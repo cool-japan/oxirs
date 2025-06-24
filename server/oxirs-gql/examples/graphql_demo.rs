@@ -76,12 +76,7 @@ async fn main() -> Result<()> {
     
     // 5. Create and configure GraphQL server
     println!("\n🌐 Starting GraphQL server...");
-    let config = GraphQLConfig {
-        enable_playground: true,
-        enable_introspection: true,
-        max_query_depth: Some(10),
-        max_query_complexity: Some(1000),
-    };
+    let config = GraphQLConfig::default();
     
     let server = GraphQLServer::new(store)
         .with_config(config);

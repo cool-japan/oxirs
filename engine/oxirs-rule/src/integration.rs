@@ -323,8 +323,8 @@ impl RuleIntegration {
                     let triple = quad.to_triple();
                     output.push_str(&format!(
                         "<{}> <{}> {} .\n",
-                        triple.subject().as_str(),
-                        triple.predicate().as_str(),
+                        triple.subject(),
+                        triple.predicate(),
                         self.format_object_for_ntriples(triple.object())
                     ));
                 }
@@ -700,8 +700,15 @@ mod tests {
         
         // Test rule atom to triple conversion
         let converted_triple = integration.rule_atom_to_triple(&rule_atom).unwrap();
-        assert_eq!(converted_triple.subject().as_str(), "http://example.org/subject");
-        assert_eq!(converted_triple.predicate().as_str(), "http://example.org/predicate");
+        // Check subject and predicate types
+        match converted_triple.subject() {
+            Subject::NamedNode(node) => assert_eq!(node.as_str(), "http://example.org/subject"),
+            _ => panic!("Expected NamedNode subject"),
+        }
+        match converted_triple.predicate() {
+            Predicate::NamedNode(node) => assert_eq!(node.as_str(), "http://example.org/predicate"),
+            _ => panic!("Expected NamedNode predicate"),
+        }
     }
 
     #[test]

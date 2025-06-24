@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use tracing::{debug, info, warn};
+use oxirs_core::{Term, NamedNode, Literal, BlankNode};
 
 use crate::{
     FederatedResult, QueryResult, ExecutionMetadata, FederationError,
@@ -407,29 +408,29 @@ impl ResultIntegrator {
     }
 
     /// Convert SPARQL binding to oxirs-core Terms
-    fn convert_sparql_binding_to_terms(&self, binding: SparqlBinding) -> Result<HashMap<String, oxirs_core::Term>> {
+    fn convert_sparql_binding_to_terms(&self, binding: SparqlBinding) -> Result<HashMap<String, Term>> {
         let mut term_binding = HashMap::new();
 
         for (var, sparql_value) in binding {
             let term = match sparql_value.value_type.as_str() {
                 "uri" => {
-                    let iri = oxirs_core::NamedNode::new(&sparql_value.value)
+                    let iri = NamedNode::new(&sparql_value.value)
                         .map_err(|e| anyhow!("Invalid IRI '{}': {}", sparql_value.value, e))?;
-                    oxirs_core::Term::NamedNode(iri)
+                    Term::NamedNode(iri)
                 }
                 "literal" => {
                     if let Some(datatype_str) = sparql_value.datatype {
-                        let datatype = oxirs_core::NamedNode::new(&datatype_str)
+                        let datatype = NamedNode::new(&datatype_str)
                             .map_err(|e| anyhow!("Invalid datatype IRI '{}': {}", datatype_str, e))?;
-                        oxirs_core::Term::Literal(oxirs_core::Literal::new_typed(&sparql_value.value, datatype))
+                        Term::Literal(Literal::new_typed(&sparql_value.value, datatype))
                     } else if let Some(lang) = sparql_value.lang {
-                        oxirs_core::Term::Literal(oxirs_core::Literal::new_lang(&sparql_value.value, &lang)?)
+                        Term::Literal(Literal::new_lang(&sparql_value.value, &lang)?)
                     } else {
-                        oxirs_core::Term::Literal(oxirs_core::Literal::new(&sparql_value.value))
+                        Term::Literal(Literal::new(&sparql_value.value))
                     }
                 }
                 "bnode" => {
-                    oxirs_core::Term::BlankNode(oxirs_core::BlankNode::new(&sparql_value.value)?)
+                    Term::BlankNode(BlankNode::new(&sparql_value.value)?)
                 }
                 _ => {
                     return Err(anyhow!("Unknown SPARQL value type: {}", sparql_value.value_type));

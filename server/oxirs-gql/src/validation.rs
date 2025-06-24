@@ -677,6 +677,7 @@ mod tests {
             selection_set: crate::ast::SelectionSet {
                 selections: vec![]
             },
+            directives: vec![],
         };
 
         context.add_fragment("TestFragment".to_string(), fragment.clone());

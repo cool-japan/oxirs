@@ -29,7 +29,7 @@ regex = "1.10"
 criterion.workspace = true
 
 [features]
-default = []
+default = ["kafka", "nats"]
 kafka = ["rdkafka"]
 nats = ["async-nats"]
 

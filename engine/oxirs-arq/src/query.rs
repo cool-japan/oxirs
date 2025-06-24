@@ -503,7 +503,7 @@ impl QueryParser {
                     self.advance(); // consume PREFIX
                     let prefix = self.expect_prefixed_name()?.0;
                     let iri = self.expect_iri()?;
-                    query.prefixes.insert(prefix, iri);
+                    query.prefixes.insert(prefix.clone(), iri.clone());
                     self.prefixes.insert(prefix, iri);
                 }
                 Token::Base => {
@@ -655,8 +655,9 @@ impl QueryParser {
             Ok(patterns.into_iter().next().unwrap())
         } else {
             // Join all patterns
-            let mut result = patterns.into_iter().next().unwrap();
-            for pattern in patterns {
+            let mut patterns_iter = patterns.into_iter();
+            let mut result = patterns_iter.next().unwrap();
+            for pattern in patterns_iter {
                 result = Algebra::join(result, pattern);
             }
             Ok(result)
@@ -1167,6 +1168,8 @@ impl QueryParser {
             }
             Some(Token::PrefixedName(prefix, local)) => {
                 // Function call
+                let prefix = prefix.clone();
+                let local = local.clone();
                 let name = format!("{}:{}", prefix, local);
                 self.advance();
                 
@@ -1182,7 +1185,7 @@ impl QueryParser {
                     Ok(Expression::Function { name, args })
                 } else {
                     // It's an IRI
-                    let full_iri = if let Some(base) = self.prefixes.get(prefix) {
+                    let full_iri = if let Some(base) = self.prefixes.get(&prefix) {
                         format!("{}{}", base, local)
                     } else {
                         name

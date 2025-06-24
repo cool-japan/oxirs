@@ -284,6 +284,167 @@ impl ServiceRegistry {
             Err(_) => Ok(ServiceStatus::Unavailable),
         }
     }
+
+    /// Initialize connection pool for a service
+    async fn initialize_connection_pool(&self, service: &FederatedService) -> Result<()> {
+        let pool = ConnectionPool {
+            service_id: service.id.clone(),
+            endpoint: service.endpoint.clone(),
+            max_connections: 10, // TODO: Make configurable
+            active_connections: 0,
+            created_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+            last_used: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+        };
+        
+        let mut pools = self.connection_pools.write().await;
+        pools.insert(service.id.clone(), pool);
+        
+        debug!("Initialized connection pool for service: {}", service.id);
+        Ok(())
+    }
+    
+    /// Detect service capabilities through introspection
+    async fn detect_service_capabilities(&self, service: &FederatedService) -> Result<HashSet<ServiceCapability>> {
+        let mut detected_capabilities = HashSet::new();
+        
+        match service.service_type {
+            ServiceType::Sparql => {
+                // Test various SPARQL features
+                if self.test_sparql_feature(service, "SELECT ?s WHERE { ?s ?p ?o } LIMIT 1").await {
+                    detected_capabilities.insert(ServiceCapability::SparqlQuery);
+                }
+                
+                if self.test_sparql_feature(service, "INSERT DATA { <http://example.org/test> <http://example.org/test> \"test\" }").await {
+                    detected_capabilities.insert(ServiceCapability::SparqlUpdate);
+                }
+                
+                if self.test_sparql_feature(service, "SELECT * WHERE { SERVICE <http://example.org/> { ?s ?p ?o } }").await {
+                    detected_capabilities.insert(ServiceCapability::SparqlService);
+                }
+            }
+            ServiceType::GraphQL => {
+                // Test GraphQL introspection and mutations
+                if self.test_graphql_introspection(service).await {
+                    detected_capabilities.insert(ServiceCapability::GraphQLQuery);
+                }
+            }
+            ServiceType::Hybrid => {
+                // Test both SPARQL and GraphQL capabilities
+                if self.test_sparql_feature(service, "ASK { ?s ?p ?o }").await {
+                    detected_capabilities.insert(ServiceCapability::SparqlQuery);
+                }
+                if self.test_graphql_introspection(service).await {
+                    detected_capabilities.insert(ServiceCapability::GraphQLQuery);
+                }
+            }
+        }
+        
+        Ok(detected_capabilities)
+    }
+    
+    /// Test a specific SPARQL feature
+    async fn test_sparql_feature(&self, service: &FederatedService, query: &str) -> bool {
+        let mut headers = HeaderMap::new();
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/sparql-query"));
+        headers.insert(ACCEPT, HeaderValue::from_static("application/sparql-results+json"));
+        
+        if let Some(auth) = &service.auth {
+            if self.add_auth_header(&mut headers, auth).is_err() {
+                return false;
+            }
+        }
+        
+        let response = self.http_client
+            .post(&service.endpoint)
+            .headers(headers)
+            .body(query)
+            .send()
+            .await;
+            
+        matches!(response, Ok(resp) if resp.status().is_success())
+    }
+    
+    /// Test GraphQL introspection capability
+    async fn test_graphql_introspection(&self, service: &FederatedService) -> bool {
+        let introspection_query = serde_json::json!({
+            "query": "{ __schema { types { name } } }"
+        });
+        
+        let mut headers = HeaderMap::new();
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+        
+        if let Some(auth) = &service.auth {
+            if self.add_auth_header(&mut headers, auth).is_err() {
+                return false;
+            }
+        }
+        
+        let response = self.http_client
+            .post(&service.endpoint)
+            .headers(headers)
+            .json(&introspection_query)
+            .send()
+            .await;
+            
+        matches!(response, Ok(resp) if resp.status().is_success())
+    }
+    
+    /// Add authentication header based on auth configuration
+    fn add_auth_header(&self, headers: &mut HeaderMap, auth: &AuthConfig) -> Result<()> {
+        match &auth.auth_type {
+            AuthType::Basic => {
+                if let (Some(username), Some(password)) = (&auth.credentials.username, &auth.credentials.password) {
+                    let credentials = format!("{}:{}", username, password);
+                    let encoded = encode(credentials.as_bytes());
+                    let auth_value = format!("Basic {}", encoded);
+                    headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value)?);
+                }
+            }
+            AuthType::Bearer => {
+                if let Some(token) = &auth.credentials.token {
+                    let auth_value = format!("Bearer {}", token);
+                    headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value)?);
+                }
+            }
+            AuthType::ApiKey => {
+                if let Some(api_key) = &auth.credentials.api_key {
+                    headers.insert("X-API-Key", HeaderValue::from_str(api_key)?);
+                }
+            }
+            AuthType::OAuth2 => {
+                // TODO: Implement OAuth2 flow
+                warn!("OAuth2 authentication not yet implemented");
+            }
+            AuthType::None => {}
+        }
+        Ok(())
+    }
+    
+    /// Get connection pool statistics
+    pub async fn get_connection_pool_stats(&self) -> HashMap<String, ConnectionPoolStats> {
+        let pools = self.connection_pools.read().await;
+        let mut stats = HashMap::new();
+        
+        for (service_id, pool) in pools.iter() {
+            stats.insert(service_id.clone(), ConnectionPoolStats {
+                max_connections: pool.max_connections,
+                active_connections: pool.active_connections,
+                created_at: pool.created_at,
+                last_used: pool.last_used,
+            });
+        }
+        
+        stats
+    }
+    
+    /// Check rate limits for a service
+    pub fn check_rate_limit(&self, service_id: &str) -> bool {
+        if let Some(limiter) = self.rate_limiters.get(service_id) {
+            limiter.check().is_ok()
+        } else {
+            true // No rate limit configured
+        }
+    }
 }
 
 impl Default for ServiceRegistry {
@@ -540,170 +701,6 @@ pub struct ServiceRegistryStats {
     pub last_health_check: Option<Instant>,
 }
 
-    /// Initialize connection pool for a service
-    async fn initialize_connection_pool(&self, service: &FederatedService) -> Result<()> {
-        let pool = ConnectionPool {
-            service_id: service.id.clone(),
-            endpoint: service.endpoint.clone(),
-            max_connections: 10, // TODO: Make configurable
-            active_connections: 0,
-            created_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
-            last_used: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
-        };
-        
-        let mut pools = self.connection_pools.write().await;
-        pools.insert(service.id.clone(), pool);
-        
-        debug!("Initialized connection pool for service: {}", service.id);
-        Ok(())
-    }
-    
-    /// Detect service capabilities through introspection
-    async fn detect_service_capabilities(&self, service: &FederatedService) -> Result<HashSet<ServiceCapability>> {
-        let mut detected_capabilities = HashSet::new();
-        
-        match service.service_type {
-            ServiceType::Sparql => {
-                // Test various SPARQL features
-                if self.test_sparql_feature(service, "SELECT ?s WHERE { ?s ?p ?o } LIMIT 1").await {
-                    detected_capabilities.insert(ServiceCapability::SparqlQuery);
-                }
-                
-                if self.test_sparql_feature(service, "INSERT DATA { <http://example.org/test> <http://example.org/test> \"test\" }").await {
-                    detected_capabilities.insert(ServiceCapability::SparqlUpdate);
-                }
-                
-                if self.test_sparql_feature(service, "SELECT * WHERE { SERVICE <http://example.org/> { ?s ?p ?o } }").await {
-                    detected_capabilities.insert(ServiceCapability::SparqlService);
-                }
-            }
-            ServiceType::GraphQL => {
-                // Test GraphQL introspection and mutations
-                if self.test_graphql_introspection(service).await {
-                    detected_capabilities.insert(ServiceCapability::GraphQLQuery);
-                }
-            }
-            ServiceType::Hybrid => {
-                // Test both SPARQL and GraphQL capabilities
-                if self.test_sparql_feature(service, "ASK { ?s ?p ?o }").await {
-                    detected_capabilities.insert(ServiceCapability::SparqlQuery);
-                }
-                if self.test_graphql_introspection(service).await {
-                    detected_capabilities.insert(ServiceCapability::GraphQLQuery);
-                }
-            }
-        }
-        
-        Ok(detected_capabilities)
-    }
-    
-    /// Test a specific SPARQL feature
-    async fn test_sparql_feature(&self, service: &FederatedService, query: &str) -> bool {
-        let mut headers = HeaderMap::new();
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/sparql-query"));
-        headers.insert(ACCEPT, HeaderValue::from_static("application/sparql-results+json"));
-        
-        if let Some(auth) = &service.auth {
-            if self.add_auth_header(&mut headers, auth).is_err() {
-                return false;
-            }
-        }
-        
-        let response = self.http_client
-            .post(&service.endpoint)
-            .headers(headers)
-            .body(query)
-            .send()
-            .await;
-            
-        matches!(response, Ok(resp) if resp.status().is_success())
-    }
-    
-    /// Test GraphQL introspection capability
-    async fn test_graphql_introspection(&self, service: &FederatedService) -> bool {
-        let introspection_query = serde_json::json!({
-            "query": "{ __schema { types { name } } }"
-        });
-        
-        let mut headers = HeaderMap::new();
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-        
-        if let Some(auth) = &service.auth {
-            if self.add_auth_header(&mut headers, auth).is_err() {
-                return false;
-            }
-        }
-        
-        let response = self.http_client
-            .post(&service.endpoint)
-            .headers(headers)
-            .json(&introspection_query)
-            .send()
-            .await;
-            
-        matches!(response, Ok(resp) if resp.status().is_success())
-    }
-    
-    /// Add authentication header based on auth configuration
-    fn add_auth_header(&self, headers: &mut HeaderMap, auth: &AuthConfig) -> Result<()> {
-        match &auth.auth_type {
-            AuthType::Basic => {
-                if let (Some(username), Some(password)) = (&auth.credentials.username, &auth.credentials.password) {
-                    let credentials = format!("{}:{}", username, password);
-                    let encoded = encode(credentials.as_bytes());
-                    let auth_value = format!("Basic {}", encoded);
-                    headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value)?);
-                }
-            }
-            AuthType::Bearer => {
-                if let Some(token) = &auth.credentials.token {
-                    let auth_value = format!("Bearer {}", token);
-                    headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value)?);
-                }
-            }
-            AuthType::ApiKey => {
-                if let Some(api_key) = &auth.credentials.api_key {
-                    headers.insert("X-API-Key", HeaderValue::from_str(api_key)?);
-                }
-            }
-            AuthType::OAuth2 => {
-                // TODO: Implement OAuth2 flow
-                warn!("OAuth2 authentication not yet implemented");
-            }
-            AuthType::None => {}
-        }
-        Ok(())
-    }
-    
-    /// Get connection pool statistics
-    pub async fn get_connection_pool_stats(&self) -> HashMap<String, ConnectionPoolStats> {
-        let pools = self.connection_pools.read().await;
-        let mut stats = HashMap::new();
-        
-        for (service_id, pool) in pools.iter() {
-            stats.insert(service_id.clone(), ConnectionPoolStats {
-                max_connections: pool.max_connections,
-                active_connections: pool.active_connections,
-                created_at: pool.created_at,
-                last_used: pool.last_used,
-            });
-        }
-        
-        stats
-    }
-    
-    /// Check rate limits for a service
-    pub fn check_rate_limit(&self, service_id: &str) -> bool {
-        if let Some(limiter) = self.rate_limiters.get(service_id) {
-            limiter.check().is_ok()
-        } else {
-            true // No rate limit configured
-        }
-    }
-}
-
-/// Connection pool for managing service connections
-#[derive(Debug, Clone)]
 struct ConnectionPool {
     service_id: String,
     endpoint: String,

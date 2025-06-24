@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::Duration;
 use tracing::{debug, info, warn};
+use sparql_syntax::{Query, ast, parser::ParseError};
 
 use crate::{FederatedService, ServiceRegistry, ServiceCapability};
 
@@ -34,12 +35,15 @@ impl QueryPlanner {
     pub async fn analyze_sparql(&self, query: &str) -> Result<QueryInfo> {
         debug!("Analyzing SPARQL query: {}", query);
 
-        // Parse the query to extract patterns, services, and dependencies
-        let query_type = self.detect_query_type(query);
-        let patterns = self.extract_triple_patterns(query)?;
-        let service_clauses = self.extract_service_clauses(query)?;
-        let filters = self.extract_filters(query)?;
-        let variables = self.extract_variables(query)?;
+        // Parse the SPARQL query using proper parser
+        let parsed_query = Query::parse(query, None)
+            .map_err(|e| anyhow!("Failed to parse SPARQL query: {}", e))?;
+
+        let query_type = self.determine_query_type(&parsed_query);
+        let patterns = self.extract_patterns_from_ast(&parsed_query)?;
+        let service_clauses = self.extract_service_clauses_from_ast(&parsed_query)?;
+        let filters = self.extract_filters_from_ast(&parsed_query)?;
+        let variables = self.extract_variables_from_ast(&parsed_query)?;
         let complexity = self.calculate_complexity(&patterns, &filters, &service_clauses);
 
         Ok(QueryInfo {
@@ -198,6 +202,408 @@ impl QueryPlanner {
     }
 
     // Helper methods for query analysis
+
+    fn determine_query_type(&self, query: &Query) -> QueryType {
+        match query {
+            Query::Select { .. } => QueryType::SparqlSelect,
+            Query::Construct { .. } => QueryType::SparqlConstruct,
+            Query::Ask { .. } => QueryType::SparqlAsk,
+            Query::Describe { .. } => QueryType::SparqlDescribe,
+            Query::Update { .. } => QueryType::SparqlUpdate,
+        }
+    }
+
+    fn extract_patterns_from_ast(&self, query: &Query) -> Result<Vec<TriplePattern>> {
+        let mut patterns = Vec::new();
+        
+        match query {
+            Query::Select { pattern, .. } |
+            Query::Construct { pattern, .. } |
+            Query::Ask { pattern, .. } |
+            Query::Describe { pattern, .. } => {
+                self.collect_patterns_from_graph_pattern(pattern, &mut patterns)?;
+            }
+            Query::Update { .. } => {
+                // Handle update patterns - simplified for now
+            }
+        }
+        
+        Ok(patterns)
+    }
+
+    fn collect_patterns_from_graph_pattern(
+        &self,
+        pattern: &ast::GraphPattern,
+        patterns: &mut Vec<TriplePattern>
+    ) -> Result<()> {
+        match pattern {
+            ast::GraphPattern::Bgp { patterns: triples } => {
+                for triple in triples {
+                    patterns.push(TriplePattern {
+                        subject: self.term_to_string(&triple.subject),
+                        predicate: self.term_to_string(&triple.predicate),
+                        object: self.term_to_string(&triple.object),
+                        pattern_string: format!("{} {} {}", 
+                            self.term_to_string(&triple.subject),
+                            self.term_to_string(&triple.predicate),
+                            self.term_to_string(&triple.object)
+                        ),
+                    });
+                }
+            }
+            ast::GraphPattern::Join { left, right } => {
+                self.collect_patterns_from_graph_pattern(left, patterns)?;
+                self.collect_patterns_from_graph_pattern(right, patterns)?;
+            }
+            ast::GraphPattern::Union { left, right } => {
+                self.collect_patterns_from_graph_pattern(left, patterns)?;
+                self.collect_patterns_from_graph_pattern(right, patterns)?;
+            }
+            ast::GraphPattern::LeftJoin { left, right, .. } => {
+                self.collect_patterns_from_graph_pattern(left, patterns)?;
+                self.collect_patterns_from_graph_pattern(right, patterns)?;
+            }
+            ast::GraphPattern::Filter { expr: _, inner } => {
+                self.collect_patterns_from_graph_pattern(inner, patterns)?;
+            }
+            ast::GraphPattern::Service { name: _, inner, .. } => {
+                self.collect_patterns_from_graph_pattern(inner, patterns)?;
+            }
+            ast::GraphPattern::Group { inner, .. } => {
+                self.collect_patterns_from_graph_pattern(inner, patterns)?;
+            }
+            ast::GraphPattern::Graph { name: _, inner } => {
+                self.collect_patterns_from_graph_pattern(inner, patterns)?;
+            }
+            ast::GraphPattern::Extend { inner, .. } => {
+                self.collect_patterns_from_graph_pattern(inner, patterns)?;
+            }
+            ast::GraphPattern::Minus { left, right } => {
+                self.collect_patterns_from_graph_pattern(left, patterns)?;
+                self.collect_patterns_from_graph_pattern(right, patterns)?;
+            }
+            ast::GraphPattern::Values { .. } => {
+                // Handle VALUES clauses if needed
+            }
+            ast::GraphPattern::OrderBy { inner, .. } => {
+                self.collect_patterns_from_graph_pattern(inner, patterns)?;
+            }
+            ast::GraphPattern::Project { inner, .. } => {
+                self.collect_patterns_from_graph_pattern(inner, patterns)?;
+            }
+            ast::GraphPattern::Distinct { inner } => {
+                self.collect_patterns_from_graph_pattern(inner, patterns)?;
+            }
+            ast::GraphPattern::Reduced { inner } => {
+                self.collect_patterns_from_graph_pattern(inner, patterns)?;
+            }
+            ast::GraphPattern::Slice { inner, .. } => {
+                self.collect_patterns_from_graph_pattern(inner, patterns)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn term_to_string(&self, term: &ast::TermPattern) -> String {
+        match term {
+            ast::TermPattern::NamedNode(node) => format!("<{}>", node),
+            ast::TermPattern::BlankNode(bnode) => format!("_:{}", bnode),
+            ast::TermPattern::Literal(literal) => format!("\"{}\"", literal.value()),
+            ast::TermPattern::Variable(var) => format!("?{}", var),
+        }
+    }
+
+    fn extract_service_clauses_from_ast(&self, query: &Query) -> Result<Vec<ServiceClause>> {
+        let mut services = Vec::new();
+        
+        match query {
+            Query::Select { pattern, .. } |
+            Query::Construct { pattern, .. } |
+            Query::Ask { pattern, .. } |
+            Query::Describe { pattern, .. } => {
+                self.collect_service_clauses_from_pattern(pattern, &mut services)?;
+            }
+            Query::Update { .. } => {
+                // Handle update service clauses if needed
+            }
+        }
+        
+        Ok(services)
+    }
+
+    fn collect_service_clauses_from_pattern(
+        &self,
+        pattern: &ast::GraphPattern,
+        services: &mut Vec<ServiceClause>
+    ) -> Result<()> {
+        match pattern {
+            ast::GraphPattern::Service { name, inner, silent } => {
+                let service_url = match name {
+                    ast::TermPattern::NamedNode(node) => node.to_string(),
+                    ast::TermPattern::Variable(var) => format!("?{}", var),
+                    _ => "unknown".to_string(),
+                };
+                
+                // Convert inner pattern back to SPARQL string (simplified)
+                let subquery = format!("SELECT * WHERE {{ {} }}", "?s ?p ?o"); // Placeholder
+                
+                services.push(ServiceClause {
+                    service_url,
+                    subquery,
+                    silent: *silent,
+                });
+            }
+            ast::GraphPattern::Join { left, right } => {
+                self.collect_service_clauses_from_pattern(left, services)?;
+                self.collect_service_clauses_from_pattern(right, services)?;
+            }
+            ast::GraphPattern::Union { left, right } => {
+                self.collect_service_clauses_from_pattern(left, services)?;
+                self.collect_service_clauses_from_pattern(right, services)?;
+            }
+            ast::GraphPattern::LeftJoin { left, right, .. } => {
+                self.collect_service_clauses_from_pattern(left, services)?;
+                self.collect_service_clauses_from_pattern(right, services)?;
+            }
+            ast::GraphPattern::Filter { inner, .. } => {
+                self.collect_service_clauses_from_pattern(inner, services)?;
+            }
+            ast::GraphPattern::Group { inner, .. } => {
+                self.collect_service_clauses_from_pattern(inner, services)?;
+            }
+            ast::GraphPattern::Graph { inner, .. } => {
+                self.collect_service_clauses_from_pattern(inner, services)?;
+            }
+            ast::GraphPattern::Extend { inner, .. } => {
+                self.collect_service_clauses_from_pattern(inner, services)?;
+            }
+            ast::GraphPattern::Minus { left, right } => {
+                self.collect_service_clauses_from_pattern(left, services)?;
+                self.collect_service_clauses_from_pattern(right, services)?;
+            }
+            ast::GraphPattern::OrderBy { inner, .. } => {
+                self.collect_service_clauses_from_pattern(inner, services)?;
+            }
+            ast::GraphPattern::Project { inner, .. } => {
+                self.collect_service_clauses_from_pattern(inner, services)?;
+            }
+            ast::GraphPattern::Distinct { inner } => {
+                self.collect_service_clauses_from_pattern(inner, services)?;
+            }
+            ast::GraphPattern::Reduced { inner } => {
+                self.collect_service_clauses_from_pattern(inner, services)?;
+            }
+            ast::GraphPattern::Slice { inner, .. } => {
+                self.collect_service_clauses_from_pattern(inner, services)?;
+            }
+            _ => {
+                // Other patterns don't contain service clauses
+            }
+        }
+        Ok(())
+    }
+
+    fn extract_filters_from_ast(&self, query: &Query) -> Result<Vec<FilterExpression>> {
+        let mut filters = Vec::new();
+        
+        match query {
+            Query::Select { pattern, .. } |
+            Query::Construct { pattern, .. } |
+            Query::Ask { pattern, .. } |
+            Query::Describe { pattern, .. } => {
+                self.collect_filters_from_pattern(pattern, &mut filters)?;
+            }
+            Query::Update { .. } => {
+                // Handle update filters if needed
+            }
+        }
+        
+        Ok(filters)
+    }
+
+    fn collect_filters_from_pattern(
+        &self,
+        pattern: &ast::GraphPattern,
+        filters: &mut Vec<FilterExpression>
+    ) -> Result<()> {
+        match pattern {
+            ast::GraphPattern::Filter { expr, inner } => {
+                // Convert expression to string (simplified)
+                let expr_string = format!("{:?}", expr); // TODO: Proper expression serialization
+                let variables = HashSet::new(); // TODO: Extract variables from expression
+                
+                filters.push(FilterExpression {
+                    expression: expr_string,
+                    variables,
+                });
+                
+                self.collect_filters_from_pattern(inner, filters)?;
+            }
+            ast::GraphPattern::Join { left, right } => {
+                self.collect_filters_from_pattern(left, filters)?;
+                self.collect_filters_from_pattern(right, filters)?;
+            }
+            ast::GraphPattern::Union { left, right } => {
+                self.collect_filters_from_pattern(left, filters)?;
+                self.collect_filters_from_pattern(right, filters)?;
+            }
+            ast::GraphPattern::LeftJoin { left, right, .. } => {
+                self.collect_filters_from_pattern(left, filters)?;
+                self.collect_filters_from_pattern(right, filters)?;
+            }
+            ast::GraphPattern::Service { inner, .. } => {
+                self.collect_filters_from_pattern(inner, filters)?;
+            }
+            ast::GraphPattern::Group { inner, .. } => {
+                self.collect_filters_from_pattern(inner, filters)?;
+            }
+            ast::GraphPattern::Graph { inner, .. } => {
+                self.collect_filters_from_pattern(inner, filters)?;
+            }
+            ast::GraphPattern::Extend { inner, .. } => {
+                self.collect_filters_from_pattern(inner, filters)?;
+            }
+            ast::GraphPattern::Minus { left, right } => {
+                self.collect_filters_from_pattern(left, filters)?;
+                self.collect_filters_from_pattern(right, filters)?;
+            }
+            ast::GraphPattern::OrderBy { inner, .. } => {
+                self.collect_filters_from_pattern(inner, filters)?;
+            }
+            ast::GraphPattern::Project { inner, .. } => {
+                self.collect_filters_from_pattern(inner, filters)?;
+            }
+            ast::GraphPattern::Distinct { inner } => {
+                self.collect_filters_from_pattern(inner, filters)?;
+            }
+            ast::GraphPattern::Reduced { inner } => {
+                self.collect_filters_from_pattern(inner, filters)?;
+            }
+            ast::GraphPattern::Slice { inner, .. } => {
+                self.collect_filters_from_pattern(inner, filters)?;
+            }
+            _ => {
+                // Other patterns don't contain filters
+            }
+        }
+        Ok(())
+    }
+
+    fn extract_variables_from_ast(&self, query: &Query) -> Result<HashSet<String>> {
+        let mut variables = HashSet::new();
+        
+        match query {
+            Query::Select { pattern, selection, .. } => {
+                // Extract projection variables
+                match selection {
+                    ast::QuerySelection::Distinct(vars) | ast::QuerySelection::Reduced(vars) => {
+                        for var in vars {
+                            match var {
+                                ast::SelectionMember::Variable(v) => {
+                                    variables.insert(format!("?{}", v));
+                                }
+                                ast::SelectionMember::Expression(_, alias) => {
+                                    if let Some(alias_var) = alias {
+                                        variables.insert(format!("?{}", alias_var));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    ast::QuerySelection::Asterisk => {
+                        // Extract all variables from pattern
+                        self.collect_variables_from_pattern(pattern, &mut variables)?;
+                    }
+                }
+            }
+            Query::Construct { pattern, .. } |
+            Query::Ask { pattern, .. } |
+            Query::Describe { pattern, .. } => {
+                self.collect_variables_from_pattern(pattern, &mut variables)?;
+            }
+            Query::Update { .. } => {
+                // Handle update variables if needed
+            }
+        }
+        
+        Ok(variables)
+    }
+
+    fn collect_variables_from_pattern(
+        &self,
+        pattern: &ast::GraphPattern,
+        variables: &mut HashSet<String>
+    ) -> Result<()> {
+        match pattern {
+            ast::GraphPattern::Bgp { patterns: triples } => {
+                for triple in triples {
+                    if let ast::TermPattern::Variable(var) = &triple.subject {
+                        variables.insert(format!("?{}", var));
+                    }
+                    if let ast::TermPattern::Variable(var) = &triple.predicate {
+                        variables.insert(format!("?{}", var));
+                    }
+                    if let ast::TermPattern::Variable(var) = &triple.object {
+                        variables.insert(format!("?{}", var));
+                    }
+                }
+            }
+            ast::GraphPattern::Join { left, right } => {
+                self.collect_variables_from_pattern(left, variables)?;
+                self.collect_variables_from_pattern(right, variables)?;
+            }
+            ast::GraphPattern::Union { left, right } => {
+                self.collect_variables_from_pattern(left, variables)?;
+                self.collect_variables_from_pattern(right, variables)?;
+            }
+            ast::GraphPattern::LeftJoin { left, right, .. } => {
+                self.collect_variables_from_pattern(left, variables)?;
+                self.collect_variables_from_pattern(right, variables)?;
+            }
+            ast::GraphPattern::Filter { inner, .. } => {
+                self.collect_variables_from_pattern(inner, variables)?;
+            }
+            ast::GraphPattern::Service { inner, .. } => {
+                self.collect_variables_from_pattern(inner, variables)?;
+            }
+            ast::GraphPattern::Group { inner, .. } => {
+                self.collect_variables_from_pattern(inner, variables)?;
+            }
+            ast::GraphPattern::Graph { inner, .. } => {
+                self.collect_variables_from_pattern(inner, variables)?;
+            }
+            ast::GraphPattern::Extend { inner, variable, .. } => {
+                variables.insert(format!("?{}", variable));
+                self.collect_variables_from_pattern(inner, variables)?;
+            }
+            ast::GraphPattern::Minus { left, right } => {
+                self.collect_variables_from_pattern(left, variables)?;
+                self.collect_variables_from_pattern(right, variables)?;
+            }
+            ast::GraphPattern::OrderBy { inner, .. } => {
+                self.collect_variables_from_pattern(inner, variables)?;
+            }
+            ast::GraphPattern::Project { inner, variables: proj_vars } => {
+                for var in proj_vars {
+                    variables.insert(format!("?{}", var));
+                }
+                self.collect_variables_from_pattern(inner, variables)?;
+            }
+            ast::GraphPattern::Distinct { inner } => {
+                self.collect_variables_from_pattern(inner, variables)?;
+            }
+            ast::GraphPattern::Reduced { inner } => {
+                self.collect_variables_from_pattern(inner, variables)?;
+            }
+            ast::GraphPattern::Slice { inner, .. } => {
+                self.collect_variables_from_pattern(inner, variables)?;
+            }
+            _ => {
+                // Other patterns
+            }
+        }
+        Ok(())
+    }
 
     fn detect_query_type(&self, query: &str) -> QueryType {
         let query_upper = query.to_uppercase();

@@ -44,6 +44,9 @@ pub trait CustomFunction: Send + Sync + Debug {
     /// Execute the function
     fn execute(&self, args: &[Value], context: &ExecutionContext) -> Result<Value>;
     
+    /// Clone this function (for registry operations)
+    fn clone_function(&self) -> Box<dyn CustomFunction>;
+    
     /// Validate function call at compile time
     fn validate(&self, args: &[Expression]) -> Result<()> {
         if let Some(expected_arity) = self.arity() {
@@ -365,6 +368,13 @@ impl ExtensionRegistry {
             .map_err(|_| anyhow!("Failed to acquire write lock on type converters"))?;
         converters.insert(key, Box::new(converter));
         Ok(())
+    }
+    
+    /// Get function by name
+    pub fn get_function(&self, name: &str) -> Result<Option<Box<dyn CustomFunction>>> {
+        let functions = self.functions.read()
+            .map_err(|_| anyhow!("Failed to acquire read lock on functions"))?;
+        Ok(functions.get(name).map(|f| f.clone_function()))
     }
     
     /// Check if function exists

@@ -502,7 +502,7 @@ impl ShapeParser {
                     for binding in bindings {
                         if let Some(node_term) = binding.get("node") {
                             shape.add_target(Target::node(node_term.clone()));
-                            tracing::debug!("Added target node: {}", node_term.as_str());
+                            tracing::debug!("Added target node: {:?}", node_term);
                         }
                     }
                 }

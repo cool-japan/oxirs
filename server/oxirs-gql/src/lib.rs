@@ -11,6 +11,8 @@ use oxigraph::store::Store;
 use oxigraph::model::{NamedNode, Literal as OxiLiteral, BlankNode, Subject, Term, Triple};
 use oxigraph::sparql::QueryResults;
 
+// Module declarations are below after the main code
+
 /// RDF store wrapper for GraphQL integration
 pub struct RdfStore {
     store: Store,
@@ -208,6 +210,7 @@ impl MockStore {
     }
 }
 
+// Individual modules
 pub mod ast;
 pub mod types;
 pub mod rdf_scalars;
@@ -221,6 +224,13 @@ pub mod optimizer;
 pub mod subscriptions;
 pub mod introspection;
 pub mod validation;
+
+// Organized module groups
+pub mod core;
+pub mod networking;
+pub mod rdf;
+pub mod features;
+pub mod docs;
 
 // New Juniper-based implementation (temporarily disabled due to compilation issues)
 // pub mod juniper_schema;

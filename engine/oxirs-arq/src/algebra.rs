@@ -41,7 +41,7 @@ impl fmt::Display for Literal {
 }
 
 /// RDF term (subject, predicate, or object)
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Term {
     Variable(Variable),
     Iri(Iri),

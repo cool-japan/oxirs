@@ -3,9 +3,10 @@
 //! This module provides the core query execution engine that evaluates
 //! SPARQL algebra expressions and produces result bindings.
 
-use crate::algebra::{Algebra, Binding, Expression, TriplePattern, Term, Variable, Solution, BinaryOperator, UnaryOperator, Aggregate};
+use crate::algebra::{Algebra, Binding, Expression, TriplePattern, Term, Variable, Solution, BinaryOperator, UnaryOperator, Aggregate, PropertyPath, PropertyPathPattern};
 use anyhow::{Result, anyhow};
 use std::collections::{HashMap, HashSet};
+use rand::Rng;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 use std::thread;
@@ -428,6 +429,7 @@ impl QueryExecutor {
         
         match algebra {
             Algebra::Bgp(patterns) => self.execute_bgp(patterns, dataset, stats),
+            Algebra::PropertyPath { subject, path, object } => self.execute_property_path(subject, path, object, dataset, stats),
             Algebra::Join { left, right } => self.execute_join(left, right, dataset, stats),
             Algebra::LeftJoin { left, right, filter } => self.execute_left_join(left, right, filter.as_ref(), dataset, stats),
             Algebra::Union { left, right } => self.execute_union(left, right, dataset, stats),
@@ -438,6 +440,11 @@ impl QueryExecutor {
             Algebra::Distinct { pattern } => self.execute_distinct(pattern, dataset, stats),
             Algebra::Slice { pattern, offset, limit } => self.execute_slice(pattern, *offset, *limit, dataset, stats),
             Algebra::OrderBy { pattern, conditions } => self.execute_order_by(pattern, conditions, dataset, stats),
+            Algebra::Group { pattern, variables, aggregates } => self.execute_group(pattern, variables, aggregates, dataset, stats),
+            Algebra::Having { pattern, condition } => self.execute_having(pattern, condition, dataset, stats),
+            Algebra::Service { endpoint, pattern, silent } => self.execute_service(endpoint, pattern, *silent, dataset, stats),
+            Algebra::Graph { graph, pattern } => self.execute_graph(graph, pattern, dataset, stats),
+            Algebra::Values { variables, bindings } => self.execute_values(variables, bindings, stats),
             Algebra::Table => Ok(vec![HashMap::new()]), // Empty binding
             Algebra::Zero => Ok(vec![]), // No results
             _ => Err(anyhow!("Algebra operation not yet implemented: {:?}", algebra)),
@@ -460,6 +467,262 @@ impl QueryExecutor {
         }
         
         Ok(solution)
+    }
+    
+    /// Execute property path pattern
+    fn execute_property_path(&self, subject: &Term, path: &PropertyPath, object: &Term, 
+                           dataset: &dyn Dataset, stats: &mut ExecutionStats) -> Result<Solution> {
+        // Property path evaluation using graph traversal
+        let mut solution = Vec::new();
+        
+        // Get all possible subject-object pairs that satisfy the property path
+        let paths = self.evaluate_property_path(subject, path, object, dataset, stats)?;
+        
+        for (subj, obj) in paths {
+            let mut binding = HashMap::new();
+            
+            // Bind variables from subject and object
+            if let Term::Variable(var) = subject {
+                binding.insert(var.clone(), subj);
+            }
+            if let Term::Variable(var) = object {
+                binding.insert(var.clone(), obj);
+            }
+            
+            solution.push(binding);
+        }
+        
+        Ok(solution)
+    }
+    
+    /// Evaluate property path to find all matching subject-object pairs
+    fn evaluate_property_path(&self, subject: &Term, path: &PropertyPath, object: &Term, 
+                            dataset: &dyn Dataset, _stats: &mut ExecutionStats) -> Result<Vec<(Term, Term)>> {
+        match path {
+            PropertyPath::Iri(iri) => {
+                // Simple property path - equivalent to triple pattern
+                let pattern = TriplePattern::new(subject.clone(), Term::Iri(iri.clone()), object.clone());
+                let triples = dataset.find_triples(&pattern)?;
+                Ok(triples.into_iter().map(|(s, _p, o)| (s, o)).collect())
+            }
+            PropertyPath::Variable(var) => {
+                // Property variable - find all properties between subject and object
+                let pattern = TriplePattern::new(subject.clone(), Term::Variable(var.clone()), object.clone());
+                let triples = dataset.find_triples(&pattern)?;
+                Ok(triples.into_iter().map(|(s, _p, o)| (s, o)).collect())
+            }
+            PropertyPath::Inverse(inner_path) => {
+                // Inverse path - swap subject and object
+                self.evaluate_property_path(object, inner_path, subject, dataset, _stats)
+                    .map(|pairs| pairs.into_iter().map(|(o, s)| (s, o)).collect())
+            }
+            PropertyPath::Sequence(left, right) => {
+                // Sequence path - find intermediate nodes
+                self.evaluate_sequence_path(subject, left, right, object, dataset, _stats)
+            }
+            PropertyPath::Alternative(left, right) => {
+                // Alternative path - union of both paths
+                let mut result = self.evaluate_property_path(subject, left, object, dataset, _stats)?;
+                let right_result = self.evaluate_property_path(subject, right, object, dataset, _stats)?;
+                result.extend(right_result);
+                
+                // Remove duplicates
+                result.sort();
+                result.dedup();
+                Ok(result)
+            }
+            PropertyPath::ZeroOrMore(inner_path) => {
+                // Kleene star - transitive closure with reflexivity
+                self.evaluate_transitive_closure(subject, inner_path, object, dataset, true, _stats)
+            }
+            PropertyPath::OneOrMore(inner_path) => {
+                // Kleene plus - transitive closure without reflexivity
+                self.evaluate_transitive_closure(subject, inner_path, object, dataset, false, _stats)
+            }
+            PropertyPath::ZeroOrOne(inner_path) => {
+                // Optional path - original path union with identity
+                let mut result = self.evaluate_property_path(subject, inner_path, object, dataset, _stats)?;
+                
+                // Add identity relation if subject == object (for variables) or if both are the same constant
+                if matches!((subject, object), (Term::Variable(_), Term::Variable(_))) || subject == object {
+                    match (subject, object) {
+                        (Term::Variable(_), Term::Variable(_)) => {
+                            // Add all possible self-loops
+                            let all_subjects = dataset.subjects()?;
+                            for subj in all_subjects {
+                                result.push((subj.clone(), subj));
+                            }
+                        }
+                        _ if subject == object => {
+                            result.push((subject.clone(), object.clone()));
+                        }
+                        _ => {}
+                    }
+                }
+                
+                result.sort();
+                result.dedup();
+                Ok(result)
+            }
+            PropertyPath::NegatedPropertySet(negated_paths) => {
+                // Negated property set - all properties except those in the set
+                self.evaluate_negated_property_set(subject, negated_paths, object, dataset, _stats)
+            }
+        }
+    }
+    
+    /// Evaluate sequence property path (path1/path2)
+    fn evaluate_sequence_path(&self, subject: &Term, left: &PropertyPath, right: &PropertyPath, 
+                            object: &Term, dataset: &dyn Dataset, stats: &mut ExecutionStats) -> Result<Vec<(Term, Term)>> {
+        let mut result = Vec::new();
+        
+        // For sequence paths, we need to find all intermediate nodes
+        // Get all possible intermediate terms
+        let mut rng = rand::thread_rng();
+        let intermediate_var = format!("__intermediate_{}", rng.gen::<u32>());
+        let intermediate_term = Term::Variable(intermediate_var);
+        
+        // First, evaluate left path from subject to intermediate
+        let left_pairs = self.evaluate_property_path(subject, left, &intermediate_term, dataset, stats)?;
+        
+        // For each intermediate result, evaluate right path to object
+        for (start, intermediate) in left_pairs {
+            let right_pairs = self.evaluate_property_path(&intermediate, right, object, dataset, stats)?;
+            for (_, end) in right_pairs {
+                result.push((start.clone(), end));
+            }
+        }
+        
+        result.sort();
+        result.dedup();
+        Ok(result)
+    }
+    
+    /// Evaluate transitive closure for * and + operators
+    fn evaluate_transitive_closure(&self, subject: &Term, path: &PropertyPath, object: &Term, 
+                                 dataset: &dyn Dataset, include_reflexive: bool, 
+                                 stats: &mut ExecutionStats) -> Result<Vec<(Term, Term)>> {
+        let mut result = Vec::new();
+        let mut visited = HashSet::new();
+        let mut queue = Vec::new();
+        
+        // Start with direct connections
+        let direct_pairs = self.evaluate_property_path(subject, path, object, dataset, stats)?;
+        
+        for (s, o) in direct_pairs {
+            if !visited.contains(&(s.clone(), o.clone())) {
+                visited.insert((s.clone(), o.clone()));
+                result.push((s.clone(), o.clone()));
+                queue.push((s, o));
+            }
+        }
+        
+        // If include_reflexive, add identity relations
+        if include_reflexive {
+            match (subject, object) {
+                (Term::Variable(_), Term::Variable(_)) => {
+                    // Add all possible nodes as self-loops
+                    let all_nodes = self.get_all_nodes(dataset)?;
+                    for node in all_nodes {
+                        if !visited.contains(&(node.clone(), node.clone())) {
+                            visited.insert((node.clone(), node.clone()));
+                            result.push((node.clone(), node));
+                        }
+                    }
+                }
+                _ if subject == object => {
+                    result.push((subject.clone(), object.clone()));
+                }
+                _ => {}
+            }
+        }
+        
+        // Breadth-first search for transitive closure
+        let max_iterations = 1000; // Prevent infinite loops
+        let mut iterations = 0;
+        
+        while !queue.is_empty() && iterations < max_iterations {
+            let current_queue = queue.clone();
+            queue.clear();
+            
+            for (current_subject, current_object) in current_queue {
+                // Find all nodes reachable from current_object via the path
+                let mut rng = rand::thread_rng();
+                let next_var = format!("__next_{}", rng.gen::<u32>());
+                let next_term = Term::Variable(next_var);
+                
+                let next_pairs = self.evaluate_property_path(&current_object, path, &next_term, dataset, stats)?;
+                
+                for (_, next_object) in next_pairs {
+                    let new_pair = (current_subject.clone(), next_object.clone());
+                    if !visited.contains(&new_pair) {
+                        visited.insert(new_pair.clone());
+                        result.push(new_pair.clone());
+                        queue.push(new_pair);
+                    }
+                }
+            }
+            
+            iterations += 1;
+        }
+        
+        Ok(result)
+    }
+    
+    /// Evaluate negated property set
+    fn evaluate_negated_property_set(&self, subject: &Term, negated_paths: &[PropertyPath], 
+                                   object: &Term, dataset: &dyn Dataset, 
+                                   stats: &mut ExecutionStats) -> Result<Vec<(Term, Term)>> {
+        // Get all predicates in the dataset
+        let all_predicates = dataset.predicates()?;
+        let mut allowed_predicates = Vec::new();
+        
+        // Filter out negated predicates
+        for predicate in all_predicates {
+            let mut is_negated = false;
+            
+            for negated_path in negated_paths {
+                if let PropertyPath::Iri(iri) = negated_path {
+                    if predicate == Term::Iri(iri.clone()) {
+                        is_negated = true;
+                        break;
+                    }
+                }
+            }
+            
+            if !is_negated {
+                allowed_predicates.push(predicate);
+            }
+        }
+        
+        // Find triples using allowed predicates
+        let mut result = Vec::new();
+        for predicate in allowed_predicates {
+            let pattern = TriplePattern::new(subject.clone(), predicate, object.clone());
+            let triples = dataset.find_triples(&pattern)?;
+            result.extend(triples.into_iter().map(|(s, _p, o)| (s, o)));
+        }
+        
+        result.sort();
+        result.dedup();
+        Ok(result)
+    }
+    
+    /// Get all nodes (subjects and objects) in the dataset
+    fn get_all_nodes(&self, dataset: &dyn Dataset) -> Result<Vec<Term>> {
+        let mut nodes = HashSet::new();
+        
+        // Add all subjects
+        for subject in dataset.subjects()? {
+            nodes.insert(subject);
+        }
+        
+        // Add all objects
+        for object in dataset.objects()? {
+            nodes.insert(object);
+        }
+        
+        Ok(nodes.into_iter().collect())
     }
     
     fn execute_triple_pattern(&self, pattern: &TriplePattern, dataset: &dyn Dataset, _stats: &mut ExecutionStats) -> Result<Solution> {
@@ -1098,6 +1361,220 @@ impl FunctionRegistry {
 impl Default for FunctionRegistry {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl QueryExecutor {
+    fn execute_group(&self, pattern: &Algebra, variables: &[crate::algebra::GroupCondition], 
+                    aggregates: &[(Variable, crate::algebra::Aggregate)], dataset: &dyn Dataset, stats: &mut ExecutionStats) -> Result<Solution> {
+        let solution = self.execute_algebra(pattern, dataset, stats)?;
+        
+        // Group by the specified variables
+        let mut groups: HashMap<Vec<Term>, Vec<Binding>> = HashMap::new();
+        
+        for binding in solution {
+            let mut group_key = Vec::new();
+            for group_var in variables {
+                if let Ok(term) = self.evaluate_expression_term(&group_var.expr, &binding) {
+                    group_key.push(term);
+                } else {
+                    group_key.push(Term::Literal(crate::algebra::Literal {
+                        value: "".to_string(),
+                        language: None,
+                        datatype: None,
+                    }));
+                }
+            }
+            groups.entry(group_key).or_insert_with(Vec::new).push(binding);
+        }
+        
+        // Apply aggregates to each group
+        let mut result = Vec::new();
+        for (group_key, group_bindings) in groups {
+            let mut group_binding = HashMap::new();
+            
+            // Add group variables to binding
+            for (i, group_var) in variables.iter().enumerate() {
+                if let Some(alias) = &group_var.alias {
+                    if let Some(term) = group_key.get(i) {
+                        group_binding.insert(alias.clone(), term.clone());
+                    }
+                }
+            }
+            
+            // Apply aggregates
+            for (var, aggregate) in aggregates {
+                let aggregate_result = self.apply_aggregate(aggregate, &group_bindings)?;
+                group_binding.insert(var.clone(), aggregate_result);
+            }
+            
+            result.push(group_binding);
+        }
+        
+        Ok(result)
+    }
+    
+    fn execute_having(&self, pattern: &Algebra, condition: &Expression, dataset: &dyn Dataset, stats: &mut ExecutionStats) -> Result<Solution> {
+        let solution = self.execute_algebra(pattern, dataset, stats)?;
+        
+        let filtered: Vec<_> = solution.into_iter()
+            .filter(|binding| self.evaluate_expression(condition, binding).unwrap_or(false))
+            .collect();
+        
+        Ok(filtered)
+    }
+    
+    fn execute_service(&self, _endpoint: &Term, pattern: &Algebra, _silent: bool, dataset: &dyn Dataset, stats: &mut ExecutionStats) -> Result<Solution> {
+        // For now, execute locally (federation support would be added later)
+        self.execute_algebra(pattern, dataset, stats)
+    }
+    
+    fn execute_graph(&self, _graph: &Term, pattern: &Algebra, dataset: &dyn Dataset, stats: &mut ExecutionStats) -> Result<Solution> {
+        // For now, ignore graph context and execute pattern
+        self.execute_algebra(pattern, dataset, stats)
+    }
+    
+    fn execute_values(&self, variables: &[Variable], bindings: &[Binding], _stats: &mut ExecutionStats) -> Result<Solution> {
+        // Simply return the provided bindings, filtered by the specified variables
+        let mut result = Vec::new();
+        
+        for binding in bindings {
+            let mut filtered_binding = HashMap::new();
+            for var in variables {
+                if let Some(term) = binding.get(var) {
+                    filtered_binding.insert(var.clone(), term.clone());
+                }
+            }
+            result.push(filtered_binding);
+        }
+        
+        Ok(result)
+    }
+    
+    fn apply_aggregate(&self, aggregate: &crate::algebra::Aggregate, bindings: &[Binding]) -> Result<Term> {
+        match aggregate {
+            crate::algebra::Aggregate::Count { distinct, expr } => {
+                let mut count = 0;
+                let mut seen = HashSet::new();
+                
+                for binding in bindings {
+                    if let Some(expr) = expr {
+                        if let Ok(term) = self.evaluate_expression_term(expr, binding) {
+                            if *distinct {
+                                if seen.insert(term) {
+                                    count += 1;
+                                }
+                            } else {
+                                count += 1;
+                            }
+                        }
+                    } else {
+                        count += 1;
+                    }
+                }
+                
+                Ok(Term::Literal(crate::algebra::Literal {
+                    value: count.to_string(),
+                    language: None,
+                    datatype: Some(crate::algebra::Iri("http://www.w3.org/2001/XMLSchema#integer".to_string())),
+                }))
+            }
+            crate::algebra::Aggregate::Sum { expr, .. } => {
+                let mut sum = 0.0;
+                for binding in bindings {
+                    if let Ok(term) = self.evaluate_expression_term(expr, binding) {
+                        if let Term::Literal(lit) = term {
+                            if let Ok(val) = lit.value.parse::<f64>() {
+                                sum += val;
+                            }
+                        }
+                    }
+                }
+                
+                Ok(Term::Literal(crate::algebra::Literal {
+                    value: sum.to_string(),
+                    language: None,
+                    datatype: Some(crate::algebra::Iri("http://www.w3.org/2001/XMLSchema#decimal".to_string())),
+                }))
+            }
+            crate::algebra::Aggregate::Min { expr, .. } => {
+                let mut min_term: Option<Term> = None;
+                for binding in bindings {
+                    if let Ok(term) = self.evaluate_expression_term(expr, binding) {
+                        if min_term.is_none() || self.compare_terms(&term, min_term.as_ref().unwrap()) == std::cmp::Ordering::Less {
+                            min_term = Some(term);
+                        }
+                    }
+                }
+                
+                min_term.ok_or_else(|| anyhow!("No values to aggregate"))
+            }
+            crate::algebra::Aggregate::Max { expr, .. } => {
+                let mut max_term: Option<Term> = None;
+                for binding in bindings {
+                    if let Ok(term) = self.evaluate_expression_term(expr, binding) {
+                        if max_term.is_none() || self.compare_terms(&term, max_term.as_ref().unwrap()) == std::cmp::Ordering::Greater {
+                            max_term = Some(term);
+                        }
+                    }
+                }
+                
+                max_term.ok_or_else(|| anyhow!("No values to aggregate"))
+            }
+            crate::algebra::Aggregate::Avg { expr, .. } => {
+                let mut sum = 0.0;
+                let mut count = 0;
+                for binding in bindings {
+                    if let Ok(term) = self.evaluate_expression_term(expr, binding) {
+                        if let Term::Literal(lit) = term {
+                            if let Ok(val) = lit.value.parse::<f64>() {
+                                sum += val;
+                                count += 1;
+                            }
+                        }
+                    }
+                }
+                
+                if count > 0 {
+                    Ok(Term::Literal(crate::algebra::Literal {
+                        value: (sum / count as f64).to_string(),
+                        language: None,
+                        datatype: Some(crate::algebra::Iri("http://www.w3.org/2001/XMLSchema#decimal".to_string())),
+                    }))
+                } else {
+                    Err(anyhow!("No values to aggregate"))
+                }
+            }
+            crate::algebra::Aggregate::Sample { expr, .. } => {
+                for binding in bindings {
+                    if let Ok(term) = self.evaluate_expression_term(expr, binding) {
+                        return Ok(term);
+                    }
+                }
+                Err(anyhow!("No values to sample"))
+            }
+            crate::algebra::Aggregate::GroupConcat { expr, separator, .. } => {
+                let mut values = Vec::new();
+                for binding in bindings {
+                    if let Ok(term) = self.evaluate_expression_term(expr, binding) {
+                        if let Term::Literal(lit) = term {
+                            values.push(lit.value);
+                        } else {
+                            values.push(format!("{}", term));
+                        }
+                    }
+                }
+                
+                let sep = separator.as_deref().unwrap_or(" ");
+                let result = values.join(sep);
+                
+                Ok(Term::Literal(crate::algebra::Literal {
+                    value: result,
+                    language: None,
+                    datatype: None,
+                }))
+            }
+        }
     }
 }
 

@@ -11,67 +11,94 @@ pub mod algebra;
 pub mod optimizer;
 pub mod executor;
 pub mod extensions;
+pub mod path;
+pub mod builtin_fixed as builtin;
+pub mod query;
 
-/// Query algebra representation
-pub mod query {
-    use super::*;
-    
-    /// Abstract syntax tree for SPARQL queries
-    #[derive(Debug, Clone)]
-    pub enum Algebra {
-        Bgp(Vec<Triple>),
-        Join(Box<Algebra>, Box<Algebra>),
-        Union(Box<Algebra>, Box<Algebra>),
-        Filter(Box<Algebra>, Expression),
-        // TODO: Add more algebra nodes
+// Re-export main types for convenience
+pub use algebra::*;
+pub use optimizer::*;
+pub use executor::*;
+pub use extensions::*;
+pub use path::*;
+pub use query::*;
+
+/// SPARQL Query Engine - High-level interface
+pub struct SparqlEngine {
+    executor: QueryExecutor,
+    optimizer: QueryOptimizer,
+    extensions: ExtensionRegistry,
+    parser: query::QueryParser,
+}
+
+impl SparqlEngine {
+    /// Create a new SPARQL engine with default configuration
+    pub fn new() -> Result<Self> {
+        let mut extensions = ExtensionRegistry::new();
+        builtin::register_builtin_functions(&extensions)?;
+        
+        Ok(Self {
+            executor: QueryExecutor::new(),
+            optimizer: QueryOptimizer::new(),
+            extensions,
+            parser: query::QueryParser::new(),
+        })
     }
     
-    /// RDF triple pattern
-    #[derive(Debug, Clone)]
-    pub struct Triple {
-        pub subject: Term,
-        pub predicate: Term,
-        pub object: Term,
+    /// Create a new SPARQL engine with custom configuration
+    pub fn with_config(executor_config: executor::ExecutionContext, optimizer_config: optimizer::OptimizerConfig) -> Result<Self> {
+        let mut extensions = ExtensionRegistry::new();
+        builtin::register_builtin_functions(&extensions)?;
+        
+        Ok(Self {
+            executor: QueryExecutor::with_context(executor_config),
+            optimizer: QueryOptimizer::with_config(optimizer_config),
+            extensions,
+            parser: query::QueryParser::new(),
+        })
     }
     
-    /// RDF term
-    #[derive(Debug, Clone)]
-    pub enum Term {
-        Variable(String),
-        Iri(String),
-        Literal(String),
-        // TODO: Add more term types
+    /// Parse and execute a SPARQL query
+    pub fn execute_query(&mut self, query_str: &str, dataset: &dyn executor::Dataset) -> Result<(algebra::Solution, executor::ExecutionStats)> {
+        // Parse query
+        let query = self.parser.parse(query_str)?;
+        
+        // Convert to algebra
+        let algebra = self.convert_query_to_algebra(query)?;
+        
+        // Optimize algebra
+        let optimized_algebra = self.optimizer.optimize(algebra)?;
+        
+        // Execute
+        self.executor.execute(&optimized_algebra, dataset)
     }
     
-    /// SPARQL expression
-    #[derive(Debug, Clone)]
-    pub enum Expression {
-        Variable(String),
-        Literal(String),
-        Function(String, Vec<Expression>),
-        // TODO: Add more expression types
+    /// Register a custom function
+    pub fn register_function<F>(&self, function: F) -> Result<()>
+    where
+        F: extensions::CustomFunction + 'static,
+    {
+        self.extensions.register_function(function)
+    }
+    
+    /// Register a custom aggregate
+    pub fn register_aggregate<A>(&self, aggregate: A) -> Result<()>
+    where
+        A: extensions::CustomAggregate + 'static,
+    {
+        self.extensions.register_aggregate(aggregate)
+    }
+    
+    /// Convert parsed query to algebra expression
+    fn convert_query_to_algebra(&self, query: query::Query) -> Result<Algebra> {
+        // TODO: Implement proper query-to-algebra conversion
+        // For now, return the where clause
+        Ok(query.where_clause)
     }
 }
 
-/// Query planner and optimizer
-pub struct QueryPlanner {
-    // TODO: Implement query planning
-}
-
-impl QueryPlanner {
-    pub fn new() -> Self {
-        Self {}
-    }
-    
-    /// Plan and optimize a SPARQL query
-    pub fn plan(&self, _query: &str) -> Result<query::Algebra> {
-        // TODO: Implement query planning
-        Ok(query::Algebra::Bgp(vec![]))
-    }
-}
-
-impl Default for QueryPlanner {
+impl Default for SparqlEngine {
     fn default() -> Self {
-        Self::new()
+        Self::new().expect("Failed to create default SPARQL engine")
     }
 }
