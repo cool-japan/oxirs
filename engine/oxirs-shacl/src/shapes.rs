@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 
 use oxirs_core::{
-    model::{NamedNode, Term, Triple, BlankNode, Literal},
+    model::{NamedNode, Term, Triple, BlankNode, Literal, RdfTerm},
     store::Store,
     graph::Graph,
     OxirsError,
@@ -109,6 +109,21 @@ impl ShapeParser {
         Ok(shapes)
     }
     
+    /// Find all IRIs that represent shapes in a graph
+    fn find_shape_iris(&self, _graph: &Graph) -> Result<Vec<String>> {
+        // TODO: Implement shape IRI discovery from graph
+        Ok(Vec::new())
+    }
+    
+    /// Parse a single shape from a graph
+    fn parse_shape(&mut self, _graph: &Graph, _shape_iri: &str, _visited: &mut HashSet<String>, _depth: usize) -> Result<Shape> {
+        // TODO: Implement shape parsing from graph
+        Ok(Shape::new(
+            ShapeId(_shape_iri.to_string()), 
+            ShapeType::NodeShape
+        ))
+    }
+
     /// Find all IRIs that represent shapes in the store
     fn find_shape_iris_in_store(&self, store: &Store, graph_name: Option<&str>) -> Result<Vec<String>> {
         let mut shape_iris = HashSet::new();
@@ -122,31 +137,58 @@ impl ShapeParser {
         ];
         
         for query in shape_type_queries {
-            // TODO: Execute SPARQL query and extract shape IRIs
             tracing::debug!("Shape discovery query: {}", query);
-            // let results = store.query(&query)?;
-            // for solution in results.solutions() {
-            //     if let Some(shape_iri) = solution.get("shape") {
-            //         if let Term::NamedNode(node) = shape_iri {
-            //             shape_iris.insert(node.as_str().to_string());
-            //         }
-            //     }
-            // }
+            match self.execute_shape_query(store, &query) {
+                Ok(results) => {
+                    if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = results {
+                        for binding in bindings {
+                            if let Some(shape_iri) = binding.get("shape") {
+                                if let Term::NamedNode(node) = shape_iri {
+                                    shape_iris.insert(node.as_str().to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Failed to execute shape type query: {}", e);
+                    // Continue with other queries
+                }
+            }
         }
         
         // Query for resources with shape-indicating properties
         let property_queries = vec![
             self.create_property_query("targetClass", graph_name),
             self.create_property_query("targetNode", graph_name),
+            self.create_property_query("targetObjectsOf", graph_name),
+            self.create_property_query("targetSubjectsOf", graph_name),
             self.create_property_query("property", graph_name),
             self.create_property_query("path", graph_name),
         ];
         
         for query in property_queries {
             tracing::debug!("Shape property discovery query: {}", query);
-            // TODO: Execute and process results
+            match self.execute_shape_query(store, &query) {
+                Ok(results) => {
+                    if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = results {
+                        for binding in bindings {
+                            if let Some(shape_iri) = binding.get("shape") {
+                                if let Term::NamedNode(node) = shape_iri {
+                                    shape_iris.insert(node.as_str().to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Failed to execute shape property query: {}", e);
+                    // Continue with other queries
+                }
+            }
         }
         
+        tracing::info!("Discovered {} shape IRIs in store", shape_iris.len());
         Ok(shape_iris.into_iter().collect())
     }
     
@@ -250,10 +292,19 @@ impl ShapeParser {
             "#, shape_iri)
         };
         
-        // TODO: Execute ASK query
-        // if store.ask(&property_shape_query)? {
-        //     return Ok(ShapeType::PropertyShape);
-        // }
+        // Execute ASK query to check for PropertyShape type
+        match self.execute_shape_query(store, &property_shape_query) {
+            Ok(result) => {
+                if let oxirs_core::query::QueryResult::Ask(is_property_shape) = result {
+                    if is_property_shape {
+                        return Ok(ShapeType::PropertyShape);
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::debug!("Failed to check PropertyShape type: {}", e);
+            }
+        }
         
         // Check for sh:path property (indicates property shape)
         let path_query = if let Some(graph) = graph_name {
@@ -272,12 +323,22 @@ impl ShapeParser {
             "#, shape_iri)
         };
         
-        // TODO: Execute ASK query
-        // if store.ask(&path_query)? {
-        //     return Ok(ShapeType::PropertyShape);
-        // }
+        // Execute ASK query to check for path property
+        match self.execute_shape_query(store, &path_query) {
+            Ok(result) => {
+                if let oxirs_core::query::QueryResult::Ask(has_path) = result {
+                    if has_path {
+                        return Ok(ShapeType::PropertyShape);
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::debug!("Failed to check path property: {}", e);
+            }
+        }
         
         // Default to NodeShape
+        tracing::debug!("Shape {} defaulting to NodeShape", shape_iri);
         Ok(ShapeType::NodeShape)
     }
     
@@ -359,6 +420,589 @@ impl ShapeParser {
         }
     }
     
+    /// Parse shape metadata from store
+    fn parse_shape_metadata_from_store(&self, _store: &Store, _shape_iri: &str, _shape: &mut Shape, _graph_name: Option<&str>) -> Result<()> {
+        // TODO: Implement metadata parsing from store
+        Ok(())
+    }
+    
+    /// Execute a shape parsing query using oxirs-core query engine
+    fn execute_shape_query(&self, store: &Store, query: &str) -> Result<oxirs_core::query::QueryResult> {
+        use oxirs_core::query::QueryEngine;
+        
+        let query_engine = QueryEngine::new();
+        
+        tracing::debug!("Executing shape parsing query: {}", query);
+        
+        let result = query_engine.query(query, store)
+            .map_err(|e| ShaclError::ShapeParsing(format!("Shape parsing query failed: {}", e)))?;
+        
+        Ok(result)
+    }
+    
+    /// Parse shape targets from store
+    fn parse_shape_targets_from_store(&self, store: &Store, shape_iri: &str, shape: &mut Shape, graph_name: Option<&str>) -> Result<()> {
+        use crate::targets::Target;
+        
+        // Parse sh:targetClass
+        let target_class_query = if let Some(graph) = graph_name {
+            format!(r#"
+                SELECT DISTINCT ?class WHERE {{
+                    GRAPH <{}> {{
+                        <{}> <http://www.w3.org/ns/shacl#targetClass> ?class .
+                    }}
+                }}
+            "#, graph, shape_iri)
+        } else {
+            format!(r#"
+                SELECT DISTINCT ?class WHERE {{
+                    <{}> <http://www.w3.org/ns/shacl#targetClass> ?class .
+                }}
+            "#, shape_iri)
+        };
+        
+        match self.execute_shape_query(store, &target_class_query) {
+            Ok(results) => {
+                if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = results {
+                    for binding in bindings {
+                        if let Some(class_term) = binding.get("class") {
+                            if let Term::NamedNode(class_node) = class_term {
+                                shape.add_target(Target::class(class_node.clone()));
+                                tracing::debug!("Added target class: {}", class_node.as_str());
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::debug!("Failed to parse target classes: {}", e);
+            }
+        }
+        
+        // Parse sh:targetNode
+        let target_node_query = if let Some(graph) = graph_name {
+            format!(r#"
+                SELECT DISTINCT ?node WHERE {{
+                    GRAPH <{}> {{
+                        <{}> <http://www.w3.org/ns/shacl#targetNode> ?node .
+                    }}
+                }}
+            "#, graph, shape_iri)
+        } else {
+            format!(r#"
+                SELECT DISTINCT ?node WHERE {{
+                    <{}> <http://www.w3.org/ns/shacl#targetNode> ?node .
+                }}
+            "#, shape_iri)
+        };
+        
+        match self.execute_shape_query(store, &target_node_query) {
+            Ok(results) => {
+                if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = results {
+                    for binding in bindings {
+                        if let Some(node_term) = binding.get("node") {
+                            shape.add_target(Target::node(node_term.clone()));
+                            tracing::debug!("Added target node: {}", node_term.as_str());
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::debug!("Failed to parse target nodes: {}", e);
+            }
+        }
+        
+        // Parse sh:targetObjectsOf
+        let target_objects_of_query = if let Some(graph) = graph_name {
+            format!(r#"
+                SELECT DISTINCT ?property WHERE {{
+                    GRAPH <{}> {{
+                        <{}> <http://www.w3.org/ns/shacl#targetObjectsOf> ?property .
+                    }}
+                }}
+            "#, graph, shape_iri)
+        } else {
+            format!(r#"
+                SELECT DISTINCT ?property WHERE {{
+                    <{}> <http://www.w3.org/ns/shacl#targetObjectsOf> ?property .
+                }}
+            "#, shape_iri)
+        };
+        
+        match self.execute_shape_query(store, &target_objects_of_query) {
+            Ok(results) => {
+                if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = results {
+                    for binding in bindings {
+                        if let Some(property_term) = binding.get("property") {
+                            if let Term::NamedNode(property_node) = property_term {
+                                shape.add_target(Target::objects_of(property_node.clone()));
+                                tracing::debug!("Added target objects of: {}", property_node.as_str());
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::debug!("Failed to parse target objects of: {}", e);
+            }
+        }
+        
+        // Parse sh:targetSubjectsOf
+        let target_subjects_of_query = if let Some(graph) = graph_name {
+            format!(r#"
+                SELECT DISTINCT ?property WHERE {{
+                    GRAPH <{}> {{
+                        <{}> <http://www.w3.org/ns/shacl#targetSubjectsOf> ?property .
+                    }}
+                }}
+            "#, graph, shape_iri)
+        } else {
+            format!(r#"
+                SELECT DISTINCT ?property WHERE {{
+                    <{}> <http://www.w3.org/ns/shacl#targetSubjectsOf> ?property .
+                }}
+            "#, shape_iri)
+        };
+        
+        match self.execute_shape_query(store, &target_subjects_of_query) {
+            Ok(results) => {
+                if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = results {
+                    for binding in bindings {
+                        if let Some(property_term) = binding.get("property") {
+                            if let Term::NamedNode(property_node) = property_term {
+                                shape.add_target(Target::subjects_of(property_node.clone()));
+                                tracing::debug!("Added target subjects of: {}", property_node.as_str());
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::debug!("Failed to parse target subjects of: {}", e);
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Parse property path from store
+    fn parse_property_path_from_store(&self, store: &Store, shape_iri: &str, shape: &mut Shape, graph_name: Option<&str>) -> Result<()> {
+        use crate::paths::PropertyPath;
+        
+        let path_query = if let Some(graph) = graph_name {
+            format!(r#"
+                SELECT DISTINCT ?path WHERE {{
+                    GRAPH <{}> {{
+                        <{}> <http://www.w3.org/ns/shacl#path> ?path .
+                    }}
+                }}
+            "#, graph, shape_iri)
+        } else {
+            format!(r#"
+                SELECT DISTINCT ?path WHERE {{
+                    <{}> <http://www.w3.org/ns/shacl#path> ?path .
+                }}
+            "#, shape_iri)
+        };
+        
+        match self.execute_shape_query(store, &path_query) {
+            Ok(results) => {
+                if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = results {
+                    for binding in bindings {
+                        if let Some(path_term) = binding.get("path") {
+                            // Parse the property path from the RDF term
+                            match self.parse_property_path_from_term(store, path_term, graph_name) {
+                                Ok(property_path) => {
+                                    shape.path = Some(property_path);
+                                    tracing::debug!("Parsed property path for shape {}", shape_iri);
+                                    break; // Only take the first path found
+                                }
+                                Err(e) => {
+                                    tracing::error!("Failed to parse property path: {}", e);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::debug!("Failed to query for property path: {}", e);
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Parse property path from an RDF term (simple implementation)
+    fn parse_property_path_from_term(&self, _store: &Store, path_term: &Term, _graph_name: Option<&str>) -> Result<PropertyPath> {
+        use crate::paths::PropertyPath;
+        
+        // For now, implement simple predicate paths only
+        // TODO: Implement complex property path parsing (inverse, sequence, alternative, etc.)
+        match path_term {
+            Term::NamedNode(predicate_node) => {
+                Ok(PropertyPath::predicate(predicate_node.clone()))
+            }
+            Term::BlankNode(_) => {
+                // This would be a complex property path (sequence, alternative, etc.)
+                // For now, return an error
+                Err(ShaclError::PropertyPath(
+                    "Complex property paths (sequences, alternatives, etc.) not yet implemented".to_string()
+                ))
+            }
+            _ => {
+                Err(ShaclError::PropertyPath(
+                    "Invalid property path term - must be a named node or blank node".to_string()
+                ))
+            }
+        }
+    }
+    
+    /// Parse shape constraints from store
+    fn parse_shape_constraints_from_store(&self, store: &Store, shape_iri: &str, shape: &mut Shape, graph_name: Option<&str>) -> Result<()> {
+        use crate::constraints::*;
+        use crate::{ConstraintComponentId, Constraint};
+        
+        // Parse sh:class constraint
+        self.parse_class_constraint(store, shape_iri, shape, graph_name)?;
+        
+        // Parse sh:datatype constraint
+        self.parse_datatype_constraint(store, shape_iri, shape, graph_name)?;
+        
+        // Parse cardinality constraints (sh:minCount, sh:maxCount)
+        self.parse_cardinality_constraints(store, shape_iri, shape, graph_name)?;
+        
+        // Parse string constraints (sh:minLength, sh:maxLength, sh:pattern)
+        self.parse_string_constraints(store, shape_iri, shape, graph_name)?;
+        
+        // Parse value constraints (sh:in, sh:hasValue)
+        self.parse_value_constraints(store, shape_iri, shape, graph_name)?;
+        
+        // Parse range constraints (sh:minInclusive, sh:maxInclusive, etc.)
+        self.parse_range_constraints(store, shape_iri, shape, graph_name)?;
+        
+        tracing::debug!("Parsed {} constraints for shape {}", shape.constraints.len(), shape_iri);
+        Ok(())
+    }
+    
+    /// Parse sh:class constraint
+    fn parse_class_constraint(&self, store: &Store, shape_iri: &str, shape: &mut Shape, graph_name: Option<&str>) -> Result<()> {
+        let query = if let Some(graph) = graph_name {
+            format!(r#"
+                SELECT DISTINCT ?class WHERE {{
+                    GRAPH <{}> {{
+                        <{}> <http://www.w3.org/ns/shacl#class> ?class .
+                    }}
+                }}
+            "#, graph, shape_iri)
+        } else {
+            format!(r#"
+                SELECT DISTINCT ?class WHERE {{
+                    <{}> <http://www.w3.org/ns/shacl#class> ?class .
+                }}
+            "#, shape_iri)
+        };
+        
+        match self.execute_shape_query(store, &query) {
+            Ok(results) => {
+                if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = results {
+                    for binding in bindings {
+                        if let Some(class_term) = binding.get("class") {
+                            if let Term::NamedNode(class_node) = class_term {
+                                let constraint = Constraint::Class(ClassConstraint { 
+                                    class_iri: class_node.clone() 
+                                });
+                                shape.add_constraint(
+                                    ConstraintComponentId::new("sh:ClassConstraintComponent"),
+                                    constraint
+                                );
+                                tracing::debug!("Added class constraint: {}", class_node.as_str());
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::debug!("Failed to parse class constraint: {}", e);
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Parse sh:datatype constraint
+    fn parse_datatype_constraint(&self, store: &Store, shape_iri: &str, shape: &mut Shape, graph_name: Option<&str>) -> Result<()> {
+        let query = if let Some(graph) = graph_name {
+            format!(r#"
+                SELECT DISTINCT ?datatype WHERE {{
+                    GRAPH <{}> {{
+                        <{}> <http://www.w3.org/ns/shacl#datatype> ?datatype .
+                    }}
+                }}
+            "#, graph, shape_iri)
+        } else {
+            format!(r#"
+                SELECT DISTINCT ?datatype WHERE {{
+                    <{}> <http://www.w3.org/ns/shacl#datatype> ?datatype .
+                }}
+            "#, shape_iri)
+        };
+        
+        match self.execute_shape_query(store, &query) {
+            Ok(results) => {
+                if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = results {
+                    for binding in bindings {
+                        if let Some(datatype_term) = binding.get("datatype") {
+                            if let Term::NamedNode(datatype_node) = datatype_term {
+                                let constraint = Constraint::Datatype(DatatypeConstraint { 
+                                    datatype_iri: datatype_node.clone() 
+                                });
+                                shape.add_constraint(
+                                    ConstraintComponentId::new("sh:DatatypeConstraintComponent"),
+                                    constraint
+                                );
+                                tracing::debug!("Added datatype constraint: {}", datatype_node.as_str());
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::debug!("Failed to parse datatype constraint: {}", e);
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Parse cardinality constraints (sh:minCount, sh:maxCount)
+    fn parse_cardinality_constraints(&self, store: &Store, shape_iri: &str, shape: &mut Shape, graph_name: Option<&str>) -> Result<()> {
+        // Parse sh:minCount
+        let min_count_query = if let Some(graph) = graph_name {
+            format!(r#"
+                SELECT DISTINCT ?minCount WHERE {{
+                    GRAPH <{}> {{
+                        <{}> <http://www.w3.org/ns/shacl#minCount> ?minCount .
+                    }}
+                }}
+            "#, graph, shape_iri)
+        } else {
+            format!(r#"
+                SELECT DISTINCT ?minCount WHERE {{
+                    <{}> <http://www.w3.org/ns/shacl#minCount> ?minCount .
+                }}
+            "#, shape_iri)
+        };
+        
+        match self.execute_shape_query(store, &min_count_query) {
+            Ok(results) => {
+                if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = results {
+                    for binding in bindings {
+                        if let Some(min_count_term) = binding.get("minCount") {
+                            if let Term::Literal(literal) = min_count_term {
+                                if let Ok(min_count) = literal.as_str().parse::<u32>() {
+                                    let constraint = Constraint::MinCount(MinCountConstraint { min_count });
+                                    shape.add_constraint(
+                                        ConstraintComponentId::new("sh:MinCountConstraintComponent"),
+                                        constraint
+                                    );
+                                    tracing::debug!("Added minCount constraint: {}", min_count);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::debug!("Failed to parse minCount constraint: {}", e);
+            }
+        }
+        
+        // Parse sh:maxCount
+        let max_count_query = if let Some(graph) = graph_name {
+            format!(r#"
+                SELECT DISTINCT ?maxCount WHERE {{
+                    GRAPH <{}> {{
+                        <{}> <http://www.w3.org/ns/shacl#maxCount> ?maxCount .
+                    }}
+                }}
+            "#, graph, shape_iri)
+        } else {
+            format!(r#"
+                SELECT DISTINCT ?maxCount WHERE {{
+                    <{}> <http://www.w3.org/ns/shacl#maxCount> ?maxCount .
+                }}
+            "#, shape_iri)
+        };
+        
+        match self.execute_shape_query(store, &max_count_query) {
+            Ok(results) => {
+                if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = results {
+                    for binding in bindings {
+                        if let Some(max_count_term) = binding.get("maxCount") {
+                            if let Term::Literal(literal) = max_count_term {
+                                if let Ok(max_count) = literal.as_str().parse::<u32>() {
+                                    let constraint = Constraint::MaxCount(MaxCountConstraint { max_count });
+                                    shape.add_constraint(
+                                        ConstraintComponentId::new("sh:MaxCountConstraintComponent"),
+                                        constraint
+                                    );
+                                    tracing::debug!("Added maxCount constraint: {}", max_count);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::debug!("Failed to parse maxCount constraint: {}", e);
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Parse string constraints (sh:minLength, sh:maxLength, sh:pattern)
+    fn parse_string_constraints(&self, store: &Store, shape_iri: &str, shape: &mut Shape, graph_name: Option<&str>) -> Result<()> {
+        // Parse sh:minLength
+        let min_length_query = if let Some(graph) = graph_name {
+            format!(r#"
+                SELECT DISTINCT ?minLength WHERE {{
+                    GRAPH <{}> {{
+                        <{}> <http://www.w3.org/ns/shacl#minLength> ?minLength .
+                    }}
+                }}
+            "#, graph, shape_iri)
+        } else {
+            format!(r#"
+                SELECT DISTINCT ?minLength WHERE {{
+                    <{}> <http://www.w3.org/ns/shacl#minLength> ?minLength .
+                }}
+            "#, shape_iri)
+        };
+        
+        match self.execute_shape_query(store, &min_length_query) {
+            Ok(results) => {
+                if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = results {
+                    for binding in bindings {
+                        if let Some(min_length_term) = binding.get("minLength") {
+                            if let Term::Literal(literal) = min_length_term {
+                                if let Ok(min_length) = literal.as_str().parse::<u32>() {
+                                    let constraint = Constraint::MinLength(MinLengthConstraint { min_length });
+                                    shape.add_constraint(
+                                        ConstraintComponentId::new("sh:MinLengthConstraintComponent"),
+                                        constraint
+                                    );
+                                    tracing::debug!("Added minLength constraint: {}", min_length);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::debug!("Failed to parse minLength constraint: {}", e);
+            }
+        }
+        
+        // Parse sh:maxLength
+        let max_length_query = if let Some(graph) = graph_name {
+            format!(r#"
+                SELECT DISTINCT ?maxLength WHERE {{
+                    GRAPH <{}> {{
+                        <{}> <http://www.w3.org/ns/shacl#maxLength> ?maxLength .
+                    }}
+                }}
+            "#, graph, shape_iri)
+        } else {
+            format!(r#"
+                SELECT DISTINCT ?maxLength WHERE {{
+                    <{}> <http://www.w3.org/ns/shacl#maxLength> ?maxLength .
+                }}
+            "#, shape_iri)
+        };
+        
+        match self.execute_shape_query(store, &max_length_query) {
+            Ok(results) => {
+                if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = results {
+                    for binding in bindings {
+                        if let Some(max_length_term) = binding.get("maxLength") {
+                            if let Term::Literal(literal) = max_length_term {
+                                if let Ok(max_length) = literal.as_str().parse::<u32>() {
+                                    let constraint = Constraint::MaxLength(MaxLengthConstraint { max_length });
+                                    shape.add_constraint(
+                                        ConstraintComponentId::new("sh:MaxLengthConstraintComponent"),
+                                        constraint
+                                    );
+                                    tracing::debug!("Added maxLength constraint: {}", max_length);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::debug!("Failed to parse maxLength constraint: {}", e);
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Parse value constraints (sh:in, sh:hasValue) - basic implementation
+    fn parse_value_constraints(&self, store: &Store, shape_iri: &str, shape: &mut Shape, graph_name: Option<&str>) -> Result<()> {
+        // Parse sh:hasValue
+        let has_value_query = if let Some(graph) = graph_name {
+            format!(r#"
+                SELECT DISTINCT ?value WHERE {{
+                    GRAPH <{}> {{
+                        <{}> <http://www.w3.org/ns/shacl#hasValue> ?value .
+                    }}
+                }}
+            "#, graph, shape_iri)
+        } else {
+            format!(r#"
+                SELECT DISTINCT ?value WHERE {{
+                    <{}> <http://www.w3.org/ns/shacl#hasValue> ?value .
+                }}
+            "#, shape_iri)
+        };
+        
+        match self.execute_shape_query(store, &has_value_query) {
+            Ok(results) => {
+                if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = results {
+                    for binding in bindings {
+                        if let Some(value_term) = binding.get("value") {
+                            let constraint = Constraint::HasValue(HasValueConstraint { 
+                                value: value_term.clone() 
+                            });
+                            shape.add_constraint(
+                                ConstraintComponentId::new("sh:HasValueConstraintComponent"),
+                                constraint
+                            );
+                            tracing::debug!("Added hasValue constraint: {}", value_term.as_str());
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::debug!("Failed to parse hasValue constraint: {}", e);
+            }
+        }
+        
+        // TODO: Implement sh:in constraint (requires parsing RDF lists)
+        
+        Ok(())
+    }
+    
+    /// Parse range constraints (sh:minInclusive, sh:maxInclusive, etc.) - basic implementation
+    fn parse_range_constraints(&self, store: &Store, shape_iri: &str, shape: &mut Shape, graph_name: Option<&str>) -> Result<()> {
+        // For now, just log that range constraints would be parsed here
+        // TODO: Implement full range constraint parsing
+        tracing::debug!("Range constraint parsing not yet fully implemented for shape {}", shape_iri);
+        Ok(())
+    }
+
     /// Clear the shape cache
     pub fn clear_cache(&mut self) {
         self.shape_cache.clear();
@@ -590,6 +1234,34 @@ impl ShapeFactory {
         }
         
         shape
+    }
+
+    /// Parse shape metadata from store (labels, descriptions, etc.)
+    fn parse_shape_metadata_from_store(&mut self, _store: &Store, _shape_iri: &str, _shape: &mut Shape, _graph_name: Option<&str>) -> Result<()> {
+        // TODO: Implement metadata parsing from store
+        // This would parse rdfs:label, rdfs:comment, sh:name, sh:description, etc.
+        Ok(())
+    }
+
+    /// Parse shape targets from store
+    fn parse_shape_targets_from_store(&mut self, _store: &Store, _shape_iri: &str, _shape: &mut Shape, _graph_name: Option<&str>) -> Result<()> {
+        // TODO: Implement target parsing from store
+        // This would parse sh:targetClass, sh:targetNode, sh:targetObjectsOf, sh:targetSubjectsOf
+        Ok(())
+    }
+
+    /// Parse property path from store for property shapes
+    fn parse_property_path_from_store(&mut self, _store: &Store, _shape_iri: &str, _shape: &mut Shape, _graph_name: Option<&str>) -> Result<()> {
+        // TODO: Implement property path parsing from store
+        // This would parse sh:path property for property shapes
+        Ok(())
+    }
+
+    /// Parse shape constraints from store
+    fn parse_shape_constraints_from_store(&mut self, _store: &Store, _shape_iri: &str, _shape: &mut Shape, _graph_name: Option<&str>) -> Result<()> {
+        // TODO: Implement constraint parsing from store
+        // This would parse all SHACL constraint properties like sh:minCount, sh:datatype, etc.
+        Ok(())
     }
 }
 

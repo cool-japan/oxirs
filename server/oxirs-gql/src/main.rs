@@ -27,7 +27,7 @@ struct Args {
     file: Option<String>,
 
     /// RDF format (turtle, ntriples, rdfxml, jsonld)
-    #[arg(short = 'f', long, default_value = "turtle")]
+    #[arg(long, default_value = "turtle")]
     format: String,
 
     /// Enable GraphQL playground
@@ -78,7 +78,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     
-    let addr: SocketAddr = format!("{}:{}", args.host, args.port).parse()?;
+    let addr: SocketAddr = if args.host == "localhost" {
+        format!("127.0.0.1:{}", args.port).parse()?
+    } else {
+        format!("{}:{}", args.host, args.port).parse()?
+    };
     let store_arc = Arc::new(store);
     
     println!("🚀 Starting OxiRS GraphQL server on http://{}", addr);

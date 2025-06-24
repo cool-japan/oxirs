@@ -5,7 +5,9 @@
 
 use crate::{Rule, RuleAtom, Term, RuleEngine};
 use anyhow::Result;
-use oxirs_core::{Store, Triple, Quad, NamedNode, Literal, Subject, Predicate, Object, GraphName};
+use oxirs_core::{OxirsError, Triple, Quad, NamedNode, Literal, Subject, Predicate, Object, GraphName, Variable};
+use oxirs_core::store::Store;
+use oxirs_core::model::RdfTerm;
 use std::collections::HashMap;
 use tracing::{debug, info, trace, warn};
 
@@ -168,6 +170,7 @@ impl RuleIntegration {
         match subject {
             Subject::NamedNode(node) => Term::Constant(node.as_str().to_string()),
             Subject::BlankNode(node) => Term::Constant(format!("_:{}", node.as_str())),
+            Subject::Variable(var) => Term::Variable(var.as_str().to_string()),
         }
     }
 
@@ -175,6 +178,7 @@ impl RuleIntegration {
     fn predicate_to_term(&self, predicate: &Predicate) -> Term {
         match predicate {
             Predicate::NamedNode(node) => Term::Constant(node.as_str().to_string()),
+            Predicate::Variable(var) => Term::Variable(var.as_str().to_string()),
         }
     }
 
@@ -184,6 +188,7 @@ impl RuleIntegration {
             Object::NamedNode(node) => Term::Constant(node.as_str().to_string()),
             Object::BlankNode(node) => Term::Constant(format!("_:{}", node.as_str())),
             Object::Literal(literal) => Term::Literal(literal.value().to_string()),
+            Object::Variable(var) => Term::Variable(var.as_str().to_string()),
         }
     }
 
@@ -243,10 +248,167 @@ impl RuleIntegration {
             }
         }
     }
+
+    /// Enhanced streaming data processing
+    pub fn process_stream(&mut self, data_stream: impl Iterator<Item = Result<Triple, OxirsError>>) -> Result<StreamingStats> {
+        let mut processed = 0;
+        let mut derived = 0;
+        let mut errors = 0;
+        
+        for triple_result in data_stream {
+            match triple_result {
+                Ok(triple) => {
+                    if self.store.insert_triple(triple)? {
+                        processed += 1;
+                        
+                        // Apply rules incrementally
+                        if processed % 1000 == 0 {
+                            let new_facts = self.apply_rules()?;
+                            derived += new_facts;
+                            info!("Processed {} triples, derived {} facts", processed, derived);
+                        }
+                    }
+                }
+                Err(_) => {
+                    errors += 1;
+                }
+            }
+        }
+        
+        // Final rule application
+        let final_derived = self.apply_rules()?;
+        derived += final_derived;
+        
+        Ok(StreamingStats {
+            processed_triples: processed,
+            derived_facts: derived,
+            errors,
+        })
+    }
+    
+    /// Batch process multiple triples with optimized rule application
+    pub fn batch_process(&mut self, triples: Vec<Triple>) -> Result<BatchProcessingStats> {
+        let start_time = std::time::Instant::now();
+        let initial_fact_count = self.store.len()?;
+        
+        // Insert all triples first
+        let mut inserted = 0;
+        for triple in triples {
+            if self.store.insert_triple(triple)? {
+                inserted += 1;
+            }
+        }
+        
+        // Apply rules once after all insertions
+        let derived = self.apply_rules()?;
+        let final_fact_count = self.store.len()?;
+        let duration = start_time.elapsed();
+        
+        Ok(BatchProcessingStats {
+            input_triples: inserted,
+            derived_facts: derived,
+            initial_fact_count,
+            final_fact_count,
+            processing_time: duration,
+        })
+    }
+    
+    /// Export reasoning results in different formats
+    pub fn export_reasoning_results(&self, format: ExportFormat) -> Result<String> {
+        match format {
+            ExportFormat::NTriples => {
+                let quads = self.store.iter_quads()?;
+                let mut output = String::new();
+                for quad in quads {
+                    let triple = quad.to_triple();
+                    output.push_str(&format!(
+                        "<{}> <{}> {} .\n",
+                        triple.subject().as_str(),
+                        triple.predicate().as_str(),
+                        self.format_object_for_ntriples(triple.object())
+                    ));
+                }
+                Ok(output)
+            }
+            ExportFormat::Json => {
+                let stats = self.get_integration_stats()?;
+                Ok(serde_json::to_string_pretty(&stats)?)
+            }
+        }
+    }
+    
+    /// Advanced reasoning analysis
+    pub fn analyze_reasoning_coverage(&mut self) -> Result<ReasoningAnalysis> {
+        let initial_facts = self.store.len()?;
+        let derived = self.apply_rules()?;
+        let final_facts = self.store.len()?;
+        
+        let coverage_ratio = if initial_facts > 0 {
+            derived as f64 / initial_facts as f64
+        } else {
+            0.0
+        };
+        
+        Ok(ReasoningAnalysis {
+            initial_fact_count: initial_facts,
+            derived_fact_count: derived,
+            final_fact_count: final_facts,
+            reasoning_coverage_ratio: coverage_ratio,
+            active_rules: self.rule_engine.rules.len(),
+        })
+    }
+    
+    /// Find reasoning bottlenecks and optimization opportunities
+    pub fn performance_analysis(&mut self) -> Result<PerformanceAnalysis> {
+        let start_time = std::time::Instant::now();
+        
+        // Measure rule loading time
+        let rule_load_start = std::time::Instant::now();
+        self.load_facts_from_store()?;
+        let rule_load_time = rule_load_start.elapsed();
+        
+        // Measure reasoning time
+        let reasoning_start = std::time::Instant::now();
+        let derived = self.apply_rules()?;
+        let reasoning_time = reasoning_start.elapsed();
+        
+        let total_time = start_time.elapsed();
+        
+        Ok(PerformanceAnalysis {
+            rule_loading_time: rule_load_time,
+            reasoning_time,
+            total_time,
+            facts_per_second: if reasoning_time.as_secs() > 0 {
+                derived as f64 / reasoning_time.as_secs_f64()
+            } else {
+                0.0
+            },
+        })
+    }
+    
+    /// Helper method to format objects for N-Triples export
+    fn format_object_for_ntriples(&self, object: &Object) -> String {
+        match object {
+            Object::NamedNode(node) => format!("<{}>", node.as_str()),
+            Object::BlankNode(node) => format!("_:{}", node.as_str()),
+            Object::Literal(literal) => {
+                if let Some(datatype) = literal.datatype() {
+                    if datatype.as_str() == "http://www.w3.org/2001/XMLSchema#string" {
+                        format!("\"{}\"@{}", literal.value(), literal.language().unwrap_or("en"))
+                    } else {
+                        format!("\"{}\"^^<{}>", literal.value(), datatype.as_str())
+                    }
+                } else {
+                    format!("\"{}\"@{}", literal.value(), literal.language().unwrap_or("en"))
+                }
+            }
+            Object::Variable(var) => format!("?{}", var.as_str()),
+        }
+    }
 }
 
 /// Statistics about the rule-store integration
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct IntegrationStats {
     /// Number of quads in the store
     pub store_quad_count: usize,
@@ -256,10 +418,85 @@ pub struct IntegrationStats {
     pub rule_count: usize,
 }
 
+/// Statistics for streaming data processing
+#[derive(Debug, Clone)]
+pub struct StreamingStats {
+    pub processed_triples: usize,
+    pub derived_facts: usize,
+    pub errors: usize,
+}
+
+/// Statistics for batch processing
+#[derive(Debug, Clone)]
+pub struct BatchProcessingStats {
+    pub input_triples: usize,
+    pub derived_facts: usize,
+    pub initial_fact_count: usize,
+    pub final_fact_count: usize,
+    pub processing_time: std::time::Duration,
+}
+
+/// Analysis of reasoning coverage and effectiveness
+#[derive(Debug, Clone)]
+pub struct ReasoningAnalysis {
+    pub initial_fact_count: usize,
+    pub derived_fact_count: usize,
+    pub final_fact_count: usize,
+    pub reasoning_coverage_ratio: f64,
+    pub active_rules: usize,
+}
+
+/// Performance analysis results
+#[derive(Debug, Clone)]
+pub struct PerformanceAnalysis {
+    pub rule_loading_time: std::time::Duration,
+    pub reasoning_time: std::time::Duration,
+    pub total_time: std::time::Duration,
+    pub facts_per_second: f64,
+}
+
+/// Export format options
+#[derive(Debug, Clone)]
+pub enum ExportFormat {
+    NTriples,
+    Json,
+}
+
 impl std::fmt::Display for IntegrationStats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Store: {} quads, Rules: {} facts/{} rules", 
                self.store_quad_count, self.rule_fact_count, self.rule_count)
+    }
+}
+
+impl std::fmt::Display for StreamingStats {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Processed: {} triples, Derived: {} facts, Errors: {}", 
+               self.processed_triples, self.derived_facts, self.errors)
+    }
+}
+
+impl std::fmt::Display for BatchProcessingStats {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Batch: {} input -> {} derived in {:?} ({} -> {} total facts)", 
+               self.input_triples, self.derived_facts, self.processing_time,
+               self.initial_fact_count, self.final_fact_count)
+    }
+}
+
+impl std::fmt::Display for ReasoningAnalysis {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Coverage: {:.2}% ({}/{} facts, {} rules)", 
+               self.reasoning_coverage_ratio * 100.0,
+               self.derived_fact_count, self.initial_fact_count, self.active_rules)
+    }
+}
+
+impl std::fmt::Display for PerformanceAnalysis {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Performance: {:.2} facts/sec (load: {:?}, reason: {:?}, total: {:?})", 
+               self.facts_per_second, self.rule_loading_time, 
+               self.reasoning_time, self.total_time)
     }
 }
 

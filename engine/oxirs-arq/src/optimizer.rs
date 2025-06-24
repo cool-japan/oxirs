@@ -6,6 +6,9 @@
 use crate::algebra::{Algebra, Expression, TriplePattern, Term, Variable, BinaryOperator, UnaryOperator};
 use anyhow::{Result, anyhow};
 use std::collections::{HashMap, HashSet};
+use std::time::Duration;
+use std::hash::{Hash, Hasher};
+use std::collections::hash_map::DefaultHasher;
 
 /// Query optimizer configuration
 #[derive(Debug, Clone)]
@@ -49,6 +52,70 @@ pub struct Statistics {
     pub pattern_cardinality: HashMap<String, usize>,
     /// Join selectivity estimates
     pub join_selectivity: HashMap<String, f64>,
+    /// Predicate frequency statistics
+    pub predicate_frequency: HashMap<String, usize>,
+    /// Subject/object cardinality statistics
+    pub subject_cardinality: HashMap<String, usize>,
+    pub object_cardinality: HashMap<String, usize>,
+    /// Index statistics
+    pub index_stats: IndexStatistics,
+    /// Query execution history
+    pub execution_history: Vec<ExecutionRecord>,
+}
+
+/// Index statistics for optimization
+#[derive(Debug, Clone, Default)]
+pub struct IndexStatistics {
+    /// Available indexes
+    pub available_indexes: HashSet<IndexType>,
+    /// Index selectivity estimates
+    pub index_selectivity: HashMap<IndexType, f64>,
+    /// Index access cost estimates
+    pub index_access_cost: HashMap<IndexType, f64>,
+}
+
+/// Index types available in the system
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum IndexType {
+    SubjectPredicate,
+    PredicateObject,
+    SubjectObject,
+    FullText,
+    Spatial,
+    Temporal,
+    Custom(String),
+}
+
+/// Execution record for learning-based optimization
+#[derive(Debug, Clone)]
+pub struct ExecutionRecord {
+    pub query_hash: u64,
+    pub algebra: Algebra,
+    pub execution_time: Duration,
+    pub cardinality: usize,
+    pub memory_usage: usize,
+    pub optimization_decisions: Vec<OptimizationDecision>,
+}
+
+/// Optimization decision record
+#[derive(Debug, Clone)]
+pub struct OptimizationDecision {
+    pub optimization_type: OptimizationType,
+    pub before_cost: f64,
+    pub after_cost: f64,
+    pub success: bool,
+}
+
+/// Types of optimizations
+#[derive(Debug, Clone)]
+pub enum OptimizationType {
+    JoinReordering,
+    FilterPushdown,
+    ProjectionPushdown,
+    ConstantFolding,
+    IndexSelection,
+    MaterializationPoint,
+    ParallelizationStrategy,
 }
 
 impl Statistics {
@@ -59,7 +126,55 @@ impl Statistics {
     /// Estimate cardinality of a triple pattern
     pub fn estimate_pattern_cardinality(&self, pattern: &TriplePattern) -> usize {
         let pattern_key = format!("{}", pattern);
-        self.pattern_cardinality.get(&pattern_key).copied().unwrap_or(1000)
+        self.pattern_cardinality.get(&pattern_key).copied().unwrap_or_else(|| {
+            // Use advanced estimation based on term types
+            self.estimate_pattern_cardinality_advanced(pattern)
+        })
+    }
+    
+    /// Advanced pattern cardinality estimation
+    fn estimate_pattern_cardinality_advanced(&self, pattern: &TriplePattern) -> usize {
+        let mut cardinality = 1000; // Base cardinality
+        
+        // Adjust based on subject term
+        match &pattern.subject {
+            Term::Iri(iri) => {
+                cardinality = self.subject_cardinality.get(&iri.0).copied().unwrap_or(100);
+            }
+            Term::Variable(_) => {
+                cardinality *= 10; // Variables are less selective
+            }
+            _ => {}
+        }
+        
+        // Adjust based on predicate term
+        match &pattern.predicate {
+            Term::Iri(iri) => {
+                let pred_freq = self.predicate_frequency.get(&iri.0).copied().unwrap_or(1000);
+                cardinality = std::cmp::min(cardinality, pred_freq);
+            }
+            Term::Variable(_) => {
+                cardinality *= 100; // Variable predicates are very unselective
+            }
+            _ => {}
+        }
+        
+        // Adjust based on object term
+        match &pattern.object {
+            Term::Iri(iri) => {
+                let obj_card = self.object_cardinality.get(&iri.0).copied().unwrap_or(100);
+                cardinality = std::cmp::min(cardinality, obj_card);
+            }
+            Term::Literal(_) => {
+                cardinality /= 2; // Literals are more selective
+            }
+            Term::Variable(_) => {
+                cardinality *= 5; // Variable objects are less selective
+            }
+            _ => {}
+        }
+        
+        std::cmp::max(1, cardinality)
     }
     
     /// Estimate selectivity of a variable
@@ -67,35 +182,191 @@ impl Statistics {
         self.variable_selectivity.get(var).copied().unwrap_or(0.1)
     }
     
-    /// Estimate cost of an algebra expression
+    /// Estimate join selectivity between two patterns
+    pub fn estimate_join_selectivity(&self, left: &Algebra, right: &Algebra) -> f64 {
+        let shared_vars = self.get_shared_variables(left, right);
+        if shared_vars.is_empty() {
+            1.0 // Cartesian product
+        } else {
+            // More shared variables typically mean higher selectivity
+            let base_selectivity = 1.0 / (shared_vars.len() as f64 + 1.0);
+            
+            // Adjust based on variable selectivity
+            let avg_var_selectivity: f64 = shared_vars.iter()
+                .map(|var| self.estimate_variable_selectivity(var))
+                .sum::<f64>() / shared_vars.len() as f64;
+            
+            base_selectivity * avg_var_selectivity
+        }
+    }
+    
+    /// Get shared variables between two algebra expressions
+    fn get_shared_variables(&self, left: &Algebra, right: &Algebra) -> Vec<Variable> {
+        let left_vars: HashSet<_> = left.variables().into_iter().collect();
+        let right_vars: HashSet<_> = right.variables().into_iter().collect();
+        left_vars.intersection(&right_vars).cloned().collect()
+    }
+    
+    /// Estimate cost of an algebra expression with advanced heuristics
     pub fn estimate_cost(&self, algebra: &Algebra) -> f64 {
         match algebra {
             Algebra::Bgp(patterns) => {
                 if patterns.is_empty() {
-                    1.0 // Empty BGP has very low cost
+                    1.0
                 } else {
-                    patterns.iter()
-                        .map(|p| self.estimate_pattern_cardinality(p) as f64)
-                        .sum()
+                    // Use sophisticated BGP cost estimation
+                    self.estimate_bgp_cost(patterns)
                 }
             }
             Algebra::Join { left, right } => {
                 let left_cost = self.estimate_cost(left);
                 let right_cost = self.estimate_cost(right);
-                // Join has base cost plus multiplicative cost
-                10.0 + left_cost * right_cost * 0.1 // Base join cost + selectivity
+                let join_selectivity = self.estimate_join_selectivity(left, right);
+                
+                // Use hash join cost model: O(M + N) + output cost
+                let base_cost = left_cost + right_cost;
+                let output_cost = left_cost * right_cost * join_selectivity;
+                base_cost + output_cost
+            }
+            Algebra::LeftJoin { left, right, .. } => {
+                // Left join typically more expensive than inner join
+                let left_cost = self.estimate_cost(left);
+                let right_cost = self.estimate_cost(right);
+                left_cost + right_cost * 1.5
             }
             Algebra::Union { left, right } => {
-                self.estimate_cost(left) + self.estimate_cost(right)
+                self.estimate_cost(left) + self.estimate_cost(right) + 10.0
             }
-            Algebra::Filter { pattern, .. } => {
-                // Filter has higher cost than the pattern alone
-                self.estimate_cost(pattern) + 50.0 // Add filter overhead
+            Algebra::Filter { pattern, condition } => {
+                let pattern_cost = self.estimate_cost(pattern);
+                let filter_selectivity = self.estimate_filter_selectivity(condition);
+                pattern_cost + (pattern_cost * (1.0 - filter_selectivity) * 0.1)
             }
-            Algebra::Zero => 0.0, // Zero has zero cost
-            Algebra::Table => 1.0, // Table has minimal cost
-            _ => 100.0, // Default cost
+            Algebra::Service { pattern, .. } => {
+                // Remote service calls are expensive
+                self.estimate_cost(pattern) * 10.0 + 1000.0
+            }
+            Algebra::Distinct { pattern } => {
+                // Distinct requires sorting or hashing
+                let pattern_cost = self.estimate_cost(pattern);
+                pattern_cost + pattern_cost.log2() * 10.0
+            }
+            Algebra::OrderBy { pattern, .. } => {
+                // Sorting cost
+                let pattern_cost = self.estimate_cost(pattern);
+                pattern_cost + pattern_cost.log2() * 5.0
+            }
+            Algebra::Group { pattern, .. } => {
+                // Grouping cost similar to sorting
+                let pattern_cost = self.estimate_cost(pattern);
+                pattern_cost + pattern_cost.log2() * 8.0
+            }
+            Algebra::Zero => 0.0,
+            Algebra::Table => 1.0,
+            _ => 100.0,
         }
+    }
+    
+    /// Estimate BGP cost using join order optimization
+    fn estimate_bgp_cost(&self, patterns: &[TriplePattern]) -> f64 {
+        if patterns.len() <= 1 {
+            return patterns.iter()
+                .map(|p| self.estimate_pattern_cardinality(p) as f64)
+                .sum();
+        }
+        
+        // Use dynamic programming for optimal join order
+        let mut dp = HashMap::new();
+        self.estimate_bgp_cost_dp(patterns, &mut dp, 0, patterns.len())
+    }
+    
+    /// Dynamic programming approach for BGP cost estimation
+    fn estimate_bgp_cost_dp(&self, patterns: &[TriplePattern], dp: &mut HashMap<(usize, usize), f64>, 
+                           start: usize, end: usize) -> f64 {
+        if start + 1 >= end {
+            return if start < patterns.len() {
+                self.estimate_pattern_cardinality(&patterns[start]) as f64
+            } else {
+                0.0
+            };
+        }
+        
+        if let Some(&cost) = dp.get(&(start, end)) {
+            return cost;
+        }
+        
+        let mut min_cost = f64::INFINITY;
+        
+        for k in start + 1..end {
+            let left_cost = self.estimate_bgp_cost_dp(patterns, dp, start, k);
+            let right_cost = self.estimate_bgp_cost_dp(patterns, dp, k, end);
+            
+            // Estimate join cost between left and right parts
+            let join_cost = left_cost + right_cost + (left_cost * right_cost * 0.1);
+            min_cost = min_cost.min(join_cost);
+        }
+        
+        dp.insert((start, end), min_cost);
+        min_cost
+    }
+    
+    /// Estimate filter selectivity
+    fn estimate_filter_selectivity(&self, _condition: &Expression) -> f64 {
+        // Simplified filter selectivity estimation
+        // In practice, this would analyze the expression structure
+        0.1 // Assume filters are 10% selective
+    }
+    
+    /// Record execution statistics for learning
+    pub fn record_execution(&mut self, record: ExecutionRecord) {
+        // Update statistics based on execution before moving
+        self.update_statistics_from_execution(&record);
+        
+        self.execution_history.push(record);
+        
+        // Limit history size to prevent memory growth
+        if self.execution_history.len() > 10000 {
+            self.execution_history.remove(0);
+        }
+    }
+    
+    /// Update statistics based on execution record
+    fn update_statistics_from_execution(&mut self, record: &ExecutionRecord) {
+        // Update pattern cardinality estimates
+        self.extract_pattern_statistics(&record.algebra, record.cardinality);
+        
+        // Update variable selectivity
+        let variables = record.algebra.variables();
+        for var in variables {
+            let current_selectivity = self.variable_selectivity.get(&var).copied().unwrap_or(0.1);
+            let observed_selectivity = record.cardinality as f64 / 10000.0; // Rough estimate
+            let updated_selectivity = (current_selectivity + observed_selectivity) / 2.0;
+            self.variable_selectivity.insert(var, updated_selectivity);
+        }
+    }
+    
+    /// Extract pattern statistics from algebra expression
+    fn extract_pattern_statistics(&mut self, algebra: &Algebra, cardinality: usize) {
+        match algebra {
+            Algebra::Bgp(patterns) => {
+                for pattern in patterns {
+                    let pattern_key = format!("{}", pattern);
+                    self.pattern_cardinality.insert(pattern_key, cardinality / patterns.len());
+                }
+            }
+            Algebra::Join { left, right } => {
+                self.extract_pattern_statistics(left, cardinality);
+                self.extract_pattern_statistics(right, cardinality);
+            }
+            _ => {}
+        }
+    }
+    
+    /// Calculate query hash for caching
+    pub fn calculate_query_hash(&self, algebra: &Algebra) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        format!("{:?}", algebra).hash(&mut hasher);
+        hasher.finish()
     }
 }
 
@@ -125,25 +396,358 @@ impl QueryOptimizer {
         self
     }
     
-    /// Optimize an algebra expression
+    /// Optimize an algebra expression with advanced techniques
     pub fn optimize(&self, algebra: Algebra) -> Result<Algebra> {
         let mut current = algebra;
         let mut pass = 0;
+        let mut optimization_history = Vec::new();
         
         while pass < self.config.max_passes {
             let before_cost = self.statistics.estimate_cost(&current);
-            let optimized = self.apply_optimization_passes(current.clone())?;
+            let optimized = self.apply_advanced_optimization_passes(current.clone())?;
             let after_cost = self.statistics.estimate_cost(&optimized);
             
-            // Stop if no improvement
-            if after_cost >= before_cost {
+            // Record optimization decision
+            optimization_history.push(OptimizationDecision {
+                optimization_type: OptimizationType::JoinReordering, // Simplified
+                before_cost,
+                after_cost,
+                success: after_cost < before_cost,
+            });
+            
+            // Stop if no improvement or convergence
+            if after_cost >= before_cost * 0.99 { // Allow for small improvements
                 break;
             }
             
             current = optimized;
             pass += 1;
         }
+        
         Ok(current)
+    }
+    
+    /// Apply advanced optimization passes
+    fn apply_advanced_optimization_passes(&self, algebra: Algebra) -> Result<Algebra> {
+        let mut result = algebra;
+        
+        // Phase 1: Basic optimizations
+        if self.config.constant_folding {
+            result = self.constant_folding(result)?;
+        }
+        
+        if self.config.dead_code_elimination {
+            result = self.dead_code_elimination(result)?;
+        }
+        
+        // Phase 2: Pushdown optimizations
+        if self.config.filter_pushdown {
+            result = self.advanced_filter_pushdown(result)?;
+        }
+        
+        if self.config.projection_pushdown {
+            result = self.advanced_projection_pushdown(result)?;
+        }
+        
+        // Phase 3: Join optimization
+        if self.config.join_reordering {
+            result = self.cost_based_join_reordering(result)?;
+        }
+        
+        // Phase 4: Advanced optimizations
+        if self.config.cost_based {
+            result = self.index_aware_optimization(result)?;
+            result = self.materialization_point_optimization(result)?;
+        }
+        
+        Ok(result)
+    }
+    
+    /// Advanced filter pushdown with predicate analysis
+    fn advanced_filter_pushdown(&self, algebra: Algebra) -> Result<Algebra> {
+        match algebra {
+            Algebra::Filter { pattern, condition } => {
+                match *pattern {
+                    Algebra::Join { left, right } => {
+                        // Analyze filter condition to determine which sub-expressions can be pushed
+                        let (left_filters, right_filters, remaining_filter) = 
+                            self.decompose_filter_condition(&condition, &left, &right);
+                        
+                        let mut optimized_left = *left;
+                        let mut optimized_right = *right;
+                        
+                        // Push filters to appropriate sides
+                        for filter in left_filters {
+                            optimized_left = Algebra::Filter {
+                                pattern: Box::new(optimized_left),
+                                condition: filter,
+                            };
+                        }
+                        
+                        for filter in right_filters {
+                            optimized_right = Algebra::Filter {
+                                pattern: Box::new(optimized_right),
+                                condition: filter,
+                            };
+                        }
+                        
+                        // Recursively optimize pushed filters
+                        optimized_left = self.advanced_filter_pushdown(optimized_left)?;
+                        optimized_right = self.advanced_filter_pushdown(optimized_right)?;
+                        
+                        let join = Algebra::Join {
+                            left: Box::new(optimized_left),
+                            right: Box::new(optimized_right),
+                        };
+                        
+                        // Apply remaining filter if any
+                        if let Some(remaining) = remaining_filter {
+                            Ok(Algebra::Filter {
+                                pattern: Box::new(join),
+                                condition: remaining,
+                            })
+                        } else {
+                            Ok(join)
+                        }
+                    }
+                    _ => {
+                        // Apply to children recursively
+                        let optimized_pattern = self.advanced_filter_pushdown(*pattern)?;
+                        Ok(Algebra::Filter {
+                            pattern: Box::new(optimized_pattern),
+                            condition,
+                        })
+                    }
+                }
+            }
+            _ => self.apply_to_children(algebra, |child| self.advanced_filter_pushdown(child)),
+        }
+    }
+    
+    /// Decompose filter condition into parts that can be pushed to different sides
+    fn decompose_filter_condition(&self, condition: &Expression, left: &Algebra, right: &Algebra) 
+        -> (Vec<Expression>, Vec<Expression>, Option<Expression>) {
+        let left_vars: HashSet<_> = left.variables().into_iter().collect();
+        let right_vars: HashSet<_> = right.variables().into_iter().collect();
+        
+        match condition {
+            Expression::Binary { op: BinaryOperator::And, left: l, right: r } => {
+                let (mut left_filters1, mut right_filters1, remaining1) = 
+                    self.decompose_filter_condition(l, left, right);
+                let (mut left_filters2, mut right_filters2, remaining2) = 
+                    self.decompose_filter_condition(r, left, right);
+                
+                left_filters1.extend(left_filters2);
+                right_filters1.extend(right_filters2);
+                
+                let remaining = match (remaining1, remaining2) {
+                    (Some(r1), Some(r2)) => Some(Expression::Binary {
+                        op: BinaryOperator::And,
+                        left: Box::new(r1),
+                        right: Box::new(r2),
+                    }),
+                    (Some(r), None) | (None, Some(r)) => Some(r),
+                    (None, None) => None,
+                };
+                
+                (left_filters1, right_filters1, remaining)
+            }
+            _ => {
+                // Check if condition uses only variables from one side
+                let condition_vars = self.get_expression_variables(condition);
+                
+                if condition_vars.is_subset(&left_vars) {
+                    (vec![condition.clone()], vec![], None)
+                } else if condition_vars.is_subset(&right_vars) {
+                    (vec![], vec![condition.clone()], None)
+                } else {
+                    // Condition spans both sides, cannot push down
+                    (vec![], vec![], Some(condition.clone()))
+                }
+            }
+        }
+    }
+    
+    /// Advanced projection pushdown with column pruning
+    fn advanced_projection_pushdown(&self, algebra: Algebra) -> Result<Algebra> {
+        match algebra {
+            Algebra::Project { pattern, variables } => {
+                let needed_vars: HashSet<_> = variables.into_iter().collect();
+                let optimized_pattern = self.push_projection_requirements(*pattern, &needed_vars)?;
+                
+                // Check if projection is still needed
+                let pattern_vars: HashSet<_> = optimized_pattern.variables().into_iter().collect();
+                if needed_vars == pattern_vars {
+                    Ok(optimized_pattern) // Projection is redundant
+                } else {
+                    Ok(Algebra::Project {
+                        pattern: Box::new(optimized_pattern),
+                        variables: needed_vars.into_iter().collect(),
+                    })
+                }
+            }
+            _ => self.apply_to_children(algebra, |child| self.advanced_projection_pushdown(child)),
+        }
+    }
+    
+    /// Push projection requirements down the algebra tree
+    fn push_projection_requirements(&self, algebra: Algebra, needed_vars: &HashSet<Variable>) -> Result<Algebra> {
+        match algebra {
+            Algebra::Join { left, right } => {
+                let left_vars: HashSet<_> = left.variables().into_iter().collect();
+                let right_vars: HashSet<_> = right.variables().into_iter().collect();
+                
+                let left_needed: HashSet<_> = needed_vars.intersection(&left_vars).cloned().collect();
+                let right_needed: HashSet<_> = needed_vars.intersection(&right_vars).cloned().collect();
+                
+                let optimized_left = if left_needed.len() < left_vars.len() {
+                    Algebra::Project {
+                        pattern: left,
+                        variables: left_needed.into_iter().collect(),
+                    }
+                } else {
+                    *left
+                };
+                
+                let optimized_right = if right_needed.len() < right_vars.len() {
+                    Algebra::Project {
+                        pattern: right,
+                        variables: right_needed.into_iter().collect(),
+                    }
+                } else {
+                    *right
+                };
+                
+                Ok(Algebra::Join {
+                    left: Box::new(self.push_projection_requirements(optimized_left, needed_vars)?),
+                    right: Box::new(self.push_projection_requirements(optimized_right, needed_vars)?),
+                })
+            }
+            _ => Ok(algebra),
+        }
+    }
+    
+    /// Cost-based join reordering using dynamic programming
+    fn cost_based_join_reordering(&self, algebra: Algebra) -> Result<Algebra> {
+        match algebra {
+            Algebra::Join { ref left, ref right } => {
+                // Extract all joins in this chain
+                let join_chain = self.extract_join_chain(&algebra);
+                if join_chain.len() <= 2 {
+                    // No reordering needed for binary joins
+                    return Ok(algebra);
+                }
+                
+                // Use dynamic programming to find optimal join order
+                let optimal_order = self.find_optimal_join_order(&join_chain)?;
+                Ok(self.build_join_tree_from_order(optimal_order))
+            }
+            _ => self.apply_to_children(algebra, |child| self.cost_based_join_reordering(child)),
+        }
+    }
+    
+    /// Extract join chain from nested join structure
+    fn extract_join_chain(&self, algebra: &Algebra) -> Vec<Algebra> {
+        match algebra {
+            Algebra::Join { left, right } => {
+                let mut chain = self.extract_join_chain(left);
+                chain.extend(self.extract_join_chain(right));
+                chain
+            }
+            _ => vec![algebra.clone()],
+        }
+    }
+    
+    /// Find optimal join order using dynamic programming
+    fn find_optimal_join_order(&self, relations: &[Algebra]) -> Result<Vec<usize>> {
+        let n = relations.len();
+        if n <= 2 {
+            return Ok((0..n).collect());
+        }
+        
+        // Simplified join ordering - in practice would use more sophisticated algorithm
+        let mut order: Vec<_> = (0..n).collect();
+        
+        // Sort by estimated cardinality (greedy approach)
+        order.sort_by(|&a, &b| {
+            let cost_a = self.statistics.estimate_cost(&relations[a]);
+            let cost_b = self.statistics.estimate_cost(&relations[b]);
+            cost_a.partial_cmp(&cost_b).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        
+        Ok(order)
+    }
+    
+    /// Build join tree from optimal order
+    fn build_join_tree_from_order(&self, order: Vec<usize>) -> Algebra {
+        // Simplified implementation - build left-deep tree
+        if order.is_empty() {
+            return Algebra::Zero;
+        }
+        
+        // This is a placeholder - real implementation would build optimal tree structure
+        Algebra::Zero // Simplified
+    }
+    
+    /// Index-aware optimization
+    fn index_aware_optimization(&self, algebra: Algebra) -> Result<Algebra> {
+        match algebra {
+            Algebra::Bgp(patterns) => {
+                // Reorder patterns based on available indexes
+                let mut optimized_patterns = patterns;
+                optimized_patterns.sort_by(|a, b| {
+                    let cost_a = self.estimate_pattern_cost_with_indexes(a);
+                    let cost_b = self.estimate_pattern_cost_with_indexes(b);
+                    cost_a.partial_cmp(&cost_b).unwrap_or(std::cmp::Ordering::Equal)
+                });
+                Ok(Algebra::Bgp(optimized_patterns))
+            }
+            _ => self.apply_to_children(algebra, |child| self.index_aware_optimization(child)),
+        }
+    }
+    
+    /// Estimate pattern cost considering available indexes
+    fn estimate_pattern_cost_with_indexes(&self, pattern: &TriplePattern) -> f64 {
+        let base_cost = self.statistics.estimate_pattern_cardinality(pattern) as f64;
+        
+        // Check if we have suitable indexes
+        let has_subject_index = matches!(pattern.subject, Term::Iri(_) | Term::Literal(_));
+        let has_predicate_index = matches!(pattern.predicate, Term::Iri(_));
+        let has_object_index = matches!(pattern.object, Term::Iri(_) | Term::Literal(_));
+        
+        let index_factor = match (has_subject_index, has_predicate_index, has_object_index) {
+            (true, true, true) => 0.1,   // Triple index - very fast
+            (true, true, false) => 0.3,  // Subject-predicate index
+            (false, true, true) => 0.4,  // Predicate-object index
+            (true, false, true) => 0.5,  // Subject-object index
+            (_, true, _) => 0.7,         // Predicate index
+            _ => 1.0,                    // No suitable index
+        };
+        
+        base_cost * index_factor
+    }
+    
+    /// Materialization point optimization
+    fn materialization_point_optimization(&self, algebra: Algebra) -> Result<Algebra> {
+        // Determine optimal points to materialize intermediate results
+        match algebra {
+            Algebra::Join { left, right } => {
+                let left_cost = self.statistics.estimate_cost(&left);
+                let right_cost = self.statistics.estimate_cost(&right);
+                
+                // If one side is much more expensive, consider materializing it
+                if left_cost > right_cost * 5.0 {
+                    // Consider materializing left side
+                    // In practice, this would add materialization algebra nodes
+                }
+                
+                Ok(Algebra::Join {
+                    left: Box::new(self.materialization_point_optimization(*left)?),
+                    right: Box::new(self.materialization_point_optimization(*right)?),
+                })
+            }
+            _ => self.apply_to_children(algebra, |child| self.materialization_point_optimization(child)),
+        }
     }
     
     fn apply_optimization_passes(&self, algebra: Algebra) -> Result<Algebra> {

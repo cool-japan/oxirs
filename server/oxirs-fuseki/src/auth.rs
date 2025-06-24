@@ -4,11 +4,11 @@ use crate::config::{SecurityConfig, UserConfig, JwtConfig, OAuthConfig, LdapConf
 use crate::error::{FusekiError, FusekiResult};
 use axum::{
     extract::{FromRequestParts, State},
-    headers::{authorization::Bearer, Authorization, HeaderMapExt},
-    http::{request::Parts, StatusCode},
+    http::{request::Parts, StatusCode, HeaderMap},
     response::{IntoResponse, Response},
     RequestPartsExt,
 };
+use axum_extra::headers::{authorization::Bearer, Authorization, HeaderMapExt};
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use argon2::password_hash::{rand_core::OsRng, SaltString};
 use chrono::{DateTime, Utc};

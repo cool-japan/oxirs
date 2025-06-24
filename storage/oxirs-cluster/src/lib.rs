@@ -36,7 +36,7 @@ impl ClusterNode {
     
     /// Start the cluster node
     pub async fn start(&mut self) -> Result<()> {
-        tracing::info!(\"Starting cluster node {} at {}\", self.config.node_id, self.config.address);
+        tracing::info!("Starting cluster node {} at {}", self.config.node_id, self.config.address);
         // TODO: Start Raft consensus and HTTP API
         Ok(())
     }
@@ -93,7 +93,7 @@ impl DistributedStore {
     /// Insert a triple (only on leader)
     pub async fn insert_triple(&mut self, _subject: &str, _predicate: &str, _object: &str) -> Result<()> {
         if !self.node.is_leader() {
-            return Err(anyhow::anyhow!(\"Not the leader\"));
+            return Err(anyhow::anyhow!("Not the leader"));
         }
         // TODO: Replicate through Raft
         Ok(())

@@ -286,11 +286,37 @@ impl SparqlConstraintExecutor {
         query: &str,
         graph_name: Option<&str>
     ) -> Result<SparqlConstraintResult> {
-        // TODO: Implement ASK query execution
-        // For now, return a placeholder result
-        Err(ShaclError::SparqlExecution(
-            "ASK query execution not yet implemented".to_string()
-        ))
+        tracing::debug!("Executing ASK constraint query: {}", query);
+        
+        // Wrap query in graph if needed
+        let final_query = if let Some(graph) = graph_name {
+            self.wrap_query_in_graph(query, graph)?
+        } else {
+            query.to_string()
+        };
+        
+        // Execute the query using oxirs-core query engine
+        match self.execute_sparql_query(store, &final_query) {
+            Ok(result) => {
+                match result {
+                    oxirs_core::query::QueryResult::Ask(ask_result) => {
+                        // For ASK queries in SHACL, true means constraint violation
+                        Ok(SparqlConstraintResult::Ask(ask_result))
+                    }
+                    _ => {
+                        Err(ShaclError::SparqlExecution(
+                            "Expected ASK result but got different query result type".to_string()
+                        ))
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::error!("ASK query execution failed: {}", e);
+                Err(ShaclError::SparqlExecution(
+                    format!("ASK query execution failed: {}", e)
+                ))
+            }
+        }
     }
     
     /// Execute a SELECT constraint
@@ -300,11 +326,97 @@ impl SparqlConstraintExecutor {
         query: &str,
         graph_name: Option<&str>
     ) -> Result<SparqlConstraintResult> {
-        // TODO: Implement SELECT query execution
-        // For now, return a placeholder result
-        Err(ShaclError::SparqlExecution(
-            "SELECT query execution not yet implemented".to_string()
-        ))
+        tracing::debug!("Executing SELECT constraint query: {}", query);
+        
+        // Wrap query in graph if needed
+        let final_query = if let Some(graph) = graph_name {
+            self.wrap_query_in_graph(query, graph)?
+        } else {
+            query.to_string()
+        };
+        
+        // Execute the query using oxirs-core query engine
+        match self.execute_sparql_query(store, &final_query) {
+            Ok(result) => {
+                match result {
+                    oxirs_core::query::QueryResult::Select { variables: _, bindings } => {
+                        // Convert oxirs-core bindings to our format
+                        let solutions: Vec<HashMap<String, Term>> = bindings.into_iter()
+                            .take(self.max_results)
+                            .collect();
+                        
+                        let truncated = solutions.len() >= self.max_results;
+                        
+                        Ok(SparqlConstraintResult::Select {
+                            solutions,
+                            truncated,
+                        })
+                    }
+                    _ => {
+                        Err(ShaclError::SparqlExecution(
+                            "Expected SELECT result but got different query result type".to_string()
+                        ))
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::error!("SELECT query execution failed: {}", e);
+                Err(ShaclError::SparqlExecution(
+                    format!("SELECT query execution failed: {}", e)
+                ))
+            }
+        }
+    }
+    
+    /// Execute a SPARQL query using oxirs-core query engine
+    fn execute_sparql_query(&self, store: &Store, query: &str) -> Result<oxirs_core::query::QueryResult> {
+        use oxirs_core::query::QueryEngine;
+        
+        let query_engine = QueryEngine::new();
+        
+        // Apply timeout if configured
+        // TODO: Implement timeout handling once oxirs-core supports it
+        
+        let result = query_engine.query(query, store)
+            .map_err(|e| ShaclError::SparqlExecution(format!("SPARQL query failed: {}", e)))?;
+        
+        Ok(result)
+    }
+    
+    /// Wrap a query in a GRAPH clause if needed
+    fn wrap_query_in_graph(&self, query: &str, graph_name: &str) -> Result<String> {
+        // Simple graph wrapping for now
+        // TODO: Implement more sophisticated query rewriting
+        
+        let query_upper = query.trim().to_uppercase();
+        
+        if query_upper.starts_with("ASK") {
+            // For ASK queries, wrap the WHERE clause
+            if let Some(where_pos) = query_upper.find("WHERE") {
+                let prefix = &query[..where_pos + 5];
+                let where_clause = &query[where_pos + 5..].trim();
+                
+                if where_clause.starts_with('{') && where_clause.ends_with('}') {
+                    let inner = &where_clause[1..where_clause.len()-1];
+                    return Ok(format!("{} {{ GRAPH <{}> {{ {} }} }}", prefix, graph_name, inner));
+                }
+            }
+        } else if query_upper.starts_with("SELECT") {
+            // For SELECT queries, wrap the WHERE clause
+            if let Some(where_pos) = query_upper.find("WHERE") {
+                let prefix = &query[..where_pos + 5];
+                let where_clause = &query[where_pos + 5..].trim();
+                
+                if where_clause.starts_with('{') && where_clause.ends_with('}') {
+                    let inner = &where_clause[1..where_clause.len()-1];
+                    return Ok(format!("{} {{ GRAPH <{}> {{ {} }} }}", prefix, graph_name, inner));
+                }
+            }
+        }
+        
+        // Fallback: return original query if we can't parse it
+        tracing::warn!("Could not wrap query in GRAPH clause, using original: {}", query);
+        Ok(query.to_string())
     }
 }
 

@@ -21,6 +21,7 @@ thiserror.workspace = true
 tracing.workspace = true
 tokio.workspace = true
 uuid = { version = "1.0", features = ["v4"] }
+chrono.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true

@@ -303,7 +303,7 @@ fn resolve_iri(iri: &str, base: &str) -> ToolResult<String> {
     }
     
     // Relative path reference
-    let base_path = base_parts.path.unwrap_or("/");
+    let base_path = base_parts.path.unwrap_or("/".to_string());
     let base_dir = if let Some(last_slash) = base_path.rfind('/') {
         &base_path[..last_slash + 1]
     } else {

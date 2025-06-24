@@ -481,7 +481,8 @@ fn format_json_results(results: &QueryResults) -> ToolResult<()> {
         println!("      {{");
         for (j, var) in results.variables.iter().enumerate() {
             let var_name = var.trim_start_matches('?');
-            let value = binding.values.get(var).unwrap_or(&String::new());
+            let empty_string = String::new();
+            let value = binding.values.get(var).unwrap_or(&empty_string);
             print!("        \"{}\": {{ \"type\": \"literal\", \"value\": \"{}\" }}", var_name, value);
             if j < results.variables.len() - 1 {
                 print!(",");

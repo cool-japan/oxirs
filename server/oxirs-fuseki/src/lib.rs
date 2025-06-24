@@ -61,7 +61,7 @@ impl Server {
     /// Run the server
     pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
         let runtime = server::Runtime::new(self.addr, self.store, self.config);
-        runtime.run().await
+        runtime.run().await.map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
     }
 }
 

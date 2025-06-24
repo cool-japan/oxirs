@@ -135,7 +135,7 @@ impl Default for ExecutionResult {
 }
 
 /// GraphQL execution error
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct GraphQLError {
     pub message: String,
     pub path: Vec<String>,
@@ -170,7 +170,7 @@ impl GraphQLError {
 }
 
 /// Source location for error reporting
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct SourceLocation {
     pub line: usize,
     pub column: usize,
@@ -351,6 +351,7 @@ impl QueryExecutor {
             data: Some(data),
             errors,
         })
+        })
     }
 
     async fn execute_field(
@@ -484,13 +485,13 @@ impl QueryExecutor {
                     Err(anyhow!("Selection set required for object/interface type"))
                 }
             }
-            GraphQLType::Union(_) => {
-                // TODO: Implement union type completion
-                Err(anyhow!("Union types not yet supported"))
+            GraphQLType::Union(union_type) => {
+                // Union type completion
+                self.complete_union_value(union_type, value, selection_set, context, schema, path).await
             }
-            GraphQLType::Enum(_) => {
-                // TODO: Implement enum type completion
-                self.serialize_scalar_value(value)
+            GraphQLType::Enum(enum_type) => {
+                // Enum type completion
+                self.complete_enum_value(enum_type, value)
             }
             GraphQLType::InputObject(_) => {
                 Err(anyhow!("Input object types cannot be used as output types"))
@@ -585,6 +586,116 @@ impl QueryExecutor {
         ).await?;
         
         result.data.ok_or_else(|| anyhow!("No data returned from fragment spread"))
+    }
+    
+    async fn complete_union_value(
+        &self,
+        union_type: &crate::types::UnionType,
+        value: &Value,
+        selection_set: &Option<SelectionSet>,
+        context: &ExecutionContext,
+        schema: &Schema,
+        path: Vec<String>,
+    ) -> Result<JsonValue> {
+        if matches!(value, Value::NullValue) {
+            return Ok(JsonValue::Null);
+        }
+        
+        // For union types, we need to determine the concrete type
+        // This is a simplified implementation - in practice, you'd need
+        // type resolution logic based on the actual data
+        
+        let concrete_type = self.resolve_union_type(union_type, value, schema)?;
+        
+        if let Some(selection_set) = selection_set {
+            let result = self.execute_selection_set(
+                selection_set,
+                &concrete_type,
+                context,
+                schema,
+                path,
+            ).await?;
+            
+            let mut object_result = result.data.unwrap_or(JsonValue::Object(serde_json::Map::new()));
+            
+            // Add __typename field for union types
+            if let JsonValue::Object(ref mut obj) = object_result {
+                obj.insert("__typename".to_string(), JsonValue::String(concrete_type));
+            }
+            
+            Ok(object_result)
+        } else {
+            Err(anyhow!("Selection set required for union type"))
+        }
+    }
+    
+    fn complete_enum_value(
+        &self,
+        enum_type: &crate::types::EnumType,
+        value: &Value,
+    ) -> Result<JsonValue> {
+        match value {
+            Value::NullValue => Ok(JsonValue::Null),
+            Value::EnumValue(enum_val) => {
+                // Validate that the enum value is valid for this enum type
+                if enum_type.values.contains_key(enum_val) {
+                    Ok(JsonValue::String(enum_val.clone()))
+                } else {
+                    Err(anyhow!("Invalid enum value '{}' for enum type '{}'", enum_val, enum_type.name))
+                }
+            }
+            Value::StringValue(string_val) => {
+                // Allow string values to be coerced to enum values
+                if enum_type.values.contains_key(string_val) {
+                    Ok(JsonValue::String(string_val.clone()))
+                } else {
+                    Err(anyhow!("Invalid enum value '{}' for enum type '{}'", string_val, enum_type.name))
+                }
+            }
+            _ => Err(anyhow!("Cannot coerce {:?} to enum type '{}'", value, enum_type.name)),
+        }
+    }
+    
+    fn resolve_union_type(
+        &self,
+        union_type: &crate::types::UnionType,
+        value: &Value,
+        schema: &Schema,
+    ) -> Result<String> {
+        // This is a simplified type resolution - in practice, you'd need
+        // more sophisticated logic to determine the concrete type
+        
+        // For now, we'll use the first available type in the union
+        // or try to infer from the value structure
+        
+        if union_type.types.is_empty() {
+            return Err(anyhow!("Union type '{}' has no possible types", union_type.name));
+        }
+        
+        match value {
+            Value::ObjectValue(obj) => {
+                // Try to determine type based on available fields
+                for type_name in &union_type.types {
+                    if let Some(GraphQLType::Object(object_type)) = schema.get_type(type_name) {
+                        // Check if the object has fields that match this type
+                        let has_matching_fields = obj.keys().any(|key| {
+                            object_type.fields.contains_key(key)
+                        });
+                        
+                        if has_matching_fields {
+                            return Ok(type_name.clone());
+                        }
+                    }
+                }
+                
+                // Fallback to first type
+                Ok(union_type.types[0].clone())
+            }
+            _ => {
+                // For non-object values, return the first type
+                Ok(union_type.types[0].clone())
+            }
+        }
     }
 }
 

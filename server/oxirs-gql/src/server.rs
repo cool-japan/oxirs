@@ -3,6 +3,7 @@
 use crate::ast::Document;
 use crate::execution::{ExecutionContext, QueryExecutor, FieldResolver};
 use crate::types::Schema;
+use crate::validation::{QueryValidator, ValidationConfig};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
@@ -49,6 +50,8 @@ pub struct Server {
     executor: QueryExecutor,
     enable_playground: bool,
     enable_introspection: bool,
+    validator: Option<QueryValidator>,
+    enable_validation: bool,
 }
 
 impl Server {
@@ -57,6 +60,8 @@ impl Server {
             executor: QueryExecutor::new(schema),
             enable_playground: true,
             enable_introspection: true,
+            validator: None,
+            enable_validation: false,
         }
     }
 
@@ -67,6 +72,17 @@ impl Server {
 
     pub fn with_introspection(mut self, enable: bool) -> Self {
         self.enable_introspection = enable;
+        self
+    }
+
+    pub fn with_validation(mut self, config: ValidationConfig, schema: Schema) -> Self {
+        self.validator = Some(QueryValidator::new(config, schema));
+        self.enable_validation = true;
+        self
+    }
+
+    pub fn with_validation_enabled(mut self, enable: bool) -> Self {
+        self.enable_validation = enable;
         self
     }
 
@@ -182,6 +198,44 @@ impl Server {
         
         // Parse the GraphQL document
         let document = self.parse_graphql_document(&request.query)?;
+        
+        // Validate the query if validation is enabled
+        if self.enable_validation {
+            if let Some(ref validator) = self.validator {
+                let validation_result = validator.validate(&document)?;
+                
+                if !validation_result.is_valid {
+                    // Return validation errors as GraphQL errors
+                    let errors = validation_result.errors.into_iter()
+                        .map(|err| GraphQLErrorResponse {
+                            message: err.message,
+                            locations: None,
+                            path: if err.path.is_empty() { None } else { Some(err.path) },
+                            extensions: Some({
+                                let mut ext = HashMap::new();
+                                ext.insert("rule".to_string(), JsonValue::String(format!("{:?}", err.rule)));
+                                ext
+                            }),
+                        })
+                        .collect();
+                    
+                    let response = GraphQLResponse {
+                        data: None,
+                        errors: Some(errors),
+                    };
+                    
+                    return Ok(serde_json::to_string(&response)?);
+                }
+                
+                // Log validation warnings if any
+                for warning in validation_result.warnings {
+                    warn!("Query validation warning: {}", warning.message);
+                    if let Some(suggestion) = warning.suggestion {
+                        warn!("Suggestion: {}", suggestion);
+                    }
+                }
+            }
+        }
         
         // Convert variables to our Value type
         let variables = request.variables.unwrap_or_default()

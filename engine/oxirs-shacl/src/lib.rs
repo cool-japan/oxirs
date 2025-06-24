@@ -265,6 +265,15 @@ impl Shape {
     }
 }
 
+impl Default for Shape {
+    fn default() -> Self {
+        Self::new(
+            ShapeId("default:shape".to_string()), 
+            ShapeType::NodeShape
+        )
+    }
+}
+
 /// Violation severity levels
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Severity {

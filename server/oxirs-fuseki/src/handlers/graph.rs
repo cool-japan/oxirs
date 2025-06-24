@@ -339,7 +339,7 @@ fn get_content_type(headers: &HeaderMap) -> FusekiResult<String> {
 }
 
 /// Read and validate RDF data from request body
-async fn read_rdf_body(body: RawBody, content_type: &str) -> FusekiResult<String> {
+async fn read_rdf_body(body: Body, content_type: &str) -> FusekiResult<String> {
     let body_bytes = axum::body::to_bytes(body, usize::MAX).await
         .map_err(|e| FusekiError::bad_request(format!("Failed to read request body: {}", e)))?;
     

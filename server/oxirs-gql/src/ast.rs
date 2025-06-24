@@ -133,6 +133,16 @@ pub enum Type {
     NonNullType(Box<Type>),
 }
 
+impl Type {
+    pub fn name(&self) -> String {
+        match self {
+            Type::NamedType(name) => name.clone(),
+            Type::ListType(inner) => format!("[{}]", inner.name()),
+            Type::NonNullType(inner) => format!("{}!", inner.name()),
+        }
+    }
+}
+
 /// Directive application
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Directive {

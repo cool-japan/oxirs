@@ -14,16 +14,44 @@ rust-version.workspace = true
 [dependencies]
 oxirs-core = { path = "../../core/oxirs-core" }
 oxirs-gql = { path = "../../server/oxirs-gql" }
-tokio.workspace = true
-hyper.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-anyhow.workspace = true
-thiserror.workspace = true
-tracing.workspace = true
+tokio = { version = "1.42", features = ["full"] }
+hyper = { version = "1.5", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+thiserror = "2.0"
+tracing = "0.1"
+reqwest = { version = "0.12", features = ["json", "stream"] }
+async-trait = "0.1"
+futures = "0.3"
+dashmap = "6.1"
+parking_lot = "0.12"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.11", features = ["v4", "serde"] }
+url = "2.5"
+backoff = "0.4"
+governor = "0.6"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace", "timeout"] }
+http = "1.1"
+bytes = "1.8"
+base64 = "0.22"
+jsonwebtoken = "9.3"
+rustls = "0.23"
+rustls-webpki = "0.102"
+opentelemetry = "0.24"
+opentelemetry-jaeger = "0.22"
+prometheus = "0.13"
+async-stream = "0.3"
+pin-project = "1.1"
 
 [dev-dependencies]
-criterion.workspace = true
+criterion = { version = "0.5", features = ["html_reports"] }
+tokio-test = "0.4"
+mockito = "1.6"
+wiremock = "0.6"
+proptest = "1.5"
+serial_test = "3.1"
 
 [features]
 default = []

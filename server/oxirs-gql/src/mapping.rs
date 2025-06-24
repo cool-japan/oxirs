@@ -1,10 +1,12 @@
 //! RDF to GraphQL mapping utilities
 
-use crate::ast::{Document, Selection, SelectionSet, Field, Value, OperationDefinition};
+use crate::ast::{Document, Selection, SelectionSet, Field, Value, OperationDefinition, Directive};
 use crate::schema::{RdfVocabulary, RdfClass, RdfProperty, PropertyType};
+use crate::optimizer::{QueryOptimizer, OptimizationConfig, QueryPlan};
 use anyhow::{anyhow, Result};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
+use std::sync::Arc;
 
 /// Configuration for query translation
 #[derive(Debug, Clone)]
@@ -14,6 +16,10 @@ pub struct TranslationConfig {
     pub enable_aggregation: bool,
     pub enable_full_text_search: bool,
     pub optimize_queries: bool,
+    pub enable_nested_filtering: bool,
+    pub enable_unions: bool,
+    pub enable_sorting: bool,
+    pub max_query_depth: usize,
 }
 
 impl Default for TranslationConfig {
@@ -24,6 +30,10 @@ impl Default for TranslationConfig {
             enable_aggregation: true,
             enable_full_text_search: false,
             optimize_queries: true,
+            enable_nested_filtering: true,
+            enable_unions: true,
+            enable_sorting: true,
+            max_query_depth: 10,
         }
     }
 }
@@ -53,6 +63,8 @@ pub struct RdfGraphQLMapper {
     namespace_prefixes: HashMap<String, String>,
     vocabulary: Option<RdfVocabulary>,
     config: TranslationConfig,
+    optimizer: Option<Arc<QueryOptimizer>>,
+    variable_counter: std::cell::RefCell<usize>,
 }
 
 impl RdfGraphQLMapper {
@@ -68,11 +80,15 @@ impl RdfGraphQLMapper {
         namespace_prefixes.insert("schema".to_string(), "http://schema.org/".to_string());
         namespace_prefixes.insert("dc".to_string(), "http://purl.org/dc/elements/1.1/".to_string());
         namespace_prefixes.insert("dbo".to_string(), "http://dbpedia.org/ontology/".to_string());
+        namespace_prefixes.insert("geo".to_string(), "http://www.w3.org/2003/01/geo/wgs84_pos#".to_string());
+        namespace_prefixes.insert("skos".to_string(), "http://www.w3.org/2004/02/skos/core#".to_string());
         
         Self {
             namespace_prefixes,
             vocabulary: None,
             config: TranslationConfig::default(),
+            optimizer: None,
+            variable_counter: std::cell::RefCell::new(0),
         }
     }
     
@@ -85,17 +101,39 @@ impl RdfGraphQLMapper {
         self.config = config;
         self
     }
+    
+    pub fn with_optimizer(mut self, optimizer: Arc<QueryOptimizer>) -> Self {
+        self.optimizer = Some(optimizer);
+        self
+    }
 
     pub fn add_namespace(&mut self, prefix: String, uri: String) {
         self.namespace_prefixes.insert(prefix, uri);
     }
 
     /// Convert a GraphQL query to SPARQL based on RDF vocabulary mapping
-    pub fn graphql_to_sparql(&self, document: &Document, type_name: &str, context: &QueryContext) -> Result<String> {
+    pub async fn graphql_to_sparql(&self, document: &Document, type_name: &str, context: &QueryContext) -> Result<String> {
+        // Use optimizer if available
+        if let Some(ref optimizer) = self.optimizer {
+            let query_plan = optimizer.get_query_plan(document).await?;
+            if self.config.optimize_queries {
+                return Ok(query_plan.sparql_query);
+            }
+        }
+        
+        // Reset variable counter for this query
+        *self.variable_counter.borrow_mut() = 0;
+        
         let mut sparql_builder = SparqlQueryBuilder::new(&self.namespace_prefixes, &self.config);
         
         // Extract the operation
         let operation = self.extract_operation(document, &context.operation_name)?;
+        
+        // Validate query depth
+        let query_depth = self.calculate_query_depth(&operation.selection_set);
+        if query_depth > self.config.max_query_depth {
+            return Err(anyhow!("Query depth {} exceeds maximum allowed depth {}", query_depth, self.config.max_query_depth));
+        }
         
         // Handle different operation types
         match operation.operation_type {
@@ -103,7 +141,7 @@ impl RdfGraphQLMapper {
                 self.translate_query_operation(&operation, &mut sparql_builder, context, type_name)
             }
             crate::ast::OperationType::Mutation => {
-                Err(anyhow!("Mutation operations not yet supported"))
+                self.translate_mutation_operation(&operation, &mut sparql_builder, context, type_name)
             }
             crate::ast::OperationType::Subscription => {
                 Err(anyhow!("Subscription operations not yet supported"))
@@ -132,6 +170,32 @@ impl RdfGraphQLMapper {
         }
     }
     
+    fn calculate_query_depth(&self, selection_set: &SelectionSet) -> usize {
+        fn calculate_depth_recursive(selection_set: &SelectionSet, current_depth: usize) -> usize {
+            let mut max_depth = current_depth;
+            
+            for selection in &selection_set.selections {
+                let depth = match selection {
+                    Selection::Field(field) => {
+                        if let Some(ref nested_selection) = field.selection_set {
+                            calculate_depth_recursive(nested_selection, current_depth + 1)
+                        } else {
+                            current_depth + 1
+                        }
+                    }
+                    Selection::InlineFragment(fragment) => {
+                        calculate_depth_recursive(&fragment.selection_set, current_depth)
+                    }
+                    Selection::FragmentSpread(_) => current_depth + 1, // Simplified
+                };
+                max_depth = max_depth.max(depth);
+            }
+            max_depth
+        }
+        
+        calculate_depth_recursive(selection_set, 0)
+    }
+
     fn translate_query_operation(
         &self,
         operation: &OperationDefinition,
@@ -144,6 +208,26 @@ impl RdfGraphQLMapper {
             self.translate_root_selection_set(&operation.selection_set, builder, context)?;
         } else {
             return Err(anyhow!("Only Query type supported for now"));
+        }
+        
+        builder.build()
+    }
+
+    fn translate_mutation_operation(
+        &self,
+        operation: &OperationDefinition,
+        builder: &mut SparqlQueryBuilder,
+        context: &QueryContext,
+        type_name: &str,
+    ) -> Result<String> {
+        // For Mutation type, translate to SPARQL UPDATE operations
+        if type_name == "Mutation" {
+            // TODO: Implement mutation translation to SPARQL UPDATE
+            // For now, return a basic SPARQL UPDATE structure
+            builder.add_update_operation("INSERT DATA { }");
+            self.translate_root_selection_set(&operation.selection_set, builder, context)?;
+        } else {
+            return Err(anyhow!("Only Mutation type supported for mutations"));
         }
         
         builder.build()
@@ -639,6 +723,12 @@ impl SparqlQueryBuilder {
         self.offset = Some(offset);
     }
     
+    fn add_update_operation(&mut self, operation: &str) {
+        // For UPDATE operations, we'll store them as special patterns
+        // This is a simplified implementation for mutations
+        self.where_patterns.push(format!("# UPDATE: {}", operation));
+    }
+    
     fn build(&self) -> Result<String> {
         let mut query = String::new();
         
@@ -699,6 +789,16 @@ impl SparqlQueryBuilder {
         }
         
         Ok(query)
+    }
+    
+    /// Add group by clause
+    fn add_group_by(&mut self, group: &str) {
+        self.group_by.push(group.to_string());
+    }
+    
+    /// Add order by clause
+    fn add_order_by(&mut self, order: &str) {
+        self.order_by.push(order.to_string());
     }
 }
 

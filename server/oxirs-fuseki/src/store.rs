@@ -4,9 +4,9 @@ use crate::error::{FusekiError, FusekiResult};
 use crate::config::DatasetConfig;
 use oxirs_core::store::Store as CoreStore;
 use oxirs_core::model::*;
-use oxirs_core::query::QueryEngine;
+use oxirs_core::query::{QueryEngine, QueryResult as CoreQueryResult};
 use oxirs_core::parser::{Parser, RdfFormat as CoreRdfFormat};
-use oxirs_core::serializer::{Serializer, RdfFormat};
+use oxirs_core::serializer::Serializer;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -244,40 +244,13 @@ impl Store {
         let mut store_guard = store.write()
             .map_err(|e| FusekiError::store(format!("Failed to acquire store write lock: {}", e)))?;
         
-        // For now, use a simplified update execution
-        // TODO: Implement proper SPARQL update parsing and execution
         let mut quads_inserted = 0;
         let mut quads_deleted = 0;
         
-        // Determine operation type from SPARQL string
-        let operation_type = if sparql.to_uppercase().contains("INSERT") {
-            "INSERT"
-        } else if sparql.to_uppercase().contains("DELETE") {
-            "DELETE"
-        } else if sparql.to_uppercase().contains("CLEAR") {
-            "CLEAR"
-        } else if sparql.to_uppercase().contains("LOAD") {
-            "LOAD"
-        } else {
-            "UNKNOWN"
-        };
-        
-        // Execute the update based on operation type
-        match operation_type {
-            "CLEAR" => {
-                let quad_count = store_guard.len()
-                    .map_err(|e| FusekiError::update_execution(format!("Failed to get store size: {}", e)))?;
-                
-                store_guard.clear()
-                    .map_err(|e| FusekiError::update_execution(format!("Failed to clear store: {}", e)))?;
-                
-                quads_deleted = quad_count;
-            }
-            _ => {
-                // For other operations, log that they're not fully implemented yet
-                warn!("SPARQL update operation '{}' not fully implemented yet", operation_type);
-            }
-        }
+        // Parse and execute the update operation
+        let (operation_type, inserted, deleted) = self.execute_sparql_update(&mut store_guard, sparql)?;
+        quads_inserted = inserted;
+        quads_deleted = deleted;
         
         let execution_time = start_time.elapsed();
         
@@ -303,6 +276,248 @@ impl Store {
             stats: update_stats,
         })
     }
+    
+    /// Execute a SPARQL update operation using basic parsing and low-level Store API
+    fn execute_sparql_update(&self, store: &mut CoreStore, sparql: &str) -> FusekiResult<(&'static str, usize, usize)> {
+        let sparql_upper = sparql.to_uppercase();
+        
+        if sparql_upper.contains("CLEAR") {
+            self.execute_clear_operation(store, sparql)
+        } else if sparql_upper.contains("INSERT DATA") {
+            self.execute_insert_data_operation(store, sparql)
+        } else if sparql_upper.contains("DELETE DATA") {
+            self.execute_delete_data_operation(store, sparql)
+        } else if sparql_upper.contains("DELETE") && sparql_upper.contains("INSERT") {
+            self.execute_delete_insert_operation(store, sparql)
+        } else if sparql_upper.contains("DELETE") && sparql_upper.contains("WHERE") {
+            self.execute_delete_where_operation(store, sparql)
+        } else if sparql_upper.contains("INSERT") {
+            self.execute_insert_operation(store, sparql)
+        } else if sparql_upper.contains("LOAD") {
+            self.execute_load_operation(store, sparql)
+        } else {
+            warn!("SPARQL update operation not recognized or supported: {}", sparql.trim());
+            Ok(("UNKNOWN", 0, 0))
+        }
+    }
+    
+    /// Execute CLEAR operation
+    fn execute_clear_operation(&self, store: &mut CoreStore, sparql: &str) -> FusekiResult<(&'static str, usize, usize)> {
+        let quad_count = store.len()
+            .map_err(|e| FusekiError::update_execution(format!("Failed to get store size: {}", e)))?;
+        
+        // Check if clearing specific graph or all
+        if sparql.to_uppercase().contains("CLEAR ALL") || sparql.to_uppercase().contains("CLEAR DEFAULT") {
+            store.clear()
+                .map_err(|e| FusekiError::update_execution(format!("Failed to clear store: {}", e)))?;
+            Ok(("CLEAR", 0, quad_count))
+        } else {
+            // For now, clear everything (TODO: implement named graph clearing)
+            store.clear()
+                .map_err(|e| FusekiError::update_execution(format!("Failed to clear store: {}", e)))?;
+            Ok(("CLEAR", 0, quad_count))
+        }
+    }
+    
+    /// Execute INSERT DATA operation
+    fn execute_insert_data_operation(&self, store: &mut CoreStore, sparql: &str) -> FusekiResult<(&'static str, usize, usize)> {
+        // Extract the data block between { and }
+        let data_block = self.extract_data_block(sparql, "INSERT DATA")?;
+        let quads = self.parse_data_block(&data_block)?;
+        
+        let mut inserted_count = 0;
+        for quad in quads {
+            if store.insert_quad(quad)
+                .map_err(|e| FusekiError::update_execution(format!("Failed to insert quad: {}", e)))? {
+                inserted_count += 1;
+            }
+        }
+        
+        Ok(("INSERT DATA", inserted_count, 0))
+    }
+    
+    /// Execute DELETE DATA operation  
+    fn execute_delete_data_operation(&self, store: &mut CoreStore, sparql: &str) -> FusekiResult<(&'static str, usize, usize)> {
+        // Extract the data block between { and }
+        let data_block = self.extract_data_block(sparql, "DELETE DATA")?;
+        let quads = self.parse_data_block(&data_block)?;
+        
+        let mut deleted_count = 0;
+        for quad in quads {
+            if store.remove_quad(&quad)
+                .map_err(|e| FusekiError::update_execution(format!("Failed to remove quad: {}", e)))? {
+                deleted_count += 1;
+            }
+        }
+        
+        Ok(("DELETE DATA", 0, deleted_count))
+    }
+    
+    /// Execute DELETE/INSERT operation (simplified implementation)
+    fn execute_delete_insert_operation(&self, store: &mut CoreStore, sparql: &str) -> FusekiResult<(&'static str, usize, usize)> {
+        // This is a simplified implementation - just parse both blocks and execute them
+        warn!("DELETE/INSERT operation using simplified implementation");
+        
+        let mut inserted_count = 0;
+        let mut deleted_count = 0;
+        
+        // Try to extract DELETE block
+        if let Ok(delete_block) = self.extract_data_block(sparql, "DELETE") {
+            let delete_quads = self.parse_data_block(&delete_block)?;
+            for quad in delete_quads {
+                if store.remove_quad(&quad)
+                    .map_err(|e| FusekiError::update_execution(format!("Failed to remove quad: {}", e)))? {
+                    deleted_count += 1;
+                }
+            }
+        }
+        
+        // Try to extract INSERT block
+        if let Ok(insert_block) = self.extract_data_block(sparql, "INSERT") {
+            let insert_quads = self.parse_data_block(&insert_block)?;
+            for quad in insert_quads {
+                if store.insert_quad(quad)
+                    .map_err(|e| FusekiError::update_execution(format!("Failed to insert quad: {}", e)))? {
+                    inserted_count += 1;
+                }
+            }
+        }
+        
+        Ok(("DELETE/INSERT", inserted_count, deleted_count))
+    }
+    
+    /// Execute DELETE WHERE operation (simplified implementation)
+    fn execute_delete_where_operation(&self, store: &mut CoreStore, sparql: &str) -> FusekiResult<(&'static str, usize, usize)> {
+        warn!("DELETE WHERE operation using simplified implementation - deleting all matching patterns");
+        
+        // For now, just extract the WHERE block and delete matching quads
+        if let Ok(where_block) = self.extract_data_block(sparql, "WHERE") {
+            let pattern_quads = self.parse_data_block(&where_block)?;
+            let mut deleted_count = 0;
+            
+            for pattern_quad in pattern_quads {
+                // Find all matching quads and delete them
+                let matching_quads = store.query_quads(
+                    Some(pattern_quad.subject()),
+                    Some(pattern_quad.predicate()),
+                    Some(pattern_quad.object()),
+                    Some(pattern_quad.graph_name())
+                ).map_err(|e| FusekiError::update_execution(format!("Failed to query matching quads: {}", e)))?;
+                
+                for quad in matching_quads {
+                    if store.remove_quad(&quad)
+                        .map_err(|e| FusekiError::update_execution(format!("Failed to remove quad: {}", e)))? {
+                        deleted_count += 1;
+                    }
+                }
+            }
+            
+            Ok(("DELETE WHERE", 0, deleted_count))
+        } else {
+            Err(FusekiError::update_execution("Failed to extract WHERE block from DELETE WHERE operation".to_string()))
+        }
+    }
+    
+    /// Execute simple INSERT operation
+    fn execute_insert_operation(&self, store: &mut CoreStore, sparql: &str) -> FusekiResult<(&'static str, usize, usize)> {
+        // Extract the data block and insert
+        let data_block = self.extract_data_block(sparql, "INSERT")?;
+        let quads = self.parse_data_block(&data_block)?;
+        
+        let mut inserted_count = 0;
+        for quad in quads {
+            if store.insert_quad(quad)
+                .map_err(|e| FusekiError::update_execution(format!("Failed to insert quad: {}", e)))? {
+                inserted_count += 1;
+            }
+        }
+        
+        Ok(("INSERT", inserted_count, 0))
+    }
+    
+    /// Execute LOAD operation (simplified implementation)
+    fn execute_load_operation(&self, _store: &mut CoreStore, sparql: &str) -> FusekiResult<(&'static str, usize, usize)> {
+        warn!("LOAD operation not fully implemented: {}", sparql.trim());
+        // TODO: Implement LOAD operation to fetch RDF from URL and insert into store
+        Ok(("LOAD", 0, 0))
+    }
+    
+    /// Extract data block from SPARQL update (between { and })
+    fn extract_data_block(&self, sparql: &str, operation: &str) -> FusekiResult<String> {
+        let operation_upper = operation.to_uppercase();
+        let sparql_upper = sparql.to_uppercase();
+        
+        // Find the operation keyword
+        let operation_pos = sparql_upper.find(&operation_upper)
+            .ok_or_else(|| FusekiError::update_execution(format!("Operation '{}' not found", operation)))?;
+        
+        // Find the opening brace after the operation
+        let remaining = &sparql[operation_pos + operation.len()..];
+        let open_brace_pos = remaining.find('{')
+            .ok_or_else(|| FusekiError::update_execution("Opening brace '{' not found".to_string()))?;
+        
+        // Find the matching closing brace
+        let mut brace_count = 0;
+        let mut close_brace_pos = None;
+        let chars: Vec<char> = remaining.chars().collect();
+        
+        for (i, &ch) in chars.iter().enumerate().skip(open_brace_pos) {
+            match ch {
+                '{' => brace_count += 1,
+                '}' => {
+                    brace_count -= 1;
+                    if brace_count == 0 {
+                        close_brace_pos = Some(i);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        
+        let close_brace_pos = close_brace_pos
+            .ok_or_else(|| FusekiError::update_execution("Matching closing brace '}' not found".to_string()))?;
+        
+        // Extract the content between braces
+        let data_block = &remaining[open_brace_pos + 1..close_brace_pos];
+        Ok(data_block.trim().to_string())
+    }
+    
+    /// Parse data block into quads using simple N-Triples-like parsing
+    fn parse_data_block(&self, data_block: &str) -> FusekiResult<Vec<Quad>> {
+        let mut quads = Vec::new();
+        
+        // Use the oxirs-core parser for N-Triples format
+        let parser = Parser::new(CoreRdfFormat::NTriples);
+        
+        // Parse each line as a potential triple
+        for line in data_block.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            
+            // Add a period if missing (for simpler parsing)
+            let line_with_period = if line.ends_with('.') {
+                line.to_string()
+            } else {
+                format!("{}.", line)
+            };
+            
+            // Try to parse as N-Triples
+            match parser.parse_str_to_quads(&line_with_period) {
+                Ok(parsed_quads) => {
+                    quads.extend(parsed_quads);
+                }
+                Err(e) => {
+                    warn!("Failed to parse line '{}': {}", line, e);
+                    // Continue parsing other lines
+                }
+            }
+        }
+        
+        Ok(quads)
+    }
 
     /// Load RDF data from a string into a dataset
     pub fn load_data(&self, data: &str, format: RdfSerializationFormat, dataset_name: Option<&str>) -> FusekiResult<usize> {
@@ -319,11 +534,12 @@ impl Store {
         };
         
         let parser = Parser::new(core_format);
-        let graph = parser.parse_str(data)
+        let quads = parser.parse_str_to_quads(data)
             .map_err(|e| FusekiError::parse(format!("Failed to parse RDF data: {}", e)))?;
+        let graph = Graph::from_iter(quads.into_iter().filter(|q| q.is_default_graph()).map(|q| q.to_triple()));
         
         let mut inserted_count = 0;
-        for triple in graph.triples() {
+        for triple in graph.iter() {
             if store_guard.insert_triple(triple.clone())
                 .map_err(|e| FusekiError::store(format!("Failed to insert triple: {}", e)))? {
                 inserted_count += 1;
@@ -341,11 +557,11 @@ impl Store {
             .map_err(|e| FusekiError::store(format!("Failed to acquire store read lock: {}", e)))?;
         
         let core_format = match format {
-            RdfSerializationFormat::Turtle => RdfFormat::Turtle,
-            RdfSerializationFormat::NTriples => RdfFormat::NTriples,
-            RdfSerializationFormat::RdfXml => RdfFormat::RdfXml,
+            RdfSerializationFormat::Turtle => CoreRdfFormat::Turtle,
+            RdfSerializationFormat::NTriples => CoreRdfFormat::NTriples,
+            RdfSerializationFormat::RdfXml => CoreRdfFormat::RdfXml,
             RdfSerializationFormat::JsonLd => return Err(FusekiError::unsupported_media_type("JSON-LD not supported yet")),
-            RdfSerializationFormat::NQuads => RdfFormat::NQuads,
+            RdfSerializationFormat::NQuads => CoreRdfFormat::NQuads,
         };
         
         let serializer = Serializer::new(core_format);
@@ -375,9 +591,13 @@ impl Store {
             .map(|start| start.elapsed())
             .unwrap_or_default();
         
+        let dataset_count = self.datasets.read()
+            .map(|datasets| datasets.len())
+            .unwrap_or(0);
+        
         Ok(StoreStats {
             triple_count,
-            dataset_count: self.datasets.read().unwrap_or_else(|_| Default::default()).len(),
+            dataset_count,
             total_queries: metadata.total_queries,
             total_updates: metadata.total_updates,
             cache_hit_ratio: if metadata.query_cache_hits + metadata.query_cache_misses > 0 {
@@ -399,33 +619,175 @@ impl Default for Store {
 /// Query result wrapper with statistics
 #[derive(Debug)]
 pub struct QueryResult {
-    pub inner: oxirs_core::query::QueryResult,
+    pub inner: CoreQueryResult,
     pub stats: QueryStats,
 }
 
 impl QueryResult {
     /// Convert to JSON string based on result type
     pub fn to_json(&self) -> FusekiResult<String> {
-        self.inner.to_json()
-            .map_err(|e| FusekiError::parse(format!("Failed to serialize query result: {}", e)))
+        match &self.inner {
+            CoreQueryResult::Select { variables, bindings } => {
+                let json_result = serde_json::json!({
+                    "head": {
+                        "vars": variables
+                    },
+                    "results": {
+                        "bindings": bindings.iter().map(|binding| {
+                            binding.iter().map(|(k, v)| {
+                                (k.clone(), serde_json::json!({
+                                    "type": match v {
+                                        Term::NamedNode(_) => "uri",
+                                        Term::BlankNode(_) => "bnode",
+                                        Term::Literal(_) => "literal",
+                                        Term::Variable(_) => "variable",
+                                    },
+                                    "value": v.to_string()
+                                }))
+                            }).collect::<serde_json::Map<String, serde_json::Value>>()
+                        }).collect::<Vec<_>>()
+                    }
+                });
+                Ok(json_result.to_string())
+            }
+            CoreQueryResult::Ask(result) => {
+                let json_result = serde_json::json!({
+                    "head": {},
+                    "boolean": result
+                });
+                Ok(json_result.to_string())
+            }
+            CoreQueryResult::Construct { .. } => {
+                Err(FusekiError::unsupported_media_type("CONSTRUCT queries should use RDF format, not JSON"))
+            }
+            CoreQueryResult::Describe { .. } => {
+                Err(FusekiError::unsupported_media_type("DESCRIBE queries should use RDF format, not JSON"))
+            }
+        }
     }
     
     /// Convert to XML string  
     pub fn to_xml(&self) -> FusekiResult<String> {
-        self.inner.to_xml()
-            .map_err(|e| FusekiError::parse(format!("Failed to serialize query result: {}", e)))
+        match &self.inner {
+            CoreQueryResult::Select { variables, bindings } => {
+                let mut xml = String::from("<?xml version=\"1.0\"?>\n<sparql xmlns=\"http://www.w3.org/2005/sparql-results#\">\n");
+                xml.push_str("  <head>\n");
+                for var in variables {
+                    xml.push_str(&format!("    <variable name=\"{}\"/>\n", var));
+                }
+                xml.push_str("  </head>\n  <results>\n");
+                
+                for binding in bindings {
+                    xml.push_str("    <result>\n");
+                    for (var, term) in binding {
+                        xml.push_str(&format!("      <binding name=\"{}\">\n", var));
+                        match term {
+                            Term::NamedNode(node) => {
+                                xml.push_str(&format!("        <uri>{}</uri>\n", node.as_str()));
+                            }
+                            Term::BlankNode(node) => {
+                                xml.push_str(&format!("        <bnode>{}</bnode>\n", node.as_str()));
+                            }
+                            Term::Literal(literal) => {
+                                xml.push_str(&format!("        <literal>{}</literal>\n", literal.value()));
+                            }
+                            Term::Variable(variable) => {
+                                xml.push_str(&format!("        <variable>{}</variable>\n", variable.as_str()));
+                            }
+                        }
+                        xml.push_str("      </binding>\n");
+                    }
+                    xml.push_str("    </result>\n");
+                }
+                xml.push_str("  </results>\n</sparql>");
+                Ok(xml)
+            }
+            CoreQueryResult::Ask(result) => {
+                let xml = format!("<?xml version=\"1.0\"?>\n<sparql xmlns=\"http://www.w3.org/2005/sparql-results#\">\n  <head/>\n  <boolean>{}</boolean>\n</sparql>", result);
+                Ok(xml)
+            }
+            _ => Err(FusekiError::unsupported_media_type("XML format only supported for SELECT and ASK queries"))
+        }
     }
     
     /// Convert to CSV string
     pub fn to_csv(&self) -> FusekiResult<String> {
-        self.inner.to_csv()
-            .map_err(|e| FusekiError::parse(format!("Failed to serialize query result: {}", e)))
+        match &self.inner {
+            CoreQueryResult::Select { variables, bindings } => {
+                let mut csv = variables.join(",");
+                csv.push('\n');
+                
+                for binding in bindings {
+                    let values: Vec<String> = variables.iter().map(|var| {
+                        binding.get(var)
+                            .map(|term| term.to_string())
+                            .unwrap_or_default()
+                    }).collect();
+                    csv.push_str(&values.join(","));
+                    csv.push('\n');
+                }
+                
+                Ok(csv)
+            }
+            _ => Err(FusekiError::unsupported_media_type("CSV format only supported for SELECT queries"))
+        }
     }
     
     /// Convert to TSV string
     pub fn to_tsv(&self) -> FusekiResult<String> {
-        self.inner.to_tsv()
-            .map_err(|e| FusekiError::parse(format!("Failed to serialize query result: {}", e)))
+        match &self.inner {
+            CoreQueryResult::Select { variables, bindings } => {
+                let mut tsv = variables.join("\t");
+                tsv.push('\n');
+                
+                for binding in bindings {
+                    let values: Vec<String> = variables.iter().map(|var| {
+                        binding.get(var)
+                            .map(|term| term.to_string())
+                            .unwrap_or_default()
+                    }).collect();
+                    tsv.push_str(&values.join("\t"));
+                    tsv.push('\n');
+                }
+                
+                Ok(tsv)
+            }
+            _ => Err(FusekiError::unsupported_media_type("TSV format only supported for SELECT queries"))
+        }
+    }
+    
+    /// Convert to RDF string (for CONSTRUCT/DESCRIBE)
+    pub fn to_rdf(&self, format: RdfSerializationFormat) -> FusekiResult<String> {
+        match &self.inner {
+            CoreQueryResult::Construct { triples } => {
+                let core_format = match format {
+                    RdfSerializationFormat::Turtle => CoreRdfFormat::Turtle,
+                    RdfSerializationFormat::NTriples => CoreRdfFormat::NTriples,
+                    RdfSerializationFormat::RdfXml => CoreRdfFormat::RdfXml,
+                    RdfSerializationFormat::JsonLd => return Err(FusekiError::unsupported_media_type("JSON-LD not supported yet")),
+                    RdfSerializationFormat::NQuads => CoreRdfFormat::NQuads,
+                };
+                
+                let serializer = Serializer::new(core_format);
+                let graph = oxirs_core::model::graph::Graph::from_iter(triples.clone());
+                serializer.serialize_graph(&graph)
+                    .map_err(|e| FusekiError::parse(format!("Failed to serialize CONSTRUCT result: {}", e)))
+            }
+            CoreQueryResult::Describe { graph } => {
+                let core_format = match format {
+                    RdfSerializationFormat::Turtle => CoreRdfFormat::Turtle,
+                    RdfSerializationFormat::NTriples => CoreRdfFormat::NTriples,
+                    RdfSerializationFormat::RdfXml => CoreRdfFormat::RdfXml,
+                    RdfSerializationFormat::JsonLd => return Err(FusekiError::unsupported_media_type("JSON-LD not supported yet")),
+                    RdfSerializationFormat::NQuads => CoreRdfFormat::NQuads,
+                };
+                
+                let serializer = Serializer::new(core_format);
+                serializer.serialize_graph(graph)
+                    .map_err(|e| FusekiError::parse(format!("Failed to serialize DESCRIBE result: {}", e)))
+            }
+            _ => Err(FusekiError::unsupported_media_type("RDF format only supported for CONSTRUCT and DESCRIBE queries"))
+        }
     }
     
     /// Get result in the specified format

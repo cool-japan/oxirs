@@ -169,20 +169,25 @@ impl TargetSelector {
             "#, rdf_type.as_str(), class_iri.as_str())
         };
         
-        // Execute the query using the store's SPARQL interface
-        // Note: This is a placeholder implementation
-        // In a real implementation, we would:
-        // 1. Use the store's query interface to execute the SPARQL query
-        // 2. Parse the results to extract the instance IRIs
-        // 3. Convert them to Terms and add to instances vector
+        // Execute the query using oxirs-core query engine
+        match self.execute_target_query(store, &query) {
+            Ok(results) => {
+                if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = results {
+                    for binding in bindings {
+                        if let Some(instance) = binding.get("instance") {
+                            instances.push(instance.clone());
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::error!("Failed to execute class instance query: {}", e);
+                // Fallback to direct store querying
+                instances = self.select_class_instances_direct(store, class_iri, graph_name)?;
+            }
+        }
         
-        // For now, we'll try a direct approach using store iteration if available
-        // This is a simplified implementation that assumes we can iterate over quads
-        
-        // Placeholder: Return empty list for now
-        // TODO: Integrate with actual oxirs-core store interface once available
-        tracing::warn!("Class instance selection not fully implemented - using placeholder");
-        
+        tracing::debug!("Found {} instances of class {}", instances.len(), class_iri.as_str());
         Ok(instances)
     }
     
@@ -207,12 +212,25 @@ impl TargetSelector {
             "#, property.as_str())
         };
         
-        // TODO: Execute SPARQL query and extract objects
-        // This would use the store's SPARQL interface to execute the query
-        // and parse the results to get all object values
+        // Execute the query using oxirs-core query engine
+        match self.execute_target_query(store, &query) {
+            Ok(results) => {
+                if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = results {
+                    for binding in bindings {
+                        if let Some(object) = binding.get("object") {
+                            objects.push(object.clone());
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::error!("Failed to execute objects query: {}", e);
+                // Fallback to direct store querying
+                objects = self.select_objects_direct(store, property, graph_name)?;
+            }
+        }
         
-        tracing::warn!("Property objects selection not fully implemented - using placeholder");
-        
+        tracing::debug!("Found {} objects of property {}", objects.len(), property.as_str());
         Ok(objects)
     }
     
@@ -237,12 +255,25 @@ impl TargetSelector {
             "#, property.as_str())
         };
         
-        // TODO: Execute SPARQL query and extract subjects
-        // This would use the store's SPARQL interface to execute the query
-        // and parse the results to get all subject values
+        // Execute the query using oxirs-core query engine
+        match self.execute_target_query(store, &query) {
+            Ok(results) => {
+                if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = results {
+                    for binding in bindings {
+                        if let Some(subject) = binding.get("subject") {
+                            subjects.push(subject.clone());
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::error!("Failed to execute subjects query: {}", e);
+                // Fallback to direct store querying
+                subjects = self.select_subjects_direct(store, property, graph_name)?;
+            }
+        }
         
-        tracing::warn!("Property subjects selection not fully implemented - using placeholder");
-        
+        tracing::debug!("Found {} subjects of property {}", subjects.len(), property.as_str());
         Ok(subjects)
     }
     
@@ -266,17 +297,140 @@ impl TargetSelector {
         
         complete_query.push_str(&query);
         
-        // TODO: Execute the SPARQL query using the store's SPARQL interface
-        // This would:
-        // 1. Parse and validate the SPARQL query
-        // 2. Execute it against the store
-        // 3. Extract the ?this bindings from the results
-        // 4. Convert them to Terms and return
+        let mut targets = Vec::new();
         
-        tracing::warn!("SPARQL target selection not fully implemented - using placeholder");
+        // Execute the SPARQL query using oxirs-core query engine
+        match self.execute_target_query(store, &complete_query) {
+            Ok(results) => {
+                if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = results {
+                    for binding in bindings {
+                        // Look for the standard ?this variable
+                        if let Some(this_value) = binding.get("this") {
+                            targets.push(this_value.clone());
+                        }
+                        // Also check for other common target variable names
+                        else if let Some(target_value) = binding.get("target") {
+                            targets.push(target_value.clone());
+                        }
+                        // If no standard variable found, take the first binding value
+                        else if let Some(first_value) = binding.values().next() {
+                            targets.push(first_value.clone());
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::error!("Failed to execute SPARQL target query: {}", e);
+                return Err(ShaclError::TargetSelection(
+                    format!("SPARQL target query execution failed: {}", e)
+                ));
+            }
+        }
         
-        // For now, return empty result
-        Ok(Vec::new())
+        tracing::debug!("Found {} targets from SPARQL query", targets.len());
+        Ok(targets)
+    }
+    
+    /// Execute a target selection query using oxirs-core query engine
+    fn execute_target_query(&self, store: &Store, query: &str) -> Result<oxirs_core::query::QueryResult> {
+        use oxirs_core::query::QueryEngine;
+        
+        let query_engine = QueryEngine::new();
+        
+        tracing::debug!("Executing target query: {}", query);
+        
+        let result = query_engine.query(query, store)
+            .map_err(|e| ShaclError::TargetSelection(format!("Target query execution failed: {}", e)))?;
+        
+        Ok(result)
+    }
+    
+    /// Fallback method to select class instances using direct store queries
+    fn select_class_instances_direct(&self, store: &Store, class_iri: &NamedNode, graph_name: Option<&str>) -> Result<Vec<Term>> {
+        use oxirs_core::model::{Subject, Predicate, Object, GraphName};
+        
+        let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+            .map_err(|e| ShaclError::Core(OxirsError::Parse(e.to_string())))?;
+        
+        let predicate = Predicate::NamedNode(rdf_type);
+        let object = Object::NamedNode(class_iri.clone());
+        
+        let graph_filter = if let Some(g) = graph_name {
+            Some(GraphName::NamedNode(
+                NamedNode::new(g).map_err(|e| ShaclError::Core(OxirsError::Parse(e.to_string())))?
+            ))
+        } else {
+            None
+        };
+        
+        let quads = store.query_quads(
+            None, // Any subject
+            Some(&predicate),
+            Some(&object),
+            graph_filter.as_ref()
+        ).map_err(|e| ShaclError::Core(e))?;
+        
+        let instances: Vec<Term> = quads.into_iter()
+            .map(|quad| Term::from(quad.subject().clone()))
+            .collect();
+        
+        Ok(instances)
+    }
+    
+    /// Fallback method to select objects using direct store queries
+    fn select_objects_direct(&self, store: &Store, property: &NamedNode, graph_name: Option<&str>) -> Result<Vec<Term>> {
+        use oxirs_core::model::{Predicate, GraphName};
+        
+        let predicate = Predicate::NamedNode(property.clone());
+        
+        let graph_filter = if let Some(g) = graph_name {
+            Some(GraphName::NamedNode(
+                NamedNode::new(g).map_err(|e| ShaclError::Core(OxirsError::Parse(e.to_string())))?
+            ))
+        } else {
+            None
+        };
+        
+        let quads = store.query_quads(
+            None, // Any subject
+            Some(&predicate),
+            None, // Any object
+            graph_filter.as_ref()
+        ).map_err(|e| ShaclError::Core(e))?;
+        
+        let objects: Vec<Term> = quads.into_iter()
+            .map(|quad| Term::from(quad.object().clone()))
+            .collect();
+        
+        Ok(objects)
+    }
+    
+    /// Fallback method to select subjects using direct store queries
+    fn select_subjects_direct(&self, store: &Store, property: &NamedNode, graph_name: Option<&str>) -> Result<Vec<Term>> {
+        use oxirs_core::model::{Predicate, GraphName};
+        
+        let predicate = Predicate::NamedNode(property.clone());
+        
+        let graph_filter = if let Some(g) = graph_name {
+            Some(GraphName::NamedNode(
+                NamedNode::new(g).map_err(|e| ShaclError::Core(OxirsError::Parse(e.to_string())))?
+            ))
+        } else {
+            None
+        };
+        
+        let quads = store.query_quads(
+            None, // Any subject
+            Some(&predicate),
+            None, // Any object
+            graph_filter.as_ref()
+        ).map_err(|e| ShaclError::Core(e))?;
+        
+        let subjects: Vec<Term> = quads.into_iter()
+            .map(|quad| Term::from(quad.subject().clone()))
+            .collect();
+        
+        Ok(subjects)
     }
     
     /// Create a cache key for target results

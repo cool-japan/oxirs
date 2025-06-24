@@ -8,7 +8,7 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use metrics::{counter, gauge, histogram, register_counter, register_gauge, register_histogram};
+use metrics::{counter, gauge, histogram, describe_counter, describe_gauge, describe_histogram};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -135,29 +135,29 @@ impl MetricsService {
     /// Initialize core application metrics
     fn initialize_metrics(&self) -> FusekiResult<()> {
         // Register core counters
-        register_counter!("http_requests_total", "Total number of HTTP requests");
-        register_counter!("sparql_queries_total", "Total number of SPARQL queries");
-        register_counter!("sparql_updates_total", "Total number of SPARQL updates");
-        register_counter!("authentication_attempts_total", "Total authentication attempts");
-        register_counter!("authentication_failures_total", "Total authentication failures");
-        register_counter!("cache_hits_total", "Total cache hits");
-        register_counter!("cache_misses_total", "Total cache misses");
-        register_counter!("errors_total", "Total errors by type");
+        describe_counter!("http_requests_total", "Total number of HTTP requests");
+        describe_counter!("sparql_queries_total", "Total number of SPARQL queries");
+        describe_counter!("sparql_updates_total", "Total number of SPARQL updates");
+        describe_counter!("authentication_attempts_total", "Total authentication attempts");
+        describe_counter!("authentication_failures_total", "Total authentication failures");
+        describe_counter!("cache_hits_total", "Total cache hits");
+        describe_counter!("cache_misses_total", "Total cache misses");
+        describe_counter!("errors_total", "Total errors by type");
 
         // Register core gauges
-        register_gauge!("active_connections", "Number of active connections");
-        register_gauge!("active_sessions", "Number of active user sessions");
-        register_gauge!("memory_usage_bytes", "Memory usage in bytes");
-        register_gauge!("cpu_usage_percent", "CPU usage percentage");
-        register_gauge!("cache_size_bytes", "Cache size in bytes");
-        register_gauge!("database_connections", "Number of database connections");
+        describe_gauge!("active_connections", "Number of active connections");
+        describe_gauge!("active_sessions", "Number of active user sessions");
+        describe_gauge!("memory_usage_bytes", "Memory usage in bytes");
+        describe_gauge!("cpu_usage_percent", "CPU usage percentage");
+        describe_gauge!("cache_size_bytes", "Cache size in bytes");
+        describe_gauge!("database_connections", "Number of database connections");
 
         // Register core histograms
-        register_histogram!("http_request_duration_seconds", "HTTP request duration");
-        register_histogram!("sparql_query_duration_seconds", "SPARQL query execution time");
-        register_histogram!("sparql_update_duration_seconds", "SPARQL update execution time");
-        register_histogram!("cache_operation_duration_seconds", "Cache operation duration");
-        register_histogram!("database_operation_duration_seconds", "Database operation duration");
+        describe_histogram!("http_request_duration_seconds", "HTTP request duration");
+        describe_histogram!("sparql_query_duration_seconds", "SPARQL query execution time");
+        describe_histogram!("sparql_update_duration_seconds", "SPARQL update execution time");
+        describe_histogram!("cache_operation_duration_seconds", "Cache operation duration");
+        describe_histogram!("database_operation_duration_seconds", "Database operation duration");
 
         info!("Metrics registry initialized with core metrics");
         Ok(())

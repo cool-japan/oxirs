@@ -546,25 +546,28 @@ mod tests {
 
     fn create_test_performance_service() -> PerformanceService {
         let config = PerformanceConfig {
-            caching: Some(CacheConfig {
+            caching: CacheConfig {
                 enabled: true,
-                max_entries: 100,
-                ttl_seconds: 300,
-                min_execution_time_ms: 10,
-            }),
-            query_optimization: Some(QueryOptimizationConfig {
+                max_size: 100,
+                ttl_secs: 300,
+                query_cache_enabled: true,
+                result_cache_enabled: true,
+                plan_cache_enabled: true,
+            },
+            query_optimization: QueryOptimizationConfig {
                 enabled: true,
-                prepared_cache_size: 50,
-                max_concurrent_queries: 10,
-                slow_query_threshold_ms: 1000,
-            }),
-            connection_pool: Some(ConnectionPoolConfig {
+                max_query_time_secs: 300,
+                max_result_size: 1000000,
+                parallel_execution: true,
+                thread_pool_size: 4,
+            },
+            connection_pool: ConnectionPoolConfig {
+                min_connections: 1,
                 max_connections: 5,
                 connection_timeout_secs: 30,
                 idle_timeout_secs: 300,
-            }),
-            rate_limiting: None,
-            compression: None,
+                max_lifetime_secs: 3600,
+            },
         };
         
         PerformanceService::new(config).unwrap()

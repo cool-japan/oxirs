@@ -199,11 +199,49 @@ pub struct GroupCondition {
     pub alias: Option<Variable>,
 }
 
+/// Property path expressions for advanced SPARQL 1.1 graph navigation
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum PropertyPath {
+    /// Direct property IRI
+    Iri(Iri),
+    /// Variable property
+    Variable(Variable),
+    /// Inverse property path (^property)
+    Inverse(Box<PropertyPath>),
+    /// Sequence path (path1/path2)
+    Sequence(Box<PropertyPath>, Box<PropertyPath>),
+    /// Alternative path (path1|path2)
+    Alternative(Box<PropertyPath>, Box<PropertyPath>),
+    /// Zero or more (path*)
+    ZeroOrMore(Box<PropertyPath>),
+    /// One or more (path+)
+    OneOrMore(Box<PropertyPath>),
+    /// Zero or one (path?)
+    ZeroOrOne(Box<PropertyPath>),
+    /// Negated property set (!property)
+    NegatedPropertySet(Vec<PropertyPath>),
+}
+
+/// Property path triple pattern
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PropertyPathPattern {
+    pub subject: Term,
+    pub path: PropertyPath,
+    pub object: Term,
+}
+
 /// SPARQL algebra expressions
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Algebra {
     /// Basic Graph Pattern
     Bgp(Vec<TriplePattern>),
+    
+    /// Property Path Pattern
+    PropertyPath {
+        subject: Term,
+        path: PropertyPath,
+        object: Term,
+    },
     
     /// Join two patterns
     Join {
@@ -311,10 +349,155 @@ pub enum Algebra {
     Zero,
 }
 
+impl PropertyPath {
+    /// Create a direct property path
+    pub fn iri(iri: Iri) -> Self {
+        PropertyPath::Iri(iri)
+    }
+    
+    /// Create an inverse property path
+    pub fn inverse(path: PropertyPath) -> Self {
+        PropertyPath::Inverse(Box::new(path))
+    }
+    
+    /// Create a sequence property path
+    pub fn sequence(left: PropertyPath, right: PropertyPath) -> Self {
+        PropertyPath::Sequence(Box::new(left), Box::new(right))
+    }
+    
+    /// Create an alternative property path
+    pub fn alternative(left: PropertyPath, right: PropertyPath) -> Self {
+        PropertyPath::Alternative(Box::new(left), Box::new(right))
+    }
+    
+    /// Create a zero-or-more property path
+    pub fn zero_or_more(path: PropertyPath) -> Self {
+        PropertyPath::ZeroOrMore(Box::new(path))
+    }
+    
+    /// Create a one-or-more property path
+    pub fn one_or_more(path: PropertyPath) -> Self {
+        PropertyPath::OneOrMore(Box::new(path))
+    }
+    
+    /// Create a zero-or-one property path
+    pub fn zero_or_one(path: PropertyPath) -> Self {
+        PropertyPath::ZeroOrOne(Box::new(path))
+    }
+    
+    /// Check if path is simple (direct property)
+    pub fn is_simple(&self) -> bool {
+        matches!(self, PropertyPath::Iri(_) | PropertyPath::Variable(_))
+    }
+    
+    /// Get all variables mentioned in this property path
+    pub fn variables(&self) -> Vec<Variable> {
+        let mut vars = Vec::new();
+        self.collect_variables(&mut vars);
+        vars.sort();
+        vars.dedup();
+        vars
+    }
+    
+    fn collect_variables(&self, vars: &mut Vec<Variable>) {
+        match self {
+            PropertyPath::Variable(var) => vars.push(var.clone()),
+            PropertyPath::Inverse(path) => path.collect_variables(vars),
+            PropertyPath::Sequence(left, right) |
+            PropertyPath::Alternative(left, right) => {
+                left.collect_variables(vars);
+                right.collect_variables(vars);
+            }
+            PropertyPath::ZeroOrMore(path) |
+            PropertyPath::OneOrMore(path) |
+            PropertyPath::ZeroOrOne(path) => path.collect_variables(vars),
+            PropertyPath::NegatedPropertySet(paths) => {
+                for path in paths {
+                    path.collect_variables(vars);
+                }
+            }
+            PropertyPath::Iri(_) => {}
+        }
+    }
+    
+    /// Estimate complexity of property path evaluation
+    pub fn complexity(&self) -> usize {
+        match self {
+            PropertyPath::Iri(_) | PropertyPath::Variable(_) => 1,
+            PropertyPath::Inverse(path) => path.complexity() + 10,
+            PropertyPath::Sequence(left, right) => left.complexity() + right.complexity() + 20,
+            PropertyPath::Alternative(left, right) => {
+                std::cmp::max(left.complexity(), right.complexity()) + 15
+            }
+            PropertyPath::ZeroOrMore(_) | PropertyPath::OneOrMore(_) => 1000, // High complexity
+            PropertyPath::ZeroOrOne(path) => path.complexity() + 5,
+            PropertyPath::NegatedPropertySet(paths) => {
+                paths.iter().map(|p| p.complexity()).sum::<usize>() + 50
+            }
+        }
+    }
+}
+
+impl PropertyPathPattern {
+    /// Create a new property path pattern
+    pub fn new(subject: Term, path: PropertyPath, object: Term) -> Self {
+        PropertyPathPattern { subject, path, object }
+    }
+    
+    /// Get all variables mentioned in this pattern
+    pub fn variables(&self) -> Vec<Variable> {
+        let mut vars = Vec::new();
+        self.collect_variables(&mut vars);
+        vars.sort();
+        vars.dedup();
+        vars
+    }
+    
+    fn collect_variables(&self, vars: &mut Vec<Variable>) {
+        self.subject.collect_variables(vars);
+        self.path.collect_variables(vars);
+        self.object.collect_variables(vars);
+    }
+}
+
+impl fmt::Display for PropertyPath {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PropertyPath::Iri(iri) => write!(f, "{}", iri),
+            PropertyPath::Variable(var) => write!(f, "?{}", var),
+            PropertyPath::Inverse(path) => write!(f, "^{}", path),
+            PropertyPath::Sequence(left, right) => write!(f, "{}/{}", left, right),
+            PropertyPath::Alternative(left, right) => write!(f, "{}|{}", left, right),
+            PropertyPath::ZeroOrMore(path) => write!(f, "{}*", path),
+            PropertyPath::OneOrMore(path) => write!(f, "{} +", path),
+            PropertyPath::ZeroOrOne(path) => write!(f, "{}?", path),
+            PropertyPath::NegatedPropertySet(paths) => {
+                write!(f, "!(")?;
+                for (i, path) in paths.iter().enumerate() {
+                    if i > 0 { write!(f, "|")? }
+                    write!(f, "{}", path)?;
+                }
+                write!(f, ")")
+            }
+        }
+    }
+}
+
+impl fmt::Display for PropertyPathPattern {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {} {}", self.subject, self.path, self.object)
+    }
+}
+
 impl Algebra {
     /// Create a new BGP from triple patterns
     pub fn bgp(patterns: Vec<TriplePattern>) -> Self {
         Algebra::Bgp(patterns)
+    }
+    
+    /// Create a property path algebra node
+    pub fn property_path(subject: Term, path: PropertyPath, object: Term) -> Self {
+        Algebra::PropertyPath { subject, path, object }
     }
     
     /// Create a join of two patterns
@@ -391,6 +574,11 @@ impl Algebra {
                 for pattern in patterns {
                     pattern.collect_variables(vars);
                 }
+            }
+            Algebra::PropertyPath { subject, path, object } => {
+                subject.collect_variables(vars);
+                path.collect_variables(vars);
+                object.collect_variables(vars);
             }
             Algebra::Join { left, right }
             | Algebra::Union { left, right }

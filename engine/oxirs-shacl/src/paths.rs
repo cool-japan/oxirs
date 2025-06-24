@@ -222,20 +222,25 @@ impl PropertyPathEvaluator {
             "#, format_term_for_sparql(start_node)?, predicate.as_str())
         };
         
-        // TODO: Execute SPARQL query using store interface
-        // For now, we'll provide a structured approach for when the interface is available
+        // Execute the SPARQL query using oxirs-core query engine
+        match self.execute_path_query(store, &query) {
+            Ok(results) => {
+                if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = results {
+                    for binding in bindings {
+                        if let Some(value) = binding.get("value") {
+                            values.push(value.clone());
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::error!("Failed to execute predicate path query: {}", e);
+                // Fallback to direct store querying
+                values = self.evaluate_predicate_direct(store, start_node, predicate, graph_name)?;
+            }
+        }
         
-        // Placeholder implementation - log the query that would be executed
-        tracing::debug!("Property path predicate query: {}", query);
-        
-        // TODO: Replace with actual store.query() call when available
-        // let results = store.query(&query)?;
-        // for solution in results.solutions() {
-        //     if let Some(value) = solution.get("value") {
-        //         values.push(value.clone());
-        //     }
-        // }
-        
+        tracing::debug!("Found {} values for predicate path {}", values.len(), predicate.as_str());
         Ok(values)
     }
     
@@ -274,17 +279,25 @@ impl PropertyPathEvaluator {
             "#, predicate.as_str(), format_term_for_sparql(start_node)?)
         };
         
-        // TODO: Execute SPARQL query using store interface
-        tracing::debug!("Inverse property path query: {}", query);
+        // Execute the SPARQL query using oxirs-core query engine
+        match self.execute_path_query(store, &query) {
+            Ok(results) => {
+                if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = results {
+                    for binding in bindings {
+                        if let Some(value) = binding.get("value") {
+                            values.push(value.clone());
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::error!("Failed to execute inverse predicate path query: {}", e);
+                // Fallback to direct store querying
+                values = self.evaluate_inverse_predicate_direct(store, start_node, predicate, graph_name)?;
+            }
+        }
         
-        // TODO: Replace with actual store.query() call when available
-        // let results = store.query(&query)?;
-        // for solution in results.solutions() {
-        //     if let Some(value) = solution.get("value") {
-        //         values.push(value.clone());
-        //     }
-        // }
-        
+        tracing::debug!("Found {} values for inverse predicate path {}", values.len(), predicate.as_str());
         Ok(values)
     }
     
@@ -294,14 +307,12 @@ impl PropertyPathEvaluator {
         // We'll implement this using a recursive approach with caching
         
         let mut result = Vec::new();
-        let mut candidates = HashSet::new();
+        let mut candidates: HashSet<Term> = HashSet::new();
         
         // Strategy: Find potential candidates and test if they reach start_node via the path
         // This is expensive but necessary for correctness
         
         // First, collect all potential starting nodes from the graph
-        // This is a simplified approach - in practice we'd want to be smarter about candidate selection
-        
         let candidate_query = if let Some(graph) = graph_name {
             format!(r#"
                 SELECT DISTINCT ?candidate WHERE {{
@@ -309,27 +320,60 @@ impl PropertyPathEvaluator {
                         ?candidate ?p ?o .
                     }}
                 }}
-                LIMIT 10000
+                LIMIT 1000
             "#, graph)
         } else {
-            "SELECT DISTINCT ?candidate WHERE { ?candidate ?p ?o . } LIMIT 10000".to_string()
+            "SELECT DISTINCT ?candidate WHERE { ?candidate ?p ?o . } LIMIT 1000".to_string()
         };
         
-        // TODO: Execute query to get candidates
-        tracing::debug!("Complex inverse path candidate query: {}", candidate_query);
+        // Execute query to get candidates
+        match self.execute_path_query(store, &candidate_query) {
+            Ok(results) => {
+                if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = results {
+                    for binding in bindings {
+                        if let Some(candidate) = binding.get("candidate") {
+                            candidates.insert(candidate.clone());
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::error!("Failed to get candidates for complex inverse path: {}", e);
+                // Use fallback: get candidates from direct store query
+                candidates = self.get_candidates_direct(store, graph_name)?;
+            }
+        }
+        
+        tracing::debug!("Testing {} candidates for complex inverse path", candidates.len());
         
         // For each candidate, test if it reaches start_node via the inner path
-        // TODO: Implement candidate testing
-        // for candidate in candidates {
-        //     let path_values = self.evaluate_path_impl(store, &candidate, inner_path, graph_name, depth + 1)?;
-        //     if path_values.contains(start_node) {
-        //         result.push(candidate);
-        //     }
-        // }
+        for candidate in candidates {
+            // Limit recursion to prevent infinite loops
+            if depth > self.max_depth - 5 {
+                tracing::warn!("Stopping complex inverse path evaluation due to depth limit");
+                break;
+            }
+            
+            match self.evaluate_path_impl(store, &candidate, inner_path, graph_name, depth + 1) {
+                Ok(path_values) => {
+                    if path_values.contains(start_node) {
+                        result.push(candidate);
+                    }
+                }
+                Err(e) => {
+                    tracing::debug!("Failed to evaluate path for candidate: {}", e);
+                    // Continue with other candidates
+                }
+            }
+            
+            // Limit result size to prevent memory issues
+            if result.len() > 100 {
+                tracing::warn!("Limiting complex inverse path results to 100 items");
+                break;
+            }
+        }
         
-        // For now, return empty result with warning
-        tracing::warn!("Complex inverse path evaluation not fully implemented - performance optimization needed");
-        
+        tracing::debug!("Complex inverse path found {} results", result.len());
         Ok(result)
     }
     
@@ -462,6 +506,119 @@ impl PropertyPathEvaluator {
         // Remove duplicates
         let unique_result: HashSet<_> = result.into_iter().collect();
         Ok(unique_result.into_iter().collect())
+    }
+    
+    /// Execute a path query using oxirs-core query engine
+    fn execute_path_query(&self, store: &Store, query: &str) -> Result<oxirs_core::query::QueryResult> {
+        use oxirs_core::query::QueryEngine;
+        
+        let query_engine = QueryEngine::new();
+        
+        tracing::debug!("Executing path query: {}", query);
+        
+        let result = query_engine.query(query, store)
+            .map_err(|e| ShaclError::PropertyPath(format!("Path query execution failed: {}", e)))?;
+        
+        Ok(result)
+    }
+    
+    /// Fallback method to evaluate predicate using direct store queries
+    fn evaluate_predicate_direct(&self, store: &Store, start_node: &Term, predicate: &NamedNode, graph_name: Option<&str>) -> Result<Vec<Term>> {
+        use oxirs_core::model::{Subject, Predicate, Object, GraphName};
+        
+        let subject = match start_node {
+            Term::NamedNode(node) => Subject::NamedNode(node.clone()),
+            Term::BlankNode(node) => Subject::BlankNode(node.clone()),
+            _ => return Err(ShaclError::PropertyPath("Invalid subject term for predicate path".to_string())),
+        };
+        
+        let predicate_term = Predicate::NamedNode(predicate.clone());
+        
+        let graph_filter = match graph_name {
+            Some(g) => Some(GraphName::NamedNode(
+                NamedNode::new(g).map_err(|e| ShaclError::Core(OxirsError::Parse(e.to_string())))?
+            )),
+            None => None,
+        };
+        
+        let quads = store.query_quads(
+            Some(&subject),
+            Some(&predicate_term),
+            None, // Any object
+            graph_filter.as_ref()
+        ).map_err(|e| ShaclError::Core(e))?;
+        
+        let values: Vec<Term> = quads.into_iter()
+            .map(|quad| Term::from(quad.object().clone()))
+            .collect();
+        
+        tracing::debug!("Direct store query found {} values for predicate path", values.len());
+        Ok(values)
+    }
+    
+    /// Fallback method to evaluate inverse predicate using direct store queries
+    fn evaluate_inverse_predicate_direct(&self, store: &Store, start_node: &Term, predicate: &NamedNode, graph_name: Option<&str>) -> Result<Vec<Term>> {
+        use oxirs_core::model::{Subject, Predicate, Object, GraphName};
+        
+        let object = match start_node {
+            Term::NamedNode(node) => Object::NamedNode(node.clone()),
+            Term::BlankNode(node) => Object::BlankNode(node.clone()),
+            Term::Literal(literal) => Object::Literal(literal.clone()),
+            _ => return Err(ShaclError::PropertyPath("Invalid object term for inverse predicate path".to_string())),
+        };
+        
+        let predicate_term = Predicate::NamedNode(predicate.clone());
+        
+        let graph_filter = match graph_name {
+            Some(g) => Some(GraphName::NamedNode(
+                NamedNode::new(g).map_err(|e| ShaclError::Core(OxirsError::Parse(e.to_string())))?
+            )),
+            None => None,
+        };
+        
+        let quads = store.query_quads(
+            None, // Any subject
+            Some(&predicate_term),
+            Some(&object),
+            graph_filter.as_ref()
+        ).map_err(|e| ShaclError::Core(e))?;
+        
+        let values: Vec<Term> = quads.into_iter()
+            .map(|quad| Term::from(quad.subject().clone()))
+            .collect();
+        
+        tracing::debug!("Direct store query found {} values for inverse predicate path", values.len());
+        Ok(values)
+    }
+    
+    /// Fallback method to get candidate nodes using direct store queries
+    fn get_candidates_direct(&self, store: &Store, graph_name: Option<&str>) -> Result<HashSet<Term>> {
+        use oxirs_core::model::GraphName;
+        
+        let mut candidates = HashSet::new();
+        
+        let graph_filter = match graph_name {
+            Some(g) => Some(GraphName::NamedNode(
+                NamedNode::new(g).map_err(|e| ShaclError::Core(OxirsError::Parse(e.to_string())))?
+            )),
+            None => None,
+        };
+        
+        // Get all subjects from the store (limited to prevent memory issues)
+        let quads = store.query_quads(
+            None, // Any subject
+            None, // Any predicate
+            None, // Any object
+            graph_filter.as_ref()
+        ).map_err(|e| ShaclError::Core(e))?;
+        
+        // Collect unique subjects, limited to prevent memory explosion
+        for quad in quads.into_iter().take(1000) {
+            candidates.insert(Term::from(quad.subject().clone()));
+        }
+        
+        tracing::debug!("Direct store query found {} candidate nodes", candidates.len());
+        Ok(candidates)
     }
     
     /// Create a cache key for path evaluation

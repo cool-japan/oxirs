@@ -204,15 +204,63 @@ impl StarSerializer {
     }
 
     /// Serialize to TriG-star format (with named graphs)
-    pub fn serialize_trig_star<W: Write>(&self, _graph: &StarGraph, _writer: W) -> StarResult<()> {
-        // TODO: Implement TriG-star serialization
-        Err(StarError::SerializationError("TriG-star serialization not yet implemented".to_string()))
+    pub fn serialize_trig_star<W: Write>(&self, graph: &StarGraph, writer: W) -> StarResult<()> {
+        let span = span!(Level::DEBUG, "serialize_trig_star");
+        let _enter = span.enter();
+
+        let mut buf_writer = BufWriter::new(writer);
+        let mut context = SerializationContext::new();
+        context.pretty_print = true;
+
+        // Write prefixes first
+        self.write_turtle_prefixes(&mut buf_writer, &context)?;
+
+        // Group triples by graph (for now, we'll serialize all to default graph)
+        // TODO: Implement proper named graph support when StarGraph supports multiple graphs
+        writeln!(buf_writer, "{{").map_err(|e| StarError::SerializationError(e.to_string()))?;
+        
+        context.increase_indent();
+        for triple in graph.triples() {
+            self.write_turtle_triple(&mut buf_writer, triple, &context)?;
+        }
+        context.decrease_indent();
+        
+        writeln!(buf_writer, "}}").map_err(|e| StarError::SerializationError(e.to_string()))?;
+
+        buf_writer.flush().map_err(|e| StarError::SerializationError(e.to_string()))?;
+        debug!("Serialized {} triples in TriG-star format", graph.len());
+        Ok(())
     }
 
     /// Serialize to N-Quads-star format
-    pub fn serialize_nquads_star<W: Write>(&self, _graph: &StarGraph, _writer: W) -> StarResult<()> {
-        // TODO: Implement N-Quads-star serialization
-        Err(StarError::SerializationError("N-Quads-star serialization not yet implemented".to_string()))
+    pub fn serialize_nquads_star<W: Write>(&self, graph: &StarGraph, writer: W) -> StarResult<()> {
+        let span = span!(Level::DEBUG, "serialize_nquads_star");
+        let _enter = span.enter();
+
+        let mut buf_writer = BufWriter::new(writer);
+        let context = SerializationContext::new(); // N-Quads doesn't use prefixes
+
+        for triple in graph.triples() {
+            self.write_nquads_quad(&mut buf_writer, triple, &context)?;
+        }
+
+        buf_writer.flush().map_err(|e| StarError::SerializationError(e.to_string()))?;
+        debug!("Serialized {} quads in N-Quads-star format", graph.len());
+        Ok(())
+    }
+
+    /// Write a single N-Quads-star quad (triple + optional graph)
+    fn write_nquads_quad<W: Write>(&self, writer: &mut W, triple: &StarTriple, _context: &SerializationContext) -> StarResult<()> {
+        let subject_str = self.format_term_ntriples(&triple.subject)?;
+        let predicate_str = self.format_term_ntriples(&triple.predicate)?;
+        let object_str = self.format_term_ntriples(&triple.object)?;
+
+        // For now, all quads go to default graph (no graph component)
+        // TODO: Add proper graph component when StarGraph supports named graphs
+        writeln!(writer, "{} {} {} .", subject_str, predicate_str, object_str)
+            .map_err(|e| StarError::SerializationError(e.to_string()))?;
+
+        Ok(())
     }
 
     /// Format a StarTerm for Turtle-star (with prefix compression)

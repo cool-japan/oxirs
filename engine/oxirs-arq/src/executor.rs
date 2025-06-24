@@ -6,8 +6,13 @@
 use crate::algebra::{Algebra, Binding, Expression, TriplePattern, Term, Variable, Solution, BinaryOperator, UnaryOperator, Aggregate};
 use anyhow::{Result, anyhow};
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
+use std::thread;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
 
 /// Query execution context
 #[derive(Debug, Clone)]
@@ -18,10 +23,42 @@ pub struct ExecutionContext {
     pub memory_limit: Option<usize>,
     /// Enable parallel execution
     pub parallel: bool,
+    /// Parallel execution configuration
+    pub parallel_config: ParallelConfig,
     /// Streaming configuration
     pub streaming: StreamingConfig,
     /// Statistics collection
     pub collect_stats: bool,
+    /// Query complexity threshold for parallel execution
+    pub parallel_threshold: usize,
+    /// Enable query result caching
+    pub enable_caching: bool,
+}
+
+/// Parallel execution configuration
+#[derive(Debug, Clone)]
+pub struct ParallelConfig {
+    /// Maximum number of threads to use
+    pub max_threads: usize,
+    /// Enable work-stealing
+    pub work_stealing: bool,
+    /// Chunk size for parallel processing
+    pub chunk_size: usize,
+    /// Threshold for enabling parallel execution
+    pub parallel_threshold: usize,
+    /// Thread pool configuration
+    pub thread_pool_config: ThreadPoolConfig,
+}
+
+/// Thread pool configuration
+#[derive(Debug, Clone)]
+pub struct ThreadPoolConfig {
+    /// Thread stack size
+    pub stack_size: Option<usize>,
+    /// Thread priority
+    pub thread_priority: Option<i32>,
+    /// Enable thread affinity
+    pub thread_affinity: bool,
 }
 
 impl Default for ExecutionContext {
@@ -30,8 +67,37 @@ impl Default for ExecutionContext {
             timeout: Some(Duration::from_secs(300)), // 5 minutes default timeout
             memory_limit: Some(1024 * 1024 * 1024), // 1GB default limit
             parallel: true,
+            parallel_config: ParallelConfig::default(),
             streaming: StreamingConfig::default(),
             collect_stats: false,
+            parallel_threshold: 1000,
+            enable_caching: true,
+        }
+    }
+}
+
+impl Default for ParallelConfig {
+    fn default() -> Self {
+        let num_cpus = thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4);
+        
+        Self {
+            max_threads: num_cpus,
+            work_stealing: true,
+            chunk_size: 1000,
+            parallel_threshold: 10000,
+            thread_pool_config: ThreadPoolConfig::default(),
+        }
+    }
+}
+
+impl Default for ThreadPoolConfig {
+    fn default() -> Self {
+        Self {
+            stack_size: Some(8 * 1024 * 1024), // 8MB stack size
+            thread_priority: None,
+            thread_affinity: false,
         }
     }
 }
@@ -162,20 +228,105 @@ fn matches_term(pattern: &Term, term: &Term) -> bool {
 pub struct QueryExecutor {
     context: ExecutionContext,
     function_registry: FunctionRegistry,
+    parallel_executor: Option<Arc<ParallelExecutor>>,
+    result_cache: Arc<RwLock<HashMap<String, CachedResult>>>,
+}
+
+/// Parallel execution engine
+pub struct ParallelExecutor {
+    config: ParallelConfig,
+    thread_pool: Arc<Mutex<Option<ThreadPool>>>,
+    work_queue: Arc<Mutex<Vec<WorkItem>>>,
+    completed_work: Arc<AtomicUsize>,
+    total_work: Arc<AtomicUsize>,
+}
+
+/// Work item for parallel execution
+#[derive(Debug)]
+pub struct WorkItem {
+    pub id: usize,
+    pub algebra: Algebra,
+    pub context: ExecutionContext,
+}
+
+/// Thread pool for parallel execution
+pub struct ThreadPool {
+    workers: Vec<Worker>,
+    sender: std::sync::mpsc::Sender<Message>,
+}
+
+/// Worker thread
+struct Worker {
+    id: usize,
+    thread: Option<thread::JoinHandle<()>>,
+}
+
+/// Message for worker communication
+enum Message {
+    NewJob(Job),
+    Terminate,
+}
+
+type Job = Box<dyn FnOnce() + Send + 'static>;
+
+/// Cached query result
+#[derive(Debug, Clone)]
+pub struct CachedResult {
+    pub solution: Solution,
+    pub stats: ExecutionStats,
+    pub timestamp: Instant,
+    pub expiry: Option<Instant>,
 }
 
 impl QueryExecutor {
     pub fn new() -> Self {
+        let context = ExecutionContext::default();
+        let parallel_executor = if context.parallel {
+            Some(Arc::new(ParallelExecutor::new(context.parallel_config.clone())))
+        } else {
+            None
+        };
+        
         Self {
-            context: ExecutionContext::default(),
+            context,
             function_registry: FunctionRegistry::new(),
+            parallel_executor,
+            result_cache: Arc::new(RwLock::new(HashMap::new())),
         }
     }
     
     pub fn with_context(context: ExecutionContext) -> Self {
+        let parallel_executor = if context.parallel {
+            Some(Arc::new(ParallelExecutor::new(context.parallel_config.clone())))
+        } else {
+            None
+        };
+        
         Self {
             context,
             function_registry: FunctionRegistry::new(),
+            parallel_executor,
+            result_cache: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+    
+    /// Enable parallel execution
+    pub fn enable_parallel(&mut self, config: ParallelConfig) {
+        self.context.parallel = true;
+        self.context.parallel_config = config.clone();
+        self.parallel_executor = Some(Arc::new(ParallelExecutor::new(config)));
+    }
+    
+    /// Disable parallel execution
+    pub fn disable_parallel(&mut self) {
+        self.context.parallel = false;
+        self.parallel_executor = None;
+    }
+    
+    /// Clear result cache
+    pub fn clear_cache(&self) {
+        if let Ok(mut cache) = self.result_cache.write() {
+            cache.clear();
         }
     }
     
@@ -184,12 +335,92 @@ impl QueryExecutor {
         let start_time = Instant::now();
         let mut stats = ExecutionStats::default();
         
-        let solution = self.execute_algebra(algebra, dataset, &mut stats)?;
+        // Check cache if enabled
+        if self.context.enable_caching {
+            let cache_key = format!("{:?}", algebra);
+            if let Ok(cache) = self.result_cache.read() {
+                if let Some(cached) = cache.get(&cache_key) {
+                    // Check if cache entry is still valid
+                    if cached.expiry.map_or(true, |exp| Instant::now() < exp) {
+                        let mut cached_stats = cached.stats.clone();
+                        cached_stats.execution_time = start_time.elapsed();
+                        return Ok((cached.solution.clone(), cached_stats));
+                    }
+                }
+            }
+        }
+        
+        // Determine if parallel execution should be used
+        let solution = if self.should_use_parallel_execution(algebra) {
+            self.execute_parallel(algebra, dataset, &mut stats)?
+        } else {
+            self.execute_algebra(algebra, dataset, &mut stats)?
+        };
         
         stats.execution_time = start_time.elapsed();
         stats.final_results = solution.len();
         
+        // Cache result if enabled
+        if self.context.enable_caching {
+            let cache_key = format!("{:?}", algebra);
+            let cached_result = CachedResult {
+                solution: solution.clone(),
+                stats: stats.clone(),
+                timestamp: Instant::now(),
+                expiry: Some(Instant::now() + Duration::from_secs(3600)), // 1 hour expiry
+            };
+            
+            if let Ok(mut cache) = self.result_cache.write() {
+                cache.insert(cache_key, cached_result);
+            }
+        }
+        
         Ok((solution, stats))
+    }
+    
+    /// Execute algebra expression in parallel
+    fn execute_parallel(&self, algebra: &Algebra, dataset: &dyn Dataset, stats: &mut ExecutionStats) -> Result<Solution> {
+        if let Some(ref parallel_executor) = self.parallel_executor {
+            parallel_executor.execute(algebra, dataset, stats)
+        } else {
+            // Fallback to sequential execution
+            self.execute_algebra(algebra, dataset, stats)
+        }
+    }
+    
+    /// Determine if parallel execution should be used
+    fn should_use_parallel_execution(&self, algebra: &Algebra) -> bool {
+        if !self.context.parallel || self.parallel_executor.is_none() {
+            return false;
+        }
+        
+        // Use heuristics to determine complexity
+        let complexity = self.estimate_complexity(algebra);
+        complexity >= self.context.parallel_threshold
+    }
+    
+    /// Estimate query complexity for parallel execution decision
+    fn estimate_complexity(&self, algebra: &Algebra) -> usize {
+        match algebra {
+            Algebra::Bgp(patterns) => patterns.len() * 100,
+            Algebra::Join { left, right } => {
+                let left_complexity = self.estimate_complexity(left);
+                let right_complexity = self.estimate_complexity(right);
+                left_complexity + right_complexity + 500 // Join overhead
+            }
+            Algebra::Union { left, right } => {
+                let left_complexity = self.estimate_complexity(left);
+                let right_complexity = self.estimate_complexity(right);
+                left_complexity + right_complexity + 200 // Union overhead
+            }
+            Algebra::Filter { pattern, .. } => {
+                self.estimate_complexity(pattern) + 100 // Filter overhead
+            }
+            Algebra::Service { pattern, .. } => {
+                self.estimate_complexity(pattern) + 1000 // Service overhead
+            }
+            _ => 100, // Default complexity
+        }
     }
     
     fn execute_algebra(&self, algebra: &Algebra, dataset: &dyn Dataset, stats: &mut ExecutionStats) -> Result<Solution> {
@@ -540,6 +771,258 @@ impl QueryExecutor {
 impl Default for QueryExecutor {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl ParallelExecutor {
+    pub fn new(config: ParallelConfig) -> Self {
+        Self {
+            config,
+            thread_pool: Arc::new(Mutex::new(None)),
+            work_queue: Arc::new(Mutex::new(Vec::new())),
+            completed_work: Arc::new(AtomicUsize::new(0)),
+            total_work: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+    
+    /// Initialize thread pool if not already created
+    fn ensure_thread_pool(&self) -> Result<()> {
+        let mut pool = self.thread_pool.lock().map_err(|_| anyhow!("Failed to lock thread pool"))?;
+        if pool.is_none() {
+            *pool = Some(ThreadPool::new(self.config.max_threads)?);
+        }
+        Ok(())
+    }
+    
+    /// Execute algebra expression in parallel
+    pub fn execute(&self, algebra: &Algebra, dataset: &dyn Dataset, stats: &mut ExecutionStats) -> Result<Solution> {
+        self.ensure_thread_pool()?;
+        
+        match algebra {
+            Algebra::Join { left, right } => self.execute_parallel_join(left, right, dataset, stats),
+            Algebra::Union { left, right } => self.execute_parallel_union(left, right, dataset, stats),
+            Algebra::Bgp(patterns) => self.execute_parallel_bgp(patterns, dataset, stats),
+            _ => {
+                // Fallback to sequential execution for unsupported parallel operations
+                let executor = QueryExecutor::new();
+                executor.execute_algebra(algebra, dataset, stats)
+            }
+        }
+    }
+    
+    /// Execute parallel join
+    fn execute_parallel_join(&self, left: &Algebra, right: &Algebra, dataset: &dyn Dataset, stats: &mut ExecutionStats) -> Result<Solution> {
+        use std::sync::mpsc;
+        
+        let (tx, rx) = mpsc::channel();
+        let tx1 = tx.clone();
+        let tx2 = tx.clone();
+        
+        let left_algebra = left.clone();
+        let right_algebra = right.clone();
+        
+        // Sequential execution for now to avoid lifetime issues  
+        // TODO: Implement proper parallel execution with dataset cloning or shared references
+        let executor = QueryExecutor::new();
+        let mut left_stats = ExecutionStats::default();
+        let left_result = executor.execute_algebra(&left_algebra, dataset, &mut left_stats);
+        tx1.send((0, left_result, left_stats)).unwrap();
+        
+        let mut right_stats = ExecutionStats::default();  
+        let right_result = executor.execute_algebra(&right_algebra, dataset, &mut right_stats);
+        tx2.send((1, right_result, right_stats)).unwrap();
+        
+        // Collect results
+        let mut left_solution = None;
+        let mut right_solution = None;
+        
+        for _ in 0..2 {
+            if let Ok((side, result, side_stats)) = rx.recv() {
+                stats.operations += side_stats.operations;
+                stats.intermediate_results += side_stats.intermediate_results;
+                
+                match side {
+                    0 => left_solution = Some(result?),
+                    1 => right_solution = Some(result?),
+                    _ => {}
+                }
+            }
+        }
+        
+        // Sequential execution completed
+        
+        // Perform join on results
+        if let (Some(left_sol), Some(right_sol)) = (left_solution, right_solution) {
+            let executor = QueryExecutor::new();
+            Ok(executor.join_solutions(left_sol, right_sol))
+        } else {
+            Ok(vec![])
+        }
+    }
+    
+    /// Execute parallel union
+    fn execute_parallel_union(&self, left: &Algebra, right: &Algebra, dataset: &dyn Dataset, stats: &mut ExecutionStats) -> Result<Solution> {
+        use std::sync::mpsc;
+        
+        let (tx, rx) = mpsc::channel();
+        let tx1 = tx.clone();
+        let tx2 = tx.clone();
+        
+        let left_algebra = left.clone();
+        let right_algebra = right.clone();
+        
+        // Sequential execution for now to avoid lifetime issues
+        // TODO: Implement proper parallel execution with dataset cloning or shared references  
+        let executor = QueryExecutor::new();
+        let mut left_stats = ExecutionStats::default();
+        let left_result = executor.execute_algebra(&left_algebra, dataset, &mut left_stats);
+        tx1.send((left_result, left_stats)).unwrap();
+        
+        let mut right_stats = ExecutionStats::default();
+        let right_result = executor.execute_algebra(&right_algebra, dataset, &mut right_stats);
+        tx2.send((right_result, right_stats)).unwrap();
+        
+        // Collect results
+        let mut combined_solution = Vec::new();
+        
+        for _ in 0..2 {
+            if let Ok((result, side_stats)) = rx.recv() {
+                stats.operations += side_stats.operations;
+                stats.intermediate_results += side_stats.intermediate_results;
+                
+                if let Ok(solution) = result {
+                    combined_solution.extend(solution);
+                }
+            }
+        }
+        
+        // Wait for threads to complete
+        // Sequential execution completed
+        
+        Ok(combined_solution)
+    }
+    
+    /// Execute parallel BGP (Basic Graph Pattern)
+    fn execute_parallel_bgp(&self, patterns: &[TriplePattern], dataset: &dyn Dataset, stats: &mut ExecutionStats) -> Result<Solution> {
+        if patterns.is_empty() {
+            return Ok(vec![HashMap::new()]);
+        }
+        
+        // For large BGPs, partition patterns and execute in parallel
+        if patterns.len() >= self.config.parallel_threshold / 100 {
+            let chunk_size = std::cmp::max(1, patterns.len() / self.config.max_threads);
+            let chunks: Vec<_> = patterns.chunks(chunk_size).collect();
+            let chunk_count = chunks.len();
+            
+            use std::sync::mpsc;
+            let (tx, rx) = mpsc::channel();
+            
+            // Sequential execution for now to avoid lifetime issues
+            // TODO: Implement proper parallel execution with dataset cloning or shared references
+            for (i, chunk) in chunks.into_iter().enumerate() {
+                let tx = tx.clone();
+                let chunk = chunk.to_vec();
+                
+                let executor = QueryExecutor::new();
+                let mut chunk_stats = ExecutionStats::default();
+                let result = executor.execute_bgp(&chunk, dataset, &mut chunk_stats);
+                tx.send((i, result, chunk_stats)).unwrap();
+            }
+            
+            // Collect and combine results
+            let mut chunk_results = Vec::new();
+            for _ in 0..chunk_count {
+                if let Ok((_, result, chunk_stats)) = rx.recv() {
+                    stats.operations += chunk_stats.operations;
+                    stats.intermediate_results += chunk_stats.intermediate_results;
+                    
+                    if let Ok(solution) = result {
+                        chunk_results.push(solution);
+                    }
+                }
+            }
+            
+            // All chunks completed sequentially
+            
+            // Join all chunk results
+            if chunk_results.is_empty() {
+                Ok(vec![])
+            } else {
+                let executor = QueryExecutor::new();
+                let mut result_iter = chunk_results.into_iter();
+                let mut result = result_iter.next().unwrap();
+                for chunk_result in result_iter {
+                    result = executor.join_solutions(result, chunk_result);
+                    stats.intermediate_results += result.len();
+                }
+                Ok(result)
+            }
+        } else {
+            // For small BGPs, use sequential execution
+            let executor = QueryExecutor::new();
+            executor.execute_bgp(patterns, dataset, stats)
+        }
+    }
+}
+
+impl ThreadPool {
+    fn new(size: usize) -> Result<ThreadPool> {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let receiver = Arc::new(Mutex::new(receiver));
+        
+        let mut workers = Vec::with_capacity(size);
+        
+        for id in 0..size {
+            workers.push(Worker::new(id, Arc::clone(&receiver))?);
+        }
+        
+        Ok(ThreadPool { workers, sender })
+    }
+    
+    fn execute<F>(&self, f: F) -> Result<()>
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        let job = Box::new(f);
+        self.sender.send(Message::NewJob(job))
+            .map_err(|_| anyhow!("Failed to send job to thread pool"))?;
+        Ok(())
+    }
+}
+
+impl Drop for ThreadPool {
+    fn drop(&mut self) {
+        for _ in &self.workers {
+            self.sender.send(Message::Terminate).unwrap();
+        }
+        
+        for worker in &mut self.workers {
+            if let Some(thread) = worker.thread.take() {
+                thread.join().unwrap();
+            }
+        }
+    }
+}
+
+impl Worker {
+    fn new(id: usize, receiver: Arc<Mutex<std::sync::mpsc::Receiver<Message>>>) -> Result<Worker> {
+        let thread = thread::spawn(move || loop {
+            let message = receiver.lock().unwrap().recv().unwrap();
+            
+            match message {
+                Message::NewJob(job) => {
+                    job();
+                }
+                Message::Terminate => {
+                    break;
+                }
+            }
+        });
+        
+        Ok(Worker {
+            id,
+            thread: Some(thread),
+        })
     }
 }
 

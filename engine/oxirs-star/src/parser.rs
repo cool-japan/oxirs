@@ -343,9 +343,76 @@ impl StarParser {
     }
 
     /// Parse N-Quads-star format
-    pub fn parse_nquads_star<R: Read>(&self, _reader: R) -> StarResult<StarGraph> {
-        // TODO: Implement N-Quads-star parsing
-        Err(StarError::ParseError("N-Quads-star parsing not yet implemented".to_string()))
+    pub fn parse_nquads_star<R: Read>(&self, reader: R) -> StarResult<StarGraph> {
+        let span = span!(Level::DEBUG, "parse_nquads_star");
+        let _enter = span.enter();
+
+        let mut graph = StarGraph::new();
+        let mut context = ParseContext::new();
+        let buf_reader = BufReader::new(reader);
+
+        for (line_num, line_result) in buf_reader.lines().enumerate() {
+            let line = line_result.map_err(|e| StarError::ParseError(e.to_string()))?;
+            let line = line.trim();
+
+            // Skip empty lines and comments
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+
+            if line.ends_with('.') {
+                let quad_str = &line[..line.len() - 1].trim();
+                let quad = self.parse_quad_pattern(quad_str, &mut context)
+                    .with_context(|| format!("Error parsing line {}: {}", line_num + 1, line))
+                    .map_err(|e| StarError::ParseError(e.to_string()))?;
+                
+                // Insert the quad into the graph with its graph component
+                if let Some(graph_name) = quad.graph {
+                    // For named graphs, we can store them with graph context
+                    // For now, we'll add all quads to the default graph
+                    // TODO: Implement proper named graph support in StarGraph
+                    let triple = StarTriple::new(quad.subject, quad.predicate, quad.object);
+                    graph.insert(triple)?;
+                } else {
+                    // Default graph
+                    let triple = StarTriple::new(quad.subject, quad.predicate, quad.object);
+                    graph.insert(triple)?;
+                }
+            } else {
+                // In N-Quads-star, all non-empty lines must be valid quads ending with '.'
+                return Err(StarError::ParseError(format!("Invalid N-Quads-star line {}: {}", line_num + 1, line)));
+            }
+        }
+
+        debug!("Parsed {} triples in N-Quads-star format", graph.len());
+        Ok(graph)
+    }
+
+    /// Parse a quad pattern (subject predicate object graph)
+    fn parse_quad_pattern(&self, pattern: &str, context: &mut ParseContext) -> Result<StarQuad> {
+        let terms = self.tokenize_quad(pattern)?;
+        
+        if terms.len() < 3 || terms.len() > 4 {
+            return Err(anyhow::anyhow!("Quad must have 3 or 4 terms, found {}", terms.len()));
+        }
+
+        let subject = self.parse_term(&terms[0], context)?;
+        let predicate = self.parse_term(&terms[1], context)?;
+        let object = self.parse_term(&terms[2], context)?;
+        
+        // Graph is optional in N-Quads (default graph if omitted)
+        let graph = if terms.len() == 4 {
+            Some(self.parse_term(&terms[3], context)?)
+        } else {
+            None
+        };
+
+        Ok(StarQuad {
+            subject,
+            predicate,
+            object,
+            graph,
+        })
     }
 
     /// Parse a triple pattern (subject predicate object)
@@ -368,6 +435,64 @@ impl StarParser {
 
     /// Tokenize a triple into its three components, handling quoted triples
     fn tokenize_triple(&self, pattern: &str) -> Result<Vec<String>> {
+        let mut tokens = Vec::new();
+        let mut current_token = String::new();
+        let mut chars = pattern.chars().peekable();
+        let mut depth = 0;
+        let mut in_string = false;
+        let mut escape_next = false;
+
+        while let Some(ch) = chars.next() {
+            if escape_next {
+                current_token.push(ch);
+                escape_next = false;
+                continue;
+            }
+
+            match ch {
+                '\\' if in_string => {
+                    escape_next = true;
+                    current_token.push(ch);
+                }
+                '"' => {
+                    in_string = !in_string;
+                    current_token.push(ch);
+                }
+                '<' if !in_string && chars.peek() == Some(&'<') => {
+                    // Start of quoted triple
+                    chars.next(); // consume second '<'
+                    depth += 1;
+                    current_token.push_str("<<");
+                }
+                '>' if !in_string && chars.peek() == Some(&'>') => {
+                    // End of quoted triple
+                    chars.next(); // consume second '>'
+                    depth -= 1;
+                    current_token.push_str(">>");
+                }
+                ' ' | '\t' if !in_string && depth == 0 => {
+                    // Whitespace at top level - end of token
+                    if !current_token.trim().is_empty() {
+                        tokens.push(current_token.trim().to_string());
+                        current_token.clear();
+                    }
+                }
+                _ => {
+                    current_token.push(ch);
+                }
+            }
+        }
+
+        // Add final token
+        if !current_token.trim().is_empty() {
+            tokens.push(current_token.trim().to_string());
+        }
+
+        Ok(tokens)
+    }
+
+    /// Tokenize a quad pattern (similar to triple but allows 4 terms)
+    fn tokenize_quad(&self, pattern: &str) -> Result<Vec<String>> {
         let mut tokens = Vec::new();
         let mut current_token = String::new();
         let mut chars = pattern.chars().peekable();

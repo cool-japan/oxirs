@@ -218,6 +218,9 @@ pub mod mapping;
 pub mod server;
 pub mod parser;
 pub mod optimizer;
+pub mod subscriptions;
+pub mod introspection;
+pub mod validation;
 
 // New Juniper-based implementation (temporarily disabled due to compilation issues)
 // pub mod juniper_schema;
@@ -233,6 +236,8 @@ pub struct GraphQLConfig {
     pub enable_playground: bool,
     pub max_query_depth: Option<usize>,
     pub max_query_complexity: Option<usize>,
+    pub validation_config: validation::ValidationConfig,
+    pub enable_query_validation: bool,
 }
 
 impl Default for GraphQLConfig {
@@ -242,6 +247,8 @@ impl Default for GraphQLConfig {
             enable_playground: true,
             max_query_depth: Some(10),
             max_query_complexity: Some(1000),
+            validation_config: validation::ValidationConfig::default(),
+            enable_query_validation: true,
         }
     }
 }
@@ -281,7 +288,7 @@ impl GraphQLServer {
         let mut schema = types::Schema::new();
         
         // Add a Query type with more fields
-        let query_type = types::ObjectType::new("Query".to_string())
+        let mut query_type = types::ObjectType::new("Query".to_string())
             .with_description("The root query type for RDF data access".to_string())
             .with_field(
                 "hello".to_string(),
@@ -370,17 +377,72 @@ impl GraphQLServer {
                 ),
             );
         
+        // Add introspection fields if enabled
+        if self.config.enable_introspection {
+            query_type = query_type
+                .with_field(
+                    "__schema".to_string(),
+                    types::FieldType::new(
+                        "__schema".to_string(),
+                        types::GraphQLType::NonNull(Box::new(types::GraphQLType::Scalar(types::ScalarType {
+                            name: "__Schema".to_string(),
+                            description: Some("A GraphQL Schema defines the capabilities of a GraphQL server".to_string()),
+                            serialize: |_| Ok(ast::Value::NullValue),
+                            parse_value: |_| Err(anyhow::anyhow!("Cannot parse __Schema")),
+                            parse_literal: |_| Err(anyhow::anyhow!("Cannot parse __Schema")),
+                        }))),
+                    ).with_description("Access the current type schema of this server".to_string()),
+                )
+                .with_field(
+                    "__type".to_string(),
+                    types::FieldType::new(
+                        "__type".to_string(),
+                        types::GraphQLType::Scalar(types::ScalarType {
+                            name: "__Type".to_string(),
+                            description: Some("A GraphQL Schema defines the capabilities of a GraphQL server".to_string()),
+                            serialize: |_| Ok(ast::Value::NullValue),
+                            parse_value: |_| Err(anyhow::anyhow!("Cannot parse __Type")),
+                            parse_literal: |_| Err(anyhow::anyhow!("Cannot parse __Type")),
+                        }),
+                    ).with_description("Request the type information of a single type".to_string())
+                    .with_argument(
+                        "name".to_string(),
+                        types::ArgumentType::new(
+                            "name".to_string(),
+                            types::GraphQLType::NonNull(Box::new(types::GraphQLType::Scalar(types::BuiltinScalars::string()))),
+                        ).with_description("The name of the type to introspect".to_string()),
+                    ),
+                );
+        }
+        
         schema.add_type(types::GraphQLType::Object(query_type));
         schema.set_query_type("Query".to_string());
         
         // Create the server with resolvers
-        let mut server = server::Server::new(schema)
+        let schema_clone = schema.clone();
+        let mut server = server::Server::new(schema.clone())
             .with_playground(self.config.enable_playground)
             .with_introspection(self.config.enable_introspection);
+        
+        // Configure validation if enabled
+        if self.config.enable_query_validation {
+            server = server.with_validation(self.config.validation_config.clone(), schema_clone.clone());
+        }
         
         // Set up resolvers
         let query_resolvers = resolvers::QueryResolvers::new(Arc::clone(&self.store));
         server.add_resolver("Query".to_string(), query_resolvers.rdf_resolver());
+        
+        // Add introspection resolver
+        let introspection_resolver = Arc::new(introspection::IntrospectionResolver::new(
+            Arc::new(schema_clone)
+        ));
+        server.add_resolver("__Schema".to_string(), introspection_resolver.clone());
+        server.add_resolver("__Type".to_string(), introspection_resolver.clone());
+        server.add_resolver("__Field".to_string(), introspection_resolver.clone());
+        server.add_resolver("__InputValue".to_string(), introspection_resolver.clone());
+        server.add_resolver("__EnumValue".to_string(), introspection_resolver.clone());
+        server.add_resolver("__Directive".to_string(), introspection_resolver);
         
         // Parse the address
         let socket_addr: std::net::SocketAddr = addr.parse()

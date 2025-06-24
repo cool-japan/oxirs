@@ -250,26 +250,118 @@ impl<'a> ValidationEngine<'a> {
         graph_name: Option<&str>
     ) -> Result<ConstraintEvaluationResult> {
         match constraint {
+            // Core Value Constraints
             Constraint::Class(c) => self.validate_class_constraint(store, c, context, graph_name),
             Constraint::Datatype(c) => self.validate_datatype_constraint(c, context),
             Constraint::NodeKind(c) => self.validate_node_kind_constraint(c, context),
+            
+            // Cardinality Constraints
             Constraint::MinCount(c) => self.validate_min_count_constraint(c, context),
             Constraint::MaxCount(c) => self.validate_max_count_constraint(c, context),
+            
+            // Range Constraints
+            Constraint::MinExclusive(c) => self.validate_min_exclusive_constraint(c, context),
+            Constraint::MaxExclusive(c) => self.validate_max_exclusive_constraint(c, context),
+            Constraint::MinInclusive(c) => self.validate_min_inclusive_constraint(c, context),
+            Constraint::MaxInclusive(c) => self.validate_max_inclusive_constraint(c, context),
+            
+            // String Constraints
             Constraint::MinLength(c) => self.validate_min_length_constraint(c, context),
             Constraint::MaxLength(c) => self.validate_max_length_constraint(c, context),
             Constraint::Pattern(c) => self.validate_pattern_constraint(c, context),
+            Constraint::LanguageIn(c) => self.validate_language_in_constraint(c, context),
+            Constraint::UniqueLang(c) => self.validate_unique_lang_constraint(c, context),
+            
+            // Value Constraints
+            Constraint::Equals(c) => self.validate_equals_constraint(c, context),
+            Constraint::Disjoint(c) => self.validate_disjoint_constraint(c, context),
+            Constraint::LessThan(c) => self.validate_less_than_constraint(c, context),
+            Constraint::LessThanOrEquals(c) => self.validate_less_than_or_equals_constraint(c, context),
             Constraint::In(c) => self.validate_in_constraint(c, context),
             Constraint::HasValue(c) => self.validate_has_value_constraint(c, context),
+            
+            // Logical Constraints (complex - placeholder implementations)
+            Constraint::Not(c) => self.validate_not_constraint(store, c, context, graph_name),
+            Constraint::And(c) => self.validate_and_constraint(store, c, context, graph_name),
+            Constraint::Or(c) => self.validate_or_constraint(store, c, context, graph_name),
+            Constraint::Xone(c) => self.validate_xone_constraint(store, c, context, graph_name),
+            
+            // Shape-based Constraints (complex - placeholder implementations)
+            Constraint::Node(c) => self.validate_node_constraint(store, c, context, graph_name),
+            Constraint::QualifiedValueShape(c) => self.validate_qualified_value_shape_constraint(store, c, context, graph_name),
+            
+            // Closed Shape Constraints (placeholder implementation)
+            Constraint::Closed(c) => self.validate_closed_constraint(store, c, context, graph_name),
+            
+            // SPARQL Constraints
             Constraint::Sparql(c) => self.validate_sparql_constraint(store, c, context, graph_name),
-            // TODO: Implement remaining constraint types
-            _ => Ok(ConstraintEvaluationResult::satisfied()),
         }
     }
     
     /// Validate class constraint
     fn validate_class_constraint(&self, store: &Store, constraint: &ClassConstraint, context: &ConstraintContext, graph_name: Option<&str>) -> Result<ConstraintEvaluationResult> {
-        // TODO: Implement class constraint validation
-        // Check if all values are instances of the specified class
+        let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+            .map_err(|e| ShaclError::ConstraintValidation(format!("Invalid rdf:type IRI: {}", e)))?;
+        
+        for value in &context.values {
+            // Only named nodes and blank nodes can be instances of classes
+            if !value.is_named_node() && !value.is_blank_node() {
+                return Ok(ConstraintEvaluationResult::violated(
+                    Some(value.clone()),
+                    Some(format!("Value {} cannot be an instance of class {} (not a resource)", 
+                               value.as_str(), constraint.class_iri.as_str()))
+                ));
+            }
+            
+            // Check if the value is an instance of the required class using SPARQL
+            let instance_query = if let Some(graph) = graph_name {
+                format!(r#"
+                    ASK {{
+                        GRAPH <{}> {{
+                            {} <{}> <{}> .
+                        }}
+                    }}
+                "#, graph, format_term_for_sparql(value)?, rdf_type.as_str(), constraint.class_iri.as_str())
+            } else {
+                format!(r#"
+                    ASK {{
+                        {} <{}> <{}> .
+                    }}
+                "#, format_term_for_sparql(value)?, rdf_type.as_str(), constraint.class_iri.as_str())
+            };
+            
+            // Execute the ASK query
+            match self.execute_constraint_query(store, &instance_query) {
+                Ok(result) => {
+                    if let oxirs_core::query::QueryResult::Ask(is_instance) = result {
+                        if !is_instance {
+                            // Value is not an instance of the required class
+                            return Ok(ConstraintEvaluationResult::violated(
+                                Some(value.clone()),
+                                Some(format!("Value {} is not an instance of class {}", 
+                                           value.as_str(), constraint.class_iri.as_str()))
+                            ));
+                        }
+                    } else {
+                        return Err(ShaclError::ConstraintValidation(
+                            "Expected ASK result for class constraint query".to_string()
+                        ));
+                    }
+                }
+                Err(e) => {
+                    tracing::debug!("SPARQL query failed for class constraint, trying direct store query: {}", e);
+                    // Fallback to direct store query
+                    if !self.is_instance_of_class_direct(store, value, &constraint.class_iri, graph_name)? {
+                        return Ok(ConstraintEvaluationResult::violated(
+                            Some(value.clone()),
+                            Some(format!("Value {} is not an instance of class {}", 
+                                       value.as_str(), constraint.class_iri.as_str()))
+                        ));
+                    }
+                }
+            }
+        }
+        
         Ok(ConstraintEvaluationResult::satisfied())
     }
     
@@ -277,9 +369,25 @@ impl<'a> ValidationEngine<'a> {
     fn validate_datatype_constraint(&self, constraint: &DatatypeConstraint, context: &ConstraintContext) -> Result<ConstraintEvaluationResult> {
         for value in &context.values {
             if let Term::Literal(literal) = value {
-                // TODO: Check if literal has the required datatype
-                // For now, just check if it's a literal
-                continue;
+                // Check if literal has the required datatype
+                if let Some(literal_datatype) = literal.datatype() {
+                    if literal_datatype.as_str() != constraint.datatype_iri.as_str() {
+                        return Ok(ConstraintEvaluationResult::violated(
+                            Some(value.clone()),
+                            Some(format!("Value has datatype {} but expected {}", 
+                                       literal_datatype.as_str(), constraint.datatype_iri.as_str()))
+                        ));
+                    }
+                } else {
+                    // Literal without explicit datatype - check if it's a simple literal that should have xsd:string
+                    let xsd_string = "http://www.w3.org/2001/XMLSchema#string";
+                    if constraint.datatype_iri.as_str() != xsd_string {
+                        return Ok(ConstraintEvaluationResult::violated(
+                            Some(value.clone()),
+                            Some(format!("Value is a plain literal but expected datatype {}", constraint.datatype_iri.as_str()))
+                        ));
+                    }
+                }
             } else {
                 return Ok(ConstraintEvaluationResult::violated(
                     Some(value.clone()),
@@ -454,6 +562,299 @@ impl<'a> ValidationEngine<'a> {
         }
     }
     
+    // Range Constraints
+    
+    /// Validate min exclusive constraint
+    fn validate_min_exclusive_constraint(&self, constraint: &MinExclusiveConstraint, context: &ConstraintContext) -> Result<ConstraintEvaluationResult> {
+        for value in &context.values {
+            if let Term::Literal(literal) = value {
+                match self.compare_literals(literal, &constraint.min_value)? {
+                    std::cmp::Ordering::Less | std::cmp::Ordering::Equal => {
+                        return Ok(ConstraintEvaluationResult::violated(
+                            Some(value.clone()),
+                            Some(format!("Value {} is not greater than minimum exclusive value {}", 
+                                       literal.as_str(), constraint.min_value.as_str()))
+                        ));
+                    }
+                    std::cmp::Ordering::Greater => {
+                        // Value is valid (greater than min exclusive)
+                    }
+                }
+            } else {
+                return Ok(ConstraintEvaluationResult::violated(
+                    Some(value.clone()),
+                    Some("MinExclusive constraint can only be applied to literals".to_string())
+                ));
+            }
+        }
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+    
+    /// Validate max exclusive constraint
+    fn validate_max_exclusive_constraint(&self, constraint: &MaxExclusiveConstraint, context: &ConstraintContext) -> Result<ConstraintEvaluationResult> {
+        for value in &context.values {
+            if let Term::Literal(literal) = value {
+                match self.compare_literals(literal, &constraint.max_value)? {
+                    std::cmp::Ordering::Greater | std::cmp::Ordering::Equal => {
+                        return Ok(ConstraintEvaluationResult::violated(
+                            Some(value.clone()),
+                            Some(format!("Value {} is not less than maximum exclusive value {}", 
+                                       literal.as_str(), constraint.max_value.as_str()))
+                        ));
+                    }
+                    std::cmp::Ordering::Less => {
+                        // Value is valid (less than max exclusive)
+                    }
+                }
+            } else {
+                return Ok(ConstraintEvaluationResult::violated(
+                    Some(value.clone()),
+                    Some("MaxExclusive constraint can only be applied to literals".to_string())
+                ));
+            }
+        }
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+    
+    /// Validate min inclusive constraint
+    fn validate_min_inclusive_constraint(&self, constraint: &MinInclusiveConstraint, context: &ConstraintContext) -> Result<ConstraintEvaluationResult> {
+        for value in &context.values {
+            if let Term::Literal(literal) = value {
+                match self.compare_literals(literal, &constraint.min_value)? {
+                    std::cmp::Ordering::Less => {
+                        return Ok(ConstraintEvaluationResult::violated(
+                            Some(value.clone()),
+                            Some(format!("Value {} is less than minimum inclusive value {}", 
+                                       literal.as_str(), constraint.min_value.as_str()))
+                        ));
+                    }
+                    std::cmp::Ordering::Equal | std::cmp::Ordering::Greater => {
+                        // Value is valid (greater than or equal to min inclusive)
+                    }
+                }
+            } else {
+                return Ok(ConstraintEvaluationResult::violated(
+                    Some(value.clone()),
+                    Some("MinInclusive constraint can only be applied to literals".to_string())
+                ));
+            }
+        }
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+    
+    /// Validate max inclusive constraint
+    fn validate_max_inclusive_constraint(&self, constraint: &MaxInclusiveConstraint, context: &ConstraintContext) -> Result<ConstraintEvaluationResult> {
+        for value in &context.values {
+            if let Term::Literal(literal) = value {
+                match self.compare_literals(literal, &constraint.max_value)? {
+                    std::cmp::Ordering::Greater => {
+                        return Ok(ConstraintEvaluationResult::violated(
+                            Some(value.clone()),
+                            Some(format!("Value {} is greater than maximum inclusive value {}", 
+                                       literal.as_str(), constraint.max_value.as_str()))
+                        ));
+                    }
+                    std::cmp::Ordering::Less | std::cmp::Ordering::Equal => {
+                        // Value is valid (less than or equal to max inclusive)
+                    }
+                }
+            } else {
+                return Ok(ConstraintEvaluationResult::violated(
+                    Some(value.clone()),
+                    Some("MaxInclusive constraint can only be applied to literals".to_string())
+                ));
+            }
+        }
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+    
+    // String Constraints
+    
+    /// Validate language in constraint
+    fn validate_language_in_constraint(&self, constraint: &LanguageInConstraint, context: &ConstraintContext) -> Result<ConstraintEvaluationResult> {
+        for value in &context.values {
+            if let Term::Literal(literal) = value {
+                if let Some(language) = literal.language() {
+                    if !constraint.languages.contains(&language.to_string()) {
+                        return Ok(ConstraintEvaluationResult::violated(
+                            Some(value.clone()),
+                            Some(format!("Language tag '{}' is not in allowed list: {:?}", 
+                                       language, constraint.languages))
+                        ));
+                    }
+                } else {
+                    // No language tag on literal
+                    if !constraint.languages.is_empty() {
+                        return Ok(ConstraintEvaluationResult::violated(
+                            Some(value.clone()),
+                            Some("Literal has no language tag, but languageIn constraint requires one".to_string())
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+    
+    /// Validate unique language constraint
+    fn validate_unique_lang_constraint(&self, constraint: &UniqueLangConstraint, context: &ConstraintContext) -> Result<ConstraintEvaluationResult> {
+        if !constraint.unique_lang {
+            return Ok(ConstraintEvaluationResult::satisfied());
+        }
+        
+        let mut seen_languages = HashSet::new();
+        
+        for value in &context.values {
+            if let Term::Literal(literal) = value {
+                if let Some(language) = literal.language() {
+                    if seen_languages.contains(language) {
+                        return Ok(ConstraintEvaluationResult::violated(
+                            Some(value.clone()),
+                            Some(format!("Duplicate language tag '{}' violates uniqueLang constraint", language))
+                        ));
+                    }
+                    seen_languages.insert(language.to_string());
+                }
+            }
+        }
+        
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+    
+    // Value Constraints
+    
+    /// Validate equals constraint (placeholder implementation)
+    fn validate_equals_constraint(&self, _constraint: &EqualsConstraint, _context: &ConstraintContext) -> Result<ConstraintEvaluationResult> {
+        // TODO: Implement equals constraint validation
+        tracing::debug!("Equals constraint validation not yet implemented");
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+    
+    /// Validate disjoint constraint (placeholder implementation)
+    fn validate_disjoint_constraint(&self, _constraint: &DisjointConstraint, _context: &ConstraintContext) -> Result<ConstraintEvaluationResult> {
+        // TODO: Implement disjoint constraint validation
+        tracing::debug!("Disjoint constraint validation not yet implemented");
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+    
+    /// Validate less than constraint (placeholder implementation)
+    fn validate_less_than_constraint(&self, _constraint: &LessThanConstraint, _context: &ConstraintContext) -> Result<ConstraintEvaluationResult> {
+        // TODO: Implement less than constraint validation
+        tracing::debug!("LessThan constraint validation not yet implemented");
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+    
+    /// Validate less than or equals constraint (placeholder implementation)
+    fn validate_less_than_or_equals_constraint(&self, _constraint: &LessThanOrEqualsConstraint, _context: &ConstraintContext) -> Result<ConstraintEvaluationResult> {
+        // TODO: Implement less than or equals constraint validation
+        tracing::debug!("LessThanOrEquals constraint validation not yet implemented");
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+    
+    // Logical Constraints (complex - placeholder implementations)
+    
+    /// Validate not constraint (placeholder implementation)
+    fn validate_not_constraint(&mut self, _store: &Store, _constraint: &NotConstraint, _context: &ConstraintContext, _graph_name: Option<&str>) -> Result<ConstraintEvaluationResult> {
+        // TODO: Implement not constraint validation (complex logical constraint)
+        tracing::debug!("Not constraint validation not yet implemented");
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+    
+    /// Validate and constraint (placeholder implementation)
+    fn validate_and_constraint(&mut self, _store: &Store, _constraint: &AndConstraint, _context: &ConstraintContext, _graph_name: Option<&str>) -> Result<ConstraintEvaluationResult> {
+        // TODO: Implement and constraint validation (complex logical constraint)
+        tracing::debug!("And constraint validation not yet implemented");
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+    
+    /// Validate or constraint (placeholder implementation)
+    fn validate_or_constraint(&mut self, _store: &Store, _constraint: &OrConstraint, _context: &ConstraintContext, _graph_name: Option<&str>) -> Result<ConstraintEvaluationResult> {
+        // TODO: Implement or constraint validation (complex logical constraint)
+        tracing::debug!("Or constraint validation not yet implemented");
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+    
+    /// Validate xone constraint (placeholder implementation)
+    fn validate_xone_constraint(&mut self, _store: &Store, _constraint: &XoneConstraint, _context: &ConstraintContext, _graph_name: Option<&str>) -> Result<ConstraintEvaluationResult> {
+        // TODO: Implement xone constraint validation (complex logical constraint)
+        tracing::debug!("Xone constraint validation not yet implemented");
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+    
+    // Shape-based Constraints (complex - placeholder implementations)
+    
+    /// Validate node constraint (placeholder implementation)
+    fn validate_node_constraint(&mut self, _store: &Store, _constraint: &NodeConstraint, _context: &ConstraintContext, _graph_name: Option<&str>) -> Result<ConstraintEvaluationResult> {
+        // TODO: Implement node constraint validation (shape-based constraint)
+        tracing::debug!("Node constraint validation not yet implemented");
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+    
+    /// Validate qualified value shape constraint (placeholder implementation)
+    fn validate_qualified_value_shape_constraint(&mut self, _store: &Store, _constraint: &QualifiedValueShapeConstraint, _context: &ConstraintContext, _graph_name: Option<&str>) -> Result<ConstraintEvaluationResult> {
+        // TODO: Implement qualified value shape constraint validation (complex shape-based constraint)
+        tracing::debug!("QualifiedValueShape constraint validation not yet implemented");
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+    
+    // Closed Shape Constraints (placeholder implementation)
+    
+    /// Validate closed constraint (placeholder implementation)
+    fn validate_closed_constraint(&self, _store: &Store, _constraint: &ClosedConstraint, _context: &ConstraintContext, _graph_name: Option<&str>) -> Result<ConstraintEvaluationResult> {
+        // TODO: Implement closed constraint validation
+        tracing::debug!("Closed constraint validation not yet implemented");
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+    
+    /// Execute a constraint validation query
+    fn execute_constraint_query(&self, store: &Store, query: &str) -> Result<oxirs_core::query::QueryResult> {
+        use oxirs_core::query::QueryEngine;
+        
+        let query_engine = QueryEngine::new();
+        
+        tracing::debug!("Executing constraint validation query: {}", query);
+        
+        let result = query_engine.query(query, store)
+            .map_err(|e| ShaclError::ConstraintValidation(format!("Constraint query execution failed: {}", e)))?;
+        
+        Ok(result)
+    }
+    
+    /// Check if a value is an instance of a class using direct store queries (fallback)
+    fn is_instance_of_class_direct(&self, store: &Store, value: &Term, class_iri: &NamedNode, graph_name: Option<&str>) -> Result<bool> {
+        use oxirs_core::model::{Subject, Predicate, Object, GraphName};
+        
+        let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+            .map_err(|e| ShaclError::ConstraintValidation(format!("Invalid rdf:type IRI: {}", e)))?;
+        
+        let subject = match value {
+            Term::NamedNode(node) => Subject::NamedNode(node.clone()),
+            Term::BlankNode(node) => Subject::BlankNode(node.clone()),
+            _ => return Ok(false), // Literals cannot be instances of classes
+        };
+        
+        let predicate = Predicate::NamedNode(rdf_type);
+        let object = Object::NamedNode(class_iri.clone());
+        
+        let graph_filter = if let Some(g) = graph_name {
+            Some(GraphName::NamedNode(
+                NamedNode::new(g).map_err(|e| ShaclError::Core(OxirsError::Parse(e.to_string())))?
+            ))
+        } else {
+            None
+        };
+        
+        let quads = store.query_quads(
+            Some(&subject),
+            Some(&predicate),
+            Some(&object),
+            graph_filter.as_ref()
+        ).map_err(|e| ShaclError::Core(e))?;
+        
+        // If we find any matching quad, the value is an instance of the class
+        Ok(quads.into_iter().next().is_some())
+    }
+    
     /// Check if validation should stop early
     fn should_stop_validation(&self, report: &ValidationReport) -> bool {
         (self.config.fail_fast && !report.conforms()) ||
@@ -469,6 +870,19 @@ impl<'a> ValidationEngine<'a> {
     pub fn clear_caches(&mut self) {
         self.target_selector.clear_cache();
         self.path_evaluator.clear_cache();
+    }
+    
+    /// Compare two literals for ordering (supports numeric and string comparison)
+    fn compare_literals(&self, left: &Literal, right: &Literal) -> Result<std::cmp::Ordering> {
+        // Try to parse as numbers first
+        if let (Ok(left_num), Ok(right_num)) = (left.as_str().parse::<f64>(), right.as_str().parse::<f64>()) {
+            Ok(left_num.partial_cmp(&right_num).unwrap_or(std::cmp::Ordering::Equal))
+        } else if let (Ok(left_int), Ok(right_int)) = (left.as_str().parse::<i64>(), right.as_str().parse::<i64>()) {
+            Ok(left_int.cmp(&right_int))
+        } else {
+            // Fall back to string comparison
+            Ok(left.as_str().cmp(right.as_str()))
+        }
     }
 }
 
@@ -565,6 +979,112 @@ impl ValidationViolation {
     pub fn with_detail(mut self, key: String, value: String) -> Self {
         self.details.insert(key, value);
         self
+    }
+}
+
+/// Context for constraint evaluation
+#[derive(Debug, Clone)]
+pub struct ConstraintContext {
+    /// The focus node being validated
+    pub focus_node: Term,
+    
+    /// The shape ID being validated
+    pub shape_id: ShapeId,
+    
+    /// The values to be validated
+    pub values: Vec<Term>,
+    
+    /// Additional context information
+    pub metadata: HashMap<String, String>,
+}
+
+impl ConstraintContext {
+    pub fn new(focus_node: Term, shape_id: ShapeId) -> Self {
+        Self {
+            focus_node,
+            shape_id,
+            values: Vec::new(),
+            metadata: HashMap::new(),
+        }
+    }
+    
+    pub fn with_values(mut self, values: Vec<Term>) -> Self {
+        self.values = values;
+        self
+    }
+    
+    pub fn with_metadata(mut self, key: String, value: String) -> Self {
+        self.metadata.insert(key, value);
+        self
+    }
+}
+
+/// Result of constraint evaluation
+#[derive(Debug, Clone)]
+pub enum ConstraintEvaluationResult {
+    /// Constraint is satisfied
+    Satisfied,
+    
+    /// Constraint is violated
+    Violated {
+        /// The specific value that caused the violation (if any)
+        violating_value: Option<Term>,
+        
+        /// Human-readable message describing the violation
+        message: Option<String>,
+        
+        /// Additional details about the violation
+        details: HashMap<String, String>,
+    },
+    
+    /// Error occurred during evaluation
+    Error {
+        /// Error message
+        message: String,
+        
+        /// Additional error details
+        details: HashMap<String, String>,
+    },
+}
+
+impl ConstraintEvaluationResult {
+    pub fn satisfied() -> Self {
+        ConstraintEvaluationResult::Satisfied
+    }
+    
+    pub fn violated(violating_value: Option<Term>, message: Option<String>) -> Self {
+        ConstraintEvaluationResult::Violated {
+            violating_value,
+            message,
+            details: HashMap::new(),
+        }
+    }
+    
+    pub fn violated_with_details(violating_value: Option<Term>, message: Option<String>, details: HashMap<String, String>) -> Self {
+        ConstraintEvaluationResult::Violated {
+            violating_value,
+            message,
+            details,
+        }
+    }
+    
+    pub fn error(message: String) -> Self {
+        ConstraintEvaluationResult::Error {
+            message,
+            details: HashMap::new(),
+        }
+    }
+    
+    pub fn is_satisfied(&self) -> bool {
+        matches!(self, ConstraintEvaluationResult::Satisfied)
+    }
+    
+    pub fn is_violated(&self) -> bool {
+        matches!(self, ConstraintEvaluationResult::Violated { .. })
+    }
+    
+    pub fn is_error(&self) -> bool {
+        matches!(self, ConstraintEvaluationResult::Error { .. })
     }
 }
 
@@ -675,5 +1195,18 @@ mod tests {
         let shapes = Box::leak(Box::new(IndexMap::new()));
         let config = ValidationConfig::default();
         ValidationEngine::new(shapes, config)
+    }
+}
+
+/// Format a term for use in SPARQL queries
+fn format_term_for_sparql(term: &Term) -> Result<String> {
+    match term {
+        Term::NamedNode(node) => Ok(format!("<{}>", node.as_str())),
+        Term::BlankNode(node) => Ok(node.as_str().to_string()),
+        Term::Literal(literal) => {
+            // TODO: Proper literal formatting with datatype and language
+            Ok(format!("\"{}\"", literal.as_str().replace('"', "\\\"")))
+        }
+        Term::Variable(var) => Ok(format!("?{}", var.name())),
     }
 }

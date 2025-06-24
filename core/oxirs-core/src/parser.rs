@@ -1,6 +1,7 @@
 //! RDF parsing utilities for various formats
 
 use std::io::{BufRead, BufReader, Cursor};
+use std::collections::HashMap;
 use rio_api::model::{Quad as RioQuad, Triple as RioTriple};
 use rio_api::parser::{QuadsParser, TriplesParser};
 use rio_turtle::{TurtleParser, NTriplesParser, TriGParser, NQuadsParser};
@@ -168,10 +169,47 @@ impl Parser {
     where
         F: FnMut(Quad) -> Result<()>,
     {
-        // Simplified implementation - for now just create empty triples
-        // TODO: Implement proper Turtle parsing when Rio API is stable
-        let _ = data;
-        let _ = handler;
+        // Use TurtleParserState for now since Rio API has changed
+        let mut parser = TurtleParserState::new(self.config.base_iri.as_deref());
+        
+        for (line_num, line) in data.lines().enumerate() {
+            let line = line.trim();
+            
+            // Skip empty lines and comments
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            
+            match parser.parse_line(line) {
+                Ok(triples) => {
+                    for triple in triples {
+                        let quad = Quad::from_triple(triple);
+                        handler(quad)?;
+                    }
+                }
+                Err(e) => {
+                    if self.config.ignore_errors {
+                        tracing::warn!("Turtle parse error on line {}: {}", line_num + 1, e);
+                        continue;
+                    } else {
+                        return Err(OxirsError::Parse(format!(
+                            "Turtle parse error on line {}: {}",
+                            line_num + 1,
+                            e
+                        )));
+                    }
+                }
+            }
+        }
+        
+        // Handle any pending statement
+        if let Some(triples) = parser.finalize()? {
+            for triple in triples {
+                let quad = Quad::from_triple(triple);
+                handler(quad)?;
+            }
+        }
+        
         Ok(())
     }
 
@@ -456,11 +494,97 @@ impl Parser {
     where
         F: FnMut(Quad) -> Result<()>,
     {
-        // Simplified implementation - for now just create empty quads
-        // TODO: Implement proper N-Quads parsing when Rio API is stable
-        let _ = data;
-        let _ = handler;
+        for (line_num, line) in data.lines().enumerate() {
+            let line = line.trim();
+            
+            // Skip empty lines and comments
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            
+            // Parse the line into a quad
+            match self.parse_nquads_line(line) {
+                Ok(Some(quad)) => {
+                    handler(quad)?;
+                }
+                Ok(None) => {
+                    // Skip this line (e.g., blank line)
+                    continue;
+                }
+                Err(e) => {
+                    if self.config.ignore_errors {
+                        tracing::warn!("Parse error on line {}: {}", line_num + 1, e);
+                        continue;
+                    } else {
+                        return Err(OxirsError::Parse(format!(
+                            "Parse error on line {}: {}", 
+                            line_num + 1, 
+                            e
+                        )));
+                    }
+                }
+            }
+        }
+        
         Ok(())
+    }
+    
+    fn parse_nquads_line(&self, line: &str) -> Result<Option<Quad>> {
+        // N-Quads parser - parse line like: <s> <p> "o" <g> .
+        let line = line.trim();
+        
+        if line.is_empty() || line.starts_with('#') {
+            return Ok(None);
+        }
+        
+        // Find the final period
+        if !line.ends_with('.') {
+            return Err(OxirsError::Parse("Line must end with '.'".to_string()));
+        }
+        
+        let line = &line[..line.len() - 1].trim(); // Remove trailing period and whitespace
+        
+        // Split into tokens respecting quoted strings
+        let tokens = self.tokenize_ntriples_line(line)?;
+        
+        if tokens.len() != 4 {
+            return Err(OxirsError::Parse(format!(
+                "Expected 4 tokens (subject, predicate, object, graph), found {}", 
+                tokens.len()
+            )));
+        }
+        
+        // Parse subject
+        let subject = self.parse_subject(&tokens[0])?;
+        
+        // Parse predicate  
+        let predicate = self.parse_predicate(&tokens[1])?;
+        
+        // Parse object
+        let object = self.parse_object(&tokens[2])?;
+        
+        // Parse graph name
+        let graph_name = self.parse_graph_name(&tokens[3])?;
+        
+        let quad = Quad::new(subject, predicate, object, graph_name);
+        
+        Ok(Some(quad))
+    }
+    
+    fn parse_graph_name(&self, token: &str) -> Result<GraphName> {
+        if token.starts_with('<') && token.ends_with('>') {
+            let iri = &token[1..token.len() - 1];
+            let named_node = NamedNode::new(iri)?;
+            Ok(GraphName::NamedNode(named_node))
+        } else if token.starts_with("_:") {
+            let blank_node = BlankNode::new(token)?;
+            Ok(GraphName::BlankNode(blank_node))
+        } else {
+            Err(OxirsError::Parse(format!(
+                "Invalid graph name: {}. Must be IRI or blank node", 
+                token
+            )))
+        }
     }
 
     fn parse_rdfxml<F>(&self, data: &str, mut handler: F) -> Result<()>
@@ -482,8 +606,419 @@ impl Parser {
         Err(OxirsError::Parse("JSON-LD parsing not yet implemented".to_string()))
     }
     
-    // TODO: Implement Rio conversion methods when API is stable
-    // For now, simplified implementation
+    /// Convert Rio triple to our Quad type
+    fn convert_rio_triple_to_quad(rio_triple: &RioTriple) -> Result<Quad> {
+        let subject = Self::convert_rio_subject(&rio_triple.subject)?;
+        let predicate = Self::convert_rio_predicate(&rio_triple.predicate)?;
+        let object = Self::convert_rio_object(&rio_triple.object)?;
+        
+        let triple = Triple::new(subject, predicate, object);
+        Ok(Quad::from_triple(triple))
+    }
+    
+    fn convert_rio_subject(rio_subject: &rio_api::model::Subject) -> Result<Subject> {
+        match rio_subject {
+            rio_api::model::Subject::NamedNode(nn) => {
+                let named_node = NamedNode::new(nn.iri)?;
+                Ok(Subject::NamedNode(named_node))
+            }
+            rio_api::model::Subject::BlankNode(bn) => {
+                let blank_node = BlankNode::new(format!("_:{}", bn.id))?;
+                Ok(Subject::BlankNode(blank_node))
+            }
+            rio_api::model::Subject::Triple(_) => {
+                Err(OxirsError::Parse("Nested triples not supported yet".to_string()))
+            }
+        }
+    }
+    
+    fn convert_rio_predicate(rio_predicate: &rio_api::model::NamedNode) -> Result<Predicate> {
+        let named_node = NamedNode::new(rio_predicate.iri)?;
+        Ok(Predicate::NamedNode(named_node))
+    }
+    
+    fn convert_rio_object(rio_object: &rio_api::model::Term) -> Result<Object> {
+        match rio_object {
+            rio_api::model::Term::NamedNode(nn) => {
+                let named_node = NamedNode::new(nn.iri)?;
+                Ok(Object::NamedNode(named_node))
+            }
+            rio_api::model::Term::BlankNode(bn) => {
+                let blank_node = BlankNode::new(format!("_:{}", bn.id))?;
+                Ok(Object::BlankNode(blank_node))
+            }
+            rio_api::model::Term::Literal(_lit) => {
+                // Simplified implementation for now - convert to plain string literal
+                // TODO: Implement proper Rio literal conversion when API is stable
+                let literal = Literal::new("placeholder");
+                Ok(Object::Literal(literal))
+            }
+            rio_api::model::Term::Triple(_) => {
+                Err(OxirsError::Parse("Nested triples not supported yet".to_string()))
+            }
+        }
+    }
+}
+
+/// Turtle parser state for handling multi-line statements and abbreviations
+struct TurtleParserState {
+    prefixes: HashMap<String, String>,
+    base_iri: Option<String>,
+    pending_statement: String,
+}
+
+impl TurtleParserState {
+    fn new(base_iri: Option<&str>) -> Self {
+        let mut prefixes = HashMap::new();
+        // Add default prefixes
+        prefixes.insert("rdf".to_string(), "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string());
+        prefixes.insert("rdfs".to_string(), "http://www.w3.org/2000/01/rdf-schema#".to_string());
+        prefixes.insert("xsd".to_string(), "http://www.w3.org/2001/XMLSchema#".to_string());
+        
+        TurtleParserState {
+            prefixes,
+            base_iri: base_iri.map(|s| s.to_string()),
+            pending_statement: String::new(),
+        }
+    }
+    
+    fn parse_line(&mut self, line: &str) -> Result<Vec<Triple>> {
+        let line = line.trim();
+        
+        // Handle directives
+        if line.starts_with("@prefix") {
+            return self.parse_prefix_directive(line);
+        }
+        
+        if line.starts_with("@base") {
+            return self.parse_base_directive(line);
+        }
+        
+        // Accumulate multi-line statements
+        self.pending_statement.push_str(line);
+        self.pending_statement.push(' ');
+        
+        // Check if statement is complete (ends with .)
+        if line.ends_with('.') {
+            let statement = self.pending_statement.trim().to_string();
+            self.pending_statement.clear();
+            return self.parse_statement(&statement);
+        }
+        
+        Ok(Vec::new())
+    }
+    
+    fn finalize(&mut self) -> Result<Option<Vec<Triple>>> {
+        if !self.pending_statement.trim().is_empty() {
+            let statement = self.pending_statement.trim().to_string();
+            self.pending_statement.clear();
+            return Ok(Some(self.parse_statement(&statement)?));
+        }
+        Ok(None)
+    }
+    
+    fn parse_prefix_directive(&mut self, line: &str) -> Result<Vec<Triple>> {
+        // @prefix ns: <http://example.org/ns#> .
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        
+        if parts.len() < 3 {
+            return Err(OxirsError::Parse("Invalid @prefix directive".to_string()));
+        }
+        
+        let prefix = parts[1].trim_end_matches(':');
+        let iri = parts[2];
+        
+        if !iri.starts_with('<') || !iri.ends_with('>') {
+            return Err(OxirsError::Parse("IRI must be enclosed in angle brackets".to_string()));
+        }
+        
+        let iri = &iri[1..iri.len() - 1];
+        self.prefixes.insert(prefix.to_string(), iri.to_string());
+        
+        Ok(Vec::new())
+    }
+    
+    fn parse_base_directive(&mut self, line: &str) -> Result<Vec<Triple>> {
+        // @base <http://example.org/> .
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        
+        if parts.len() < 2 {
+            return Err(OxirsError::Parse("Invalid @base directive".to_string()));
+        }
+        
+        let iri = parts[1];
+        
+        if !iri.starts_with('<') || !iri.ends_with('>') {
+            return Err(OxirsError::Parse("Base IRI must be enclosed in angle brackets".to_string()));
+        }
+        
+        let iri = &iri[1..iri.len() - 1];
+        self.base_iri = Some(iri.to_string());
+        
+        Ok(Vec::new())
+    }
+    
+    fn parse_statement(&mut self, statement: &str) -> Result<Vec<Triple>> {
+        let statement = statement.trim().trim_end_matches('.');
+        let mut triples = Vec::new();
+        
+        // Handle abbreviated syntax: subject predicate object ; predicate object
+        let subject_parts: Vec<&str> = statement.split(';').collect();
+        
+        if subject_parts.len() == 1 {
+            // Single triple: subject predicate object
+            if let Some(triple) = self.parse_simple_triple(statement)? {
+                triples.push(triple);
+            }
+        } else {
+            // Multiple triples with same subject
+            let first_part = subject_parts[0].trim();
+            let first_triple = self.parse_simple_triple(first_part)?;
+            
+            if let Some(triple) = first_triple {
+                let subject = triple.subject().clone();
+                triples.push(triple);
+                
+                // Parse remaining predicate-object pairs
+                for part in &subject_parts[1..] {
+                    let part = part.trim();
+                    if !part.is_empty() {
+                        if let Some(triple) = self.parse_predicate_object_pair(&subject, part)? {
+                            triples.push(triple);
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(triples)
+    }
+    
+    fn parse_simple_triple(&self, triple_str: &str) -> Result<Option<Triple>> {
+        let tokens = self.tokenize_turtle_statement(triple_str)?;
+        
+        if tokens.len() < 3 {
+            return Ok(None);
+        }
+        
+        let subject = self.parse_turtle_subject(&tokens[0])?;
+        let predicate = self.parse_turtle_predicate(&tokens[1])?;
+        let object = self.parse_turtle_object(&tokens[2])?;
+        
+        Ok(Some(Triple::new(subject, predicate, object)))
+    }
+    
+    fn parse_predicate_object_pair(&self, subject: &Subject, pair_str: &str) -> Result<Option<Triple>> {
+        let tokens = self.tokenize_turtle_statement(pair_str)?;
+        
+        if tokens.len() < 2 {
+            return Ok(None);
+        }
+        
+        let predicate = self.parse_turtle_predicate(&tokens[0])?;
+        let object = self.parse_turtle_object(&tokens[1])?;
+        
+        Ok(Some(Triple::new(subject.clone(), predicate, object)))
+    }
+    
+    fn tokenize_turtle_statement(&self, statement: &str) -> Result<Vec<String>> {
+        let mut tokens = Vec::new();
+        let mut current_token = String::new();
+        let mut in_quotes = false;
+        let mut in_angles = false;
+        let mut escaped = false;
+        
+        for c in statement.chars() {
+            if escaped {
+                current_token.push(c);
+                escaped = false;
+            } else if c == '\\' && (in_quotes || in_angles) {
+                escaped = true;
+                current_token.push(c);
+            } else if c == '"' && !in_angles {
+                current_token.push(c);
+                in_quotes = !in_quotes;
+            } else if c == '<' && !in_quotes {
+                current_token.push(c);
+                in_angles = true;
+            } else if c == '>' && !in_quotes {
+                current_token.push(c);
+                in_angles = false;
+            } else if c.is_whitespace() && !in_quotes && !in_angles {
+                if !current_token.is_empty() {
+                    tokens.push(current_token.clone());
+                    current_token.clear();
+                }
+            } else {
+                current_token.push(c);
+            }
+        }
+        
+        if !current_token.is_empty() {
+            tokens.push(current_token);
+        }
+        
+        Ok(tokens)
+    }
+    
+    fn parse_turtle_subject(&self, token: &str) -> Result<Subject> {
+        if token.starts_with('<') && token.ends_with('>') {
+            let iri = self.resolve_iri(&token[1..token.len() - 1])?;
+            let named_node = NamedNode::new(iri)?;
+            Ok(Subject::NamedNode(named_node))
+        } else if token.starts_with("_:") {
+            let blank_node = BlankNode::new(token)?;
+            Ok(Subject::BlankNode(blank_node))
+        } else if token.contains(':') && !token.starts_with("http://") && !token.starts_with("https://") {
+            // Prefixed name
+            let iri = self.expand_prefixed_name(token)?;
+            let named_node = NamedNode::new(iri)?;
+            Ok(Subject::NamedNode(named_node))
+        } else {
+            Err(OxirsError::Parse(format!("Invalid subject: {}", token)))
+        }
+    }
+    
+    fn parse_turtle_predicate(&self, token: &str) -> Result<Predicate> {
+        if token == "a" {
+            // Shorthand for rdf:type
+            let rdf_type = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+            let named_node = NamedNode::new(rdf_type)?;
+            Ok(Predicate::NamedNode(named_node))
+        } else if token.starts_with('<') && token.ends_with('>') {
+            let iri = self.resolve_iri(&token[1..token.len() - 1])?;
+            let named_node = NamedNode::new(iri)?;
+            Ok(Predicate::NamedNode(named_node))
+        } else if token.contains(':') && !token.starts_with("http://") && !token.starts_with("https://") {
+            // Prefixed name
+            let iri = self.expand_prefixed_name(token)?;
+            let named_node = NamedNode::new(iri)?;
+            Ok(Predicate::NamedNode(named_node))
+        } else {
+            Err(OxirsError::Parse(format!("Invalid predicate: {}", token)))
+        }
+    }
+    
+    fn parse_turtle_object(&self, token: &str) -> Result<Object> {
+        if token.starts_with('<') && token.ends_with('>') {
+            // IRI
+            let iri = self.resolve_iri(&token[1..token.len() - 1])?;
+            let named_node = NamedNode::new(iri)?;
+            Ok(Object::NamedNode(named_node))
+        } else if token.starts_with("_:") {
+            // Blank node
+            let blank_node = BlankNode::new(token)?;
+            Ok(Object::BlankNode(blank_node))
+        } else if token.starts_with('"') {
+            // Literal
+            self.parse_turtle_literal(token)
+        } else if token.contains(':') && !token.starts_with("http://") && !token.starts_with("https://") {
+            // Prefixed name
+            let iri = self.expand_prefixed_name(token)?;
+            let named_node = NamedNode::new(iri)?;
+            Ok(Object::NamedNode(named_node))
+        } else {
+            Err(OxirsError::Parse(format!("Invalid object: {}", token)))
+        }
+    }
+    
+    fn parse_turtle_literal(&self, token: &str) -> Result<Object> {
+        if !token.starts_with('"') {
+            return Err(OxirsError::Parse("Literal must start with quote".to_string()));
+        }
+        
+        // Find the closing quote
+        let mut end_quote_pos = None;
+        let mut escaped = false;
+        let chars: Vec<char> = token.chars().collect();
+        
+        for i in 1..chars.len() {
+            if escaped {
+                escaped = false;
+                continue;
+            }
+            
+            if chars[i] == '\\' {
+                escaped = true;
+            } else if chars[i] == '"' {
+                end_quote_pos = Some(i);
+                break;
+            }
+        }
+        
+        let end_quote_pos = end_quote_pos.ok_or_else(|| {
+            OxirsError::Parse("Unterminated literal".to_string())
+        })?;
+        
+        // Extract the literal value (without quotes)
+        let literal_value: String = chars[1..end_quote_pos].iter().collect();
+        
+        // Check for language tag or datatype
+        let remaining = &token[end_quote_pos + 1..];
+        
+        if remaining.starts_with('@') {
+            // Language tag
+            let lang_tag = &remaining[1..];
+            let literal = Literal::new_lang(literal_value, lang_tag)?;
+            Ok(Object::Literal(literal))
+        } else if remaining.starts_with("^^") {
+            // Datatype
+            let datatype_part = &remaining[2..];
+            if datatype_part.starts_with('<') && datatype_part.ends_with('>') {
+                // IRI datatype
+                let datatype_iri = self.resolve_iri(&datatype_part[1..datatype_part.len() - 1])?;
+                let datatype = NamedNode::new(datatype_iri)?;
+                let literal = Literal::new_typed(literal_value, datatype);
+                Ok(Object::Literal(literal))
+            } else if datatype_part.contains(':') {
+                // Prefixed datatype
+                let datatype_iri = self.expand_prefixed_name(datatype_part)?;
+                let datatype = NamedNode::new(datatype_iri)?;
+                let literal = Literal::new_typed(literal_value, datatype);
+                Ok(Object::Literal(literal))
+            } else {
+                Err(OxirsError::Parse(format!("Invalid datatype: {}", datatype_part)))
+            }
+        } else if remaining.is_empty() {
+            // Plain literal
+            let literal = Literal::new(literal_value);
+            Ok(Object::Literal(literal))
+        } else {
+            Err(OxirsError::Parse(format!("Invalid literal syntax: {}", token)))
+        }
+    }
+    
+    fn expand_prefixed_name(&self, prefixed_name: &str) -> Result<String> {
+        if let Some(colon_pos) = prefixed_name.find(':') {
+            let prefix = &prefixed_name[..colon_pos];
+            let local_name = &prefixed_name[colon_pos + 1..];
+            
+            if let Some(namespace) = self.prefixes.get(prefix) {
+                Ok(format!("{}{}", namespace, local_name))
+            } else {
+                Err(OxirsError::Parse(format!("Unknown prefix: {}", prefix)))
+            }
+        } else {
+            Err(OxirsError::Parse(format!("Invalid prefixed name: {}", prefixed_name)))
+        }
+    }
+    
+    fn resolve_iri(&self, iri: &str) -> Result<String> {
+        if iri.contains("://") {
+            // Absolute IRI
+            Ok(iri.to_string())
+        } else if let Some(base) = &self.base_iri {
+            // Resolve relative IRI against base
+            if base.ends_with('/') {
+                Ok(format!("{}{}", base, iri))
+            } else {
+                Ok(format!("{}/{}", base, iri))
+            }
+        } else {
+            // No base IRI, return as-is
+            Ok(iri.to_string())
+        }
+    }
 }
 
 /// Convenience function to detect RDF format from content
@@ -707,6 +1242,158 @@ invalid line here
         assert!(result_tolerant.is_ok());
         let quads = result_tolerant.unwrap();
         assert_eq!(quads.len(), 2); // Should parse the two valid triples
+    }
+    
+    #[test]
+    fn test_nquads_parsing() {
+        let nquads_data = r#"<http://example.org/alice> <http://xmlns.com/foaf/0.1/name> "Alice Smith" <http://example.org/graph1> .
+<http://example.org/alice> <http://xmlns.com/foaf/0.1/age> "30"^^<http://www.w3.org/2001/XMLSchema#integer> <http://example.org/graph2> .
+_:person1 <http://xmlns.com/foaf/0.1/knows> <http://example.org/bob> _:graph1 ."#;
+        
+        let parser = Parser::new(RdfFormat::NQuads);
+        let result = parser.parse_str_to_quads(nquads_data);
+        
+        assert!(result.is_ok());
+        let quads = result.unwrap();
+        assert_eq!(quads.len(), 3);
+        
+        // Check that quads have proper graph names
+        let first_quad = &quads[0];
+        assert!(!first_quad.is_default_graph());
+        
+        // Check that we can extract graph names
+        if let GraphName::NamedNode(graph_name) = first_quad.graph_name() {
+            assert!(graph_name.as_str().contains("example.org"));
+        } else {
+            panic!("Expected named graph");
+        }
+    }
+    
+    #[test]
+    fn test_turtle_parsing_basic() {
+        let turtle_data = r#"@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix ex: <http://example.org/> .
+
+ex:alice foaf:name "Alice Smith" .
+ex:alice foaf:age "30"^^<http://www.w3.org/2001/XMLSchema#integer> .
+ex:alice foaf:knows ex:bob ."#;
+        
+        let parser = Parser::new(RdfFormat::Turtle);
+        let result = parser.parse_str_to_quads(turtle_data);
+        
+        assert!(result.is_ok());
+        let quads = result.unwrap();
+        assert_eq!(quads.len(), 3);
+        
+        // All quads should be in default graph
+        for quad in &quads {
+            assert!(quad.is_default_graph());
+        }
+    }
+    
+    #[test]
+    fn test_turtle_parsing_prefixes() {
+        let turtle_data = r#"@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+foaf:Person a foaf:Person ."#;
+        
+        let parser = Parser::new(RdfFormat::Turtle);
+        let result = parser.parse_str_to_quads(turtle_data);
+        
+        assert!(result.is_ok());
+        let quads = result.unwrap();
+        assert_eq!(quads.len(), 1);
+        
+        let triple = quads[0].to_triple();
+        // Should expand foaf:Person to full IRI
+        if let Subject::NamedNode(subj) = triple.subject() {
+            assert!(subj.as_str().contains("xmlns.com/foaf"));
+        } else {
+            panic!("Expected named node subject");
+        }
+        
+        // Predicate should be rdf:type (from 'a')
+        if let Predicate::NamedNode(pred) = triple.predicate() {
+            assert!(pred.as_str().contains("rdf-syntax-ns#type"));
+        } else {
+            panic!("Expected named node predicate");
+        }
+    }
+    
+    #[test]
+    fn test_turtle_parsing_abbreviated_syntax() {
+        let turtle_data = r#"@prefix ex: <http://example.org/> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+
+ex:alice foaf:name "Alice" ;
+         foaf:age "30" ."#;
+        
+        let parser = Parser::new(RdfFormat::Turtle);
+        let result = parser.parse_str_to_quads(turtle_data);
+        
+        assert!(result.is_ok());
+        let quads = result.unwrap();
+        assert_eq!(quads.len(), 2);
+        
+        // Both triples should have the same subject
+        let subjects: Vec<_> = quads.iter().map(|q| q.to_triple().subject().clone()).collect();
+        assert_eq!(subjects[0], subjects[1]);
+    }
+    
+    #[test]
+    fn test_turtle_parsing_base_iri() {
+        let turtle_data = r#"@base <http://example.org/> .
+<alice> <knows> <bob> ."#;
+        
+        let parser = Parser::new(RdfFormat::Turtle);
+        let result = parser.parse_str_to_quads(turtle_data);
+        
+        assert!(result.is_ok());
+        let quads = result.unwrap();
+        assert_eq!(quads.len(), 1);
+        
+        let triple = quads[0].to_triple();
+        // IRIs should be resolved relative to base
+        if let Subject::NamedNode(subj) = triple.subject() {
+            assert!(subj.as_str().contains("example.org"));
+        } else {
+            panic!("Expected named node subject");
+        }
+    }
+    
+    #[test]
+    fn test_turtle_parsing_literals() {
+        let turtle_data = r#"@prefix ex: <http://example.org/> .
+ex:alice ex:name "Alice"@en .
+ex:alice ex:age "30"^^<http://www.w3.org/2001/XMLSchema#integer> ."#;
+        
+        let parser = Parser::new(RdfFormat::Turtle);
+        let result = parser.parse_str_to_quads(turtle_data);
+        
+        assert!(result.is_ok());
+        let quads = result.unwrap();
+        assert_eq!(quads.len(), 2);
+        
+        // Check for language tag and datatype
+        let triples: Vec<_> = quads.into_iter().map(|q| q.to_triple()).collect();
+        
+        let mut found_lang_literal = false;
+        let mut found_typed_literal = false;
+        
+        for triple in triples {
+            if let Object::Literal(literal) = triple.object() {
+                if literal.language().is_some() {
+                    found_lang_literal = true;
+                    assert_eq!(literal.language(), Some("en"));
+                }
+                if literal.datatype().is_some() {
+                    found_typed_literal = true;
+                    assert!(literal.datatype().unwrap().as_str().contains("integer"));
+                }
+            }
+        }
+        
+        assert!(found_lang_literal);
+        assert!(found_typed_literal);
     }
     
     #[test]

@@ -31,6 +31,10 @@ uuid.workspace = true
 chrono.workspace = true
 urlencoding = "2.1"
 
+# WebSocket support for subscriptions
+tokio-tungstenite.workspace = true
+futures-util.workspace = true
+
 [dev-dependencies]
 criterion.workspace = true
 

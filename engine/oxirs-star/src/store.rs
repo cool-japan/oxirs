@@ -356,28 +356,22 @@ impl Default for StarStore {
     }
 }
 
-/// Iterator over triples in the store
-pub struct StarTripleIterator<'a> {
-    triples: std::slice::Iter<'a, StarTriple>,
-}
-
-impl<'a> Iterator for StarTripleIterator<'a> {
-    type Item = &'a StarTriple;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.triples.next()
-    }
-}
+// Note: StarTripleIterator has been removed in favor of a safer iterator implementation
+// that doesn't use unsafe code or hold locks across method boundaries
 
 impl StarStore {
-    /// Get an iterator over all triples
-    pub fn iter(&self) -> StarTripleIterator {
+    /// Get a vector of all triples (cloned to avoid lifetime issues)
+    pub fn all_triples(&self) -> Vec<StarTriple> {
         let star_triples = self.star_triples.read().unwrap();
-        // Note: This is a simplified implementation
-        // In practice, we'd need a more sophisticated iterator that doesn't hold the lock
-        StarTripleIterator {
-            triples: unsafe { std::mem::transmute(star_triples.iter()) },
-        }
+        star_triples.clone()
+    }
+
+    /// Get an iterator over all triples using a safe implementation
+    pub fn iter(&self) -> impl Iterator<Item = StarTriple> {
+        // Clone all triples to avoid holding the lock
+        // This is safe but potentially memory-intensive for large stores
+        // TODO: Implement a more sophisticated lock-free iterator for production use
+        self.all_triples().into_iter()
     }
 }
 

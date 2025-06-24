@@ -253,6 +253,130 @@ impl SwrlEngine {
             implementation: builtin_boolean_value,
         });
         
+        // Advanced mathematical built-ins
+        self.register_builtin(BuiltinFunction {
+            name: "mod".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 3,
+            max_args: Some(3),
+            implementation: builtin_mod,
+        });
+        
+        self.register_builtin(BuiltinFunction {
+            name: "pow".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 3,
+            max_args: Some(3),
+            implementation: builtin_pow,
+        });
+        
+        self.register_builtin(BuiltinFunction {
+            name: "sqrt".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_sqrt,
+        });
+        
+        self.register_builtin(BuiltinFunction {
+            name: "sin".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_sin,
+        });
+        
+        self.register_builtin(BuiltinFunction {
+            name: "cos".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_cos,
+        });
+        
+        // Date and time built-ins
+        self.register_builtin(BuiltinFunction {
+            name: "dayTimeDuration".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_day_time_duration,
+        });
+        
+        self.register_builtin(BuiltinFunction {
+            name: "yearMonthDuration".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_year_month_duration,
+        });
+        
+        self.register_builtin(BuiltinFunction {
+            name: "dateTime".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_date_time,
+        });
+        
+        // List operations
+        self.register_builtin(BuiltinFunction {
+            name: "listConcat".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: None,
+            implementation: builtin_list_concat,
+        });
+        
+        self.register_builtin(BuiltinFunction {
+            name: "listLength".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_list_length,
+        });
+        
+        self.register_builtin(BuiltinFunction {
+            name: "member".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_member,
+        });
+        
+        // Enhanced string operations
+        self.register_builtin(BuiltinFunction {
+            name: "stringMatches".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(3),
+            implementation: builtin_string_matches,
+        });
+        
+        self.register_builtin(BuiltinFunction {
+            name: "substring".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 3,
+            max_args: Some(4),
+            implementation: builtin_substring,
+        });
+        
+        self.register_builtin(BuiltinFunction {
+            name: "upperCase".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_upper_case,
+        });
+        
+        self.register_builtin(BuiltinFunction {
+            name: "lowerCase".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_lower_case,
+        });
+        
         info!("Registered {} core SWRL built-in functions", self.builtins.len());
     }
     
@@ -744,6 +868,238 @@ fn extract_boolean_value(arg: &SwrlArgument) -> Result<bool> {
         }
         _ => Err(anyhow::anyhow!("Expected literal boolean value, got {:?}", arg)),
     }
+}
+
+// Additional mathematical built-ins
+
+fn builtin_mod(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 3 {
+        return Err(anyhow::anyhow!("mod requires exactly 3 arguments"));
+    }
+    
+    let dividend = extract_numeric_value(&args[0])?;
+    let divisor = extract_numeric_value(&args[1])?;
+    let result = extract_numeric_value(&args[2])?;
+    
+    if divisor == 0.0 {
+        return Err(anyhow::anyhow!("Division by zero in mod operation"));
+    }
+    
+    Ok((dividend % divisor - result).abs() < f64::EPSILON)
+}
+
+fn builtin_pow(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 3 {
+        return Err(anyhow::anyhow!("pow requires exactly 3 arguments"));
+    }
+    
+    let base = extract_numeric_value(&args[0])?;
+    let exponent = extract_numeric_value(&args[1])?;
+    let result = extract_numeric_value(&args[2])?;
+    
+    Ok((base.powf(exponent) - result).abs() < f64::EPSILON)
+}
+
+fn builtin_sqrt(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("sqrt requires exactly 2 arguments"));
+    }
+    
+    let input = extract_numeric_value(&args[0])?;
+    let result = extract_numeric_value(&args[1])?;
+    
+    if input < 0.0 {
+        return Err(anyhow::anyhow!("Cannot take square root of negative number"));
+    }
+    
+    Ok((input.sqrt() - result).abs() < f64::EPSILON)
+}
+
+fn builtin_sin(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("sin requires exactly 2 arguments"));
+    }
+    
+    let input = extract_numeric_value(&args[0])?;
+    let result = extract_numeric_value(&args[1])?;
+    
+    Ok((input.sin() - result).abs() < f64::EPSILON)
+}
+
+fn builtin_cos(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("cos requires exactly 2 arguments"));
+    }
+    
+    let input = extract_numeric_value(&args[0])?;
+    let result = extract_numeric_value(&args[1])?;
+    
+    Ok((input.cos() - result).abs() < f64::EPSILON)
+}
+
+// Date and time built-ins
+
+fn builtin_day_time_duration(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("dayTimeDuration requires exactly 2 arguments"));
+    }
+    
+    let duration_str = extract_string_value(&args[0])?;
+    let expected = extract_string_value(&args[1])?;
+    
+    // Simple duration parsing (P[n]DT[n]H[n]M[n]S format)
+    // This is a simplified implementation
+    Ok(duration_str == expected)
+}
+
+fn builtin_year_month_duration(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("yearMonthDuration requires exactly 2 arguments"));
+    }
+    
+    let duration_str = extract_string_value(&args[0])?;
+    let expected = extract_string_value(&args[1])?;
+    
+    // Simple duration parsing (P[n]Y[n]M format)
+    // This is a simplified implementation
+    Ok(duration_str == expected)
+}
+
+fn builtin_date_time(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("dateTime requires exactly 2 arguments"));
+    }
+    
+    let datetime_str = extract_string_value(&args[0])?;
+    let expected = extract_string_value(&args[1])?;
+    
+    // Simple datetime validation (ISO 8601 format)
+    // This is a simplified implementation
+    Ok(datetime_str == expected)
+}
+
+// List operations
+
+fn builtin_list_concat(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() < 2 {
+        return Err(anyhow::anyhow!("listConcat requires at least 2 arguments"));
+    }
+    
+    // In a full implementation, this would handle RDF lists
+    // For now, treat as string concatenation of comma-separated values
+    let mut concat_result = String::new();
+    for arg in &args[0..args.len()-1] {
+        if !concat_result.is_empty() {
+            concat_result.push(',');
+        }
+        concat_result.push_str(&extract_string_value(arg)?);
+    }
+    
+    let expected = extract_string_value(&args[args.len()-1])?;
+    Ok(concat_result == expected)
+}
+
+fn builtin_list_length(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("listLength requires exactly 2 arguments"));
+    }
+    
+    let list_str = extract_string_value(&args[0])?;
+    let length_val = extract_numeric_value(&args[1])? as usize;
+    
+    // Simple implementation: count comma-separated items
+    let items: Vec<&str> = list_str.split(',').collect();
+    Ok(items.len() == length_val)
+}
+
+fn builtin_member(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("member requires exactly 2 arguments"));
+    }
+    
+    let element = extract_string_value(&args[0])?;
+    let list_str = extract_string_value(&args[1])?;
+    
+    // Simple implementation: check if element is in comma-separated list
+    let items: Vec<&str> = list_str.split(',').collect();
+    Ok(items.contains(&element.as_str()))
+}
+
+// Enhanced string operations
+
+fn builtin_string_matches(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() < 2 || args.len() > 3 {
+        return Err(anyhow::anyhow!("stringMatches requires 2 or 3 arguments"));
+    }
+    
+    let input = extract_string_value(&args[0])?;
+    let pattern = extract_string_value(&args[1])?;
+    
+    // Simple pattern matching (could be enhanced with full regex support)
+    if args.len() == 3 {
+        let _flags = extract_string_value(&args[2])?;
+        // Ignore flags in simple implementation
+    }
+    
+    // Basic wildcard matching (* and ?)
+    let regex_pattern = pattern
+        .replace("*", ".*")
+        .replace("?", ".");
+    
+    match regex::Regex::new(&regex_pattern) {
+        Ok(re) => Ok(re.is_match(&input)),
+        Err(_) => Ok(false),
+    }
+}
+
+fn builtin_substring(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() < 3 || args.len() > 4 {
+        return Err(anyhow::anyhow!("substring requires 3 or 4 arguments"));
+    }
+    
+    let input = extract_string_value(&args[0])?;
+    let start = extract_numeric_value(&args[1])? as usize;
+    let result = extract_string_value(&args[args.len()-1])?;
+    
+    let extracted = if args.len() == 4 {
+        let length = extract_numeric_value(&args[2])? as usize;
+        if start > input.len() {
+            String::new()
+        } else {
+            let end = std::cmp::min(start + length, input.len());
+            input.chars().skip(start).take(end - start).collect()
+        }
+    } else {
+        if start > input.len() {
+            String::new()
+        } else {
+            input.chars().skip(start).collect()
+        }
+    };
+    
+    Ok(extracted == result)
+}
+
+fn builtin_upper_case(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("upperCase requires exactly 2 arguments"));
+    }
+    
+    let input = extract_string_value(&args[0])?;
+    let result = extract_string_value(&args[1])?;
+    
+    Ok(input.to_uppercase() == result)
+}
+
+fn builtin_lower_case(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("lowerCase requires exactly 2 arguments"));
+    }
+    
+    let input = extract_string_value(&args[0])?;
+    let result = extract_string_value(&args[1])?;
+    
+    Ok(input.to_lowercase() == result)
 }
 
 #[cfg(test)]

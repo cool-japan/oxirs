@@ -13,6 +13,8 @@ pub mod swrl;
 pub mod rete;
 pub mod forward;
 pub mod backward;
+pub mod integration;
+pub mod performance;
 
 /// Rule representation
 #[derive(Debug, Clone)]

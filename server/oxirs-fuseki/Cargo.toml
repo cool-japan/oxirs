@@ -21,6 +21,7 @@ tokio = { version = "1.42", features = ["full"] }
 tokio-util = "0.7"
 hyper = { version = "1.5", features = ["full"] }
 axum = { version = "0.7", features = ["ws", "multipart"] }
+axum-extra = { version = "0.9", features = ["typed-header"] }
 tower = { version = "0.4", features = ["timeout", "load-shed", "buffer"] }
 tower-http = { version = "0.6", features = ["cors", "trace", "timeout", "compression-gzip", "compression-br", "request-id", "sensitive-headers"] }
 
@@ -77,6 +78,9 @@ governor = { version = "0.6", optional = true }
 
 # Validation
 validator = { version = "0.18", features = ["derive"] }
+
+# Random number generation
+rand = "0.8"
 
 # Async utilities
 futures = "0.3"

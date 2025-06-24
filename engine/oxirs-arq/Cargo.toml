@@ -18,14 +18,17 @@ serde_json.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+chrono = { version = "0.4", features = ["serde"] }
+rayon = { version = "1.8", optional = true }
 
 [dev-dependencies]
 criterion.workspace = true
 
 [features]
-default = []
+default = ["parallel"]
 star = ["oxirs-star"]
 extensions = []
+parallel = ["rayon"]
 
 [dependencies.oxirs-star]
 path = "../oxirs-star"

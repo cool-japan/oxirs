@@ -16,6 +16,7 @@ oxigraph.workspace = true
 rio_api.workspace = true
 rio_turtle.workspace = true
 rio_xml.workspace = true
+oxiri = "0.2"
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 anyhow.workspace = true

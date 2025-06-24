@@ -87,6 +87,10 @@ async-trait = "0.1"
 uuid = { version = "1.10", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 
+# WebSocket support for GraphQL subscriptions
+tokio-tungstenite = "0.21"
+futures-util = "0.3"
+
 [workspace.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
