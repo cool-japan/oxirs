@@ -281,8 +281,8 @@ mod tests {
     fn test_resolver_registry() {
         let mut registry = ResolverRegistry::new();
         
-        // Create a mock store for testing
-        let store = Arc::new(crate::MockStore::new().unwrap());
+        // Create an RDF store for testing
+        let store = Arc::new(crate::RdfStore::new().unwrap());
         
         // Set up default resolvers
         registry.setup_default_resolvers(store);

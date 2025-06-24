@@ -28,6 +28,13 @@ impl Graph {
         }
     }
     
+    /// Creates a graph from a vector of triples
+    pub fn from_triples(triples: Vec<Triple>) -> Self {
+        Graph {
+            triples: triples.into_iter().collect(),
+        }
+    }
+    
     /// Inserts a triple into the graph
     /// 
     /// Returns `true` if the triple was not already present, `false` otherwise.

@@ -7,7 +7,7 @@
 //! - GraphQL Playground web interface
 
 use oxirs_gql::{
-    GraphQLServer, GraphQLConfig, MockStore,
+    GraphQLServer, GraphQLConfig, RdfStore,
     schema::{SchemaGenerator, SchemaGenerationConfig},
     parser::parse_document,
     types::Schema,
@@ -24,9 +24,9 @@ async fn main() -> Result<()> {
     println!("🚀 OxiRS GraphQL Demo");
     println!("====================");
     
-    // 1. Create a mock RDF store
+    // 1. Create an RDF store
     println!("📦 Creating RDF store...");
-    let store = Arc::new(MockStore::new()?);
+    let store = Arc::new(RdfStore::new()?);
     
     // 2. Generate GraphQL schema from RDF ontology
     println!("🏗️  Generating GraphQL schema from RDF ontology...");

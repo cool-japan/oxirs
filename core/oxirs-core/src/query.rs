@@ -133,7 +133,7 @@ impl QueryEngine {
     fn execute_describe(&self, _query: &Query, _store: &Store) -> Result<QueryResult> {
         // TODO: Implement DESCRIBE query execution
         Ok(QueryResult::Describe {
-            graph: crate::graph::Graph::new(),
+            graph: crate::model::graph::Graph::new(),
         })
     }
     
@@ -240,7 +240,7 @@ pub enum QueryResult {
     Ask(bool),
     /// DESCRIBE query result with description graph
     Describe {
-        graph: crate::graph::Graph,
+        graph: crate::model::graph::Graph,
     },
 }
 
@@ -301,7 +301,7 @@ impl QueryResult {
     }
     
     /// Get DESCRIBE graph
-    pub fn as_describe(&self) -> Option<&crate::graph::Graph> {
+    pub fn as_describe(&self) -> Option<&crate::model::graph::Graph> {
         if let QueryResult::Describe { graph } = self {
             Some(graph)
         } else {

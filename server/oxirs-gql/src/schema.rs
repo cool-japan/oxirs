@@ -180,7 +180,7 @@ impl SchemaGenerator {
     
     /// Generate GraphQL schema SDL from RDF ontology
     pub fn generate_from_ontology(&self, ontology_uri: &str) -> Result<String> {
-        // For now, load a mock vocabulary
+        // For now, load a mock vocabulary - TODO: implement real ontology parsing
         let vocabulary = self.load_mock_vocabulary(ontology_uri)?;
         
         let schema_with_vocab = Self::new()
@@ -189,6 +189,241 @@ impl SchemaGenerator {
         
         let schema = schema_with_vocab.generate_schema()?;
         Ok(self.schema_to_sdl(&schema))
+    }
+    
+    /// Generate GraphQL schema from RDF store containing ontology data
+    pub fn generate_from_store(&self, store: &crate::RdfStore) -> Result<String> {
+        let vocabulary = self.extract_vocabulary_from_store(store)?;
+        
+        let schema_with_vocab = Self::new()
+            .with_config(self.config.clone())
+            .with_vocabulary(vocabulary);
+        
+        let schema = schema_with_vocab.generate_schema()?;
+        Ok(self.schema_to_sdl(&schema))
+    }
+    
+    /// Extract RDF vocabulary from a store using SPARQL queries
+    pub fn extract_vocabulary_from_store(&self, store: &crate::RdfStore) -> Result<RdfVocabulary> {
+        let mut classes = HashMap::new();
+        let mut properties = HashMap::new();
+        let mut namespaces = HashMap::new();
+        
+        // Extract namespaces
+        namespaces.insert("rdf".to_string(), "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string());
+        namespaces.insert("rdfs".to_string(), "http://www.w3.org/2000/01/rdf-schema#".to_string());
+        namespaces.insert("owl".to_string(), "http://www.w3.org/2002/07/owl#".to_string());
+        
+        // Extract classes using SPARQL
+        let class_query = r#"
+            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+            PREFIX owl: <http://www.w3.org/2002/07/owl#>
+            
+            SELECT DISTINCT ?class ?label ?comment ?superClass
+            WHERE {
+                {
+                    ?class a rdfs:Class .
+                } UNION {
+                    ?class a owl:Class .
+                }
+                OPTIONAL { ?class rdfs:label ?label }
+                OPTIONAL { ?class rdfs:comment ?comment }
+                OPTIONAL { ?class rdfs:subClassOf ?superClass }
+                FILTER(!isBlank(?class))
+            }
+        "#;
+        
+        if let Ok(results) = store.query(class_query) {
+            self.process_class_results(results, &mut classes)?;
+        }
+        
+        // Extract properties using SPARQL
+        let property_query = r#"
+            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+            PREFIX owl: <http://www.w3.org/2002/07/owl#>
+            
+            SELECT DISTINCT ?property ?label ?comment ?domain ?range ?type
+            WHERE {
+                {
+                    ?property a rdf:Property .
+                    BIND("AnnotationProperty" as ?type)
+                } UNION {
+                    ?property a rdfs:Property .
+                    BIND("DataProperty" as ?type)
+                } UNION {
+                    ?property a owl:DatatypeProperty .
+                    BIND("DataProperty" as ?type)
+                } UNION {
+                    ?property a owl:ObjectProperty .
+                    BIND("ObjectProperty" as ?type)
+                } UNION {
+                    ?property a owl:AnnotationProperty .
+                    BIND("AnnotationProperty" as ?type)
+                }
+                OPTIONAL { ?property rdfs:label ?label }
+                OPTIONAL { ?property rdfs:comment ?comment }
+                OPTIONAL { ?property rdfs:domain ?domain }
+                OPTIONAL { ?property rdfs:range ?range }
+                FILTER(!isBlank(?property))
+            }
+        "#;
+        
+        if let Ok(results) = store.query(property_query) {
+            self.process_property_results(results, &mut properties)?;
+        }
+        
+        // Link properties to classes
+        self.link_properties_to_classes(&mut classes, &properties);
+        
+        Ok(RdfVocabulary {
+            classes,
+            properties,
+            namespaces,
+        })
+    }
+    
+    fn process_class_results(&self, results: oxigraph::sparql::QueryResults, classes: &mut HashMap<String, RdfClass>) -> Result<()> {
+        use oxigraph::sparql::QueryResults;
+        
+        if let QueryResults::Solutions(solutions) = results {
+            for solution in solutions {
+                let solution = solution?;
+                
+                if let Some(class_term) = solution.get("class") {
+                    let class_uri = class_term.to_string();
+                    
+                    let label = solution.get("label")
+                        .map(|t| t.to_string())
+                        .and_then(|s| self.extract_literal_value(&s));
+                    
+                    let comment = solution.get("comment")
+                        .map(|t| t.to_string())
+                        .and_then(|s| self.extract_literal_value(&s));
+                    
+                    let super_class = solution.get("superClass")
+                        .map(|t| t.to_string());
+                    
+                    // Get or create class entry
+                    let rdf_class = classes.entry(class_uri.clone()).or_insert_with(|| RdfClass {
+                        uri: class_uri.clone(),
+                        label: None,
+                        comment: None,
+                        super_classes: Vec::new(),
+                        properties: Vec::new(),
+                    });
+                    
+                    // Update class information
+                    if label.is_some() {
+                        rdf_class.label = label;
+                    }
+                    if comment.is_some() {
+                        rdf_class.comment = comment;
+                    }
+                    if let Some(sc) = super_class {
+                        if !rdf_class.super_classes.contains(&sc) {
+                            rdf_class.super_classes.push(sc);
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(())
+    }
+    
+    fn process_property_results(&self, results: oxigraph::sparql::QueryResults, properties: &mut HashMap<String, RdfProperty>) -> Result<()> {
+        use oxigraph::sparql::QueryResults;
+        
+        if let QueryResults::Solutions(solutions) = results {
+            for solution in solutions {
+                let solution = solution?;
+                
+                if let Some(property_term) = solution.get("property") {
+                    let property_uri = property_term.to_string();
+                    
+                    let label = solution.get("label")
+                        .map(|t| t.to_string())
+                        .and_then(|s| self.extract_literal_value(&s));
+                    
+                    let comment = solution.get("comment")
+                        .map(|t| t.to_string())
+                        .and_then(|s| self.extract_literal_value(&s));
+                    
+                    let domain = solution.get("domain")
+                        .map(|t| t.to_string());
+                    
+                    let range = solution.get("range")
+                        .map(|t| t.to_string());
+                    
+                    let property_type = solution.get("type")
+                        .map(|t| t.to_string())
+                        .and_then(|s| self.extract_literal_value(&s))
+                        .unwrap_or_else(|| "AnnotationProperty".to_string());
+                    
+                    let prop_type = match property_type.as_str() {
+                        "DataProperty" => PropertyType::DataProperty,
+                        "ObjectProperty" => PropertyType::ObjectProperty,
+                        _ => PropertyType::AnnotationProperty,
+                    };
+                    
+                    // Get or create property entry
+                    let rdf_property = properties.entry(property_uri.clone()).or_insert_with(|| RdfProperty {
+                        uri: property_uri.clone(),
+                        label: None,
+                        comment: None,
+                        domain: Vec::new(),
+                        range: Vec::new(),
+                        property_type: prop_type,
+                        functional: false,
+                        inverse_functional: false,
+                    });
+                    
+                    // Update property information
+                    if label.is_some() {
+                        rdf_property.label = label;
+                    }
+                    if comment.is_some() {
+                        rdf_property.comment = comment;
+                    }
+                    if let Some(d) = domain {
+                        if !rdf_property.domain.contains(&d) {
+                            rdf_property.domain.push(d);
+                        }
+                    }
+                    if let Some(r) = range {
+                        if !rdf_property.range.contains(&r) {
+                            rdf_property.range.push(r);
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(())
+    }
+    
+    fn extract_literal_value(&self, term_str: &str) -> Option<String> {
+        // Extract literal value from RDF term string format
+        if term_str.starts_with('"') {
+            if let Some(end_quote) = term_str[1..].find('"') {
+                return Some(term_str[1..end_quote + 1].to_string());
+            }
+        }
+        None
+    }
+    
+    fn link_properties_to_classes(&self, classes: &mut HashMap<String, RdfClass>, properties: &HashMap<String, RdfProperty>) {
+        for (property_uri, property) in properties {
+            for domain_class in &property.domain {
+                if let Some(class) = classes.get_mut(domain_class) {
+                    if !class.properties.contains(property_uri) {
+                        class.properties.push(property_uri.clone());
+                    }
+                }
+            }
+        }
     }
     
     fn generate_object_type_from_class(&self, rdf_class: &RdfClass, vocabulary: &RdfVocabulary) -> Result<ObjectType> {
@@ -618,13 +853,30 @@ impl SchemaGenerator {
     }
     
     fn load_mock_vocabulary(&self, ontology_uri: &str) -> Result<RdfVocabulary> {
-        // Mock vocabulary for demonstration
+        // Enhanced mock vocabulary for demonstration
         let mut classes = HashMap::new();
         let mut properties = HashMap::new();
         let mut namespaces = HashMap::new();
         
+        // Common namespaces
         namespaces.insert("foaf".to_string(), "http://xmlns.com/foaf/0.1/".to_string());
         namespaces.insert("schema".to_string(), "http://schema.org/".to_string());
+        namespaces.insert("dbo".to_string(), "http://dbpedia.org/ontology/".to_string());
+        namespaces.insert("dc".to_string(), "http://purl.org/dc/elements/1.1/".to_string());
+        
+        // FOAF Agent (base class)
+        classes.insert(
+            "http://xmlns.com/foaf/0.1/Agent".to_string(),
+            RdfClass {
+                uri: "http://xmlns.com/foaf/0.1/Agent".to_string(),
+                label: Some("Agent".to_string()),
+                comment: Some("An agent (eg. person, group, software or physical artifact)".to_string()),
+                super_classes: vec![],
+                properties: vec![
+                    "http://xmlns.com/foaf/0.1/name".to_string(),
+                ],
+            },
+        );
         
         // FOAF Person class
         classes.insert(
@@ -638,54 +890,72 @@ impl SchemaGenerator {
                     "http://xmlns.com/foaf/0.1/name".to_string(),
                     "http://xmlns.com/foaf/0.1/email".to_string(),
                     "http://xmlns.com/foaf/0.1/knows".to_string(),
+                    "http://xmlns.com/foaf/0.1/age".to_string(),
+                    "http://xmlns.com/foaf/0.1/homepage".to_string(),
                 ],
             },
         );
         
-        // FOAF name property
-        properties.insert(
-            "http://xmlns.com/foaf/0.1/name".to_string(),
-            RdfProperty {
-                uri: "http://xmlns.com/foaf/0.1/name".to_string(),
-                label: Some("name".to_string()),
-                comment: Some("A name for some thing".to_string()),
-                domain: vec!["http://xmlns.com/foaf/0.1/Person".to_string()],
-                range: vec!["http://www.w3.org/2001/XMLSchema#string".to_string()],
-                property_type: PropertyType::DataProperty,
-                functional: false,
-                inverse_functional: false,
+        // FOAF Organization class
+        classes.insert(
+            "http://xmlns.com/foaf/0.1/Organization".to_string(),
+            RdfClass {
+                uri: "http://xmlns.com/foaf/0.1/Organization".to_string(),
+                label: Some("Organization".to_string()),
+                comment: Some("An organization".to_string()),
+                super_classes: vec!["http://xmlns.com/foaf/0.1/Agent".to_string()],
+                properties: vec![
+                    "http://xmlns.com/foaf/0.1/name".to_string(),
+                    "http://xmlns.com/foaf/0.1/homepage".to_string(),
+                ],
             },
         );
         
-        // FOAF email property
-        properties.insert(
-            "http://xmlns.com/foaf/0.1/email".to_string(),
-            RdfProperty {
-                uri: "http://xmlns.com/foaf/0.1/email".to_string(),
-                label: Some("email".to_string()),
-                comment: Some("An email address".to_string()),
-                domain: vec!["http://xmlns.com/foaf/0.1/Person".to_string()],
-                range: vec!["http://www.w3.org/2001/XMLSchema#string".to_string()],
-                property_type: PropertyType::DataProperty,
-                functional: false,
-                inverse_functional: true,
+        // Schema.org Product class
+        classes.insert(
+            "http://schema.org/Product".to_string(),
+            RdfClass {
+                uri: "http://schema.org/Product".to_string(),
+                label: Some("Product".to_string()),
+                comment: Some("Any offered product or service".to_string()),
+                super_classes: vec![],
+                properties: vec![
+                    "http://schema.org/name".to_string(),
+                    "http://schema.org/description".to_string(),
+                    "http://schema.org/price".to_string(),
+                    "http://schema.org/manufacturer".to_string(),
+                ],
             },
         );
         
-        // FOAF knows property
-        properties.insert(
-            "http://xmlns.com/foaf/0.1/knows".to_string(),
-            RdfProperty {
-                uri: "http://xmlns.com/foaf/0.1/knows".to_string(),
-                label: Some("knows".to_string()),
-                comment: Some("A person known by this person".to_string()),
-                domain: vec!["http://xmlns.com/foaf/0.1/Person".to_string()],
-                range: vec!["http://xmlns.com/foaf/0.1/Person".to_string()],
-                property_type: PropertyType::ObjectProperty,
-                functional: false,
-                inverse_functional: false,
-            },
-        );
+        // Properties
+        let property_definitions = vec![
+            ("http://xmlns.com/foaf/0.1/name", "name", "A name for some thing", PropertyType::DataProperty, vec!["http://xmlns.com/foaf/0.1/Agent"], vec!["http://www.w3.org/2001/XMLSchema#string"]),
+            ("http://xmlns.com/foaf/0.1/email", "email", "An email address", PropertyType::DataProperty, vec!["http://xmlns.com/foaf/0.1/Person"], vec!["http://www.w3.org/2001/XMLSchema#string"]),
+            ("http://xmlns.com/foaf/0.1/age", "age", "The age in years of some agent", PropertyType::DataProperty, vec!["http://xmlns.com/foaf/0.1/Person"], vec!["http://www.w3.org/2001/XMLSchema#int"]),
+            ("http://xmlns.com/foaf/0.1/homepage", "homepage", "A homepage for some thing", PropertyType::DataProperty, vec!["http://xmlns.com/foaf/0.1/Agent"], vec!["http://www.w3.org/2001/XMLSchema#anyURI"]),
+            ("http://xmlns.com/foaf/0.1/knows", "knows", "A person known by this person", PropertyType::ObjectProperty, vec!["http://xmlns.com/foaf/0.1/Person"], vec!["http://xmlns.com/foaf/0.1/Person"]),
+            ("http://schema.org/name", "name", "The name of the item", PropertyType::DataProperty, vec!["http://schema.org/Product"], vec!["http://www.w3.org/2001/XMLSchema#string"]),
+            ("http://schema.org/description", "description", "A description of the item", PropertyType::DataProperty, vec!["http://schema.org/Product"], vec!["http://www.w3.org/2001/XMLSchema#string"]),
+            ("http://schema.org/price", "price", "The price of the product", PropertyType::DataProperty, vec!["http://schema.org/Product"], vec!["http://www.w3.org/2001/XMLSchema#decimal"]),
+            ("http://schema.org/manufacturer", "manufacturer", "The manufacturer of the product", PropertyType::ObjectProperty, vec!["http://schema.org/Product"], vec!["http://xmlns.com/foaf/0.1/Organization"]),
+        ];
+        
+        for (uri, label, comment, prop_type, domain, range) in property_definitions {
+            properties.insert(
+                uri.to_string(),
+                RdfProperty {
+                    uri: uri.to_string(),
+                    label: Some(label.to_string()),
+                    comment: Some(comment.to_string()),
+                    domain: domain.into_iter().map(|s| s.to_string()).collect(),
+                    range: range.into_iter().map(|s| s.to_string()).collect(),
+                    property_type: prop_type,
+                    functional: matches!(label, "email" | "age" | "homepage"),
+                    inverse_functional: label == "email",
+                },
+            );
+        }
         
         Ok(RdfVocabulary {
             classes,

@@ -621,7 +621,7 @@ fn format_term_for_sparql(term: &Term) -> Result<String> {
         Term::BlankNode(node) => Ok(node.as_str().to_string()),
         Term::Literal(literal) => {
             // TODO: Proper literal formatting with datatype and language
-            Ok(format!("\"{}\"", literal.as_str().replace('"', "\\\""))))
+            Ok(format!("\"{}\"", literal.as_str().replace('"', "\\\"")))
         }
         Term::Variable(var) => Ok(format!("?{}", var.name())),
     }

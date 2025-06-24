@@ -166,22 +166,21 @@ impl RdfResolver {
             })
             .ok_or_else(|| anyhow!("SPARQL query argument required"))?;
 
-        // Execute query synchronously to avoid Send issues
+        // Execute query and convert results synchronously to avoid Send issues
         let results = self.store.query(query)?;
-        self.sparql_results_to_graphql(results).await
+        let converted_results = self.convert_sparql_results_sync(results)?;
+        Ok(converted_results)
     }
 
-    /// Convert SPARQL query results to GraphQL Value
-    async fn sparql_results_to_graphql(&self, results: QueryResults) -> Result<Value> {
+    /// Convert SPARQL query results to GraphQL Value synchronously
+    fn convert_sparql_results_sync(&self, results: QueryResults) -> Result<Value> {
         match results {
             QueryResults::Solutions(solutions) => {
                 let mut result_rows = Vec::new();
                 
-                // Collect all solutions first to avoid Send issues
-                let collected_solutions: Result<Vec<_>, _> = solutions.collect();
-                let solutions = collected_solutions?;
-                
+                // Collect all solutions synchronously
                 for solution in solutions {
+                    let solution = solution?;
                     let mut row = HashMap::new();
                     
                     for (var, term) in solution.iter() {

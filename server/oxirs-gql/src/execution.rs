@@ -18,6 +18,7 @@ pub struct ExecutionContext {
     pub variables: HashMap<String, Value>,
     pub operation_name: Option<String>,
     pub request_id: String,
+    pub fragments: HashMap<String, crate::ast::FragmentDefinition>,
 }
 
 impl ExecutionContext {
@@ -26,6 +27,7 @@ impl ExecutionContext {
             variables: HashMap::new(),
             operation_name: None,
             request_id: uuid::Uuid::new_v4().to_string(),
+            fragments: HashMap::new(),
         }
     }
 
@@ -38,11 +40,50 @@ impl ExecutionContext {
         self.operation_name = Some(operation_name);
         self
     }
+    
+    pub fn with_fragments(mut self, fragments: HashMap<String, crate::ast::FragmentDefinition>) -> Self {
+        self.fragments = fragments;
+        self
+    }
+    
+    pub fn add_fragment(&mut self, name: String, fragment: crate::ast::FragmentDefinition) {
+        self.fragments.insert(name, fragment);
+    }
 }
 
 impl Default for ExecutionContext {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Fragment execution context for type condition checking
+#[derive(Debug, Clone)]
+pub struct FragmentContext {
+    pub parent_type: String,
+    pub object_type: Option<String>,
+}
+
+impl FragmentContext {
+    pub fn new(parent_type: String) -> Self {
+        Self {
+            parent_type,
+            object_type: None,
+        }
+    }
+    
+    pub fn with_object_type(mut self, object_type: String) -> Self {
+        self.object_type = Some(object_type);
+        self
+    }
+    
+    pub fn can_apply_fragment(&self, type_condition: &str) -> bool {
+        // Check if the fragment can be applied to the current type
+        if let Some(ref obj_type) = self.object_type {
+            obj_type == type_condition || self.parent_type == type_condition
+        } else {
+            self.parent_type == type_condition
+        }
     }
 }
 
@@ -166,8 +207,12 @@ impl QueryExecutor {
     ) -> Result<ExecutionResult> {
         let schema = self.schema.read().await;
         
+        // Collect fragments from the document
+        let mut execution_context = context.clone();
+        self.collect_fragments(document, &mut execution_context)?;
+        
         // Find the operation to execute
-        let operation = self.get_operation(document, &context.operation_name)?;
+        let operation = self.get_operation(document, &execution_context.operation_name)?;
         
         // Execute based on operation type
         match operation.operation_type {
@@ -178,7 +223,7 @@ impl QueryExecutor {
                 self.execute_selection_set(
                     &operation.selection_set,
                     query_type,
-                    context,
+                    &execution_context,
                     &schema,
                     Vec::new(),
                 ).await
@@ -190,7 +235,7 @@ impl QueryExecutor {
                 self.execute_selection_set(
                     &operation.selection_set,
                     mutation_type,
-                    context,
+                    &execution_context,
                     &schema,
                     Vec::new(),
                 ).await
@@ -199,6 +244,15 @@ impl QueryExecutor {
                 Err(anyhow!("Subscription execution not yet implemented"))
             }
         }
+    }
+    
+    fn collect_fragments(&self, document: &Document, context: &mut ExecutionContext) -> Result<()> {
+        for definition in &document.definitions {
+            if let crate::ast::Definition::Fragment(fragment) = definition {
+                context.add_fragment(fragment.name.clone(), fragment.clone());
+            }
+        }
+        Ok(())
     }
 
     fn get_operation<'a>(
@@ -226,14 +280,15 @@ impl QueryExecutor {
         }
     }
 
-    async fn execute_selection_set(
-        &self,
-        selection_set: &SelectionSet,
-        type_name: &str,
-        context: &ExecutionContext,
-        schema: &Schema,
+    fn execute_selection_set<'a>(
+        &'a self,
+        selection_set: &'a SelectionSet,
+        type_name: &'a str,
+        context: &'a ExecutionContext,
+        schema: &'a Schema,
         path: Vec<String>,
-    ) -> Result<ExecutionResult> {
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<ExecutionResult>> + Send + 'a>> {
+        Box::pin(async move {
         let mut result_data = HashMap::new();
         let mut errors = Vec::new();
 
@@ -256,13 +311,35 @@ impl QueryExecutor {
                         }
                     }
                 }
-                Selection::InlineFragment(_) => {
-                    // TODO: Implement inline fragment execution
-                    errors.push(GraphQLError::new("Inline fragments not yet supported".to_string()));
+                Selection::InlineFragment(inline_fragment) => {
+                    match self.execute_inline_fragment(inline_fragment, type_name, context, schema, path.clone()).await {
+                        Ok(fragment_data) => {
+                            // Merge fragment data into result
+                            if let Some(fragment_object) = fragment_data.as_object() {
+                                for (key, value) in fragment_object {
+                                    result_data.insert(key.clone(), value.clone());
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            errors.push(GraphQLError::new(err.to_string()).with_path(path.clone()));
+                        }
+                    }
                 }
-                Selection::FragmentSpread(_) => {
-                    // TODO: Implement fragment spread execution
-                    errors.push(GraphQLError::new("Fragment spreads not yet supported".to_string()));
+                Selection::FragmentSpread(fragment_spread) => {
+                    match self.execute_fragment_spread(fragment_spread, type_name, context, schema, path.clone()).await {
+                        Ok(fragment_data) => {
+                            // Merge fragment data into result
+                            if let Some(fragment_object) = fragment_data.as_object() {
+                                for (key, value) in fragment_object {
+                                    result_data.insert(key.clone(), value.clone());
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            errors.push(GraphQLError::new(err.to_string()).with_path(path.clone()));
+                        }
+                    }
                 }
             }
         }
@@ -449,6 +526,66 @@ impl QueryExecutor {
             Value::Variable(_) => Err(anyhow!("Variables should be resolved before serialization")),
         }
     }
+    
+    async fn execute_inline_fragment(
+        &self,
+        inline_fragment: &crate::ast::InlineFragment,
+        parent_type: &str,
+        context: &ExecutionContext,
+        schema: &Schema,
+        path: Vec<String>,
+    ) -> Result<JsonValue> {
+        // Check type condition if present
+        if let Some(ref type_condition) = inline_fragment.type_condition {
+            let fragment_context = FragmentContext::new(parent_type.to_string());
+            if !fragment_context.can_apply_fragment(type_condition) {
+                // Fragment doesn't apply to this type, return empty object
+                return Ok(JsonValue::Object(serde_json::Map::new()));
+            }
+        }
+        
+        // Execute the fragment's selection set
+        let result = self.execute_selection_set(
+            &inline_fragment.selection_set,
+            parent_type,
+            context,
+            schema,
+            path,
+        ).await?;
+        
+        result.data.ok_or_else(|| anyhow!("No data returned from inline fragment"))
+    }
+    
+    async fn execute_fragment_spread(
+        &self,
+        fragment_spread: &crate::ast::FragmentSpread,
+        parent_type: &str,
+        context: &ExecutionContext,
+        schema: &Schema,
+        path: Vec<String>,
+    ) -> Result<JsonValue> {
+        // Look up the fragment definition
+        let fragment_def = context.fragments.get(&fragment_spread.fragment_name)
+            .ok_or_else(|| anyhow!("Fragment '{}' not found", fragment_spread.fragment_name))?;
+        
+        // Check type condition
+        let fragment_context = FragmentContext::new(parent_type.to_string());
+        if !fragment_context.can_apply_fragment(&fragment_def.type_condition) {
+            // Fragment doesn't apply to this type, return empty object
+            return Ok(JsonValue::Object(serde_json::Map::new()));
+        }
+        
+        // Execute the fragment's selection set
+        let result = self.execute_selection_set(
+            &fragment_def.selection_set,
+            parent_type,
+            context,
+            schema,
+            path,
+        ).await?;
+        
+        result.data.ok_or_else(|| anyhow!("No data returned from fragment spread"))
+    }
 }
 
 /// Default resolver for simple field access
@@ -467,6 +604,33 @@ impl FieldResolver for DefaultResolver {
         match field_name {
             "hello" => Ok(Value::StringValue("Hello, World!".to_string())),
             "id" => Ok(Value::StringValue(uuid::Uuid::new_v4().to_string())),
+            "__typename" => Ok(Value::StringValue("Query".to_string())), // Default typename
+            _ => Ok(Value::NullValue),
+        }
+    }
+}
+
+/// Type information resolver for GraphQL type system
+pub struct TypeInfoResolver {
+    type_name: String,
+}
+
+impl TypeInfoResolver {
+    pub fn new(type_name: String) -> Self {
+        Self { type_name }
+    }
+}
+
+#[async_trait]
+impl FieldResolver for TypeInfoResolver {
+    async fn resolve_field(
+        &self,
+        field_name: &str,
+        _args: &HashMap<String, Value>,
+        _context: &ExecutionContext,
+    ) -> Result<Value> {
+        match field_name {
+            "__typename" => Ok(Value::StringValue(self.type_name.clone())),
             _ => Ok(Value::NullValue),
         }
     }

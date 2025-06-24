@@ -199,7 +199,7 @@ impl Store {
             .map_err(|e| FusekiError::store(format!("Failed to acquire store read lock: {}", e)))?;
         
         // Execute the query using the query engine
-        let result = self.query_engine.query(sparql, &*store_guard)
+        let core_result = self.query_engine.query(sparql, &*store_guard)
             .map_err(|e| FusekiError::query_execution(format!("Query execution failed: {}", e)))?;
         
         let execution_time = start_time.elapsed();
@@ -212,15 +212,20 @@ impl Store {
         
         let query_stats = QueryStats {
             execution_time,
-            result_count: result.result_count(),
-            query_type: result.query_type().to_string(),
+            result_count: core_result.len(),
+            query_type: match &core_result {
+                CoreQueryResult::Select { .. } => "SELECT",
+                CoreQueryResult::Construct { .. } => "CONSTRUCT",
+                CoreQueryResult::Ask(_) => "ASK",
+                CoreQueryResult::Describe { .. } => "DESCRIBE",
+            }.to_string(),
             success: true,
             error_message: None,
         };
         
         debug!("Query executed successfully in {:?}", execution_time);
         Ok(QueryResult {
-            inner: result,
+            inner: core_result,
             stats: query_stats,
         })
     }

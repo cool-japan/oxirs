@@ -13,9 +13,8 @@ rust-version.workspace = true
 
 [dependencies]
 # Core dependencies
-# oxirs-core = { path = "../../core/oxirs-core" }
-# oxirs-arq = { path = "../../engine/oxirs-arq" }
-# Temporarily removed to fix compilation issues
+oxirs-core = { path = "../../core/oxirs-core" }
+oxirs-arq = { path = "../../engine/oxirs-arq" }
 
 # HTTP server framework
 tokio = { version = "1.42", features = ["full"] }

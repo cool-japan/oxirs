@@ -165,8 +165,8 @@ impl RdfStore {
             Term::NamedNode(NamedNode::new(object)?)
         };
         
-        let triple = oxigraph::model::Triple::new(subject, predicate, object);
-        self.store.insert(&triple)?;
+        let quad = oxigraph::model::Quad::new(subject, predicate, object, oxigraph::model::GraphName::DefaultGraph);
+        self.store.insert(&quad)?;
         Ok(())
     }
 
@@ -180,16 +180,15 @@ impl RdfStore {
             "turtle" | "ttl" => RdfFormat::Turtle,
             "ntriples" | "nt" => RdfFormat::NTriples,
             "rdfxml" | "rdf" => RdfFormat::RdfXml,
-            "jsonld" | "json" => RdfFormat::JsonLd { profile: oxigraph::io::JsonLdProfile::Expanded },
+            "jsonld" | "json" => RdfFormat::JsonLd { profile: oxigraph::io::JsonLdProfile::Expanded.into() },
             _ => return Err(anyhow::anyhow!("Unsupported format: {}", format)),
         };
         
         let file = File::open(path)?;
         let reader = BufReader::new(file);
         
-        for quad in RdfParser::from_format(format).read_quads(reader)? {
-            self.store.insert(&quad?)?;
-        }
+        // Load data into store using oxigraph's load functionality
+        self.store.load_from_reader(format, reader)?;
         
         Ok(())
     }
@@ -218,6 +217,11 @@ pub mod resolvers;
 pub mod mapping;
 pub mod server;
 pub mod parser;
+pub mod optimizer;
+
+// New Juniper-based implementation (temporarily disabled due to compilation issues)
+// pub mod juniper_schema;
+// pub mod juniper_server;
 
 #[cfg(test)]
 mod tests;
