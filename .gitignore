@@ -1,0 +1,91 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+*.rocksdb/
+/data/
+/tdb/
+/tdb2/
+
+# Configuration files with secrets
+.env
+.env.local
+*.secret
+config.local.*
+
+# Test outputs
+/test-results/
+/coverage/
+criterion-output/
+
+# Benchmarks
+/benchmarks/results/
+*.bench
+
+# Temporary files
+/tmp/
+*.tmp
+*.temp
+
+# Build artifacts
+/dist/
+/build/
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Kubernetes
+*.kubeconfig
+kube-config
+
+# RDF/Knowledge Graph data
+*.ttl.gz
+*.nt.gz
+*.rdf.gz
+*.n3.gz
+*.jsonld.gz
+/datasets/
+/graphs/
+/indices/
+
+# AI/ML models
+*.model
+*.bin
+*.pkl
+*.pt
+*.pth
+/models/
+/embeddings/
+
+# Profiling
+*.prof
+*.pprof
+flamegraph.svg
+perf.data*

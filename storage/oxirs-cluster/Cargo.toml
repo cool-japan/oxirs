@@ -1,0 +1,31 @@
+[package]
+name = "oxirs-cluster"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Raft-backed distributed dataset for high availability and horizontal scaling"
+keywords.workspace = true
+categories.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+oxirs-core = { path = "../../core/oxirs-core" }
+oxirs-tdb = { path = "../oxirs-tdb" }
+openraft = { workspace = true, optional = true }
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+
+[features]
+default = []
+raft = ["openraft"]
+

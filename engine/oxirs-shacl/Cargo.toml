@@ -1,0 +1,41 @@
+[package]
+name = "oxirs-shacl"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "SHACL Core + SHACL-SPARQL validator for RDF data validation"
+keywords.workspace = true
+categories.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+oxirs-core = { path = "../../core/oxirs-core" }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+regex = "1.10"
+uuid = { version = "1.8", features = ["v4", "serde"] }
+indexmap = { version = "2.2", features = ["serde"] }
+petgraph = "0.6"
+rayon = { version = "1.10", optional = true }
+tokio = { version = "1.0", features = ["rt", "sync", "time"], optional = true }
+once_cell = "1.19"
+dashmap = "5.5"
+
+[dev-dependencies]
+criterion.workspace = true
+proptest = "1.4"
+tokio-test = "0.4"
+
+[features]
+default = ["core"]
+core = []
+sparql = []
+async = ["tokio"]
+parallel = ["rayon"]
+

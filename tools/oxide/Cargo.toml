@@ -1,0 +1,79 @@
+[package]
+name = "oxide"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Command-line interface for OxiRS - import, export, migration, and benchmarking tools"
+keywords.workspace = true
+categories.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+oxirs-core = { path = "../../core/oxirs-core" }
+# oxirs-fuseki = { path = "../../server/oxirs-fuseki" }
+# oxirs-gql = { path = "../../server/oxirs-gql" }
+# oxirs-tdb = { path = "../../storage/oxirs-tdb" }
+clap.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+rand = "0.8"
+
+[dev-dependencies]
+criterion.workspace = true
+tempfile = "3.8"
+tokio-test = "0.4"
+
+[features]
+default = []
+all-features = [
+    "star",
+    "ai", 
+    "cluster",
+    "text",
+    "geo",
+    "vec"
+]
+star = ["oxirs-star"]
+ai = ["oxirs-embed", "oxirs-chat"]
+cluster = ["oxirs-cluster"]
+text = ["tantivy"]
+geo = []
+vec = ["oxirs-vec"]
+
+[dependencies.oxirs-star]
+path = "../../engine/oxirs-star"
+optional = true
+
+[dependencies.oxirs-embed]
+path = "../../ai/oxirs-embed"
+optional = true
+
+[dependencies.oxirs-chat]
+path = "../../ai/oxirs-chat"
+optional = true
+
+[dependencies.oxirs-cluster]
+path = "../../storage/oxirs-cluster"
+optional = true
+
+[dependencies.oxirs-vec]
+path = "../../engine/oxirs-vec"
+optional = true
+
+[dependencies.tantivy]
+workspace = true
+optional = true
+
+[[bin]]
+name = "oxide"
+path = "src/main.rs"
+

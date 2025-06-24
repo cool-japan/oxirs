@@ -1,0 +1,34 @@
+[package]
+name = "oxirs-core"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Core RDF and SPARQL functionality for OxiRS - thin, safe re-export of oxigraph"
+keywords.workspace = true
+categories.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+oxigraph.workspace = true
+rio_api.workspace = true
+rio_turtle.workspace = true
+rio_xml.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+url = "2.5"
+regex = "1.10"
+lazy_static = "1.5"
+
+[dev-dependencies]
+criterion.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
+
+[features]
+default = []
+

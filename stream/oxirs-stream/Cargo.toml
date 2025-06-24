@@ -1,0 +1,34 @@
+[package]
+name = "oxirs-stream"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Real-time streaming support with Kafka/NATS I/O, RDF Patch, and SPARQL Update delta"
+keywords.workspace = true
+categories.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+oxirs-core = { path = "../../core/oxirs-core" }
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+rdkafka = { workspace = true, optional = true }
+async-nats = { workspace = true, optional = true }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.0", features = ["v4"] }
+
+[dev-dependencies]
+criterion.workspace = true
+
+[features]
+default = []
+kafka = ["rdkafka"]
+nats = ["async-nats"]
+
