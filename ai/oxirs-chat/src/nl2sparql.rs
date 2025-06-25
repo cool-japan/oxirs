@@ -1174,7 +1174,7 @@ impl SPARQLOptimizer {
         }
         
         // Rewrite FILTER patterns for better performance
-        let filter_pattern = Regex::new(r"(?i)FILTER\s*\(\s*regex\s*\(\s*\?(\w+)\s*,\s*\"([^\"]+)\"\s*\)\s*\)")?;
+        let filter_pattern = Regex::new(r#"(?i)FILTER\s*\(\s*regex\s*\(\s*\?(\w+)\s*,\s*"([^"]+)"\s*\)\s*\)"#)?;
         rewritten = filter_pattern.replace_all(&rewritten, |caps: &regex::Captures| {
             format!("FILTER(CONTAINS(LCASE(?{}), LCASE(\"{}\")))", &caps[1], &caps[2])
         }).to_string();

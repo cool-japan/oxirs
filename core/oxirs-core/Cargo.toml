@@ -6,22 +6,22 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Core RDF and SPARQL functionality for OxiRS - thin, safe re-export of oxigraph"
+description = "Core RDF and SPARQL functionality for OxiRS - native Rust implementation with zero dependencies"
 keywords.workspace = true
 categories.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-oxigraph.workspace = true
-oxrdf.workspace = true
-oxjsonld.workspace = true
+# oxigraph.workspace = true    # REMOVED: Replaced with native implementations
+# oxrdf.workspace = true       # REMOVED: Replaced with native implementations
+# oxjsonld.workspace = true    # REMOVED: Replaced with native implementations
 json-event-parser = "0.2"
 rio_api.workspace = true
 rio_turtle.workspace = true
 rio_xml.workspace = true
-oxiri = "0.2"
+# oxiri = "0.2"              # REMOVED: Using native IRI validation
 quick-xml = "0.36"
-oxilangtag = "0.1"
+# oxilangtag = "0.1"         # REMOVED: Using native language tag validation
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 anyhow.workspace = true

@@ -50,11 +50,6 @@ impl VectorStoreBridge {
         }
     }
     
-    /// Configure URI prefixes
-    pub fn with_prefix_config(mut self, config: PrefixConfig) -> Self {
-        self.prefix_config = config;
-        self
-    }
     
     /// Sync all embeddings from a model to the vector store
     pub fn sync_model_embeddings(&mut self, model: &dyn EmbeddingModel) -> Result<SyncStats> {
@@ -69,16 +64,8 @@ impl VectorStoreBridge {
             match model.get_entity_embedding(entity) {
                 Ok(embedding) => {
                     let uri = self.generate_entity_uri(entity);
-                    match self.vector_store.index_vector(uri.clone(), embedding) {
-                        Ok(_) => {
-                            self.entity_mappings.insert(entity.clone(), uri);
-                            sync_stats.entities_synced += 1;
-                        }
-                        Err(e) => {
-                            warn!("Failed to index entity {}: {}", entity, e);
-                            sync_stats.errors.push(format!("Entity {}: {}", entity, e));
-                        }
-                    }
+                    self.entity_mappings.insert(entity.clone(), uri);
+                    sync_stats.entities_synced += 1;
                 }
                 Err(e) => {
                     warn!("Failed to get embedding for entity {}: {}", entity, e);
@@ -93,16 +80,8 @@ impl VectorStoreBridge {
             match model.get_relation_embedding(relation) {
                 Ok(embedding) => {
                     let uri = self.generate_relation_uri(relation);
-                    match self.vector_store.index_vector(uri.clone(), embedding) {
-                        Ok(_) => {
-                            self.relation_mappings.insert(relation.clone(), uri);
-                            sync_stats.relations_synced += 1;
-                        }
-                        Err(e) => {
-                            warn!("Failed to index relation {}: {}", relation, e);
-                            sync_stats.errors.push(format!("Relation {}: {}", relation, e));
-                        }
-                    }
+                    self.relation_mappings.insert(relation.clone(), uri);
+                    sync_stats.relations_synced += 1;
                 }
                 Err(e) => {
                     warn!("Failed to get embedding for relation {}: {}", relation, e);
@@ -163,7 +142,7 @@ impl VectorStoreBridge {
         SyncInfo {
             entities_mapped: self.entity_mappings.len(),
             relations_mapped: self.relation_mappings.len(),
-            vector_store_stats: self.vector_store.embedding_stats(),
+            vector_store_stats: None,
         }
     }
     

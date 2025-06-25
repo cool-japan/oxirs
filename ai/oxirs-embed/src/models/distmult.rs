@@ -514,7 +514,7 @@ impl EmbeddingModel for DistMult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oxirs_core::NamedNode;
+    use crate::NamedNode;
     
     #[tokio::test]
     async fn test_distmult_basic() -> Result<()> {

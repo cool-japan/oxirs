@@ -457,12 +457,12 @@ impl TripleStore {
             // Two bound - need to scan for matches
             (Some(s), Some(p), None) => {
                 // Subject and predicate bound, find all objects
-                results.extend(self.scan_for_pattern_tx(tx_id, best_index, s, p, None)?);
+                results.extend(self.scan_for_pattern_tx(tx_id, best_index, Some(s), Some(p), None)?);
             }
             
             (Some(s), None, Some(o)) => {
                 // Subject and object bound, find all predicates
-                results.extend(self.scan_for_pattern_tx(tx_id, best_index, s, None, Some(o))?);
+                results.extend(self.scan_for_pattern_tx(tx_id, best_index, Some(s), None, Some(o))?);
             }
             
             (None, Some(p), Some(o)) => {
@@ -472,7 +472,7 @@ impl TripleStore {
             
             // One bound - broader scan
             (Some(s), None, None) => {
-                results.extend(self.scan_for_pattern_tx(tx_id, best_index, s, None, None)?);
+                results.extend(self.scan_for_pattern_tx(tx_id, best_index, Some(s), None, None)?);
             }
             
             (None, Some(p), None) => {

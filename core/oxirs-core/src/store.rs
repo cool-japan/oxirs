@@ -9,8 +9,8 @@ use crate::indexing::{UltraIndex, IndexStats, MemoryUsage};
 use crate::optimization::{RdfArena, OptimizedGraph};
 use crate::{OxirsError, Result};
 
-// Re-export from oxigraph for compatibility
-pub use oxigraph::sparql::QueryResults;
+// QueryResults placeholder - will be implemented in Phase 2
+pub type QueryResults = Vec<Quad>; // Temporary placeholder
 
 /// Storage backend for RDF quads
 #[derive(Debug)]
@@ -381,6 +381,11 @@ impl Store {
     /// Get all quads in the store
     pub fn iter_quads(&self) -> Result<Vec<Quad>> {
         self.query_quads(None, None, None, None)
+    }
+    
+    /// Get all triples in the default graph
+    pub fn triples(&self) -> Result<Vec<Triple>> {
+        self.query_triples(None, None, None)
     }
     
     /// Get the number of quads in the store

@@ -9,7 +9,7 @@ use crate::model::{
 };
 
 /// Union type for terms that can be graph names
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub enum GraphName {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
@@ -57,7 +57,7 @@ impl From<Variable> for GraphName {
 /// 
 /// Represents an RDF statement with subject, predicate, object, and graph name.
 /// This is used in RDF datasets where triples can belong to different named graphs.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct Quad {
     subject: Subject,
     predicate: Predicate,

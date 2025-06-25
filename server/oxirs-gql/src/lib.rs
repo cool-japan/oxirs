@@ -7,9 +7,12 @@
 
 use std::sync::Arc;
 use anyhow::Result;
-use oxigraph::store::Store;
-use oxigraph::model::{NamedNode, Literal as OxiLiteral, BlankNode, Subject, Term, Triple};
-use oxigraph::sparql::QueryResults;
+// use oxigraph::store::Store;
+// use oxigraph::model::{NamedNode, Literal as OxiLiteral, BlankNode, Subject, Term, Triple};
+// use oxigraph::sparql::QueryResults;
+use oxirs_core::store::Store;
+use oxirs_core::model::{NamedNode, Literal as OxiLiteral, BlankNode, Subject, Term, Triple};
+use oxirs_core::sparql::QueryResults;
 
 // Module declarations are below after the main code
 

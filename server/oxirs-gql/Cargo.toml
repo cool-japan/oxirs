@@ -12,7 +12,8 @@ categories.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-oxigraph.workspace = true
+# oxigraph.workspace = true  # REMOVED: Using oxirs-core instead
+oxirs-core = { path = "../../core/oxirs-core" }
 juniper.workspace = true
 juniper_hyper.workspace = true
 tokio.workspace = true

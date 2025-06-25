@@ -30,6 +30,7 @@ rand_distr = "0.4"
 
 [dev-dependencies]
 criterion = "0.5"
+tempfile = "3.0"
 
 [features]
 default = ["basic-models"]

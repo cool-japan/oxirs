@@ -5,9 +5,13 @@ use super::profile::{JsonLdProcessingMode, JsonLdProfile, JsonLdProfileSet};
 #[cfg(feature = "async")]
 use json_event_parser::TokioAsyncReaderJsonParser;
 use json_event_parser::{JsonEvent, ReaderJsonParser, SliceJsonParser};
-use oxiri::{Iri, IriParseError};
-use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, Quad};
+// TODO: Phase 3 - Replace with native OxiRS types
+// use oxiri::{Iri, IriParseError};
+// use oxrdf::vocab::{rdf, xsd};
+// use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, Quad};
+use crate::model::*;
+use crate::OxirsError as IriParseError; // Temporary alias
+type Iri<T> = T; // Temporary alias
 use std::error::Error;
 use std::fmt::Write;
 use std::io::Read;

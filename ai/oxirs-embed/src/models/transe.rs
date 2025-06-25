@@ -490,7 +490,7 @@ impl EmbeddingModel for TransE {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oxirs_core::NamedNode;
+    use crate::NamedNode;
     
     #[tokio::test]
     async fn test_transe_basic() -> Result<()> {

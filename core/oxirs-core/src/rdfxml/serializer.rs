@@ -1,7 +1,10 @@
 use crate::rdfxml::utils::*;
-use oxiri::{Iri, IriParseError};
-use oxrdf::vocab::{rdf, xsd};
-use oxrdf::{NamedNodeRef, NamedOrBlankNode, NamedOrBlankNodeRef, TermRef, TripleRef};
+// TODO: Phase 3 - Replace with native OxiRS types
+// use oxiri::{Iri, IriParseError};
+// use oxrdf::vocab::{rdf, xsd};
+// use oxrdf::{NamedNodeRef, NamedOrBlankNode, NamedOrBlankNodeRef, TermRef, TripleRef};
+use crate::model::*;
+use crate::OxirsError as IriParseError; // Temporary alias
 use quick_xml::Writer;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use std::borrow::Cow;

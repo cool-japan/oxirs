@@ -6,7 +6,7 @@
 //! RDF updates with JetStream for persistence and delivery guarantees.
 
 use anyhow::{anyhow, Result};
-use crate::{StreamEvent, StreamConfig, StreamBackend, RdfPatch, PatchOperation};
+use crate::{StreamEvent, StreamConfig, StreamBackend, RdfPatch, PatchOperation, EventMetadata};
 use crate::kafka::KafkaEvent; // Reuse the same event format
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -208,12 +208,26 @@ impl NatsProducer {
     
     pub async fn publish_patch(&mut self, patch: &RdfPatch) -> Result<()> {
         for operation in &patch.operations {
+            let metadata = EventMetadata {
+                event_id: uuid::Uuid::new_v4().to_string(),
+                timestamp: chrono::Utc::now(),
+                source: "nats_patch".to_string(),
+                user: None,
+                context: Some(patch.id.clone()),
+                caused_by: None,
+                version: "1.0".to_string(),
+                properties: std::collections::HashMap::new(),
+                checksum: None,
+            };
+
             let event = match operation {
                 PatchOperation::Add { subject, predicate, object } => {
                     StreamEvent::TripleAdded {
                         subject: subject.clone(),
                         predicate: predicate.clone(),
                         object: object.clone(),
+                        graph: None,
+                        metadata,
                     }
                 }
                 PatchOperation::Delete { subject, predicate, object } => {
@@ -221,12 +235,20 @@ impl NatsProducer {
                         subject: subject.clone(),
                         predicate: predicate.clone(),
                         object: object.clone(),
+                        graph: None,
+                        metadata,
                     }
                 }
-                PatchOperation::AddGraph { .. } => continue, // Skip for now
+                PatchOperation::AddGraph { graph } => {
+                    StreamEvent::GraphCreated {
+                        graph: graph.clone(),
+                        metadata,
+                    }
+                }
                 PatchOperation::DeleteGraph { graph } => {
-                    StreamEvent::GraphCleared {
-                        graph: Some(graph.clone()),
+                    StreamEvent::GraphDeleted {
+                        graph: graph.clone(),
+                        metadata,
                     }
                 }
             };

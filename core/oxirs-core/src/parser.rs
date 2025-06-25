@@ -9,7 +9,7 @@ use rio_api::model::{Quad as RioQuad, Triple as RioTriple};
 use rio_api::parser::{QuadsParser, TriplesParser};
 use rio_turtle::{TurtleParser, NTriplesParser, TriGParser, NQuadsParser};
 use rio_xml::RdfXmlParser;
-use oxrdf::{Quad as OxrdfQuad, Subject as OxrdfSubject, Term as OxrdfTerm};
+// use oxrdf::{Quad as OxrdfQuad, Subject as OxrdfSubject, Term as OxrdfTerm}; // REMOVED: Native implementation
 use crate::model::*;
 use crate::{OxirsError, Result};
 
@@ -659,83 +659,8 @@ impl Parser {
         }
     }
     
-    /// Convert oxigraph Quad to our Quad type
-    fn convert_oxigraph_quad_to_quad(oxigraph_quad: &oxigraph::model::Quad) -> Result<Quad> {
-        let subject = Self::convert_oxigraph_subject(&oxigraph_quad.subject)?;
-        let predicate = Self::convert_oxigraph_predicate(&oxigraph_quad.predicate)?;
-        let object = Self::convert_oxigraph_object(&oxigraph_quad.object)?;
-        let graph_name = if oxigraph_quad.graph_name != oxigraph::model::GraphName::DefaultGraph {
-            Self::convert_oxigraph_graph_name(&oxigraph_quad.graph_name)?
-        } else {
-            GraphName::DefaultGraph
-        };
-        
-        Ok(Quad::new(subject, predicate, object, graph_name))
-    }
-    
-    fn convert_oxigraph_subject(oxigraph_subject: &oxigraph::model::Subject) -> Result<Subject> {
-        match oxigraph_subject {
-            oxigraph::model::Subject::NamedNode(nn) => {
-                let named_node = NamedNode::new(nn.as_str())?;
-                Ok(Subject::NamedNode(named_node))
-            }
-            oxigraph::model::Subject::BlankNode(bn) => {
-                let blank_node = BlankNode::new(bn.as_str())?;
-                Ok(Subject::BlankNode(blank_node))
-            }
-            oxigraph::model::Subject::Triple(_) => {
-                Err(OxirsError::Parse("Nested triples not supported yet".to_string()))
-            }
-        }
-    }
-    
-    fn convert_oxigraph_predicate(oxigraph_predicate: &oxigraph::model::NamedNode) -> Result<Predicate> {
-        let named_node = NamedNode::new(oxigraph_predicate.as_str())?;
-        Ok(Predicate::NamedNode(named_node))
-    }
-    
-    fn convert_oxigraph_object(oxigraph_object: &oxigraph::model::Term) -> Result<Object> {
-        match oxigraph_object {
-            oxigraph::model::Term::NamedNode(nn) => {
-                let named_node = NamedNode::new(nn.as_str())?;
-                Ok(Object::NamedNode(named_node))
-            }
-            oxigraph::model::Term::BlankNode(bn) => {
-                let blank_node = BlankNode::new(bn.as_str())?;
-                Ok(Object::BlankNode(blank_node))
-            }
-            oxigraph::model::Term::Literal(lit) => {
-                let literal = if let Some(lang) = lit.language() {
-                    Literal::new_lang(lit.value(), lang)?
-                } else if lit.datatype() != oxigraph::model::vocab::xsd::STRING {
-                    let datatype = NamedNode::new(lit.datatype().as_str())?;
-                    Literal::new_typed(lit.value(), datatype)
-                } else {
-                    Literal::new(lit.value())
-                };
-                Ok(Object::Literal(literal))
-            }
-            oxigraph::model::Term::Triple(_) => {
-                Err(OxirsError::Parse("Nested triples not supported yet".to_string()))
-            }
-        }
-    }
-    
-    fn convert_oxigraph_graph_name(oxigraph_graph: &oxigraph::model::GraphName) -> Result<GraphName> {
-        match oxigraph_graph {
-            oxigraph::model::GraphName::NamedNode(nn) => {
-                let named_node = NamedNode::new(nn.as_str())?;
-                Ok(GraphName::NamedNode(named_node))
-            }
-            oxigraph::model::GraphName::BlankNode(bn) => {
-                let blank_node = BlankNode::new(bn.as_str())?;
-                Ok(GraphName::BlankNode(blank_node))
-            }
-            oxigraph::model::GraphName::DefaultGraph => {
-                Ok(GraphName::DefaultGraph)
-            }
-        }
-    }
+    // TODO: Phase 2 - OxiGraph conversion methods will be replaced with native parsing
+    // These methods were for converting from OxiGraph types to OxiRS types
 }
 
 /// Turtle parser state for handling multi-line statements and abbreviations

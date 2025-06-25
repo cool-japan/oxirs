@@ -34,6 +34,7 @@ pub mod serializer;
 pub mod interning;
 pub mod indexing;
 pub mod optimization;
+pub mod vocab;
 // pub mod config;
 // pub mod jsonld;
 // pub mod rdfxml;

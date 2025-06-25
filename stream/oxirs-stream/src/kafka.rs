@@ -6,7 +6,7 @@
 //! RDF updates, patches, and SPARQL operations in real-time.
 
 use anyhow::{anyhow, Result};
-use crate::{StreamEvent, StreamConfig, StreamBackend, RdfPatch, PatchOperation};
+use crate::{StreamEvent, StreamConfig, StreamBackend, RdfPatch, PatchOperation, EventMetadata};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
@@ -177,7 +177,7 @@ impl KafkaProducer {
     /// Create topic if it doesn't exist
     #[cfg(feature = "kafka")]
     pub async fn ensure_topic(&self) -> Result<()> {
-        if let StreamBackend::Kafka { brokers } = &self.config.backend {
+        if let StreamBackend::Kafka { brokers, .. } = &self.config.backend {
             let admin_config = ClientConfig::new()
                 .set("bootstrap.servers", brokers.join(","))
                 .clone();
@@ -256,12 +256,26 @@ impl KafkaProducer {
     
     pub async fn publish_patch(&mut self, patch: &RdfPatch) -> Result<()> {
         for operation in &patch.operations {
+            let metadata = EventMetadata {
+                event_id: uuid::Uuid::new_v4().to_string(),
+                timestamp: chrono::Utc::now(),
+                source: "kafka_patch".to_string(),
+                user: None,
+                context: Some(patch.id.clone()),
+                caused_by: None,
+                version: "1.0".to_string(),
+                properties: std::collections::HashMap::new(),
+                checksum: None,
+            };
+
             let event = match operation {
                 PatchOperation::Add { subject, predicate, object } => {
                     StreamEvent::TripleAdded {
                         subject: subject.clone(),
                         predicate: predicate.clone(),
                         object: object.clone(),
+                        graph: None,
+                        metadata,
                     }
                 }
                 PatchOperation::Delete { subject, predicate, object } => {
@@ -269,15 +283,20 @@ impl KafkaProducer {
                         subject: subject.clone(),
                         predicate: predicate.clone(),
                         object: object.clone(),
+                        graph: None,
+                        metadata,
                     }
                 }
                 PatchOperation::AddGraph { graph } => {
-                    // For graph operations, we can create a synthetic event
-                    continue; // Skip for now
+                    StreamEvent::GraphCreated {
+                        graph: graph.clone(),
+                        metadata,
+                    }
                 }
                 PatchOperation::DeleteGraph { graph } => {
-                    StreamEvent::GraphCleared {
-                        graph: Some(graph.clone()),
+                    StreamEvent::GraphDeleted {
+                        graph: graph.clone(),
+                        metadata,
                     }
                 }
             };

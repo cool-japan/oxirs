@@ -220,7 +220,7 @@ impl EarlyStopping {
             self.wait_count = 0;
         } else {
             self.wait_count += 1;
-            if self.wait_count >= self.patience {
+            if self.wait_count > self.patience {
                 self.stopped = true;
             }
         }

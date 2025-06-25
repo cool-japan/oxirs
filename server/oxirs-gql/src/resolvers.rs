@@ -10,7 +10,8 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
-use oxigraph::sparql::QueryResults;
+// use oxigraph::sparql::QueryResults;
+use oxirs_core::sparql::QueryResults;
 
 /// RDF-based resolver that executes SPARQL queries
 pub struct RdfResolver {

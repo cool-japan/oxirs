@@ -32,10 +32,10 @@ categories = ["database", "web-programming", "science"]
 rust-version = "1.70"
 
 [workspace.dependencies]
-# Core RDF and SPARQL functionality
-oxigraph = "0.4.11"
-oxjsonld = "0.1.0"
-oxrdf = "0.2.0"
+# Core RDF and SPARQL functionality (native OxiRS implementations)
+# oxigraph = "0.4.11"  # REMOVED: Replaced with native implementations
+# oxjsonld = "0.1.0"   # REMOVED: Replaced with native implementations
+# oxrdf = "0.2.0"      # REMOVED: Replaced with native implementations
 rio_api = "0.8"
 rio_turtle = "0.8"
 rio_xml = "0.8"

@@ -26,6 +26,11 @@ pub mod data_loader {
                 continue; // Skip empty lines and comments
             }
             
+            // Skip header line (first line that contains common header terms)
+            if line_num == 0 && (line.contains("subject") || line.contains("predicate") || line.contains("object")) {
+                continue;
+            }
+            
             let parts: Vec<&str> = line.split('\t').collect();
             if parts.len() >= 3 {
                 let subject = parts[0].trim().to_string();

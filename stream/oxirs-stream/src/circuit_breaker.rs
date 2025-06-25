@@ -762,12 +762,167 @@ pub struct CircuitBreakerStats {
     pub last_failure_time: Option<Instant>,
 }
 
+/// Enhanced circuit breaker statistics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnhancedCircuitBreakerStats {
+    pub id: String,
+    pub state: CircuitBreakerState,
+    pub failure_count: u32,
+    pub success_count: u32,
+    pub half_open_calls: u32,
+    pub last_failure_time: Option<Instant>,
+    pub failure_by_type: HashMap<FailureType, u32>,
+    pub metrics: CircuitBreakerMetrics,
+    pub adaptive_threshold: f64,
+    pub recovery_timeout: Duration,
+    pub created_at: Instant,
+    pub uptime: Duration,
+}
+
+/// Circuit breaker error types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CircuitBreakerError {
+    CircuitOpen {
+        state: CircuitBreakerState,
+        last_failure: Option<Instant>,
+    },
+    OperationFailed(String),
+    Timeout,
+    ConfigurationError(String),
+}
+
+impl std::fmt::Display for CircuitBreakerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CircuitBreakerError::CircuitOpen { state, last_failure } => {
+                write!(f, "Circuit breaker is {:?}, last failure: {:?}", state, last_failure)
+            }
+            CircuitBreakerError::OperationFailed(msg) => {
+                write!(f, "Operation failed: {}", msg)
+            }
+            CircuitBreakerError::Timeout => {
+                write!(f, "Operation timed out")
+            }
+            CircuitBreakerError::ConfigurationError(msg) => {
+                write!(f, "Configuration error: {}", msg)
+            }
+        }
+    }
+}
+
+impl std::error::Error for CircuitBreakerError {}
+
 /// Shared circuit breaker for async usage
 pub type SharedCircuitBreaker = Arc<RwLock<CircuitBreaker>>;
 
 /// Create a new shared circuit breaker
 pub fn new_shared_circuit_breaker(config: CircuitBreakerConfig) -> SharedCircuitBreaker {
     Arc::new(RwLock::new(CircuitBreaker::new(config)))
+}
+
+/// Create a new shared circuit breaker with custom ID
+pub fn new_shared_circuit_breaker_with_id(config: CircuitBreakerConfig, id: String) -> SharedCircuitBreaker {
+    Arc::new(RwLock::new(CircuitBreaker::with_id(config, id)))
+}
+
+/// Helper functions for working with shared circuit breakers
+pub mod shared_helpers {
+    use super::*;
+    
+    /// Execute an async operation with circuit breaker protection
+    pub async fn execute_protected<F, Fut, R, E>(
+        cb: &SharedCircuitBreaker,
+        operation: F
+    ) -> Result<R, CircuitBreakerError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = std::result::Result<R, E>>,
+        E: std::fmt::Debug,
+    {
+        let mut circuit_breaker = cb.write().await;
+        circuit_breaker.execute_async(operation).await
+    }
+
+    /// Get enhanced statistics
+    pub async fn get_enhanced_stats(cb: &SharedCircuitBreaker) -> EnhancedCircuitBreakerStats {
+        let circuit_breaker = cb.read().await;
+        circuit_breaker.get_enhanced_stats()
+    }
+}
+
+/// Circuit breaker manager for handling multiple circuit breakers
+pub struct CircuitBreakerManager {
+    circuit_breakers: Arc<RwLock<HashMap<String, SharedCircuitBreaker>>>,
+    default_config: CircuitBreakerConfig,
+}
+
+impl CircuitBreakerManager {
+    pub fn new(default_config: CircuitBreakerConfig) -> Self {
+        Self {
+            circuit_breakers: Arc::new(RwLock::new(HashMap::new())),
+            default_config,
+        }
+    }
+
+    /// Get or create a circuit breaker
+    pub async fn get_or_create(&self, name: String) -> SharedCircuitBreaker {
+        let mut breakers = self.circuit_breakers.write().await;
+        
+        breakers.entry(name.clone()).or_insert_with(|| {
+            new_shared_circuit_breaker_with_id(self.default_config.clone(), name)
+        }).clone()
+    }
+
+    /// Get circuit breaker by name
+    pub async fn get(&self, name: &str) -> Option<SharedCircuitBreaker> {
+        let breakers = self.circuit_breakers.read().await;
+        breakers.get(name).cloned()
+    }
+
+    /// Remove circuit breaker
+    pub async fn remove(&self, name: &str) -> Option<SharedCircuitBreaker> {
+        let mut breakers = self.circuit_breakers.write().await;
+        breakers.remove(name)
+    }
+
+    /// Get all circuit breaker names
+    pub async fn list_names(&self) -> Vec<String> {
+        let breakers = self.circuit_breakers.read().await;
+        breakers.keys().cloned().collect()
+    }
+
+    /// Get health summary of all circuit breakers
+    pub async fn get_health_summary(&self) -> HashMap<String, bool> {
+        let breakers = self.circuit_breakers.read().await;
+        let mut summary = HashMap::new();
+
+        for (name, cb) in breakers.iter() {
+            summary.insert(name.clone(), cb.is_healthy().await);
+        }
+
+        summary
+    }
+
+    /// Reset all circuit breakers
+    pub async fn reset_all(&self) {
+        let breakers = self.circuit_breakers.read().await;
+        
+        for cb in breakers.values() {
+            cb.reset().await;
+        }
+    }
+
+    /// Get comprehensive statistics for all circuit breakers
+    pub async fn get_all_stats(&self) -> HashMap<String, EnhancedCircuitBreakerStats> {
+        let breakers = self.circuit_breakers.read().await;
+        let mut stats = HashMap::new();
+
+        for (name, cb) in breakers.iter() {
+            stats.insert(name.clone(), cb.get_enhanced_stats().await);
+        }
+
+        stats
+    }
 }
 
 #[cfg(test)]

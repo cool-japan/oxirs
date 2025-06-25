@@ -183,6 +183,57 @@ pub fn validate_xsd_value(value: &str, datatype_iri: &str) -> Result<(), OxirsEr
         
         "http://www.w3.org/2001/XMLSchema#date" => {
             if DATE_REGEX.is_match(value) {
+                // Additional validation for valid date values
+                let date_part = if value.contains('T') {
+                    value.split('T').next().unwrap()
+                } else if value.contains('Z') || value.contains('+') || value.contains('-') {
+                    &value[..10]
+                } else {
+                    value
+                };
+                
+                let parts: Vec<&str> = date_part.split('-').collect();
+                if parts.len() == 3 {
+                    let year: i32 = parts[0].parse().map_err(|_| {
+                        OxirsError::Parse(format!("Invalid year in date: {}", value))
+                    })?;
+                    let month: u32 = parts[1].parse().map_err(|_| {
+                        OxirsError::Parse(format!("Invalid month in date: {}", value))
+                    })?;
+                    let day: u32 = parts[2].parse().map_err(|_| {
+                        OxirsError::Parse(format!("Invalid day in date: {}", value))
+                    })?;
+                    
+                    // Validate month
+                    if month < 1 || month > 12 {
+                        return Err(OxirsError::Parse(format!(
+                            "Invalid month in date: {}. Month must be between 01 and 12",
+                            value
+                        )));
+                    }
+                    
+                    // Validate day based on month
+                    let max_day = match month {
+                        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+                        4 | 6 | 9 | 11 => 30,
+                        2 => {
+                            // Check for leap year
+                            if (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0) {
+                                29
+                            } else {
+                                28
+                            }
+                        }
+                        _ => unreachable!(),
+                    };
+                    
+                    if day < 1 || day > max_day {
+                        return Err(OxirsError::Parse(format!(
+                            "Invalid day in date: {}. Day must be between 01 and {} for month {}",
+                            value, max_day, month
+                        )));
+                    }
+                }
                 Ok(())
             } else {
                 Err(OxirsError::Parse(format!(

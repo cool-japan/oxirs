@@ -1,13 +1,17 @@
 #[cfg(feature = "async")]
 use json_event_parser::TokioAsyncWriterJsonSerializer;
 use json_event_parser::{JsonEvent, WriterJsonSerializer};
-use oxiri::{Iri, IriParseError};
-#[cfg(feature = "rdf-12")]
-use oxrdf::BaseDirection;
-use oxrdf::vocab::xsd;
-use oxrdf::{
-    GraphName, GraphNameRef, NamedNode, NamedOrBlankNode, NamedOrBlankNodeRef, QuadRef, TermRef,
-};
+// TODO: Phase 3 - Replace with native OxiRS types
+// use oxiri::{Iri, IriParseError};
+// #[cfg(feature = "rdf-12")]
+// use oxrdf::BaseDirection;
+// use oxrdf::vocab::xsd;
+// use oxrdf::{
+//     GraphName, GraphNameRef, NamedNode, NamedOrBlankNode, NamedOrBlankNodeRef, QuadRef, TermRef,
+// };
+use crate::model::*;
+use crate::OxirsError as IriParseError; // Temporary alias
+type Iri<T> = T; // Temporary alias
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io;

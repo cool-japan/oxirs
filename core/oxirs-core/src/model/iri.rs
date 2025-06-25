@@ -132,10 +132,24 @@ fn validate_percent_encoding(iri: &str) -> Result<(), OxirsError> {
 pub fn normalize_iri(iri: &str) -> String {
     let mut normalized = iri.to_string();
     
-    // 1. Convert scheme to lowercase
+    // 1. Convert scheme and host to lowercase
     if let Some(colon_pos) = normalized.find(':') {
         let (scheme, rest) = normalized.split_at(colon_pos);
-        normalized = format!("{}{}", scheme.to_lowercase(), rest);
+        let scheme_lower = scheme.to_lowercase();
+        
+        // Also lowercase the host if it's an authority-based IRI
+        if rest.starts_with("://") {
+            if let Some(slash_pos) = rest[3..].find('/') {
+                let authority = &rest[3..3 + slash_pos];
+                let path = &rest[3 + slash_pos..];
+                normalized = format!("{}://{}{}", scheme_lower, authority.to_lowercase(), path);
+            } else {
+                // No path, just authority
+                normalized = format!("{}://{}", scheme_lower, rest[3..].to_lowercase());
+            }
+        } else {
+            normalized = format!("{}{}", scheme_lower, rest);
+        }
     }
     
     // 2. Normalize percent encoding - convert to uppercase
@@ -339,5 +353,30 @@ mod tests {
         
         let owned = node_ref.to_owned();
         assert_eq!(owned.as_str(), "http://example.org/test");
+    }
+    
+    #[test]
+    fn test_normalize_iri() {
+        // Test scheme lowercasing
+        assert_eq!(normalize_iri("HTTP://EXAMPLE.ORG/"), "http://example.org/");
+        assert_eq!(normalize_iri("HTTPS://Test.COM/"), "https://test.com/");
+        
+        // Test percent encoding normalization
+        assert_eq!(normalize_iri("http://example.org/%2f"), "http://example.org/%2F");
+        assert_eq!(normalize_iri("http://example.org/%2F"), "http://example.org/%2F");
+        
+        // Test path normalization
+        assert_eq!(normalize_iri("http://example.org/./path"), "http://example.org/path");
+        assert_eq!(normalize_iri("http://example.org/a/../b"), "http://example.org/b");
+        
+        // Test default port removal
+        assert_eq!(normalize_iri("http://example.org:80/path"), "http://example.org/path");
+        assert_eq!(normalize_iri("https://example.org:443/path"), "https://example.org/path");
+    }
+    
+    #[test]
+    fn test_named_node_normalized() {
+        let node = NamedNode::new_normalized("HTTP://EXAMPLE.ORG/").unwrap();
+        assert_eq!(node.as_str(), "http://example.org/");
     }
 }

@@ -11,8 +11,10 @@ use juniper::{
 use crate::RdfStore;
 use std::sync::Arc;
 use anyhow::Result;
-use oxigraph::sparql::QueryResults;
-use oxigraph::model::{Term, NamedNode as OxiNamedNode, Literal as OxiLiteral, BlankNode as OxiBlankNode};
+// use oxigraph::sparql::QueryResults;
+// use oxigraph::model::{Term, NamedNode as OxiNamedNode, Literal as OxiLiteral, BlankNode as OxiBlankNode};
+use oxirs_core::sparql::QueryResults;
+use oxirs_core::model::{Term, NamedNode as OxiNamedNode, Literal as OxiLiteral, BlankNode as OxiBlankNode};
 use serde::{Deserialize, Serialize};
 
 /// Custom scalar type for RDF IRIs
