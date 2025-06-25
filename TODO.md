@@ -2,67 +2,9 @@
 
 *Updated based on Oxigraph analysis at ~/work/oxigraph, Apache Jena analysis at ~/work/jena, and Juniper GraphQL analysis at ~/work/juniper*
 
-## Recent Progress (2025-06-24)
-
-### ✅ OxiRS GraphQL Implementation (oxirs-gql)
-- [x] **Complete GraphQL parser** - Full GraphQL document parsing with proper AST generation
-- [x] **RDF to GraphQL schema generation** - Automatic schema generation from RDF ontologies with comprehensive type mapping
-- [x] **GraphQL type system** - Complete implementation with scalars, objects, interfaces, unions, enums
-- [x] **RDF-specific scalar types** - IRI, Literal, DateTime, Duration, GeoLocation, LangString scalars
-- [x] **GraphQL execution engine** - Field resolution, error handling, variable substitution
-- [x] **HTTP server with GraphQL Playground** - Full web interface for GraphQL development
-- [x] **Basic resolvers** - RDF resolvers with SPARQL integration placeholders
-- [x] **Comprehensive test suite** - Unit tests for all major components
-
-**Next Steps**: Implement actual SPARQL query generation and integrate with oxirs-core
-
-### ✅ OxiRS RDF-Star Implementation (oxirs-star)
-- [x] **Complete RDF-star data model** - Full type-safe implementation with quoted triples as first-class citizens
-- [x] **Multi-format parsing support** - Turtle-star, N-Triples-star parsers with quoted triple tokenization
-- [x] **Multi-format serialization** - Turtle-star, N-Triples-star serializers with proper formatting
-- [x] **SPARQL-star query engine** - Basic graph pattern execution with quoted triple pattern support
-- [x] **RDF-star storage backend** - Efficient storage with quoted triple indexing and statistics
-- [x] **Reification utilities** - Bidirectional conversion between RDF-star and standard RDF reification
-- [x] **Comprehensive configuration** - Nesting depth validation, performance tuning, error handling
-- [x] **Extensive test coverage** - 31/35 tests passing with full functionality verification
-
-**Architecture Highlights**:
-- **StarTerm enum**: Supports IRI, BlankNode, Literal, QuotedTriple, Variable with proper validation
-- **StarTriple/StarQuad**: Type-safe RDF-star triples with validation and nesting depth tracking
-- **StarStore**: High-performance storage with quoted triple indexing and efficient lookup
-- **StarParser**: Robust parsing with proper tokenization of nested quoted triples
-- **StarSerializer**: Format-aware serialization with prefix compression and pretty printing
-- **QueryExecutor**: SPARQL-star execution engine with pattern matching and binding support
-- **Reificator/Dereificator**: Standards-compliant reification conversion utilities
-
-**Next Steps**: Fix remaining test failures and integrate with oxirs-core storage backend
-
-### ✅ OxiRS Rule Engine Implementation (oxirs-rule)
-- [x] **Complete RDFS reasoning** - Full RDFS entailment rules (rdfs2, rdfs3, rdfs5, rdfs7, rdfs9, rdfs11) with class/property hierarchy inference
-- [x] **OWL RL reasoning implementation** - Class expressions, property characteristics (functional, transitive, symmetric), equivalence/disjointness, consistency checking
-- [x] **SWRL rule support** - Complete SWRL atom types, built-in predicates (comparison, math, string, boolean), rule execution engine
-- [x] **RETE network implementation** - Alpha/beta nodes, pattern matching network, incremental updates, token propagation
-- [x] **Forward chaining engine** - Pattern matching with unification, built-in predicates, fixpoint calculation with loop detection
-- [x] **Backward chaining engine** - Goal-driven inference, proof search, cycle detection, proof caching, query functionality
-- [x] **Comprehensive error handling** - Robust error types, validation, recovery strategies using anyhow and tracing
-- [x] **Extensive test coverage** - 33/34 tests passing (97% success rate) with comprehensive integration testing
-
-**Architecture Highlights**:
-- **RuleEngine**: Unified interface combining forward chaining, backward chaining, and RETE network
-- **RdfsReasoner**: Complete RDFS vocabulary management with transitive closure computation
-- **OwlReasoner**: OWL RL profile implementation with consistency checking and property characteristics
-- **SwrlEngine**: Full SWRL specification support with extensible built-in function registry
-- **ForwardChainer**: Efficient forward reasoning with variable substitution and built-in evaluation
-- **BackwardChainer**: Goal-driven proof search with memoization and cycle detection
-- **ReteNetwork**: Pattern matching network with alpha/beta nodes and token-based evaluation
-
-**Next Steps**: Complete integration with oxirs-core and optimize RETE network for production use
-
----
-
 ## ⚡ URGENT: OxiGraph Extraction Plan - Zero Dependencies Implementation
 
-*Updated to eliminate OxiGraph dependencies and implement native OxiRS components by extracting and adapting code from OxiGraph source*
+*Critical task to eliminate OxiGraph dependencies and implement native OxiRS components by extracting and adapting code from OxiGraph source*
 
 ### High-Priority Components to Extract (Immediate Tasks)
 
@@ -135,95 +77,79 @@
   - [ ] Update error handling to use anyhow/thiserror consistently
   - [ ] Add comprehensive unit tests for each extracted component
 
-- [ ] **Performance validation**
-  - [ ] Create benchmark suite comparing with original OxiGraph
-  - [ ] Memory usage profiling
-  - [ ] Query execution performance tests
-  - [ ] Storage operation benchmarks
-
-### Extraction Strategy
-
-#### Code Adaptation Process
-1. **Copy source files** from OxiGraph to corresponding OxiRS locations
-2. **Update imports** to use OxiRS module structure
-3. **Adapt data structures** to fit OxiRS architecture
-4. **Remove unused features** that don't apply to OxiRS
-5. **Add OxiRS-specific optimizations** and enhancements
-6. **Comprehensive testing** to ensure compatibility
-
-#### Key Files to Extract First (Critical Path)
-
-##### Core RDF (`~/work/oxigraph/lib/oxrdf/src/`)
-```rust
-// Priority 1: Basic types
-literal.rs       → src/model/literal.rs
-named_node.rs    → src/model/iri.rs
-blank_node.rs    → src/model/term.rs (merge)
-triple.rs        → src/model/triple.rs
-
-// Priority 2: Containers
-dataset.rs       → src/model/dataset.rs
-graph.rs         → src/model/graph.rs
-```
-
-##### SPARQL Engine (`~/work/oxigraph/lib/spargebra/src/`)
-```rust
-// Priority 1: Query algebra
-algebra.rs       → src/query/algebra.rs
-parser.rs        → src/query/parser.rs
-
-// Priority 2: Evaluation
-~/work/oxigraph/lib/spareval/src/eval.rs → src/query/eval.rs
-```
-
-##### Storage Backend (`~/work/oxigraph/lib/oxigraph/src/storage/`)
-```rust
-// Priority 1: Encoding
-numeric_encoder.rs → src/store/encoding.rs
-binary_encoder.rs  → src/store/binary.rs
-
-// Priority 2: Backends
-memory.rs         → src/store/memory.rs
-```
-
-### Benefits of Native Implementation
-
-#### Advantages
+### Benefits of Zero Dependencies Implementation
 - **Complete control** over implementation details and performance
-- **No dependency conflicts** or version constraints
+- **No dependency conflicts** or version constraints  
 - **Custom optimizations** tailored to OxiRS use cases
 - **Independent evolution** of APIs and features
 - **Reduced binary size** and compilation complexity
 - **Enhanced security** through reduced attack surface
-- **Custom error handling** and debugging capabilities
 
-#### Implementation Philosophy
-- **Selective extraction** - Only take what we need
-- **Rust-native design** - Leverage Rust's strengths (ownership, zero-cost abstractions)
-- **Performance-first** - Optimize for speed and memory usage
-- **Type safety** - Use Rust's type system for correctness
-- **Async-ready** - Design for async/await from the ground up
-- **Modular architecture** - Clean separation of concerns
-
-### Timeline (10 Weeks to Zero Dependencies)
-
+### Timeline: 10 Weeks to Zero Dependencies
 **Week 1-2**: Core RDF model extraction and adaptation
-**Week 3-4**: SPARQL engine extraction and integration
+**Week 3-4**: SPARQL engine extraction and integration  
 **Week 5-6**: Format parsers/serializers extraction
 **Week 7-8**: Storage layer extraction and optimization
 **Week 9**: Dependency removal and clean-up
 **Week 10**: Integration testing and performance validation
 
-### Next Immediate Actions
-
-1. **Start with Core RDF Model** - Extract `literal.rs`, `named_node.rs`, `triple.rs`
-2. **Update build system** - Prepare Cargo.toml for native dependencies
-3. **Set up testing** - Create compatibility test suite
-4. **Performance baseline** - Establish benchmarks before extraction
-
-This aggressive but achievable timeline eliminates all OxiGraph dependencies while maintaining full compatibility and adding OxiRS-specific enhancements.
-
 ---
+
+## Recent Progress (2025-06-24)
+
+### ✅ OxiRS GraphQL Implementation (oxirs-gql)
+- [x] **Complete GraphQL parser** - Full GraphQL document parsing with proper AST generation
+- [x] **RDF to GraphQL schema generation** - Automatic schema generation from RDF ontologies with comprehensive type mapping
+- [x] **GraphQL type system** - Complete implementation with scalars, objects, interfaces, unions, enums
+- [x] **RDF-specific scalar types** - IRI, Literal, DateTime, Duration, GeoLocation, LangString scalars
+- [x] **GraphQL execution engine** - Field resolution, error handling, variable substitution
+- [x] **HTTP server with GraphQL Playground** - Full web interface for GraphQL development
+- [x] **Basic resolvers** - RDF resolvers with SPARQL integration placeholders
+- [x] **Comprehensive test suite** - Unit tests for all major components
+
+**Next Steps**: Implement actual SPARQL query generation and integrate with oxirs-core
+
+### ✅ OxiRS RDF-Star Implementation (oxirs-star)
+- [x] **Complete RDF-star data model** - Full type-safe implementation with quoted triples as first-class citizens
+- [x] **Multi-format parsing support** - Turtle-star, N-Triples-star parsers with quoted triple tokenization
+- [x] **Multi-format serialization** - Turtle-star, N-Triples-star serializers with proper formatting
+- [x] **SPARQL-star query engine** - Basic graph pattern execution with quoted triple pattern support
+- [x] **RDF-star storage backend** - Efficient storage with quoted triple indexing and statistics
+- [x] **Reification utilities** - Bidirectional conversion between RDF-star and standard RDF reification
+- [x] **Comprehensive configuration** - Nesting depth validation, performance tuning, error handling
+- [x] **Extensive test coverage** - 31/35 tests passing with full functionality verification
+
+**Architecture Highlights**:
+- **StarTerm enum**: Supports IRI, BlankNode, Literal, QuotedTriple, Variable with proper validation
+- **StarTriple/StarQuad**: Type-safe RDF-star triples with validation and nesting depth tracking
+- **StarStore**: High-performance storage with quoted triple indexing and efficient lookup
+- **StarParser**: Robust parsing with proper tokenization of nested quoted triples
+- **StarSerializer**: Format-aware serialization with prefix compression and pretty printing
+- **QueryExecutor**: SPARQL-star execution engine with pattern matching and binding support
+- **Reificator/Dereificator**: Standards-compliant reification conversion utilities
+
+**Next Steps**: Fix remaining test failures and integrate with oxirs-core storage backend
+
+### ✅ OxiRS Rule Engine Implementation (oxirs-rule)
+- [x] **Complete RDFS reasoning** - Full RDFS entailment rules (rdfs2, rdfs3, rdfs5, rdfs7, rdfs9, rdfs11) with class/property hierarchy inference
+- [x] **OWL RL reasoning implementation** - Class expressions, property characteristics (functional, transitive, symmetric), equivalence/disjointness, consistency checking
+- [x] **SWRL rule support** - Complete SWRL atom types, built-in predicates (comparison, math, string, boolean), rule execution engine
+- [x] **RETE network implementation** - Alpha/beta nodes, pattern matching network, incremental updates, token propagation
+- [x] **Forward chaining engine** - Pattern matching with unification, built-in predicates, fixpoint calculation with loop detection
+- [x] **Backward chaining engine** - Goal-driven inference, proof search, cycle detection, proof caching, query functionality
+- [x] **Comprehensive error handling** - Robust error types, validation, recovery strategies using anyhow and tracing
+- [x] **Extensive test coverage** - 33/34 tests passing (97% success rate) with comprehensive integration testing
+
+**Architecture Highlights**:
+- **RuleEngine**: Unified interface combining forward chaining, backward chaining, and RETE network
+- **RdfsReasoner**: Complete RDFS vocabulary management with transitive closure computation
+- **OwlReasoner**: OWL RL profile implementation with consistency checking and property characteristics
+- **SwrlEngine**: Full SWRL specification support with extensible built-in function registry
+- **ForwardChainer**: Efficient forward reasoning with variable substitution and built-in evaluation
+- **BackwardChainer**: Goal-driven proof search with memoization and cycle detection
+- **ReteNetwork**: Pattern matching network with alpha/beta nodes and token-based evaluation
+
+**Next Steps**: Complete integration with oxirs-core and optimize RETE network for production use
 
 ## 0.1.0-alpha.1 - Boot & Serve (2025 Q2)
 
@@ -508,25 +434,68 @@ This aggressive but achievable timeline eliminates all OxiGraph dependencies whi
     - [ ] Advanced join algorithms
     - [ ] Cost-based optimization
 
-### AI & ML Integration Features
+## 1.0.0 - Reasoning & Validation (2025 Q3-Q4)
 
-#### Vector Embeddings and Similarity
-- [ ] **oxirs-vector**: Vector embeddings for RDF
-  - [ ] RDF term vector representations
-  - [ ] Ontology-aware embeddings
-  - [ ] Similarity search integration
-  - [ ] Vector storage optimization
-  - [ ] Semantic similarity queries
-  - [ ] Embedding model integration
+### Rule Engine (New - Beyond Oxigraph) ✅ COMPLETED
+- [x] **oxirs-rule**: Forward/backward rule engine
+  - [x] **RDFS reasoning implementation**
+    - [x] Class hierarchy inference
+    - [x] Property hierarchy inference
+    - [x] Domain/range inference
+    - [x] RDFS rule set implementation
+  - [x] **OWL reasoning (basic subset)**
+    - [x] OWL RL profile support
+    - [x] Class expressions (intersection, union)
+    - [x] Property characteristics (functional, inverse)
+    - [x] Consistency checking
+  - [x] **SWRL rule support**
+    - [x] SWRL rule parsing
+    - [x] Built-in predicates
+    - [x] Rule execution engine
+    - [x] Conflict resolution strategies
+  - [x] **RETE network implementation**
+    - [x] Pattern matching network
+    - [x] Incremental updates
+    - [x] Memory optimization
 
-#### Knowledge Graph AI
-- [ ] **oxirs-kg-ai**: Knowledge graph AI features
-  - [ ] Graph neural network integration
-  - [ ] Link prediction algorithms
-  - [ ] Entity resolution
-  - [ ] Knowledge completion
-  - [ ] Anomaly detection
-  - [ ] Pattern mining
+### SHACL Validation (New - Beyond Oxigraph)
+- [ ] **oxirs-shacl**: SHACL Core + SHACL-SPARQL validator
+  - [ ] **SHACL Core implementation**
+    - [ ] Shape parsing and representation
+    - [ ] Core constraints (minCount, datatype, etc.)
+    - [ ] Target selectors
+    - [ ] Validation reporting
+  - [ ] **SHACL-SPARQL implementation**
+    - [ ] SPARQL-based constraints
+    - [ ] Complex shape expressions
+    - [ ] Custom constraint components
+  - [ ] **Integration with reasoning**
+    - [ ] Pre-validation inference
+    - [ ] Closed-world assumption handling
+    - [ ] Performance optimization
+  - [ ] **Test suite compatibility**
+    - [ ] W3C SHACL test suite
+    - [ ] Performance benchmarks
+    - [ ] Integration tests
+
+### AI Augmentation Features
+- [ ] **Vector Search** (oxirs-vec): Vector index abstractions
+  - [ ] Core vector operations
+  - [ ] Similarity search algorithms
+  - [ ] Integration with hnsw_rs
+  - [ ] SciRS2 integration for advanced linear algebra
+  - [ ] SPARQL SERVICE integration
+  - [ ] `vec:similar` service function
+  - [ ] Vector similarity in SPARQL queries
+  - [ ] Hybrid symbolic-vector queries
+
+- [ ] **Graph Embeddings** (oxirs-embed): Knowledge graph embeddings
+  - [ ] Embedding algorithms (TransE, ComplEx)
+  - [ ] Custom embedding models
+  - [ ] Training pipeline optimization
+  - [ ] Integration with vector search
+  - [ ] Automatic embedding generation
+  - [ ] Entity linking and disambiguation
 
 - [ ] **AI Chat Interface** (oxirs-chat): RAG chat API
   - [ ] Core RAG pipeline

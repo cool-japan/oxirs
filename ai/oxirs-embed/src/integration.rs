@@ -46,7 +46,7 @@ impl VectorStoreBridge {
         Self {
             entity_mappings: HashMap::new(),
             relation_mappings: HashMap::new(),
-            prefix_config: PrefixConfig::default(),
+            prefix_config,
         }
     }
     

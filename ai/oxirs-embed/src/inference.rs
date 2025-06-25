@@ -90,13 +90,19 @@ impl InferenceCache {
         }
     }
     
-    pub fn get_entity_embedding(&mut self, entity: &str) -> Option<&Vector> {
-        if let Some(entry) = self.entity_cache.get(entity) {
+    pub fn get_entity_embedding(&mut self, entity: &str) -> Option<Vector> {
+        let expired = if let Some(entry) = self.entity_cache.get(entity) {
             if !entry.is_expired(self.ttl_seconds) {
-                return Some(&entry.value);
+                return Some(entry.value.clone());
             } else {
-                self.entity_cache.remove(entity);
+                true
             }
+        } else {
+            false
+        };
+        
+        if expired {
+            self.entity_cache.remove(entity);
         }
         None
     }
@@ -112,13 +118,19 @@ impl InferenceCache {
         self.entity_cache.insert(entity, CacheEntry::new(embedding));
     }
     
-    pub fn get_relation_embedding(&mut self, relation: &str) -> Option<&Vector> {
-        if let Some(entry) = self.relation_cache.get(relation) {
+    pub fn get_relation_embedding(&mut self, relation: &str) -> Option<Vector> {
+        let expired = if let Some(entry) = self.relation_cache.get(relation) {
             if !entry.is_expired(self.ttl_seconds) {
-                return Some(&entry.value);
+                return Some(entry.value.clone());
             } else {
-                self.relation_cache.remove(relation);
+                true
             }
+        } else {
+            false
+        };
+        
+        if expired {
+            self.relation_cache.remove(relation);
         }
         None
     }
