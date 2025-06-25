@@ -3,7 +3,7 @@
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use crate::model::{
-    NamedNode, BlankNode, Literal, Variable,
+    NamedNode, BlankNode, Variable,
     Subject, Predicate, Object, Triple, TripleRef,
     SubjectRef, PredicateRef, ObjectRef
 };

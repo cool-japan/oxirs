@@ -2,7 +2,6 @@
 
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::cmp::Ordering;
 use serde::{Deserialize, Serialize};
 use crate::model::{NamedNode, BlankNode, Literal, Variable, Subject, Predicate, Object};
 use crate::model::RdfTerm;

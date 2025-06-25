@@ -166,13 +166,13 @@ fn check_graph_store_permissions(method: &Method, graph_uri: &Option<String>) ->
     // For now, we'll implement basic validation
     
     match method {
-        Method::GET => {
+        &Method::GET => {
             // Read operations - require read permission
             // if !user.has_permission(&Permission::GraphStore) {
             //     return Err(FusekiError::forbidden("Insufficient permissions for graph read"));
             // }
         }
-        Method::PUT | Method::POST | Method::DELETE => {
+        &Method::PUT | &Method::POST | &Method::DELETE => {
             // Write operations - require write permission
             // if !user.has_permission(&Permission::SparqlUpdate) {
             //     return Err(FusekiError::forbidden("Insufficient permissions for graph write"));

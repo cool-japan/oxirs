@@ -165,11 +165,11 @@ impl MetricsService {
 
     /// Start background monitoring tasks
     fn start_background_tasks(&self) {
-        let registry = Arc::clone(&self.registry);
         let config = self.config.clone();
         
         // System metrics collection task
         if config.metrics.collect_system_metrics {
+            let registry = Arc::clone(&self.registry);
             tokio::spawn(async move {
                 let mut interval = tokio::time::interval(Duration::from_secs(30));
                 
@@ -181,8 +181,8 @@ impl MetricsService {
                         registry.system_metrics = system_metrics;
                         
                         // Update Prometheus metrics
-                        gauge!("memory_usage_bytes", registry.system_metrics.memory_usage_bytes as f64);
-                        gauge!("cpu_usage_percent", registry.system_metrics.cpu_usage_percent);
+                        gauge!("memory_usage_bytes").set(registry.system_metrics.memory_usage_bytes as f64);
+                        gauge!("cpu_usage_percent").set(registry.system_metrics.cpu_usage_percent);
                     }
                 }
             });
@@ -190,7 +190,7 @@ impl MetricsService {
 
         // Health check task
         if config.health_checks.enabled {
-            let registry_clone = Arc::clone(&registry);
+            let registry_clone = Arc::clone(&self.registry);
             let health_config = config.health_checks.clone();
             
             tokio::spawn(async move {

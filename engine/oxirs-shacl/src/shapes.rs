@@ -1236,33 +1236,6 @@ impl ShapeFactory {
         shape
     }
 
-    /// Parse shape metadata from store (labels, descriptions, etc.)
-    fn parse_shape_metadata_from_store(&mut self, _store: &Store, _shape_iri: &str, _shape: &mut Shape, _graph_name: Option<&str>) -> Result<()> {
-        // TODO: Implement metadata parsing from store
-        // This would parse rdfs:label, rdfs:comment, sh:name, sh:description, etc.
-        Ok(())
-    }
-
-    /// Parse shape targets from store
-    fn parse_shape_targets_from_store(&mut self, _store: &Store, _shape_iri: &str, _shape: &mut Shape, _graph_name: Option<&str>) -> Result<()> {
-        // TODO: Implement target parsing from store
-        // This would parse sh:targetClass, sh:targetNode, sh:targetObjectsOf, sh:targetSubjectsOf
-        Ok(())
-    }
-
-    /// Parse property path from store for property shapes
-    fn parse_property_path_from_store(&mut self, _store: &Store, _shape_iri: &str, _shape: &mut Shape, _graph_name: Option<&str>) -> Result<()> {
-        // TODO: Implement property path parsing from store
-        // This would parse sh:path property for property shapes
-        Ok(())
-    }
-
-    /// Parse shape constraints from store
-    fn parse_shape_constraints_from_store(&mut self, _store: &Store, _shape_iri: &str, _shape: &mut Shape, _graph_name: Option<&str>) -> Result<()> {
-        // TODO: Implement constraint parsing from store
-        // This would parse all SHACL constraint properties like sh:minCount, sh:datatype, etc.
-        Ok(())
-    }
 }
 
 #[cfg(test)]

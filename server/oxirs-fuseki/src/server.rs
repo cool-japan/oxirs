@@ -78,7 +78,7 @@ impl Runtime {
         info!("Initializing server services...");
 
         // Initialize authentication service
-        if self.config.security.authentication.enabled {
+        if self.config.security.auth_required {
             info!("Initializing authentication service");
             self.auth_service = Some(AuthService::new(self.config.security.clone()));
         }
@@ -124,32 +124,38 @@ impl Runtime {
         // Initialize all services
         self.initialize_services().await?;
 
+        let addr = self.addr;
+        let config = self.config.clone();
+        
         // Create application state
         let app_state = AppState {
             store: self.store,
-            config: self.config.clone(),
+            config: config.clone(),
             auth_service: self.auth_service.clone(),
             metrics_service: self.metrics_service.clone(),
             performance_service: self.performance_service.clone(),
             #[cfg(feature = "rate-limit")]
             rate_limiter: self.rate_limiter.clone(),
         };
+        
+        // Build the application with comprehensive middleware - use a temporary self reference
+        let temp_server = FusekiServer::new(addr, config.clone());
+        let app = temp_server.build_app(app_state).await?;
 
-        // Build the application with comprehensive middleware
-        let app = self.build_app(app_state).await?;
-
-        info!("Starting OxiRS Fuseki server on {}", self.addr);
-        info!("Server configuration: {:#?}", self.config.server);
+        info!("Starting OxiRS Fuseki server on {}", addr);
+        info!("Server configuration: {:#?}", config.server);
 
         // Start the server
-        let listener = tokio::net::TcpListener::bind(self.addr)
+        let listener = tokio::net::TcpListener::bind(addr)
             .await
-            .map_err(|e| FusekiError::server_error(format!("Failed to bind to {}: {}", self.addr, e)))?;
+            .map_err(|e| FusekiError::internal(format!("Failed to bind to {}: {}", addr, e)))?;
 
+        let graceful_shutdown = Self::create_graceful_shutdown(config.server.graceful_shutdown_timeout_secs);
+        
         axum::serve(listener, app)
-            .with_graceful_shutdown(self.graceful_shutdown())
+            .with_graceful_shutdown(graceful_shutdown)
             .await
-            .map_err(|e| FusekiError::server_error(format!("Server error: {}", e)))?;
+            .map_err(|e| FusekiError::internal(format!("Server error: {}", e)))?;
 
         info!("Server shutdown complete");
         Ok(())
@@ -179,7 +185,7 @@ impl Runtime {
             .route("/$/backup/:name", post(handlers::admin::backup_dataset));
 
         // Authentication routes (if enabled)
-        if self.config.security.authentication.enabled {
+        if self.config.security.auth_required {
             app = app
                 .route("/$/login", post(handlers::auth::login_handler))
                 .route("/$/logout", post(handlers::auth::logout_handler))
@@ -286,8 +292,8 @@ impl Runtime {
     }
 
     /// Graceful shutdown with configurable timeout
-    async fn graceful_shutdown(&self) {
-        let shutdown_timeout = Duration::from_secs(self.config.server.graceful_shutdown_timeout_secs);
+    async fn create_graceful_shutdown(graceful_shutdown_timeout_secs: u64) {
+        let shutdown_timeout = Duration::from_secs(graceful_shutdown_timeout_secs);
         
         let ctrl_c = async {
             signal::ctrl_c()
@@ -339,9 +345,9 @@ pub struct AppState {
 struct MakeRequestUuid;
 
 impl MakeRequestId for MakeRequestUuid {
-    fn make_request_id<B>(&mut self, _request: &axum::http::Request<B>) -> Option<axum::http::HeaderValue> {
+    fn make_request_id<B>(&mut self, _request: &axum::http::Request<B>) -> Option<RequestId> {
         let request_id = Uuid::new_v4().to_string();
-        axum::http::HeaderValue::from_str(&request_id).ok()
+        axum::http::HeaderValue::from_str(&request_id).ok().map(RequestId::from)
     }
 }
 

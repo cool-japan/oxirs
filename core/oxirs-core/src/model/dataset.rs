@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 use std::iter::FromIterator;
 use crate::model::{
-    Graph, Triple, Quad, QuadRef, GraphName, GraphNameRef,
-    Subject, Predicate, Object, NamedNode, BlankNode
+    Graph, Quad, QuadRef, GraphName, GraphNameRef,
+    Subject, Predicate, Object
 };
 
 /// An in-memory RDF Dataset

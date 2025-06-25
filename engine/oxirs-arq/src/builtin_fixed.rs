@@ -5,26 +5,41 @@
 
 use crate::extensions::{CustomFunction, Value, ValueType, ExecutionContext, ExtensionRegistry, CustomAggregate, AggregateState};
 use crate::algebra::{Expression, Term, Iri, Literal};
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, anyhow, bail, Context};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc, Datelike};
+use chrono::{DateTime, Utc, Datelike, Timelike};
+use regex::Regex;
+use md5;
+use sha1::Sha1;
+use sha2::{Sha256, Sha384, Sha512, Digest};
+use rand::Rng;
+use uuid::Uuid;
 
-/// Register essential built-in SPARQL functions
+/// Register comprehensive SPARQL 1.1 built-in functions
 pub fn register_builtin_functions(registry: &ExtensionRegistry) -> Result<()> {
-    // Essential string functions
+    // String functions
     registry.register_function(StrFunction)?;
     registry.register_function(LangFunction)?;
     registry.register_function(DatatypeFunction)?;
-    registry.register_function(BoundFunction)?;
+    registry.register_function(ConcatFunction)?;
+    registry.register_function(SubstrFunction)?;
+    registry.register_function(StrlenFunction)?;
+    registry.register_function(UcaseFunction)?;
+    registry.register_function(LcaseFunction)?;
+    registry.register_function(ContainsFunction)?;
+    registry.register_function(StrStartsFunction)?;
+    registry.register_function(StrEndsFunction)?;
+    registry.register_function(ReplaceFunction)?;
     
-    // Essential numeric functions
+    // Numeric functions
     registry.register_function(AbsFunction)?;
     
-    // Essential type checking functions
+    // Type checking functions
+    registry.register_function(BoundFunction)?;
     registry.register_function(IsIriFunction)?;
     registry.register_function(IsLiteralFunction)?;
     
-    // Essential aggregate functions
+    // Aggregate functions
     registry.register_aggregate(CountAggregate)?;
     registry.register_aggregate(SumAggregate)?;
     
@@ -297,5 +312,301 @@ impl AggregateState for SumState {
     
     fn clone_state(&self) -> Box<dyn AggregateState> {
         Box::new(self.clone())
+    }
+}
+
+// Additional String Functions
+
+#[derive(Debug, Clone)]
+struct ConcatFunction;
+
+impl CustomFunction for ConcatFunction {
+    fn name(&self) -> &str { "http://www.w3.org/2005/xpath-functions#concat" }
+    fn arity(&self) -> Option<usize> { None } // Variable arity
+    fn parameter_types(&self) -> Vec<ValueType> { vec![] }
+    fn return_type(&self) -> ValueType { ValueType::String }
+    fn documentation(&self) -> &str { "Concatenates multiple strings" }
+    fn clone_function(&self) -> Box<dyn CustomFunction> { Box::new(self.clone()) }
+    
+    fn execute(&self, args: &[Value], _context: &ExecutionContext) -> Result<Value> {
+        if args.is_empty() {
+            bail!("concat() requires at least 1 argument");
+        }
+        
+        let mut result = String::new();
+        for arg in args {
+            match arg {
+                Value::String(s) => result.push_str(s),
+                Value::Literal { value, .. } => result.push_str(value),
+                _ => bail!("concat() can only concatenate string values"),
+            }
+        }
+        Ok(Value::String(result))
+    }
+}
+
+#[derive(Debug, Clone)]
+struct SubstrFunction;
+
+impl CustomFunction for SubstrFunction {
+    fn name(&self) -> &str { "http://www.w3.org/2005/xpath-functions#substring" }
+    fn arity(&self) -> Option<usize> { Some(3) }
+    fn parameter_types(&self) -> Vec<ValueType> { vec![ValueType::String, ValueType::Integer, ValueType::Integer] }
+    fn return_type(&self) -> ValueType { ValueType::String }
+    fn documentation(&self) -> &str { "Returns substring of a string" }
+    fn clone_function(&self) -> Box<dyn CustomFunction> { Box::new(self.clone()) }
+    
+    fn execute(&self, args: &[Value], _context: &ExecutionContext) -> Result<Value> {
+        if args.len() < 2 || args.len() > 3 {
+            bail!("substr() requires 2 or 3 arguments");
+        }
+        
+        let string = match &args[0] {
+            Value::String(s) => s,
+            Value::Literal { value, .. } => value,
+            _ => bail!("First argument to substr() must be a string"),
+        };
+        
+        let start = match &args[1] {
+            Value::Integer(i) => *i as usize,
+            _ => bail!("Second argument to substr() must be an integer"),
+        };
+        
+        if args.len() == 3 {
+            let length = match &args[2] {
+                Value::Integer(i) => *i as usize,
+                _ => bail!("Third argument to substr() must be an integer"),
+            };
+            
+            let result = if start > 0 && start <= string.len() {
+                let start_idx = start - 1; // SPARQL uses 1-based indexing
+                let end_idx = std::cmp::min(start_idx + length, string.len());
+                string[start_idx..end_idx].to_string()
+            } else {
+                String::new()
+            };
+            Ok(Value::String(result))
+        } else {
+            let result = if start > 0 && start <= string.len() {
+                let start_idx = start - 1;
+                string[start_idx..].to_string()
+            } else {
+                String::new()
+            };
+            Ok(Value::String(result))
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct StrlenFunction;
+
+impl CustomFunction for StrlenFunction {
+    fn name(&self) -> &str { "http://www.w3.org/2005/xpath-functions#string-length" }
+    fn arity(&self) -> Option<usize> { Some(1) }
+    fn parameter_types(&self) -> Vec<ValueType> { vec![ValueType::String] }
+    fn return_type(&self) -> ValueType { ValueType::Integer }
+    fn documentation(&self) -> &str { "Returns the length of a string" }
+    fn clone_function(&self) -> Box<dyn CustomFunction> { Box::new(self.clone()) }
+    
+    fn execute(&self, args: &[Value], _context: &ExecutionContext) -> Result<Value> {
+        if args.len() != 1 {
+            bail!("strlen() requires exactly 1 argument");
+        }
+        
+        let string = match &args[0] {
+            Value::String(s) => s,
+            Value::Literal { value, .. } => value,
+            _ => bail!("strlen() argument must be a string"),
+        };
+        
+        Ok(Value::Integer(string.chars().count() as i64))
+    }
+}
+
+#[derive(Debug, Clone)]
+struct UcaseFunction;
+
+impl CustomFunction for UcaseFunction {
+    fn name(&self) -> &str { "http://www.w3.org/2005/xpath-functions#upper-case" }
+    fn arity(&self) -> Option<usize> { Some(1) }
+    fn parameter_types(&self) -> Vec<ValueType> { vec![ValueType::String] }
+    fn return_type(&self) -> ValueType { ValueType::String }
+    fn documentation(&self) -> &str { "Converts string to uppercase" }
+    fn clone_function(&self) -> Box<dyn CustomFunction> { Box::new(self.clone()) }
+    
+    fn execute(&self, args: &[Value], _context: &ExecutionContext) -> Result<Value> {
+        if args.len() != 1 {
+            bail!("ucase() requires exactly 1 argument");
+        }
+        
+        let string = match &args[0] {
+            Value::String(s) => s,
+            Value::Literal { value, .. } => value,
+            _ => bail!("ucase() argument must be a string"),
+        };
+        
+        Ok(Value::String(string.to_uppercase()))
+    }
+}
+
+#[derive(Debug, Clone)]
+struct LcaseFunction;
+
+impl CustomFunction for LcaseFunction {
+    fn name(&self) -> &str { "http://www.w3.org/2005/xpath-functions#lower-case" }
+    fn arity(&self) -> Option<usize> { Some(1) }
+    fn parameter_types(&self) -> Vec<ValueType> { vec![ValueType::String] }
+    fn return_type(&self) -> ValueType { ValueType::String }
+    fn documentation(&self) -> &str { "Converts string to lowercase" }
+    fn clone_function(&self) -> Box<dyn CustomFunction> { Box::new(self.clone()) }
+    
+    fn execute(&self, args: &[Value], _context: &ExecutionContext) -> Result<Value> {
+        if args.len() != 1 {
+            bail!("lcase() requires exactly 1 argument");
+        }
+        
+        let string = match &args[0] {
+            Value::String(s) => s,
+            Value::Literal { value, .. } => value,
+            _ => bail!("lcase() argument must be a string"),
+        };
+        
+        Ok(Value::String(string.to_lowercase()))
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ContainsFunction;
+
+impl CustomFunction for ContainsFunction {
+    fn name(&self) -> &str { "http://www.w3.org/2005/xpath-functions#contains" }
+    fn arity(&self) -> Option<usize> { Some(2) }
+    fn parameter_types(&self) -> Vec<ValueType> { vec![ValueType::String, ValueType::String] }
+    fn return_type(&self) -> ValueType { ValueType::Boolean }
+    fn documentation(&self) -> &str { "Tests if a string contains another string" }
+    fn clone_function(&self) -> Box<dyn CustomFunction> { Box::new(self.clone()) }
+    
+    fn execute(&self, args: &[Value], _context: &ExecutionContext) -> Result<Value> {
+        if args.len() != 2 {
+            bail!("contains() requires exactly 2 arguments");
+        }
+        
+        let haystack = match &args[0] {
+            Value::String(s) => s,
+            Value::Literal { value, .. } => value,
+            _ => bail!("First argument to contains() must be a string"),
+        };
+        
+        let needle = match &args[1] {
+            Value::String(s) => s,
+            Value::Literal { value, .. } => value,
+            _ => bail!("Second argument to contains() must be a string"),
+        };
+        
+        Ok(Value::Boolean(haystack.contains(needle)))
+    }
+}
+
+#[derive(Debug, Clone)]
+struct StrStartsFunction;
+
+impl CustomFunction for StrStartsFunction {
+    fn name(&self) -> &str { "http://www.w3.org/2005/xpath-functions#starts-with" }
+    fn arity(&self) -> Option<usize> { Some(2) }
+    fn parameter_types(&self) -> Vec<ValueType> { vec![ValueType::String, ValueType::String] }
+    fn return_type(&self) -> ValueType { ValueType::Boolean }
+    fn documentation(&self) -> &str { "Tests if a string starts with another string" }
+    fn clone_function(&self) -> Box<dyn CustomFunction> { Box::new(self.clone()) }
+    
+    fn execute(&self, args: &[Value], _context: &ExecutionContext) -> Result<Value> {
+        if args.len() != 2 {
+            bail!("strStarts() requires exactly 2 arguments");
+        }
+        
+        let string = match &args[0] {
+            Value::String(s) => s,
+            Value::Literal { value, .. } => value,
+            _ => bail!("First argument to strStarts() must be a string"),
+        };
+        
+        let prefix = match &args[1] {
+            Value::String(s) => s,
+            Value::Literal { value, .. } => value,
+            _ => bail!("Second argument to strStarts() must be a string"),
+        };
+        
+        Ok(Value::Boolean(string.starts_with(prefix)))
+    }
+}
+
+#[derive(Debug, Clone)]
+struct StrEndsFunction;
+
+impl CustomFunction for StrEndsFunction {
+    fn name(&self) -> &str { "http://www.w3.org/2005/xpath-functions#ends-with" }
+    fn arity(&self) -> Option<usize> { Some(2) }
+    fn parameter_types(&self) -> Vec<ValueType> { vec![ValueType::String, ValueType::String] }
+    fn return_type(&self) -> ValueType { ValueType::Boolean }
+    fn documentation(&self) -> &str { "Tests if a string ends with another string" }
+    fn clone_function(&self) -> Box<dyn CustomFunction> { Box::new(self.clone()) }
+    
+    fn execute(&self, args: &[Value], _context: &ExecutionContext) -> Result<Value> {
+        if args.len() != 2 {
+            bail!("strEnds() requires exactly 2 arguments");
+        }
+        
+        let string = match &args[0] {
+            Value::String(s) => s,
+            Value::Literal { value, .. } => value,
+            _ => bail!("First argument to strEnds() must be a string"),
+        };
+        
+        let suffix = match &args[1] {
+            Value::String(s) => s,
+            Value::Literal { value, .. } => value,
+            _ => bail!("Second argument to strEnds() must be a string"),
+        };
+        
+        Ok(Value::Boolean(string.ends_with(suffix)))
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ReplaceFunction;
+
+impl CustomFunction for ReplaceFunction {
+    fn name(&self) -> &str { "http://www.w3.org/2005/xpath-functions#replace" }
+    fn arity(&self) -> Option<usize> { Some(3) }
+    fn parameter_types(&self) -> Vec<ValueType> { vec![ValueType::String, ValueType::String, ValueType::String] }
+    fn return_type(&self) -> ValueType { ValueType::String }
+    fn documentation(&self) -> &str { "Replaces all occurrences of a pattern with replacement string" }
+    fn clone_function(&self) -> Box<dyn CustomFunction> { Box::new(self.clone()) }
+    
+    fn execute(&self, args: &[Value], _context: &ExecutionContext) -> Result<Value> {
+        if args.len() != 3 {
+            bail!("replace() requires exactly 3 arguments");
+        }
+        
+        let string = match &args[0] {
+            Value::String(s) => s,
+            Value::Literal { value, .. } => value,
+            _ => bail!("First argument to replace() must be a string"),
+        };
+        
+        let pattern = match &args[1] {
+            Value::String(s) => s,
+            Value::Literal { value, .. } => value,
+            _ => bail!("Second argument to replace() must be a string"),
+        };
+        
+        let replacement = match &args[2] {
+            Value::String(s) => s,
+            Value::Literal { value, .. } => value,
+            _ => bail!("Third argument to replace() must be a string"),
+        };
+        
+        let regex = Regex::new(pattern).context("Invalid regex pattern")?;
+        Ok(Value::String(regex.replace_all(string, replacement).to_string()))
     }
 }

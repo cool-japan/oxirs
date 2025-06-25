@@ -19,7 +19,7 @@ use rdkafka::{
     client::DefaultClientContext,
     config::ClientConfig,
     consumer::{Consumer, StreamConsumer as KafkaStreamConsumer},
-    producer::{FutureProducer, FutureRecord},
+    producer::{Producer, FutureProducer, FutureRecord},
     Message, TopicPartitionList,
 };
 
@@ -494,7 +494,7 @@ impl KafkaAdmin {
     
     #[cfg(feature = "kafka")]
     pub async fn list_topics(&self) -> Result<Vec<String>> {
-        let metadata = self.admin_client.fetch_metadata(None, Duration::from_secs(10))
+        let metadata = self.admin_client.inner().fetch_metadata(None, Duration::from_secs(10))
             .map_err(|e| anyhow!("Failed to fetch metadata: {}", e))?;
         
         let topics = metadata.topics()
@@ -512,7 +512,7 @@ impl KafkaAdmin {
     
     #[cfg(feature = "kafka")]
     pub async fn create_topic(&self, topic: &str, partitions: i32, replication: i16) -> Result<()> {
-        let new_topic = NewTopic::new(topic, partitions, TopicReplication::Fixed(replication));
+        let new_topic = NewTopic::new(topic, partitions, TopicReplication::Fixed(replication as i32));
         
         let result = self.admin_client
             .create_topics(vec![&new_topic], &AdminOptions::new())

@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 pub type Variable = String;
 
 /// IRI (Internationalized Resource Identifier)
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Iri(pub String);
 
 impl fmt::Display for Iri {
@@ -21,7 +21,7 @@ impl fmt::Display for Iri {
 }
 
 /// Literal value with optional language tag or datatype
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Literal {
     pub value: String,
     pub language: Option<String>,
@@ -347,6 +347,88 @@ pub enum Algebra {
     
     /// Zero matches
     Zero,
+}
+
+/// Join algorithm hints
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum JoinAlgorithm {
+    HashJoin,
+    SortMergeJoin,
+    NestedLoopJoin,
+    IndexNestedLoopJoin,
+    BindJoin,
+}
+
+/// Filter placement hints
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum FilterPlacement {
+    Early,     // Push down as much as possible
+    Late,      // Keep at current level
+    Optimal,   // Let optimizer decide
+}
+
+/// Service capabilities
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ServiceCapabilities {
+    pub supports_projection: bool,
+    pub supports_filtering: bool,
+    pub supports_ordering: bool,
+    pub supports_aggregation: bool,
+    pub max_query_size: Option<usize>,
+}
+
+/// Projection types
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum ProjectionType {
+    Standard,
+    Streaming,
+    Cached,
+}
+
+/// Sort algorithms
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum SortAlgorithm {
+    QuickSort,
+    MergeSort,
+    HeapSort,
+    ExternalSort,
+}
+
+/// Grouping algorithms
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum GroupingAlgorithm {
+    HashGrouping,
+    SortGrouping,
+    StreamingGrouping,
+}
+
+/// Materialization strategies
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum MaterializationStrategy {
+    InMemory,
+    Disk,
+    Adaptive,
+}
+
+/// Parallelism types
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum ParallelismType {
+    DataParallel,
+    PipelineParallel,
+    Hybrid,
+}
+
+/// Index types for optimization
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum IndexType {
+    SubjectIndex,
+    PredicateIndex,
+    ObjectIndex,
+    SubjectPredicateIndex,
+    PredicateObjectIndex,
+    SubjectObjectIndex,
+    FullIndex,
+    CustomIndex(String),
 }
 
 impl PropertyPath {
@@ -741,24 +823,78 @@ macro_rules! iri {
 #[macro_export]
 macro_rules! literal {
     ($value:expr) => {
-        Term::Literal(Literal {
-            value: $value.to_string(),
-            language: None,
-            datatype: None,
-        })
+        Term::Literal(Literal::new(
+            $value.to_string(),
+            None,
+            None,
+        ))
     };
     ($value:expr, lang: $lang:expr) => {
-        Term::Literal(Literal {
-            value: $value.to_string(),
-            language: Some($lang.to_string()),
-            datatype: None,
-        })
+        Term::Literal(Literal::new(
+            $value.to_string(),
+            Some($lang.to_string()),
+            None,
+        ))
     };
     ($value:expr, datatype: $dt:expr) => {
-        Term::Literal(Literal {
-            value: $value.to_string(),
-            language: None,
-            datatype: Some(Iri($dt.to_string())),
-        })
+        Term::Literal(Literal::new(
+            $value.to_string(),
+            None,
+            Some(Iri($dt.to_string())),
+        ))
     };
+}
+
+impl Default for FilterPlacement {
+    fn default() -> Self {
+        FilterPlacement::Optimal
+    }
+}
+
+impl Default for ProjectionType {
+    fn default() -> Self {
+        ProjectionType::Standard
+    }
+}
+
+impl Default for ServiceCapabilities {
+    fn default() -> Self {
+        Self {
+            supports_projection: true,
+            supports_filtering: true,
+            supports_ordering: false,
+            supports_aggregation: false,
+            max_query_size: None,
+        }
+    }
+}
+
+impl Default for JoinAlgorithm {
+    fn default() -> Self {
+        JoinAlgorithm::HashJoin
+    }
+}
+
+impl Default for SortAlgorithm {
+    fn default() -> Self {
+        SortAlgorithm::QuickSort
+    }
+}
+
+impl Default for GroupingAlgorithm {
+    fn default() -> Self {
+        GroupingAlgorithm::HashGrouping
+    }
+}
+
+impl Default for MaterializationStrategy {
+    fn default() -> Self {
+        MaterializationStrategy::Adaptive
+    }
+}
+
+impl Default for ParallelismType {
+    fn default() -> Self {
+        ParallelismType::DataParallel
+    }
 }

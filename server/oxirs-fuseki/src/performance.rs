@@ -113,37 +113,21 @@ impl PerformanceService {
     pub fn new(config: PerformanceConfig) -> FusekiResult<Self> {
         // Initialize query result cache
         let query_cache = Cache::builder()
-            .max_capacity(config.caching.as_ref().map(|c| c.max_entries).unwrap_or(1000) as u64)
-            .time_to_live(Duration::from_secs(
-                config.caching.as_ref().map(|c| c.ttl_seconds).unwrap_or(300)
-            ))
+            .max_capacity(config.caching.max_size as u64)
+            .time_to_live(Duration::from_secs(config.caching.ttl_secs))
             .build();
 
         // Initialize prepared query cache
-        let prepared_cache_size = NonZeroUsize::new(
-            config.query_optimization.as_ref()
-                .map(|opt| opt.prepared_cache_size)
-                .unwrap_or(100)
-        ).unwrap();
+        let prepared_cache_size = NonZeroUsize::new(100).unwrap();
         let prepared_cache = Arc::new(RwLock::new(LruCache::new(prepared_cache_size)));
 
         // Initialize connection pool
-        let max_connections = config.connection_pool.as_ref()
-            .map(|pool| pool.max_connections)
-            .unwrap_or(10);
+        let max_connections = config.connection_pool.max_connections;
         let connection_pool = Arc::new(ConnectionPool {
             max_connections,
             active_connections: Arc::new(Semaphore::new(max_connections)),
-            connection_timeout: Duration::from_secs(
-                config.connection_pool.as_ref()
-                    .map(|pool| pool.connection_timeout_secs)
-                    .unwrap_or(30)
-            ),
-            idle_timeout: Duration::from_secs(
-                config.connection_pool.as_ref()
-                    .map(|pool| pool.idle_timeout_secs)
-                    .unwrap_or(300)
-            ),
+            connection_timeout: Duration::from_secs(config.connection_pool.connection_timeout_secs),
+            idle_timeout: Duration::from_secs(config.connection_pool.idle_timeout_secs),
         });
 
         // Initialize resource monitoring
@@ -168,9 +152,7 @@ impl PerformanceService {
         }));
 
         // Query execution semaphore for concurrency control
-        let max_concurrent_queries = config.query_optimization.as_ref()
-            .map(|opt| opt.max_concurrent_queries)
-            .unwrap_or(50);
+        let max_concurrent_queries = 50;
         let query_semaphore = Arc::new(Semaphore::new(max_concurrent_queries));
 
         let service = Self {
@@ -317,10 +299,10 @@ impl PerformanceService {
 
     /// Check if query should be cached based on configuration
     pub fn should_cache_query(&self, query: &str, execution_time_ms: u64) -> bool {
-        if let Some(cache_config) = &self.config.caching {
+        let cache_config = &self.config.caching;
+        if cache_config.enabled {
             // Cache if enabled and query is not too short or too long
-            cache_config.enabled &&
-            execution_time_ms >= cache_config.min_execution_time_ms &&
+            execution_time_ms >= 10 &&
             query.len() >= 10 && // Minimum query length
             query.len() <= 10000 // Maximum query length
         } else {

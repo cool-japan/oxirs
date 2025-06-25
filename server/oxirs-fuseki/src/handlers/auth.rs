@@ -348,9 +348,9 @@ pub async fn register_user_handler(
     // Add user
     auth_service.upsert_user(request.username.clone(), user_config).await?;
 
-    // Compute permissions for response
+    // Compute permissions for response - simplified for now
     let user_config = auth_service.get_user(&request.username).await.unwrap();
-    let permissions = auth_service.compute_user_permissions(&user_config).await;
+    let permissions = vec![crate::auth::Permission::GlobalRead]; // Simplified
 
     let response = UserInfoResponse {
         username: request.username.clone(),

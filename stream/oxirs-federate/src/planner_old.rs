@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::Duration;
 use tracing::{debug, info, warn};
+// use sparql_syntax::{Query, ast, parser::ParseError}; // TODO: Add proper SPARQL parsing
 
 use crate::{FederatedService, ServiceRegistry, ServiceCapability};
 
@@ -34,6 +35,8 @@ impl QueryPlanner {
     pub async fn analyze_sparql(&self, query: &str) -> Result<QueryInfo> {
         debug!("Analyzing SPARQL query: {}", query);
 
+        // Use simplified string-based parsing for now
+        // TODO: Implement proper SPARQL AST parsing
         let query_type = self.detect_query_type(query);
         let patterns = self.extract_triple_patterns(query)?;
         let service_clauses = self.extract_service_clauses(query)?;
@@ -57,10 +60,12 @@ impl QueryPlanner {
     pub async fn analyze_graphql(&self, query: &str, variables: Option<&serde_json::Value>) -> Result<QueryInfo> {
         debug!("Analyzing GraphQL query: {}", query);
 
-        let query_type = QueryType::GraphQLQuery;
+        // Parse GraphQL query structure
+        let query_type = QueryType::GraphQLQuery; // TODO: Detect mutations/subscriptions
         let selections = self.extract_graphql_selections(query)?;
-        let _graphql_variables = variables.cloned().unwrap_or(serde_json::Value::Null);
+        let graphql_variables = variables.cloned().unwrap_or(serde_json::Value::Null);
         
+        // Convert GraphQL selections to patterns for planning
         let patterns = self.graphql_to_patterns(&selections)?;
         let complexity = self.calculate_graphql_complexity(&selections);
 
@@ -68,9 +73,9 @@ impl QueryPlanner {
             query_type,
             original_query: query.to_string(),
             patterns,
-            service_clauses: Vec::new(),
-            filters: Vec::new(),
-            variables: HashSet::new(),
+            service_clauses: Vec::new(), // GraphQL doesn't have SERVICE clauses
+            filters: Vec::new(), // TODO: Extract GraphQL filters/arguments
+            variables: HashSet::new(), // TODO: Extract GraphQL variables
             complexity,
             estimated_cost: self.estimate_graphql_cost(&selections),
         })
@@ -150,6 +155,7 @@ impl QueryPlanner {
             dependencies: HashMap::new(),
         };
 
+        // Find GraphQL services that can handle this query
         let graphql_services: Vec<_> = registry
             .get_services_with_capability(&ServiceCapability::GraphQLQuery);
 
@@ -157,6 +163,8 @@ impl QueryPlanner {
             return Err(anyhow!("No GraphQL services available for federation"));
         }
 
+        // For now, create a single step per GraphQL service
+        // TODO: Implement more sophisticated GraphQL federation logic
         for service in graphql_services {
             let step = ExecutionStep {
                 step_id: uuid::Uuid::new_v4().to_string(),
@@ -166,11 +174,12 @@ impl QueryPlanner {
                 expected_variables: HashSet::new(),
                 estimated_duration: Duration::from_millis(200),
                 dependencies: Vec::new(),
-                parallel_group: Some(0),
+                parallel_group: Some(0), // GraphQL services can be queried in parallel
             };
             plan.steps.push(step);
         }
 
+        // Add schema stitching step if multiple services
         if plan.steps.len() > 1 {
             let stitch_step = ExecutionStep {
                 step_id: uuid::Uuid::new_v4().to_string(),
@@ -189,6 +198,8 @@ impl QueryPlanner {
         Ok(plan)
     }
 
+    // Helper methods for query analysis
+
     fn detect_query_type(&self, query: &str) -> QueryType {
         let query_upper = query.to_uppercase();
         
@@ -205,26 +216,31 @@ impl QueryPlanner {
         } else if query_upper.trim_start().starts_with("QUERY") || query_upper.contains("{") {
             QueryType::GraphQLQuery
         } else {
-            QueryType::SparqlSelect
+            QueryType::SparqlSelect // Default fallback
         }
     }
 
+    /// Extract triple patterns using simple string parsing
     fn extract_triple_patterns(&self, query: &str) -> Result<Vec<TriplePattern>> {
         let mut patterns = Vec::new();
         
+        // Find WHERE clause
         if let Some(where_start) = query.to_uppercase().find("WHERE") {
             let where_clause = &query[where_start + 5..];
             
+            // Find the content between braces
             if let Some(open_brace) = where_clause.find('{') {
                 if let Some(close_brace) = where_clause.rfind('}') {
                     let pattern_content = &where_clause[open_brace + 1..close_brace];
                     
+                    // Split by periods and extract patterns
                     for line in pattern_content.split('.') {
                         let line = line.trim();
                         if line.is_empty() || line.starts_with("#") {
                             continue;
                         }
                         
+                        // Simple triple pattern extraction
                         let parts: Vec<&str> = line.split_whitespace().collect();
                         if parts.len() >= 3 {
                             patterns.push(TriplePattern {
@@ -242,18 +258,22 @@ impl QueryPlanner {
         Ok(patterns)
     }
 
+    /// Extract SERVICE clauses using simple string parsing
     fn extract_service_clauses(&self, query: &str) -> Result<Vec<ServiceClause>> {
         let mut services = Vec::new();
         let query_upper = query.to_uppercase();
         
+        // Find all SERVICE clauses
         let mut start_pos = 0;
         while let Some(service_pos) = query_upper[start_pos..].find("SERVICE") {
             let actual_pos = start_pos + service_pos;
             
+            // Find the service URL and subquery
             if let Some(url_start) = query[actual_pos..].find('<') {
                 if let Some(url_end) = query[actual_pos + url_start..].find('>') {
                     let service_url = query[actual_pos + url_start + 1..actual_pos + url_start + url_end].to_string();
                     
+                    // Find the subquery in braces
                     if let Some(brace_start) = query[actual_pos..].find('{') {
                         if let Some(brace_end) = query[actual_pos + brace_start..].find('}') {
                             let subquery = query[actual_pos + brace_start + 1..actual_pos + brace_start + brace_end].trim().to_string();
@@ -268,20 +288,23 @@ impl QueryPlanner {
                 }
             }
             
-            start_pos = actual_pos + 7;
+            start_pos = actual_pos + 7; // Move past "SERVICE"
         }
         
         Ok(services)
     }
 
+    /// Extract FILTER expressions using simple string parsing
     fn extract_filters(&self, query: &str) -> Result<Vec<FilterExpression>> {
         let mut filters = Vec::new();
         let query_upper = query.to_uppercase();
         
+        // Find all FILTER clauses
         let mut start_pos = 0;
         while let Some(filter_pos) = query_upper[start_pos..].find("FILTER") {
             let actual_pos = start_pos + filter_pos;
             
+            // Find the filter expression in parentheses or brackets
             if let Some(paren_start) = query[actual_pos..].find('(') {
                 let mut paren_count = 0;
                 let mut end_pos = actual_pos + paren_start;
@@ -307,31 +330,36 @@ impl QueryPlanner {
                 });
             }
             
-            start_pos = actual_pos + 6;
+            start_pos = actual_pos + 6; // Move past "FILTER"
         }
         
         Ok(filters)
     }
 
+    /// Extract variables using simple string parsing
     fn extract_variables(&self, query: &str) -> Result<HashSet<String>> {
         let mut variables = HashSet::new();
         
+        // Check for SELECT clause variables
         if let Some(select_start) = query.to_uppercase().find("SELECT") {
             if let Some(where_start) = query.to_uppercase().find("WHERE") {
                 let select_clause = &query[select_start + 6..where_start];
                 
+                // Extract variables from SELECT clause
                 for word in select_clause.split_whitespace() {
                     if word.starts_with('?') {
                         variables.insert(word.to_string());
                     }
                 }
                 
+                // If SELECT *, extract variables from WHERE clause
                 if select_clause.trim() == "*" {
                     variables.extend(self.extract_variables_from_text(&query[where_start..]));
                 }
             }
         }
         
+        // Also extract from WHERE clause patterns
         if let Some(where_start) = query.to_uppercase().find("WHERE") {
             variables.extend(self.extract_variables_from_text(&query[where_start..]));
         }
@@ -339,11 +367,13 @@ impl QueryPlanner {
         Ok(variables)
     }
     
+    /// Helper to extract variables from text
     fn extract_variables_from_text(&self, text: &str) -> HashSet<String> {
         let mut variables = HashSet::new();
         
         for word in text.split_whitespace() {
             if word.starts_with('?') {
+                // Clean up the variable (remove trailing punctuation)
                 let clean_var = word.trim_end_matches(&['.', ';', '}', ')', ','][..]);
                 variables.insert(clean_var.to_string());
             }
@@ -352,7 +382,266 @@ impl QueryPlanner {
         variables
     }
 
+    fn extract_variables_from_ast(&self, query: &Query) -> Result<HashSet<String>> {
+        let mut variables = HashSet::new();
+        
+        match query {
+            Query::Select { pattern, selection, .. } => {
+                // Extract projection variables
+                match selection {
+                    ast::QuerySelection::Distinct(vars) | ast::QuerySelection::Reduced(vars) => {
+                        for var in vars {
+                            match var {
+                                ast::SelectionMember::Variable(v) => {
+                                    variables.insert(format!("?{}", v));
+                                }
+                                ast::SelectionMember::Expression(_, alias) => {
+                                    if let Some(alias_var) = alias {
+                                        variables.insert(format!("?{}", alias_var));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    ast::QuerySelection::Asterisk => {
+                        // Extract all variables from pattern
+                        self.collect_variables_from_pattern(pattern, &mut variables)?;
+                    }
+                }
+            }
+            Query::Construct { pattern, .. } |
+            Query::Ask { pattern, .. } |
+            Query::Describe { pattern, .. } => {
+                self.collect_variables_from_pattern(pattern, &mut variables)?;
+            }
+            Query::Update { .. } => {
+                // Handle update variables if needed
+            }
+        }
+        
+        Ok(variables)
+    }
+
+    fn collect_variables_from_pattern(
+        &self,
+        pattern: &ast::GraphPattern,
+        variables: &mut HashSet<String>
+    ) -> Result<()> {
+        match pattern {
+            ast::GraphPattern::Bgp { patterns: triples } => {
+                for triple in triples {
+                    if let ast::TermPattern::Variable(var) = &triple.subject {
+                        variables.insert(format!("?{}", var));
+                    }
+                    if let ast::TermPattern::Variable(var) = &triple.predicate {
+                        variables.insert(format!("?{}", var));
+                    }
+                    if let ast::TermPattern::Variable(var) = &triple.object {
+                        variables.insert(format!("?{}", var));
+                    }
+                }
+            }
+            ast::GraphPattern::Join { left, right } => {
+                self.collect_variables_from_pattern(left, variables)?;
+                self.collect_variables_from_pattern(right, variables)?;
+            }
+            ast::GraphPattern::Union { left, right } => {
+                self.collect_variables_from_pattern(left, variables)?;
+                self.collect_variables_from_pattern(right, variables)?;
+            }
+            ast::GraphPattern::LeftJoin { left, right, .. } => {
+                self.collect_variables_from_pattern(left, variables)?;
+                self.collect_variables_from_pattern(right, variables)?;
+            }
+            ast::GraphPattern::Filter { inner, .. } => {
+                self.collect_variables_from_pattern(inner, variables)?;
+            }
+            ast::GraphPattern::Service { inner, .. } => {
+                self.collect_variables_from_pattern(inner, variables)?;
+            }
+            ast::GraphPattern::Group { inner, .. } => {
+                self.collect_variables_from_pattern(inner, variables)?;
+            }
+            ast::GraphPattern::Graph { inner, .. } => {
+                self.collect_variables_from_pattern(inner, variables)?;
+            }
+            ast::GraphPattern::Extend { inner, variable, .. } => {
+                variables.insert(format!("?{}", variable));
+                self.collect_variables_from_pattern(inner, variables)?;
+            }
+            ast::GraphPattern::Minus { left, right } => {
+                self.collect_variables_from_pattern(left, variables)?;
+                self.collect_variables_from_pattern(right, variables)?;
+            }
+            ast::GraphPattern::OrderBy { inner, .. } => {
+                self.collect_variables_from_pattern(inner, variables)?;
+            }
+            ast::GraphPattern::Project { inner, variables: proj_vars } => {
+                for var in proj_vars {
+                    variables.insert(format!("?{}", var));
+                }
+                self.collect_variables_from_pattern(inner, variables)?;
+            }
+            ast::GraphPattern::Distinct { inner } => {
+                self.collect_variables_from_pattern(inner, variables)?;
+            }
+            ast::GraphPattern::Reduced { inner } => {
+                self.collect_variables_from_pattern(inner, variables)?;
+            }
+            ast::GraphPattern::Slice { inner, .. } => {
+                self.collect_variables_from_pattern(inner, variables)?;
+            }
+            _ => {
+                // Other patterns
+            }
+        }
+        Ok(())
+    }
+
+    fn detect_query_type(&self, query: &str) -> QueryType {
+        let query_upper = query.to_uppercase();
+        if query_upper.trim_start().starts_with("SELECT") {
+            QueryType::SparqlSelect
+        } else if query_upper.trim_start().starts_with("CONSTRUCT") {
+            QueryType::SparqlConstruct
+        } else if query_upper.trim_start().starts_with("ASK") {
+            QueryType::SparqlAsk
+        } else if query_upper.trim_start().starts_with("DESCRIBE") {
+            QueryType::SparqlDescribe
+        } else if query_upper.contains("INSERT") || query_upper.contains("DELETE") {
+            QueryType::SparqlUpdate
+        } else {
+            QueryType::Unknown
+        }
+    }
+
+    fn extract_triple_patterns(&self, query: &str) -> Result<Vec<TriplePattern>> {
+        // Simplified pattern extraction - would need a proper SPARQL parser
+        let mut patterns = Vec::new();
+        
+        // Look for basic triple patterns in WHERE clauses
+        if let Some(where_start) = query.to_uppercase().find("WHERE") {
+            let where_clause = &query[where_start..];
+            
+            // Very basic pattern detection - this needs improvement
+            let lines: Vec<&str> = where_clause.lines().collect();
+            for line in lines {
+                let trimmed = line.trim();
+                if trimmed.contains(" ") && !trimmed.starts_with('#') && !trimmed.is_empty() {
+                    patterns.push(TriplePattern {
+                        subject: "?s".to_string(), // Simplified
+                        predicate: "?p".to_string(),
+                        object: "?o".to_string(),
+                        pattern_string: trimmed.to_string(),
+                    });
+                }
+            }
+        }
+
+        Ok(patterns)
+    }
+
+    fn extract_service_clauses(&self, query: &str) -> Result<Vec<ServiceClause>> {
+        let mut services = Vec::new();
+        let query_upper = query.to_uppercase();
+        
+        // Find SERVICE clauses
+        let mut pos = 0;
+        while let Some(service_pos) = query_upper[pos..].find("SERVICE") {
+            let absolute_pos = pos + service_pos;
+            
+            // Extract service URL and subquery
+            if let Some(url_start) = query[absolute_pos..].find('<') {
+                if let Some(url_end) = query[absolute_pos + url_start..].find('>') {
+                    let service_url = &query[absolute_pos + url_start + 1..absolute_pos + url_start + url_end];
+                    
+                    // Extract the subquery (simplified)
+                    let subquery = "SELECT * WHERE { ?s ?p ?o }".to_string(); // Placeholder
+                    
+                    services.push(ServiceClause {
+                        service_url: service_url.to_string(),
+                        subquery,
+                        silent: query_upper[absolute_pos..].contains("SILENT"),
+                    });
+                }
+            }
+            
+            pos = absolute_pos + 7; // Move past "SERVICE"
+        }
+
+        Ok(services)
+    }
+
+    fn extract_filters(&self, query: &str) -> Result<Vec<FilterExpression>> {
+        let mut filters = Vec::new();
+        let query_upper = query.to_uppercase();
+        
+        // Find FILTER clauses
+        let mut pos = 0;
+        while let Some(filter_pos) = query_upper[pos..].find("FILTER") {
+            let absolute_pos = pos + filter_pos;
+            
+            // Extract filter expression (simplified)
+            if let Some(paren_start) = query[absolute_pos..].find('(') {
+                let mut paren_count = 0;
+                let mut filter_end = absolute_pos + paren_start;
+                
+                for (i, c) in query[absolute_pos + paren_start..].char_indices() {
+                    match c {
+                        '(' => paren_count += 1,
+                        ')' => {
+                            paren_count -= 1;
+                            if paren_count == 0 {
+                                filter_end = absolute_pos + paren_start + i + 1;
+                                break;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                
+                let filter_expr = &query[absolute_pos + paren_start + 1..filter_end - 1];
+                filters.push(FilterExpression {
+                    expression: filter_expr.to_string(),
+                    variables: self.extract_variables_from_expression(filter_expr),
+                });
+            }
+            
+            pos = absolute_pos + 6; // Move past "FILTER"
+        }
+
+        Ok(filters)
+    }
+
+    fn extract_variables(&self, query: &str) -> Result<HashSet<String>> {
+        let mut variables = HashSet::new();
+        
+        // Find all variables (starting with ?)
+        for word in query.split_whitespace() {
+            if word.starts_with('?') {
+                let var_name = word.trim_end_matches(&['.', ',', ';', ')', '}'][..]);
+                variables.insert(var_name.to_string());
+            }
+        }
+
+        Ok(variables)
+    }
+
+    fn extract_variables_from_expression(&self, expr: &str) -> HashSet<String> {
+        let mut variables = HashSet::new();
+        
+        for word in expr.split_whitespace() {
+            if word.starts_with('?') {
+                let var_name = word.trim_end_matches(&['.', ',', ';', ')', '}'][..]);
+                variables.insert(var_name.to_string());
+            }
+        }
+
+        variables
+    }
+
     fn extract_graphql_selections(&self, _query: &str) -> Result<Vec<GraphQLSelection>> {
+        // TODO: Implement proper GraphQL parsing
         Ok(vec![GraphQLSelection {
             name: "placeholder".to_string(),
             arguments: HashMap::new(),
@@ -361,6 +650,7 @@ impl QueryPlanner {
     }
 
     fn graphql_to_patterns(&self, _selections: &[GraphQLSelection]) -> Result<Vec<TriplePattern>> {
+        // TODO: Convert GraphQL selections to RDF patterns
         Ok(Vec::new())
     }
 
@@ -379,6 +669,7 @@ impl QueryPlanner {
     }
 
     fn calculate_graphql_complexity(&self, _selections: &[GraphQLSelection]) -> QueryComplexity {
+        // TODO: Implement GraphQL complexity analysis
         QueryComplexity::Medium
     }
 
@@ -387,10 +678,11 @@ impl QueryPlanner {
     }
 
     fn estimate_graphql_cost(&self, _selections: &[GraphQLSelection]) -> u64 {
-        100
+        100 // Placeholder
     }
 
     fn create_service_step(&self, service_clause: &ServiceClause, registry: &ServiceRegistry) -> Result<ExecutionStep> {
+        // Find the service in the registry
         let service = registry
             .get_all_services()
             .find(|s| s.endpoint == service_clause.service_url)
@@ -401,7 +693,7 @@ impl QueryPlanner {
             step_type: StepType::ServiceQuery,
             service_id: Some(service.id.clone()),
             query_fragment: service_clause.subquery.clone(),
-            expected_variables: HashSet::new(),
+            expected_variables: HashSet::new(), // TODO: Extract from subquery
             estimated_duration: Duration::from_millis(150),
             dependencies: Vec::new(),
             parallel_group: None,
@@ -411,6 +703,7 @@ impl QueryPlanner {
     fn assign_patterns_to_services(&self, patterns: &[&TriplePattern], registry: &ServiceRegistry) -> Result<HashMap<String, Vec<TriplePattern>>> {
         let mut assignments = HashMap::new();
         
+        // Simple assignment: try to assign all patterns to SPARQL services
         let sparql_services: Vec<_> = registry
             .get_services_with_capability(&ServiceCapability::SparqlQuery);
 
@@ -418,6 +711,8 @@ impl QueryPlanner {
             return Err(anyhow!("No SPARQL services available"));
         }
 
+        // For now, assign all patterns to the first available service
+        // TODO: Implement more sophisticated pattern-to-service assignment
         if let Some(service) = sparql_services.first() {
             assignments.insert(
                 service.id.clone(),
@@ -429,6 +724,7 @@ impl QueryPlanner {
     }
 
     fn is_pattern_in_service_clause(&self, _pattern: &TriplePattern, _service_clauses: &[ServiceClause]) -> bool {
+        // TODO: Check if pattern is already handled by a SERVICE clause
         false
     }
 
@@ -445,6 +741,7 @@ impl QueryPlanner {
         let mut variables = HashSet::new();
         
         for pattern in patterns {
+            // Extract variables from subject, predicate, object
             if pattern.subject.starts_with('?') {
                 variables.insert(pattern.subject.clone());
             }
@@ -460,6 +757,7 @@ impl QueryPlanner {
     }
 
     fn optimize_plan(&self, plan: &mut ExecutionPlan) {
+        // Identify parallelizable steps
         let mut parallel_groups = HashMap::new();
         let mut group_id = 0;
 
@@ -472,6 +770,7 @@ impl QueryPlanner {
 
         plan.parallelizable_steps = parallel_groups.into_values().collect();
 
+        // Estimate total duration
         let mut max_parallel_duration = Duration::from_secs(0);
         let mut sequential_duration = Duration::from_secs(0);
 
@@ -599,8 +898,8 @@ pub struct ExecutionPlan {
     pub query_type: QueryType,
     pub steps: Vec<ExecutionStep>,
     pub estimated_duration: Duration,
-    pub parallelizable_steps: Vec<Vec<String>>,
-    pub dependencies: HashMap<String, Vec<String>>,
+    pub parallelizable_steps: Vec<Vec<String>>, // Groups of step IDs that can run in parallel
+    pub dependencies: HashMap<String, Vec<String>>, // Step dependencies
 }
 
 /// Individual step in an execution plan
@@ -612,8 +911,8 @@ pub struct ExecutionStep {
     pub query_fragment: String,
     pub expected_variables: HashSet<String>,
     pub estimated_duration: Duration,
-    pub dependencies: Vec<String>,
-    pub parallel_group: Option<usize>,
+    pub dependencies: Vec<String>, // IDs of steps this step depends on
+    pub parallel_group: Option<usize>, // Which parallel group this step belongs to
 }
 
 /// Types of execution steps

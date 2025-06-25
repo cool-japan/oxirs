@@ -2,13 +2,11 @@
 
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::str::FromStr;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
 use std::collections::HashSet;
 use regex::Regex;
 use lazy_static::lazy_static;
-use serde::{Deserialize, Serialize, Deserializer, Serializer};
+use serde::{Deserialize, Serialize};
 use crate::model::{RdfTerm, SubjectTerm, ObjectTerm, NamedNode, Literal};
 use crate::OxirsError;
 
@@ -353,6 +351,33 @@ impl Term {
         match self {
             Term::Variable(v) => Some(v),
             _ => None,
+        }
+    }
+    
+    /// Convert a Subject to a Term
+    pub fn from_subject(subject: &crate::model::Subject) -> Term {
+        match subject {
+            crate::model::Subject::NamedNode(n) => Term::NamedNode(n.clone()),
+            crate::model::Subject::BlankNode(b) => Term::BlankNode(b.clone()),
+            crate::model::Subject::Variable(v) => Term::Variable(v.clone()),
+        }
+    }
+    
+    /// Convert a Predicate to a Term
+    pub fn from_predicate(predicate: &crate::model::Predicate) -> Term {
+        match predicate {
+            crate::model::Predicate::NamedNode(n) => Term::NamedNode(n.clone()),
+            crate::model::Predicate::Variable(v) => Term::Variable(v.clone()),
+        }
+    }
+    
+    /// Convert an Object to a Term
+    pub fn from_object(object: &crate::model::Object) -> Term {
+        match object {
+            crate::model::Object::NamedNode(n) => Term::NamedNode(n.clone()),
+            crate::model::Object::BlankNode(b) => Term::BlankNode(b.clone()),
+            crate::model::Object::Literal(l) => Term::Literal(l.clone()),
+            crate::model::Object::Variable(v) => Term::Variable(v.clone()),
         }
     }
 }

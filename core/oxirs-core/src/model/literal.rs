@@ -4,8 +4,302 @@ use std::borrow::Cow;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
+use regex::Regex;
+use lazy_static::lazy_static;
 use crate::model::{RdfTerm, ObjectTerm, NamedNode, NamedNodeRef};
 use crate::OxirsError;
+
+lazy_static! {
+    /// BCP 47 language tag validation regex
+    /// Based on RFC 5646 - Tags for Identifying Languages
+    static ref LANGUAGE_TAG_REGEX: Regex = Regex::new(
+        r"^([a-zA-Z]{2,3}(-[a-zA-Z]{3}){0,3}(-[a-zA-Z]{4})?(-[a-zA-Z]{2}|\d{3})?(-[0-9a-zA-Z]{5,8}|-\d[0-9a-zA-Z]{3})*(-[0-9a-wyzA-WYZ](-[0-9a-zA-Z]{2,8})+)*(-x(-[0-9a-zA-Z]{1,8})+)?|x(-[0-9a-zA-Z]{1,8})+|[a-zA-Z]{4}|[a-zA-Z]{5,8})$"
+    ).expect("Language tag regex compilation failed");
+    
+    /// Simple language subtag validation (2-3 letter language codes)
+    static ref SIMPLE_LANGUAGE_REGEX: Regex = Regex::new(
+        r"^[a-zA-Z]{2,3}$"
+    ).expect("Simple language regex compilation failed");
+    
+    /// XSD numeric type validation regexes
+    static ref INTEGER_REGEX: Regex = Regex::new(
+        r"^[+-]?\d+$"
+    ).expect("Integer regex compilation failed");
+    
+    static ref DECIMAL_REGEX: Regex = Regex::new(
+        r"^[+-]?(\d+(\.\d*)?|\.\d+)$"
+    ).expect("Decimal regex compilation failed");
+    
+    static ref DOUBLE_REGEX: Regex = Regex::new(
+        r"^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$|^[+-]?INF$|^NaN$"
+    ).expect("Double regex compilation failed");
+    
+    static ref BOOLEAN_REGEX: Regex = Regex::new(
+        r"^(true|false|1|0)$"
+    ).expect("Boolean regex compilation failed");
+    
+    /// DateTime validation (simplified ISO 8601)
+    static ref DATETIME_REGEX: Regex = Regex::new(
+        r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?$"
+    ).expect("DateTime regex compilation failed");
+    
+    static ref DATE_REGEX: Regex = Regex::new(
+        r"^\d{4}-\d{2}-\d{2}(Z|[+-]\d{2}:\d{2})?$"
+    ).expect("Date regex compilation failed");
+    
+    static ref TIME_REGEX: Regex = Regex::new(
+        r"^\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?$"
+    ).expect("Time regex compilation failed");
+}
+
+/// Validates a language tag according to BCP 47 (RFC 5646)
+fn validate_language_tag(tag: &str) -> Result<(), OxirsError> {
+    if tag.is_empty() {
+        return Err(OxirsError::Parse("Language tag cannot be empty".to_string()));
+    }
+    
+    // Convert to lowercase for validation (BCP 47 is case-insensitive)
+    let tag_lower = tag.to_lowercase();
+    
+    // Check overall structure with regex
+    if !LANGUAGE_TAG_REGEX.is_match(&tag_lower) {
+        return Err(OxirsError::Parse(format!(
+            "Invalid language tag format: '{}'. Must follow BCP 47 specification",
+            tag
+        )));
+    }
+    
+    // Additional validations for common cases
+    let parts: Vec<&str> = tag_lower.split('-').collect();
+    
+    if parts.is_empty() {
+        return Err(OxirsError::Parse("Language tag cannot be empty".to_string()));
+    }
+    
+    // First part should be a valid language subtag
+    let language_subtag = parts[0];
+    if language_subtag.len() < 2 || language_subtag.len() > 8 {
+        return Err(OxirsError::Parse(format!(
+            "Invalid language subtag length: '{}'. Must be 2-8 characters",
+            language_subtag
+        )));
+    }
+    
+    // Check for common invalid patterns
+    if tag_lower.starts_with('-') || tag_lower.ends_with('-') || tag_lower.contains("--") {
+        return Err(OxirsError::Parse(format!(
+            "Invalid language tag structure: '{}'",
+            tag
+        )));
+    }
+    
+    Ok(())
+}
+
+/// Validates a literal value against its XSD datatype
+pub fn validate_xsd_value(value: &str, datatype_iri: &str) -> Result<(), OxirsError> {
+    match datatype_iri {
+        // String types
+        "http://www.w3.org/2001/XMLSchema#string" |
+        "http://www.w3.org/2001/XMLSchema#normalizedString" |
+        "http://www.w3.org/2001/XMLSchema#token" => {
+            // All strings are valid for string types
+            Ok(())
+        }
+        
+        // Boolean type
+        "http://www.w3.org/2001/XMLSchema#boolean" => {
+            if BOOLEAN_REGEX.is_match(value) {
+                Ok(())
+            } else {
+                Err(OxirsError::Parse(format!(
+                    "Invalid boolean value: '{}'. Must be true, false, 1, or 0",
+                    value
+                )))
+            }
+        }
+        
+        // Integer types
+        "http://www.w3.org/2001/XMLSchema#integer" |
+        "http://www.w3.org/2001/XMLSchema#long" |
+        "http://www.w3.org/2001/XMLSchema#int" |
+        "http://www.w3.org/2001/XMLSchema#short" |
+        "http://www.w3.org/2001/XMLSchema#byte" |
+        "http://www.w3.org/2001/XMLSchema#unsignedLong" |
+        "http://www.w3.org/2001/XMLSchema#unsignedInt" |
+        "http://www.w3.org/2001/XMLSchema#unsignedShort" |
+        "http://www.w3.org/2001/XMLSchema#unsignedByte" |
+        "http://www.w3.org/2001/XMLSchema#positiveInteger" |
+        "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" |
+        "http://www.w3.org/2001/XMLSchema#negativeInteger" |
+        "http://www.w3.org/2001/XMLSchema#nonPositiveInteger" => {
+            if INTEGER_REGEX.is_match(value) {
+                // Additional validation for specific integer types
+                validate_integer_range(value, datatype_iri)
+            } else {
+                Err(OxirsError::Parse(format!(
+                    "Invalid integer format: '{}'",
+                    value
+                )))
+            }
+        }
+        
+        // Decimal types
+        "http://www.w3.org/2001/XMLSchema#decimal" => {
+            if DECIMAL_REGEX.is_match(value) {
+                Ok(())
+            } else {
+                Err(OxirsError::Parse(format!(
+                    "Invalid decimal format: '{}'",
+                    value
+                )))
+            }
+        }
+        
+        // Floating point types
+        "http://www.w3.org/2001/XMLSchema#double" |
+        "http://www.w3.org/2001/XMLSchema#float" => {
+            if DOUBLE_REGEX.is_match(value) {
+                Ok(())
+            } else {
+                Err(OxirsError::Parse(format!(
+                    "Invalid floating point format: '{}'",
+                    value
+                )))
+            }
+        }
+        
+        // Date/time types
+        "http://www.w3.org/2001/XMLSchema#dateTime" => {
+            if DATETIME_REGEX.is_match(value) {
+                Ok(())
+            } else {
+                Err(OxirsError::Parse(format!(
+                    "Invalid dateTime format: '{}'. Expected ISO 8601 format",
+                    value
+                )))
+            }
+        }
+        
+        "http://www.w3.org/2001/XMLSchema#date" => {
+            if DATE_REGEX.is_match(value) {
+                Ok(())
+            } else {
+                Err(OxirsError::Parse(format!(
+                    "Invalid date format: '{}'. Expected YYYY-MM-DD format",
+                    value
+                )))
+            }
+        }
+        
+        "http://www.w3.org/2001/XMLSchema#time" => {
+            if TIME_REGEX.is_match(value) {
+                Ok(())
+            } else {
+                Err(OxirsError::Parse(format!(
+                    "Invalid time format: '{}'. Expected HH:MM:SS format",
+                    value
+                )))
+            }
+        }
+        
+        // For unknown datatypes, don't validate
+        _ => Ok(())
+    }
+}
+
+/// Validates integer values against their specific type ranges
+fn validate_integer_range(value: &str, datatype_iri: &str) -> Result<(), OxirsError> {
+    let parsed_value: i64 = value.parse().map_err(|_| {
+        OxirsError::Parse(format!("Cannot parse integer: '{}'", value))
+    })?;
+    
+    match datatype_iri {
+        "http://www.w3.org/2001/XMLSchema#byte" => {
+            if parsed_value < -128 || parsed_value > 127 {
+                return Err(OxirsError::Parse(format!(
+                    "Byte value out of range: {}. Must be between -128 and 127",
+                    parsed_value
+                )));
+            }
+        }
+        "http://www.w3.org/2001/XMLSchema#short" => {
+            if parsed_value < -32768 || parsed_value > 32767 {
+                return Err(OxirsError::Parse(format!(
+                    "Short value out of range: {}. Must be between -32768 and 32767",
+                    parsed_value
+                )));
+            }
+        }
+        "http://www.w3.org/2001/XMLSchema#int" => {
+            if parsed_value < -2147483648 || parsed_value > 2147483647 {
+                return Err(OxirsError::Parse(format!(
+                    "Int value out of range: {}. Must be between -2147483648 and 2147483647",
+                    parsed_value
+                )));
+            }
+        }
+        "http://www.w3.org/2001/XMLSchema#unsignedByte" => {
+            if parsed_value < 0 || parsed_value > 255 {
+                return Err(OxirsError::Parse(format!(
+                    "Unsigned byte value out of range: {}. Must be between 0 and 255",
+                    parsed_value
+                )));
+            }
+        }
+        "http://www.w3.org/2001/XMLSchema#unsignedShort" => {
+            if parsed_value < 0 || parsed_value > 65535 {
+                return Err(OxirsError::Parse(format!(
+                    "Unsigned short value out of range: {}. Must be between 0 and 65535",
+                    parsed_value
+                )));
+            }
+        }
+        "http://www.w3.org/2001/XMLSchema#unsignedInt" => {
+            if parsed_value < 0 || parsed_value > 4294967295 {
+                return Err(OxirsError::Parse(format!(
+                    "Unsigned int value out of range: {}. Must be between 0 and 4294967295",
+                    parsed_value
+                )));
+            }
+        }
+        "http://www.w3.org/2001/XMLSchema#positiveInteger" => {
+            if parsed_value <= 0 {
+                return Err(OxirsError::Parse(format!(
+                    "Positive integer must be greater than 0, got: {}",
+                    parsed_value
+                )));
+            }
+        }
+        "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" => {
+            if parsed_value < 0 {
+                return Err(OxirsError::Parse(format!(
+                    "Non-negative integer must be >= 0, got: {}",
+                    parsed_value
+                )));
+            }
+        }
+        "http://www.w3.org/2001/XMLSchema#negativeInteger" => {
+            if parsed_value >= 0 {
+                return Err(OxirsError::Parse(format!(
+                    "Negative integer must be less than 0, got: {}",
+                    parsed_value
+                )));
+            }
+        }
+        "http://www.w3.org/2001/XMLSchema#nonPositiveInteger" => {
+            if parsed_value > 0 {
+                return Err(OxirsError::Parse(format!(
+                    "Non-positive integer must be <= 0, got: {}",
+                    parsed_value
+                )));
+            }
+        }
+        _ => {} // Other integer types don't have additional range restrictions in this simplified implementation
+    }
+    
+    Ok(())
+}
 
 /// An RDF Literal
 /// 
@@ -29,23 +323,31 @@ impl Literal {
     
     /// Creates a new literal with a datatype
     pub fn new_typed(value: impl Into<String>, datatype: NamedNode) -> Self {
+        let value = value.into();
+        // Note: For performance, we don't validate by default in the constructor
+        // Use `new_typed_validated` for validation
         Literal {
-            value: value.into(),
+            value,
             datatype: Some(datatype),
             language: None,
         }
     }
     
+    /// Creates a new literal with a datatype and validates the value
+    pub fn new_typed_validated(value: impl Into<String>, datatype: NamedNode) -> Result<Self, OxirsError> {
+        let value = value.into();
+        validate_xsd_value(&value, datatype.as_str())?;
+        Ok(Literal {
+            value,
+            datatype: Some(datatype),
+            language: None,
+        })
+    }
+    
     /// Creates a new literal with a language tag
     pub fn new_lang(value: impl Into<String>, language: impl Into<String>) -> Result<Self, OxirsError> {
         let language = language.into();
-        
-        // Basic language tag validation
-        if language.is_empty() {
-            return Err(OxirsError::Parse("Language tag cannot be empty".to_string()));
-        }
-        
-        // TODO: Add BCP 47 language tag validation
+        validate_language_tag(&language)?;
         
         Ok(Literal {
             value: value.into(),
@@ -158,31 +460,120 @@ impl Literal {
     
     /// Returns the canonical form of this literal
     /// 
-    /// This normalizes the literal according to XSD rules
+    /// This normalizes the literal according to XSD rules and recommendations
     pub fn canonical_form(&self) -> Literal {
         if let Some(datatype) = &self.datatype {
             let dt_iri = datatype.as_str();
             match dt_iri {
                 "http://www.w3.org/2001/XMLSchema#boolean" => {
                     if let Some(bool_val) = self.as_bool() {
-                        return Literal::new_typed(bool_val.to_string(), datatype.clone());
+                        let canonical_value = if bool_val { "true" } else { "false" };
+                        return Literal::new_typed(canonical_value, datatype.clone());
                     }
                 }
-                "http://www.w3.org/2001/XMLSchema#integer" => {
+                "http://www.w3.org/2001/XMLSchema#integer" |
+                "http://www.w3.org/2001/XMLSchema#long" |
+                "http://www.w3.org/2001/XMLSchema#int" |
+                "http://www.w3.org/2001/XMLSchema#short" |
+                "http://www.w3.org/2001/XMLSchema#byte" => {
                     if let Some(int_val) = self.as_i64() {
                         return Literal::new_typed(int_val.to_string(), datatype.clone());
                     }
                 }
+                "http://www.w3.org/2001/XMLSchema#unsignedLong" |
+                "http://www.w3.org/2001/XMLSchema#unsignedInt" |
+                "http://www.w3.org/2001/XMLSchema#unsignedShort" |
+                "http://www.w3.org/2001/XMLSchema#unsignedByte" |
+                "http://www.w3.org/2001/XMLSchema#positiveInteger" |
+                "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" => {
+                    if let Some(int_val) = self.as_i64() {
+                        if int_val >= 0 {
+                            return Literal::new_typed(int_val.to_string(), datatype.clone());
+                        }
+                    }
+                }
+                "http://www.w3.org/2001/XMLSchema#negativeInteger" |
+                "http://www.w3.org/2001/XMLSchema#nonPositiveInteger" => {
+                    if let Some(int_val) = self.as_i64() {
+                        if int_val <= 0 {
+                            return Literal::new_typed(int_val.to_string(), datatype.clone());
+                        }
+                    }
+                }
                 "http://www.w3.org/2001/XMLSchema#decimal" => {
                     if let Some(dec_val) = self.as_f64() {
-                        // Format as decimal without scientific notation
-                        return Literal::new_typed(format!("{:.1}", dec_val), datatype.clone());
+                        // Format decimal properly - remove trailing zeros after decimal point
+                        let formatted = format!("{}", dec_val);
+                        if formatted.contains('.') {
+                            let trimmed = formatted.trim_end_matches('0').trim_end_matches('.');
+                            return Literal::new_typed(
+                                if trimmed.is_empty() || trimmed == "-" { "0" } else { trimmed },
+                                datatype.clone()
+                            );
+                        } else {
+                            return Literal::new_typed(format!("{}.0", formatted), datatype.clone());
+                        }
                     }
+                }
+                "http://www.w3.org/2001/XMLSchema#double" |
+                "http://www.w3.org/2001/XMLSchema#float" => {
+                    if let Some(float_val) = self.as_f64() {
+                        // Handle special values
+                        if float_val.is_infinite() {
+                            return Literal::new_typed(
+                                if float_val.is_sign_positive() { "INF" } else { "-INF" },
+                                datatype.clone()
+                            );
+                        } else if float_val.is_nan() {
+                            return Literal::new_typed("NaN", datatype.clone());
+                        } else {
+                            // Use scientific notation for very large or very small numbers
+                            let formatted = if float_val.abs() >= 1e6 || (float_val.abs() < 1e-3 && float_val != 0.0) {
+                                format!("{:E}", float_val)
+                            } else {
+                                format!("{}", float_val)
+                            };
+                            return Literal::new_typed(formatted, datatype.clone());
+                        }
+                    }
+                }
+                "http://www.w3.org/2001/XMLSchema#string" |
+                "http://www.w3.org/2001/XMLSchema#normalizedString" => {
+                    // Normalize whitespace for normalizedString
+                    if dt_iri == "http://www.w3.org/2001/XMLSchema#normalizedString" {
+                        let normalized = self.value.replace('\t', " ")
+                            .replace('\n', " ")
+                            .replace('\r', " ");
+                        return Literal::new_typed(normalized, datatype.clone());
+                    }
+                }
+                "http://www.w3.org/2001/XMLSchema#token" => {
+                    // Normalize whitespace and collapse consecutive spaces
+                    let normalized = self.value.split_whitespace().collect::<Vec<_>>().join(" ");
+                    return Literal::new_typed(normalized, datatype.clone());
                 }
                 _ => {}
             }
+        } else if let Some(language) = &self.language {
+            // Normalize language tag to lowercase
+            return Literal {
+                value: self.value.clone(),
+                datatype: None,
+                language: Some(language.to_lowercase()),
+            };
         }
         self.clone()
+    }
+    
+    /// Validates this literal against its datatype (if any)
+    pub fn validate(&self) -> Result<(), OxirsError> {
+        if let Some(datatype) = &self.datatype {
+            validate_xsd_value(&self.value, datatype.as_str())?;
+        }
+        if let Some(language) = &self.language {
+            validate_language_tag(language)?;
+        }
+        Ok(())
     }
 }
 
@@ -539,10 +930,10 @@ mod tests {
         assert_eq!(int_literal.as_i32(), Some(42));
         assert_eq!(int_literal.as_f64(), Some(42.0));
         
-        let decimal_literal = xsd::decimal_literal(3.14159);
+        let decimal_literal = xsd::decimal_literal(3.25);
         assert!(decimal_literal.is_numeric());
-        assert_eq!(decimal_literal.as_f64(), Some(3.14159));
-        assert_eq!(decimal_literal.as_f32(), Some(3.14159_f32));
+        assert_eq!(decimal_literal.as_f64(), Some(3.25));
+        assert_eq!(decimal_literal.as_f32(), Some(3.25_f32));
         
         // Test untyped numeric strings
         let untyped_num = Literal::new("123");
@@ -565,9 +956,9 @@ mod tests {
         assert!(canonical.datatype().is_some());
         
         // Decimal canonicalization
-        let dec_literal = Literal::new_typed("3.14", xsd::decimal());
+        let dec_literal = Literal::new_typed("3.140", xsd::decimal());
         let canonical = dec_literal.canonical_form();
-        assert_eq!(canonical.value(), "3.1"); // Should format with .1 precision
+        assert_eq!(canonical.value(), "3.14"); // Should remove trailing zeros
     }
     
     #[test]
@@ -575,7 +966,7 @@ mod tests {
         // Test all the convenience functions work
         assert_eq!(xsd::boolean_literal(true).value(), "true");
         assert_eq!(xsd::integer_literal(123).value(), "123");
-        assert_eq!(xsd::decimal_literal(3.14).value(), "3.14");
+        assert_eq!(xsd::decimal_literal(3.25).value(), "3.25");
         assert_eq!(xsd::double_literal(2.71).value(), "2.71");
         assert_eq!(xsd::string_literal("hello").value(), "hello");
         

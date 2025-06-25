@@ -396,10 +396,16 @@ impl StarTriple {
     }
 }
 
-/// Graph container for RDF-star triples
+/// Graph container for RDF-star triples and quads with named graph support
 #[derive(Debug, Clone, Default)]
 pub struct StarGraph {
+    /// Default graph triples (no explicit graph name)
     triples: Vec<StarTriple>,
+    /// Named graph quads grouped by graph name
+    named_graphs: HashMap<String, Vec<StarTriple>>,
+    /// All quads including both default and named graphs
+    quads: Vec<StarQuad>,
+    /// Statistics about the graph
     statistics: HashMap<String, usize>,
 }
 
@@ -408,32 +414,105 @@ impl StarGraph {
     pub fn new() -> Self {
         Self {
             triples: Vec::new(),
+            named_graphs: HashMap::new(),
+            quads: Vec::new(),
             statistics: HashMap::new(),
         }
     }
 
-    /// Add a triple to the graph
+    /// Add a triple to the default graph
     pub fn insert(&mut self, triple: StarTriple) -> StarResult<()> {
         triple.validate()?;
-        self.triples.push(triple);
+        self.triples.push(triple.clone());
+        
+        // Also add as a quad with no graph
+        let quad = StarQuad::new(triple.subject, triple.predicate, triple.object, None);
+        self.quads.push(quad);
+        
         *self.statistics.entry("triples".to_string()).or_insert(0) += 1;
         Ok(())
     }
 
-    /// Get all triples in the graph
+    /// Add a quad to the graph (with optional named graph)
+    pub fn insert_quad(&mut self, quad: StarQuad) -> StarResult<()> {
+        quad.validate()?;
+        
+        let triple = StarTriple::new(quad.subject.clone(), quad.predicate.clone(), quad.object.clone());
+        
+        if let Some(ref graph_term) = quad.graph {
+            // Named graph
+            let graph_key = match graph_term {
+                StarTerm::NamedNode(node) => node.iri.clone(),
+                StarTerm::BlankNode(node) => format!("_:{}", node.id),
+                _ => return Err(StarError::InvalidQuotedTriple(
+                    "Graph name must be a named node or blank node".to_string()
+                )),
+            };
+            
+            self.named_graphs.entry(graph_key.clone()).or_insert_with(Vec::new).push(triple);
+            *self.statistics.entry(format!("graph_{}", graph_key)).or_insert(0) += 1;
+        } else {
+            // Default graph
+            self.triples.push(triple);
+            *self.statistics.entry("triples".to_string()).or_insert(0) += 1;
+        }
+        
+        self.quads.push(quad);
+        *self.statistics.entry("quads".to_string()).or_insert(0) += 1;
+        Ok(())
+    }
+
+    /// Get all triples in the default graph
     pub fn triples(&self) -> &[StarTriple] {
         &self.triples
     }
 
-    /// Check if the graph contains a specific triple
-    pub fn contains(&self, triple: &StarTriple) -> bool {
-        self.triples.contains(triple)
+    /// Get all quads in the graph (including both default and named graphs)
+    pub fn quads(&self) -> &[StarQuad] {
+        &self.quads
     }
 
-    /// Remove a triple from the graph
+    /// Get triples from a specific named graph
+    pub fn named_graph_triples(&self, graph_name: &str) -> Option<&Vec<StarTriple>> {
+        self.named_graphs.get(graph_name)
+    }
+
+    /// Get all named graph names
+    pub fn named_graph_names(&self) -> Vec<&String> {
+        self.named_graphs.keys().collect()
+    }
+
+    /// Get all triples from all graphs (default + named)
+    pub fn all_triples(&self) -> Vec<StarTriple> {
+        let mut all = self.triples.clone();
+        for triples in self.named_graphs.values() {
+            all.extend(triples.clone());
+        }
+        all
+    }
+
+    /// Check if the graph contains a specific triple in any graph
+    pub fn contains(&self, triple: &StarTriple) -> bool {
+        self.triples.contains(triple) || 
+        self.named_graphs.values().any(|triples| triples.contains(triple))
+    }
+
+    /// Check if a specific named graph exists
+    pub fn contains_named_graph(&self, graph_name: &str) -> bool {
+        self.named_graphs.contains_key(graph_name)
+    }
+
+    /// Remove a triple from the default graph
     pub fn remove(&mut self, triple: &StarTriple) -> bool {
         if let Some(pos) = self.triples.iter().position(|t| t == triple) {
             self.triples.remove(pos);
+            
+            // Also remove from quads
+            self.quads.retain(|q| {
+                let q_triple = StarTriple::new(q.subject.clone(), q.predicate.clone(), q.object.clone());
+                q_triple != *triple || q.graph.is_some()
+            });
+            
             if let Some(count) = self.statistics.get_mut("triples") {
                 *count = count.saturating_sub(1);
             }
@@ -443,20 +522,105 @@ impl StarGraph {
         }
     }
 
-    /// Get the number of triples in the graph
+    /// Remove a quad from the graph
+    pub fn remove_quad(&mut self, quad: &StarQuad) -> bool {
+        if let Some(pos) = self.quads.iter().position(|q| q == quad) {
+            let removed_quad = self.quads.remove(pos);
+            
+            // Remove from appropriate graph
+            if let Some(ref graph_term) = removed_quad.graph {
+                let graph_key = match graph_term {
+                    StarTerm::NamedNode(node) => node.iri.clone(),
+                    StarTerm::BlankNode(node) => format!("_:{}", node.id),
+                    _ => return false,
+                };
+                
+                if let Some(triples) = self.named_graphs.get_mut(&graph_key) {
+                    let triple = StarTriple::new(
+                        removed_quad.subject, 
+                        removed_quad.predicate, 
+                        removed_quad.object
+                    );
+                    triples.retain(|t| t != &triple);
+                    
+                    if triples.is_empty() {
+                        self.named_graphs.remove(&graph_key);
+                    }
+                }
+            } else {
+                // Remove from default graph
+                let triple = StarTriple::new(
+                    removed_quad.subject, 
+                    removed_quad.predicate, 
+                    removed_quad.object
+                );
+                self.triples.retain(|t| t != &triple);
+            }
+            
+            if let Some(count) = self.statistics.get_mut("quads") {
+                *count = count.saturating_sub(1);
+            }
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Get the number of triples in the default graph
     pub fn len(&self) -> usize {
         self.triples.len()
     }
 
-    /// Check if the graph is empty
+    /// Get the total number of triples across all graphs
+    pub fn total_len(&self) -> usize {
+        self.triples.len() + self.named_graphs.values().map(|v| v.len()).sum::<usize>()
+    }
+
+    /// Get the total number of quads
+    pub fn quad_len(&self) -> usize {
+        self.quads.len()
+    }
+
+    /// Check if the default graph is empty
     pub fn is_empty(&self) -> bool {
         self.triples.is_empty()
     }
 
-    /// Clear all triples from the graph
+    /// Check if all graphs are empty
+    pub fn is_completely_empty(&self) -> bool {
+        self.triples.is_empty() && self.named_graphs.is_empty()
+    }
+
+    /// Clear all triples and quads from all graphs
     pub fn clear(&mut self) {
         self.triples.clear();
+        self.named_graphs.clear();
+        self.quads.clear();
         self.statistics.clear();
+    }
+
+    /// Clear a specific named graph
+    pub fn clear_named_graph(&mut self, graph_name: &str) {
+        if let Some(triples) = self.named_graphs.remove(graph_name) {
+            // Remove corresponding quads
+            self.quads.retain(|q| {
+                if let Some(ref graph_term) = q.graph {
+                    let key = match graph_term {
+                        StarTerm::NamedNode(node) => node.iri.clone(),
+                        StarTerm::BlankNode(node) => format!("_:{}", node.id),
+                        _ => String::new(),
+                    };
+                    key != graph_name
+                } else {
+                    true
+                }
+            });
+
+            self.statistics.remove(&format!("graph_{}", graph_name));
+            if let Some(count) = self.statistics.get_mut("quads") {
+                *count = count.saturating_sub(triples.len());
+            }
+        }
     }
 
     /// Get statistics about the graph
@@ -464,24 +628,45 @@ impl StarGraph {
         &self.statistics
     }
 
-    /// Count quoted triples in the graph
+    /// Count quoted triples across all graphs
     pub fn count_quoted_triples(&self) -> usize {
         let mut count = 0;
+        
+        // Count in default graph
         for triple in &self.triples {
             if triple.contains_quoted_triples() {
                 count += 1;
             }
         }
+        
+        // Count in named graphs
+        for triples in self.named_graphs.values() {
+            for triple in triples {
+                if triple.contains_quoted_triples() {
+                    count += 1;
+                }
+            }
+        }
+        
         count
     }
 
-    /// Get maximum nesting depth in the graph
+    /// Get maximum nesting depth across all graphs
     pub fn max_nesting_depth(&self) -> usize {
-        self.triples
+        let default_max = self.triples
             .iter()
             .map(|t| t.nesting_depth())
             .max()
-            .unwrap_or(0)
+            .unwrap_or(0);
+            
+        let named_max = self.named_graphs
+            .values()
+            .flat_map(|triples| triples.iter())
+            .map(|t| t.nesting_depth())
+            .max()
+            .unwrap_or(0);
+            
+        default_max.max(named_max)
     }
 }
 

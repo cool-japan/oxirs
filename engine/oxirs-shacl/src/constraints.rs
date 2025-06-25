@@ -150,11 +150,36 @@ impl Constraint {
             _ => None,
         }
     }
+    
+    /// Evaluate this constraint against the given context
+    pub fn evaluate(&self, store: &Store, context: &ConstraintContext) -> Result<ConstraintEvaluationResult> {
+        match self {
+            Constraint::Class(c) => c.evaluate(store, context),
+            Constraint::Datatype(c) => c.evaluate(store, context),
+            Constraint::NodeKind(c) => c.evaluate(store, context),
+            Constraint::MinCount(c) => c.evaluate(store, context),
+            Constraint::MaxCount(c) => c.evaluate(store, context),
+            Constraint::Pattern(c) => c.evaluate(store, context),
+            Constraint::In(c) => c.evaluate(store, context),
+            
+            // TODO: Implement evaluation for other constraint types
+            _ => {
+                tracing::warn!("Constraint evaluation not yet implemented for {:?}", self.component_id());
+                Ok(ConstraintEvaluationResult::satisfied())
+            }
+        }
+    }
 }
 
-/// Trait for validating constraint values
+/// Trait for validating constraint definitions
 pub trait ConstraintValidator {
     fn validate(&self) -> Result<()>;
+}
+
+/// Trait for evaluating constraints against data
+pub trait ConstraintEvaluator {
+    /// Evaluate the constraint against the given context
+    fn evaluate(&self, store: &Store, context: &ConstraintContext) -> Result<ConstraintEvaluationResult>;
 }
 
 // Core Value Constraints
@@ -172,6 +197,50 @@ impl ConstraintValidator for ClassConstraint {
     }
 }
 
+impl ConstraintEvaluator for ClassConstraint {
+    fn evaluate(&self, store: &Store, context: &ConstraintContext) -> Result<ConstraintEvaluationResult> {
+        // For each value, check if it's an instance of the required class
+        for value in &context.values {
+            let is_instance = self.check_class_membership(store, value)?;
+            if !is_instance {
+                return Ok(ConstraintEvaluationResult::violated(
+                    Some(value.clone()),
+                    Some(format!("Value {} is not an instance of class {}", value, self.class_iri))
+                ));
+            }
+        }
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+}
+
+impl ClassConstraint {
+    fn check_class_membership(&self, store: &Store, value: &Term) -> Result<bool> {
+        // Check if the value is an instance of the class
+        // This involves checking for rdf:type triples and possibly rdfs:subClassOf inference
+        match value {
+            Term::NamedNode(node) => {
+                // Query for ?value rdf:type ?class where ?class is self.class_iri or a subclass
+                let type_predicate = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+                    .map_err(|e| ShaclError::ConstraintValidation(format!("Invalid RDF type IRI: {}", e)))?;
+                
+                // Check direct type assertion
+                let triple = Triple::new(node.clone(), type_predicate.clone(), self.class_iri.clone());
+                if store.contains_quad(&triple.into()).unwrap_or(false) {
+                    return Ok(true);
+                }
+                
+                // TODO: Check subclass relationships using RDFS reasoning
+                // For now, we only check direct type assertions
+                Ok(false)
+            }
+            _ => {
+                // Blank nodes and literals cannot be instances of classes in standard RDF
+                Ok(false)
+            }
+        }
+    }
+}
+
 /// sh:datatype constraint - validates that values have a specific datatype
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DatatypeConstraint {
@@ -182,6 +251,32 @@ impl ConstraintValidator for DatatypeConstraint {
     fn validate(&self) -> Result<()> {
         // Datatype IRI should be valid
         Ok(())
+    }
+}
+
+impl ConstraintEvaluator for DatatypeConstraint {
+    fn evaluate(&self, store: &Store, context: &ConstraintContext) -> Result<ConstraintEvaluationResult> {
+        // For each value, check if it has the required datatype
+        for value in &context.values {
+            match value {
+                Term::Literal(literal) => {
+                    if literal.datatype() != Some(&self.datatype_iri) {
+                        return Ok(ConstraintEvaluationResult::violated(
+                            Some(value.clone()),
+                            Some(format!("Value {} has datatype {:?} but expected {}", 
+                                literal, literal.datatype(), self.datatype_iri))
+                        ));
+                    }
+                }
+                _ => {
+                    return Ok(ConstraintEvaluationResult::violated(
+                        Some(value.clone()),
+                        Some(format!("Value {} is not a literal, cannot check datatype", value))
+                    ));
+                }
+            }
+        }
+        Ok(ConstraintEvaluationResult::satisfied())
     }
 }
 
@@ -208,6 +303,38 @@ impl ConstraintValidator for NodeKindConstraint {
     }
 }
 
+impl ConstraintEvaluator for NodeKindConstraint {
+    fn evaluate(&self, store: &Store, context: &ConstraintContext) -> Result<ConstraintEvaluationResult> {
+        // For each value, check if it matches the required node kind
+        for value in &context.values {
+            if !self.matches_node_kind(value) {
+                return Ok(ConstraintEvaluationResult::violated(
+                    Some(value.clone()),
+                    Some(format!("Value {} does not match required node kind {:?}", value, self.node_kind))
+                ));
+            }
+        }
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+}
+
+impl NodeKindConstraint {
+    fn matches_node_kind(&self, value: &Term) -> bool {
+        match (&self.node_kind, value) {
+            (NodeKind::Iri, Term::NamedNode(_)) => true,
+            (NodeKind::BlankNode, Term::BlankNode(_)) => true,
+            (NodeKind::Literal, Term::Literal(_)) => true,
+            (NodeKind::BlankNodeOrIri, Term::BlankNode(_)) => true,
+            (NodeKind::BlankNodeOrIri, Term::NamedNode(_)) => true,
+            (NodeKind::BlankNodeOrLiteral, Term::BlankNode(_)) => true,
+            (NodeKind::BlankNodeOrLiteral, Term::Literal(_)) => true,
+            (NodeKind::IriOrLiteral, Term::NamedNode(_)) => true,
+            (NodeKind::IriOrLiteral, Term::Literal(_)) => true,
+            _ => false,
+        }
+    }
+}
+
 // Cardinality Constraints
 
 /// sh:minCount constraint - validates minimum number of values
@@ -222,6 +349,19 @@ impl ConstraintValidator for MinCountConstraint {
     }
 }
 
+impl ConstraintEvaluator for MinCountConstraint {
+    fn evaluate(&self, store: &Store, context: &ConstraintContext) -> Result<ConstraintEvaluationResult> {
+        let value_count = context.values.len() as u32;
+        if value_count < self.min_count {
+            return Ok(ConstraintEvaluationResult::violated(
+                None,
+                Some(format!("Expected at least {} values, but found {}", self.min_count, value_count))
+            ));
+        }
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+}
+
 /// sh:maxCount constraint - validates maximum number of values
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MaxCountConstraint {
@@ -231,6 +371,19 @@ pub struct MaxCountConstraint {
 impl ConstraintValidator for MaxCountConstraint {
     fn validate(&self) -> Result<()> {
         Ok(())
+    }
+}
+
+impl ConstraintEvaluator for MaxCountConstraint {
+    fn evaluate(&self, store: &Store, context: &ConstraintContext) -> Result<ConstraintEvaluationResult> {
+        let value_count = context.values.len() as u32;
+        if value_count > self.max_count {
+            return Ok(ConstraintEvaluationResult::violated(
+                None,
+                Some(format!("Expected at most {} values, but found {}", self.max_count, value_count))
+            ));
+        }
+        Ok(ConstraintEvaluationResult::satisfied())
     }
 }
 
@@ -330,7 +483,7 @@ impl ConstraintValidator for PatternConstraint {
             let multi_line = flags.contains('m');
             let dot_matches_new_line = flags.contains('s');
             
-            let regex = regex_builder
+            let _regex = regex_builder
                 .case_insensitive(case_insensitive)
                 .multi_line(multi_line)
                 .dot_matches_new_line(dot_matches_new_line)
@@ -346,6 +499,57 @@ impl ConstraintValidator for PatternConstraint {
         }
         
         Ok(())
+    }
+}
+
+impl ConstraintEvaluator for PatternConstraint {
+    fn evaluate(&self, store: &Store, context: &ConstraintContext) -> Result<ConstraintEvaluationResult> {
+        // Build the regex with flags
+        let regex = if let Some(flags) = &self.flags {
+            let case_insensitive = flags.contains('i');
+            let multi_line = flags.contains('m');
+            let dot_matches_new_line = flags.contains('s');
+            
+            regex::RegexBuilder::new(&self.pattern)
+                .case_insensitive(case_insensitive)
+                .multi_line(multi_line)
+                .dot_matches_new_line(dot_matches_new_line)
+                .build()
+                .map_err(|e| ShaclError::ConstraintValidation(
+                    format!("Invalid regex pattern '{}': {}", self.pattern, e)
+                ))?
+        } else {
+            Regex::new(&self.pattern)
+                .map_err(|e| ShaclError::ConstraintValidation(
+                    format!("Invalid regex pattern '{}': {}", self.pattern, e)
+                ))?
+        };
+        
+        // Check each value against the pattern
+        for value in &context.values {
+            match value {
+                Term::Literal(literal) => {
+                    let string_value = literal.value();
+                    if !regex.is_match(string_value) {
+                        let message = self.message.clone().unwrap_or_else(|| {
+                            format!("Value '{}' does not match pattern '{}'", string_value, self.pattern)
+                        });
+                        return Ok(ConstraintEvaluationResult::violated(
+                            Some(value.clone()),
+                            Some(message)
+                        ));
+                    }
+                }
+                _ => {
+                    return Ok(ConstraintEvaluationResult::violated(
+                        Some(value.clone()),
+                        Some(format!("Value {} is not a literal, cannot check pattern", value))
+                    ));
+                }
+            }
+        }
+        
+        Ok(ConstraintEvaluationResult::satisfied())
     }
 }
 
@@ -446,6 +650,21 @@ impl ConstraintValidator for InConstraint {
             ));
         }
         Ok(())
+    }
+}
+
+impl ConstraintEvaluator for InConstraint {
+    fn evaluate(&self, store: &Store, context: &ConstraintContext) -> Result<ConstraintEvaluationResult> {
+        // Check if each value is in the allowed set
+        for value in &context.values {
+            if !self.values.contains(value) {
+                return Ok(ConstraintEvaluationResult::violated(
+                    Some(value.clone()),
+                    Some(format!("Value {} is not in the allowed set of values", value))
+                ));
+            }
+        }
+        Ok(ConstraintEvaluationResult::satisfied())
     }
 }
 

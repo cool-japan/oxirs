@@ -12,7 +12,8 @@ pub mod optimizer;
 pub mod executor;
 pub mod extensions;
 pub mod path;
-pub mod builtin_fixed as builtin;
+pub mod builtin_fixed;
+pub use builtin_fixed as builtin;
 pub mod query;
 
 // Re-export main types for convenience

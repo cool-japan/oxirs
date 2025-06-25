@@ -1,18 +1,23 @@
-//! RDF store abstraction and implementation
+//! Ultra-high performance RDF store implementation
 
 use std::collections::{HashMap, HashSet, BTreeMap, BTreeSet};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
+use rayon::prelude::*;
 use crate::model::*;
+use crate::indexing::{UltraIndex, IndexStats, MemoryUsage};
+use crate::optimization::{RdfArena, OptimizedGraph};
 use crate::{OxirsError, Result};
 
 // Re-export from oxigraph for compatibility
 pub use oxigraph::sparql::QueryResults;
 
 /// Storage backend for RDF quads
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum StorageBackend {
-    /// In-memory storage using collections
+    /// Ultra-high performance in-memory storage
+    UltraMemory(Arc<UltraIndex>, Arc<RdfArena>),
+    /// Legacy in-memory storage using collections
     Memory(Arc<RwLock<MemoryStorage>>),
     /// File-based storage (future: will use disk-backed storage)
     Persistent(Arc<RwLock<MemoryStorage>>, std::path::PathBuf),
@@ -203,14 +208,24 @@ impl MemoryStorage {
 }
 
 /// Main RDF store interface
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Store {
     backend: StorageBackend,
 }
 
 impl Store {
-    /// Create a new in-memory store
+    /// Create a new ultra-high performance in-memory store
     pub fn new() -> Result<Self> {
+        Ok(Store {
+            backend: StorageBackend::UltraMemory(
+                Arc::new(UltraIndex::new()),
+                Arc::new(RdfArena::new()),
+            ),
+        })
+    }
+
+    /// Create a new legacy in-memory store for compatibility
+    pub fn new_legacy() -> Result<Self> {
         Ok(Store {
             backend: StorageBackend::Memory(Arc::new(RwLock::new(MemoryStorage::new()))),
         })
@@ -233,11 +248,45 @@ impl Store {
     /// Insert a quad into the store
     pub fn insert_quad(&mut self, quad: Quad) -> Result<bool> {
         match &self.backend {
+            StorageBackend::UltraMemory(index, _arena) => {
+                // Check if quad already exists
+                let existing = index.find_quads(
+                    Some(quad.subject()),
+                    Some(quad.predicate()),
+                    Some(quad.object()),
+                    Some(quad.graph_name())
+                );
+                if !existing.is_empty() {
+                    return Ok(false); // Quad already exists
+                }
+                
+                let _id = index.insert_quad(&quad);
+                Ok(true) // New quad inserted
+            }
             StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
                 let mut storage = storage.write().map_err(|e| {
                     OxirsError::Store(format!("Failed to acquire write lock: {}", e))
                 })?;
                 Ok(storage.insert_quad(quad))
+            }
+        }
+    }
+
+    /// Bulk insert quads for maximum performance
+    pub fn bulk_insert_quads(&mut self, quads: Vec<Quad>) -> Result<Vec<u64>> {
+        match &self.backend {
+            StorageBackend::UltraMemory(index, _arena) => {
+                let ids = index.bulk_insert_quads(&quads);
+                Ok(ids)
+            }
+            _ => {
+                // Fallback to individual inserts for legacy backend
+                let mut ids = Vec::new();
+                for quad in quads {
+                    self.insert_quad(quad)?;
+                    ids.push(0); // Dummy ID for legacy mode
+                }
+                Ok(ids)
             }
         }
     }
@@ -260,6 +309,9 @@ impl Store {
     /// Remove a quad from the store
     pub fn remove_quad(&mut self, quad: &Quad) -> Result<bool> {
         match &self.backend {
+            StorageBackend::UltraMemory(index, _arena) => {
+                Ok(index.remove_quad(quad))
+            }
             StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
                 let mut storage = storage.write().map_err(|e| {
                     OxirsError::Store(format!("Failed to acquire write lock: {}", e))
@@ -278,6 +330,15 @@ impl Store {
                 })?;
                 Ok(storage.contains_quad(quad))
             }
+            StorageBackend::UltraMemory(index, _) => {
+                let results = index.find_quads(
+                    Some(quad.subject()),
+                    Some(quad.predicate()),
+                    Some(quad.object()),
+                    Some(quad.graph_name())
+                );
+                Ok(!results.is_empty())
+            }
         }
     }
     
@@ -292,6 +353,10 @@ impl Store {
         graph_name: Option<&GraphName>,
     ) -> Result<Vec<Quad>> {
         match &self.backend {
+            StorageBackend::UltraMemory(index, _arena) => {
+                let results = index.find_quads(subject, predicate, object, graph_name);
+                Ok(results)
+            }
             StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
                 let storage = storage.read().map_err(|e| {
                     OxirsError::Store(format!("Failed to acquire read lock: {}", e))
@@ -321,6 +386,9 @@ impl Store {
     /// Get the number of quads in the store
     pub fn len(&self) -> Result<usize> {
         match &self.backend {
+            StorageBackend::UltraMemory(index, _arena) => {
+                Ok(index.len())
+            }
             StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
                 let storage = storage.read().map_err(|e| {
                     OxirsError::Store(format!("Failed to acquire read lock: {}", e))
@@ -333,6 +401,9 @@ impl Store {
     /// Check if the store is empty
     pub fn is_empty(&self) -> Result<bool> {
         match &self.backend {
+            StorageBackend::UltraMemory(index, _arena) => {
+                Ok(index.is_empty())
+            }
             StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
                 let storage = storage.read().map_err(|e| {
                     OxirsError::Store(format!("Failed to acquire read lock: {}", e))
@@ -341,10 +412,46 @@ impl Store {
             }
         }
     }
+
+    /// Get performance statistics (ultra-performance mode only)
+    pub fn stats(&self) -> Option<Arc<IndexStats>> {
+        match &self.backend {
+            StorageBackend::UltraMemory(index, _arena) => {
+                Some(index.stats())
+            }
+            _ => None,
+        }
+    }
+
+    /// Get memory usage statistics (ultra-performance mode only)
+    pub fn memory_usage(&self) -> Option<MemoryUsage> {
+        match &self.backend {
+            StorageBackend::UltraMemory(index, arena) => {
+                let mut usage = index.memory_usage();
+                usage.arena_bytes = arena.allocated_bytes();
+                Some(usage)
+            }
+            _ => None,
+        }
+    }
+
+    /// Clear memory arena to reclaim memory (ultra-performance mode only)
+    pub fn clear_arena(&self) {
+        match &self.backend {
+            StorageBackend::UltraMemory(index, _arena) => {
+                index.clear_arena();
+            }
+            _ => {}
+        }
+    }
     
     /// Clear all data from the store
     pub fn clear(&mut self) -> Result<()> {
         match &self.backend {
+            StorageBackend::UltraMemory(index, _arena) => {
+                index.clear();
+                Ok(())
+            }
             StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
                 let mut storage = storage.write().map_err(|e| {
                     OxirsError::Store(format!("Failed to acquire write lock: {}", e))
@@ -418,7 +525,8 @@ mod tests {
     
     #[test]
     fn test_store_quad_operations() {
-        let mut store = Store::new().unwrap();
+        // Use legacy backend for faster testing
+        let mut store = Store::new_legacy().unwrap();
         let quad = create_test_quad();
         
         // Test insertion

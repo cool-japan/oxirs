@@ -39,6 +39,7 @@ pub mod integration;
 pub mod graphql;
 pub mod discovery;
 pub mod monitoring;
+pub mod cache;
 
 pub use service::*;
 pub use planner::*;
@@ -47,6 +48,7 @@ pub use integration::*;
 pub use graphql::*;
 pub use discovery::*;
 pub use monitoring::*;
+pub use cache::*;
 
 /// Main federation engine that coordinates all federated query processing
 #[derive(Debug, Clone)]
@@ -63,6 +65,8 @@ pub struct FederationEngine {
     graphql_federation: Arc<GraphQLFederation>,
     /// Performance monitoring
     monitor: Arc<FederationMonitor>,
+    /// Advanced caching system
+    cache: Arc<FederationCache>,
 }
 
 impl FederationEngine {
@@ -74,6 +78,7 @@ impl FederationEngine {
         let integrator = Arc::new(ResultIntegrator::new());
         let graphql_federation = Arc::new(GraphQLFederation::new());
         let monitor = Arc::new(FederationMonitor::new());
+        let cache = Arc::new(FederationCache::new());
 
         Self {
             service_registry,
@@ -82,6 +87,7 @@ impl FederationEngine {
             integrator,
             graphql_federation,
             monitor,
+            cache,
         }
     }
 
@@ -93,6 +99,7 @@ impl FederationEngine {
         let integrator = Arc::new(ResultIntegrator::with_config(config.integrator_config));
         let graphql_federation = Arc::new(GraphQLFederation::with_config(config.graphql_config));
         let monitor = Arc::new(FederationMonitor::with_config(config.monitor_config));
+        let cache = Arc::new(FederationCache::with_config(config.cache_config));
 
         Self {
             service_registry,
@@ -101,6 +108,7 @@ impl FederationEngine {
             integrator,
             graphql_federation,
             monitor,
+            cache,
         }
     }
 
@@ -123,6 +131,98 @@ impl FederationEngine {
         // Parse and analyze the query
         let query_info = self.query_planner.analyze_sparql(query).await?;
         
+        // Generate cache key
+        let cache_key = self.cache.generate_query_key(&query_info);
+        
+        // Check cache first
+        if let Some(cached_result) = self.cache.get_query_result(&cache_key).await {
+            let execution_time = start_time.elapsed();
+            
+            // Record cache hit
+            self.monitor.record_cache_hit("query_cache", true).await;
+            self.monitor.record_query_execution("sparql", execution_time, true).await;
+            
+            return match cached_result {
+                QueryResultCache::Sparql(sparql_results) => {
+                    // Convert back to FederatedResult
+                    let result_bindings: Vec<HashMap<String, oxirs_core::Term>> = sparql_results
+                        .results
+                        .bindings
+                        .into_iter()
+                        .map(|binding| {
+                            // Convert SparqlBinding to HashMap<String, Term>
+                            binding.into_iter()
+                                .filter_map(|(var, sparql_value)| {
+                                    match sparql_value.value_type.as_str() {
+                                        "uri" => {
+                                            if let Ok(iri) = oxirs_core::NamedNode::new(&sparql_value.value) {
+                                                Some((var, oxirs_core::Term::NamedNode(iri)))
+                                            } else {
+                                                None
+                                            }
+                                        }
+                                        "literal" => {
+                                            if let Some(datatype_str) = sparql_value.datatype {
+                                                if let Ok(datatype) = oxirs_core::NamedNode::new(&datatype_str) {
+                                                    Some((var, oxirs_core::Term::Literal(
+                                                        oxirs_core::Literal::new_typed(&sparql_value.value, datatype)
+                                                    )))
+                                                } else {
+                                                    Some((var, oxirs_core::Term::Literal(
+                                                        oxirs_core::Literal::new(&sparql_value.value)
+                                                    )))
+                                                }
+                                            } else if let Some(lang) = sparql_value.lang {
+                                                if let Ok(literal) = oxirs_core::Literal::new_lang(&sparql_value.value, &lang) {
+                                                    Some((var, oxirs_core::Term::Literal(literal)))
+                                                } else {
+                                                    Some((var, oxirs_core::Term::Literal(
+                                                        oxirs_core::Literal::new(&sparql_value.value)
+                                                    )))
+                                                }
+                                            } else {
+                                                Some((var, oxirs_core::Term::Literal(
+                                                    oxirs_core::Literal::new(&sparql_value.value)
+                                                )))
+                                            }
+                                        }
+                                        "bnode" => {
+                                            if let Ok(bnode) = oxirs_core::BlankNode::new(&sparql_value.value) {
+                                                Some((var, oxirs_core::Term::BlankNode(bnode)))
+                                            } else {
+                                                None
+                                            }
+                                        }
+                                        _ => None,
+                                    }
+                                })
+                                .collect()
+                        })
+                        .collect();
+
+                    Ok(FederatedResult {
+                        data: QueryResult::Sparql(result_bindings),
+                        metadata: ExecutionMetadata {
+                            execution_time,
+                            services_used: 0, // From cache
+                            subqueries_executed: 0,
+                            cache_hit: true,
+                            plan_summary: "Cached result".to_string(),
+                        },
+                        errors: vec![],
+                    })
+                }
+                _ => {
+                    // Invalid cache entry type
+                    self.cache.remove(&cache_key).await;
+                    return Err(anyhow!("Invalid cached result type for SPARQL query"));
+                }
+            };
+        }
+        
+        // Cache miss - execute normally
+        self.monitor.record_cache_hit("query_cache", false).await;
+        
         // Plan the federated execution
         let registry = self.service_registry.read().await;
         let execution_plan = self.query_planner.plan_sparql(&query_info, &*registry).await?;
@@ -133,6 +233,74 @@ impl FederationEngine {
         
         // Integrate results
         let final_result = self.integrator.integrate_sparql_results(partial_results).await?;
+        
+        // Cache the result if successful
+        if final_result.is_success() {
+            if let QueryResult::Sparql(ref result_bindings) = final_result.data {
+                // Convert to cacheable format
+                let sparql_bindings: Vec<crate::executor::SparqlBinding> = result_bindings
+                    .iter()
+                    .map(|binding| {
+                        binding.iter()
+                            .map(|(var, term)| {
+                                let sparql_value = match term {
+                                    oxirs_core::Term::NamedNode(node) => crate::executor::SparqlValue {
+                                        value_type: "uri".to_string(),
+                                        value: node.to_string(),
+                                        datatype: None,
+                                        lang: None,
+                                    },
+                                    oxirs_core::Term::Literal(literal) => {
+                                        if let Some(lang) = literal.language() {
+                                            crate::executor::SparqlValue {
+                                                value_type: "literal".to_string(),
+                                                value: literal.value().to_string(),
+                                                datatype: None,
+                                                lang: Some(lang.to_string()),
+                                            }
+                                        } else {
+                                            crate::executor::SparqlValue {
+                                                value_type: "literal".to_string(),
+                                                value: literal.value().to_string(),
+                                                datatype: literal.datatype().map(|dt| dt.to_string()),
+                                                lang: None,
+                                            }
+                                        }
+                                    }
+                                    oxirs_core::Term::BlankNode(bnode) => crate::executor::SparqlValue {
+                                        value_type: "bnode".to_string(),
+                                        value: bnode.to_string(),
+                                        datatype: None,
+                                        lang: None,
+                                    },
+                                    oxirs_core::Term::Variable(var) => crate::executor::SparqlValue {
+                                        value_type: "variable".to_string(),
+                                        value: var.to_string(),
+                                        datatype: None,
+                                        lang: None,
+                                    },
+                                };
+                                (var.clone(), sparql_value)
+                            })
+                            .collect()
+                    })
+                    .collect();
+
+                let cached_result = crate::executor::SparqlResults {
+                    head: crate::executor::SparqlHead {
+                        vars: result_bindings.first()
+                            .map(|binding| binding.keys().cloned().collect())
+                            .unwrap_or_default(),
+                    },
+                    results: crate::executor::SparqlResultSet {
+                        bindings: sparql_bindings,
+                    },
+                };
+
+                // Cache with default TTL
+                self.cache.put_query_result(&cache_key, QueryResultCache::Sparql(cached_result), None).await;
+            }
+        }
         
         // Record metrics
         let execution_time = start_time.elapsed();
@@ -194,6 +362,31 @@ impl FederationEngine {
         let discovery = ServiceDiscovery::new();
         discovery.update_service_capabilities(&mut *registry).await
     }
+
+    /// Get cache statistics
+    pub async fn get_cache_stats(&self) -> CacheStats {
+        self.cache.get_stats().await
+    }
+
+    /// Invalidate cache for a specific service
+    pub async fn invalidate_service_cache(&self, service_id: &str) {
+        self.cache.invalidate_service(service_id).await;
+    }
+
+    /// Invalidate all query caches
+    pub async fn invalidate_query_cache(&self) {
+        self.cache.invalidate_queries().await;
+    }
+
+    /// Warm up the cache with commonly used data
+    pub async fn warmup_cache(&self) -> Result<()> {
+        self.cache.warmup().await
+    }
+
+    /// Clean up expired cache entries
+    pub async fn cleanup_cache(&self) {
+        self.cache.cleanup_expired().await;
+    }
 }
 
 impl Default for FederationEngine {
@@ -211,6 +404,7 @@ pub struct FederationConfig {
     pub integrator_config: ResultIntegratorConfig,
     pub graphql_config: GraphQLFederationConfig,
     pub monitor_config: FederationMonitorConfig,
+    pub cache_config: CacheConfig,
 }
 
 impl Default for FederationConfig {
@@ -222,6 +416,7 @@ impl Default for FederationConfig {
             integrator_config: ResultIntegratorConfig::default(),
             graphql_config: GraphQLFederationConfig::default(),
             monitor_config: FederationMonitorConfig::default(),
+            cache_config: CacheConfig::default(),
         }
     }
 }

@@ -212,23 +212,52 @@ impl StarSerializer {
         let mut context = SerializationContext::new();
         context.pretty_print = true;
 
+        // Add common prefixes
+        self.add_common_prefixes(&mut context);
+
         // Write prefixes first
         self.write_turtle_prefixes(&mut buf_writer, &context)?;
 
-        // Group triples by graph (for now, we'll serialize all to default graph)
-        // TODO: Implement proper named graph support when StarGraph supports multiple graphs
-        writeln!(buf_writer, "{{").map_err(|e| StarError::SerializationError(e.to_string()))?;
-        
-        context.increase_indent();
-        for triple in graph.triples() {
-            self.write_turtle_triple(&mut buf_writer, triple, &context)?;
+        // Serialize default graph if it has triples
+        if !graph.triples().is_empty() {
+            writeln!(buf_writer, "{{").map_err(|e| StarError::SerializationError(e.to_string()))?;
+            
+            context.increase_indent();
+            for triple in graph.triples() {
+                self.write_turtle_triple(&mut buf_writer, triple, &context)?;
+            }
+            context.decrease_indent();
+            
+            writeln!(buf_writer, "}}").map_err(|e| StarError::SerializationError(e.to_string()))?;
+            writeln!(buf_writer).map_err(|e| StarError::SerializationError(e.to_string()))?;
         }
-        context.decrease_indent();
-        
-        writeln!(buf_writer, "}}").map_err(|e| StarError::SerializationError(e.to_string()))?;
+
+        // Serialize named graphs
+        for graph_name in graph.named_graph_names() {
+            if let Some(named_triples) = graph.named_graph_triples(graph_name) {
+                if !named_triples.is_empty() {
+                    // Write graph declaration
+                    let graph_term = self.parse_graph_name(graph_name, &context)?;
+                    writeln!(buf_writer, "{} {{", graph_term)
+                        .map_err(|e| StarError::SerializationError(e.to_string()))?;
+                    
+                    context.increase_indent();
+                    for triple in named_triples {
+                        self.write_turtle_triple(&mut buf_writer, triple, &context)?;
+                    }
+                    context.decrease_indent();
+                    
+                    writeln!(buf_writer, "}}")
+                        .map_err(|e| StarError::SerializationError(e.to_string()))?;
+                    writeln!(buf_writer)
+                        .map_err(|e| StarError::SerializationError(e.to_string()))?;
+                }
+            }
+        }
 
         buf_writer.flush().map_err(|e| StarError::SerializationError(e.to_string()))?;
-        debug!("Serialized {} triples in TriG-star format", graph.len());
+        debug!("Serialized {} quads ({} total triples) in TriG-star format", 
+               graph.quad_len(), graph.total_len());
         Ok(())
     }
 
@@ -240,23 +269,44 @@ impl StarSerializer {
         let mut buf_writer = BufWriter::new(writer);
         let context = SerializationContext::new(); // N-Quads doesn't use prefixes
 
-        for triple in graph.triples() {
-            self.write_nquads_quad(&mut buf_writer, triple, &context)?;
+        // Serialize all quads from the graph (including both default and named graphs)
+        for quad in graph.quads() {
+            self.write_nquads_quad_complete(&mut buf_writer, quad, &context)?;
         }
 
         buf_writer.flush().map_err(|e| StarError::SerializationError(e.to_string()))?;
-        debug!("Serialized {} quads in N-Quads-star format", graph.len());
+        debug!("Serialized {} quads ({} total triples) in N-Quads-star format", 
+               graph.quad_len(), graph.total_len());
         Ok(())
     }
 
-    /// Write a single N-Quads-star quad (triple + optional graph)
+    /// Write a single N-Quads-star quad with proper graph context
+    fn write_nquads_quad_complete<W: Write>(&self, writer: &mut W, quad: &StarQuad, _context: &SerializationContext) -> StarResult<()> {
+        let subject_str = self.format_term_ntriples(&quad.subject)?;
+        let predicate_str = self.format_term_ntriples(&quad.predicate)?;
+        let object_str = self.format_term_ntriples(&quad.object)?;
+
+        if let Some(ref graph_term) = quad.graph {
+            // Named graph quad
+            let graph_str = self.format_term_ntriples(graph_term)?;
+            writeln!(writer, "{} {} {} {} .", subject_str, predicate_str, object_str, graph_str)
+                .map_err(|e| StarError::SerializationError(e.to_string()))?;
+        } else {
+            // Default graph quad (triple)
+            writeln!(writer, "{} {} {} .", subject_str, predicate_str, object_str)
+                .map_err(|e| StarError::SerializationError(e.to_string()))?;
+        }
+
+        Ok(())
+    }
+
+    /// Write a single N-Quads-star quad (triple + optional graph) - legacy method
     fn write_nquads_quad<W: Write>(&self, writer: &mut W, triple: &StarTriple, _context: &SerializationContext) -> StarResult<()> {
         let subject_str = self.format_term_ntriples(&triple.subject)?;
         let predicate_str = self.format_term_ntriples(&triple.predicate)?;
         let object_str = self.format_term_ntriples(&triple.object)?;
 
-        // For now, all quads go to default graph (no graph component)
-        // TODO: Add proper graph component when StarGraph supports named graphs
+        // Default graph (no graph component)
         writeln!(writer, "{} {} {} .", subject_str, predicate_str, object_str)
             .map_err(|e| StarError::SerializationError(e.to_string()))?;
 
@@ -333,6 +383,17 @@ impl StarSerializer {
         context.add_prefix("xsd", "http://www.w3.org/2001/XMLSchema#");
         context.add_prefix("foaf", "http://xmlns.com/foaf/0.1/");
         context.add_prefix("dc", "http://purl.org/dc/terms/");
+    }
+
+    /// Parse a graph name string back to a term for TriG serialization
+    fn parse_graph_name(&self, graph_name: &str, context: &SerializationContext) -> StarResult<String> {
+        if graph_name.starts_with("_:") {
+            // Blank node graph name
+            Ok(graph_name.to_string())
+        } else {
+            // Named node graph name - compress with prefixes if possible
+            Ok(context.compress_iri(graph_name))
+        }
     }
 }
 
@@ -539,5 +600,108 @@ mod tests {
 
         // N-Triples should be larger due to full IRIs
         assert!(ntriples_size > turtle_size);
+    }
+
+    #[test]
+    fn test_enhanced_trig_star_serialization() {
+        let serializer = StarSerializer::new();
+        let mut graph = StarGraph::new();
+
+        // Add triple to default graph
+        let default_triple = StarTriple::new(
+            StarTerm::iri("http://example.org/alice").unwrap(),
+            StarTerm::iri("http://example.org/knows").unwrap(),
+            StarTerm::iri("http://example.org/bob").unwrap(),
+        );
+        graph.insert(default_triple).unwrap();
+
+        // Add quad to named graph
+        let named_quad = StarQuad::new(
+            StarTerm::iri("http://example.org/charlie").unwrap(),
+            StarTerm::iri("http://example.org/age").unwrap(),
+            StarTerm::literal("30").unwrap(),
+            Some(StarTerm::iri("http://example.org/graph1").unwrap()),
+        );
+        graph.insert_quad(named_quad).unwrap();
+
+        let result = serializer.serialize_to_string(&graph, StarFormat::TrigStar).unwrap();
+        
+        // Should contain prefix declarations
+        assert!(result.contains("@prefix"));
+        
+        // Should contain default graph block
+        assert!(result.contains("{"));
+        assert!(result.contains("alice"));
+        
+        // Should contain named graph declaration
+        assert!(result.contains("http://example.org/graph1"));
+        assert!(result.contains("charlie"));
+    }
+
+    #[test]
+    fn test_enhanced_nquads_star_serialization() {
+        let serializer = StarSerializer::new();
+        let mut graph = StarGraph::new();
+
+        // Add triple to default graph
+        let default_triple = StarTriple::new(
+            StarTerm::iri("http://example.org/alice").unwrap(),
+            StarTerm::iri("http://example.org/knows").unwrap(),
+            StarTerm::iri("http://example.org/bob").unwrap(),
+        );
+        graph.insert(default_triple).unwrap();
+
+        // Add quad to named graph
+        let named_quad = StarQuad::new(
+            StarTerm::iri("http://example.org/charlie").unwrap(),
+            StarTerm::iri("http://example.org/age").unwrap(),
+            StarTerm::literal("30").unwrap(),
+            Some(StarTerm::iri("http://example.org/graph1").unwrap()),
+        );
+        graph.insert_quad(named_quad).unwrap();
+
+        let result = serializer.serialize_to_string(&graph, StarFormat::NQuadsStar).unwrap();
+        
+        // Should contain default graph triple (3 terms)
+        assert!(result.contains("<http://example.org/alice> <http://example.org/knows> <http://example.org/bob> ."));
+        
+        // Should contain named graph quad (4 terms)
+        assert!(result.contains("<http://example.org/charlie> <http://example.org/age> \"30\" <http://example.org/graph1> ."));
+    }
+
+    #[test]
+    fn test_quoted_triple_serialization_roundtrip() {
+        let serializer = StarSerializer::new();
+        let mut graph = StarGraph::new();
+
+        // Create a complex quoted triple structure
+        let inner = StarTriple::new(
+            StarTerm::iri("http://example.org/alice").unwrap(),
+            StarTerm::iri("http://example.org/says").unwrap(),
+            StarTerm::literal("Hello").unwrap(),
+        );
+
+        let outer = StarTriple::new(
+            StarTerm::quoted_triple(inner),
+            StarTerm::iri("http://example.org/certainty").unwrap(),
+            StarTerm::literal("0.95").unwrap(),
+        );
+
+        graph.insert(outer).unwrap();
+
+        // Test all formats
+        for format in [StarFormat::TurtleStar, StarFormat::NTriplesStar, StarFormat::TrigStar, StarFormat::NQuadsStar] {
+            let serialized = serializer.serialize_to_string(&graph, format).unwrap();
+            
+            // Should contain quoted triple markers
+            assert!(serialized.contains("<<"));
+            assert!(serialized.contains(">>"));
+            
+            // Should contain the nested content
+            assert!(serialized.contains("alice"));
+            assert!(serialized.contains("says"));
+            assert!(serialized.contains("Hello"));
+            assert!(serialized.contains("certainty"));
+        }
     }
 }

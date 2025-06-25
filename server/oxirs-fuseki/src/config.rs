@@ -192,6 +192,15 @@ pub struct SecurityConfig {
     pub cors: CorsConfig,
     
     pub session: SessionConfig,
+    
+    #[validate(nested)]
+    pub authentication: AuthenticationConfig,
+}
+
+/// Authentication configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct AuthenticationConfig {
+    pub enabled: bool,
 }
 
 /// JWT configuration
@@ -535,6 +544,9 @@ impl Default for ServerConfig {
                     http_only: true,
                     same_site: SameSitePolicy::Lax,
                 },
+                authentication: AuthenticationConfig {
+                    enabled: false,
+                },
             },
             monitoring: MonitoringConfig {
                 metrics: MetricsConfig {
@@ -595,7 +607,7 @@ impl Default for ServerConfig {
 impl ServerConfig {
     /// Load configuration using Figment (supports TOML, YAML, env vars)
     pub fn load() -> FusekiResult<Self> {
-        let config = Figment::new()
+        let config: Self = Figment::new()
             .merge(Toml::file("oxirs-fuseki.toml"))
             .merge(Yaml::file("oxirs-fuseki.yaml"))
             .merge(Yaml::file("oxirs-fuseki.yml"))
@@ -613,7 +625,7 @@ impl ServerConfig {
     /// Load configuration from a specific file
     pub fn from_file<P: AsRef<Path>>(path: P) -> FusekiResult<Self> {
         let path = path.as_ref();
-        let config = match path.extension().and_then(|ext| ext.to_str()) {
+        let config: Self = match path.extension().and_then(|ext| ext.to_str()) {
             Some("toml") => {
                 let figment = Figment::new()
                     .merge(Toml::file(path))

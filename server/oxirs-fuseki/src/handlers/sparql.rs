@@ -418,7 +418,7 @@ async fn execute_sparql_query(
             ];
             
             Ok(QueryResult {
-                query_type,
+                query_type: query_type.clone(),
                 execution_time_ms: 10,
                 result_count: Some(bindings.len()),
                 bindings: Some(bindings),
@@ -429,7 +429,7 @@ async fn execute_sparql_query(
         }
         "ASK" => {
             Ok(QueryResult {
-                query_type,
+                query_type: query_type.clone(),
                 execution_time_ms: 5,
                 result_count: None,
                 bindings: None,
@@ -442,7 +442,7 @@ async fn execute_sparql_query(
             let graph = "@prefix ex: <http://example.org/> .\nex:subject ex:predicate \"object\" .";
             
             Ok(QueryResult {
-                query_type,
+                query_type: query_type.clone(),
                 execution_time_ms: 15,
                 result_count: Some(1),
                 bindings: None,

@@ -262,8 +262,8 @@ impl PropertyPathEvaluator {
                 Ok(false)
             }
             PropertyPath::Alternative(left, right) => {
-                self.evaluate_path_recursive(current, left, target, dataset, visited, depth)? ||
-                self.evaluate_path_recursive(current, right, target, dataset, visited, depth)?
+                Ok(self.evaluate_path_recursive(current, left, target, dataset, visited, depth)? ||
+                   self.evaluate_path_recursive(current, right, target, dataset, visited, depth)?)
             }
             PropertyPath::ZeroOrMore(inner_path) => {
                 // Zero case

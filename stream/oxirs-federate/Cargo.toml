@@ -39,19 +39,19 @@ base64 = "0.22"
 jsonwebtoken = "9.3"
 rustls = { version = "0.23", features = ["std"] }
 rustls-webpki = "0.102"
-opentelemetry = { version = "0.22", features = ["trace", "metrics"], optional = true }
+opentelemetry = { version = "0.30", features = ["trace", "metrics"], optional = true }
 opentelemetry-jaeger = { version = "0.22", optional = true }
-opentelemetry-otlp = { version = "0.22", optional = true }
+opentelemetry-otlp = { version = "0.30", optional = true }
 prometheus = { version = "0.13", optional = true }
 async-stream = "0.3"
 pin-project = "1.1"
-sparql-syntax = "0.3"
+oxigraph = "0.4.11"
 async-graphql = { version = "7.0", optional = true }
 async-graphql-parser = { version = "7.0", optional = true }
 mdns-sd = { version = "0.11", optional = true }
 kube = { version = "0.95", features = ["client", "config"], optional = true }
 k8s-openapi = { version = "0.23", features = ["v1_29"], optional = true }
-oauth2 = "4.4"
+oauth2 = { version = "4.4", optional = true }
 redis = { version = "0.27", features = ["aio", "tokio-comp"], optional = true }
 lru = { version = "0.12", optional = true }
 moka = { version = "0.12", features = ["future"], optional = true }
@@ -66,7 +66,7 @@ proptest = "1.5"
 serial_test = "3.1"
 
 [features]
-default = ["caching", "monitoring"]
+default = ["caching", "monitoring", "redis-cache"]
 graphql-stitching = ["async-graphql", "async-graphql-parser"]
 kubernetes = ["kube", "k8s-openapi"]
 redis-cache = ["redis"]

@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tokio::time;
 use tracing::{debug, error, info, warn};
+use futures_util::{StreamExt, TryStreamExt};
 
 #[cfg(feature = "nats")]
 use async_nats::{
@@ -139,16 +140,12 @@ impl NatsProducer {
             ..Default::default()
         };
         
-        match jetstream.create_stream(stream_config).await {
+        match jetstream.get_or_create_stream(stream_config).await {
             Ok(_) => {
-                info!("Created JetStream stream: {}", self.nats_config.stream_name);
+                info!("Got or created JetStream stream: {}", self.nats_config.stream_name);
             }
             Err(e) => {
-                if e.to_string().contains("already exists") {
-                    debug!("JetStream stream already exists: {}", self.nats_config.stream_name);
-                } else {
-                    return Err(anyhow!("Failed to create JetStream stream: {}", e));
-                }
+                return Err(anyhow!("Failed to get or create JetStream stream: {}", e));
             }
         }
         
@@ -325,7 +322,20 @@ impl NatsConsumer {
         
         let jetstream = jetstream::new(client.clone());
         
-        // Create consumer
+        // Get or create the stream first
+        let stream = jetstream
+            .get_or_create_stream(jetstream::stream::Config {
+                name: self.nats_config.stream_name.clone(),
+                subjects: vec![format!("{}.*", self.nats_config.subject_prefix)],
+                max_age: std::time::Duration::from_secs(self.nats_config.max_age_seconds),
+                max_bytes: self.nats_config.max_bytes as i64,
+                num_replicas: self.nats_config.replicas,
+                ..Default::default()
+            })
+            .await
+            .map_err(|e| anyhow!("Failed to create NATS stream: {}", e))?;
+        
+        // Create consumer on the stream
         let consumer_config = jetstream::consumer::pull::Config {
             name: Some("oxirs-consumer".to_string()),
             durable_name: Some("oxirs-consumer".to_string()),
@@ -339,8 +349,8 @@ impl NatsConsumer {
             ..Default::default()
         };
         
-        let consumer = jetstream
-            .create_consumer_on_stream(consumer_config, &self.nats_config.stream_name)
+        let consumer = stream
+            .create_consumer(consumer_config)
             .await
             .map_err(|e| anyhow!("Failed to create NATS consumer: {}", e))?;
         

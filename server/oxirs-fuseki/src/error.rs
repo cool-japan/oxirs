@@ -356,6 +356,28 @@ impl FusekiError {
             message: message.into() 
         }
     }
+
+    pub fn bad_request(message: impl Into<String>) -> Self {
+        Self::Parse { 
+            message: message.into() 
+        }
+    }
+    
+    pub fn conflict(message: impl Into<String>) -> Self {
+        Self::Internal { 
+            message: message.into() 
+        }
+    }
+    
+    pub fn method_not_allowed(message: impl Into<String>) -> Self {
+        Self::MethodNotAllowed
+    }
+    
+    pub fn forbidden(message: impl Into<String>) -> Self {
+        Self::Authorization { 
+            message: message.into() 
+        }
+    }
 }
 
 /// Extension trait for converting Results to FusekiError

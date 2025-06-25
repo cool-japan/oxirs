@@ -583,6 +583,7 @@ macro_rules! register_function {
             fn parameter_types(&self) -> Vec<ValueType> { self.params.clone() }
             fn return_type(&self) -> ValueType { self.return_type.clone() }
             fn documentation(&self) -> &str { "Generated function" }
+            fn clone_function(&self) -> Box<dyn CustomFunction> { Box::new(self.clone()) }
             
             fn execute(&self, args: &[Value], context: &ExecutionContext) -> Result<Value> {
                 (self.body)(args, context)
@@ -613,6 +614,7 @@ mod tests {
         fn parameter_types(&self) -> Vec<ValueType> { vec![ValueType::Integer, ValueType::Integer] }
         fn return_type(&self) -> ValueType { ValueType::Integer }
         fn documentation(&self) -> &str { "Test function that adds two integers" }
+        fn clone_function(&self) -> Box<dyn CustomFunction> { Box::new(self.clone()) }
         
         fn execute(&self, args: &[Value], _context: &ExecutionContext) -> Result<Value> {
             if args.len() != 2 {

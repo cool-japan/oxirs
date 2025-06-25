@@ -357,7 +357,7 @@ impl ServiceRegistry {
         let response = self.http_client
             .post(&service.endpoint)
             .headers(headers)
-            .body(query)
+            .body(query.to_string())
             .send()
             .await;
             
@@ -698,9 +698,11 @@ pub struct ServiceRegistryStats {
     pub total_services: usize,
     pub healthy_services: usize,
     pub capabilities_distribution: HashMap<ServiceCapability, usize>,
+    #[serde(skip)]
     pub last_health_check: Option<Instant>,
 }
 
+#[derive(Debug)]
 struct ConnectionPool {
     service_id: String,
     endpoint: String,

@@ -157,18 +157,21 @@ pub async fn create_dataset(
         services: vec![
             crate::config::ServiceConfig {
                 name: "query".to_string(),
+                service_type: crate::config::ServiceType::SparqlQuery,
                 endpoint: format!("/{}/sparql", request.name),
-                service_type: "sparql-query".to_string(),
-                description: "SPARQL Query Service".to_string(),
+                auth_required: false,
+                rate_limit: None,
             },
             crate::config::ServiceConfig {
                 name: "update".to_string(),
+                service_type: crate::config::ServiceType::SparqlUpdate,
                 endpoint: format!("/{}/update", request.name),
-                service_type: "sparql-update".to_string(),
-                description: "SPARQL Update Service".to_string(),
+                auth_required: false,
+                rate_limit: None,
             },
         ],
         access_control: None,
+        backup: None,
     };
 
     // Create dataset in store
@@ -438,8 +441,8 @@ async fn get_dataset_info(
     let services = config.services.iter().map(|service| ServiceInfo {
         name: service.name.clone(),
         endpoint: service.endpoint.clone(),
-        service_type: service.service_type.clone(),
-        description: service.description.clone(),
+        service_type: format!("{:?}", service.service_type),
+        description: format!("{:?} service", service.service_type),
     }).collect();
 
     Ok(DatasetInfo {

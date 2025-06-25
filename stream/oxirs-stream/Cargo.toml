@@ -24,6 +24,7 @@ async-nats = { workspace = true, optional = true }
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.0", features = ["v4"] }
 regex = "1.10"
+futures-util = "0.3"
 
 [dev-dependencies]
 criterion.workspace = true
