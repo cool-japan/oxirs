@@ -15,18 +15,21 @@ use crate::{
     store::Store,
 };
 use axum::{
-    extract::{Query, State, WebSocketUpgrade, ws::{Message, WebSocket}},
+    extract::{
+        ws::{Message, WebSocket},
+        Query, State, WebSocketUpgrade,
+    },
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use chrono::{DateTime, Utc};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc, RwLock};
-use tracing::{info, warn, error, debug, instrument};
+use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
 
 /// WebSocket subscription manager
@@ -194,7 +197,7 @@ impl SubscriptionManager {
     /// Create new subscription manager with enhanced capabilities
     pub fn new() -> Self {
         let (change_notifier, _change_receiver) = broadcast::channel(10000);
-        
+
         SubscriptionManager {
             subscriptions: Arc::new(RwLock::new(HashMap::new())),
             change_notifier,
@@ -226,9 +229,11 @@ impl SubscriptionManager {
 
         let mut subscriptions = self.subscriptions.write().await;
         subscriptions.insert(subscription_id.clone(), subscription);
-        
-        info!("Added enhanced subscription: {} with debounce: {:?}ms", 
-              subscription_id, filters.debounce_ms);
+
+        info!(
+            "Added enhanced subscription: {} with debounce: {:?}ms",
+            subscription_id, filters.debounce_ms
+        );
         subscription_id
     }
 
@@ -247,7 +252,10 @@ impl SubscriptionManager {
     }
 
     /// Get subscription metrics
-    pub async fn get_subscription_metrics(&self, subscription_id: &str) -> Option<SubscriptionMetrics> {
+    pub async fn get_subscription_metrics(
+        &self,
+        subscription_id: &str,
+    ) -> Option<SubscriptionMetrics> {
         // Implementation would return actual metrics
         Some(SubscriptionMetrics {
             total_updates: 10,
@@ -278,7 +286,7 @@ impl SubscriptionManager {
 
         let mut subscriptions = self.subscriptions.write().await;
         subscriptions.insert(subscription_id.clone(), subscription);
-        
+
         info!("Added subscription: {}", subscription_id);
         subscription_id
     }
@@ -287,11 +295,11 @@ impl SubscriptionManager {
     pub async fn remove_subscription(&self, subscription_id: &str) -> bool {
         let mut subscriptions = self.subscriptions.write().await;
         let removed = subscriptions.remove(subscription_id).is_some();
-        
+
         if removed {
             info!("Removed subscription: {}", subscription_id);
         }
-        
+
         removed
     }
 
@@ -377,7 +385,9 @@ async fn handle_websocket_connection(
                         &subscription_manager_clone,
                         &state_clone,
                         &tx,
-                    ).await {
+                    )
+                    .await
+                    {
                         warn!("Error handling WebSocket message: {}", e);
                     }
                 }
@@ -415,7 +425,9 @@ async fn handle_websocket_connection(
                 &subscription_manager_clone,
                 &state,
                 &tx_clone,
-            ).await {
+            )
+            .await
+            {
                 warn!("Error handling change notification: {}", e);
             }
         }
@@ -450,18 +462,16 @@ async fn handle_websocket_message(
         SubscriptionAction::Unsubscribe => {
             handle_unsubscribe_request(request, subscription_manager).await?
         }
-        SubscriptionAction::Pause => {
-            handle_pause_request(request, subscription_manager).await?
-        }
-        SubscriptionAction::Resume => {
-            handle_resume_request(request, subscription_manager).await?
-        }
+        SubscriptionAction::Pause => handle_pause_request(request, subscription_manager).await?,
+        SubscriptionAction::Resume => handle_resume_request(request, subscription_manager).await?,
         SubscriptionAction::GetStatus => {
             handle_status_request(request, subscription_manager).await?
         }
     };
 
-    response_tx.send(response).await
+    response_tx
+        .send(response)
+        .await
         .map_err(|e| FusekiError::internal(format!("Failed to send response: {}", e)))?;
 
     Ok(())
@@ -473,7 +483,8 @@ async fn handle_subscribe_request(
     subscription_manager: &SubscriptionManager,
     state: &AppState,
 ) -> FusekiResult<SubscriptionResponse> {
-    let query = request.query
+    let query = request
+        .query
         .ok_or_else(|| FusekiError::bad_request("Query required for subscription"))?;
 
     let filters = request.filters.unwrap_or_else(|| SubscriptionFilters {
@@ -509,17 +520,24 @@ async fn handle_unsubscribe_request(
     request: SubscriptionRequest,
     subscription_manager: &SubscriptionManager,
 ) -> FusekiResult<SubscriptionResponse> {
-    let subscription_id = request.subscription_id
+    let subscription_id = request
+        .subscription_id
         .ok_or_else(|| FusekiError::bad_request("Subscription ID required for unsubscribe"))?;
 
-    let removed = subscription_manager.remove_subscription(&subscription_id).await;
+    let removed = subscription_manager
+        .remove_subscription(&subscription_id)
+        .await;
 
     Ok(SubscriptionResponse {
         action: "unsubscribe".to_string(),
         subscription_id: Some(subscription_id),
         success: removed,
         data: None,
-        error: if removed { None } else { Some("Subscription not found".to_string()) },
+        error: if removed {
+            None
+        } else {
+            Some("Subscription not found".to_string())
+        },
         timestamp: Utc::now(),
     })
 }
@@ -529,18 +547,25 @@ async fn handle_pause_request(
     request: SubscriptionRequest,
     subscription_manager: &SubscriptionManager,
 ) -> FusekiResult<SubscriptionResponse> {
-    let subscription_id = request.subscription_id
+    let subscription_id = request
+        .subscription_id
         .ok_or_else(|| FusekiError::bad_request("Subscription ID required for pause"))?;
 
     // In a full implementation, this would mark the subscription as paused
-    let subscription = subscription_manager.get_subscription(&subscription_id).await;
+    let subscription = subscription_manager
+        .get_subscription(&subscription_id)
+        .await;
 
     Ok(SubscriptionResponse {
         action: "pause".to_string(),
         subscription_id: Some(subscription_id),
         success: subscription.is_some(),
         data: None,
-        error: if subscription.is_some() { None } else { Some("Subscription not found".to_string()) },
+        error: if subscription.is_some() {
+            None
+        } else {
+            Some("Subscription not found".to_string())
+        },
         timestamp: Utc::now(),
     })
 }
@@ -550,17 +575,24 @@ async fn handle_resume_request(
     request: SubscriptionRequest,
     subscription_manager: &SubscriptionManager,
 ) -> FusekiResult<SubscriptionResponse> {
-    let subscription_id = request.subscription_id
+    let subscription_id = request
+        .subscription_id
         .ok_or_else(|| FusekiError::bad_request("Subscription ID required for resume"))?;
 
-    let subscription = subscription_manager.get_subscription(&subscription_id).await;
+    let subscription = subscription_manager
+        .get_subscription(&subscription_id)
+        .await;
 
     Ok(SubscriptionResponse {
         action: "resume".to_string(),
         subscription_id: Some(subscription_id),
         success: subscription.is_some(),
         data: None,
-        error: if subscription.is_some() { None } else { Some("Subscription not found".to_string()) },
+        error: if subscription.is_some() {
+            None
+        } else {
+            Some("Subscription not found".to_string())
+        },
         timestamp: Utc::now(),
     })
 }
@@ -572,7 +604,9 @@ async fn handle_status_request(
 ) -> FusekiResult<SubscriptionResponse> {
     let data = if let Some(subscription_id) = request.subscription_id {
         // Get specific subscription status
-        subscription_manager.get_subscription(&subscription_id).await
+        subscription_manager
+            .get_subscription(&subscription_id)
+            .await
             .map(|sub| serde_json::to_value(sub).unwrap_or_default())
     } else {
         // Get all subscriptions status
@@ -618,7 +652,10 @@ async fn handle_change_notification(
                     };
 
                     if response_tx.send(response).await.is_err() {
-                        warn!("Failed to send update for subscription: {}", subscription.id);
+                        warn!(
+                            "Failed to send update for subscription: {}",
+                            subscription.id
+                        );
                     }
 
                     // Update subscription result count
@@ -627,7 +664,10 @@ async fn handle_change_notification(
                         .await;
                 }
                 Err(e) => {
-                    warn!("Error executing subscription query {}: {}", subscription.id, e);
+                    warn!(
+                        "Error executing subscription query {}: {}",
+                        subscription.id, e
+                    );
                 }
             }
         }
@@ -643,10 +683,11 @@ fn should_notify_subscription(
 ) -> bool {
     // Check graph filters
     if let Some(ref graph_filter) = subscription.filters.graph_filter {
-        let notification_affects_filtered_graphs = notification.affected_graphs
+        let notification_affects_filtered_graphs = notification
+            .affected_graphs
             .iter()
             .any(|graph| graph_filter.contains(graph));
-        
+
         if !notification_affects_filtered_graphs {
             return false;
         }
@@ -671,12 +712,8 @@ async fn execute_subscription_query(
     state: &AppState,
 ) -> FusekiResult<serde_json::Value> {
     // Execute query using existing SPARQL handler logic
-    let result = crate::handlers::sparql::execute_sparql_query(
-        &state.store,
-        query,
-        &[],
-        &[],
-    ).await?;
+    let result =
+        crate::handlers::sparql::execute_sparql_query(&state.store, query, &[], &[]).await?;
 
     // Convert to JSON format suitable for WebSocket
     let json_result = match result.query_type.as_str() {
@@ -770,20 +807,22 @@ async fn detect_store_changes(
 ) -> FusekiResult<Vec<ChangeNotification>> {
     let mut changes = Vec::new();
     let now = Utc::now();
-    
+
     // Check for transaction log changes
     if let Ok(tx_log_changes) = check_transaction_log_changes(store, detector.last_check).await {
         changes.extend(tx_log_changes);
     }
-    
+
     // Check for graph-level modifications using checksums
-    if let Ok(graph_changes) = detect_graph_modifications(store, &mut detector.graph_checksums).await {
+    if let Ok(graph_changes) =
+        detect_graph_modifications(store, &mut detector.graph_checksums).await
+    {
         changes.extend(graph_changes);
     }
-    
+
     // Batch and deduplicate changes
     let batched_changes = batch_and_deduplicate_changes(changes);
-    
+
     detector.last_check = now;
     Ok(batched_changes)
 }
@@ -796,12 +835,13 @@ async fn check_transaction_log_changes(
     // This would interface with the actual transaction log
     // For now, simulate with a more realistic approach
     let mut changes = Vec::new();
-    
+
     // Simulate checking different types of changes
     let change_types = ["INSERT", "DELETE", "CLEAR", "LOAD", "CREATE", "DROP"];
-    
+
     for (i, change_type) in change_types.iter().enumerate() {
-        if rand::random::<f32>() < 0.1 { // 10% chance of each change type
+        if rand::random::<f32>() < 0.1 {
+            // 10% chance of each change type
             let graph_name = format!("http://example.org/graph_{}", i % 3);
             changes.push(ChangeNotification {
                 change_type: change_type.to_string(),
@@ -811,7 +851,7 @@ async fn check_transaction_log_changes(
             });
         }
     }
-    
+
     Ok(changes)
 }
 
@@ -821,13 +861,13 @@ async fn detect_graph_modifications(
     graph_checksums: &mut HashMap<String, u64>,
 ) -> FusekiResult<Vec<ChangeNotification>> {
     let mut changes = Vec::new();
-    
+
     // Get current graph list and checksums
     let current_graphs = get_store_graphs(store).await?;
-    
+
     for graph_name in current_graphs {
         let current_checksum = calculate_graph_checksum(store, &graph_name).await?;
-        
+
         if let Some(&previous_checksum) = graph_checksums.get(&graph_name) {
             if current_checksum != previous_checksum {
                 changes.push(ChangeNotification {
@@ -838,20 +878,24 @@ async fn detect_graph_modifications(
                 });
             }
         }
-        
+
         graph_checksums.insert(graph_name, current_checksum);
     }
-    
+
     Ok(changes)
 }
 
 /// Batch and deduplicate change notifications
 fn batch_and_deduplicate_changes(changes: Vec<ChangeNotification>) -> Vec<ChangeNotification> {
     let mut batched: HashMap<String, ChangeNotification> = HashMap::new();
-    
+
     for change in changes {
-        let key = format!("{}:{}", change.change_type, change.affected_graphs.join(","));
-        
+        let key = format!(
+            "{}:{}",
+            change.change_type,
+            change.affected_graphs.join(",")
+        );
+
         match batched.get_mut(&key) {
             Some(existing) => {
                 existing.change_count += change.change_count;
@@ -862,7 +906,7 @@ fn batch_and_deduplicate_changes(changes: Vec<ChangeNotification>) -> Vec<Change
             }
         }
     }
-    
+
     batched.into_values().collect()
 }
 
@@ -878,19 +922,22 @@ async fn get_store_graphs(store: &crate::store::Store) -> FusekiResult<Vec<Strin
 }
 
 /// Calculate checksum for a graph
-async fn calculate_graph_checksum(store: &crate::store::Store, graph_name: &str) -> FusekiResult<u64> {
+async fn calculate_graph_checksum(
+    store: &crate::store::Store,
+    graph_name: &str,
+) -> FusekiResult<u64> {
     // This would calculate a hash of all triples in the graph
     // For now, simulate with a random value that changes occasionally
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
-    
+
     let mut hasher = DefaultHasher::new();
     graph_name.hash(&mut hasher);
-    
+
     // Add some time-based variation to simulate real changes
     let time_factor = (Utc::now().timestamp() / 60) as u64; // Changes every minute
     time_factor.hash(&mut hasher);
-    
+
     Ok(hasher.finish())
 }
 
@@ -898,17 +945,21 @@ async fn calculate_graph_checksum(store: &crate::store::Store, graph_name: &str)
 async fn cleanup_stale_subscriptions(subscription_manager: &SubscriptionManager) {
     let subscriptions = subscription_manager.get_active_subscriptions().await;
     let now = Utc::now();
-    
+
     for subscription in subscriptions {
         // Remove subscriptions older than 1 hour without activity
         if let Some(last_result) = subscription.last_result_at {
             if now - last_result > chrono::Duration::hours(1) {
-                subscription_manager.remove_subscription(&subscription.id).await;
+                subscription_manager
+                    .remove_subscription(&subscription.id)
+                    .await;
                 debug!("Removed stale subscription: {}", subscription.id);
             }
         } else if now - subscription.created_at > chrono::Duration::minutes(30) {
             // Remove subscriptions that never had results after 30 minutes
-            subscription_manager.remove_subscription(&subscription.id).await;
+            subscription_manager
+                .remove_subscription(&subscription.id)
+                .await;
             debug!("Removed inactive subscription: {}", subscription.id);
         }
     }
@@ -921,7 +972,7 @@ mod tests {
     #[tokio::test]
     async fn test_subscription_manager() {
         let manager = SubscriptionManager::new();
-        
+
         let filters = SubscriptionFilters {
             min_results: None,
             max_results: Some(100),
@@ -982,7 +1033,10 @@ mod tests {
             change_count: 1,
         };
 
-        assert!(!should_notify_subscription(&subscription, &notification_different_graph));
+        assert!(!should_notify_subscription(
+            &subscription,
+            &notification_different_graph
+        ));
     }
 
     #[test]

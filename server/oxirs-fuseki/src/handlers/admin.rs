@@ -2,20 +2,20 @@
 
 use crate::{
     auth::{AuthUser, Permission},
-    config::{ServerConfig, DatasetConfig},
+    config::{DatasetConfig, ServerConfig},
     error::{FusekiError, FusekiResult},
     server::AppState,
     store::Store,
 };
 use axum::{
     extract::{Path, Query, State},
-    http::{StatusCode, HeaderMap},
-    response::{Html, Json, IntoResponse, Response},
+    http::{HeaderMap, StatusCode},
+    response::{Html, IntoResponse, Json, Response},
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Instant;
-use tracing::{info, warn, error, debug, instrument};
+use tracing::{debug, error, info, instrument, warn};
 
 /// Dataset creation request
 #[derive(Debug, Deserialize)]
@@ -87,7 +87,7 @@ pub async fn ui_handler(State(state): State<AppState>) -> Result<Html<String>, F
 
     // Generate basic admin UI HTML
     let html_content = generate_admin_ui_html(&state).await?;
-    
+
     Ok(Html(html_content))
 }
 
@@ -101,7 +101,7 @@ pub async fn list_datasets(
     // check_admin_permission(&auth_user, &Permission::SystemMetrics)?;
 
     let mut datasets = Vec::new();
-    
+
     for (name, config) in &state.config.datasets {
         let dataset_info = get_dataset_info(name, config, &state.store).await?;
         datasets.push(dataset_info);
@@ -121,11 +121,13 @@ pub async fn get_dataset(
     // Check permissions
     // check_dataset_permission(&auth_user, &dataset_name, &Permission::DatasetRead)?;
 
-    let config = state.config.datasets.get(&dataset_name)
-        .ok_or_else(|| FusekiError::not_found(format!("Dataset '{}' not found", dataset_name)))?;
+    let config =
+        state.config.datasets.get(&dataset_name).ok_or_else(|| {
+            FusekiError::not_found(format!("Dataset '{}' not found", dataset_name))
+        })?;
 
     let dataset_info = get_dataset_info(&dataset_name, config, &state.store).await?;
-    
+
     Ok(Json(dataset_info))
 }
 
@@ -144,13 +146,18 @@ pub async fn create_dataset(
 
     // Check if dataset already exists
     if state.config.datasets.contains_key(&request.name) {
-        return Err(FusekiError::conflict(format!("Dataset '{}' already exists", request.name)));
+        return Err(FusekiError::conflict(format!(
+            "Dataset '{}' already exists",
+            request.name
+        )));
     }
 
     // Create dataset configuration
     let dataset_config = DatasetConfig {
         name: request.name.clone(),
-        location: request.location.unwrap_or_else(|| format!("/data/{}", request.name)),
+        location: request
+            .location
+            .unwrap_or_else(|| format!("/data/{}", request.name)),
         read_only: request.read_only.unwrap_or(false),
         text_index: None,
         shacl_shapes: Vec::new(),
@@ -196,7 +203,10 @@ pub async fn delete_dataset(
 
     // Check if dataset exists
     if !state.config.datasets.contains_key(&dataset_name) {
-        return Err(FusekiError::not_found(format!("Dataset '{}' not found", dataset_name)));
+        return Err(FusekiError::not_found(format!(
+            "Dataset '{}' not found",
+            dataset_name
+        )));
     }
 
     // Delete dataset from store
@@ -208,21 +218,37 @@ pub async fn delete_dataset(
 
 /// Get server information
 #[instrument(skip(state))]
-pub async fn server_info(State(state): State<AppState>) -> Result<Json<serde_json::Value>, FusekiError> {
+pub async fn server_info(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, FusekiError> {
     let mut info = HashMap::new();
-    
+
     info.insert("name", serde_json::json!("OxiRS Fuseki"));
     info.insert("version", serde_json::json!(env!("CARGO_PKG_VERSION")));
-    info.insert("description", serde_json::json!("SPARQL 1.1/1.2 HTTP protocol server with Fuseki-compatible configuration"));
-    info.insert("built_at", serde_json::json!(option_env!("VERGEN_BUILD_TIMESTAMP").unwrap_or("unknown")));
-    info.insert("features", serde_json::json!({
-        "authentication": state.config.security.authentication.enabled,
-        "metrics": state.config.monitoring.metrics.enabled,
-        "admin_ui": state.config.server.admin_ui,
-        "cors": state.config.server.cors,
-    }));
-    info.insert("datasets_count", serde_json::json!(state.config.datasets.len()));
-    
+    info.insert(
+        "description",
+        serde_json::json!(
+            "SPARQL 1.1/1.2 HTTP protocol server with Fuseki-compatible configuration"
+        ),
+    );
+    info.insert(
+        "built_at",
+        serde_json::json!(option_env!("VERGEN_BUILD_TIMESTAMP").unwrap_or("unknown")),
+    );
+    info.insert(
+        "features",
+        serde_json::json!({
+            "authentication": state.config.security.authentication.enabled,
+            "metrics": state.config.monitoring.metrics.enabled,
+            "admin_ui": state.config.server.admin_ui,
+            "cors": state.config.server.cors,
+        }),
+    );
+    info.insert(
+        "datasets_count",
+        serde_json::json!(state.config.datasets.len()),
+    );
+
     if let Some(metrics_service) = &state.metrics_service {
         let summary = metrics_service.get_summary().await;
         info.insert("uptime_seconds", serde_json::json!(summary.uptime_seconds));
@@ -238,7 +264,7 @@ pub async fn server_info(State(state): State<AppState>) -> Result<Json<serde_jso
 pub async fn server_stats(State(state): State<AppState>) -> Result<Json<ServerStats>, FusekiError> {
     let stats = if let Some(metrics_service) = &state.metrics_service {
         let summary = metrics_service.get_summary().await;
-        
+
         ServerStats {
             server_name: "OxiRS Fuseki".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
@@ -280,17 +306,26 @@ pub async fn compact_dataset(
 
     // Check if dataset exists
     if !state.config.datasets.contains_key(&dataset_name) {
-        return Err(FusekiError::not_found(format!("Dataset '{}' not found", dataset_name)));
+        return Err(FusekiError::not_found(format!(
+            "Dataset '{}' not found",
+            dataset_name
+        )));
     }
 
     let start_time = Instant::now();
-    
+
     // Perform compaction
-    let result = compact_dataset_in_store(&state.store, &dataset_name, params.force.unwrap_or(false)).await?;
-    
+    let result =
+        compact_dataset_in_store(&state.store, &dataset_name, params.force.unwrap_or(false))
+            .await?;
+
     let execution_time = start_time.elapsed();
 
-    info!("Compacted dataset '{}' in {}ms", dataset_name, execution_time.as_millis());
+    info!(
+        "Compacted dataset '{}' in {}ms",
+        dataset_name,
+        execution_time.as_millis()
+    );
 
     Ok(Json(serde_json::json!({
         "success": true,
@@ -316,7 +351,10 @@ pub async fn backup_dataset(
 
     // Check if dataset exists
     if !state.config.datasets.contains_key(&dataset_name) {
-        return Err(FusekiError::not_found(format!("Dataset '{}' not found", dataset_name)));
+        return Err(FusekiError::not_found(format!(
+            "Dataset '{}' not found",
+            dataset_name
+        )));
     }
 
     let format = params.format.as_deref().unwrap_or("turtle");
@@ -324,31 +362,45 @@ pub async fn backup_dataset(
     let include_metadata = params.include_metadata.unwrap_or(true);
 
     let start_time = Instant::now();
-    
+
     // Create backup
     let backup_data = create_dataset_backup(
-        &state.store, 
-        &dataset_name, 
-        format, 
-        compress, 
-        include_metadata
-    ).await?;
-    
+        &state.store,
+        &dataset_name,
+        format,
+        compress,
+        include_metadata,
+    )
+    .await?;
+
     let execution_time = start_time.elapsed();
 
-    info!("Created backup for dataset '{}' in {}ms", dataset_name, execution_time.as_millis());
+    info!(
+        "Created backup for dataset '{}' in {}ms",
+        dataset_name,
+        execution_time.as_millis()
+    );
 
     // Determine content type and filename
     let (content_type, filename) = match format {
         "turtle" => ("text/turtle", format!("{}_backup.ttl", dataset_name)),
-        "ntriples" => ("application/n-triples", format!("{}_backup.nt", dataset_name)),
-        "rdfxml" => ("application/rdf+xml", format!("{}_backup.rdf", dataset_name)),
+        "ntriples" => (
+            "application/n-triples",
+            format!("{}_backup.nt", dataset_name),
+        ),
+        "rdfxml" => (
+            "application/rdf+xml",
+            format!("{}_backup.rdf", dataset_name),
+        ),
         _ => ("text/turtle", format!("{}_backup.ttl", dataset_name)),
     };
 
     let headers = [
         ("content-type", content_type),
-        ("content-disposition", &format!("attachment; filename=\"{}\"", filename)),
+        (
+            "content-disposition",
+            &format!("attachment; filename=\"{}\"", filename),
+        ),
     ];
 
     Ok((StatusCode::OK, headers, backup_data).into_response())
@@ -359,8 +411,9 @@ pub async fn backup_dataset(
 /// Generate basic admin UI HTML
 async fn generate_admin_ui_html(state: &AppState) -> FusekiResult<String> {
     let datasets_count = state.config.datasets.len();
-    
-    let html = format!(r#"
+
+    let html = format!(
+        r#"
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -415,10 +468,26 @@ async fn generate_admin_ui_html(state: &AppState) -> FusekiResult<String> {
     "#,
         env!("CARGO_PKG_VERSION"),
         datasets_count,
-        if state.config.security.authentication.enabled { "enabled" } else { "disabled" },
-        if state.config.security.authentication.enabled { "ENABLED" } else { "DISABLED" },
-        if state.config.monitoring.metrics.enabled { "enabled" } else { "disabled" },
-        if state.config.monitoring.metrics.enabled { "ENABLED" } else { "DISABLED" },
+        if state.config.security.authentication.enabled {
+            "enabled"
+        } else {
+            "disabled"
+        },
+        if state.config.security.authentication.enabled {
+            "ENABLED"
+        } else {
+            "DISABLED"
+        },
+        if state.config.monitoring.metrics.enabled {
+            "enabled"
+        } else {
+            "disabled"
+        },
+        if state.config.monitoring.metrics.enabled {
+            "ENABLED"
+        } else {
+            "DISABLED"
+        },
         if state.config.monitoring.metrics.enabled {
             r#"<div class="endpoint">GET <a href="/metrics">/metrics</a> - Prometheus metrics</div>"#
         } else {
@@ -438,19 +507,23 @@ async fn get_dataset_info(
     // Get dataset statistics from store
     let stats = get_dataset_stats_from_store(store, name).await?;
 
-    let services = config.services.iter().map(|service| ServiceInfo {
-        name: service.name.clone(),
-        endpoint: service.endpoint.clone(),
-        service_type: format!("{:?}", service.service_type),
-        description: format!("{:?} service", service.service_type),
-    }).collect();
+    let services = config
+        .services
+        .iter()
+        .map(|service| ServiceInfo {
+            name: service.name.clone(),
+            endpoint: service.endpoint.clone(),
+            service_type: format!("{:?}", service.service_type),
+            description: format!("{:?} service", service.service_type),
+        })
+        .collect();
 
     Ok(DatasetInfo {
         name: name.to_string(),
         location: config.location.clone(),
         read_only: config.read_only,
-        description: None, // Could be added to config
-        created_at: chrono::Utc::now().to_rfc3339(), // Mock data
+        description: None,                              // Could be added to config
+        created_at: chrono::Utc::now().to_rfc3339(),    // Mock data
         last_modified: chrono::Utc::now().to_rfc3339(), // Mock data
         triple_count: stats.triple_count,
         size_bytes: stats.size_bytes,
@@ -465,17 +538,26 @@ fn validate_dataset_name(name: &str) -> FusekiResult<()> {
     }
 
     if name.len() > 64 {
-        return Err(FusekiError::bad_request("Dataset name too long (max 64 characters)"));
+        return Err(FusekiError::bad_request(
+            "Dataset name too long (max 64 characters)",
+        ));
     }
 
     // Check for valid characters (alphanumeric, dash, underscore)
-    if !name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
-        return Err(FusekiError::bad_request("Dataset name contains invalid characters"));
+    if !name
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err(FusekiError::bad_request(
+            "Dataset name contains invalid characters",
+        ));
     }
 
     // Cannot start with dash
     if name.starts_with('-') {
-        return Err(FusekiError::bad_request("Dataset name cannot start with dash"));
+        return Err(FusekiError::bad_request(
+            "Dataset name cannot start with dash",
+        ));
     }
 
     Ok(())
@@ -501,9 +583,16 @@ async fn get_dataset_stats_from_store(store: &Store, name: &str) -> FusekiResult
     })
 }
 
-async fn create_dataset_in_store(store: &Store, name: &str, config: &DatasetConfig) -> FusekiResult<()> {
+async fn create_dataset_in_store(
+    store: &Store,
+    name: &str,
+    config: &DatasetConfig,
+) -> FusekiResult<()> {
     // Mock implementation
-    debug!("Creating dataset '{}' at location '{}'", name, config.location);
+    debug!(
+        "Creating dataset '{}' at location '{}'",
+        name, config.location
+    );
     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     Ok(())
 }
@@ -515,11 +604,15 @@ async fn delete_dataset_from_store(store: &Store, name: &str) -> FusekiResult<()
     Ok(())
 }
 
-async fn compact_dataset_in_store(store: &Store, name: &str, force: bool) -> FusekiResult<CompactionResult> {
+async fn compact_dataset_in_store(
+    store: &Store,
+    name: &str,
+    force: bool,
+) -> FusekiResult<CompactionResult> {
     // Mock implementation
     debug!("Compacting dataset '{}' (force: {})", name, force);
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    
+
     Ok(CompactionResult {
         size_before: 100000,
         size_after: 75000,
@@ -534,11 +627,13 @@ async fn create_dataset_backup(
     include_metadata: bool,
 ) -> FusekiResult<String> {
     // Mock implementation
-    debug!("Creating backup for dataset '{}' in format '{}' (compress: {}, metadata: {})", 
-           name, format, compress, include_metadata);
-    
+    debug!(
+        "Creating backup for dataset '{}' in format '{}' (compress: {}, metadata: {})",
+        name, format, compress, include_metadata
+    );
+
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-    
+
     // Return mock backup data
     match format {
         "turtle" => Ok("@prefix ex: <http://example.org/> .\nex:subject ex:predicate \"backup data\" .".to_string()),

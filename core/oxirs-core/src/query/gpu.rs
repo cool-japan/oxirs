@@ -4,7 +4,7 @@
 //! a generic interface that can work with CUDA, OpenCL, or WebGPU backends.
 
 use crate::model::*;
-use crate::query::algebra::TriplePattern;
+use crate::query::algebra;
 use crate::query::plan::ExecutionPlan;
 use crate::OxirsError;
 use std::sync::Arc;
@@ -238,7 +238,7 @@ impl GpuQueryExecutor {
     }
 
     /// Check if triple matches pattern
-    fn triple_matches_pattern(&self, triple: &GpuTriple, pattern: &TriplePattern) -> bool {
+    fn triple_matches_pattern(&self, triple: &GpuTriple, pattern: &crate::model::pattern::TriplePattern) -> bool {
         // Simplified matching - would use actual term resolution
         true
     }

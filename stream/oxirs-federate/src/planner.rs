@@ -462,14 +462,308 @@ impl QueryPlanner {
             return Err(anyhow!("No SPARQL services available"));
         }
 
-        if let Some(service) = sparql_services.first() {
-            assignments.insert(
-                service.id.clone(),
-                patterns.iter().map(|p| (*p).clone()).collect(),
-            );
+        // Use different assignment strategies based on configuration
+        match self.config.service_selection_strategy {
+            ServiceSelectionStrategy::RoundRobin => {
+                self.assign_patterns_round_robin(patterns, &sparql_services, &mut assignments)?;
+            }
+            ServiceSelectionStrategy::CapabilityBased => {
+                self.assign_patterns_by_capability(patterns, &sparql_services, registry, &mut assignments)?;
+            }
+            ServiceSelectionStrategy::LoadBased => {
+                self.assign_patterns_by_load(patterns, &sparql_services, registry, &mut assignments)?;
+            }
+            ServiceSelectionStrategy::CostBased => {
+                self.assign_patterns_by_cost(patterns, &sparql_services, registry, &mut assignments)?;
+            }
+            ServiceSelectionStrategy::PredicateBased => {
+                self.assign_patterns_by_predicate(patterns, &sparql_services, registry, &mut assignments)?;
+            }
+            ServiceSelectionStrategy::First => {
+                // Original simple strategy - assign all to first service
+                if let Some(service) = sparql_services.first() {
+                    assignments.insert(
+                        service.id.clone(),
+                        patterns.iter().map(|p| (*p).clone()).collect(),
+                    );
+                }
+            }
         }
 
         Ok(assignments)
+    }
+
+    /// Assign patterns using round-robin strategy
+    fn assign_patterns_round_robin(
+        &self,
+        patterns: &[&TriplePattern],
+        services: &[crate::FederatedService],
+        assignments: &mut HashMap<String, Vec<TriplePattern>>,
+    ) -> Result<()> {
+        for (i, pattern) in patterns.iter().enumerate() {
+            let service = &services[i % services.len()];
+            assignments
+                .entry(service.id.clone())
+                .or_default()
+                .push((*pattern).clone());
+        }
+        Ok(())
+    }
+
+    /// Assign patterns based on service capabilities and data coverage
+    fn assign_patterns_by_capability(
+        &self,
+        patterns: &[&TriplePattern],
+        services: &[crate::FederatedService],
+        registry: &ServiceRegistry,
+        assignments: &mut HashMap<String, Vec<TriplePattern>>,
+    ) -> Result<()> {
+        for pattern in patterns {
+            let mut best_service = None;
+            let mut best_score = 0.0;
+
+            for service in services {
+                let score = self.calculate_service_capability_score(pattern, service, registry);
+                if score > best_score {
+                    best_score = score;
+                    best_service = Some(service);
+                }
+            }
+
+            if let Some(service) = best_service {
+                assignments
+                    .entry(service.id.clone())
+                    .or_default()
+                    .push((*pattern).clone());
+            } else {
+                // Fallback to first service
+                assignments
+                    .entry(services[0].id.clone())
+                    .or_default()
+                    .push((*pattern).clone());
+            }
+        }
+        Ok(())
+    }
+
+    /// Assign patterns based on current service load
+    fn assign_patterns_by_load(
+        &self,
+        patterns: &[&TriplePattern],
+        services: &[crate::FederatedService],
+        registry: &ServiceRegistry,
+        assignments: &mut HashMap<String, Vec<TriplePattern>>,
+    ) -> Result<()> {
+        for pattern in patterns {
+            let mut best_service = None;
+            let mut lowest_load = f64::INFINITY;
+
+            for service in services {
+                // Get current load from service status
+                let load = self.get_service_load(service, registry);
+                if load < lowest_load {
+                    lowest_load = load;
+                    best_service = Some(service);
+                }
+            }
+
+            if let Some(service) = best_service {
+                assignments
+                    .entry(service.id.clone())
+                    .or_default()
+                    .push((*pattern).clone());
+            }
+        }
+        Ok(())
+    }
+
+    /// Assign patterns based on estimated cost
+    fn assign_patterns_by_cost(
+        &self,
+        patterns: &[&TriplePattern],
+        services: &[crate::FederatedService],
+        registry: &ServiceRegistry,
+        assignments: &mut HashMap<String, Vec<TriplePattern>>,
+    ) -> Result<()> {
+        for pattern in patterns {
+            let mut best_service = None;
+            let mut lowest_cost = u64::MAX;
+
+            for service in services {
+                let cost = self.estimate_pattern_cost(pattern, service, registry);
+                if cost < lowest_cost {
+                    lowest_cost = cost;
+                    best_service = Some(service);
+                }
+            }
+
+            if let Some(service) = best_service {
+                assignments
+                    .entry(service.id.clone())
+                    .or_default()
+                    .push((*pattern).clone());
+            }
+        }
+        Ok(())
+    }
+
+    /// Assign patterns based on predicate specialization
+    fn assign_patterns_by_predicate(
+        &self,
+        patterns: &[&TriplePattern],
+        services: &[crate::FederatedService],
+        registry: &ServiceRegistry,
+        assignments: &mut HashMap<String, Vec<TriplePattern>>,
+    ) -> Result<()> {
+        // Group patterns by predicate
+        let mut predicate_groups: HashMap<String, Vec<&TriplePattern>> = HashMap::new();
+        for pattern in patterns {
+            predicate_groups
+                .entry(pattern.predicate.clone())
+                .or_default()
+                .push(pattern);
+        }
+
+        // Assign each predicate group to the most suitable service
+        for (predicate, predicate_patterns) in predicate_groups {
+            let mut best_service = None;
+            let mut best_score = 0.0;
+
+            for service in services {
+                let score = self.calculate_predicate_affinity_score(&predicate, service, registry);
+                if score > best_score {
+                    best_score = score;
+                    best_service = Some(service);
+                }
+            }
+
+            let target_service = best_service.unwrap_or(&services[0]);
+            for pattern in predicate_patterns {
+                assignments
+                    .entry(target_service.id.clone())
+                    .or_default()
+                    .push((*pattern).clone());
+            }
+        }
+        Ok(())
+    }
+
+    /// Calculate service capability score for a pattern
+    fn calculate_service_capability_score(
+        &self,
+        pattern: &TriplePattern,
+        service: &crate::FederatedService,
+        _registry: &ServiceRegistry,
+    ) -> f64 {
+        let mut score = 0.0;
+
+        // Basic capability scoring
+        if service.capabilities.contains(&ServiceCapability::SparqlQuery) {
+            score += 1.0;
+        }
+        if service.capabilities.contains(&ServiceCapability::FullTextSearch) && 
+           pattern.pattern_string.contains("REGEX") {
+            score += 0.5;
+        }
+        if service.capabilities.contains(&ServiceCapability::Geospatial) && 
+           pattern.predicate.contains("geo:") {
+            score += 0.5;
+        }
+
+        // Pattern complexity factor
+        let complexity = self.calculate_pattern_complexity(pattern);
+        score += match complexity {
+            PatternComplexity::Simple => 0.1,
+            PatternComplexity::Medium => 0.0,
+            PatternComplexity::Complex => -0.1,
+        };
+
+        score
+    }
+
+    /// Get current load of a service
+    fn get_service_load(&self, service: &crate::FederatedService, _registry: &ServiceRegistry) -> f64 {
+        // In a real implementation, this would query service metrics
+        // For now, use a simple heuristic based on service status
+        match service.status {
+            crate::ServiceStatus::Healthy => 0.3,
+            crate::ServiceStatus::Degraded => 0.7,
+            crate::ServiceStatus::Unavailable => f64::INFINITY,
+            crate::ServiceStatus::Unknown => 0.5,
+        }
+    }
+
+    /// Estimate cost of executing a pattern on a service
+    fn estimate_pattern_cost(
+        &self,
+        pattern: &TriplePattern,
+        service: &crate::FederatedService,
+        _registry: &ServiceRegistry,
+    ) -> u64 {
+        let mut cost = 100; // Base cost
+
+        // Pattern complexity factor
+        let complexity = self.calculate_pattern_complexity(pattern);
+        cost += match complexity {
+            PatternComplexity::Simple => 10,
+            PatternComplexity::Medium => 50,
+            PatternComplexity::Complex => 200,
+        };
+
+        // Service performance factor
+        cost = (cost as f64 * service.performance_score.unwrap_or(1.0)) as u64;
+
+        // Network latency factor (estimated)
+        if let Some(latency) = service.latency {
+            cost += latency.as_millis() as u64;
+        }
+
+        cost
+    }
+
+    /// Calculate predicate affinity score for a service
+    fn calculate_predicate_affinity_score(
+        &self,
+        predicate: &str,
+        service: &crate::FederatedService,
+        _registry: &ServiceRegistry,
+    ) -> f64 {
+        let mut score = 1.0; // Base score
+
+        // Check if service has specialized capabilities for this predicate
+        if predicate.contains("geo:") && service.capabilities.contains(&ServiceCapability::Geospatial) {
+            score += 2.0;
+        }
+        if predicate.contains("foaf:") && service.name.to_lowercase().contains("foaf") {
+            score += 1.5;
+        }
+        if predicate.contains("dbo:") && service.name.to_lowercase().contains("dbpedia") {
+            score += 1.5;
+        }
+        if predicate.contains("schema:") && service.name.to_lowercase().contains("schema") {
+            score += 1.5;
+        }
+
+        // Performance factor
+        score *= service.performance_score.unwrap_or(1.0);
+
+        score
+    }
+
+    /// Calculate pattern complexity
+    fn calculate_pattern_complexity(&self, pattern: &TriplePattern) -> PatternComplexity {
+        let variable_count = [&pattern.subject, &pattern.predicate, &pattern.object]
+            .iter()
+            .filter(|part| part.starts_with('?'))
+            .count();
+
+        if variable_count == 0 {
+            PatternComplexity::Simple
+        } else if variable_count <= 2 {
+            PatternComplexity::Medium
+        } else {
+            PatternComplexity::Complex
+        }
     }
 
     fn is_pattern_in_service_clause(
@@ -553,6 +847,7 @@ pub struct QueryPlannerConfig {
     pub timeout: Duration,
     pub enable_caching: bool,
     pub cost_threshold: u64,
+    pub service_selection_strategy: ServiceSelectionStrategy,
 }
 
 impl Default for QueryPlannerConfig {
@@ -563,8 +858,34 @@ impl Default for QueryPlannerConfig {
             timeout: Duration::from_secs(30),
             enable_caching: true,
             cost_threshold: 1000,
+            service_selection_strategy: ServiceSelectionStrategy::CapabilityBased,
         }
     }
+}
+
+/// Service selection strategies for query planning
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum ServiceSelectionStrategy {
+    /// Assign patterns to first available service
+    First,
+    /// Round-robin assignment across services
+    RoundRobin,
+    /// Select services based on capabilities and pattern characteristics
+    CapabilityBased,
+    /// Select services based on current load
+    LoadBased,
+    /// Select services based on estimated execution cost
+    CostBased,
+    /// Group patterns by predicate and assign to specialized services
+    PredicateBased,
+}
+
+/// Pattern complexity levels
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PatternComplexity {
+    Simple,
+    Medium,
+    Complex,
 }
 
 /// Optimization levels for query planning

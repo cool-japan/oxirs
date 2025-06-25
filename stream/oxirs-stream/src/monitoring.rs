@@ -650,4 +650,216 @@ mod tests {
         assert!(prometheus_output.contains("oxirs_producer_events_published_total 500"));
         assert!(prometheus_output.contains("oxirs_producer_events_failed_total 10"));
     }
+
+    #[tokio::test]
+    async fn test_health_checking() {
+        let config = MonitoringConfig {
+            enable_metrics: true,
+            enable_tracing: false,
+            metrics_interval: Duration::from_secs(60),
+            health_check_interval: Duration::from_secs(30),
+            enable_profiling: false,
+            prometheus_endpoint: None,
+            jaeger_endpoint: None,
+            log_level: "info".to_string(),
+        };
+
+        let mut health_checker = HealthChecker::new(config);
+
+        // Add a mock component checker
+        struct MockChecker;
+        
+        #[async_trait::async_trait]
+        impl ComponentHealthChecker for MockChecker {
+            fn component_name(&self) -> &str {
+                "mock_component"
+            }
+
+            async fn check_health(&self) -> ComponentHealth {
+                ComponentHealth {
+                    status: HealthStatus::Healthy,
+                    message: "Component is healthy".to_string(),
+                    last_check: Utc::now(),
+                    metrics: HashMap::new(),
+                    dependencies: vec!["database".to_string()],
+                }
+            }
+        }
+
+        health_checker.add_component_checker(Box::new(MockChecker));
+        health_checker.check_all_components().await.unwrap();
+
+        let health = health_checker.get_health().await;
+        assert_eq!(health.overall_status, HealthStatus::Healthy);
+        assert!(health.component_health.contains_key("mock_component"));
+    }
+
+    #[tokio::test]
+    async fn test_consumer_metrics_update() {
+        let config = MonitoringConfig {
+            enable_metrics: true,
+            enable_tracing: false,
+            metrics_interval: Duration::from_secs(60),
+            health_check_interval: Duration::from_secs(30),
+            enable_profiling: false,
+            prometheus_endpoint: None,
+            jaeger_endpoint: None,
+            log_level: "info".to_string(),
+        };
+
+        let collector = MetricsCollector::new(config);
+
+        collector
+            .update_consumer_metrics(ConsumerMetricsUpdate {
+                events_consumed: 1000,
+                events_processed: 950,
+                events_filtered: 50,
+                events_failed: 10,
+                bytes_received: 4096,
+                batches_received: 100,
+                processing_time_ms: 2.5,
+                throughput_eps: 1500.0,
+                lag_ms: Some(100.0),
+            })
+            .await;
+
+        let metrics = collector.get_metrics().await;
+        assert_eq!(metrics.consumer_events_consumed, 1000);
+        assert_eq!(metrics.consumer_events_processed, 950);
+        assert_eq!(metrics.consumer_throughput_eps, 1500.0);
+        assert_eq!(metrics.consumer_lag_ms, Some(100.0));
+    }
+
+    #[tokio::test]
+    async fn test_backend_metrics_update() {
+        let config = MonitoringConfig {
+            enable_metrics: true,
+            enable_tracing: false,
+            metrics_interval: Duration::from_secs(60),
+            health_check_interval: Duration::from_secs(30),
+            enable_profiling: false,
+            prometheus_endpoint: None,
+            jaeger_endpoint: None,
+            log_level: "info".to_string(),
+        };
+
+        let collector = MetricsCollector::new(config);
+
+        collector
+            .update_backend_metrics(BackendMetricsUpdate {
+                connections_active: 5,
+                connections_idle: 3,
+                connection_errors: 2,
+                circuit_breaker_trips: 1,
+                retry_attempts: 5,
+            })
+            .await;
+
+        let metrics = collector.get_metrics().await;
+        assert_eq!(metrics.backend_connections_active, 5);
+        assert_eq!(metrics.backend_connections_idle, 3);
+        assert_eq!(metrics.backend_connection_errors, 2);
+    }
+
+    #[test]
+    fn test_health_status_serialization() {
+        let health = SystemHealth {
+            overall_status: HealthStatus::Warning,
+            component_health: {
+                let mut health_map = HashMap::new();
+                health_map.insert(
+                    "database".to_string(),
+                    ComponentHealth {
+                        status: HealthStatus::Warning,
+                        message: "High latency detected".to_string(),
+                        last_check: Utc::now(),
+                        metrics: {
+                            let mut metrics = HashMap::new();
+                            metrics.insert("latency_ms".to_string(), 150.0);
+                            metrics
+                        },
+                        dependencies: vec!["network".to_string()],
+                    },
+                );
+                health_map
+            },
+            last_check: Utc::now(),
+            uptime: Duration::from_secs(3600),
+            alerts: vec![HealthAlert {
+                id: "alert-1".to_string(),
+                component: "database".to_string(),
+                severity: AlertSeverity::Warning,
+                message: "High latency detected".to_string(),
+                timestamp: Utc::now(),
+                resolved: false,
+            }],
+        };
+
+        let serialized = serde_json::to_string(&health).unwrap();
+        let deserialized: SystemHealth = serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(deserialized.overall_status, HealthStatus::Warning);
+        assert_eq!(deserialized.component_health.len(), 1);
+        assert_eq!(deserialized.alerts.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_profiler() {
+        let profiler = Profiler::new(1.0); // 100% sampling for testing
+
+        {
+            let _trace = profiler.start_trace("test_operation".to_string()).await;
+            // Simulate some work
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        } // TraceHandle dropped here, trace should be recorded
+
+        // Give some time for async trace recording
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let traces = profiler.traces.read().await;
+        assert_eq!(traces.len(), 1);
+        assert_eq!(traces[0].operation, "test_operation");
+        assert!(traces[0].duration >= Duration::from_millis(10));
+    }
+
+    #[test]
+    fn test_metrics_update_structures() {
+        let producer_update = ProducerMetricsUpdate {
+            events_published: 100,
+            events_failed: 2,
+            bytes_sent: 1024,
+            batches_sent: 10,
+            latency_ms: 5.5,
+            throughput_eps: 200.0,
+        };
+
+        assert_eq!(producer_update.events_published, 100);
+        assert_eq!(producer_update.latency_ms, 5.5);
+
+        let consumer_update = ConsumerMetricsUpdate {
+            events_consumed: 95,
+            events_processed: 90,
+            events_filtered: 5,
+            events_failed: 1,
+            bytes_received: 950,
+            batches_received: 9,
+            processing_time_ms: 2.0,
+            throughput_eps: 190.0,
+            lag_ms: Some(50.0),
+        };
+
+        assert_eq!(consumer_update.events_consumed, 95);
+        assert_eq!(consumer_update.lag_ms, Some(50.0));
+
+        let backend_update = BackendMetricsUpdate {
+            connections_active: 3,
+            connections_idle: 2,
+            connection_errors: 1,
+            circuit_breaker_trips: 0,
+            retry_attempts: 2,
+        };
+
+        assert_eq!(backend_update.connections_active, 3);
+        assert_eq!(backend_update.retry_attempts, 2);
+    }
 }

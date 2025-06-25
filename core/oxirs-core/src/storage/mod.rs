@@ -10,18 +10,17 @@
 
 pub mod columnar;
 pub mod compression;
+pub mod immutable;
 pub mod temporal;
 pub mod tiered;
-// TODO: Implement additional storage modules
-// pub mod immutable;
-// pub mod virtualization;
+pub mod virtualization;
 
 use crate::OxirsError;
 use std::path::Path;
 use std::sync::Arc;
 
 /// Storage configuration
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct StorageConfig {
     /// Enable tiered storage
     pub enable_tiering: bool,
@@ -51,7 +50,7 @@ impl Default for StorageConfig {
 }
 
 /// Compression types
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum CompressionType {
     None,
     Lz4 { level: u32 },
@@ -60,7 +59,7 @@ pub enum CompressionType {
 }
 
 /// Storage tier configuration
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TierConfig {
     /// Hot tier: in-memory with fastest access
     pub hot_tier: HotTierConfig,
@@ -84,7 +83,7 @@ impl Default for TierConfig {
 }
 
 /// Hot tier configuration
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct HotTierConfig {
     /// Maximum size in MB
     pub max_size_mb: usize,
@@ -105,7 +104,7 @@ impl Default for HotTierConfig {
 }
 
 /// Warm tier configuration  
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct WarmTierConfig {
     /// Path to warm storage
     pub path: String,
@@ -129,7 +128,7 @@ impl Default for WarmTierConfig {
 }
 
 /// Cold tier configuration
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ColdTierConfig {
     /// Path to cold storage
     pub path: String,
@@ -153,7 +152,7 @@ impl Default for ColdTierConfig {
 }
 
 /// Archive tier configuration
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ArchiveTierConfig {
     /// Archive storage backend
     pub backend: ArchiveBackend,
@@ -174,7 +173,7 @@ impl Default for ArchiveTierConfig {
 }
 
 /// Archive storage backend
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum ArchiveBackend {
     Local(String),
     S3 { bucket: String, prefix: String },
@@ -183,7 +182,7 @@ pub enum ArchiveBackend {
 }
 
 /// Eviction policy for hot tier
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum EvictionPolicy {
     Lru,
     Lfu,

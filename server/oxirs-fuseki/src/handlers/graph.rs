@@ -20,12 +20,15 @@ use crate::{
 use axum::{
     body::Body,
     extract::{Query, State},
-    http::{StatusCode, HeaderMap, Method, header::{CONTENT_TYPE, ACCEPT}},
-    response::{Response, IntoResponse},
+    http::{
+        header::{ACCEPT, CONTENT_TYPE},
+        HeaderMap, Method, StatusCode,
+    },
+    response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
-use tracing::{info, warn, error, debug, instrument};
+use tracing::{debug, error, info, instrument, warn};
 
 /// Graph Store protocol parameters
 #[derive(Debug, Deserialize)]
@@ -84,22 +87,15 @@ pub async fn graph_store_handler(
 
     // Execute operation based on HTTP method
     let result = match method {
-        Method::GET => {
-            handle_graph_retrieve(&state.store, &graph_uri, &headers).await?
-        }
-        Method::PUT => {
-            handle_graph_replace(&state.store, &graph_uri, &headers, body).await?
-        }
-        Method::POST => {
-            handle_graph_add(&state.store, &graph_uri, &headers, body).await?
-        }
-        Method::DELETE => {
-            handle_graph_delete(&state.store, &graph_uri).await?
-        }
+        Method::GET => handle_graph_retrieve(&state.store, &graph_uri, &headers).await?,
+        Method::PUT => handle_graph_replace(&state.store, &graph_uri, &headers, body).await?,
+        Method::POST => handle_graph_add(&state.store, &graph_uri, &headers, body).await?,
+        Method::DELETE => handle_graph_delete(&state.store, &graph_uri).await?,
         _ => {
-            return Err(FusekiError::method_not_allowed(
-                format!("Method {} not supported for Graph Store", method)
-            ));
+            return Err(FusekiError::method_not_allowed(format!(
+                "Method {} not supported for Graph Store",
+                method
+            )));
         }
     };
 
@@ -107,11 +103,13 @@ pub async fn graph_store_handler(
 
     // Record metrics
     if let Some(metrics_service) = &state.metrics_service {
-        metrics_service.record_sparql_update(
-            execution_time,
-            true, // Assume success if we get here
-            &format!("graph_store_{}", method.as_str().to_lowercase()),
-        ).await;
+        metrics_service
+            .record_sparql_update(
+                execution_time,
+                true, // Assume success if we get here
+                &format!("graph_store_{}", method.as_str().to_lowercase()),
+            )
+            .await;
     }
 
     info!(
@@ -129,7 +127,7 @@ fn validate_graph_store_params(params: &GraphStoreParams) -> FusekiResult<()> {
     // Check that graph and default are mutually exclusive
     if params.graph.is_some() && params.default == Some(true) {
         return Err(FusekiError::bad_request(
-            "Cannot specify both 'graph' and 'default' parameters"
+            "Cannot specify both 'graph' and 'default' parameters",
         ));
     }
 
@@ -138,9 +136,12 @@ fn validate_graph_store_params(params: &GraphStoreParams) -> FusekiResult<()> {
         if graph_uri.is_empty() {
             return Err(FusekiError::bad_request("Graph URI cannot be empty"));
         }
-        
+
         // Basic URI validation
-        if !graph_uri.starts_with("http://") && !graph_uri.starts_with("https://") && !graph_uri.starts_with("urn:") {
+        if !graph_uri.starts_with("http://")
+            && !graph_uri.starts_with("https://")
+            && !graph_uri.starts_with("urn:")
+        {
             return Err(FusekiError::bad_request("Invalid graph URI format"));
         }
     }
@@ -156,7 +157,9 @@ fn determine_target_graph(params: &GraphStoreParams) -> FusekiResult<Option<Stri
         // Default graph operation
         Ok(None)
     } else {
-        Err(FusekiError::bad_request("Must specify either 'graph' parameter or 'default=true'"))
+        Err(FusekiError::bad_request(
+            "Must specify either 'graph' parameter or 'default=true'",
+        ))
     }
 }
 
@@ -164,7 +167,7 @@ fn determine_target_graph(params: &GraphStoreParams) -> FusekiResult<Option<Stri
 fn check_graph_store_permissions(method: &Method, graph_uri: &Option<String>) -> FusekiResult<()> {
     // In a full implementation, this would check user permissions
     // For now, we'll implement basic validation
-    
+
     match method {
         &Method::GET => {
             // Read operations - require read permission
@@ -205,8 +208,9 @@ async fn handle_graph_retrieve(
     Ok((
         StatusCode::OK,
         [(CONTENT_TYPE, response_format.as_str())],
-        graph_data
-    ).into_response())
+        graph_data,
+    )
+        .into_response())
 }
 
 /// Handle PUT request - replace graph content
@@ -218,10 +222,10 @@ async fn handle_graph_replace(
 ) -> FusekiResult<Response> {
     // Determine content type
     let content_type = get_content_type(headers)?;
-    
+
     // Read and validate RDF data
     let rdf_data = read_rdf_body(body, &content_type).await?;
-    
+
     // Replace graph content in store
     let result = replace_graph_in_store(store, graph_uri, &rdf_data, &content_type).await?;
 
@@ -247,10 +251,10 @@ async fn handle_graph_add(
 ) -> FusekiResult<Response> {
     // Determine content type
     let content_type = get_content_type(headers)?;
-    
+
     // Read and validate RDF data
     let rdf_data = read_rdf_body(body, &content_type).await?;
-    
+
     // Add to graph content in store
     let result = add_to_graph_in_store(store, graph_uri, &rdf_data, &content_type).await?;
 
@@ -268,10 +272,7 @@ async fn handle_graph_add(
 }
 
 /// Handle DELETE request - remove graph content
-async fn handle_graph_delete(
-    store: &Store,
-    graph_uri: &Option<String>,
-) -> FusekiResult<Response> {
+async fn handle_graph_delete(store: &Store, graph_uri: &Option<String>) -> FusekiResult<Response> {
     // Delete graph from store
     let result = delete_graph_from_store(store, graph_uri).await?;
 
@@ -294,7 +295,8 @@ async fn handle_graph_delete(
 
 /// Determine RDF response format from Accept header
 fn determine_rdf_response_format(headers: &HeaderMap) -> String {
-    let accept_header = headers.get(ACCEPT)
+    let accept_header = headers
+        .get(ACCEPT)
         .and_then(|accept| accept.to_str().ok())
         .unwrap_or("text/turtle");
 
@@ -321,7 +323,8 @@ fn determine_rdf_response_format(headers: &HeaderMap) -> String {
 
 /// Get content type from request headers
 fn get_content_type(headers: &HeaderMap) -> FusekiResult<String> {
-    let content_type = headers.get(CONTENT_TYPE)
+    let content_type = headers
+        .get(CONTENT_TYPE)
         .and_then(|ct| ct.to_str().ok())
         .unwrap_or("text/turtle");
 
@@ -329,20 +332,26 @@ fn get_content_type(headers: &HeaderMap) -> FusekiResult<String> {
     match content_type {
         ct if ct.starts_with("text/turtle") => Ok(rdf_content_types::TURTLE.to_string()),
         ct if ct.starts_with("application/rdf+xml") => Ok(rdf_content_types::RDF_XML.to_string()),
-        ct if ct.starts_with("application/n-triples") => Ok(rdf_content_types::N_TRIPLES.to_string()),
+        ct if ct.starts_with("application/n-triples") => {
+            Ok(rdf_content_types::N_TRIPLES.to_string())
+        }
         ct if ct.starts_with("application/ld+json") => Ok(rdf_content_types::JSON_LD.to_string()),
         ct if ct.starts_with("application/n-quads") => Ok(rdf_content_types::N_QUADS.to_string()),
         ct if ct.starts_with("application/trig") => Ok(rdf_content_types::TRIG.to_string()),
         ct if ct.starts_with("text/n3") => Ok(rdf_content_types::N3.to_string()),
-        _ => Err(FusekiError::bad_request(format!("Unsupported RDF content type: {}", content_type)))
+        _ => Err(FusekiError::bad_request(format!(
+            "Unsupported RDF content type: {}",
+            content_type
+        ))),
     }
 }
 
 /// Read and validate RDF data from request body
 async fn read_rdf_body(body: Body, content_type: &str) -> FusekiResult<String> {
-    let body_bytes = axum::body::to_bytes(body, usize::MAX).await
+    let body_bytes = axum::body::to_bytes(body, usize::MAX)
+        .await
         .map_err(|e| FusekiError::bad_request(format!("Failed to read request body: {}", e)))?;
-    
+
     let rdf_data = String::from_utf8(body_bytes.to_vec())
         .map_err(|e| FusekiError::bad_request(format!("Invalid UTF-8 in RDF data: {}", e)))?;
 
@@ -362,7 +371,9 @@ fn validate_rdf_syntax(rdf_data: &str, content_type: &str) -> FusekiResult<()> {
         ct if ct == rdf_content_types::TURTLE || ct == rdf_content_types::N3 => {
             // Basic Turtle/N3 validation
             if !rdf_data.contains('.') && !rdf_data.contains(';') {
-                return Err(FusekiError::bad_request("Invalid Turtle syntax: missing statement terminators"));
+                return Err(FusekiError::bad_request(
+                    "Invalid Turtle syntax: missing statement terminators",
+                ));
             }
         }
         ct if ct == rdf_content_types::N_TRIPLES => {
@@ -370,7 +381,9 @@ fn validate_rdf_syntax(rdf_data: &str, content_type: &str) -> FusekiResult<()> {
             for line in rdf_data.lines() {
                 let trimmed = line.trim();
                 if !trimmed.is_empty() && !trimmed.starts_with('#') && !trimmed.ends_with('.') {
-                    return Err(FusekiError::bad_request("Invalid N-Triples syntax: statements must end with '.'"));
+                    return Err(FusekiError::bad_request(
+                        "Invalid N-Triples syntax: statements must end with '.'",
+                    ));
                 }
             }
         }
@@ -455,11 +468,16 @@ async fn replace_graph_in_store(
     content_type: &str,
 ) -> FusekiResult<GraphModificationResult> {
     // Mock implementation
-    debug!("Replacing graph {:?} with {} bytes of {} data", graph_uri, rdf_data.len(), content_type);
-    
+    debug!(
+        "Replacing graph {:?} with {} bytes of {} data",
+        graph_uri,
+        rdf_data.len(),
+        content_type
+    );
+
     // Simulate processing time
     tokio::time::sleep(std::time::Duration::from_millis(5)).await;
-    
+
     Ok(GraphModificationResult {
         triple_count: count_approximate_triples(rdf_data, content_type),
     })
@@ -473,11 +491,16 @@ async fn add_to_graph_in_store(
     content_type: &str,
 ) -> FusekiResult<GraphModificationResult> {
     // Mock implementation
-    debug!("Adding to graph {:?} {} bytes of {} data", graph_uri, rdf_data.len(), content_type);
-    
+    debug!(
+        "Adding to graph {:?} {} bytes of {} data",
+        graph_uri,
+        rdf_data.len(),
+        content_type
+    );
+
     // Simulate processing time
     tokio::time::sleep(std::time::Duration::from_millis(3)).await;
-    
+
     Ok(GraphModificationResult {
         triple_count: count_approximate_triples(rdf_data, content_type),
     })
@@ -490,12 +513,12 @@ async fn delete_graph_from_store(
 ) -> FusekiResult<GraphDeletionResult> {
     // Mock implementation
     debug!("Deleting graph {:?}", graph_uri);
-    
+
     // Simulate processing time
     tokio::time::sleep(std::time::Duration::from_millis(2)).await;
-    
+
     Ok(GraphDeletionResult {
-        existed: true, // Assume graph existed
+        existed: true,     // Assume graph existed
         deleted_count: 10, // Mock deletion count
     })
 }
@@ -503,11 +526,10 @@ async fn delete_graph_from_store(
 /// Approximate triple count based on RDF content
 fn count_approximate_triples(rdf_data: &str, content_type: &str) -> usize {
     match content_type {
-        ct if ct == rdf_content_types::N_TRIPLES => {
-            rdf_data.lines()
-                .filter(|line| !line.trim().is_empty() && !line.trim().starts_with('#'))
-                .count()
-        }
+        ct if ct == rdf_content_types::N_TRIPLES => rdf_data
+            .lines()
+            .filter(|line| !line.trim().is_empty() && !line.trim().starts_with('#'))
+            .count(),
         ct if ct == rdf_content_types::TURTLE || ct == rdf_content_types::N3 => {
             // Count statements ending with '.'
             rdf_data.matches('.').count()
@@ -526,34 +548,38 @@ mod tests {
     #[test]
     fn test_graph_store_params_validation() {
         // Valid cases
-        assert!(validate_graph_store_params(&GraphStoreParams { 
-            graph: Some("http://example.org".to_string()), 
-            default: None 
-        }).is_ok());
-        
-        assert!(validate_graph_store_params(&GraphStoreParams { 
-            graph: None, 
-            default: Some(true) 
-        }).is_ok());
+        assert!(validate_graph_store_params(&GraphStoreParams {
+            graph: Some("http://example.org".to_string()),
+            default: None
+        })
+        .is_ok());
+
+        assert!(validate_graph_store_params(&GraphStoreParams {
+            graph: None,
+            default: Some(true)
+        })
+        .is_ok());
 
         // Invalid cases
-        assert!(validate_graph_store_params(&GraphStoreParams { 
-            graph: Some("http://example.org".to_string()), 
-            default: Some(true) 
-        }).is_err());
+        assert!(validate_graph_store_params(&GraphStoreParams {
+            graph: Some("http://example.org".to_string()),
+            default: Some(true)
+        })
+        .is_err());
 
-        assert!(validate_graph_store_params(&GraphStoreParams { 
-            graph: Some("".to_string()), 
-            default: None 
-        }).is_err());
+        assert!(validate_graph_store_params(&GraphStoreParams {
+            graph: Some("".to_string()),
+            default: None
+        })
+        .is_err());
     }
 
     #[test]
     fn test_target_graph_determination() {
         // Named graph
-        let params = GraphStoreParams { 
-            graph: Some("http://example.org".to_string()), 
-            default: None 
+        let params = GraphStoreParams {
+            graph: Some("http://example.org".to_string()),
+            default: None,
         };
         assert_eq!(
             determine_target_graph(&params).unwrap(),
@@ -561,9 +587,9 @@ mod tests {
         );
 
         // Default graph
-        let params = GraphStoreParams { 
-            graph: None, 
-            default: Some(true) 
+        let params = GraphStoreParams {
+            graph: None,
+            default: Some(true),
         };
         assert_eq!(determine_target_graph(&params).unwrap(), None);
     }
@@ -571,35 +597,56 @@ mod tests {
     #[test]
     fn test_rdf_format_determination() {
         let mut headers = HeaderMap::new();
-        
+
         headers.insert(ACCEPT, "text/turtle".parse().unwrap());
-        assert_eq!(determine_rdf_response_format(&headers), rdf_content_types::TURTLE);
-        
+        assert_eq!(
+            determine_rdf_response_format(&headers),
+            rdf_content_types::TURTLE
+        );
+
         headers.insert(ACCEPT, "application/rdf+xml".parse().unwrap());
-        assert_eq!(determine_rdf_response_format(&headers), rdf_content_types::RDF_XML);
+        assert_eq!(
+            determine_rdf_response_format(&headers),
+            rdf_content_types::RDF_XML
+        );
     }
 
     #[test]
     fn test_rdf_syntax_validation() {
         // Valid Turtle
         assert!(validate_rdf_syntax("<s> <p> <o> .", rdf_content_types::TURTLE).is_ok());
-        
+
         // Invalid Turtle (missing terminator)
         assert!(validate_rdf_syntax("<s> <p> <o>", rdf_content_types::TURTLE).is_err());
-        
+
         // Valid N-Triples
-        assert!(validate_rdf_syntax("<http://s> <http://p> <http://o> .", rdf_content_types::N_TRIPLES).is_ok());
-        
+        assert!(validate_rdf_syntax(
+            "<http://s> <http://p> <http://o> .",
+            rdf_content_types::N_TRIPLES
+        )
+        .is_ok());
+
         // Invalid N-Triples (missing terminator)
-        assert!(validate_rdf_syntax("<http://s> <http://p> <http://o>", rdf_content_types::N_TRIPLES).is_err());
+        assert!(validate_rdf_syntax(
+            "<http://s> <http://p> <http://o>",
+            rdf_content_types::N_TRIPLES
+        )
+        .is_err());
     }
 
     #[test]
     fn test_triple_counting() {
         let turtle_data = "<s1> <p> <o1> .\n<s2> <p> <o2> .";
-        assert_eq!(count_approximate_triples(turtle_data, rdf_content_types::TURTLE), 2);
-        
-        let ntriples_data = "<http://s1> <http://p> <http://o1> .\n<http://s2> <http://p> <http://o2> .";
-        assert_eq!(count_approximate_triples(ntriples_data, rdf_content_types::N_TRIPLES), 2);
+        assert_eq!(
+            count_approximate_triples(turtle_data, rdf_content_types::TURTLE),
+            2
+        );
+
+        let ntriples_data =
+            "<http://s1> <http://p> <http://o1> .\n<http://s2> <http://p> <http://o2> .";
+        assert_eq!(
+            count_approximate_triples(ntriples_data, rdf_content_types::N_TRIPLES),
+            2
+        );
     }
 }

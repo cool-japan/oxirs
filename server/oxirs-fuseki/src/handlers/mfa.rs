@@ -14,20 +14,20 @@ use crate::{
     server::AppState,
 };
 use axum::{
-    extract::{Query, State, Path},
-    http::{StatusCode, HeaderMap},
-    response::{Json, IntoResponse, Response},
+    extract::{Path, Query, State},
+    http::{HeaderMap, StatusCode},
+    response::{IntoResponse, Json, Response},
 };
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use chrono::{DateTime, Utc, Duration};
 use base32::Alphabet;
-use qrcode::{QrCode, render::svg};
-use rand::Rng;
-use sha1::{Sha1, Digest};
+use base64::{engine::general_purpose, Engine as _};
+use chrono::{DateTime, Duration, Utc};
 use hmac::{Hmac, Mac};
-use base64::{Engine as _, engine::general_purpose};
-use tracing::{info, warn, error, debug, instrument};
+use qrcode::{render::svg, QrCode};
+use rand::Rng;
+use serde::{Deserialize, Serialize};
+use sha1::{Digest, Sha1};
+use std::collections::HashMap;
+use tracing::{debug, error, info, instrument, warn};
 
 type HmacSha1 = Hmac<Sha1>;
 
@@ -160,7 +160,9 @@ pub async fn enroll_mfa(
     headers: HeaderMap,
     Json(request): Json<MfaEnrollRequest>,
 ) -> Result<Json<MfaSetupResponse>, FusekiError> {
-    let auth_service = state.auth_service.as_ref()
+    let auth_service = state
+        .auth_service
+        .as_ref()
         .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
 
     // Extract user from session
@@ -182,7 +184,9 @@ pub async fn create_mfa_challenge(
     Path(challenge_type): Path<String>,
     headers: HeaderMap,
 ) -> Result<Json<MfaChallengeResponse>, FusekiError> {
-    let auth_service = state.auth_service.as_ref()
+    let auth_service = state
+        .auth_service
+        .as_ref()
         .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
 
     let user = extract_authenticated_user(&headers, auth_service).await?;
@@ -193,7 +197,11 @@ pub async fn create_mfa_challenge(
         MfaType::Sms => create_sms_challenge(&user, auth_service).await?,
         MfaType::Email => create_email_challenge(&user, auth_service).await?,
         MfaType::Hardware => create_webauthn_challenge(&user, auth_service).await?,
-        MfaType::Backup => return Err(FusekiError::bad_request("Backup codes don't require challenges")),
+        MfaType::Backup => {
+            return Err(FusekiError::bad_request(
+                "Backup codes don't require challenges",
+            ))
+        }
     };
 
     // Store challenge in auth service
@@ -215,16 +223,22 @@ pub async fn verify_mfa(
     State(state): State<AppState>,
     Json(request): Json<MfaVerifyRequest>,
 ) -> Result<Json<MfaVerifyResponse>, FusekiError> {
-    let auth_service = state.auth_service.as_ref()
+    let auth_service = state
+        .auth_service
+        .as_ref()
         .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
 
     // Retrieve challenge
-    let challenge = auth_service.get_mfa_challenge(&request.challenge_id).await?
+    let challenge = auth_service
+        .get_mfa_challenge(&request.challenge_id)
+        .await?
         .ok_or_else(|| FusekiError::bad_request("Invalid or expired challenge"))?;
 
     // Check if challenge is expired
     if Utc::now() > challenge.expires_at {
-        auth_service.remove_mfa_challenge(&request.challenge_id).await?;
+        auth_service
+            .remove_mfa_challenge(&request.challenge_id)
+            .await?;
         return Err(FusekiError::bad_request("Challenge expired"));
     }
 
@@ -233,19 +247,26 @@ pub async fn verify_mfa(
         MfaType::Totp => verify_totp_code(&request.code, auth_service).await?,
         MfaType::Sms => verify_sms_code(&request.code, &challenge, auth_service).await?,
         MfaType::Email => verify_email_code(&request.code, &challenge, auth_service).await?,
-        MfaType::Hardware => verify_webauthn_assertion(&request.code, &challenge, auth_service).await?,
+        MfaType::Hardware => {
+            verify_webauthn_assertion(&request.code, &challenge, auth_service).await?
+        }
         MfaType::Backup => verify_backup_code(&request.code, auth_service).await?,
     };
 
     if verification_result {
         // Remove challenge after successful verification
-        auth_service.remove_mfa_challenge(&request.challenge_id).await?;
-        
+        auth_service
+            .remove_mfa_challenge(&request.challenge_id)
+            .await?;
+
         // Create authenticated session
         let user = get_user_from_challenge(&challenge, auth_service).await?;
         let session_id = auth_service.create_session(user).await?;
 
-        info!("MFA verification successful for challenge: {}", request.challenge_id);
+        info!(
+            "MFA verification successful for challenge: {}",
+            request.challenge_id
+        );
 
         Ok(Json(MfaVerifyResponse {
             success: true,
@@ -256,21 +277,32 @@ pub async fn verify_mfa(
     } else {
         // Decrement attempts
         let mut updated_challenge = challenge;
-        updated_challenge.attempts_remaining = updated_challenge.attempts_remaining.saturating_sub(1);
+        updated_challenge.attempts_remaining =
+            updated_challenge.attempts_remaining.saturating_sub(1);
 
         if updated_challenge.attempts_remaining == 0 {
-            auth_service.remove_mfa_challenge(&request.challenge_id).await?;
-            warn!("MFA challenge expired due to too many failed attempts: {}", request.challenge_id);
+            auth_service
+                .remove_mfa_challenge(&request.challenge_id)
+                .await?;
+            warn!(
+                "MFA challenge expired due to too many failed attempts: {}",
+                request.challenge_id
+            );
             return Err(FusekiError::authentication("Too many failed attempts"));
         } else {
-            auth_service.update_mfa_challenge(&updated_challenge).await?;
+            auth_service
+                .update_mfa_challenge(&updated_challenge)
+                .await?;
         }
 
         Ok(Json(MfaVerifyResponse {
             success: false,
             access_granted: false,
             session_id: None,
-            message: format!("Invalid code. {} attempts remaining", updated_challenge.attempts_remaining),
+            message: format!(
+                "Invalid code. {} attempts remaining",
+                updated_challenge.attempts_remaining
+            ),
         }))
     }
 }
@@ -281,7 +313,9 @@ pub async fn get_mfa_status(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<MfaStatusResponse>, FusekiError> {
-    let auth_service = state.auth_service.as_ref()
+    let auth_service = state
+        .auth_service
+        .as_ref()
         .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
 
     let user = extract_authenticated_user(&headers, auth_service).await?;
@@ -297,17 +331,21 @@ pub async fn disable_mfa(
     Path(mfa_type): Path<String>,
     headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, FusekiError> {
-    let auth_service = state.auth_service.as_ref()
+    let auth_service = state
+        .auth_service
+        .as_ref()
         .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
 
     let user = extract_authenticated_user(&headers, auth_service).await?;
     let parsed_mfa_type = parse_mfa_type(&mfa_type)?;
 
-    let success = auth_service.disable_mfa_method(&user.username, &parsed_mfa_type).await?;
+    let success = auth_service
+        .disable_mfa_method(&user.username, &parsed_mfa_type)
+        .await?;
 
     Ok(Json(serde_json::json!({
         "success": success,
-        "message": if success { 
+        "message": if success {
             format!("{:?} MFA disabled successfully", parsed_mfa_type)
         } else {
             "Failed to disable MFA method".to_string()
@@ -321,13 +359,17 @@ pub async fn regenerate_backup_codes(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, FusekiError> {
-    let auth_service = state.auth_service.as_ref()
+    let auth_service = state
+        .auth_service
+        .as_ref()
         .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
 
     let user = extract_authenticated_user(&headers, auth_service).await?;
     let backup_codes = generate_new_backup_codes();
-    
-    auth_service.store_backup_codes(&user.username, &backup_codes).await?;
+
+    auth_service
+        .store_backup_codes(&user.username, &backup_codes)
+        .await?;
 
     Ok(Json(serde_json::json!({
         "success": true,
@@ -357,11 +399,15 @@ async fn enroll_totp_mfa(
     let qr_code = generate_qr_code_svg(&totp_uri)?;
 
     // Store TOTP secret for user
-    auth_service.store_totp_secret(&user.username, &secret).await?;
+    auth_service
+        .store_totp_secret(&user.username, &secret)
+        .await?;
 
     // Generate backup codes
     let backup_codes = generate_new_backup_codes();
-    auth_service.store_backup_codes(&user.username, &backup_codes).await?;
+    auth_service
+        .store_backup_codes(&user.username, &backup_codes)
+        .await?;
 
     Ok(Json(MfaSetupResponse {
         success: true,
@@ -370,7 +416,8 @@ async fn enroll_totp_mfa(
         qr_code: Some(qr_code),
         backup_codes: Some(backup_codes),
         enrollment_id: None,
-        message: "TOTP MFA enrolled successfully. Scan the QR code with your authenticator app.".to_string(),
+        message: "TOTP MFA enrolled successfully. Scan the QR code with your authenticator app."
+            .to_string(),
     }))
 }
 
@@ -401,7 +448,10 @@ async fn enroll_sms_mfa(
         qr_code: None,
         backup_codes: None,
         enrollment_id: Some(format!("sms_{}", generate_enrollment_id())),
-        message: format!("SMS MFA enrollment initiated. Verification code sent to {}", mask_phone_number(&phone)),
+        message: format!(
+            "SMS MFA enrollment initiated. Verification code sent to {}",
+            mask_phone_number(&phone)
+        ),
     }))
 }
 
@@ -410,7 +460,8 @@ async fn enroll_email_mfa(
     email: Option<String>,
     auth_service: &AuthService,
 ) -> Result<Json<MfaSetupResponse>, FusekiError> {
-    let email_addr = email.or_else(|| user.email.clone())
+    let email_addr = email
+        .or_else(|| user.email.clone())
         .ok_or_else(|| FusekiError::bad_request("Email address required for email MFA"))?;
 
     // Validate email format
@@ -423,7 +474,9 @@ async fn enroll_email_mfa(
     send_verification_email(&email_addr, &verification_code).await?;
 
     // Store email for user
-    auth_service.store_mfa_email(&user.username, &email_addr).await?;
+    auth_service
+        .store_mfa_email(&user.username, &email_addr)
+        .await?;
 
     Ok(Json(MfaSetupResponse {
         success: true,
@@ -432,7 +485,10 @@ async fn enroll_email_mfa(
         qr_code: None,
         backup_codes: None,
         enrollment_id: Some(format!("email_{}", generate_enrollment_id())),
-        message: format!("Email MFA enrollment initiated. Verification code sent to {}", mask_email(&email_addr)),
+        message: format!(
+            "Email MFA enrollment initiated. Verification code sent to {}",
+            mask_email(&email_addr)
+        ),
     }))
 }
 
@@ -453,7 +509,10 @@ async fn enroll_hardware_mfa(
         user: WebAuthnUser {
             id: user.username.clone(),
             name: user.username.clone(),
-            display_name: user.full_name.clone().unwrap_or_else(|| user.username.clone()),
+            display_name: user
+                .full_name
+                .clone()
+                .unwrap_or_else(|| user.username.clone()),
         },
         pub_key_cred_params: vec![
             PubKeyCredParam {
@@ -470,7 +529,9 @@ async fn enroll_hardware_mfa(
     };
 
     // Store registration challenge
-    auth_service.store_webauthn_challenge(&user.username, &registration_options.challenge).await?;
+    auth_service
+        .store_webauthn_challenge(&user.username, &registration_options.challenge)
+        .await?;
 
     Ok(Json(MfaSetupResponse {
         success: true,
@@ -488,7 +549,9 @@ async fn generate_backup_codes(
     auth_service: &AuthService,
 ) -> Result<Json<MfaSetupResponse>, FusekiError> {
     let backup_codes = generate_new_backup_codes();
-    auth_service.store_backup_codes(&user.username, &backup_codes).await?;
+    auth_service
+        .store_backup_codes(&user.username, &backup_codes)
+        .await?;
 
     Ok(Json(MfaSetupResponse {
         success: true,
@@ -525,13 +588,14 @@ fn generate_totp_uri(config: &TotpConfig) -> String {
 fn generate_qr_code_svg(uri: &str) -> FusekiResult<String> {
     let code = QrCode::new(uri)
         .map_err(|e| FusekiError::internal(format!("Failed to generate QR code: {}", e)))?;
-    
-    let svg = code.render()
+
+    let svg = code
+        .render()
         .min_dimensions(200, 200)
         .dark_color(svg::Color("#000000"))
         .light_color(svg::Color("#ffffff"))
         .build();
-    
+
     Ok(svg)
 }
 
@@ -544,20 +608,20 @@ async fn verify_totp_code(code: &str, auth_service: &AuthService) -> FusekiResul
 fn generate_totp_code(secret: &str, time: u64) -> FusekiResult<String> {
     let key = base32::decode(Alphabet::RFC4648 { padding: false }, secret)
         .ok_or_else(|| FusekiError::internal("Invalid TOTP secret"))?;
-    
+
     let time_bytes = (time / 30).to_be_bytes();
-    
+
     let mut mac = HmacSha1::new_from_slice(&key)
         .map_err(|e| FusekiError::internal(format!("HMAC error: {}", e)))?;
     mac.update(&time_bytes);
     let result = mac.finalize().into_bytes();
-    
+
     let offset = (result[19] & 0xf) as usize;
     let code = ((result[offset] & 0x7f) as u32) << 24
         | ((result[offset + 1] & 0xff) as u32) << 16
         | ((result[offset + 2] & 0xff) as u32) << 8
         | (result[offset + 3] & 0xff) as u32;
-    
+
     Ok(format!("{:06}", code % 1_000_000))
 }
 
@@ -572,14 +636,19 @@ async fn create_totp_challenge(user: &User) -> FusekiResult<MfaChallenge> {
     })
 }
 
-async fn create_sms_challenge(user: &User, auth_service: &AuthService) -> FusekiResult<MfaChallenge> {
+async fn create_sms_challenge(
+    user: &User,
+    auth_service: &AuthService,
+) -> FusekiResult<MfaChallenge> {
     // Generate and send SMS code
     let code = generate_sms_verification_code();
-    let phone = auth_service.get_user_sms_phone(&user.username).await?
+    let phone = auth_service
+        .get_user_sms_phone(&user.username)
+        .await?
         .ok_or_else(|| FusekiError::bad_request("SMS not enrolled for user"))?;
-    
+
     send_verification_sms(&phone, &code).await?;
-    
+
     Ok(MfaChallenge {
         challenge_id: uuid::Uuid::new_v4().to_string(),
         challenge_type: MfaType::Sms,
@@ -588,14 +657,19 @@ async fn create_sms_challenge(user: &User, auth_service: &AuthService) -> Fuseki
     })
 }
 
-async fn create_email_challenge(user: &User, auth_service: &AuthService) -> FusekiResult<MfaChallenge> {
+async fn create_email_challenge(
+    user: &User,
+    auth_service: &AuthService,
+) -> FusekiResult<MfaChallenge> {
     // Generate and send email code
     let code = generate_email_verification_code();
-    let email = auth_service.get_user_mfa_email(&user.username).await?
+    let email = auth_service
+        .get_user_mfa_email(&user.username)
+        .await?
         .ok_or_else(|| FusekiError::bad_request("Email MFA not enrolled for user"))?;
-    
+
     send_verification_email(&email, &code).await?;
-    
+
     Ok(MfaChallenge {
         challenge_id: uuid::Uuid::new_v4().to_string(),
         challenge_type: MfaType::Email,
@@ -604,10 +678,15 @@ async fn create_email_challenge(user: &User, auth_service: &AuthService) -> Fuse
     })
 }
 
-async fn create_webauthn_challenge(user: &User, auth_service: &AuthService) -> FusekiResult<MfaChallenge> {
+async fn create_webauthn_challenge(
+    user: &User,
+    auth_service: &AuthService,
+) -> FusekiResult<MfaChallenge> {
     let challenge = generate_webauthn_challenge();
-    auth_service.store_webauthn_challenge(&user.username, &challenge).await?;
-    
+    auth_service
+        .store_webauthn_challenge(&user.username, &challenge)
+        .await?;
+
     Ok(MfaChallenge {
         challenge_id: challenge,
         challenge_type: MfaType::Hardware,
@@ -618,17 +697,29 @@ async fn create_webauthn_challenge(user: &User, auth_service: &AuthService) -> F
 
 // Verification Functions
 
-async fn verify_sms_code(code: &str, challenge: &MfaChallenge, auth_service: &AuthService) -> FusekiResult<bool> {
+async fn verify_sms_code(
+    code: &str,
+    challenge: &MfaChallenge,
+    auth_service: &AuthService,
+) -> FusekiResult<bool> {
     // In production, verify against stored code
     Ok(code.len() == 6 && code.chars().all(|c| c.is_ascii_digit()))
 }
 
-async fn verify_email_code(code: &str, challenge: &MfaChallenge, auth_service: &AuthService) -> FusekiResult<bool> {
+async fn verify_email_code(
+    code: &str,
+    challenge: &MfaChallenge,
+    auth_service: &AuthService,
+) -> FusekiResult<bool> {
     // In production, verify against stored code
     Ok(code.len() == 8 && code.chars().all(|c| c.is_ascii_alphanumeric()))
 }
 
-async fn verify_webauthn_assertion(assertion: &str, challenge: &MfaChallenge, auth_service: &AuthService) -> FusekiResult<bool> {
+async fn verify_webauthn_assertion(
+    assertion: &str,
+    challenge: &MfaChallenge,
+    auth_service: &AuthService,
+) -> FusekiResult<bool> {
     // In production, verify WebAuthn assertion signature
     Ok(!assertion.is_empty())
 }
@@ -640,7 +731,10 @@ async fn verify_backup_code(code: &str, auth_service: &AuthService) -> FusekiRes
 
 // Helper Functions
 
-async fn extract_authenticated_user(headers: &HeaderMap, auth_service: &AuthService) -> FusekiResult<User> {
+async fn extract_authenticated_user(
+    headers: &HeaderMap,
+    auth_service: &AuthService,
+) -> FusekiResult<User> {
     // Extract user from session (simplified)
     Ok(User {
         username: "testuser".to_string(),
@@ -671,10 +765,12 @@ fn generate_sms_verification_code() -> String {
 fn generate_email_verification_code() -> String {
     let mut rng = rand::thread_rng();
     let chars: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    (0..8).map(|_| {
-        let idx = rng.gen_range(0..chars.len());
-        chars[idx] as char
-    }).collect()
+    (0..8)
+        .map(|_| {
+            let idx = rng.gen_range(0..chars.len());
+            chars[idx] as char
+        })
+        .collect()
 }
 
 fn generate_webauthn_challenge() -> String {
@@ -689,28 +785,43 @@ fn generate_enrollment_id() -> String {
 
 fn generate_new_backup_codes() -> Vec<String> {
     let mut rng = rand::thread_rng();
-    (0..10).map(|_| {
-        let code: String = (0..8).map(|_| {
-            let chars = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-            chars[rng.gen_range(0..chars.len())] as char
-        }).collect();
-        code
-    }).collect()
+    (0..10)
+        .map(|_| {
+            let code: String = (0..8)
+                .map(|_| {
+                    let chars = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+                    chars[rng.gen_range(0..chars.len())] as char
+                })
+                .collect();
+            code
+        })
+        .collect()
 }
 
 async fn send_verification_sms(phone: &str, code: &str) -> FusekiResult<()> {
     // In production, integrate with SMS service (Twilio, AWS SNS, etc.)
-    info!("SMS verification code {} sent to {}", code, mask_phone_number(phone));
+    info!(
+        "SMS verification code {} sent to {}",
+        code,
+        mask_phone_number(phone)
+    );
     Ok(())
 }
 
 async fn send_verification_email(email: &str, code: &str) -> FusekiResult<()> {
     // In production, integrate with email service (SendGrid, AWS SES, etc.)
-    info!("Email verification code {} sent to {}", code, mask_email(email));
+    info!(
+        "Email verification code {} sent to {}",
+        code,
+        mask_email(email)
+    );
     Ok(())
 }
 
-async fn get_user_from_challenge(challenge: &MfaChallenge, auth_service: &AuthService) -> FusekiResult<User> {
+async fn get_user_from_challenge(
+    challenge: &MfaChallenge,
+    auth_service: &AuthService,
+) -> FusekiResult<User> {
     // In production, extract user associated with challenge
     Ok(User {
         username: "testuser".to_string(),
@@ -723,7 +834,10 @@ async fn get_user_from_challenge(challenge: &MfaChallenge, auth_service: &AuthSe
 }
 
 fn is_valid_phone_number(phone: &str) -> bool {
-    phone.len() >= 10 && phone.chars().all(|c| c.is_ascii_digit() || c == '+' || c == '-' || c == ' ')
+    phone.len() >= 10
+        && phone
+            .chars()
+            .all(|c| c.is_ascii_digit() || c == '+' || c == '-' || c == ' ')
 }
 
 fn is_valid_email(email: &str) -> bool {
@@ -732,7 +846,7 @@ fn is_valid_email(email: &str) -> bool {
 
 fn mask_phone_number(phone: &str) -> String {
     if phone.len() >= 4 {
-        format!("***-***-{}", &phone[phone.len()-4..])
+        format!("***-***-{}", &phone[phone.len() - 4..])
     } else {
         "***-***-****".to_string()
     }
@@ -767,7 +881,10 @@ mod tests {
         assert!(matches!(parse_mfa_type("totp").unwrap(), MfaType::Totp));
         assert!(matches!(parse_mfa_type("sms").unwrap(), MfaType::Sms));
         assert!(matches!(parse_mfa_type("email").unwrap(), MfaType::Email));
-        assert!(matches!(parse_mfa_type("hardware").unwrap(), MfaType::Hardware));
+        assert!(matches!(
+            parse_mfa_type("hardware").unwrap(),
+            MfaType::Hardware
+        ));
         assert!(parse_mfa_type("invalid").is_err());
     }
 

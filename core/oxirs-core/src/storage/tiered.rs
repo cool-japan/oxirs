@@ -144,7 +144,9 @@ impl TieredStorageEngine {
     pub async fn new(config: StorageConfig) -> Result<Arc<dyn StorageEngine>, OxirsError> {
         // Initialize hot tier
         let hot_capacity = config.tiers.hot_tier.max_size_mb * 1024 * 1024 / 1000; // Approximate
-        let hot_tier = Arc::new(Mutex::new(LruCache::new(hot_capacity)));
+        let hot_tier = Arc::new(Mutex::new(LruCache::new(
+            std::num::NonZeroUsize::new(hot_capacity).unwrap_or(std::num::NonZeroUsize::new(10000).unwrap())
+        )));
 
         // Initialize warm tier
         let warm_path = PathBuf::from(&config.tiers.warm_tier.path);
@@ -635,20 +637,36 @@ impl StorageEngine for TieredStorageEngine {
         let hot_bytes = bincode::serialize(&hot_data)?;
         std::fs::write(hot_backup, hot_bytes)?;
 
-        // Warm and cold tiers - use RocksDB backup
-        let warm_backup = path.join("warm");
-        self.warm_tier
-            .read()
-            .await
-            .storage
-            .create_checkpoint(&warm_backup)?;
+        // Warm and cold tiers - backup by iterating and saving
+        let warm_backup = path.join("warm.bin");
+        let warm_data: Vec<(Vec<u8>, Vec<u8>)> = {
+            let warm = self.warm_tier.read().await;
+            let mut data = Vec::new();
+            let iter = warm.storage.iterator(rocksdb::IteratorMode::Start);
+            for item in iter {
+                if let Ok((key, value)) = item {
+                    data.push((key.to_vec(), value.to_vec()));
+                }
+            }
+            data
+        };
+        let warm_bytes = bincode::serialize(&warm_data)?;
+        std::fs::write(warm_backup, warm_bytes)?;
 
-        let cold_backup = path.join("cold");
-        self.cold_tier
-            .read()
-            .await
-            .storage
-            .create_checkpoint(&cold_backup)?;
+        let cold_backup = path.join("cold.bin");
+        let cold_data: Vec<(Vec<u8>, Vec<u8>)> = {
+            let cold = self.cold_tier.read().await;
+            let mut data = Vec::new();
+            let iter = cold.storage.iterator(rocksdb::IteratorMode::Start);
+            for item in iter {
+                if let Ok((key, value)) = item {
+                    data.push((key.to_vec(), value.to_vec()));
+                }
+            }
+            data
+        };
+        let cold_bytes = bincode::serialize(&cold_data)?;
+        std::fs::write(cold_backup, cold_bytes)?;
 
         // Index backup
         let index_backup = path.join("index.bin");
@@ -679,6 +697,30 @@ impl StorageEngine for TieredStorageEngine {
             hot.clear();
             for (k, v) in hot_data {
                 hot.put(k, v);
+            }
+        }
+
+        // Restore warm tier
+        let warm_backup = path.join("warm.bin");
+        if warm_backup.exists() {
+            let warm_bytes = std::fs::read(warm_backup)?;
+            let warm_data: Vec<(Vec<u8>, Vec<u8>)> = bincode::deserialize(&warm_bytes)?;
+
+            let warm = self.warm_tier.write().await;
+            for (key, value) in warm_data {
+                warm.storage.put(&key, &value)?;
+            }
+        }
+
+        // Restore cold tier
+        let cold_backup = path.join("cold.bin");
+        if cold_backup.exists() {
+            let cold_bytes = std::fs::read(cold_backup)?;
+            let cold_data: Vec<(Vec<u8>, Vec<u8>)> = bincode::deserialize(&cold_bytes)?;
+
+            let cold = self.cold_tier.write().await;
+            for (key, value) in cold_data {
+                cold.storage.put(&key, &value)?;
             }
         }
 

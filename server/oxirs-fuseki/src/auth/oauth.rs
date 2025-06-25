@@ -4,7 +4,7 @@
 //! providing enterprise-grade authentication integration.
 
 use crate::{
-    auth::{AuthResult, User, Permission},
+    auth::{AuthResult, Permission, User},
     config::OAuthConfig,
     error::{FusekiError, FusekiResult},
 };
@@ -163,28 +163,35 @@ impl OAuth2Service {
 
     /// Discover OIDC configuration from provider
     pub async fn discover_oidc_config(&self) -> FusekiResult<OIDCDiscovery> {
-        let discovery_url = if self.config.auth_url.ends_with("/.well-known/openid_configuration") {
+        let discovery_url = if self
+            .config
+            .auth_url
+            .ends_with("/.well-known/openid_configuration")
+        {
             self.config.auth_url.clone()
         } else {
-            format!("{}/.well-known/openid_configuration", self.config.auth_url.trim_end_matches('/'))
+            format!(
+                "{}/.well-known/openid_configuration",
+                self.config.auth_url.trim_end_matches('/')
+            )
         };
 
         info!("Discovering OIDC configuration from: {}", discovery_url);
 
-        let response = self.client
-            .get(&discovery_url)
-            .send()
-            .await
-            .map_err(|e| FusekiError::authentication(format!("Failed to fetch OIDC discovery: {}", e)))?;
+        let response = self.client.get(&discovery_url).send().await.map_err(|e| {
+            FusekiError::authentication(format!("Failed to fetch OIDC discovery: {}", e))
+        })?;
 
         if !response.status().is_success() {
-            return Err(FusekiError::authentication(
-                format!("OIDC discovery failed with status: {}", response.status())
-            ));
+            return Err(FusekiError::authentication(format!(
+                "OIDC discovery failed with status: {}",
+                response.status()
+            )));
         }
 
-        let discovery: OIDCDiscovery = response.json().await
-            .map_err(|e| FusekiError::authentication(format!("Failed to parse OIDC discovery: {}", e)))?;
+        let discovery: OIDCDiscovery = response.json().await.map_err(|e| {
+            FusekiError::authentication(format!("Failed to parse OIDC discovery: {}", e))
+        })?;
 
         debug!("OIDC discovery successful for issuer: {}", discovery.issuer);
         Ok(discovery)
@@ -228,12 +235,12 @@ impl OAuth2Service {
         if use_pkce {
             let code_verifier = generate_code_verifier();
             let code_challenge = generate_code_challenge(&code_verifier);
-            
+
             url.push_str(&format!(
                 "&code_challenge={}&code_challenge_method=S256",
                 urlencoding::encode(&code_challenge)
             ));
-            
+
             oauth_state.code_verifier = Some(code_verifier);
         }
 
@@ -285,7 +292,8 @@ impl OAuth2Service {
 
         debug!("Exchanging authorization code for token");
 
-        let response = self.client
+        let response = self
+            .client
             .post(&self.config.token_url)
             .header("Content-Type", "application/x-www-form-urlencoded")
             .form(&params)
@@ -295,13 +303,16 @@ impl OAuth2Service {
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(FusekiError::authentication(
-                format!("Token exchange failed with status {}: {}", response.status(), error_text)
-            ));
+            return Err(FusekiError::authentication(format!(
+                "Token exchange failed with status {}: {}",
+                response.status(),
+                error_text
+            )));
         }
 
-        let token_response: OAuth2TokenResponse = response.json().await
-            .map_err(|e| FusekiError::authentication(format!("Failed to parse token response: {}", e)))?;
+        let token_response: OAuth2TokenResponse = response.json().await.map_err(|e| {
+            FusekiError::authentication(format!("Failed to parse token response: {}", e))
+        })?;
 
         let token = OAuth2Token {
             access_token: token_response.access_token,
@@ -325,7 +336,8 @@ impl OAuth2Service {
     pub async fn get_user_info(&self, access_token: &str) -> FusekiResult<OIDCUserInfo> {
         debug!("Fetching user info from OIDC userinfo endpoint");
 
-        let response = self.client
+        let response = self
+            .client
             .get(&self.config.user_info_url)
             .bearer_auth(access_token)
             .send()
@@ -333,15 +345,20 @@ impl OAuth2Service {
             .map_err(|e| FusekiError::authentication(format!("UserInfo request failed: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(FusekiError::authentication(
-                format!("UserInfo request failed with status: {}", response.status())
-            ));
+            return Err(FusekiError::authentication(format!(
+                "UserInfo request failed with status: {}",
+                response.status()
+            )));
         }
 
-        let user_info: OIDCUserInfo = response.json().await
-            .map_err(|e| FusekiError::authentication(format!("Failed to parse user info: {}", e)))?;
+        let user_info: OIDCUserInfo = response.json().await.map_err(|e| {
+            FusekiError::authentication(format!("Failed to parse user info: {}", e))
+        })?;
 
-        debug!("Successfully retrieved user info for subject: {}", user_info.sub);
+        debug!(
+            "Successfully retrieved user info for subject: {}",
+            user_info.sub
+        );
         Ok(user_info)
     }
 
@@ -353,7 +370,10 @@ impl OAuth2Service {
         // Map OIDC user info to internal user
         let user = self.map_oidc_user_to_internal(user_info).await?;
 
-        info!("OAuth2/OIDC authentication successful for user: {}", user.username);
+        info!(
+            "OAuth2/OIDC authentication successful for user: {}",
+            user.username
+        );
         Ok(AuthResult::Authenticated(user))
     }
 
@@ -368,7 +388,8 @@ impl OAuth2Service {
             ("client_secret", &self.config.client_secret),
         ];
 
-        let response = self.client
+        let response = self
+            .client
             .post(&self.config.token_url)
             .header("Content-Type", "application/x-www-form-urlencoded")
             .form(&params)
@@ -377,19 +398,23 @@ impl OAuth2Service {
             .map_err(|e| FusekiError::authentication(format!("Token refresh failed: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(FusekiError::authentication(
-                format!("Token refresh failed with status: {}", response.status())
-            ));
+            return Err(FusekiError::authentication(format!(
+                "Token refresh failed with status: {}",
+                response.status()
+            )));
         }
 
-        let token_response: OAuth2TokenResponse = response.json().await
-            .map_err(|e| FusekiError::authentication(format!("Failed to parse refresh response: {}", e)))?;
+        let token_response: OAuth2TokenResponse = response.json().await.map_err(|e| {
+            FusekiError::authentication(format!("Failed to parse refresh response: {}", e))
+        })?;
 
         let token = OAuth2Token {
             access_token: token_response.access_token,
             token_type: token_response.token_type,
             expires_in: token_response.expires_in.unwrap_or(3600),
-            refresh_token: token_response.refresh_token.or_else(|| Some(refresh_token.to_string())),
+            refresh_token: token_response
+                .refresh_token
+                .or_else(|| Some(refresh_token.to_string())),
             scope: token_response.scope.unwrap_or_default(),
             id_token: token_response.id_token,
             issued_at: Utc::now(),
@@ -402,7 +427,7 @@ impl OAuth2Service {
     /// Validate access token
     pub async fn validate_access_token(&self, access_token: &str) -> FusekiResult<bool> {
         let tokens = self.access_tokens.read().await;
-        
+
         if let Some(token) = tokens.get(access_token) {
             let expires_at = token.issued_at + chrono::Duration::seconds(token.expires_in as i64);
             Ok(Utc::now() < expires_at)
@@ -425,14 +450,11 @@ impl OAuth2Service {
     /// Map OIDC user info to internal user structure
     async fn map_oidc_user_to_internal(&self, user_info: OIDCUserInfo) -> FusekiResult<User> {
         // Extract username (prefer email, fallback to subject)
-        let username = user_info.email
-            .as_ref()
-            .unwrap_or(&user_info.sub)
-            .clone();
+        let username = user_info.email.as_ref().unwrap_or(&user_info.sub).clone();
 
         // Map groups/roles from OIDC to internal roles
         let mut roles = Vec::new();
-        
+
         // Add roles from OIDC groups
         if let Some(groups) = &user_info.groups {
             for group in groups {
@@ -505,16 +527,10 @@ impl OAuth2Service {
                     ]);
                 }
                 "reader" => {
-                    permissions.extend(vec![
-                        Permission::GlobalRead,
-                        Permission::SparqlQuery,
-                    ]);
+                    permissions.extend(vec![Permission::GlobalRead, Permission::SparqlQuery]);
                 }
                 "user" => {
-                    permissions.extend(vec![
-                        Permission::GlobalRead,
-                        Permission::SparqlQuery,
-                    ]);
+                    permissions.extend(vec![Permission::GlobalRead, Permission::SparqlQuery]);
                 }
                 _ => {}
             }
@@ -541,7 +557,8 @@ impl OAuth2Service {
         {
             let mut tokens = self.access_tokens.write().await;
             tokens.retain(|_, token| {
-                let expires_at = token.issued_at + chrono::Duration::seconds(token.expires_in as i64);
+                let expires_at =
+                    token.issued_at + chrono::Duration::seconds(token.expires_in as i64);
                 expires_at > now
             });
         }
@@ -553,7 +570,7 @@ fn generate_code_verifier() -> String {
     use rand::Rng;
     const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
     let mut rng = rand::thread_rng();
-    
+
     (0..128)
         .map(|_| {
             let idx = rng.gen_range(0..CHARSET.len());
@@ -591,7 +608,11 @@ mod tests {
             auth_url: "https://provider.example.com/auth".to_string(),
             token_url: "https://provider.example.com/token".to_string(),
             user_info_url: "https://provider.example.com/userinfo".to_string(),
-            scopes: vec!["openid".to_string(), "profile".to_string(), "email".to_string()],
+            scopes: vec![
+                "openid".to_string(),
+                "profile".to_string(),
+                "email".to_string(),
+            ],
         }
     }
 
@@ -599,7 +620,7 @@ mod tests {
     async fn test_oauth2_service_creation() {
         let config = create_test_oauth_config();
         let service = OAuth2Service::new(config);
-        
+
         assert_eq!(service.config.provider, "test");
         assert_eq!(service.config.client_id, "test_client_id");
     }
@@ -608,12 +629,12 @@ mod tests {
     async fn test_authorization_url_generation() {
         let config = create_test_oauth_config();
         let service = OAuth2Service::new(config);
-        
+
         let (url, state) = service
             .generate_authorization_url("http://localhost:3030/callback", &[], false)
             .await
             .unwrap();
-        
+
         assert!(url.contains("response_type=code"));
         assert!(url.contains("client_id=test_client_id"));
         assert!(url.contains(&state));
@@ -624,7 +645,7 @@ mod tests {
     async fn test_pkce_generation() {
         let code_verifier = generate_code_verifier();
         let code_challenge = generate_code_challenge(&code_verifier);
-        
+
         assert_eq!(code_verifier.len(), 128);
         assert!(!code_challenge.is_empty());
         assert_ne!(code_verifier, code_challenge);
@@ -644,17 +665,21 @@ mod tests {
             groups: Some(vec!["administrators".to_string()]),
             roles: Some(vec!["admin".to_string()]),
         };
-        
+
         assert_eq!(user_info.sub, "user123");
         assert_eq!(user_info.email.as_ref().unwrap(), "john.doe@example.com");
-        assert!(user_info.groups.as_ref().unwrap().contains(&"administrators".to_string()));
+        assert!(user_info
+            .groups
+            .as_ref()
+            .unwrap()
+            .contains(&"administrators".to_string()));
     }
 
     #[tokio::test]
     async fn test_cleanup_expired() {
         let config = create_test_oauth_config();
         let service = OAuth2Service::new(config);
-        
+
         // Add expired state
         let expired_state = OAuth2State {
             state: "expired".to_string(),
@@ -664,14 +689,14 @@ mod tests {
             created_at: Utc::now() - chrono::Duration::hours(1),
             expires_at: Utc::now() - chrono::Duration::minutes(30),
         };
-        
+
         {
             let mut states = service.active_states.write().await;
             states.insert("expired".to_string(), expired_state);
         }
-        
+
         service.cleanup_expired().await;
-        
+
         let states = service.active_states.read().await;
         assert!(!states.contains_key("expired"));
     }

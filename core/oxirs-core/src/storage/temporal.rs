@@ -41,7 +41,7 @@ impl Default for TemporalConfig {
 }
 
 /// Retention policy for temporal data
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum RetentionPolicy {
     /// Keep data forever
     Forever,
@@ -53,6 +53,18 @@ pub enum RetentionPolicy {
     Versions(u32),
     /// Custom policy function
     Custom(Arc<dyn Fn(&TemporalTriple) -> bool + Send + Sync>),
+}
+
+impl std::fmt::Debug for RetentionPolicy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RetentionPolicy::Forever => write!(f, "Forever"),
+            RetentionPolicy::Days(n) => write!(f, "Days({})", n),
+            RetentionPolicy::Months(n) => write!(f, "Months({})", n),
+            RetentionPolicy::Versions(n) => write!(f, "Versions({})", n),
+            RetentionPolicy::Custom(_) => write!(f, "Custom(<function>)"),
+        }
+    }
 }
 
 /// Temporal indexing strategy
@@ -167,7 +179,7 @@ struct EntityIndex {
 }
 
 /// Entity history
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct EntityHistory {
     /// Chronological list of states
     states: BTreeMap<DateTime<Utc>, EntityState>,
@@ -527,7 +539,10 @@ impl TemporalStorage {
             });
 
         // Add property or relationship
-        let predicate_uri = temporal.triple.predicate().as_str();
+        let predicate_uri = match temporal.triple.predicate() {
+            crate::model::Predicate::NamedNode(nn) => nn.as_str(),
+            crate::model::Predicate::Variable(v) => v.as_str(),
+        };
         match temporal.triple.object() {
             crate::model::Object::Literal(lit) => {
                 state
@@ -556,7 +571,10 @@ impl TemporalStorage {
         let change = ChangeEvent {
             timestamp: temporal.valid_from,
             change_type: ChangeType::Insert,
-            property: temporal.triple.predicate().as_str().to_string(),
+            property: match temporal.triple.predicate() {
+                crate::model::Predicate::NamedNode(nn) => nn.as_str(),
+                crate::model::Predicate::Variable(v) => v.as_str(),
+            }.to_string(),
             old_value: None,
             new_value: Some(Term::from_object(temporal.triple.object())),
         };

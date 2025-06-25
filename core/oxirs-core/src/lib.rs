@@ -23,6 +23,7 @@
 //! # }
 //! ```
 
+pub mod distributed;
 pub mod graph;
 pub mod indexing;
 pub mod interning;
@@ -54,6 +55,43 @@ pub enum OxirsError {
     Serialize(String),
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+}
+
+// Additional error conversions
+impl From<bincode::Error> for OxirsError {
+    fn from(err: bincode::Error) -> Self {
+        OxirsError::Serialize(err.to_string())
+    }
+}
+
+impl From<serde_json::Error> for OxirsError {
+    fn from(err: serde_json::Error) -> Self {
+        OxirsError::Serialize(err.to_string())
+    }
+}
+
+impl From<rocksdb::Error> for OxirsError {
+    fn from(err: rocksdb::Error) -> Self {
+        OxirsError::Store(err.to_string())
+    }
+}
+
+impl From<datafusion::error::DataFusionError> for OxirsError {
+    fn from(err: datafusion::error::DataFusionError) -> Self {
+        OxirsError::Query(err.to_string())
+    }
+}
+
+impl From<arrow::error::ArrowError> for OxirsError {
+    fn from(err: arrow::error::ArrowError) -> Self {
+        OxirsError::Store(err.to_string())
+    }
+}
+
+impl From<parquet::errors::ParquetError> for OxirsError {
+    fn from(err: parquet::errors::ParquetError) -> Self {
+        OxirsError::Store(err.to_string())
+    }
 }
 
 /// Result type alias for OxiRS operations

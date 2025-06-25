@@ -1,8 +1,8 @@
 //! Integration utilities with other OxiRS components
 
+use crate::Vector;
 use crate::{EmbeddingModel, ModelStats};
 use anyhow::{anyhow, Result};
-use crate::Vector;
 use std::collections::HashMap;
 use tracing::{debug, info, warn};
 
@@ -40,7 +40,7 @@ impl VectorStoreBridge {
             prefix_config: PrefixConfig::default(),
         }
     }
-    
+
     /// Create bridge with custom prefix config
     pub fn with_prefix_config(prefix_config: PrefixConfig) -> Self {
         Self {
@@ -49,15 +49,14 @@ impl VectorStoreBridge {
             prefix_config,
         }
     }
-    
-    
+
     /// Sync all embeddings from a model to the vector store
     pub fn sync_model_embeddings(&mut self, model: &dyn EmbeddingModel) -> Result<SyncStats> {
         let start_time = std::time::Instant::now();
         let mut sync_stats = SyncStats::default();
-        
+
         info!("Starting embedding synchronization to vector store");
-        
+
         // Sync entity embeddings
         let entities = model.get_entities();
         for entity in &entities {
@@ -73,7 +72,7 @@ impl VectorStoreBridge {
                 }
             }
         }
-        
+
         // Sync relation embeddings
         let relations = model.get_relations();
         for relation in &relations {
@@ -85,18 +84,24 @@ impl VectorStoreBridge {
                 }
                 Err(e) => {
                     warn!("Failed to get embedding for relation {}: {}", relation, e);
-                    sync_stats.errors.push(format!("Relation {}: {}", relation, e));
+                    sync_stats
+                        .errors
+                        .push(format!("Relation {}: {}", relation, e));
                 }
             }
         }
-        
+
         sync_stats.sync_duration = start_time.elapsed();
-        info!("Embedding sync completed: {} entities, {} relations, {} errors", 
-              sync_stats.entities_synced, sync_stats.relations_synced, sync_stats.errors.len());
-        
+        info!(
+            "Embedding sync completed: {} entities, {} relations, {} errors",
+            sync_stats.entities_synced,
+            sync_stats.relations_synced,
+            sync_stats.errors.len()
+        );
+
         Ok(sync_stats)
     }
-    
+
     /// Find similar entities using vector similarity
     pub fn find_similar_entities(&self, entity: &str, k: usize) -> Result<Vec<(String, f32)>> {
         if let Some(uri) = self.entity_mappings.get(entity) {
@@ -108,7 +113,7 @@ impl VectorStoreBridge {
             Err(anyhow!("Entity not found in mappings: {}", entity))
         }
     }
-    
+
     /// Find similar relations using vector similarity
     pub fn find_similar_relations(&self, relation: &str, k: usize) -> Result<Vec<(String, f32)>> {
         if let Some(uri) = self.relation_mappings.get(relation) {
@@ -118,7 +123,7 @@ impl VectorStoreBridge {
             Err(anyhow!("Relation not found in mappings: {}", relation))
         }
     }
-    
+
     /// Generate URI for entity
     fn generate_entity_uri(&self, entity: &str) -> String {
         if self.prefix_config.use_namespaces {
@@ -127,7 +132,7 @@ impl VectorStoreBridge {
             entity.to_string()
         }
     }
-    
+
     /// Generate URI for relation
     fn generate_relation_uri(&self, relation: &str) -> String {
         if self.prefix_config.use_namespaces {
@@ -136,7 +141,7 @@ impl VectorStoreBridge {
             relation.to_string()
         }
     }
-    
+
     /// Get sync statistics
     pub fn get_sync_info(&self) -> SyncInfo {
         SyncInfo {
@@ -145,7 +150,7 @@ impl VectorStoreBridge {
             vector_store_stats: None,
         }
     }
-    
+
     /// Clear all mappings
     pub fn clear_mappings(&mut self) {
         self.entity_mappings.clear();
@@ -193,53 +198,52 @@ impl ChatIntegration {
             similarity_threshold: 0.7,
         }
     }
-    
+
     /// Configure context window size
     pub fn with_context_window(mut self, window_size: usize) -> Self {
         self.context_window = window_size;
         self
     }
-    
+
     /// Configure similarity threshold for relevant entities
     pub fn with_similarity_threshold(mut self, threshold: f32) -> Self {
         self.similarity_threshold = threshold;
         self
     }
-    
+
     /// Extract relevant entities from a query
     pub fn extract_relevant_entities(&self, query: &str) -> Result<Vec<String>> {
         // This is a simplified implementation
         // In practice, this would use NLP techniques to identify entities
         let entities = self.model.get_entities();
         let mut relevant = Vec::new();
-        
+
         for entity in entities {
             // Simple substring matching - would be replaced with proper NLP
             if query.to_lowercase().contains(&entity.to_lowercase()) {
                 relevant.push(entity);
             }
         }
-        
+
         Ok(relevant)
     }
-    
+
     /// Generate context embeddings for a conversation
     pub fn generate_context_embedding(&self, messages: &[String]) -> Result<Vector> {
         if messages.is_empty() {
             return Err(anyhow!("No messages provided"));
         }
-        
+
         // Take the last N messages based on context window
-        let recent_messages: Vec<&String> = messages
-            .iter()
-            .rev()
-            .take(self.context_window)
-            .collect();
-        
+        let recent_messages: Vec<&String> =
+            messages.iter().rev().take(self.context_window).collect();
+
         // For now, just return a dummy embedding
         // In practice, this would combine message embeddings intelligently
         let dummy_values = vec![0.0; 100]; // Would be model's dimension
-        Ok(Vector::new(dummy_values.into_iter().map(|x| x as f32).collect()))
+        Ok(Vector::new(
+            dummy_values.into_iter().map(|x| x as f32).collect(),
+        ))
     }
 }
 
@@ -257,15 +261,15 @@ impl SparqlIntegration {
             similarity_boost: 0.1,
         }
     }
-    
+
     /// Enhance SPARQL query with similarity-based suggestions
     pub fn enhance_query(&self, sparql_query: &str) -> Result<EnhancedQuery> {
         // Parse basic patterns from SPARQL (simplified)
         let entities = self.extract_entities_from_sparql(sparql_query)?;
         let relations = self.extract_relations_from_sparql(sparql_query)?;
-        
+
         let mut suggestions = Vec::new();
-        
+
         // Find similar entities
         for entity in &entities {
             // This would use actual similarity computation
@@ -276,7 +280,7 @@ impl SparqlIntegration {
                 confidence: 0.8,
             });
         }
-        
+
         // Find similar relations
         for relation in &relations {
             suggestions.push(QuerySuggestion {
@@ -286,7 +290,7 @@ impl SparqlIntegration {
                 confidence: 0.7,
             });
         }
-        
+
         Ok(EnhancedQuery {
             original_query: sparql_query.to_string(),
             entities_found: entities,
@@ -294,13 +298,13 @@ impl SparqlIntegration {
             suggestions,
         })
     }
-    
+
     /// Extract entities from SPARQL query (simplified)
     fn extract_entities_from_sparql(&self, query: &str) -> Result<Vec<String>> {
         // This is a very simplified extraction
         // A real implementation would use a proper SPARQL parser
         let mut entities = Vec::new();
-        
+
         for line in query.lines() {
             if line.contains("http://") {
                 // Extract URIs that might be entities
@@ -312,15 +316,15 @@ impl SparqlIntegration {
                 }
             }
         }
-        
+
         Ok(entities)
     }
-    
+
     /// Extract relations from SPARQL query (simplified)
     fn extract_relations_from_sparql(&self, query: &str) -> Result<Vec<String>> {
         // Simplified relation extraction
         let mut relations = Vec::new();
-        
+
         for line in query.lines() {
             if line.contains("?") && line.contains("http://") {
                 // Look for patterns like "?s <relation> ?o"
@@ -332,7 +336,7 @@ impl SparqlIntegration {
                 }
             }
         }
-        
+
         Ok(relations)
     }
 }
@@ -369,35 +373,35 @@ mod tests {
     use super::*;
     use crate::models::TransE;
     use crate::ModelConfig;
-    
+
     #[test]
     fn test_vector_store_bridge() {
         let config = ModelConfig::default().with_dimensions(10);
         let model = TransE::new(config);
-        
+
         let mut bridge = VectorStoreBridge::new();
-        
+
         // Test URI generation
         let entity_uri = bridge.generate_entity_uri("test_entity");
         assert!(entity_uri.starts_with("kg:entity:"));
-        
+
         let relation_uri = bridge.generate_relation_uri("test_relation");
         assert!(relation_uri.starts_with("kg:relation:"));
     }
-    
+
     #[test]
     fn test_sparql_integration() -> Result<()> {
         let config = ModelConfig::default().with_dimensions(10);
         let model = TransE::new(config);
-        
+
         let integration = SparqlIntegration::new(Box::new(model));
-        
+
         let test_query = "SELECT ?s ?o WHERE { ?s <http://example.org/knows> ?o }";
         let enhanced = integration.enhance_query(test_query)?;
-        
+
         assert_eq!(enhanced.original_query, test_query);
         assert!(!enhanced.suggestions.is_empty());
-        
+
         Ok(())
     }
 }

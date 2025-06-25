@@ -8,7 +8,7 @@
 //! - Memory and resource monitoring
 
 use crate::{
-    config::{PerformanceConfig, CacheConfig},
+    config::{CacheConfig, PerformanceConfig},
     error::{FusekiError, FusekiResult},
     metrics::MetricsService,
 };
@@ -20,7 +20,7 @@ use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::{RwLock, Semaphore};
-use tracing::{debug, info, warn, error, instrument};
+use tracing::{debug, error, info, instrument, warn};
 
 /// Cache key for query results
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -88,22 +88,22 @@ pub struct ResourceUsage {
 #[derive(Clone)]
 pub struct PerformanceService {
     config: PerformanceConfig,
-    
+
     // Query result cache
     query_cache: Arc<Cache<QueryCacheKey, CachedQueryResult>>,
-    
+
     // Prepared query cache
     prepared_cache: Arc<RwLock<LruCache<String, PreparedQuery>>>,
-    
+
     // Connection pool
     connection_pool: Arc<ConnectionPool>,
-    
+
     // Resource monitoring
     resource_monitor: Arc<RwLock<ResourceUsage>>,
-    
+
     // Performance metrics
     metrics: Arc<RwLock<PerformanceMetrics>>,
-    
+
     // Query execution semaphore for rate limiting
     query_semaphore: Arc<Semaphore>,
 }
@@ -180,7 +180,7 @@ impl PerformanceService {
             let mut updated = cached.clone();
             updated.hit_count += 1;
             self.query_cache.insert(key.clone(), updated.clone()).await;
-            
+
             debug!("Query cache hit for key: {:?}", key);
             Some(updated)
         } else {
@@ -203,7 +203,10 @@ impl PerformanceService {
             format,
             execution_time_ms,
             cached_at: SystemTime::now(),
-            ttl_seconds: self.config.caching.as_ref()
+            ttl_seconds: self
+                .config
+                .caching
+                .as_ref()
                 .map(|c| c.ttl_seconds)
                 .unwrap_or(300),
             hit_count: 0,
@@ -239,7 +242,9 @@ impl PerformanceService {
     /// Acquire database connection from pool
     #[instrument(skip(self))]
     pub async fn acquire_connection(&self) -> FusekiResult<ConnectionGuard> {
-        let permit = self.connection_pool.active_connections
+        let permit = self
+            .connection_pool
+            .active_connections
             .clone()
             .acquire_owned()
             .await
@@ -255,7 +260,8 @@ impl PerformanceService {
     /// Acquire query execution permit
     #[instrument(skip(self))]
     pub async fn acquire_query_permit(&self) -> FusekiResult<QueryPermit> {
-        let permit = self.query_semaphore
+        let permit = self
+            .query_semaphore
             .clone()
             .acquire_owned()
             .await
@@ -272,7 +278,7 @@ impl PerformanceService {
     #[instrument(skip(self))]
     pub async fn optimize_query(&self, query: &str, dataset: &str) -> FusekiResult<String> {
         let query_hash = self.calculate_query_hash(query);
-        
+
         // Check for prepared query
         if let Some(prepared) = self.get_prepared_query(&query_hash).await {
             debug!("Using optimized prepared query");
@@ -281,7 +287,7 @@ impl PerformanceService {
 
         // Perform query optimization
         let optimized_query = self.perform_query_optimization(query, dataset).await?;
-        
+
         // Cache the optimized query
         let prepared = PreparedQuery {
             query_string: query.to_string(),
@@ -293,7 +299,7 @@ impl PerformanceService {
         };
 
         self.cache_prepared_query(query_hash, prepared).await;
-        
+
         Ok(optimized_query)
     }
 
@@ -328,33 +334,45 @@ impl PerformanceService {
         self.query_cache.invalidate_all();
         let mut prepared_cache = self.prepared_cache.write().await;
         prepared_cache.clear();
-        
+
         info!("All caches cleared");
     }
 
     /// Get cache statistics
     pub async fn get_cache_stats(&self) -> HashMap<String, serde_json::Value> {
         let mut stats = HashMap::new();
-        
+
         // Query cache stats
-        stats.insert("query_cache_size".to_string(), 
-                    serde_json::json!(self.query_cache.entry_count()));
-        stats.insert("query_cache_capacity".to_string(), 
-                    serde_json::json!(self.query_cache.max_capacity()));
-        
+        stats.insert(
+            "query_cache_size".to_string(),
+            serde_json::json!(self.query_cache.entry_count()),
+        );
+        stats.insert(
+            "query_cache_capacity".to_string(),
+            serde_json::json!(self.query_cache.max_capacity()),
+        );
+
         // Prepared query cache stats
         let prepared_cache = self.prepared_cache.read().await;
-        stats.insert("prepared_cache_size".to_string(), 
-                    serde_json::json!(prepared_cache.len()));
-        stats.insert("prepared_cache_capacity".to_string(), 
-                    serde_json::json!(prepared_cache.cap()));
-        
+        stats.insert(
+            "prepared_cache_size".to_string(),
+            serde_json::json!(prepared_cache.len()),
+        );
+        stats.insert(
+            "prepared_cache_capacity".to_string(),
+            serde_json::json!(prepared_cache.cap()),
+        );
+
         // Connection pool stats
-        stats.insert("available_connections".to_string(), 
-                    serde_json::json!(self.connection_pool.active_connections.available_permits()));
-        stats.insert("max_connections".to_string(), 
-                    serde_json::json!(self.connection_pool.max_connections));
-        
+        stats.insert(
+            "available_connections".to_string(),
+            serde_json::json!(self.connection_pool.active_connections.available_permits()),
+        );
+        stats.insert(
+            "max_connections".to_string(),
+            serde_json::json!(self.connection_pool.max_connections),
+        );
+
         stats
     }
 
@@ -367,21 +385,22 @@ impl PerformanceService {
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(30));
-            
+
             loop {
                 interval.tick().await;
-                
+
                 // Update performance metrics
                 let resource_usage = resource_monitor.read().await;
                 let prepared_cache_guard = prepared_cache.read().await;
-                
+
                 let mut metrics_guard = metrics.write().await;
-                metrics_guard.memory_usage_mb = resource_usage.memory_bytes as f64 / 1024.0 / 1024.0;
+                metrics_guard.memory_usage_mb =
+                    resource_usage.memory_bytes as f64 / 1024.0 / 1024.0;
                 metrics_guard.active_connections = resource_usage.connection_count as usize;
                 metrics_guard.query_cache_size = query_cache.entry_count() as usize;
                 metrics_guard.prepared_cache_size = prepared_cache_guard.len();
                 metrics_guard.last_updated = SystemTime::now();
-                
+
                 drop(metrics_guard);
                 drop(prepared_cache_guard);
             }
@@ -393,7 +412,7 @@ impl PerformanceService {
     fn calculate_query_hash(&self, query: &str) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
         query.hash(&mut hasher);
         format!("{:x}", hasher.finish())
@@ -402,10 +421,10 @@ impl PerformanceService {
     async fn perform_query_optimization(&self, query: &str, dataset: &str) -> FusekiResult<String> {
         // Mock optimization - in reality this would use a query planner
         debug!("Optimizing query for dataset: {}", dataset);
-        
+
         // Simulate optimization time
         tokio::time::sleep(Duration::from_millis(5)).await;
-        
+
         // Return "optimized" query (in reality would be a parsed/optimized query structure)
         Ok(query.to_string())
     }
@@ -413,8 +432,12 @@ impl PerformanceService {
     async fn estimate_query_cost(&self, query: &str) -> u64 {
         // Mock cost estimation - in reality would analyze query complexity
         let base_cost = query.len() as u64;
-        let complexity_factor = if query.to_lowercase().contains("join") { 10 } else { 1 };
-        
+        let complexity_factor = if query.to_lowercase().contains("join") {
+            10
+        } else {
+            1
+        };
+
         base_cost * complexity_factor
     }
 }
@@ -427,8 +450,10 @@ pub struct ConnectionGuard {
 
 impl Drop for ConnectionGuard {
     fn drop(&mut self) {
-        debug!("Released database connection after {}ms", 
-               self.acquired_at.elapsed().as_millis());
+        debug!(
+            "Released database connection after {}ms",
+            self.acquired_at.elapsed().as_millis()
+        );
     }
 }
 
@@ -440,15 +465,17 @@ pub struct QueryPermit {
 
 impl Drop for QueryPermit {
     fn drop(&mut self) {
-        debug!("Released query execution permit after {}ms", 
-               self.started_at.elapsed().as_millis());
+        debug!(
+            "Released query execution permit after {}ms",
+            self.started_at.elapsed().as_millis()
+        );
     }
 }
 
 /// Memory usage monitoring utilities
 pub mod memory {
     use super::*;
-    
+
     /// Get current memory usage
     pub async fn get_memory_usage() -> FusekiResult<u64> {
         // Platform-specific memory usage collection
@@ -462,14 +489,14 @@ pub mod memory {
             Ok(0)
         }
     }
-    
+
     #[cfg(target_os = "linux")]
     async fn get_linux_memory_usage() -> FusekiResult<u64> {
         use std::fs;
-        
+
         let status = fs::read_to_string("/proc/self/status")
             .map_err(|e| FusekiError::internal(format!("Failed to read memory info: {}", e)))?;
-        
+
         for line in status.lines() {
             if line.starts_with("VmRSS:") {
                 if let Some(value_str) = line.split_whitespace().nth(1) {
@@ -479,7 +506,7 @@ pub mod memory {
                 }
             }
         }
-        
+
         Ok(0)
     }
 }
@@ -487,13 +514,13 @@ pub mod memory {
 /// Query execution timing utilities
 pub mod timing {
     use super::*;
-    
+
     /// Query execution timer
     pub struct QueryTimer {
         start: Instant,
         query_type: String,
     }
-    
+
     impl QueryTimer {
         pub fn new(query_type: String) -> Self {
             Self {
@@ -501,20 +528,21 @@ pub mod timing {
                 query_type,
             }
         }
-        
+
         pub fn elapsed_ms(&self) -> u64 {
             self.start.elapsed().as_millis() as u64
         }
-        
+
         pub fn is_slow_query(&self, threshold_ms: u64) -> bool {
             self.elapsed_ms() > threshold_ms
         }
     }
-    
+
     impl Drop for QueryTimer {
         fn drop(&mut self) {
             let elapsed_ms = self.elapsed_ms();
-            if elapsed_ms > 1000 { // Log slow queries (>1s)
+            if elapsed_ms > 1000 {
+                // Log slow queries (>1s)
                 warn!("Slow {} query detected: {}ms", self.query_type, elapsed_ms);
             }
         }
@@ -524,7 +552,7 @@ pub mod timing {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{CacheConfig, QueryOptimizationConfig, ConnectionPoolConfig};
+    use crate::config::{CacheConfig, ConnectionPoolConfig, QueryOptimizationConfig};
 
     fn create_test_performance_service() -> PerformanceService {
         let config = PerformanceConfig {
@@ -551,31 +579,33 @@ mod tests {
                 max_lifetime_secs: 3600,
             },
         };
-        
+
         PerformanceService::new(config).unwrap()
     }
 
     #[tokio::test]
     async fn test_query_caching() {
         let service = create_test_performance_service();
-        
+
         let key = QueryCacheKey {
             query_hash: "test_hash".to_string(),
             dataset: "test_dataset".to_string(),
             parameters: vec![],
         };
-        
+
         // Cache miss
         assert!(service.get_cached_query(&key).await.is_none());
-        
+
         // Cache result
-        service.cache_query_result(
-            key.clone(),
-            "test result".to_string(),
-            "application/json".to_string(),
-            100,
-        ).await;
-        
+        service
+            .cache_query_result(
+                key.clone(),
+                "test result".to_string(),
+                "application/json".to_string(),
+                100,
+            )
+            .await;
+
         // Cache hit
         let cached = service.get_cached_query(&key).await;
         assert!(cached.is_some());
@@ -585,12 +615,12 @@ mod tests {
     #[tokio::test]
     async fn test_prepared_query_caching() {
         let service = create_test_performance_service();
-        
+
         let query_hash = "prepared_test_hash";
-        
+
         // Cache miss
         assert!(service.get_prepared_query(query_hash).await.is_none());
-        
+
         // Cache prepared query
         let prepared = PreparedQuery {
             query_string: "SELECT * WHERE { ?s ?p ?o }".to_string(),
@@ -600,9 +630,11 @@ mod tests {
             last_used: Instant::now(),
             use_count: 1,
         };
-        
-        service.cache_prepared_query(query_hash.to_string(), prepared).await;
-        
+
+        service
+            .cache_prepared_query(query_hash.to_string(), prepared)
+            .await;
+
         // Cache hit
         let cached = service.get_prepared_query(query_hash).await;
         assert!(cached.is_some());
@@ -612,23 +644,29 @@ mod tests {
     #[tokio::test]
     async fn test_connection_pool() {
         let service = create_test_performance_service();
-        
+
         // Acquire connection
         let _conn1 = service.acquire_connection().await.unwrap();
         let _conn2 = service.acquire_connection().await.unwrap();
-        
+
         // Connection pool should work
-        assert!(service.connection_pool.active_connections.available_permits() <= 5);
+        assert!(
+            service
+                .connection_pool
+                .active_connections
+                .available_permits()
+                <= 5
+        );
     }
 
     #[tokio::test]
     async fn test_query_permit() {
         let service = create_test_performance_service();
-        
+
         // Acquire query permit
         let _permit1 = service.acquire_query_permit().await.unwrap();
         let _permit2 = service.acquire_query_permit().await.unwrap();
-        
+
         // Should work within limits
         assert!(service.query_semaphore.available_permits() <= 10);
     }
@@ -636,13 +674,13 @@ mod tests {
     #[test]
     fn test_cache_decision() {
         let service = create_test_performance_service();
-        
+
         // Should cache longer queries
         assert!(service.should_cache_query("SELECT * WHERE { ?s ?p ?o }", 50));
-        
+
         // Should not cache short execution time
         assert!(!service.should_cache_query("SELECT * WHERE { ?s ?p ?o }", 5));
-        
+
         // Should not cache very short queries
         assert!(!service.should_cache_query("ASK {}", 50));
     }
@@ -650,16 +688,18 @@ mod tests {
     #[tokio::test]
     async fn test_cache_statistics() {
         let service = create_test_performance_service();
-        
+
         // Add some cached data
         let key = QueryCacheKey {
             query_hash: "stats_test".to_string(),
             dataset: "test".to_string(),
             parameters: vec![],
         };
-        
-        service.cache_query_result(key, "result".to_string(), "json".to_string(), 100).await;
-        
+
+        service
+            .cache_query_result(key, "result".to_string(), "json".to_string(), 100)
+            .await;
+
         let stats = service.get_cache_stats().await;
         assert!(stats.contains_key("query_cache_size"));
         assert!(stats.contains_key("prepared_cache_size"));

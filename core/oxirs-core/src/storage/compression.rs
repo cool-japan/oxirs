@@ -23,7 +23,7 @@ pub enum Algorithm {
 }
 
 /// RDF-specific compression options
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RdfCompressionOptions {
     /// Use dictionary compression for URIs
     pub uri_dictionary: bool,
@@ -113,18 +113,18 @@ impl Compressor {
         let start = std::time::Instant::now();
         let original_size = data.len();
 
-        let (compressed, algorithm_name) = match &self.algorithm {
+        let (compressed, algorithm_name) = match self.algorithm.clone() {
             Algorithm::None => (data.to_vec(), "none"),
             Algorithm::Lz4 { level } => {
-                let compressed = self.compress_lz4(data, *level)?;
+                let compressed = self.compress_lz4(data, level)?;
                 (compressed, "lz4")
             }
             Algorithm::Zstd { level } => {
-                let compressed = self.compress_zstd(data, *level)?;
+                let compressed = self.compress_zstd(data, level)?;
                 (compressed, "zstd")
             }
             Algorithm::RdfCustom { options } => {
-                let compressed = self.compress_rdf_custom(data, options)?;
+                let compressed = self.compress_rdf_custom(data, &options)?;
                 (compressed, "rdf_custom")
             }
         };

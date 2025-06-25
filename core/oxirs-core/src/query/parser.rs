@@ -3,8 +3,8 @@
 //! This is a placeholder implementation that will be enhanced with full
 //! SPARQL 1.1 parsing capabilities in future iterations.
 
-use crate::model::*;
-use crate::query::algebra::*;
+use crate::model::{Variable, Term, NamedNode, BlankNode, Literal};
+use crate::query::algebra::{GraphPattern, TriplePattern, TermPattern, Query, QueryForm, SelectVariables, Expression, OrderExpression, Dataset};
 use crate::OxirsError;
 use std::collections::HashMap;
 
@@ -156,7 +156,7 @@ impl SparqlParser {
         }
 
         let content = content[1..content.len() - 1].trim();
-        let mut triple_patterns = Vec::new();
+        let mut triple_patterns: Vec<TriplePattern> = Vec::new();
 
         // Split by periods (very naive approach)
         for triple_str in content.split('.') {

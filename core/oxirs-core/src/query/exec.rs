@@ -110,7 +110,7 @@ impl<'a> QueryExecutor<'a> {
         }
     }
 
-    fn execute_triple_scan(&self, pattern: &TriplePattern) -> Result<Vec<Solution>, OxirsError> {
+    fn execute_triple_scan(&self, pattern: &crate::model::pattern::TriplePattern) -> Result<Vec<Solution>, OxirsError> {
         let mut solutions = Vec::new();
 
         // Get all triples from the store
@@ -125,34 +125,40 @@ impl<'a> QueryExecutor<'a> {
         Ok(solutions)
     }
 
-    fn match_triple_pattern(&self, triple: &Triple, pattern: &TriplePattern) -> Option<Solution> {
+    fn match_triple_pattern(&self, triple: &Triple, pattern: &crate::model::pattern::TriplePattern) -> Option<Solution> {
         let mut solution = Solution::new();
 
         // Match subject
-        if !self.match_term_pattern(
-            &Term::from_subject(triple.subject()),
-            &pattern.subject,
-            &mut solution,
-        ) {
-            return None;
+        if let Some(ref subject_pattern) = pattern.subject {
+            if !self.match_subject_pattern(
+                triple.subject(),
+                subject_pattern,
+                &mut solution,
+            ) {
+                return None;
+            }
         }
 
         // Match predicate
-        if !self.match_term_pattern(
-            &Term::from_predicate(triple.predicate()),
-            &pattern.predicate,
-            &mut solution,
-        ) {
-            return None;
+        if let Some(ref predicate_pattern) = pattern.predicate {
+            if !self.match_predicate_pattern(
+                triple.predicate(),
+                predicate_pattern,
+                &mut solution,
+            ) {
+                return None;
+            }
         }
 
         // Match object
-        if !self.match_term_pattern(
-            &Term::from_object(triple.object()),
-            &pattern.object,
-            &mut solution,
-        ) {
-            return None;
+        if let Some(ref object_pattern) = pattern.object {
+            if !self.match_object_pattern(
+                triple.object(),
+                object_pattern,
+                &mut solution,
+            ) {
+                return None;
+            }
         }
 
         Some(solution)
@@ -182,6 +188,81 @@ impl<'a> QueryExecutor<'a> {
             TermPattern::Literal(l) => {
                 matches!(term, Term::Literal(lit) if lit == l)
             }
+        }
+    }
+
+    fn match_subject_pattern(
+        &self,
+        subject: &Subject,
+        pattern: &crate::model::pattern::SubjectPattern,
+        solution: &mut Solution,
+    ) -> bool {
+        use crate::model::pattern::SubjectPattern;
+        match pattern {
+            SubjectPattern::Variable(var) => {
+                if let Some(bound_value) = solution.get(var) {
+                    match (subject, bound_value) {
+                        (Subject::NamedNode(n1), Term::NamedNode(n2)) => n1 == n2,
+                        (Subject::BlankNode(b1), Term::BlankNode(b2)) => b1 == b2,
+                        _ => false,
+                    }
+                } else {
+                    solution.bindings.insert(var.clone(), Term::from_subject(subject));
+                    true
+                }
+            }
+            SubjectPattern::NamedNode(n) => matches!(subject, Subject::NamedNode(nn) if nn == n),
+            SubjectPattern::BlankNode(b) => matches!(subject, Subject::BlankNode(bn) if bn == b),
+        }
+    }
+
+    fn match_predicate_pattern(
+        &self,
+        predicate: &Predicate,
+        pattern: &crate::model::pattern::PredicatePattern,
+        solution: &mut Solution,
+    ) -> bool {
+        use crate::model::pattern::PredicatePattern;
+        match pattern {
+            PredicatePattern::Variable(var) => {
+                if let Some(bound_value) = solution.get(var) {
+                    match (predicate, bound_value) {
+                        (Predicate::NamedNode(n1), Term::NamedNode(n2)) => n1 == n2,
+                        _ => false,
+                    }
+                } else {
+                    solution.bindings.insert(var.clone(), Term::from_predicate(predicate));
+                    true
+                }
+            }
+            PredicatePattern::NamedNode(n) => matches!(predicate, Predicate::NamedNode(nn) if nn == n),
+        }
+    }
+
+    fn match_object_pattern(
+        &self,
+        object: &Object,
+        pattern: &crate::model::pattern::ObjectPattern,
+        solution: &mut Solution,
+    ) -> bool {
+        use crate::model::pattern::ObjectPattern;
+        match pattern {
+            ObjectPattern::Variable(var) => {
+                if let Some(bound_value) = solution.get(var) {
+                    match (object, bound_value) {
+                        (Object::NamedNode(n1), Term::NamedNode(n2)) => n1 == n2,
+                        (Object::BlankNode(b1), Term::BlankNode(b2)) => b1 == b2,
+                        (Object::Literal(l1), Term::Literal(l2)) => l1 == l2,
+                        _ => false,
+                    }
+                } else {
+                    solution.bindings.insert(var.clone(), Term::from_object(object));
+                    true
+                }
+            }
+            ObjectPattern::NamedNode(n) => matches!(object, Object::NamedNode(nn) if nn == n),
+            ObjectPattern::BlankNode(b) => matches!(object, Object::BlankNode(bn) if bn == b),
+            ObjectPattern::Literal(l) => matches!(object, Object::Literal(lit) if lit == l),
         }
     }
 

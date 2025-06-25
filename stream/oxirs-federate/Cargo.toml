@@ -56,6 +56,7 @@ redis = { version = "0.27", features = ["aio", "tokio-comp"], optional = true }
 lru = { version = "0.12", optional = true }
 moka = { version = "0.12", features = ["future"], optional = true }
 bloom = { version = "0.3", optional = true }
+regex = "1.11"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

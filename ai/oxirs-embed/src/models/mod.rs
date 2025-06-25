@@ -7,10 +7,10 @@
 //! - RotatE: Rotation-based embeddings
 //! - TuckER: Tucker decomposition based embeddings (optional)
 
-pub mod transe;
 pub mod complex;
 pub mod distmult;
 pub mod rotate;
+pub mod transe;
 
 #[cfg(feature = "tucker")]
 pub mod tucker;
@@ -22,10 +22,10 @@ pub mod base;
 pub mod common;
 
 // Re-export all models
-pub use transe::TransE;
 pub use complex::ComplEx;
 pub use distmult::DistMult;
 pub use rotate::RotatE;
+pub use transe::TransE;
 
 #[cfg(feature = "tucker")]
 pub use tucker::TuckER;

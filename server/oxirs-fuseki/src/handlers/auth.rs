@@ -1,20 +1,23 @@
 //! Authentication and user management handlers
 
 use crate::{
-    auth::{AuthService, AuthUser, AuthResult, LoginRequest, LoginResponse, User, Permission},
+    auth::{AuthResult, AuthService, AuthUser, LoginRequest, LoginResponse, Permission, User},
     config::UserConfig,
     error::{FusekiError, FusekiResult},
     server::AppState,
 };
 use axum::{
     extract::{Query, State},
-    http::{StatusCode, HeaderMap, header::{SET_COOKIE, AUTHORIZATION}},
-    response::{Json, IntoResponse, Response},
+    http::{
+        header::{AUTHORIZATION, SET_COOKIE},
+        HeaderMap, StatusCode,
+    },
+    response::{IntoResponse, Json, Response},
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Instant;
-use tracing::{info, warn, error, debug, instrument};
+use tracing::{debug, error, info, instrument, warn};
 
 /// User registration request
 #[derive(Debug, Deserialize)]
@@ -73,7 +76,9 @@ pub async fn login_handler(
     let start_time = Instant::now();
 
     // Check if authentication is enabled
-    let auth_service = state.auth_service.as_ref()
+    let auth_service = state
+        .auth_service
+        .as_ref()
         .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
 
     // Record authentication attempt
@@ -82,9 +87,14 @@ pub async fn login_handler(
     }
 
     // Authenticate user
-    let auth_result = auth_service.authenticate_user(&request.username, &request.password).await
+    let auth_result = auth_service
+        .authenticate_user(&request.username, &request.password)
+        .await
         .map_err(|e| {
-            warn!("Authentication error for user '{}': {}", request.username, e);
+            warn!(
+                "Authentication error for user '{}': {}",
+                request.username, e
+            );
             FusekiError::authentication("Authentication failed")
         })?;
 
@@ -102,9 +112,10 @@ pub async fn login_handler(
                 #[cfg(feature = "auth")]
                 {
                     let token = auth_service.generate_jwt_token(&user)?;
-                    let expires_at = chrono::Utc::now() + chrono::Duration::seconds(
-                        state.config.security.jwt.as_ref().unwrap().expiration_secs as i64
-                    );
+                    let expires_at = chrono::Utc::now()
+                        + chrono::Duration::seconds(
+                            state.config.security.jwt.as_ref().unwrap().expiration_secs as i64,
+                        );
                     (Some(token), Some(expires_at))
                 }
                 #[cfg(not(feature = "auth"))]
@@ -114,9 +125,8 @@ pub async fn login_handler(
             } else {
                 // Create session
                 let session_id = auth_service.create_session(user.clone()).await?;
-                let expires_at = chrono::Utc::now() + chrono::Duration::seconds(
-                    state.config.security.session.timeout_secs as i64
-                );
+                let expires_at = chrono::Utc::now()
+                    + chrono::Duration::seconds(state.config.security.session.timeout_secs as i64);
                 (Some(session_id), Some(expires_at))
             };
 
@@ -135,10 +145,10 @@ pub async fn login_handler(
                 if let Some(session_id) = response.token {
                     let cookie_value = format!(
                         "session_id={}; HttpOnly; Secure; SameSite=Strict; Max-Age={}",
-                        session_id,
-                        state.config.security.session.timeout_secs
+                        session_id, state.config.security.session.timeout_secs
                     );
-                    resp.headers_mut().insert(SET_COOKIE, cookie_value.parse().unwrap());
+                    resp.headers_mut()
+                        .insert(SET_COOKIE, cookie_value.parse().unwrap());
                 }
             }
 
@@ -152,7 +162,7 @@ pub async fn login_handler(
         }
         AuthResult::Unauthenticated => {
             warn!("Failed login attempt for user '{}'", request.username);
-            
+
             let response = LoginResponse {
                 success: false,
                 token: None,
@@ -165,7 +175,7 @@ pub async fn login_handler(
         }
         AuthResult::Locked => {
             warn!("Login attempt for locked user '{}'", request.username);
-            
+
             let response = LoginResponse {
                 success: false,
                 token: None,
@@ -178,7 +188,7 @@ pub async fn login_handler(
         }
         AuthResult::Forbidden => {
             warn!("Login attempt for disabled user '{}'", request.username);
-            
+
             let response = LoginResponse {
                 success: false,
                 token: None,
@@ -190,8 +200,11 @@ pub async fn login_handler(
             Ok((StatusCode::FORBIDDEN, Json(response)).into_response())
         }
         _ => {
-            error!("Unexpected authentication result for user '{}'", request.username);
-            
+            error!(
+                "Unexpected authentication result for user '{}'",
+                request.username
+            );
+
             let response = LoginResponse {
                 success: false,
                 token: None,
@@ -211,7 +224,9 @@ pub async fn logout_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Response, FusekiError> {
-    let auth_service = state.auth_service.as_ref()
+    let auth_service = state
+        .auth_service
+        .as_ref()
         .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
 
     // Extract session ID from cookie or token
@@ -220,16 +235,19 @@ pub async fn logout_handler(
     if let Some(session_id) = session_id {
         // Invalidate session
         auth_service.logout(&session_id).await?;
-        
+
         // Clear session cookie
         let mut resp = Json(serde_json::json!({
             "success": true,
             "message": "Logged out successfully"
-        })).into_response();
+        }))
+        .into_response();
 
         resp.headers_mut().insert(
             SET_COOKIE,
-            "session_id=; HttpOnly; Secure; SameSite=Strict; Max-Age=0".parse().unwrap()
+            "session_id=; HttpOnly; Secure; SameSite=Strict; Max-Age=0"
+                .parse()
+                .unwrap(),
         );
 
         info!("User logged out successfully");
@@ -238,7 +256,8 @@ pub async fn logout_handler(
         Ok(Json(serde_json::json!({
             "success": true,
             "message": "No active session found"
-        })).into_response())
+        }))
+        .into_response())
     }
 }
 
@@ -249,7 +268,7 @@ pub async fn user_info_handler(
     auth_user: AuthUser,
 ) -> Result<Json<UserInfoResponse>, FusekiError> {
     let user = auth_user.0;
-    
+
     let response = UserInfoResponse {
         username: user.username.clone(),
         email: user.email.clone(),
@@ -273,15 +292,19 @@ pub async fn list_users_handler(
 
     // Check admin permissions
     if !user.permissions.contains(&Permission::UserManagement) {
-        return Err(FusekiError::forbidden("Insufficient permissions to list users"));
+        return Err(FusekiError::forbidden(
+            "Insufficient permissions to list users",
+        ));
     }
 
-    let auth_service = state.auth_service.as_ref()
+    let auth_service = state
+        .auth_service
+        .as_ref()
         .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
 
     // Get all users
     let users_map = auth_service.list_users().await;
-    
+
     let mut users = Vec::new();
     for (username, user_config) in users_map {
         users.push(UserSummary {
@@ -297,12 +320,12 @@ pub async fn list_users_handler(
 
     let total_count = users.len();
 
-    info!("Admin user '{}' listed {} users", user.username, total_count);
+    info!(
+        "Admin user '{}' listed {} users",
+        user.username, total_count
+    );
 
-    Ok(Json(UsersListResponse {
-        users,
-        total_count,
-    }))
+    Ok(Json(UsersListResponse { users, total_count }))
 }
 
 /// Register new user (admin only)
@@ -316,10 +339,14 @@ pub async fn register_user_handler(
 
     // Check admin permissions
     if !admin_user.permissions.contains(&Permission::UserManagement) {
-        return Err(FusekiError::forbidden("Insufficient permissions to create users"));
+        return Err(FusekiError::forbidden(
+            "Insufficient permissions to create users",
+        ));
     }
 
-    let auth_service = state.auth_service.as_ref()
+    let auth_service = state
+        .auth_service
+        .as_ref()
         .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
 
     // Validate request
@@ -327,7 +354,10 @@ pub async fn register_user_handler(
 
     // Check if user already exists
     if auth_service.get_user(&request.username).await.is_some() {
-        return Err(FusekiError::conflict(format!("User '{}' already exists", request.username)));
+        return Err(FusekiError::conflict(format!(
+            "User '{}' already exists",
+            request.username
+        )));
     }
 
     // Hash password
@@ -346,7 +376,9 @@ pub async fn register_user_handler(
     };
 
     // Add user
-    auth_service.upsert_user(request.username.clone(), user_config).await?;
+    auth_service
+        .upsert_user(request.username.clone(), user_config)
+        .await?;
 
     // Compute permissions for response - simplified for now
     let user_config = auth_service.get_user(&request.username).await.unwrap();
@@ -362,7 +394,10 @@ pub async fn register_user_handler(
         account_status: "active".to_string(),
     };
 
-    info!("Admin user '{}' created new user '{}'", admin_user.username, request.username);
+    info!(
+        "Admin user '{}' created new user '{}'",
+        admin_user.username, request.username
+    );
 
     Ok(Json(response))
 }
@@ -376,11 +411,15 @@ pub async fn change_password_handler(
 ) -> Result<Json<serde_json::Value>, FusekiError> {
     let user = auth_user.0;
 
-    let auth_service = state.auth_service.as_ref()
+    let auth_service = state
+        .auth_service
+        .as_ref()
         .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
 
     // Get current user config
-    let mut user_config = auth_service.get_user(&user.username).await
+    let mut user_config = auth_service
+        .get_user(&user.username)
+        .await
         .ok_or_else(|| FusekiError::not_found("User not found"))?;
 
     // Verify current password
@@ -396,7 +435,9 @@ pub async fn change_password_handler(
     user_config.password_hash = new_password_hash;
 
     // Update user
-    auth_service.upsert_user(user.username.clone(), user_config).await?;
+    auth_service
+        .upsert_user(user.username.clone(), user_config)
+        .await?;
 
     info!("User '{}' changed their password", user.username);
 
@@ -417,7 +458,9 @@ pub async fn delete_user_handler(
 
     // Check admin permissions
     if !admin_user.permissions.contains(&Permission::UserManagement) {
-        return Err(FusekiError::forbidden("Insufficient permissions to delete users"));
+        return Err(FusekiError::forbidden(
+            "Insufficient permissions to delete users",
+        ));
     }
 
     // Prevent self-deletion
@@ -425,17 +468,25 @@ pub async fn delete_user_handler(
         return Err(FusekiError::bad_request("Cannot delete your own account"));
     }
 
-    let auth_service = state.auth_service.as_ref()
+    let auth_service = state
+        .auth_service
+        .as_ref()
         .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
 
     // Delete user
     let deleted = auth_service.remove_user(&username).await?;
 
     if deleted {
-        info!("Admin user '{}' deleted user '{}'", admin_user.username, username);
+        info!(
+            "Admin user '{}' deleted user '{}'",
+            admin_user.username, username
+        );
         Ok(StatusCode::NO_CONTENT)
     } else {
-        Err(FusekiError::not_found(format!("User '{}' not found", username)))
+        Err(FusekiError::not_found(format!(
+            "User '{}' not found",
+            username
+        )))
     }
 }
 
@@ -475,11 +526,19 @@ fn validate_user_registration(request: &RegisterUserRequest) -> FusekiResult<()>
     }
 
     if request.username.len() > 64 {
-        return Err(FusekiError::bad_request("Username too long (max 64 characters)"));
+        return Err(FusekiError::bad_request(
+            "Username too long (max 64 characters)",
+        ));
     }
 
-    if !request.username.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.') {
-        return Err(FusekiError::bad_request("Username contains invalid characters"));
+    if !request
+        .username
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.')
+    {
+        return Err(FusekiError::bad_request(
+            "Username contains invalid characters",
+        ));
     }
 
     // Validate password
@@ -509,11 +568,15 @@ fn validate_user_registration(request: &RegisterUserRequest) -> FusekiResult<()>
 /// Validate password strength
 fn validate_password_strength(password: &str) -> FusekiResult<()> {
     if password.len() < 8 {
-        return Err(FusekiError::bad_request("Password must be at least 8 characters long"));
+        return Err(FusekiError::bad_request(
+            "Password must be at least 8 characters long",
+        ));
     }
 
     if password.len() > 128 {
-        return Err(FusekiError::bad_request("Password too long (max 128 characters)"));
+        return Err(FusekiError::bad_request(
+            "Password too long (max 128 characters)",
+        ));
     }
 
     let has_uppercase = password.chars().any(|c| c.is_uppercase());
@@ -528,7 +591,7 @@ fn validate_password_strength(password: &str) -> FusekiResult<()> {
 
     if requirements_met < 3 {
         return Err(FusekiError::bad_request(
-            "Password must contain at least 3 of: uppercase, lowercase, digit, special character"
+            "Password must contain at least 3 of: uppercase, lowercase, digit, special character",
         ));
     }
 
@@ -537,8 +600,7 @@ fn validate_password_strength(password: &str) -> FusekiResult<()> {
 
 /// Check if role is valid
 fn is_valid_role(role: &str) -> bool {
-    matches!(role, "admin" | "user" | "reader" | "writer") || 
-    role.starts_with("dataset:")
+    matches!(role, "admin" | "user" | "reader" | "writer") || role.starts_with("dataset:")
 }
 
 #[cfg(test)]

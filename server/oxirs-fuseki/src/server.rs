@@ -2,20 +2,20 @@
 
 use crate::{
     auth::{AuthService, AuthUser},
-    config::{ServerConfig, SecurityConfig, MonitoringConfig},
+    config::{MonitoringConfig, SecurityConfig, ServerConfig},
     error::{FusekiError, FusekiResult},
     handlers::{self, SubscriptionManager},
     metrics::{MetricsService, RequestMetrics},
-    performance::PerformanceService,
     optimization::QueryOptimizer,
+    performance::PerformanceService,
     store::Store,
 };
 use axum::{
     extract::{MatchedPath, Request, State},
-    http::{Method, StatusCode, HeaderMap},
+    http::{HeaderMap, Method, StatusCode},
     middleware::{self, Next},
     response::{Html, Json, Response},
-    routing::{get, post, delete},
+    routing::{delete, get, post},
     Router,
 };
 use std::collections::HashMap;
@@ -25,14 +25,14 @@ use std::time::{Duration, Instant};
 use tokio::signal;
 use tower::ServiceBuilder;
 use tower_http::{
-    cors::{Any, CorsLayer},
-    trace::TraceLayer,
-    timeout::TimeoutLayer,
     compression::CompressionLayer,
+    cors::{Any, CorsLayer},
     request_id::{MakeRequestId, RequestId, SetRequestIdLayer},
     sensitive_headers::SetSensitiveRequestHeadersLayer,
+    timeout::TimeoutLayer,
+    trace::TraceLayer,
 };
-use tracing::{info, warn, error, debug, Span};
+use tracing::{debug, error, info, warn, Span};
 use uuid::Uuid;
 
 #[cfg(feature = "rate-limit")]
@@ -54,7 +54,9 @@ pub struct Runtime {
     query_optimizer: Option<Arc<QueryOptimizer>>,
     subscription_manager: Option<Arc<SubscriptionManager>>,
     #[cfg(feature = "rate-limit")]
-    rate_limiter: Option<Arc<RateLimiter<String, governor::DefaultDirectRateLimiter, governor::clock::DefaultClock>>>,
+    rate_limiter: Option<
+        Arc<RateLimiter<String, governor::DefaultDirectRateLimiter, governor::clock::DefaultClock>>,
+    >,
     #[cfg(feature = "hot-reload")]
     config_watcher: Option<watch::Receiver<ServerConfig>>,
 }
@@ -116,8 +118,13 @@ impl Runtime {
         #[cfg(feature = "rate-limit")]
         {
             if let Some(rate_limit_config) = &self.config.performance.rate_limiting {
-                info!("Initializing rate limiter: {} requests per second", rate_limit_config.requests_per_second);
-                let quota = Quota::per_second(NonZeroU32::new(rate_limit_config.requests_per_second).unwrap());
+                info!(
+                    "Initializing rate limiter: {} requests per second",
+                    rate_limit_config.requests_per_second
+                );
+                let quota = Quota::per_second(
+                    NonZeroU32::new(rate_limit_config.requests_per_second).unwrap(),
+                );
                 let limiter = RateLimiter::dashmap(quota);
                 self.rate_limiter = Some(Arc::new(limiter));
             }
@@ -143,7 +150,7 @@ impl Runtime {
 
         let addr = self.addr;
         let config = self.config.clone();
-        
+
         // Create application state
         let app_state = AppState {
             store: self.store,
@@ -156,15 +163,16 @@ impl Runtime {
             #[cfg(feature = "rate-limit")]
             rate_limiter: self.rate_limiter.clone(),
         };
-        
+
         // Start subscription monitor for WebSocket notifications
         if let Some(subscription_manager) = &self.subscription_manager {
             handlers::websocket::start_subscription_monitor(
                 subscription_manager.as_ref().clone(),
                 app_state.clone(),
-            ).await;
+            )
+            .await;
         }
-        
+
         // Build the application with comprehensive middleware
         let app = self.build_app(app_state).await?;
 
@@ -176,8 +184,9 @@ impl Runtime {
             .await
             .map_err(|e| FusekiError::internal(format!("Failed to bind to {}: {}", addr, e)))?;
 
-        let graceful_shutdown = Self::create_graceful_shutdown(config.server.graceful_shutdown_timeout_secs);
-        
+        let graceful_shutdown =
+            Self::create_graceful_shutdown(config.server.graceful_shutdown_timeout_secs);
+
         axum::serve(listener, app)
             .with_graceful_shutdown(graceful_shutdown)
             .await
@@ -193,14 +202,28 @@ impl Runtime {
 
         // Core SPARQL Protocol routes
         app = app
-            .route("/sparql", get(handlers::sparql::query_handler).post(handlers::sparql::query_handler))
+            .route(
+                "/sparql",
+                get(handlers::sparql::query_handler).post(handlers::sparql::query_handler),
+            )
             .route("/update", post(handlers::sparql::update_handler))
-            .route("/graph-store", get(handlers::graph::graph_store_handler).post(handlers::graph::graph_store_handler).put(handlers::graph::graph_store_handler).delete(handlers::graph::graph_store_handler));
+            .route(
+                "/graph-store",
+                get(handlers::graph::graph_store_handler)
+                    .post(handlers::graph::graph_store_handler)
+                    .put(handlers::graph::graph_store_handler)
+                    .delete(handlers::graph::graph_store_handler),
+            );
 
         // Dataset management routes
         app = app
             .route("/$/datasets", get(handlers::admin::list_datasets))
-            .route("/$/datasets/:name", get(handlers::admin::get_dataset).post(handlers::admin::create_dataset).delete(handlers::admin::delete_dataset));
+            .route(
+                "/$/datasets/:name",
+                get(handlers::admin::get_dataset)
+                    .post(handlers::admin::create_dataset)
+                    .delete(handlers::admin::delete_dataset),
+            );
 
         // Server management routes
         app = app
@@ -222,13 +245,34 @@ impl Runtime {
         // OAuth2/OIDC authentication routes (if OAuth2 is configured)
         if self.config.security.oauth.is_some() {
             app = app
-                .route("/auth/oauth2/authorize", get(handlers::oauth2::initiate_oauth2_flow))
-                .route("/auth/oauth2/callback", get(handlers::oauth2::handle_oauth2_callback))
-                .route("/auth/oauth2/refresh", post(handlers::oauth2::refresh_oauth2_token))
-                .route("/auth/oauth2/userinfo", get(handlers::oauth2::get_oauth2_user_info))
-                .route("/auth/oauth2/validate", get(handlers::oauth2::validate_oauth2_token))
-                .route("/auth/oauth2/config", get(handlers::oauth2::get_oauth2_config))
-                .route("/auth/oauth2/.well-known/openid_configuration", get(handlers::oauth2::oauth2_discovery));
+                .route(
+                    "/auth/oauth2/authorize",
+                    get(handlers::oauth2::initiate_oauth2_flow),
+                )
+                .route(
+                    "/auth/oauth2/callback",
+                    get(handlers::oauth2::handle_oauth2_callback),
+                )
+                .route(
+                    "/auth/oauth2/refresh",
+                    post(handlers::oauth2::refresh_oauth2_token),
+                )
+                .route(
+                    "/auth/oauth2/userinfo",
+                    get(handlers::oauth2::get_oauth2_user_info),
+                )
+                .route(
+                    "/auth/oauth2/validate",
+                    get(handlers::oauth2::validate_oauth2_token),
+                )
+                .route(
+                    "/auth/oauth2/config",
+                    get(handlers::oauth2::get_oauth2_config),
+                )
+                .route(
+                    "/auth/oauth2/.well-known/openid_configuration",
+                    get(handlers::oauth2::oauth2_discovery),
+                );
         }
 
         // SAML 2.0 authentication routes (if SAML is configured)
@@ -236,20 +280,38 @@ impl Runtime {
             app = app
                 .route("/auth/saml/login", get(handlers::saml::initiate_saml_sso))
                 .route("/auth/saml/acs", post(handlers::saml::handle_saml_acs))
-                .route("/auth/saml/slo", get(handlers::saml::handle_saml_slo).post(handlers::saml::handle_saml_slo))
-                .route("/auth/saml/logout", get(handlers::saml::initiate_saml_logout))
-                .route("/auth/saml/metadata", get(handlers::saml::get_saml_metadata));
+                .route(
+                    "/auth/saml/slo",
+                    get(handlers::saml::handle_saml_slo).post(handlers::saml::handle_saml_slo),
+                )
+                .route(
+                    "/auth/saml/logout",
+                    get(handlers::saml::initiate_saml_logout),
+                )
+                .route(
+                    "/auth/saml/metadata",
+                    get(handlers::saml::get_saml_metadata),
+                );
         }
 
         // Multi-Factor Authentication routes (if MFA is enabled)
         if self.config.security.mfa.enabled {
             app = app
                 .route("/auth/mfa/enroll", post(handlers::mfa::enroll_mfa))
-                .route("/auth/mfa/challenge/:type", post(handlers::mfa::create_mfa_challenge))
+                .route(
+                    "/auth/mfa/challenge/:type",
+                    post(handlers::mfa::create_mfa_challenge),
+                )
                 .route("/auth/mfa/verify", post(handlers::mfa::verify_mfa))
                 .route("/auth/mfa/status", get(handlers::mfa::get_mfa_status))
-                .route("/auth/mfa/disable/:type", delete(handlers::mfa::disable_mfa))
-                .route("/auth/mfa/backup-codes", post(handlers::mfa::regenerate_backup_codes));
+                .route(
+                    "/auth/mfa/disable/:type",
+                    delete(handlers::mfa::disable_mfa),
+                )
+                .route(
+                    "/auth/mfa/backup-codes",
+                    post(handlers::mfa::regenerate_backup_codes),
+                );
         }
 
         // Health check routes
@@ -269,7 +331,10 @@ impl Runtime {
             app = app
                 .route("/$/performance", get(performance_info_handler))
                 .route("/$/performance/cache", get(cache_stats_handler))
-                .route("/$/performance/cache", axum::routing::delete(clear_cache_handler));
+                .route(
+                    "/$/performance/cache",
+                    axum::routing::delete(clear_cache_handler),
+                );
         }
 
         // Query optimization routes (if enabled)
@@ -277,7 +342,10 @@ impl Runtime {
             app = app
                 .route("/$/optimization", get(optimization_stats_handler))
                 .route("/$/optimization/plans", get(optimization_plans_handler))
-                .route("/$/optimization/stats", get(optimization_detailed_stats_handler));
+                .route(
+                    "/$/optimization/stats",
+                    get(optimization_detailed_stats_handler),
+                );
         }
 
         // WebSocket routes for live query subscriptions
@@ -296,7 +364,11 @@ impl Runtime {
     }
 
     /// Apply comprehensive middleware stack
-    async fn apply_middleware_stack(&self, app: Router, state: AppState) -> FusekiResult<Router<AppState>> {
+    async fn apply_middleware_stack(
+        &self,
+        app: Router,
+        state: AppState,
+    ) -> FusekiResult<Router<AppState>> {
         let mut service_builder = ServiceBuilder::new();
 
         // 1. Request ID (first - needed for tracing)
@@ -304,7 +376,11 @@ impl Runtime {
 
         // 2. Sensitive headers protection
         service_builder = service_builder.layer(SetSensitiveRequestHeadersLayer::new([
-            "authorization", "cookie", "set-cookie", "x-api-key", "x-auth-token"
+            "authorization",
+            "cookie",
+            "set-cookie",
+            "x-api-key",
+            "x-auth-token",
         ]));
 
         // 3. Timeout (early in stack)
@@ -317,7 +393,13 @@ impl Runtime {
         // 5. CORS (if enabled)
         if self.config.server.cors {
             let cors = CorsLayer::new()
-                .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::OPTIONS])
+                .allow_methods([
+                    Method::GET,
+                    Method::POST,
+                    Method::PUT,
+                    Method::DELETE,
+                    Method::OPTIONS,
+                ])
                 .allow_headers(Any)
                 .allow_origin(Any)
                 .allow_credentials(true);
@@ -325,28 +407,33 @@ impl Runtime {
         }
 
         // 6. Tracing (for request logging)
-        service_builder = service_builder.layer(
-            TraceLayer::new_for_http()
-                .make_span_with(|request: &Request<_>| {
-                    let matched_path = request
-                        .extensions()
-                        .get::<MatchedPath>()
-                        .map(MatchedPath::as_str);
+        service_builder = service_builder.layer(TraceLayer::new_for_http().make_span_with(
+            |request: &Request<_>| {
+                let matched_path = request
+                    .extensions()
+                    .get::<MatchedPath>()
+                    .map(MatchedPath::as_str);
 
-                    tracing::info_span!(
-                        "http_request",
-                        method = ?request.method(),
-                        matched_path,
-                        some_other_field = tracing::field::Empty,
-                    )
-                })
-        );
+                tracing::info_span!(
+                    "http_request",
+                    method = ?request.method(),
+                    matched_path,
+                    some_other_field = tracing::field::Empty,
+                )
+            },
+        ));
 
         // Apply the service builder to the app with state
         let app_with_middleware = app
             .layer(service_builder)
-            .layer(middleware::from_fn_with_state(state.clone(), metrics_middleware))
-            .layer(middleware::from_fn_with_state(state.clone(), error_handling_middleware))
+            .layer(middleware::from_fn_with_state(
+                state.clone(),
+                metrics_middleware,
+            ))
+            .layer(middleware::from_fn_with_state(
+                state.clone(),
+                error_handling_middleware,
+            ))
             .with_state(state);
 
         // Add rate limiting middleware if enabled
@@ -365,7 +452,7 @@ impl Runtime {
     /// Graceful shutdown with configurable timeout
     async fn create_graceful_shutdown(graceful_shutdown_timeout_secs: u64) {
         let shutdown_timeout = Duration::from_secs(graceful_shutdown_timeout_secs);
-        
+
         let ctrl_c = async {
             signal::ctrl_c()
                 .await
@@ -393,7 +480,10 @@ impl Runtime {
         }
 
         // Allow some time for graceful shutdown
-        info!("Allowing {}s for graceful shutdown...", shutdown_timeout.as_secs());
+        info!(
+            "Allowing {}s for graceful shutdown...",
+            shutdown_timeout.as_secs()
+        );
         tokio::time::sleep(shutdown_timeout).await;
         warn!("Graceful shutdown timeout reached, forcing exit");
     }
@@ -410,7 +500,9 @@ pub struct AppState {
     pub query_optimizer: Option<Arc<QueryOptimizer>>,
     pub subscription_manager: Option<Arc<SubscriptionManager>>,
     #[cfg(feature = "rate-limit")]
-    pub rate_limiter: Option<Arc<RateLimiter<String, governor::DefaultDirectRateLimiter, governor::clock::DefaultClock>>>,
+    pub rate_limiter: Option<
+        Arc<RateLimiter<String, governor::DefaultDirectRateLimiter, governor::clock::DefaultClock>>,
+    >,
 }
 
 /// Request UUID generator for request IDs
@@ -420,7 +512,9 @@ struct MakeRequestUuid;
 impl MakeRequestId for MakeRequestUuid {
     fn make_request_id<B>(&mut self, _request: &axum::http::Request<B>) -> Option<RequestId> {
         let request_id = Uuid::new_v4().to_string();
-        axum::http::HeaderValue::from_str(&request_id).ok().map(RequestId::from)
+        axum::http::HeaderValue::from_str(&request_id)
+            .ok()
+            .map(RequestId::from)
     }
 }
 
@@ -431,14 +525,14 @@ async fn error_handling_middleware(
     next: Next,
 ) -> Response {
     let response = next.run(request).await;
-    
+
     // Log error responses for debugging
     if response.status().is_server_error() {
         error!("Server error response: {:?}", response.status());
     } else if response.status().is_client_error() {
         debug!("Client error response: {:?}", response.status());
     }
-    
+
     response
 }
 
@@ -451,9 +545,9 @@ async fn metrics_middleware(
     let start_time = Instant::now();
     let method = request.method().clone();
     let path = request.uri().path().to_string();
-    
+
     let response = next.run(request).await;
-    
+
     // Record metrics if metrics service is available
     if let Some(metrics_service) = &state.metrics_service {
         let request_metrics = RequestMetrics {
@@ -461,28 +555,25 @@ async fn metrics_middleware(
             path,
             status: response.status().as_u16(),
             duration: start_time.elapsed(),
-            bytes_sent: 0, // Would need to capture actual bytes
+            bytes_sent: 0,     // Would need to capture actual bytes
             bytes_received: 0, // Would need to capture actual bytes
         };
-        
+
         metrics_service.record_request(request_metrics).await;
     }
-    
+
     response
 }
 
 /// Rate limiting middleware
 #[cfg(feature = "rate-limit")]
-async fn rate_limiting_middleware(
-    request: Request,
-    next: Next,
-) -> Response {
+async fn rate_limiting_middleware(request: Request, next: Next) -> Response {
     // Extract client IP or use a default key
     let client_key = extract_client_identifier(&request);
-    
+
     // This is a simplified implementation
     // In production, you'd want to get the rate limiter from state
-    
+
     let response = next.run(request).await;
     response
 }
@@ -497,13 +588,13 @@ fn extract_client_identifier(request: &Request) -> String {
             }
         }
     }
-    
+
     if let Some(real_ip) = request.headers().get("x-real-ip") {
         if let Ok(ip_str) = real_ip.to_str() {
             return ip_str.to_string();
         }
     }
-    
+
     // Fallback to connection info or default
     "unknown".to_string()
 }
@@ -542,82 +633,119 @@ async fn ping_handler() -> &'static str {
 }
 
 /// Server information handler
-pub async fn server_info_handler(State(state): State<AppState>) -> Json<HashMap<String, serde_json::Value>> {
+pub async fn server_info_handler(
+    State(state): State<AppState>,
+) -> Json<HashMap<String, serde_json::Value>> {
     let mut info = HashMap::new();
     info.insert("name".to_string(), serde_json::json!("OxiRS Fuseki"));
-    info.insert("version".to_string(), serde_json::json!(env!("CARGO_PKG_VERSION")));
-    info.insert("datasets".to_string(), serde_json::json!(state.config.datasets.len()));
-    info.insert("authentication".to_string(), serde_json::json!(state.config.security.authentication.enabled));
-    info.insert("metrics".to_string(), serde_json::json!(state.config.monitoring.metrics.enabled));
-    
+    info.insert(
+        "version".to_string(),
+        serde_json::json!(env!("CARGO_PKG_VERSION")),
+    );
+    info.insert(
+        "datasets".to_string(),
+        serde_json::json!(state.config.datasets.len()),
+    );
+    info.insert(
+        "authentication".to_string(),
+        serde_json::json!(state.config.security.authentication.enabled),
+    );
+    info.insert(
+        "metrics".to_string(),
+        serde_json::json!(state.config.monitoring.metrics.enabled),
+    );
+
     if let Some(metrics_service) = &state.metrics_service {
         let summary = metrics_service.get_summary().await;
-        info.insert("uptime_seconds".to_string(), serde_json::json!(summary.uptime_seconds));
-        info.insert("requests_total".to_string(), serde_json::json!(summary.requests_total));
+        info.insert(
+            "uptime_seconds".to_string(),
+            serde_json::json!(summary.uptime_seconds),
+        );
+        info.insert(
+            "requests_total".to_string(),
+            serde_json::json!(summary.requests_total),
+        );
     }
-    
+
     Json(info)
 }
 
 /// Performance information handler
-pub async fn performance_info_handler(State(state): State<AppState>) -> Result<Json<serde_json::Value>, FusekiError> {
+pub async fn performance_info_handler(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, FusekiError> {
     if let Some(performance_service) = &state.performance_service {
         let metrics = performance_service.get_metrics().await;
         let cache_stats = performance_service.get_cache_stats().await;
-        
+
         let mut response = serde_json::to_value(metrics)
             .map_err(|e| FusekiError::internal(format!("Failed to serialize metrics: {}", e)))?;
-            
+
         if let serde_json::Value::Object(ref mut map) = response {
             for (key, value) in cache_stats {
                 map.insert(key, value);
             }
         }
-        
+
         Ok(Json(response))
     } else {
-        Err(FusekiError::service_unavailable("Performance service not available"))
+        Err(FusekiError::service_unavailable(
+            "Performance service not available",
+        ))
     }
 }
 
 /// Cache statistics handler
-pub async fn cache_stats_handler(State(state): State<AppState>) -> Result<Json<HashMap<String, serde_json::Value>>, FusekiError> {
+pub async fn cache_stats_handler(
+    State(state): State<AppState>,
+) -> Result<Json<HashMap<String, serde_json::Value>>, FusekiError> {
     if let Some(performance_service) = &state.performance_service {
         let stats = performance_service.get_cache_stats().await;
         Ok(Json(stats))
     } else {
-        Err(FusekiError::service_unavailable("Performance service not available"))
+        Err(FusekiError::service_unavailable(
+            "Performance service not available",
+        ))
     }
 }
 
 /// Clear cache handler
-pub async fn clear_cache_handler(State(state): State<AppState>) -> Result<Json<serde_json::Value>, FusekiError> {
+pub async fn clear_cache_handler(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, FusekiError> {
     if let Some(performance_service) = &state.performance_service {
         performance_service.clear_caches().await;
-        
+
         Ok(Json(serde_json::json!({
             "success": true,
             "message": "All caches cleared successfully",
             "timestamp": chrono::Utc::now()
         })))
     } else {
-        Err(FusekiError::service_unavailable("Performance service not available"))
+        Err(FusekiError::service_unavailable(
+            "Performance service not available",
+        ))
     }
 }
 
 /// Query optimization statistics handler
-pub async fn optimization_stats_handler(State(state): State<AppState>) -> Result<Json<serde_json::Value>, FusekiError> {
+pub async fn optimization_stats_handler(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, FusekiError> {
     if let Some(query_optimizer) = &state.query_optimizer {
         let stats = query_optimizer.get_optimization_stats().await;
-        
+
         let mut response = serde_json::Map::new();
         response.insert("optimization_enabled".to_string(), serde_json::json!(true));
-        response.insert("timestamp".to_string(), serde_json::json!(chrono::Utc::now()));
-        
+        response.insert(
+            "timestamp".to_string(),
+            serde_json::json!(chrono::Utc::now()),
+        );
+
         for (key, value) in stats {
             response.insert(key, value);
         }
-        
+
         Ok(Json(serde_json::Value::Object(response)))
     } else {
         Ok(Json(serde_json::json!({
@@ -629,7 +757,9 @@ pub async fn optimization_stats_handler(State(state): State<AppState>) -> Result
 }
 
 /// Optimization plans handler
-pub async fn optimization_plans_handler(State(state): State<AppState>) -> Result<Json<serde_json::Value>, FusekiError> {
+pub async fn optimization_plans_handler(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, FusekiError> {
     if let Some(_query_optimizer) = &state.query_optimizer {
         // Return sample optimization plan information
         Ok(Json(serde_json::json!({
@@ -639,22 +769,26 @@ pub async fn optimization_plans_handler(State(state): State<AppState>) -> Result
             "most_used_plans": [],
             "optimization_types": [
                 "INDEX_OPTIMIZATION",
-                "JOIN_OPTIMIZATION", 
+                "JOIN_OPTIMIZATION",
                 "PARALLELIZATION",
                 "COST_BASED_OPTIMIZATION"
             ],
             "timestamp": chrono::Utc::now()
         })))
     } else {
-        Err(FusekiError::service_unavailable("Query optimizer not available"))
+        Err(FusekiError::service_unavailable(
+            "Query optimizer not available",
+        ))
     }
 }
 
 /// Detailed optimization statistics handler
-pub async fn optimization_detailed_stats_handler(State(state): State<AppState>) -> Result<Json<serde_json::Value>, FusekiError> {
+pub async fn optimization_detailed_stats_handler(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, FusekiError> {
     if let Some(query_optimizer) = &state.query_optimizer {
         let optimization_stats = query_optimizer.get_optimization_stats().await;
-        
+
         Ok(Json(serde_json::json!({
             "optimization_features": {
                 "cost_based_optimization": true,
@@ -680,7 +814,9 @@ pub async fn optimization_detailed_stats_handler(State(state): State<AppState>) 
             "timestamp": chrono::Utc::now()
         })))
     } else {
-        Err(FusekiError::service_unavailable("Query optimizer not available"))
+        Err(FusekiError::service_unavailable(
+            "Query optimizer not available",
+        ))
     }
 }
 
@@ -695,7 +831,7 @@ mod tests {
         let addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
         let store = Store::new().unwrap();
         let config = ServerConfig::default();
-        
+
         Runtime::new(addr, store, config)
     }
 
@@ -709,13 +845,13 @@ mod tests {
     #[tokio::test]
     async fn test_service_initialization() {
         let mut runtime = create_test_runtime();
-        
+
         // Enable services in config
         runtime.config.security.authentication.enabled = true;
         runtime.config.monitoring.metrics.enabled = true;
-        
+
         runtime.initialize_services().await.unwrap();
-        
+
         assert!(runtime.auth_service.is_some());
         assert!(runtime.metrics_service.is_some());
     }
@@ -725,12 +861,12 @@ mod tests {
         #[cfg(feature = "rate-limit")]
         {
             use axum::http::Request;
-            
+
             let request = Request::builder()
                 .header("x-forwarded-for", "192.168.1.1, 10.0.0.1")
                 .body(())
                 .unwrap();
-                
+
             let client_id = extract_client_identifier(&request);
             assert_eq!(client_id, "192.168.1.1");
         }

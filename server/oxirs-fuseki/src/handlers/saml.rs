@@ -2,7 +2,7 @@
 //!
 //! This module provides comprehensive SAML 2.0 Single Sign-On (SSO) authentication
 //! following the Web Browser SSO Profile specification.
-//! 
+//!
 //! Features:
 //! - SP-initiated and IdP-initiated SSO flows
 //! - SAML assertion validation and processing
@@ -12,22 +12,25 @@
 //! - Metadata exchange
 
 use crate::{
-    auth::{AuthService, AuthResult, SamlResponse, User, Permission},
+    auth::{AuthResult, AuthService, Permission, SamlResponse, User},
     error::{FusekiError, FusekiResult},
     server::AppState,
 };
 use axum::{
-    extract::{Query, State, Form},
-    http::{StatusCode, HeaderMap, header::{LOCATION, SET_COOKIE}},
-    response::{Json, IntoResponse, Response, Redirect, Html},
+    extract::{Form, Query, State},
+    http::{
+        header::{LOCATION, SET_COOKIE},
+        HeaderMap, StatusCode,
+    },
+    response::{Html, IntoResponse, Json, Redirect, Response},
 };
+use base64::{engine::general_purpose, Engine as _};
+use chrono::{DateTime, Duration, Utc};
+use flate2::{read::DeflateDecoder, write::DeflateEncoder, Compression};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc, Duration};
-use base64::{Engine as _, engine::general_purpose};
-use flate2::{read::DeflateDecoder, write::DeflateEncoder, Compression};
 use std::io::{Read, Write};
-use tracing::{info, warn, error, debug, instrument};
+use tracing::{debug, error, info, instrument, warn};
 
 /// SAML SSO initiation parameters
 #[derive(Debug, Deserialize)]
@@ -201,26 +204,36 @@ pub async fn initiate_saml_sso(
     State(state): State<AppState>,
     Query(params): Query<SamlSsoParams>,
 ) -> Result<Response, FusekiError> {
-    let auth_service = state.auth_service.as_ref()
+    let auth_service = state
+        .auth_service
+        .as_ref()
         .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
 
     if !auth_service.is_saml_enabled() {
-        return Err(FusekiError::service_unavailable("SAML authentication not configured"));
+        return Err(FusekiError::service_unavailable(
+            "SAML authentication not configured",
+        ));
     }
 
     let target_url = params.target.unwrap_or_else(|| "/".to_string());
     let force_authn = params.force_authn.unwrap_or(false);
-    let relay_state = params.relay_state.unwrap_or_else(|| 
-        general_purpose::STANDARD.encode(serde_json::json!({
-            "target": target_url,
-            "timestamp": Utc::now().timestamp()
-        }).to_string())
-    );
+    let relay_state = params.relay_state.unwrap_or_else(|| {
+        general_purpose::STANDARD.encode(
+            serde_json::json!({
+                "target": target_url,
+                "timestamp": Utc::now().timestamp()
+            })
+            .to_string(),
+        )
+    });
 
-    match auth_service.generate_saml_auth_request(&target_url, force_authn, &relay_state).await {
+    match auth_service
+        .generate_saml_auth_request(&target_url, force_authn, &relay_state)
+        .await
+    {
         Ok((sso_url, request_id)) => {
             info!("Generated SAML SSO request with ID: {}", request_id);
-            
+
             // For HTTP-Redirect binding, redirect directly to IdP
             Ok(Redirect::temporary(&sso_url).into_response())
         }
@@ -237,7 +250,9 @@ pub async fn handle_saml_acs(
     State(state): State<AppState>,
     Form(form_data): Form<SamlAcsParams>,
 ) -> Result<Response, FusekiError> {
-    let auth_service = state.auth_service.as_ref()
+    let auth_service = state
+        .auth_service
+        .as_ref()
         .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
 
     debug!("Processing SAML ACS response");
@@ -254,18 +269,25 @@ pub async fn handle_saml_acs(
     // Map SAML attributes to user
     let user = map_saml_attributes_to_user(&validated_assertion, auth_service).await?;
 
-    match auth_service.complete_saml_authentication(user.clone()).await {
+    match auth_service
+        .complete_saml_authentication(user.clone())
+        .await
+    {
         Ok(AuthResult::Authenticated(authenticated_user)) => {
-            info!("SAML authentication successful for user: {}", authenticated_user.username);
+            info!(
+                "SAML authentication successful for user: {}",
+                authenticated_user.username
+            );
 
             // Create session
-            let session_id = auth_service.create_session(authenticated_user.clone()).await?;
+            let session_id = auth_service
+                .create_session(authenticated_user.clone())
+                .await?;
 
             // Set session cookie
             let cookie_value = format!(
                 "session_id={}; HttpOnly; Secure; SameSite=Strict; Max-Age={}; Path=/",
-                session_id,
-                state.config.security.session.timeout_secs
+                session_id, state.config.security.session.timeout_secs
             );
 
             // Determine redirect URL from RelayState
@@ -273,7 +295,9 @@ pub async fn handle_saml_acs(
                 .unwrap_or_else(|| "/".to_string());
 
             let mut response = Redirect::temporary(&redirect_url).into_response();
-            response.headers_mut().insert(SET_COOKIE, cookie_value.parse().unwrap());
+            response
+                .headers_mut()
+                .insert(SET_COOKIE, cookie_value.parse().unwrap());
 
             Ok(response)
         }
@@ -294,23 +318,25 @@ pub async fn handle_saml_slo(
     State(state): State<AppState>,
     Query(params): Query<SamlSloParams>,
 ) -> Result<Response, FusekiError> {
-    let auth_service = state.auth_service.as_ref()
+    let auth_service = state
+        .auth_service
+        .as_ref()
         .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
 
     if let Some(saml_request) = params.saml_request {
         // Handle SLO request from IdP
         let decoded_request = decode_saml_request(&saml_request)?;
-        
+
         // Extract session index and name ID from the request
         let (session_index, name_id) = extract_slo_info_from_request(&decoded_request)?;
-        
+
         // Logout user based on session index
         let logout_success = auth_service.logout_by_session_index(&session_index).await?;
-        
+
         // Generate SLO response
         let slo_response = generate_saml_slo_response(&name_id, logout_success)?;
         let encoded_response = encode_saml_response(&slo_response)?;
-        
+
         // Redirect back to IdP with SLO response
         let slo_response_url = format!(
             "{}?SAMLResponse={}&RelayState={}",
@@ -318,13 +344,12 @@ pub async fn handle_saml_slo(
             urlencoding::encode(&encoded_response),
             params.relay_state.unwrap_or_default()
         );
-        
+
         Ok(Redirect::temporary(&slo_response_url).into_response())
-        
     } else if let Some(saml_response) = params.saml_response {
         // Handle SLO response from IdP
         let decoded_response = decode_saml_response(&saml_response)?;
-        
+
         if is_slo_response_successful(&decoded_response)? {
             info!("SAML SLO completed successfully");
             Ok(Html("<html><body><h1>Logout Successful</h1><p>You have been logged out.</p></body></html>").into_response())
@@ -339,26 +364,30 @@ pub async fn handle_saml_slo(
 
 /// Get SAML metadata for this service provider
 #[instrument(skip(state))]
-pub async fn get_saml_metadata(
-    State(state): State<AppState>,
-) -> Result<Response, FusekiError> {
-    let auth_service = state.auth_service.as_ref()
+pub async fn get_saml_metadata(State(state): State<AppState>) -> Result<Response, FusekiError> {
+    let auth_service = state
+        .auth_service
+        .as_ref()
         .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
 
     if !auth_service.is_saml_enabled() {
-        return Err(FusekiError::service_unavailable("SAML authentication not configured"));
+        return Err(FusekiError::service_unavailable(
+            "SAML authentication not configured",
+        ));
     }
 
-    let sp_config = auth_service.get_saml_sp_config()
+    let sp_config = auth_service
+        .get_saml_sp_config()
         .ok_or_else(|| FusekiError::internal("SAML SP configuration not available"))?;
 
     let metadata_xml = generate_saml_metadata(&sp_config, &state.config)?;
-    
+
     Ok((
         StatusCode::OK,
         [("Content-Type", "application/samlmetadata+xml")],
-        metadata_xml
-    ).into_response())
+        metadata_xml,
+    )
+        .into_response())
 }
 
 /// Initiate SP-initiated SAML logout
@@ -367,18 +396,22 @@ pub async fn initiate_saml_logout(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Response, FusekiError> {
-    let auth_service = state.auth_service.as_ref()
+    let auth_service = state
+        .auth_service
+        .as_ref()
         .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
 
     // Extract current session
     let session_id = extract_session_id_from_headers(&headers)?;
-    let session = auth_service.get_session(&session_id).await?
+    let session = auth_service
+        .get_session(&session_id)
+        .await?
         .ok_or_else(|| FusekiError::authentication("Invalid session"))?;
 
     // Generate SAML logout request
     let slo_request = generate_saml_slo_request(&session.user, &session.session_id)?;
     let encoded_request = encode_saml_request(&slo_request)?;
-    
+
     // Construct logout URL
     let idp_slo_url = get_idp_slo_url(auth_service)?;
     let logout_url = format!(
@@ -386,10 +419,10 @@ pub async fn initiate_saml_logout(
         idp_slo_url,
         urlencoding::encode(&encoded_request)
     );
-    
+
     // Invalidate local session
     auth_service.invalidate_session(&session_id).await?;
-    
+
     Ok(Redirect::temporary(&logout_url).into_response())
 }
 
@@ -397,14 +430,16 @@ pub async fn initiate_saml_logout(
 
 /// Decode base64 and deflate-compressed SAML response
 fn decode_saml_response(encoded_response: &str) -> FusekiResult<String> {
-    let decoded = general_purpose::STANDARD.decode(encoded_response)
+    let decoded = general_purpose::STANDARD
+        .decode(encoded_response)
         .map_err(|e| FusekiError::bad_request(format!("Invalid base64 encoding: {}", e)))?;
-    
+
     let mut decoder = DeflateDecoder::new(&decoded[..]);
     let mut decompressed = String::new();
-    decoder.read_to_string(&mut decompressed)
-        .map_err(|e| FusekiError::bad_request(format!("Failed to decompress SAML response: {}", e)))?;
-    
+    decoder.read_to_string(&mut decompressed).map_err(|e| {
+        FusekiError::bad_request(format!("Failed to decompress SAML response: {}", e))
+    })?;
+
     Ok(decompressed)
 }
 
@@ -416,12 +451,14 @@ fn decode_saml_request(encoded_request: &str) -> FusekiResult<String> {
 /// Encode SAML response with base64 and deflate compression
 fn encode_saml_response(response_xml: &str) -> FusekiResult<String> {
     let mut encoder = DeflateEncoder::new(Vec::new(), Compression::default());
-    encoder.write_all(response_xml.as_bytes())
+    encoder
+        .write_all(response_xml.as_bytes())
         .map_err(|e| FusekiError::internal(format!("Failed to compress SAML response: {}", e)))?;
-    
-    let compressed = encoder.finish()
+
+    let compressed = encoder
+        .finish()
         .map_err(|e| FusekiError::internal(format!("Failed to finish compression: {}", e)))?;
-    
+
     Ok(general_purpose::STANDARD.encode(compressed))
 }
 
@@ -436,23 +473,23 @@ async fn validate_saml_assertion(
     auth_service: &AuthService,
 ) -> FusekiResult<ValidatedSamlAssertion> {
     // Simplified validation - in production, use a proper SAML library
-    
+
     // Extract key information from XML (simplified parsing)
     let subject = extract_xml_value(response_xml, "saml:Subject")?;
     let issuer = extract_xml_value(response_xml, "saml:Issuer")?;
     let session_index = extract_xml_value(response_xml, "saml:AuthnStatement")
         .and_then(|stmt| extract_attribute(&stmt, "SessionIndex"))
         .unwrap_or_else(|| "unknown".to_string());
-    
+
     // Extract attributes
     let attributes = extract_saml_attributes(response_xml)?;
-    
+
     // Validate signature (simplified)
     let signature_valid = validate_saml_signature(response_xml, auth_service).await?;
-    
+
     // Validate conditions
     let conditions_valid = validate_saml_conditions(response_xml)?;
-    
+
     Ok(ValidatedSamlAssertion {
         subject: extract_name_id(&subject)?,
         issuer,
@@ -474,20 +511,21 @@ async fn map_saml_attributes_to_user(
     assertion: &ValidatedSamlAssertion,
     auth_service: &AuthService,
 ) -> FusekiResult<User> {
-    let attribute_mapping = auth_service.get_saml_attribute_mapping()
+    let attribute_mapping = auth_service
+        .get_saml_attribute_mapping()
         .unwrap_or_default();
-    
+
     let username = assertion.subject.clone();
     let email = get_mapped_attribute(&assertion.attributes, &attribute_mapping, "email");
     let full_name = get_mapped_attribute(&assertion.attributes, &attribute_mapping, "displayName");
-    
+
     // Map roles from SAML attributes
     let roles = get_mapped_attribute_list(&assertion.attributes, &attribute_mapping, "roles")
         .unwrap_or_else(|| vec!["user".to_string()]);
-    
+
     // Generate permissions based on roles
     let permissions = generate_permissions_from_roles(&roles);
-    
+
     Ok(User {
         username,
         roles,
@@ -501,7 +539,9 @@ async fn map_saml_attributes_to_user(
 /// Extract redirect URL from RelayState
 fn extract_redirect_from_relay_state(relay_state: &Option<String>) -> Option<String> {
     relay_state.as_ref().and_then(|state| {
-        general_purpose::STANDARD.decode(state).ok()
+        general_purpose::STANDARD
+            .decode(state)
+            .ok()
             .and_then(|decoded| String::from_utf8(decoded).ok())
             .and_then(|json_str| serde_json::from_str::<serde_json::Value>(&json_str).ok())
             .and_then(|json| json.get("target")?.as_str().map(|s| s.to_string()))
@@ -509,8 +549,12 @@ fn extract_redirect_from_relay_state(relay_state: &Option<String>) -> Option<Str
 }
 
 /// Generate SAML metadata XML
-fn generate_saml_metadata(sp_config: &SamlSpConfig, server_config: &crate::config::ServerConfig) -> FusekiResult<String> {
-    let metadata = format!(r#"<?xml version="1.0" encoding="UTF-8"?>
+fn generate_saml_metadata(
+    sp_config: &SamlSpConfig,
+    server_config: &crate::config::ServerConfig,
+) -> FusekiResult<String> {
+    let metadata = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
 <md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" 
                      entityID="{}">
   <md:SPSSODescriptor AuthnRequestsSigned="{}" WantAssertionsSigned="{}" 
@@ -536,7 +580,7 @@ fn generate_saml_metadata(sp_config: &SamlSpConfig, server_config: &crate::confi
         sp_config.acs_url,
         sp_config.slo_url
     );
-    
+
     Ok(metadata)
 }
 
@@ -591,7 +635,7 @@ fn get_mapped_attribute_list(
 
 fn generate_permissions_from_roles(roles: &[String]) -> Vec<Permission> {
     let mut permissions = vec![Permission::SparqlQuery];
-    
+
     for role in roles {
         match role.as_str() {
             "admin" => {
@@ -611,7 +655,7 @@ fn generate_permissions_from_roles(roles: &[String]) -> Vec<Permission> {
             _ => {}
         }
     }
-    
+
     permissions
 }
 
@@ -657,28 +701,42 @@ pub async fn validate_enhanced_saml_assertion(
 ) -> FusekiResult<ValidatedSamlAssertion> {
     // Standard validation
     let mut assertion = validate_saml_assertion(response_xml, auth_service).await?;
-    
+
     // Additional compliance checks
     if compliance_config.require_encryption && !assertion.encryption_valid {
-        return Err(FusekiError::authentication("SAML assertion encryption required but not valid"));
+        return Err(FusekiError::authentication(
+            "SAML assertion encryption required but not valid",
+        ));
     }
-    
+
     if compliance_config.require_destination_validation {
         if !validate_assertion_destination(response_xml)? {
-            return Err(FusekiError::authentication("SAML assertion destination validation failed"));
+            return Err(FusekiError::authentication(
+                "SAML assertion destination validation failed",
+            ));
         }
     }
-    
+
     // Check signature algorithm compliance
     let signature_algorithm = extract_signature_algorithm(response_xml)?;
-    if compliance_config.blacklisted_algorithms.contains(&signature_algorithm) {
-        return Err(FusekiError::authentication("SAML signature algorithm not allowed"));
+    if compliance_config
+        .blacklisted_algorithms
+        .contains(&signature_algorithm)
+    {
+        return Err(FusekiError::authentication(
+            "SAML signature algorithm not allowed",
+        ));
     }
-    
-    if !meets_minimum_signature_strength(&signature_algorithm, &compliance_config.minimum_signature_algorithm)? {
-        return Err(FusekiError::authentication("SAML signature algorithm too weak"));
+
+    if !meets_minimum_signature_strength(
+        &signature_algorithm,
+        &compliance_config.minimum_signature_algorithm,
+    )? {
+        return Err(FusekiError::authentication(
+            "SAML signature algorithm too weak",
+        ));
     }
-    
+
     Ok(assertion)
 }
 
@@ -690,20 +748,25 @@ pub fn validate_mfa_requirements(
     if !mfa_config.required {
         return Ok(true);
     }
-    
-    let authn_context = assertion.authn_context_class.as_ref()
-        .ok_or_else(|| FusekiError::authentication("MFA required but no authentication context provided"))?;
-    
+
+    let authn_context = assertion.authn_context_class.as_ref().ok_or_else(|| {
+        FusekiError::authentication("MFA required but no authentication context provided")
+    })?;
+
     if !mfa_config.accepted_contexts.contains(authn_context) {
-        return Err(FusekiError::authentication("Authentication context does not meet MFA requirements"));
+        return Err(FusekiError::authentication(
+            "Authentication context does not meet MFA requirements",
+        ));
     }
-    
+
     // Check authentication strength
     let context_strength = determine_authn_strength(authn_context);
     if !meets_minimum_strength(&context_strength, &mfa_config.minimum_strength) {
-        return Err(FusekiError::authentication("Authentication strength insufficient for MFA requirements"));
+        return Err(FusekiError::authentication(
+            "Authentication strength insufficient for MFA requirements",
+        ));
     }
-    
+
     Ok(true)
 }
 
@@ -717,21 +780,24 @@ fn extract_signature_algorithm(_xml: &str) -> FusekiResult<String> {
     Ok("http://www.w3.org/2001/04/xmldsig-more#rsa-sha256".to_string())
 }
 
-fn meets_minimum_signature_strength(
-    algorithm: &str,
-    minimum: &str,
-) -> FusekiResult<bool> {
+fn meets_minimum_signature_strength(algorithm: &str, minimum: &str) -> FusekiResult<bool> {
     // Simplified strength comparison
     let strength_order = vec![
-        "http://www.w3.org/2000/09/xmldsig#rsa-sha1",           // Weak
-        "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256",    // Medium
-        "http://www.w3.org/2001/04/xmldsig-more#rsa-sha384",    // Strong
-        "http://www.w3.org/2001/04/xmldsig-more#rsa-sha512",    // Very Strong
+        "http://www.w3.org/2000/09/xmldsig#rsa-sha1", // Weak
+        "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256", // Medium
+        "http://www.w3.org/2001/04/xmldsig-more#rsa-sha384", // Strong
+        "http://www.w3.org/2001/04/xmldsig-more#rsa-sha512", // Very Strong
     ];
-    
-    let alg_pos = strength_order.iter().position(|&x| x == algorithm).unwrap_or(0);
-    let min_pos = strength_order.iter().position(|&x| x == minimum).unwrap_or(0);
-    
+
+    let alg_pos = strength_order
+        .iter()
+        .position(|&x| x == algorithm)
+        .unwrap_or(0);
+    let min_pos = strength_order
+        .iter()
+        .position(|&x| x == minimum)
+        .unwrap_or(0);
+
     Ok(alg_pos >= min_pos)
 }
 
@@ -739,7 +805,9 @@ fn determine_authn_strength(context_class: &str) -> AuthnStrength {
     match context_class {
         "urn:oasis:names:tc:SAML:2.0:ac:classes:Password" => AuthnStrength::Low,
         "urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport" => AuthnStrength::Low,
-        "urn:oasis:names:tc:SAML:2.0:ac:classes:MobileOneFactorUnregistered" => AuthnStrength::Medium,
+        "urn:oasis:names:tc:SAML:2.0:ac:classes:MobileOneFactorUnregistered" => {
+            AuthnStrength::Medium
+        }
         "urn:oasis:names:tc:SAML:2.0:ac:classes:MobileTwoFactorContract" => AuthnStrength::High,
         "urn:oasis:names:tc:SAML:2.0:ac:classes:Smartcard" => AuthnStrength::High,
         "urn:oasis:names:tc:SAML:2.0:ac:classes:SmartcardPKI" => AuthnStrength::Highest,
@@ -754,7 +822,7 @@ fn meets_minimum_strength(actual: &AuthnStrength, required: &AuthnStrength) -> b
         AuthnStrength::High => 3,
         AuthnStrength::Highest => 4,
     };
-    
+
     strength_values(actual) >= strength_values(required)
 }
 
@@ -781,10 +849,10 @@ mod tests {
     fn test_attribute_mapping() {
         let mut attributes = HashMap::new();
         attributes.insert("mail".to_string(), vec!["user@example.com".to_string()]);
-        
+
         let mut mapping = HashMap::new();
         mapping.insert("email".to_string(), "mail".to_string());
-        
+
         let email = get_mapped_attribute(&attributes, &mapping, "email");
         assert_eq!(email, Some("user@example.com".to_string()));
     }

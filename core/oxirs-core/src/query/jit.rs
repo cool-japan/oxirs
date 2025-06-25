@@ -267,27 +267,30 @@ impl JitCompiler {
     fn match_triple(
         &self,
         triple: &Triple,
-        pattern: &TriplePattern,
+        pattern: &crate::model::pattern::TriplePattern,
         existing: &HashMap<Variable, Term>,
     ) -> Option<HashMap<Variable, Term>> {
         let mut bindings = existing.clone();
 
         // Match subject
-        let subject_term = Term::from_subject(triple.subject());
-        if !self.match_term(&subject_term, &pattern.subject, &mut bindings) {
-            return None;
+        if let Some(ref subject_pattern) = pattern.subject {
+            if !self.match_subject_pattern(triple.subject(), subject_pattern, &mut bindings) {
+                return None;
+            }
         }
 
         // Match predicate
-        let predicate_term = Term::from_predicate(triple.predicate());
-        if !self.match_term(&predicate_term, &pattern.predicate, &mut bindings) {
-            return None;
+        if let Some(ref predicate_pattern) = pattern.predicate {
+            if !self.match_predicate_pattern(triple.predicate(), predicate_pattern, &mut bindings) {
+                return None;
+            }
         }
 
         // Match object
-        let object_term = Term::from_object(triple.object());
-        if !self.match_term(&object_term, &pattern.object, &mut bindings) {
-            return None;
+        if let Some(ref object_pattern) = pattern.object {
+            if !self.match_object_pattern(triple.object(), object_pattern, &mut bindings) {
+                return None;
+            }
         }
 
         Some(bindings)
@@ -318,6 +321,75 @@ impl JitCompiler {
             TermPattern::BlankNode(b) => {
                 matches!(term, Term::BlankNode(bn) if bn == b)
             }
+        }
+    }
+
+    /// Match subject pattern
+    fn match_subject_pattern(
+        &self,
+        subject: &Subject,
+        pattern: &crate::model::pattern::SubjectPattern,
+        bindings: &mut HashMap<Variable, Term>,
+    ) -> bool {
+        use crate::model::pattern::SubjectPattern;
+        match pattern {
+            SubjectPattern::Variable(var) => {
+                let term = Term::from_subject(subject);
+                if let Some(bound_value) = bindings.get(var) {
+                    bound_value == &term
+                } else {
+                    bindings.insert(var.clone(), term);
+                    true
+                }
+            }
+            SubjectPattern::NamedNode(n) => matches!(subject, Subject::NamedNode(nn) if nn == n),
+            SubjectPattern::BlankNode(b) => matches!(subject, Subject::BlankNode(bn) if bn == b),
+        }
+    }
+
+    /// Match predicate pattern
+    fn match_predicate_pattern(
+        &self,
+        predicate: &Predicate,
+        pattern: &crate::model::pattern::PredicatePattern,
+        bindings: &mut HashMap<Variable, Term>,
+    ) -> bool {
+        use crate::model::pattern::PredicatePattern;
+        match pattern {
+            PredicatePattern::Variable(var) => {
+                let term = Term::from_predicate(predicate);
+                if let Some(bound_value) = bindings.get(var) {
+                    bound_value == &term
+                } else {
+                    bindings.insert(var.clone(), term);
+                    true
+                }
+            }
+            PredicatePattern::NamedNode(n) => matches!(predicate, Predicate::NamedNode(nn) if nn == n),
+        }
+    }
+
+    /// Match object pattern
+    fn match_object_pattern(
+        &self,
+        object: &Object,
+        pattern: &crate::model::pattern::ObjectPattern,
+        bindings: &mut HashMap<Variable, Term>,
+    ) -> bool {
+        use crate::model::pattern::ObjectPattern;
+        match pattern {
+            ObjectPattern::Variable(var) => {
+                let term = Term::from_object(object);
+                if let Some(bound_value) = bindings.get(var) {
+                    bound_value == &term
+                } else {
+                    bindings.insert(var.clone(), term);
+                    true
+                }
+            }
+            ObjectPattern::NamedNode(n) => matches!(object, Object::NamedNode(nn) if nn == n),
+            ObjectPattern::BlankNode(b) => matches!(object, Object::BlankNode(bn) if bn == b),
+            ObjectPattern::Literal(l) => matches!(object, Object::Literal(lit) if lit == l),
         }
     }
 
@@ -433,7 +505,7 @@ impl JitCompiler {
     }
 
     /// Compile triple scan to native code
-    fn compile_triple_scan(&self, pattern: &TriplePattern) -> Result<QueryFunction, OxirsError> {
+    fn compile_triple_scan(&self, pattern: &crate::model::pattern::TriplePattern) -> Result<QueryFunction, OxirsError> {
         // Generate specialized matching function
         let pattern = pattern.clone();
 
@@ -441,7 +513,7 @@ impl JitCompiler {
             let mut results = Vec::new();
 
             // Optimized scanning based on pattern
-            if let TermPattern::NamedNode(pred) = &pattern.predicate {
+            if let Some(crate::model::pattern::PredicatePattern::NamedNode(pred)) = &pattern.predicate {
                 // Use predicate index
                 if let Some(indices) = context.data.indexes.by_predicate.get(&pred.clone().into()) {
                     for &idx in indices {
@@ -501,32 +573,43 @@ impl JitCompiler {
 /// Fast triple matching for compiled code
 fn match_triple_fast(
     triple: &Triple,
-    pattern: &TriplePattern,
+    pattern: &crate::model::pattern::TriplePattern,
     bindings: &HashMap<Variable, Term>,
 ) -> Option<HashMap<Variable, Term>> {
     let mut result = bindings.clone();
 
     // Inline matching for performance
-    match &pattern.subject {
-        TermPattern::Variable(v) => {
-            if let Some(bound) = bindings.get(v) {
-                if bound != &Term::from_subject(triple.subject()) {
+    if let Some(ref subject_pattern) = pattern.subject {
+        use crate::model::pattern::SubjectPattern;
+        match subject_pattern {
+            SubjectPattern::Variable(v) => {
+                if let Some(bound) = bindings.get(v) {
+                    if bound != &Term::from_subject(triple.subject()) {
+                        return None;
+                    }
+                } else {
+                    result.insert(v.clone(), Term::from_subject(triple.subject()));
+                }
+            }
+            SubjectPattern::NamedNode(n) => {
+                if let Subject::NamedNode(nn) = triple.subject() {
+                    if nn != n {
+                        return None;
+                    }
+                } else {
                     return None;
                 }
-            } else {
-                result.insert(v.clone(), Term::from_subject(triple.subject()));
             }
-        }
-        TermPattern::NamedNode(n) => {
-            if let Subject::NamedNode(nn) = triple.subject() {
-                if nn != n {
+            SubjectPattern::BlankNode(b) => {
+                if let Subject::BlankNode(bn) = triple.subject() {
+                    if bn != b {
+                        return None;
+                    }
+                } else {
                     return None;
                 }
-            } else {
-                return None;
             }
         }
-        _ => return None,
     }
 
     // Similar for predicate and object...
@@ -650,11 +733,11 @@ mod tests {
         let compiler = JitCompiler::new(JitConfig::default());
 
         let plan = ExecutionPlan::TripleScan {
-            pattern: TriplePattern {
-                subject: TermPattern::Variable(Variable::new("?s").unwrap()),
-                predicate: TermPattern::Variable(Variable::new("?p").unwrap()),
-                object: TermPattern::Variable(Variable::new("?o").unwrap()),
-            },
+            pattern: crate::model::pattern::TriplePattern::new(
+                Some(crate::model::pattern::SubjectPattern::Variable(Variable::new("?s").unwrap())),
+                Some(crate::model::pattern::PredicatePattern::Variable(Variable::new("?p").unwrap())),
+                Some(crate::model::pattern::ObjectPattern::Variable(Variable::new("?o").unwrap())),
+            ),
         };
 
         let hash1 = compiler.hash_plan(&plan);

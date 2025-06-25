@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn, instrument};
+use tracing::{debug, error, info, instrument, warn};
 
 /// Vector search engine with multiple embedding models
 #[derive(Clone)]
@@ -51,12 +51,12 @@ pub struct EmbeddingModel {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ModelType {
-    Sentence,      // Sentence transformers
-    Word,          // Word embeddings (Word2Vec, GloVe)
-    Document,      // Document embeddings
-    Knowledge,     // Knowledge graph embeddings
-    Multimodal,    // Text + image embeddings
-    Custom,        // Custom model
+    Sentence,   // Sentence transformers
+    Word,       // Word embeddings (Word2Vec, GloVe)
+    Document,   // Document embeddings
+    Knowledge,  // Knowledge graph embeddings
+    Multimodal, // Text + image embeddings
+    Custom,     // Custom model
 }
 
 /// Vector index for efficient similarity search
@@ -74,22 +74,22 @@ pub struct VectorIndex {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IndexType {
-    Exact,         // Brute force exact search
-    Hnsw,          // Hierarchical Navigable Small World
-    Ivf,           // Inverted File Index
-    Lsh,           // Locality Sensitive Hashing
-    Annoy,         // Approximate Nearest Neighbors Oh Yeah
+    Exact, // Brute force exact search
+    Hnsw,  // Hierarchical Navigable Small World
+    Ivf,   // Inverted File Index
+    Lsh,   // Locality Sensitive Hashing
+    Annoy, // Approximate Nearest Neighbors Oh Yeah
 }
 
 /// Index configuration parameters
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IndexParameters {
     pub distance_metric: DistanceMetric,
-    pub ef_construction: Option<usize>,  // HNSW parameter
-    pub ef_search: Option<usize>,        // HNSW parameter
-    pub m: Option<usize>,                // HNSW parameter
-    pub num_trees: Option<usize>,        // Annoy parameter
-    pub num_probes: Option<usize>,       // IVF parameter
+    pub ef_construction: Option<usize>, // HNSW parameter
+    pub ef_search: Option<usize>,       // HNSW parameter
+    pub m: Option<usize>,               // HNSW parameter
+    pub num_trees: Option<usize>,       // Annoy parameter
+    pub num_probes: Option<usize>,      // IVF parameter
 }
 
 /// Distance metrics for similarity calculation
@@ -194,10 +194,14 @@ impl VectorSearchEngine {
     /// Register an embedding model
     pub async fn register_model(&self, model: EmbeddingModel) -> FusekiResult<()> {
         let mut models = self.models.write().await;
-        
-        info!("Registering embedding model: {} ({})", model.name, model.model_type.to_string());
+
+        info!(
+            "Registering embedding model: {} ({})",
+            model.name,
+            model.model_type.to_string()
+        );
         models.insert(model.name.clone(), model);
-        
+
         Ok(())
     }
 
@@ -208,12 +212,17 @@ impl VectorSearchEngine {
         texts: &[String],
         model_name: &str,
     ) -> FusekiResult<Vec<Vec<f32>>> {
-        debug!("Generating embeddings for {} texts using model: {}", texts.len(), model_name);
-        
+        debug!(
+            "Generating embeddings for {} texts using model: {}",
+            texts.len(),
+            model_name
+        );
+
         let models = self.models.read().await;
-        let model = models.get(model_name)
+        let model = models
+            .get(model_name)
             .ok_or_else(|| FusekiError::not_found(format!("Model not found: {}", model_name)))?;
-        
+
         match &model.model_type {
             ModelType::Sentence => self.generate_sentence_embeddings(texts, model).await,
             ModelType::Document => self.generate_document_embeddings(texts, model).await,
@@ -232,9 +241,11 @@ impl VectorSearchEngine {
     ) -> FusekiResult<String> {
         // Generate embedding
         let embeddings = self.generate_embeddings(&[text], &model_name).await?;
-        let vector = embeddings.into_iter().next()
+        let vector = embeddings
+            .into_iter()
+            .next()
             .ok_or_else(|| FusekiError::internal("Failed to generate embedding"))?;
-        
+
         // Create embedding record
         let embedding_id = uuid::Uuid::new_v4().to_string();
         let embedding = VectorEmbedding {
@@ -245,11 +256,11 @@ impl VectorSearchEngine {
             created_at: Utc::now(),
             metadata,
         };
-        
+
         // Store embedding
         let mut embeddings_store = self.embeddings.write().await;
         embeddings_store.insert(embedding_id.clone(), embedding);
-        
+
         info!("Added embedding for resource: {}", resource_uri);
         Ok(embedding_id)
     }
@@ -261,43 +272,58 @@ impl VectorSearchEngine {
         query: VectorSearchQuery,
     ) -> FusekiResult<VectorSearchResult> {
         let start_time = std::time::Instant::now();
-        
+
         // Determine model to use
-        let model_name = query.model_name
+        let model_name = query
+            .model_name
             .as_ref()
             .unwrap_or(&self.config.default_model)
             .clone();
-        
+
         // Get query vector
         let query_vector = if let Some(vector) = query.query_vector {
             vector
         } else if let Some(text) = &query.query_text {
-            let embeddings = self.generate_embeddings(&[text.clone()], &model_name).await?;
-            embeddings.into_iter().next()
+            let embeddings = self
+                .generate_embeddings(&[text.clone()], &model_name)
+                .await?;
+            embeddings
+                .into_iter()
+                .next()
                 .ok_or_else(|| FusekiError::internal("Failed to generate query embedding"))?
         } else {
-            return Err(FusekiError::bad_request("Either query_text or query_vector must be provided"));
+            return Err(FusekiError::bad_request(
+                "Either query_text or query_vector must be provided",
+            ));
         };
-        
+
         // Perform similarity search
-        let results = self.find_similar_vectors(
-            &query_vector,
-            &model_name,
-            query.top_k.unwrap_or(self.config.max_results),
-            query.similarity_threshold.unwrap_or(self.config.similarity_threshold),
-            &query.filters.unwrap_or_default(),
-        ).await?;
-        
+        let results = self
+            .find_similar_vectors(
+                &query_vector,
+                &model_name,
+                query.top_k.unwrap_or(self.config.max_results),
+                query
+                    .similarity_threshold
+                    .unwrap_or(self.config.similarity_threshold),
+                &query.filters.unwrap_or_default(),
+            )
+            .await?;
+
         let query_time = start_time.elapsed();
-        
+
         let result = VectorSearchResult {
             results,
             query_time_ms: query_time.as_millis() as u64,
             total_candidates: self.embeddings.read().await.len(),
             model_used: model_name,
         };
-        
-        info!("Vector search completed in {:?}, {} results", query_time, result.results.len());
+
+        info!(
+            "Vector search completed in {:?}, {} results",
+            query_time,
+            result.results.len()
+        );
         Ok(result)
     }
 
@@ -308,37 +334,36 @@ impl VectorSearchEngine {
         semantic_query: SemanticQuery,
         store: &Store,
     ) -> FusekiResult<serde_json::Value> {
-        debug!("Executing semantic SPARQL query with {} vector clauses", 
-               semantic_query.vector_clauses.len());
-        
+        debug!(
+            "Executing semantic SPARQL query with {} vector clauses",
+            semantic_query.vector_clauses.len()
+        );
+
         // Execute vector searches for each clause
         let mut vector_results = HashMap::new();
         for clause in &semantic_query.vector_clauses {
             let search_result = self.vector_search(clause.search_query.clone()).await?;
             vector_results.insert(clause.variable.clone(), search_result);
         }
-        
+
         // Modify SPARQL query to include vector results as VALUES clauses
-        let enhanced_sparql = self.enhance_sparql_with_vector_results(
-            &semantic_query.sparql_query,
-            &vector_results,
-        ).await?;
-        
+        let enhanced_sparql = self
+            .enhance_sparql_with_vector_results(&semantic_query.sparql_query, &vector_results)
+            .await?;
+
         debug!("Enhanced SPARQL query: {}", enhanced_sparql);
-        
+
         // Execute enhanced SPARQL query
         let sparql_result = store.query(&enhanced_sparql)?;
-        
+
         // Combine results if hybrid scoring is enabled
         if let Some(hybrid_scoring) = &semantic_query.hybrid_scoring {
-            self.apply_hybrid_scoring(
-                sparql_result,
-                &vector_results,
-                hybrid_scoring,
-            ).await
+            self.apply_hybrid_scoring(sparql_result, &vector_results, hybrid_scoring)
+                .await
         } else {
             // Convert SPARQL result to JSON
-            sparql_result.to_json()
+            sparql_result
+                .to_json()
                 .map(|json_str| serde_json::from_str(&json_str).unwrap_or_default())
                 .map_err(|e| FusekiError::internal(format!("Failed to convert result: {}", e)))
         }
@@ -360,10 +385,10 @@ impl VectorSearchEngine {
             created_at: Utc::now(),
             index_parameters: parameters,
         };
-        
+
         let mut indices = self.indices.write().await;
         indices.insert(name.clone(), index);
-        
+
         info!("Created vector index: {}", name);
         Ok(())
     }
@@ -373,12 +398,14 @@ impl VectorSearchEngine {
         let embeddings = self.embeddings.read().await;
         let models = self.models.read().await;
         let indices = self.indices.read().await;
-        
+
         let mut model_counts = HashMap::new();
         for embedding in embeddings.values() {
-            *model_counts.entry(embedding.model_name.clone()).or_insert(0) += 1;
+            *model_counts
+                .entry(embedding.model_name.clone())
+                .or_insert(0) += 1;
         }
-        
+
         EmbeddingStatistics {
             total_embeddings: embeddings.len(),
             total_models: models.len(),
@@ -397,19 +424,19 @@ impl VectorSearchEngine {
     ) -> FusekiResult<Vec<Vec<f32>>> {
         // Mock implementation for sentence embeddings
         debug!("Generating sentence embeddings using: {}", model.name);
-        
+
         let mut embeddings = Vec::new();
         for text in texts {
             // Simulate sentence embedding generation
             let mut vector = vec![0.0; model.dimensions];
-            
+
             // Simple hash-based mock embedding
             for (i, byte) in text.bytes().enumerate() {
                 if i < model.dimensions {
                     vector[i] = (byte as f32) / 255.0;
                 }
             }
-            
+
             // Normalize vector
             let norm: f32 = vector.iter().map(|x| x * x).sum::<f32>().sqrt();
             if norm > 0.0 {
@@ -417,10 +444,10 @@ impl VectorSearchEngine {
                     *x /= norm;
                 }
             }
-            
+
             embeddings.push(vector);
         }
-        
+
         Ok(embeddings)
     }
 
@@ -431,33 +458,33 @@ impl VectorSearchEngine {
     ) -> FusekiResult<Vec<Vec<f32>>> {
         // Mock implementation for document embeddings
         debug!("Generating document embeddings using: {}", model.name);
-        
+
         let mut embeddings = Vec::new();
         for text in texts {
             // Simulate document-level features
             let word_count = text.split_whitespace().count();
             let char_count = text.len();
-            let avg_word_length = if word_count > 0 { 
-                char_count as f32 / word_count as f32 
-            } else { 
-                0.0 
+            let avg_word_length = if word_count > 0 {
+                char_count as f32 / word_count as f32
+            } else {
+                0.0
             };
-            
+
             let mut vector = vec![0.0; model.dimensions];
             vector[0] = (word_count as f32).ln();
             vector[1] = (char_count as f32).ln();
             vector[2] = avg_word_length;
-            
+
             // Fill remaining dimensions with text-based features
             for (i, byte) in text.bytes().enumerate() {
                 if i + 3 < model.dimensions {
                     vector[i + 3] = (byte as f32) / 255.0;
                 }
             }
-            
+
             embeddings.push(vector);
         }
-        
+
         Ok(embeddings)
     }
 
@@ -467,8 +494,11 @@ impl VectorSearchEngine {
         model: &EmbeddingModel,
     ) -> FusekiResult<Vec<Vec<f32>>> {
         // Mock implementation for knowledge graph embeddings
-        debug!("Generating knowledge graph embeddings using: {}", model.name);
-        
+        debug!(
+            "Generating knowledge graph embeddings using: {}",
+            model.name
+        );
+
         // This would typically use entity linking and relation extraction
         self.generate_sentence_embeddings(texts, model).await
     }
@@ -492,13 +522,13 @@ impl VectorSearchEngine {
     ) -> FusekiResult<Vec<SimilarityResult>> {
         let embeddings = self.embeddings.read().await;
         let mut candidates = Vec::new();
-        
+
         // Find embeddings from the same model
         for embedding in embeddings.values() {
             if embedding.model_name != model_name {
                 continue;
             }
-            
+
             // Apply filters
             let mut matches_filters = true;
             for (key, value) in filters {
@@ -507,14 +537,14 @@ impl VectorSearchEngine {
                     break;
                 }
             }
-            
+
             if !matches_filters {
                 continue;
             }
-            
+
             // Calculate similarity
             let similarity = self.calculate_cosine_similarity(query_vector, &embedding.vector);
-            
+
             if similarity >= threshold {
                 candidates.push(SimilarityResult {
                     resource_uri: embedding.resource_uri.clone(),
@@ -525,11 +555,11 @@ impl VectorSearchEngine {
                 });
             }
         }
-        
+
         // Sort by similarity (descending) and take top_k
         candidates.sort_by(|a, b| b.similarity_score.partial_cmp(&a.similarity_score).unwrap());
         candidates.truncate(top_k);
-        
+
         Ok(candidates)
     }
 
@@ -537,11 +567,11 @@ impl VectorSearchEngine {
         if a.len() != b.len() {
             return 0.0;
         }
-        
+
         let dot_product: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
         let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
         let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-        
+
         if norm_a == 0.0 || norm_b == 0.0 {
             0.0
         } else {
@@ -555,23 +585,23 @@ impl VectorSearchEngine {
         vector_results: &HashMap<String, VectorSearchResult>,
     ) -> FusekiResult<String> {
         let mut enhanced_query = sparql_query.to_string();
-        
+
         // Add VALUES clauses for each vector search result
         for (variable, results) in vector_results {
             let mut values_clause = format!("VALUES ?{} {{\n", variable);
-            
+
             for result in &results.results {
                 values_clause.push_str(&format!("  <{}>\n", result.resource_uri));
             }
-            
+
             values_clause.push_str("}\n");
-            
+
             // Insert VALUES clause before the closing brace of WHERE clause
             if let Some(pos) = enhanced_query.rfind('}') {
                 enhanced_query.insert_str(pos, &values_clause);
             }
         }
-        
+
         Ok(enhanced_query)
     }
 
@@ -583,10 +613,10 @@ impl VectorSearchEngine {
     ) -> FusekiResult<serde_json::Value> {
         // This is a simplified implementation of hybrid scoring
         // In a full implementation, this would combine SPARQL and vector scores
-        
+
         let sparql_json = sparql_result.to_json()?;
         let mut combined_result: serde_json::Value = serde_json::from_str(&sparql_json)?;
-        
+
         // Add vector similarity scores to results
         if let Some(results_obj) = combined_result.get_mut("results") {
             if let Some(bindings) = results_obj.get_mut("bindings") {
@@ -620,19 +650,19 @@ impl VectorSearchEngine {
                 }
             }
         }
-        
+
         Ok(combined_result)
     }
 
     async fn estimate_memory_usage(&self, embeddings: &HashMap<String, VectorEmbedding>) -> f64 {
         let mut total_bytes = 0;
-        
+
         for embedding in embeddings.values() {
             total_bytes += embedding.vector.len() * std::mem::size_of::<f32>();
             total_bytes += embedding.resource_uri.len();
             total_bytes += embedding.id.len();
         }
-        
+
         total_bytes as f64 / (1024.0 * 1024.0) // Convert to MB
     }
 }
@@ -694,7 +724,7 @@ mod tests {
     async fn test_vector_search_engine_creation() {
         let config = VectorSearchConfig::default();
         let engine = VectorSearchEngine::new(config);
-        
+
         let stats = engine.get_embedding_statistics().await;
         assert_eq!(stats.total_embeddings, 0);
         assert_eq!(stats.total_models, 0);
@@ -704,7 +734,7 @@ mod tests {
     async fn test_model_registration() {
         let config = VectorSearchConfig::default();
         let engine = VectorSearchEngine::new(config);
-        
+
         let model = EmbeddingModel {
             name: "test-model".to_string(),
             model_type: ModelType::Sentence,
@@ -715,9 +745,9 @@ mod tests {
             preprocessing_steps: vec![],
             max_input_length: 512,
         };
-        
+
         engine.register_model(model).await.unwrap();
-        
+
         let stats = engine.get_embedding_statistics().await;
         assert_eq!(stats.total_models, 1);
     }
@@ -726,7 +756,7 @@ mod tests {
     async fn test_embedding_generation() {
         let config = VectorSearchConfig::default();
         let engine = VectorSearchEngine::new(config);
-        
+
         let model = EmbeddingModel {
             name: "test-model".to_string(),
             model_type: ModelType::Sentence,
@@ -737,12 +767,15 @@ mod tests {
             preprocessing_steps: vec![],
             max_input_length: 512,
         };
-        
+
         engine.register_model(model).await.unwrap();
-        
+
         let texts = vec!["Hello world".to_string(), "Testing embeddings".to_string()];
-        let embeddings = engine.generate_embeddings(&texts, "test-model").await.unwrap();
-        
+        let embeddings = engine
+            .generate_embeddings(&texts, "test-model")
+            .await
+            .unwrap();
+
         assert_eq!(embeddings.len(), 2);
         assert_eq!(embeddings[0].len(), 384);
         assert_eq!(embeddings[1].len(), 384);
@@ -751,11 +784,11 @@ mod tests {
     #[test]
     fn test_cosine_similarity() {
         let engine = VectorSearchEngine::new(VectorSearchConfig::default());
-        
+
         let vec1 = vec![1.0, 0.0, 0.0];
         let vec2 = vec![0.0, 1.0, 0.0];
         let vec3 = vec![1.0, 0.0, 0.0];
-        
+
         assert_eq!(engine.calculate_cosine_similarity(&vec1, &vec2), 0.0);
         assert_eq!(engine.calculate_cosine_similarity(&vec1, &vec3), 1.0);
     }

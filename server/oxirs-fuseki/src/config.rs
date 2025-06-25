@@ -1,7 +1,10 @@
 //! Advanced server configuration management with validation and hot-reload
 
 use crate::error::{FusekiError, FusekiResult};
-use figment::{Figment, providers::{Format, Toml, Yaml, Env}};
+use figment::{
+    providers::{Env, Format, Toml, Yaml},
+    Figment,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -22,19 +25,19 @@ use tokio::sync::watch;
 pub struct ServerConfig {
     #[validate(nested)]
     pub server: ServerSettings,
-    
+
     #[validate(nested)]
     pub datasets: HashMap<String, DatasetConfig>,
-    
+
     #[validate(nested)]
     pub security: SecurityConfig,
-    
+
     #[validate(nested)]
     pub monitoring: MonitoringConfig,
-    
+
     #[validate(nested)]
     pub performance: PerformanceConfig,
-    
+
     #[validate(nested)]
     pub logging: LoggingConfig,
 }
@@ -44,22 +47,22 @@ pub struct ServerConfig {
 pub struct ServerSettings {
     #[validate(range(min = 1, max = 65535))]
     pub port: u16,
-    
+
     #[validate(length(min = 1))]
     pub host: String,
-    
+
     pub admin_ui: bool,
     pub cors: bool,
-    
+
     #[validate(range(min = 1))]
     pub max_connections: usize,
-    
+
     #[validate(range(min = 1))]
     pub request_timeout_secs: u64,
-    
+
     #[validate(range(min = 1))]
     pub graceful_shutdown_timeout_secs: u64,
-    
+
     pub tls: Option<TlsConfig>,
 }
 
@@ -68,12 +71,12 @@ pub struct ServerSettings {
 pub struct TlsConfig {
     #[validate(length(min = 1))]
     pub cert_path: PathBuf,
-    
+
     #[validate(length(min = 1))]
     pub key_path: PathBuf,
-    
+
     pub require_client_cert: bool,
-    
+
     pub ca_cert_path: Option<PathBuf>,
 }
 
@@ -82,23 +85,23 @@ pub struct TlsConfig {
 pub struct DatasetConfig {
     #[validate(length(min = 1))]
     pub name: String,
-    
+
     #[validate(length(min = 1))]
     pub location: String,
-    
+
     pub read_only: bool,
-    
+
     #[validate(nested)]
     pub text_index: Option<TextIndexConfig>,
-    
+
     pub shacl_shapes: Vec<PathBuf>,
-    
+
     #[validate(nested)]
     pub services: Vec<ServiceConfig>,
-    
+
     #[validate(nested)]
     pub access_control: Option<AccessControlConfig>,
-    
+
     pub backup: Option<BackupConfig>,
 }
 
@@ -107,14 +110,14 @@ pub struct DatasetConfig {
 pub struct ServiceConfig {
     #[validate(length(min = 1))]
     pub name: String,
-    
+
     pub service_type: ServiceType,
-    
+
     #[validate(length(min = 1))]
     pub endpoint: String,
-    
+
     pub auth_required: bool,
-    
+
     pub rate_limit: Option<RateLimitConfig>,
 }
 
@@ -142,13 +145,13 @@ pub struct AccessControlConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct BackupConfig {
     pub enabled: bool,
-    
+
     #[validate(length(min = 1))]
     pub directory: PathBuf,
-    
+
     #[validate(range(min = 1))]
     pub interval_hours: u64,
-    
+
     #[validate(range(min = 1))]
     pub retain_count: usize,
 }
@@ -157,15 +160,15 @@ pub struct BackupConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct TextIndexConfig {
     pub enabled: bool,
-    
+
     #[validate(length(min = 1))]
     pub analyzer: String,
-    
+
     #[validate(range(min = 1))]
     pub max_results: usize,
-    
+
     pub stemming: bool,
-    
+
     pub stop_words: Vec<String>,
 }
 
@@ -173,26 +176,26 @@ pub struct TextIndexConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SecurityConfig {
     pub auth_required: bool,
-    
+
     #[validate(nested)]
     pub users: HashMap<String, UserConfig>,
-    
+
     #[validate(nested)]
     pub jwt: Option<JwtConfig>,
-    
+
     #[validate(nested)]
     pub oauth: Option<OAuthConfig>,
-    
+
     #[validate(nested)]
     pub ldap: Option<LdapConfig>,
-    
+
     #[validate(nested)]
     pub rate_limiting: Option<RateLimitConfig>,
-    
+
     pub cors: CorsConfig,
-    
+
     pub session: SessionConfig,
-    
+
     #[validate(nested)]
     pub authentication: AuthenticationConfig,
 }
@@ -208,13 +211,13 @@ pub struct AuthenticationConfig {
 pub struct JwtConfig {
     #[validate(length(min = 32))]
     pub secret: String,
-    
+
     #[validate(range(min = 300, max = 86400))] // 5 min to 24 hours
     pub expiration_secs: u64,
-    
+
     #[validate(length(min = 1))]
     pub issuer: String,
-    
+
     #[validate(length(min = 1))]
     pub audience: String,
 }
@@ -224,22 +227,22 @@ pub struct JwtConfig {
 pub struct OAuthConfig {
     #[validate(length(min = 1))]
     pub provider: String,
-    
+
     #[validate(length(min = 1))]
     pub client_id: String,
-    
+
     #[validate(length(min = 1))]
     pub client_secret: String,
-    
+
     #[validate(url)]
     pub auth_url: String,
-    
+
     #[validate(url)]
     pub token_url: String,
-    
+
     #[validate(url)]
     pub user_info_url: String,
-    
+
     pub scopes: Vec<String>,
 }
 
@@ -248,25 +251,25 @@ pub struct OAuthConfig {
 pub struct LdapConfig {
     #[validate(url)]
     pub server: String,
-    
+
     #[validate(length(min = 1))]
     pub bind_dn: String,
-    
+
     #[validate(length(min = 1))]
     pub bind_password: String,
-    
+
     #[validate(length(min = 1))]
     pub user_base_dn: String,
-    
+
     #[validate(length(min = 1))]
     pub user_filter: String,
-    
+
     #[validate(length(min = 1))]
     pub group_base_dn: String,
-    
+
     #[validate(length(min = 1))]
     pub group_filter: String,
-    
+
     pub use_tls: bool,
 }
 
@@ -275,14 +278,14 @@ pub struct LdapConfig {
 pub struct RateLimitConfig {
     #[validate(range(min = 1))]
     pub requests_per_minute: u32,
-    
+
     #[validate(range(min = 1))]
     pub burst_size: u32,
-    
+
     pub per_ip: bool,
-    
+
     pub per_user: bool,
-    
+
     pub whitelist: Vec<String>,
 }
 
@@ -295,7 +298,7 @@ pub struct CorsConfig {
     pub allow_headers: Vec<String>,
     pub expose_headers: Vec<String>,
     pub allow_credentials: bool,
-    
+
     #[validate(range(min = 0, max = 86400))]
     pub max_age_secs: u64,
 }
@@ -305,14 +308,14 @@ pub struct CorsConfig {
 pub struct SessionConfig {
     #[validate(length(min = 32))]
     pub secret: String,
-    
+
     #[validate(range(min = 300, max = 86400))] // 5 min to 24 hours
     pub timeout_secs: u64,
-    
+
     pub secure: bool,
-    
+
     pub http_only: bool,
-    
+
     pub same_site: SameSitePolicy,
 }
 
@@ -330,19 +333,19 @@ pub enum SameSitePolicy {
 pub struct UserConfig {
     #[validate(length(min = 1))]
     pub password_hash: String,
-    
+
     pub roles: Vec<String>,
-    
+
     pub enabled: bool,
-    
+
     pub email: Option<String>,
-    
+
     pub full_name: Option<String>,
-    
+
     pub last_login: Option<chrono::DateTime<chrono::Utc>>,
-    
+
     pub failed_login_attempts: u32,
-    
+
     pub locked_until: Option<chrono::DateTime<chrono::Utc>>,
 }
 
@@ -358,17 +361,17 @@ pub struct MonitoringConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct MetricsConfig {
     pub enabled: bool,
-    
+
     #[validate(length(min = 1))]
     pub endpoint: String,
-    
+
     #[validate(range(min = 1, max = 65535))]
     pub port: Option<u16>,
-    
+
     pub namespace: String,
-    
+
     pub collect_system_metrics: bool,
-    
+
     pub histogram_buckets: Vec<f64>,
 }
 
@@ -376,13 +379,13 @@ pub struct MetricsConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct HealthCheckConfig {
     pub enabled: bool,
-    
+
     #[validate(range(min = 1))]
     pub interval_secs: u64,
-    
+
     #[validate(range(min = 1))]
     pub timeout_secs: u64,
-    
+
     pub checks: Vec<String>,
 }
 
@@ -390,11 +393,11 @@ pub struct HealthCheckConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct TracingConfig {
     pub enabled: bool,
-    
+
     pub endpoint: Option<String>,
-    
+
     pub service_name: String,
-    
+
     pub sample_rate: f64,
 }
 
@@ -410,17 +413,17 @@ pub struct PerformanceConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CacheConfig {
     pub enabled: bool,
-    
+
     #[validate(range(min = 1))]
     pub max_size: usize,
-    
+
     #[validate(range(min = 1))]
     pub ttl_secs: u64,
-    
+
     pub query_cache_enabled: bool,
-    
+
     pub result_cache_enabled: bool,
-    
+
     pub plan_cache_enabled: bool,
 }
 
@@ -429,16 +432,16 @@ pub struct CacheConfig {
 pub struct ConnectionPoolConfig {
     #[validate(range(min = 1))]
     pub min_connections: usize,
-    
+
     #[validate(range(min = 1))]
     pub max_connections: usize,
-    
+
     #[validate(range(min = 1))]
     pub connection_timeout_secs: u64,
-    
+
     #[validate(range(min = 1))]
     pub idle_timeout_secs: u64,
-    
+
     #[validate(range(min = 1))]
     pub max_lifetime_secs: u64,
 }
@@ -447,15 +450,15 @@ pub struct ConnectionPoolConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct QueryOptimizationConfig {
     pub enabled: bool,
-    
+
     #[validate(range(min = 1))]
     pub max_query_time_secs: u64,
-    
+
     #[validate(range(min = 1))]
     pub max_result_size: usize,
-    
+
     pub parallel_execution: bool,
-    
+
     #[validate(range(min = 1))]
     pub thread_pool_size: usize,
 }
@@ -465,11 +468,11 @@ pub struct QueryOptimizationConfig {
 pub struct LoggingConfig {
     #[validate(length(min = 1))]
     pub level: String,
-    
+
     pub format: LogFormat,
-    
+
     pub output: LogOutput,
-    
+
     pub file_config: Option<FileLogConfig>,
 }
 
@@ -497,13 +500,13 @@ pub enum LogOutput {
 pub struct FileLogConfig {
     #[validate(length(min = 1))]
     pub path: PathBuf,
-    
+
     #[validate(range(min = 1))]
     pub max_size_mb: u64,
-    
+
     #[validate(range(min = 1))]
     pub max_files: usize,
-    
+
     pub compress: bool,
 }
 
@@ -531,7 +534,12 @@ impl Default for ServerConfig {
                 cors: CorsConfig {
                     enabled: true,
                     allow_origins: vec!["*".to_string()],
-                    allow_methods: vec!["GET".to_string(), "POST".to_string(), "PUT".to_string(), "DELETE".to_string()],
+                    allow_methods: vec![
+                        "GET".to_string(),
+                        "POST".to_string(),
+                        "PUT".to_string(),
+                        "DELETE".to_string(),
+                    ],
                     allow_headers: vec!["*".to_string()],
                     expose_headers: vec![],
                     allow_credentials: false,
@@ -544,9 +552,7 @@ impl Default for ServerConfig {
                     http_only: true,
                     same_site: SameSitePolicy::Lax,
                 },
-                authentication: AuthenticationConfig {
-                    enabled: false,
-                },
+                authentication: AuthenticationConfig { enabled: false },
             },
             monitoring: MonitoringConfig {
                 metrics: MetricsConfig {
@@ -555,7 +561,9 @@ impl Default for ServerConfig {
                     port: None,
                     namespace: "oxirs_fuseki".to_string(),
                     collect_system_metrics: true,
-                    histogram_buckets: vec![0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
+                    histogram_buckets: vec![
+                        0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+                    ],
                 },
                 health_checks: HealthCheckConfig {
                     enabled: true,
@@ -613,12 +621,15 @@ impl ServerConfig {
             .merge(Yaml::file("oxirs-fuseki.yml"))
             .merge(Env::prefixed("OXIRS_FUSEKI_"))
             .extract()
-            .map_err(|e| FusekiError::configuration(format!("Failed to load configuration: {}", e)))?;
-        
+            .map_err(|e| {
+                FusekiError::configuration(format!("Failed to load configuration: {}", e))
+            })?;
+
         // Validate the configuration
-        config.validate()
-            .map_err(|e| FusekiError::validation(format!("Configuration validation failed: {}", e)))?;
-        
+        config.validate().map_err(|e| {
+            FusekiError::validation(format!("Configuration validation failed: {}", e))
+        })?;
+
         Ok(config)
     }
 
@@ -639,19 +650,23 @@ impl ServerConfig {
                 figment.extract()
             }
             _ => {
-                return Err(FusekiError::configuration(
-                    format!("Unsupported configuration file format: {:?}", path)
-                ));
+                return Err(FusekiError::configuration(format!(
+                    "Unsupported configuration file format: {:?}",
+                    path
+                )));
             }
-        }.map_err(|e| FusekiError::configuration(
-            format!("Failed to load configuration from {:?}: {}", path, e)
-        ))?;
+        }
+        .map_err(|e| {
+            FusekiError::configuration(format!(
+                "Failed to load configuration from {:?}: {}",
+                path, e
+            ))
+        })?;
 
         // Validate the configuration
-        config.validate()
-            .map_err(|e| FusekiError::validation(
-                format!("Configuration validation failed: {}", e)
-            ))?;
+        config.validate().map_err(|e| {
+            FusekiError::validation(format!("Configuration validation failed: {}", e))
+        })?;
 
         info!("Configuration loaded from {:?}", path);
         Ok(config)
@@ -659,32 +674,36 @@ impl ServerConfig {
 
     /// Save configuration to YAML file
     pub fn save_yaml<P: AsRef<Path>>(&self, path: P) -> FusekiResult<()> {
-        let content = serde_yaml::to_string(self)
-            .map_err(|e| FusekiError::configuration(
-                format!("Failed to serialize configuration to YAML: {}", e)
-            ))?;
-        
-        std::fs::write(&path, content)
-            .map_err(|e| FusekiError::configuration(
-                format!("Failed to write configuration to {:?}: {}", path.as_ref(), e)
-            ))?;
-        
+        let content = serde_yaml::to_string(self).map_err(|e| {
+            FusekiError::configuration(format!("Failed to serialize configuration to YAML: {}", e))
+        })?;
+
+        std::fs::write(&path, content).map_err(|e| {
+            FusekiError::configuration(format!(
+                "Failed to write configuration to {:?}: {}",
+                path.as_ref(),
+                e
+            ))
+        })?;
+
         info!("Configuration saved to {:?}", path.as_ref());
         Ok(())
     }
 
     /// Save configuration to TOML file
     pub fn save_toml<P: AsRef<Path>>(&self, path: P) -> FusekiResult<()> {
-        let content = toml::to_string_pretty(self)
-            .map_err(|e| FusekiError::configuration(
-                format!("Failed to serialize configuration to TOML: {}", e)
-            ))?;
-        
-        std::fs::write(&path, content)
-            .map_err(|e| FusekiError::configuration(
-                format!("Failed to write configuration to {:?}: {}", path.as_ref(), e)
-            ))?;
-        
+        let content = toml::to_string_pretty(self).map_err(|e| {
+            FusekiError::configuration(format!("Failed to serialize configuration to TOML: {}", e))
+        })?;
+
+        std::fs::write(&path, content).map_err(|e| {
+            FusekiError::configuration(format!(
+                "Failed to write configuration to {:?}: {}",
+                path.as_ref(),
+                e
+            ))
+        })?;
+
         info!("Configuration saved to {:?}", path.as_ref());
         Ok(())
     }
@@ -692,10 +711,9 @@ impl ServerConfig {
     /// Get the socket address for the server
     pub fn socket_addr(&self) -> FusekiResult<SocketAddr> {
         let addr = format!("{}:{}", self.server.host, self.server.port);
-        addr.parse()
-            .map_err(|e| FusekiError::configuration(
-                format!("Invalid host:port combination '{}': {}", addr, e)
-            ))
+        addr.parse().map_err(|e| {
+            FusekiError::configuration(format!("Invalid host:port combination '{}': {}", addr, e))
+        })
     }
 
     /// Get request timeout as Duration
@@ -731,61 +749,61 @@ impl ServerConfig {
     /// Validate configuration and return detailed errors
     pub fn validate_detailed(&self) -> Result<(), Vec<String>> {
         let mut errors = Vec::new();
-        
+
         // Check port availability (basic check)
         if self.server.port < 1024 && !is_privileged_user() {
             errors.push(format!(
-                "Port {} requires elevated privileges. Consider using port >= 1024", 
+                "Port {} requires elevated privileges. Consider using port >= 1024",
                 self.server.port
             ));
         }
-        
+
         // Check TLS configuration
         if let Some(ref tls) = self.server.tls {
             if !tls.cert_path.exists() {
-                errors.push(format!("TLS certificate file not found: {:?}", tls.cert_path));
+                errors.push(format!(
+                    "TLS certificate file not found: {:?}",
+                    tls.cert_path
+                ));
             }
             if !tls.key_path.exists() {
                 errors.push(format!("TLS key file not found: {:?}", tls.key_path));
             }
         }
-        
+
         // Check dataset locations
         for (name, dataset) in &self.datasets {
             if dataset.location.is_empty() {
                 errors.push(format!("Dataset '{}' has empty location", name));
             }
-            
+
             // Check if SHACL shape files exist
             for shape_file in &dataset.shacl_shapes {
                 if !shape_file.exists() {
                     errors.push(format!(
-                        "SHACL shape file not found for dataset '{}': {:?}", 
+                        "SHACL shape file not found for dataset '{}': {:?}",
                         name, shape_file
                     ));
                 }
             }
         }
-        
+
         // Check JWT configuration
         if let Some(ref jwt) = self.security.jwt {
             if jwt.secret.len() < 32 {
                 errors.push("JWT secret must be at least 32 characters long".to_string());
             }
         }
-        
+
         // Check logging configuration
         if let Some(ref file_config) = self.logging.file_config {
             if let Some(parent) = file_config.path.parent() {
                 if !parent.exists() {
-                    errors.push(format!(
-                        "Log file directory does not exist: {:?}", 
-                        parent
-                    ));
+                    errors.push(format!("Log file directory does not exist: {:?}", parent));
                 }
             }
         }
-        
+
         if errors.is_empty() {
             Ok(())
         } else {
@@ -804,13 +822,15 @@ pub struct ConfigWatcher {
 #[cfg(feature = "hot-reload")]
 impl ConfigWatcher {
     /// Create a new configuration watcher
-    pub fn new<P: AsRef<Path>>(config_path: P) -> FusekiResult<(Self, tokio::sync::watch::Receiver<ServerConfig>)> {
+    pub fn new<P: AsRef<Path>>(
+        config_path: P,
+    ) -> FusekiResult<(Self, tokio::sync::watch::Receiver<ServerConfig>)> {
         let config_path = config_path.as_ref().to_path_buf();
         let initial_config = ServerConfig::from_file(&config_path)?;
-        
+
         let (tx, rx) = tokio::sync::watch::channel(initial_config);
         let (file_tx, file_rx) = mpsc::channel();
-        
+
         let mut watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
             match res {
                 Ok(event) => {
@@ -820,15 +840,18 @@ impl ConfigWatcher {
                 }
                 Err(e) => warn!("File watch error: {}", e),
             }
-        }).map_err(|e| FusekiError::configuration(
-            format!("Failed to create file watcher: {}", e)
-        ))?;
-        
-        watcher.watch(&config_path, RecursiveMode::NonRecursive)
-            .map_err(|e| FusekiError::configuration(
-                format!("Failed to watch config file {:?}: {}", config_path, e)
-            ))?;
-        
+        })
+        .map_err(|e| FusekiError::configuration(format!("Failed to create file watcher: {}", e)))?;
+
+        watcher
+            .watch(&config_path, RecursiveMode::NonRecursive)
+            .map_err(|e| {
+                FusekiError::configuration(format!(
+                    "Failed to watch config file {:?}: {}",
+                    config_path, e
+                ))
+            })?;
+
         // Spawn background task to handle file events
         let config_path_clone = config_path.clone();
         let tx_clone = tx.clone();
@@ -837,7 +860,7 @@ impl ConfigWatcher {
                 if event.kind.is_modify() {
                     // Debounce rapid file changes
                     tokio::time::sleep(Duration::from_millis(100)).await;
-                    
+
                     match ServerConfig::from_file(&config_path_clone) {
                         Ok(new_config) => {
                             if let Err(e) = tx_clone.send(new_config) {
@@ -853,15 +876,15 @@ impl ConfigWatcher {
                 }
             }
         });
-        
+
         let config_watcher = ConfigWatcher {
             _watcher: watcher,
             receiver: rx.clone(),
         };
-        
+
         Ok((config_watcher, rx))
     }
-    
+
     /// Get the current configuration
     pub fn current_config(&self) -> ServerConfig {
         self.receiver.borrow().clone()
@@ -892,8 +915,8 @@ fn get_cpu_count() -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::NamedTempFile;
     use std::io::Write;
+    use tempfile::NamedTempFile;
 
     #[test]
     fn test_server_config_default() {
@@ -912,17 +935,17 @@ mod tests {
     #[test]
     fn test_config_validation() {
         let mut config = ServerConfig::default();
-        
+
         // Valid configuration should pass
         assert!(config.validate().is_ok());
-        
+
         // Invalid port should fail
         config.server.port = 0;
         assert!(config.validate().is_err());
-        
+
         // Reset to valid
         config.server.port = 3030;
-        
+
         // Empty host should fail
         config.server.host = String::new();
         assert!(config.validate().is_err());
@@ -946,7 +969,7 @@ mod tests {
     fn test_tls_config() {
         let mut config = ServerConfig::default();
         assert!(!config.is_tls_enabled());
-        
+
         config.server.tls = Some(TlsConfig {
             cert_path: "/path/to/cert.pem".into(),
             key_path: "/path/to/key.pem".into(),
@@ -964,10 +987,10 @@ mod tests {
             issuer: "oxirs-fuseki".to_string(),
             audience: "oxirs-users".to_string(),
         };
-        
+
         // Short secret should fail validation
         assert!(jwt_config.validate().is_err());
-        
+
         // Long enough secret should pass
         jwt_config.secret = "a".repeat(32);
         assert!(jwt_config.validate().is_ok());
@@ -982,7 +1005,7 @@ mod tests {
             per_user: false,
             whitelist: vec!["127.0.0.1".to_string()],
         };
-        
+
         assert!(rate_limit.validate().is_ok());
     }
 
@@ -995,7 +1018,7 @@ mod tests {
             auth_required: false,
             rate_limit: None,
         };
-        
+
         assert!(service.validate().is_ok());
     }
 
@@ -1023,7 +1046,7 @@ mod tests {
                 sample_rate: 0.1,
             },
         };
-        
+
         assert!(monitoring.validate().is_ok());
     }
 
@@ -1053,7 +1076,7 @@ mod tests {
                 thread_pool_size: 4,
             },
         };
-        
+
         assert!(performance.validate().is_ok());
     }
 
@@ -1065,7 +1088,7 @@ mod tests {
             output: LogOutput::Stdout,
             file_config: None,
         };
-        
+
         assert!(logging.validate().is_ok());
     }
 
@@ -1099,7 +1122,7 @@ mod tests {
             allow_credentials: true,
             max_age_secs: 3600,
         };
-        
+
         assert!(cors.validate().is_ok());
     }
 
@@ -1112,7 +1135,7 @@ mod tests {
             http_only: true,
             same_site: SameSitePolicy::Strict,
         };
-        
+
         assert!(session.validate().is_ok());
     }
 
@@ -1120,13 +1143,13 @@ mod tests {
     fn test_save_and_load_yaml() {
         let config = ServerConfig::default();
         let temp_file = NamedTempFile::new().unwrap();
-        
+
         // Save configuration
         config.save_yaml(temp_file.path()).unwrap();
-        
+
         // Load configuration
         let loaded_config = ServerConfig::from_file(temp_file.path()).unwrap();
-        
+
         assert_eq!(config.server.port, loaded_config.server.port);
         assert_eq!(config.server.host, loaded_config.server.host);
     }
@@ -1136,16 +1159,16 @@ mod tests {
         let config = ServerConfig::default();
         let mut temp_file = NamedTempFile::new().unwrap();
         let temp_path = temp_file.path().with_extension("toml");
-        
+
         // Save configuration
         config.save_toml(&temp_path).unwrap();
-        
+
         // Load configuration
         let loaded_config = ServerConfig::from_file(&temp_path).unwrap();
-        
+
         assert_eq!(config.server.port, loaded_config.server.port);
         assert_eq!(config.server.host, loaded_config.server.host);
-        
+
         // Clean up
         std::fs::remove_file(temp_path).ok();
     }
@@ -1153,10 +1176,10 @@ mod tests {
     #[test]
     fn test_detailed_validation() {
         let mut config = ServerConfig::default();
-        
+
         // Should pass validation for default config
         assert!(config.validate_detailed().is_ok());
-        
+
         // Add invalid dataset
         let dataset = DatasetConfig {
             name: "test".to_string(),
@@ -1168,9 +1191,9 @@ mod tests {
             access_control: None,
             backup: None,
         };
-        
+
         config.datasets.insert("test".to_string(), dataset);
-        
+
         let errors = config.validate_detailed().unwrap_err();
         assert!(!errors.is_empty());
         assert!(errors.iter().any(|e| e.contains("empty location")));

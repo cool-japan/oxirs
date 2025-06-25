@@ -188,8 +188,22 @@ impl ColumnarStorage {
 
         // Get IDs from dictionary
         let mut dict = self.uri_dictionary.write().await;
-        let subject_id = self.get_or_create_term_id(&mut dict, triple.subject());
-        let predicate_id = self.get_or_create_term_id(&mut dict, triple.predicate());
+        
+        // Handle subject
+        let subject_str = match triple.subject() {
+            crate::model::Subject::NamedNode(nn) => nn.as_str(),
+            crate::model::Subject::BlankNode(bn) => bn.as_str(),
+            crate::model::Subject::Variable(v) => v.as_str(),
+            crate::model::Subject::QuotedTriple(_) => "_:quoted", // Simplified for now
+        };
+        let subject_id = dict.get_or_create_uri(subject_str);
+        
+        // Handle predicate
+        let predicate_str = match triple.predicate() {
+            crate::model::Predicate::NamedNode(nn) => nn.as_str(),
+            crate::model::Predicate::Variable(v) => v.as_str(),
+        };
+        let predicate_id = dict.get_or_create_uri(predicate_str);
 
         // Build columns
         writer.subject_builder.append_value(subject_id);
@@ -213,12 +227,10 @@ impl ColumnarStorage {
                 writer.object_type_builder.append_value("literal");
                 writer.object_value_builder.append_value(lit.value());
 
-                if let Some(dt) = lit.datatype() {
-                    let dt_id = dict.get_or_create_uri(dt.as_str());
-                    writer.object_datatype_builder.append_value(dt_id);
-                } else {
-                    writer.object_datatype_builder.append_null();
-                }
+                // Literals always have a datatype
+                let dt = lit.datatype();
+                let dt_id = dict.get_or_create_uri(dt.as_str());
+                writer.object_datatype_builder.append_value(dt_id);
 
                 if let Some(lang) = lit.language() {
                     writer.object_lang_builder.append_value(lang);
@@ -301,12 +313,22 @@ impl ColumnarStorage {
                 let object_value = object_values.value(i);
 
                 // Reconstruct triple
-                let subject = dict.get_term(subject_id).ok_or_else(|| {
+                let subject_uri = dict.get_uri(subject_id).ok_or_else(|| {
                     OxirsError::Query(format!("Unknown subject ID: {}", subject_id))
                 })?;
-                let predicate = dict.get_term(predicate_id).ok_or_else(|| {
+                let predicate_uri = dict.get_uri(predicate_id).ok_or_else(|| {
                     OxirsError::Query(format!("Unknown predicate ID: {}", predicate_id))
                 })?;
+                
+                // Construct subject
+                let subject = if subject_uri.starts_with("_:") {
+                    crate::model::Subject::BlankNode(BlankNode::new(subject_uri)?)
+                } else {
+                    crate::model::Subject::NamedNode(NamedNode::new(subject_uri)?)
+                };
+                
+                // Construct predicate (predicates can only be named nodes in RDF)
+                let predicate = crate::model::Predicate::NamedNode(NamedNode::new(predicate_uri)?);
 
                 let object = match object_type {
                     "uri" => crate::model::Object::NamedNode(NamedNode::new(object_value)?),
@@ -424,7 +446,7 @@ impl ColumnarStorage {
 
     /// Flush current batch to disk
     async fn flush_batch(&self, writer_guard: &mut Option<BatchWriter>) -> Result<(), OxirsError> {
-        if let Some(writer) = writer_guard.take() {
+        if let Some(mut writer) = writer_guard.take() {
             // Create record batch
             let batch = RecordBatch::try_new(
                 self.schema.clone(),
@@ -484,7 +506,7 @@ impl ColumnarStorage {
             }
             PartitionStrategy::ByTimeRange { bucket_hours } => {
                 let now = chrono::Utc::now();
-                let bucket = now.timestamp() / (bucket_hours as i64 * 3600);
+                let bucket = now.timestamp() / (*bucket_hours as i64 * 3600);
                 format!("time_bucket_{}", bucket)
             }
             PartitionStrategy::Custom(name) => name.clone(),
@@ -496,20 +518,12 @@ impl ColumnarStorage {
         match self.config.compression {
             CompressionType::None => parquet::basic::Compression::UNCOMPRESSED,
             CompressionType::Snappy => parquet::basic::Compression::SNAPPY,
-            CompressionType::Gzip => parquet::basic::Compression::GZIP,
+            CompressionType::Gzip => parquet::basic::Compression::GZIP(parquet::basic::GzipLevel::default()),
             CompressionType::Lz4 => parquet::basic::Compression::LZ4,
-            CompressionType::Zstd => parquet::basic::Compression::ZSTD,
+            CompressionType::Zstd => parquet::basic::Compression::ZSTD(parquet::basic::ZstdLevel::default()),
         }
     }
 
-    /// Get or create term ID
-    fn get_or_create_term_id(
-        &self,
-        dict: &mut UriDictionary,
-        term: &impl crate::model::RdfTerm,
-    ) -> u64 {
-        dict.get_or_create_uri(term.as_str())
-    }
 }
 
 impl UriDictionary {
@@ -623,10 +637,13 @@ mod tests {
         storage.store_triple(&triple).await.unwrap();
 
         // Flush to ensure it's written
-        storage
-            .flush_batch(&mut storage.writer.write().await)
-            .await
-            .unwrap();
+        {
+            let mut writer_guard = storage.writer.write().await;
+            storage
+                .flush_batch(&mut *writer_guard)
+                .await
+                .unwrap();
+        }
 
         // Query using SQL
         let results = storage
@@ -659,10 +676,13 @@ mod tests {
         }
 
         // Flush remaining
-        storage
-            .flush_batch(&mut storage.writer.write().await)
-            .await
-            .unwrap();
+        {
+            let mut writer_guard = storage.writer.write().await;
+            storage
+                .flush_batch(&mut *writer_guard)
+                .await
+                .unwrap();
+        }
 
         // Count by predicate
         let result = storage

@@ -3,20 +3,20 @@
 //! This crate provides state-of-the-art knowledge graph embedding methods
 //! including TransE, DistMult, ComplEx, and RotatE models.
 
-pub mod models;
-pub mod training;
 pub mod evaluation;
 pub mod inference;
-pub mod persistence;
 pub mod integration;
+pub mod models;
+pub mod persistence;
+pub mod training;
 pub mod utils;
 
 // Local type definitions (normally would import from oxirs-core and oxirs-vec)
 use anyhow::{anyhow, Result};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 
 /// Vector for embeddings
 #[derive(Debug, Clone)]
@@ -42,7 +42,11 @@ pub struct Triple {
 
 impl Triple {
     pub fn new(subject: NamedNode, predicate: NamedNode, object: NamedNode) -> Self {
-        Self { subject, predicate, object }
+        Self {
+            subject,
+            predicate,
+            object,
+        }
     }
 }
 
@@ -54,7 +58,9 @@ pub struct NamedNode {
 
 impl NamedNode {
     pub fn new(iri: &str) -> Result<Self> {
-        Ok(Self { iri: iri.to_string() })
+        Ok(Self {
+            iri: iri.to_string(),
+        })
     }
 }
 
@@ -99,17 +105,17 @@ impl ModelConfig {
         self.dimensions = dimensions;
         self
     }
-    
+
     pub fn with_learning_rate(mut self, learning_rate: f64) -> Self {
         self.learning_rate = learning_rate;
         self
     }
-    
+
     pub fn with_max_epochs(mut self, max_epochs: usize) -> Self {
         self.max_epochs = max_epochs;
         self
     }
-    
+
     pub fn with_seed(mut self, seed: u64) -> Self {
         self.seed = Some(seed);
         self
@@ -163,9 +169,24 @@ pub trait EmbeddingModel: Send + Sync {
     fn get_entity_embedding(&self, entity: &str) -> Result<Vector>;
     fn get_relation_embedding(&self, relation: &str) -> Result<Vector>;
     fn score_triple(&self, subject: &str, predicate: &str, object: &str) -> Result<f64>;
-    fn predict_objects(&self, subject: &str, predicate: &str, k: usize) -> Result<Vec<(String, f64)>>;
-    fn predict_subjects(&self, predicate: &str, object: &str, k: usize) -> Result<Vec<(String, f64)>>;
-    fn predict_relations(&self, subject: &str, object: &str, k: usize) -> Result<Vec<(String, f64)>>;
+    fn predict_objects(
+        &self,
+        subject: &str,
+        predicate: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>>;
+    fn predict_subjects(
+        &self,
+        predicate: &str,
+        object: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>>;
+    fn predict_relations(
+        &self,
+        subject: &str,
+        object: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>>;
     fn get_entities(&self) -> Vec<String>;
     fn get_relations(&self) -> Vec<String>;
     fn get_stats(&self) -> ModelStats;
@@ -176,4 +197,4 @@ pub trait EmbeddingModel: Send + Sync {
 }
 
 // Re-export main model types
-pub use models::{TransE, DistMult, ComplEx, RotatE};
+pub use models::{ComplEx, DistMult, RotatE, TransE};

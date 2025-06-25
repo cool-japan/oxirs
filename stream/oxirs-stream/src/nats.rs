@@ -8,6 +8,7 @@
 use crate::kafka::KafkaEvent; // Reuse the same event format
 use crate::{EventMetadata, PatchOperation, RdfPatch, StreamBackend, StreamConfig, StreamEvent};
 use anyhow::{anyhow, Result};
+use chrono::{DateTime, Utc};
 use futures_util::{StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -20,26 +21,153 @@ use async_nats::{
     Client, ConnectOptions,
 };
 
-/// NATS-specific configuration
+/// NATS-specific configuration with advanced JetStream features
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NatsConfig {
     pub url: String,
+    pub cluster_urls: Option<Vec<String>>,
     pub stream_name: String,
     pub subject_prefix: String,
     pub max_age_seconds: u64,
     pub max_bytes: u64,
     pub replicas: usize,
+    pub storage_type: NatsStorageType,
+    pub retention_policy: NatsRetentionPolicy,
+    pub max_msgs: i64,
+    pub max_msg_size: i32,
+    pub discard_policy: NatsDiscardPolicy,
+    pub duplicate_window: Duration,
+    pub consumer_config: NatsConsumerConfig,
+    pub auth_config: Option<NatsAuthConfig>,
+    pub tls_config: Option<NatsTlsConfig>,
+}
+
+/// NATS storage types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum NatsStorageType {
+    File,
+    Memory,
+}
+
+/// NATS retention policies
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum NatsRetentionPolicy {
+    Limits,
+    Interest,
+    WorkQueue,
+}
+
+/// NATS discard policies
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum NatsDiscardPolicy {
+    Old,
+    New,
+}
+
+/// NATS consumer configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NatsConsumerConfig {
+    pub name: String,
+    pub description: String,
+    pub deliver_policy: NatsDeliverPolicy,
+    pub ack_policy: NatsAckPolicy,
+    pub ack_wait: Duration,
+    pub max_deliver: i64,
+    pub replay_policy: NatsReplayPolicy,
+    pub max_ack_pending: i64,
+    pub max_waiting: i64,
+    pub max_batch: i64,
+    pub max_expires: Duration,
+    pub flow_control: bool,
+    pub heartbeat: Duration,
+}
+
+/// NATS deliver policies
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum NatsDeliverPolicy {
+    All,
+    Last,
+    New,
+    ByStartSequence(u64),
+    ByStartTime(DateTime<Utc>),
+    LastPerSubject,
+}
+
+/// NATS acknowledgment policies
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum NatsAckPolicy {
+    None,
+    All,
+    Explicit,
+}
+
+/// NATS replay policies
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum NatsReplayPolicy {
+    Instant,
+    Original,
+}
+
+/// NATS authentication configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NatsAuthConfig {
+    pub token: Option<String>,
+    pub username: Option<String>,
+    pub password: Option<String>,
+    pub nkey: Option<String>,
+    pub credentials_file: Option<String>,
+    pub jwt: Option<String>,
+}
+
+/// NATS TLS configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NatsTlsConfig {
+    pub ca_file: Option<String>,
+    pub cert_file: Option<String>,
+    pub key_file: Option<String>,
+    pub verify: bool,
+    pub timeout: Duration,
 }
 
 impl Default for NatsConfig {
     fn default() -> Self {
         Self {
             url: "nats://localhost:4222".to_string(),
+            cluster_urls: None,
             stream_name: "OXIRS_RDF".to_string(),
             subject_prefix: "oxirs.rdf".to_string(),
             max_age_seconds: 86400,        // 24 hours
             max_bytes: 1024 * 1024 * 1024, // 1GB
             replicas: 1,
+            storage_type: NatsStorageType::File,
+            retention_policy: NatsRetentionPolicy::Limits,
+            max_msgs: 1_000_000,
+            max_msg_size: 1024 * 1024, // 1MB
+            discard_policy: NatsDiscardPolicy::Old,
+            duplicate_window: Duration::from_secs(120),
+            consumer_config: NatsConsumerConfig::default(),
+            auth_config: None,
+            tls_config: None,
+        }
+    }
+}
+
+impl Default for NatsConsumerConfig {
+    fn default() -> Self {
+        Self {
+            name: "oxirs-consumer".to_string(),
+            description: "OxiRS RDF Stream Consumer".to_string(),
+            deliver_policy: NatsDeliverPolicy::All,
+            ack_policy: NatsAckPolicy::Explicit,
+            ack_wait: Duration::from_secs(30),
+            max_deliver: 3,
+            replay_policy: NatsReplayPolicy::Instant,
+            max_ack_pending: 1000,
+            max_waiting: 512,
+            max_batch: 100,
+            max_expires: Duration::from_secs(60),
+            flow_control: true,
+            heartbeat: Duration::from_secs(5),
         }
     }
 }
@@ -129,22 +257,42 @@ impl NatsProducer {
 
     #[cfg(feature = "nats")]
     async fn ensure_stream(&self, jetstream: &jetstream::Context) -> Result<()> {
+        let storage = match self.nats_config.storage_type {
+            NatsStorageType::File => jetstream::stream::StorageType::File,
+            NatsStorageType::Memory => jetstream::stream::StorageType::Memory,
+        };
+
+        let retention = match self.nats_config.retention_policy {
+            NatsRetentionPolicy::Limits => jetstream::stream::RetentionPolicy::Limits,
+            NatsRetentionPolicy::Interest => jetstream::stream::RetentionPolicy::Interest,
+            NatsRetentionPolicy::WorkQueue => jetstream::stream::RetentionPolicy::WorkQueue,
+        };
+
+        let discard = match self.nats_config.discard_policy {
+            NatsDiscardPolicy::Old => jetstream::stream::DiscardPolicy::Old,
+            NatsDiscardPolicy::New => jetstream::stream::DiscardPolicy::New,
+        };
+
         let stream_config = jetstream::stream::Config {
             name: self.nats_config.stream_name.clone(),
             subjects: vec![format!("{}.*", self.nats_config.subject_prefix)],
             max_age: Duration::from_secs(self.nats_config.max_age_seconds),
             max_bytes: self.nats_config.max_bytes as i64,
+            max_messages: self.nats_config.max_msgs,
+            max_message_size: self.nats_config.max_msg_size,
             num_replicas: self.nats_config.replicas,
-            storage: jetstream::stream::StorageType::File,
-            retention: jetstream::stream::RetentionPolicy::Limits,
+            storage,
+            retention,
+            discard,
+            duplicate_window: self.nats_config.duplicate_window,
             ..Default::default()
         };
 
         match jetstream.get_or_create_stream(stream_config).await {
             Ok(_) => {
                 info!(
-                    "Got or created JetStream stream: {}",
-                    self.nats_config.stream_name
+                    "Got or created JetStream stream: {} with {} replicas",
+                    self.nats_config.stream_name, self.nats_config.replicas
                 );
             }
             Err(e) => {
@@ -369,17 +517,43 @@ impl NatsConsumer {
             .await
             .map_err(|e| anyhow!("Failed to create NATS stream: {}", e))?;
 
-        // Create consumer on the stream
+        // Create consumer on the stream with advanced configuration
+        let deliver_policy = match self.nats_config.consumer_config.deliver_policy {
+            NatsDeliverPolicy::All => jetstream::consumer::DeliverPolicy::All,
+            NatsDeliverPolicy::Last => jetstream::consumer::DeliverPolicy::Last,
+            NatsDeliverPolicy::New => jetstream::consumer::DeliverPolicy::New,
+            NatsDeliverPolicy::ByStartSequence(seq) => jetstream::consumer::DeliverPolicy::ByStartSequence { start_sequence: seq },
+            NatsDeliverPolicy::ByStartTime(time) => jetstream::consumer::DeliverPolicy::ByStartTime { start_time: time },
+            NatsDeliverPolicy::LastPerSubject => jetstream::consumer::DeliverPolicy::LastPerSubject,
+        };
+
+        let ack_policy = match self.nats_config.consumer_config.ack_policy {
+            NatsAckPolicy::None => jetstream::consumer::AckPolicy::None,
+            NatsAckPolicy::All => jetstream::consumer::AckPolicy::All,
+            NatsAckPolicy::Explicit => jetstream::consumer::AckPolicy::Explicit,
+        };
+
+        let replay_policy = match self.nats_config.consumer_config.replay_policy {
+            NatsReplayPolicy::Instant => jetstream::consumer::ReplayPolicy::Instant,
+            NatsReplayPolicy::Original => jetstream::consumer::ReplayPolicy::Original,
+        };
+
         let consumer_config = jetstream::consumer::pull::Config {
-            name: Some("oxirs-consumer".to_string()),
-            durable_name: Some("oxirs-consumer".to_string()),
-            description: Some("OxiRS RDF Stream Consumer".to_string()),
-            deliver_policy: jetstream::consumer::DeliverPolicy::All,
-            ack_policy: jetstream::consumer::AckPolicy::Explicit,
-            ack_wait: Duration::from_secs(30),
-            max_deliver: 3,
+            name: Some(self.nats_config.consumer_config.name.clone()),
+            durable_name: Some(self.nats_config.consumer_config.name.clone()),
+            description: Some(self.nats_config.consumer_config.description.clone()),
+            deliver_policy,
+            ack_policy,
+            ack_wait: self.nats_config.consumer_config.ack_wait,
+            max_deliver: self.nats_config.consumer_config.max_deliver,
             filter_subject: format!("{}.*", self.nats_config.subject_prefix),
-            replay_policy: jetstream::consumer::ReplayPolicy::Instant,
+            replay_policy,
+            max_ack_pending: self.nats_config.consumer_config.max_ack_pending,
+            max_waiting: self.nats_config.consumer_config.max_waiting,
+            max_batch: self.nats_config.consumer_config.max_batch,
+            max_expires: self.nats_config.consumer_config.max_expires,
+            flow_control: self.nats_config.consumer_config.flow_control,
+            heartbeat: self.nats_config.consumer_config.heartbeat,
             ..Default::default()
         };
 

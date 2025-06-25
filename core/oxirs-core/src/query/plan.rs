@@ -4,14 +4,40 @@
 //! optimized execution plans.
 
 use crate::model::*;
-use crate::query::algebra::*;
+use crate::query::algebra;
+use crate::query::{Expression, OrderExpression, Query, QueryForm, SelectVariables};
 use crate::OxirsError;
+
+/// Convert algebra TriplePattern to model TriplePattern
+pub fn convert_triple_pattern(pattern: &algebra::TriplePattern) -> TriplePattern {
+    let subject = match &pattern.subject {
+        algebra::TermPattern::NamedNode(nn) => Some(SubjectPattern::NamedNode(nn.clone())),
+        algebra::TermPattern::BlankNode(bn) => Some(SubjectPattern::BlankNode(bn.clone())),
+        algebra::TermPattern::Variable(v) => Some(SubjectPattern::Variable(v.clone())),
+        algebra::TermPattern::Literal(_) => None, // Literals can't be subjects
+    };
+    
+    let predicate = match &pattern.predicate {
+        algebra::TermPattern::NamedNode(nn) => Some(PredicatePattern::NamedNode(nn.clone())),
+        algebra::TermPattern::Variable(v) => Some(PredicatePattern::Variable(v.clone())),
+        _ => None, // Only named nodes and variables can be predicates
+    };
+    
+    let object = match &pattern.object {
+        algebra::TermPattern::NamedNode(nn) => Some(ObjectPattern::NamedNode(nn.clone())),
+        algebra::TermPattern::BlankNode(bn) => Some(ObjectPattern::BlankNode(bn.clone())),
+        algebra::TermPattern::Literal(lit) => Some(ObjectPattern::Literal(lit.clone())),
+        algebra::TermPattern::Variable(v) => Some(ObjectPattern::Variable(v.clone())),
+    };
+    
+    TriplePattern::new(subject, predicate, object)
+}
 
 /// A query execution plan
 #[derive(Debug, Clone)]
 pub enum ExecutionPlan {
     /// Scan all triples matching a pattern
-    TripleScan { pattern: TriplePattern },
+    TripleScan { pattern: crate::model::pattern::TriplePattern },
     /// Join two sub-plans
     HashJoin {
         left: Box<ExecutionPlan>,
@@ -118,22 +144,22 @@ impl QueryPlanner {
     }
 
     /// Plans a graph pattern
-    fn plan_graph_pattern(&self, pattern: &GraphPattern) -> Result<ExecutionPlan, OxirsError> {
+    fn plan_graph_pattern(&self, pattern: &algebra::GraphPattern) -> Result<ExecutionPlan, OxirsError> {
         match pattern {
-            GraphPattern::Bgp(patterns) => {
+            algebra::GraphPattern::Bgp(patterns) => {
                 if patterns.is_empty() {
                     return Err(OxirsError::Query("Empty basic graph pattern".to_string()));
                 }
 
                 // Start with the first pattern
                 let mut plan = ExecutionPlan::TripleScan {
-                    pattern: patterns[0].clone(),
+                    pattern: convert_triple_pattern(&patterns[0]),
                 };
 
                 // Join with remaining patterns
                 for pattern in &patterns[1..] {
                     let right_plan = ExecutionPlan::TripleScan {
-                        pattern: pattern.clone(),
+                        pattern: convert_triple_pattern(pattern),
                     };
 
                     // Find join variables
@@ -148,14 +174,14 @@ impl QueryPlanner {
 
                 Ok(plan)
             }
-            GraphPattern::Filter { expr, inner } => {
+            algebra::GraphPattern::Filter { expr, inner } => {
                 let inner_plan = self.plan_graph_pattern(inner)?;
                 Ok(ExecutionPlan::Filter {
                     input: Box::new(inner_plan),
                     condition: expr.clone(),
                 })
             }
-            GraphPattern::Union(left, right) => {
+            algebra::GraphPattern::Union(left, right) => {
                 let left_plan = self.plan_graph_pattern(left)?;
                 let right_plan = self.plan_graph_pattern(right)?;
                 Ok(ExecutionPlan::Union {

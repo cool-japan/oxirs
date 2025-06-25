@@ -18,7 +18,7 @@
 //!
 //! ```rust
 //! use oxirs_fuseki::Server;
-//! 
+//!
 //! # #[tokio::main]
 //! # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let server = Server::builder()
@@ -26,7 +26,7 @@
 //!     .dataset_path(\"/data\")
 //!     .build()
 //!     .await?;
-//! 
+//!
 //! server.run().await?;
 //! # Ok(())
 //! # }
@@ -34,16 +34,16 @@
 
 use std::net::SocketAddr;
 
-pub mod error;
-pub mod server;
-pub mod config;
-pub mod handlers;
 pub mod auth;
-pub mod metrics;
-pub mod performance;
-pub mod optimization;
-pub mod store;
+pub mod config;
+pub mod error;
 pub mod federation;
+pub mod handlers;
+pub mod metrics;
+pub mod optimization;
+pub mod performance;
+pub mod server;
+pub mod store;
 pub mod vector_search;
 
 use store::Store;
@@ -64,7 +64,10 @@ impl Server {
     /// Run the server
     pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
         let runtime = server::Runtime::new(self.addr, self.store, self.config);
-        runtime.run().await.map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+        runtime
+            .run()
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
     }
 }
 
@@ -106,7 +109,7 @@ impl ServerBuilder {
         } else {
             Store::new()?
         };
-        
+
         let config = config::ServerConfig::default();
 
         Ok(Server {

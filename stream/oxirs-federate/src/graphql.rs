@@ -58,20 +58,180 @@ impl GraphQLFederation {
 
     /// Execute a federated GraphQL query plan
     pub async fn execute_federated(&self, plan: &ExecutionPlan) -> Result<Vec<StepResult>> {
-        info!("Executing federated GraphQL plan");
+        info!("Executing federated GraphQL plan with {} steps", plan.steps.len());
 
-        // For now, this delegates to the general executor
-        // In a full implementation, this would handle GraphQL-specific federation logic
+        let mut results = Vec::new();
+        let mut completed_steps: HashMap<String, StepResult> = HashMap::new();
 
-        // TODO: Implement GraphQL-specific execution logic including:
-        // - Schema merging and conflict resolution
-        // - Query decomposition based on schema ownership
-        // - Entity resolution across services
-        // - Type extension handling
-        // - Apollo Federation support
+        // Execute steps in dependency order
+        let execution_order = self.calculate_execution_order(plan)?;
+        
+        for step_id in execution_order {
+            if let Some(step) = plan.steps.iter().find(|s| s.step_id == step_id) {
+                let step_result = self.execute_graphql_step(step, &completed_steps).await?;
+                completed_steps.insert(step_id.clone(), step_result.clone());
+                results.push(step_result);
+            }
+        }
 
-        // Placeholder implementation
-        Ok(Vec::new())
+        Ok(results)
+    }
+
+    /// Calculate the order of step execution based on dependencies
+    fn calculate_execution_order(&self, plan: &ExecutionPlan) -> Result<Vec<String>> {
+        let mut order = Vec::new();
+        let mut visited = HashSet::new();
+        let mut visiting = HashSet::new();
+
+        // Topological sort
+        for step in &plan.steps {
+            if !visited.contains(&step.step_id) {
+                self.visit_step(&step.step_id, plan, &mut visited, &mut visiting, &mut order)?;
+            }
+        }
+
+        Ok(order)
+    }
+
+    /// Recursive helper for topological sort
+    fn visit_step(
+        &self,
+        step_id: &str,
+        plan: &ExecutionPlan,
+        visited: &mut HashSet<String>,
+        visiting: &mut HashSet<String>,
+        order: &mut Vec<String>,
+    ) -> Result<()> {
+        if visiting.contains(step_id) {
+            return Err(anyhow!("Circular dependency detected in execution plan"));
+        }
+
+        if visited.contains(step_id) {
+            return Ok(());
+        }
+
+        visiting.insert(step_id.to_string());
+
+        if let Some(step) = plan.steps.iter().find(|s| s.step_id == step_id) {
+            for dep_id in &step.dependencies {
+                self.visit_step(dep_id, plan, visited, visiting, order)?;
+            }
+        }
+
+        visiting.remove(step_id);
+        visited.insert(step_id.to_string());
+        order.push(step_id.to_string());
+
+        Ok(())
+    }
+
+    /// Execute a single GraphQL step
+    async fn execute_graphql_step(
+        &self,
+        step: &crate::ExecutionStep,
+        completed_steps: &HashMap<String, StepResult>,
+    ) -> Result<StepResult> {
+        use std::time::Instant;
+        let start_time = Instant::now();
+
+        debug!("Executing GraphQL step: {} ({})", step.step_id, step.step_type);
+
+        let result = match step.step_type {
+            crate::StepType::GraphQLQuery => {
+                self.execute_graphql_query_step(step, completed_steps).await
+            }
+            crate::StepType::SchemaStitch => {
+                self.execute_schema_stitch_step(step, completed_steps).await
+            }
+            _ => {
+                // For non-GraphQL steps, return a success result
+                Ok(QueryResultData::GraphQL(GraphQLResponse {
+                    data: serde_json::Value::Null,
+                    errors: Vec::new(),
+                    extensions: None,
+                }))
+            }
+        };
+
+        let execution_time = start_time.elapsed();
+
+        let (status, data, error) = match result {
+            Ok(query_data) => (
+                crate::executor::ExecutionStatus::Success,
+                Some(query_data),
+                None,
+            ),
+            Err(err) => (
+                crate::executor::ExecutionStatus::Failed,
+                None,
+                Some(err.to_string()),
+            ),
+        };
+
+        Ok(StepResult {
+            step_id: step.step_id.clone(),
+            step_type: step.step_type,
+            status,
+            data,
+            error,
+            execution_time,
+            service_id: step.service_id.clone(),
+        })
+    }
+
+    /// Execute a GraphQL query step
+    async fn execute_graphql_query_step(
+        &self,
+        step: &crate::ExecutionStep,
+        _completed_steps: &HashMap<String, StepResult>,
+    ) -> Result<QueryResultData> {
+        debug!("Executing GraphQL query: {}", step.query_fragment);
+
+        // In a real implementation, this would:
+        // 1. Send the query to the appropriate GraphQL service
+        // 2. Handle authentication and headers
+        // 3. Parse and validate the response
+        // 4. Apply any necessary transformations
+
+        // For now, return a mock successful response
+        let mock_response = GraphQLResponse {
+            data: serde_json::json!({
+                "result": "GraphQL query executed successfully",
+                "service": step.service_id.as_ref().unwrap_or(&"unknown".to_string()),
+                "query": step.query_fragment
+            }),
+            errors: Vec::new(),
+            extensions: None,
+        };
+
+        Ok(QueryResultData::GraphQL(mock_response))
+    }
+
+    /// Execute a schema stitching step
+    async fn execute_schema_stitch_step(
+        &self,
+        step: &crate::ExecutionStep,
+        completed_steps: &HashMap<String, StepResult>,
+    ) -> Result<QueryResultData> {
+        debug!("Executing schema stitch step: {}", step.step_id);
+
+        // Collect all GraphQL results from dependencies
+        let mut service_results = Vec::new();
+
+        for dep_id in &step.dependencies {
+            if let Some(dep_result) = completed_steps.get(dep_id) {
+                if let Some(QueryResultData::GraphQL(graphql_response)) = &dep_result.data {
+                    service_results.push(ServiceResult {
+                        service_id: dep_result.service_id.clone().unwrap_or_default(),
+                        response: graphql_response.clone(),
+                    });
+                }
+            }
+        }
+
+        // Stitch the results together
+        let stitched_response = self.stitch_results(service_results).await?;
+        Ok(QueryResultData::GraphQL(stitched_response))
     }
 
     /// Create a unified schema from all registered schemas
@@ -319,15 +479,196 @@ impl GraphQLFederation {
 
     /// Decompose a GraphQL query for federation
     pub async fn decompose_query(&self, query: &str) -> Result<Vec<ServiceQuery>> {
-        // Parse the GraphQL query
-        // Analyze which services own which fields
-        // Split the query into service-specific subqueries
-        // Plan the execution order
-
-        // TODO: Implement proper query decomposition
         debug!("Decomposing GraphQL query for federation");
 
-        Ok(Vec::new())
+        // Parse the query into an AST-like structure
+        let parsed_query = self.parse_graphql_query(query)?;
+        
+        // Get the unified schema to understand field ownership
+        let unified_schema = self.create_unified_schema().await?;
+        
+        // Analyze field ownership across services
+        let field_ownership = self.analyze_field_ownership(&parsed_query, &unified_schema)?;
+        
+        // Decompose into service-specific queries
+        let service_queries = self.create_service_queries(&parsed_query, &field_ownership)?;
+        
+        debug!("Decomposed query into {} service queries", service_queries.len());
+        Ok(service_queries)
+    }
+
+    /// Parse a GraphQL query string into a structured representation
+    fn parse_graphql_query(&self, query: &str) -> Result<ParsedQuery> {
+        // This is a simplified parser - in production, use a proper GraphQL parser like graphql-parser
+        let query = query.trim();
+        
+        // Extract operation type and name
+        let (operation_type, operation_name) = if query.starts_with("query") {
+            let parts: Vec<&str> = query.splitn(3, ' ').collect();
+            let name = if parts.len() > 1 && parts[1] != "{" {
+                Some(parts[1].to_string())
+            } else {
+                None
+            };
+            (GraphQLOperationType::Query, name)
+        } else if query.starts_with("mutation") {
+            let parts: Vec<&str> = query.splitn(3, ' ').collect();
+            let name = if parts.len() > 1 && parts[1] != "{" {
+                Some(parts[1].to_string())
+            } else {
+                None
+            };
+            (GraphQLOperationType::Mutation, name)
+        } else if query.starts_with("subscription") {
+            let parts: Vec<&str> = query.splitn(3, ' ').collect();
+            let name = if parts.len() > 1 && parts[1] != "{" {
+                Some(parts[1].to_string())
+            } else {
+                None
+            };
+            (GraphQLOperationType::Subscription, name)
+        } else {
+            // Default to query if no operation type specified
+            (GraphQLOperationType::Query, None)
+        };
+
+        // Extract selection set (simplified)
+        let selection_set = self.parse_selection_set(query)?;
+
+        Ok(ParsedQuery {
+            operation_type,
+            operation_name,
+            selection_set,
+            variables: HashMap::new(), // TODO: Parse variables
+        })
+    }
+
+    /// Parse a selection set from a GraphQL query
+    fn parse_selection_set(&self, query: &str) -> Result<Vec<Selection>> {
+        let mut selections = Vec::new();
+        
+        // Find the main selection set between braces
+        if let Some(start) = query.find('{') {
+            if let Some(end) = query.rfind('}') {
+                let selection_content = &query[start + 1..end];
+                
+                // Split by lines and parse each field
+                for line in selection_content.lines() {
+                    let line = line.trim();
+                    if line.is_empty() || line.starts_with('#') {
+                        continue;
+                    }
+                    
+                    // Simple field parsing (no nested objects for now)
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    if let Some(field_name) = parts.first() {
+                        selections.push(Selection {
+                            name: field_name.to_string(),
+                            alias: None,
+                            arguments: HashMap::new(), // TODO: Parse arguments
+                            selection_set: Vec::new(), // TODO: Parse nested selections
+                        });
+                    }
+                }
+            }
+        }
+        
+        Ok(selections)
+    }
+
+    /// Analyze which services own which fields
+    fn analyze_field_ownership(&self, query: &ParsedQuery, schema: &UnifiedSchema) -> Result<FieldOwnership> {
+        let mut ownership = FieldOwnership {
+            field_to_service: HashMap::new(),
+            service_to_fields: HashMap::new(),
+        };
+
+        for selection in &query.selection_set {
+            // Determine which service owns this field
+            let service_ids = match query.operation_type {
+                GraphQLOperationType::Query => {
+                    if let Some(field_def) = schema.queries.get(&selection.name) {
+                        // For now, assign to the first service that can handle this query
+                        // In a real implementation, this would be more sophisticated
+                        schema.schema_mapping.get(&selection.name)
+                            .unwrap_or(&vec!["default".to_string()])
+                            .clone()
+                    } else {
+                        vec!["default".to_string()]
+                    }
+                }
+                GraphQLOperationType::Mutation => {
+                    if let Some(_field_def) = schema.mutations.get(&selection.name) {
+                        schema.schema_mapping.get(&selection.name)
+                            .unwrap_or(&vec!["default".to_string()])
+                            .clone()
+                    } else {
+                        vec!["default".to_string()]
+                    }
+                }
+                GraphQLOperationType::Subscription => {
+                    if let Some(_field_def) = schema.subscriptions.get(&selection.name) {
+                        schema.schema_mapping.get(&selection.name)
+                            .unwrap_or(&vec!["default".to_string()])
+                            .clone()
+                    } else {
+                        vec!["default".to_string()]
+                    }
+                }
+            };
+
+            // Record ownership
+            for service_id in &service_ids {
+                ownership.field_to_service.insert(selection.name.clone(), service_id.clone());
+                ownership.service_to_fields
+                    .entry(service_id.clone())
+                    .or_default()
+                    .push(selection.name.clone());
+            }
+        }
+
+        Ok(ownership)
+    }
+
+    /// Create service-specific queries based on field ownership
+    fn create_service_queries(&self, query: &ParsedQuery, ownership: &FieldOwnership) -> Result<Vec<ServiceQuery>> {
+        let mut service_queries = Vec::new();
+
+        for (service_id, fields) in &ownership.service_to_fields {
+            if fields.is_empty() {
+                continue;
+            }
+
+            // Build a query for this service with only its owned fields
+            let operation_type_str = match query.operation_type {
+                GraphQLOperationType::Query => "query",
+                GraphQLOperationType::Mutation => "mutation", 
+                GraphQLOperationType::Subscription => "subscription",
+            };
+
+            let operation_name = query.operation_name.as_ref()
+                .map(|name| format!(" {}", name))
+                .unwrap_or_default();
+
+            let field_strings: Vec<String> = fields.iter()
+                .map(|field| format!("  {}", field))
+                .collect();
+
+            let service_query = format!(
+                "{}{} {{\n{}\n}}",
+                operation_type_str,
+                operation_name,
+                field_strings.join("\n")
+            );
+
+            service_queries.push(ServiceQuery {
+                service_id: service_id.clone(),
+                query: service_query,
+                variables: None, // TODO: Filter variables based on field usage
+            });
+        }
+
+        Ok(service_queries)
     }
 
     /// Stitch together results from multiple services

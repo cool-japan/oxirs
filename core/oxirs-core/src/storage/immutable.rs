@@ -3,14 +3,14 @@
 //! This module provides an immutable, content-addressable storage system
 //! inspired by Git and IPFS, optimized for RDF data integrity and versioning.
 
-use crate::model::{Triple, TriplePattern, NamedNode};
+use crate::model::{NamedNode, Triple, TriplePattern};
 use crate::OxirsError;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use sha2::{Sha256, Digest};
-use serde::{Serialize, Deserialize};
 
 /// Immutable storage configuration
 #[derive(Debug, Clone)]
@@ -205,14 +205,14 @@ impl ImmutableStorage {
         std::fs::create_dir_all(&config.path)?;
         std::fs::create_dir_all(config.path.join("blocks"))?;
         std::fs::create_dir_all(config.path.join("refs"))?;
-        
+
         let cache_size = 1000; // Number of blocks to cache
-        
+
         Ok(ImmutableStorage {
             config: config.clone(),
             blocks: Arc::new(RwLock::new(BlockStore {
                 path: config.path.join("blocks"),
-                cache: lru::LruCache::new(cache_size),
+                cache: lru::LruCache::new(std::num::NonZeroUsize::new(cache_size).unwrap_or(std::num::NonZeroUsize::new(1000).unwrap())),
                 metadata: HashMap::new(),
             })),
             merkle_tree: Arc::new(RwLock::new(MerkleTree {
@@ -232,7 +232,7 @@ impl ImmutableStorage {
             stats: Arc::new(RwLock::new(ImmutableStats::default())),
         })
     }
-    
+
     /// Store triples as immutable blocks
     pub async fn store_triples(
         &self,
@@ -242,7 +242,7 @@ impl ImmutableStorage {
         let mut block_hashes = Vec::new();
         let mut blocks_guard = self.blocks.write().await;
         let mut dedup_guard = self.dedup_index.write().await;
-        
+
         // Process triples in chunks
         for chunk in triples.chunks(100) {
             // Check for deduplication
@@ -253,16 +253,16 @@ impl ImmutableStorage {
                         unique_triples.push(triple.clone());
                     }
                 }
-                
+
                 if !unique_triples.is_empty() {
                     let block = self.create_triple_block(&unique_triples)?;
                     let hash = block.hash;
-                    
+
                     // Update deduplication index
                     for triple in unique_triples {
                         dedup_guard.triple_blocks.insert(triple, hash);
                     }
-                    
+
                     // Store block
                     self.store_block(&mut blocks_guard, block).await?;
                     block_hashes.push(hash);
@@ -274,16 +274,16 @@ impl ImmutableStorage {
                 block_hashes.push(hash);
             }
         }
-        
+
         // Create index blocks if needed
         let index_blocks = self.create_index_blocks(&block_hashes)?;
         for block in index_blocks {
             self.store_block(&mut blocks_guard, block).await?;
         }
-        
+
         // Build Merkle tree
         let tree_root = self.build_merkle_tree(&block_hashes).await?;
-        
+
         // Create commit
         let commit = Commit {
             hash: self.compute_commit_hash(&tree_root, message),
@@ -294,7 +294,7 @@ impl ImmutableStorage {
             message: message.to_string(),
             metadata: HashMap::new(),
         };
-        
+
         // Store commit block
         let commit_block = Block {
             hash: commit.hash,
@@ -303,32 +303,29 @@ impl ImmutableStorage {
             references: vec![tree_root],
         };
         self.store_block(&mut blocks_guard, commit_block).await?;
-        
+
         // Update references
         self.update_references(&commit).await?;
-        
+
         // Update stats
         let mut stats = self.stats.write().await;
         stats.total_blocks += block_hashes.len() as u64 + 1;
         stats.unique_blocks += block_hashes.len() as u64 + 1;
-        
+
         Ok(commit)
     }
-    
+
     /// Read triples from a commit
-    pub async fn read_commit(
-        &self,
-        commit_hash: ContentHash,
-    ) -> Result<Vec<Triple>, OxirsError> {
+    pub async fn read_commit(&self, commit_hash: ContentHash) -> Result<Vec<Triple>, OxirsError> {
         let blocks = self.blocks.read().await;
-        
+
         // Load commit block
         let commit_block = self.load_block(&blocks, &commit_hash).await?;
         let commit: Commit = bincode::deserialize(&commit_block.data)?;
-        
+
         // Traverse tree to find triple blocks
         let triple_blocks = self.find_triple_blocks(&commit.tree).await?;
-        
+
         // Load and decode triples
         let mut all_triples = Vec::new();
         for block_hash in triple_blocks {
@@ -336,10 +333,10 @@ impl ImmutableStorage {
             let triples: Vec<Triple> = bincode::deserialize(&block.data)?;
             all_triples.extend(triples);
         }
-        
+
         Ok(all_triples)
     }
-    
+
     /// Query triples with pattern matching
     pub async fn query_triples(
         &self,
@@ -353,20 +350,21 @@ impl ImmutableStorage {
             // Get latest commit (HEAD)
             self.get_head().await?
         };
-        
+
         let all_triples = self.read_commit(commit).await?;
-        
+
         // Filter by pattern
-        Ok(all_triples.into_iter()
+        Ok(all_triples
+            .into_iter()
             .filter(|triple| pattern.matches(triple))
             .collect())
     }
-    
+
     /// Verify integrity of storage
     pub async fn verify_integrity(&self) -> Result<IntegrityReport, OxirsError> {
         let blocks = self.blocks.read().await;
         let merkle = self.merkle_tree.read().await;
-        
+
         let mut report = IntegrityReport {
             total_blocks: 0,
             verified_blocks: 0,
@@ -374,11 +372,11 @@ impl ImmutableStorage {
             missing_blocks: Vec::new(),
             merkle_valid: true,
         };
-        
+
         // Verify all blocks
         for (hash, metadata) in &blocks.metadata {
             report.total_blocks += 1;
-            
+
             if let Ok(block) = self.load_block(&blocks, hash).await {
                 // Verify hash
                 if self.compute_hash(&block.data) == *hash {
@@ -390,31 +388,31 @@ impl ImmutableStorage {
                 report.missing_blocks.push(*hash);
             }
         }
-        
+
         // Verify Merkle tree
         if let Some(root) = merkle.root {
             report.merkle_valid = self.verify_merkle_tree(&merkle, root).await?;
         }
-        
+
         Ok(report)
     }
-    
+
     /// Run garbage collection
     pub async fn garbage_collect(&self) -> Result<GCReport, OxirsError> {
         let mut refs = self.references.write().await;
         let mut blocks = self.blocks.write().await;
-        
+
         let mut report = GCReport {
             total_blocks: blocks.metadata.len(),
             reachable_blocks: 0,
             collected_blocks: 0,
             reclaimed_bytes: 0,
         };
-        
+
         // Mark phase - find all reachable blocks
         let mut reachable = HashSet::new();
         let mut to_visit: Vec<_> = refs.roots.iter().cloned().collect();
-        
+
         while let Some(hash) = to_visit.pop() {
             if reachable.insert(hash) {
                 if let Some(children) = refs.forward_refs.get(&hash) {
@@ -422,27 +420,29 @@ impl ImmutableStorage {
                 }
             }
         }
-        
+
         report.reachable_blocks = reachable.len();
-        
+
         // Sweep phase - remove unreachable blocks
-        let unreachable: Vec<_> = blocks.metadata.keys()
-            .filter(|hash| !reachable.contains(hash))
+        let unreachable: Vec<_> = blocks
+            .metadata
+            .keys()
+            .filter(|hash| !reachable.contains(*hash))
             .cloned()
             .collect();
-        
+
         for hash in unreachable {
             if let Some(metadata) = blocks.metadata.remove(&hash) {
                 report.collected_blocks += 1;
                 report.reclaimed_bytes += metadata.size;
-                
+
                 // Remove from disk
                 let block_path = blocks.path.join(hex::encode(hash));
                 let _ = std::fs::remove_file(block_path);
-                
+
                 // Remove from cache
                 blocks.cache.pop(&hash);
-                
+
                 // Remove references
                 refs.forward_refs.remove(&hash);
                 for (_, back_refs) in refs.backward_refs.iter_mut() {
@@ -450,19 +450,19 @@ impl ImmutableStorage {
                 }
             }
         }
-        
+
         // Update stats
         let mut stats = self.stats.write().await;
         stats.gc_reclaimed += report.reclaimed_bytes as u64;
-        
+
         Ok(report)
     }
-    
+
     /// Create a triple block
     fn create_triple_block(&self, triples: &[Triple]) -> Result<Block, OxirsError> {
         let data = bincode::serialize(triples)?;
         let hash = self.compute_hash(&data);
-        
+
         Ok(Block {
             hash,
             block_type: BlockType::TripleData,
@@ -470,77 +470,76 @@ impl ImmutableStorage {
             references: Vec::new(),
         })
     }
-    
+
     /// Create index blocks for efficient querying
     fn create_index_blocks(&self, data_blocks: &[ContentHash]) -> Result<Vec<Block>, OxirsError> {
         // Simplified - would create actual index structures
         Ok(Vec::new())
     }
-    
+
     /// Build Merkle tree from blocks
     async fn build_merkle_tree(&self, blocks: &[ContentHash]) -> Result<ContentHash, OxirsError> {
         let mut merkle = self.merkle_tree.write().await;
-        
+
         // Build tree bottom-up
         let mut current_level = blocks.to_vec();
-        
+
         while current_level.len() > 1 {
             let mut next_level = Vec::new();
-            
+
             for chunk in current_level.chunks(2) {
                 let left = chunk[0];
                 let right = chunk.get(1).cloned().unwrap_or(left);
-                
+
                 let combined = [left.as_slice(), right.as_slice()].concat();
                 let parent_hash = self.compute_hash(&combined);
-                
+
                 let node = MerkleNode {
                     hash: parent_hash,
                     left: Some(left),
                     right: Some(right),
                     data: None,
                 };
-                
+
                 merkle.nodes.insert(parent_hash, node);
                 next_level.push(parent_hash);
             }
-            
+
             current_level = next_level;
         }
-        
+
         let root = current_level[0];
         merkle.root = Some(root);
         Ok(root)
     }
-    
+
     /// Store a block
-    async fn store_block(
-        &self,
-        blocks: &mut BlockStore,
-        block: Block,
-    ) -> Result<(), OxirsError> {
+    async fn store_block(&self, blocks: &mut BlockStore, block: Block) -> Result<(), OxirsError> {
         let hash = block.hash;
         let size = block.data.len();
-        
+
         // Write to disk
         let block_path = blocks.path.join(hex::encode(hash));
         let compressed = self.compress_block(&block)?;
         std::fs::write(block_path, compressed)?;
-        
+
         // Update metadata
-        blocks.metadata.insert(hash, BlockMetadata {
-            created_at: chrono::Utc::now(),
-            size,
-            compression: Some("zstd".to_string()),
-            ref_count: 0,
-        });
-        
+        blocks.metadata.insert(
+            hash,
+            BlockMetadata {
+                created_at: chrono::Utc::now(),
+                size,
+                compression: Some("zstd".to_string()),
+                ref_count: 0,
+            },
+        );
+
         // Add to cache
         blocks.cache.put(hash, block);
-        
+
         Ok(())
     }
-    
+
     /// Load a block
     async fn load_block(
         &self,
@@ -551,51 +550,57 @@ impl ImmutableStorage {
         if let Some(block) = blocks.cache.peek(hash) {
             return Ok(block.clone());
         }
-        
+
         // Load from disk
         let block_path = blocks.path.join(hex::encode(hash));
         let compressed = std::fs::read(block_path)?;
         let block = self.decompress_block(&compressed)?;
-        
+
         Ok(block)
     }
-    
+
     /// Find all triple blocks under a tree
-    async fn find_triple_blocks(&self, tree_hash: &ContentHash) -> Result<Vec<ContentHash>, OxirsError> {
+    async fn find_triple_blocks(
+        &self,
+        tree_hash: &ContentHash,
+    ) -> Result<Vec<ContentHash>, OxirsError> {
         // Simplified - would traverse tree structure
         Ok(vec![*tree_hash])
     }
-    
+
     /// Update reference tracking
     async fn update_references(&self, commit: &Commit) -> Result<(), OxirsError> {
         let mut refs = self.references.write().await;
-        
+
         // Add commit as root
         refs.roots.insert(commit.hash);
-        
+
         // Add forward reference
         refs.forward_refs
             .entry(commit.hash)
             .or_insert_with(HashSet::new)
             .insert(commit.tree);
-        
+
         // Add backward reference
         refs.backward_refs
             .entry(commit.tree)
             .or_insert_with(HashSet::new)
             .insert(commit.hash);
-        
+
         Ok(())
     }
-    
+
     /// Get current HEAD commit
     async fn get_head(&self) -> Result<ContentHash, OxirsError> {
         // Simplified - would read from refs/heads/main
         let refs = self.references.read().await;
-        refs.roots.iter().next().cloned()
-            .ok_or_else(|| OxirsError::Storage("No commits found".to_string()))
+        refs.roots
+            .iter()
+            .next()
+            .cloned()
+            .ok_or_else(|| OxirsError::Store("No commits found".to_string()))
     }
-    
+
     /// Verify Merkle tree integrity
     async fn verify_merkle_tree(
         &self,
@@ -605,14 +610,14 @@ impl ImmutableStorage {
         // Simplified verification
         Ok(merkle.nodes.contains_key(&root))
     }
-    
+
     /// Compute SHA256 hash
     fn compute_hash(&self, data: &[u8]) -> ContentHash {
         let mut hasher = Sha256::new();
         hasher.update(data);
         hasher.finalize().into()
     }
-    
+
     /// Compute commit hash
     fn compute_commit_hash(&self, tree: &ContentHash, message: &str) -> ContentHash {
         let mut hasher = Sha256::new();
@@ -620,13 +625,13 @@ impl ImmutableStorage {
         hasher.update(message.as_bytes());
         hasher.finalize().into()
     }
-    
+
     /// Compress block data
     fn compress_block(&self, block: &Block) -> Result<Vec<u8>, OxirsError> {
         let serialized = bincode::serialize(block)?;
         Ok(zstd::encode_all(&serialized[..], 3)?)
     }
-    
+
     /// Decompress block data
     fn decompress_block(&self, data: &[u8]) -> Result<Block, OxirsError> {
         let decompressed = zstd::decode_all(data)?;
@@ -656,16 +661,16 @@ pub struct GCReport {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_immutable_storage() {
         let config = ImmutableConfig {
             path: PathBuf::from("/tmp/oxirs_immutable_test"),
             ..Default::default()
         };
-        
+
         let storage = ImmutableStorage::new(config).await.unwrap();
-        
+
         // Create test triples
         let triples = vec![
             Triple::new(
@@ -679,30 +684,32 @@ mod tests {
                 crate::model::Object::Literal(crate::model::Literal::new("test")),
             ),
         ];
-        
+
         // Store triples
-        let commit = storage.store_triples(&triples, "Initial commit")
+        let commit = storage
+            .store_triples(&triples, "Initial commit")
             .await
             .unwrap();
-        
+
         // Read back triples
         let loaded = storage.read_commit(commit.hash).await.unwrap();
         assert_eq!(loaded.len(), 2);
-        
+
         // Query with pattern
         let pattern = TriplePattern::new(
             Some(crate::model::SubjectPattern::NamedNode(
-                NamedNode::new("http://example.org/s1").unwrap()
+                NamedNode::new("http://example.org/s1").unwrap(),
             )),
             None,
             None,
         );
-        let results = storage.query_triples(&pattern, Some(commit.hash))
+        let results = storage
+            .query_triples(&pattern, Some(commit.hash))
             .await
             .unwrap();
         assert_eq!(results.len(), 1);
     }
-    
+
     #[tokio::test]
     async fn test_deduplication() {
         let config = ImmutableConfig {
@@ -710,23 +717,21 @@ mod tests {
             deduplication: true,
             ..Default::default()
         };
-        
+
         let storage = ImmutableStorage::new(config).await.unwrap();
-        
+
         // Store same triple multiple times
         let triple = Triple::new(
             NamedNode::new("http://example.org/s").unwrap(),
             NamedNode::new("http://example.org/p").unwrap(),
             crate::model::Object::Literal(crate::model::Literal::new("value")),
         );
-        
+
         let triples = vec![triple.clone(), triple.clone(), triple.clone()];
-        
+
         // Should deduplicate
-        let commit = storage.store_triples(&triples, "Dedup test")
-            .await
-            .unwrap();
-        
+        let commit = storage.store_triples(&triples, "Dedup test").await.unwrap();
+
         let stats = storage.stats.read().await;
         // Should only store one unique block for the triples
         assert!(stats.unique_blocks < 3);

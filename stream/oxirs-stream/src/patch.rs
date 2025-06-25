@@ -670,3 +670,185 @@ pub fn validate_patch(patch: &RdfPatch) -> Result<Vec<String>> {
 
     Ok(warnings)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{PatchOperation, RdfPatch};
+
+    #[test]
+    fn test_patch_serialization() {
+        let mut patch = RdfPatch::new();
+        patch.add_operation(PatchOperation::Add {
+            subject: "http://example.org/subject".to_string(),
+            predicate: "http://example.org/predicate".to_string(),
+            object: "\"Object literal\"".to_string(),
+        });
+        patch.add_operation(PatchOperation::Delete {
+            subject: "http://example.org/subject2".to_string(),
+            predicate: "http://example.org/predicate2".to_string(),
+            object: "http://example.org/object2".to_string(),
+        });
+
+        let serializer = PatchSerializer::new();
+        let result = serializer.serialize(&patch);
+        
+        assert!(result.is_ok());
+        let serialized = result.unwrap();
+        assert!(serialized.contains("A "));
+        assert!(serialized.contains("D "));
+        assert!(serialized.contains("@prefix"));
+    }
+
+    #[test]
+    fn test_patch_parsing() {
+        let patch_content = r#"
+@prefix ex: <http://example.org/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+
+A ex:subject ex:predicate "Object literal" .
+D ex:subject2 ex:predicate2 ex:object2 .
+GA ex:graph1 .
+GD ex:graph2 .
+"#;
+
+        let mut parser = PatchParser::new();
+        let result = parser.parse(patch_content);
+        
+        assert!(result.is_ok());
+        let patch = result.unwrap();
+        assert_eq!(patch.operations.len(), 4);
+        
+        match &patch.operations[0] {
+            PatchOperation::Add { subject, predicate, object } => {
+                assert_eq!(subject, "http://example.org/subject");
+                assert_eq!(predicate, "http://example.org/predicate");
+                assert_eq!(object, "\"Object literal\"");
+            }
+            _ => panic!("Expected Add operation"),
+        }
+    }
+
+    #[test]
+    fn test_patch_round_trip() {
+        let mut original_patch = RdfPatch::new();
+        original_patch.add_operation(PatchOperation::Add {
+            subject: "http://example.org/subject".to_string(),
+            predicate: "http://example.org/predicate".to_string(),
+            object: "\"Test object\"".to_string(),
+        });
+
+        // Serialize to string
+        let serialized = original_patch.to_rdf_patch_format().unwrap();
+        
+        // Parse back from string
+        let parsed_patch = RdfPatch::from_rdf_patch_format(&serialized).unwrap();
+        
+        // Check that we get the same operations
+        assert_eq!(original_patch.operations.len(), parsed_patch.operations.len());
+        
+        match (&original_patch.operations[0], &parsed_patch.operations[0]) {
+            (
+                PatchOperation::Add { subject: s1, predicate: p1, object: o1 },
+                PatchOperation::Add { subject: s2, predicate: p2, object: o2 }
+            ) => {
+                assert_eq!(s1, s2);
+                assert_eq!(p1, p2);
+                assert_eq!(o1, o2);
+            }
+            _ => panic!("Operations don't match"),
+        }
+    }
+
+    #[test]
+    fn test_reverse_patch() {
+        let mut patch = RdfPatch::new();
+        patch.add_operation(PatchOperation::Add {
+            subject: "http://example.org/s".to_string(),
+            predicate: "http://example.org/p".to_string(),
+            object: "http://example.org/o".to_string(),
+        });
+        patch.add_operation(PatchOperation::AddGraph {
+            graph: "http://example.org/graph".to_string(),
+        });
+
+        let reverse = create_reverse_patch(&patch).unwrap();
+        
+        assert_eq!(reverse.operations.len(), 2);
+        
+        // Operations should be reversed in order and type
+        match &reverse.operations[0] {
+            PatchOperation::DeleteGraph { graph } => {
+                assert_eq!(graph, "http://example.org/graph");
+            }
+            _ => panic!("Expected DeleteGraph operation"),
+        }
+        
+        match &reverse.operations[1] {
+            PatchOperation::Delete { subject, predicate, object } => {
+                assert_eq!(subject, "http://example.org/s");
+                assert_eq!(predicate, "http://example.org/p");
+                assert_eq!(object, "http://example.org/o");
+            }
+            _ => panic!("Expected Delete operation"),
+        }
+    }
+
+    #[test]
+    fn test_patch_optimization() {
+        let mut patch = RdfPatch::new();
+        let operation = PatchOperation::Add {
+            subject: "http://example.org/s".to_string(),
+            predicate: "http://example.org/p".to_string(),
+            object: "http://example.org/o".to_string(),
+        };
+        
+        // Add the same operation twice
+        patch.add_operation(operation.clone());
+        patch.add_operation(operation);
+        
+        let optimized = optimize_patch(&patch).unwrap();
+        
+        // Should remove duplicate
+        assert_eq!(optimized.operations.len(), 1);
+    }
+
+    #[test]
+    fn test_patch_validation() {
+        let mut patch = RdfPatch::new();
+        patch.add_operation(PatchOperation::Delete {
+            subject: "http://example.org/s".to_string(),
+            predicate: "http://example.org/p".to_string(),
+            object: "http://example.org/o".to_string(),
+        });
+        
+        let warnings = validate_patch(&patch).unwrap();
+        
+        // Should warn about deleting without prior addition
+        assert!(!warnings.is_empty());
+        assert!(warnings[0].contains("deleted without prior addition"));
+    }
+
+    #[test]
+    fn test_patch_application() {
+        let mut patch = RdfPatch::new();
+        patch.add_operation(PatchOperation::Add {
+            subject: "http://example.org/s".to_string(),
+            predicate: "http://example.org/p".to_string(),
+            object: "http://example.org/o".to_string(),
+        });
+
+        let context = PatchContext {
+            strict_mode: false,
+            validate_operations: true,
+            dry_run: true,
+        };
+
+        let result = apply_patch_with_context(&patch, &context).unwrap();
+        
+        assert_eq!(result.total_operations, 1);
+        assert_eq!(result.operations_applied, 1);
+        assert!(result.is_success());
+        assert_eq!(result.success_rate(), 1.0);
+    }
+}

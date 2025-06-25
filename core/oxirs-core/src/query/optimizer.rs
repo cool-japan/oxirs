@@ -4,8 +4,8 @@
 //! techniques to improve query performance based on historical patterns.
 
 use crate::indexing::IndexStats;
-use crate::model::*;
-use crate::query::algebra::*;
+use crate::model::{Variable, Term, NamedNode, BlankNode, Literal};
+use crate::query::algebra::{GraphPattern, TriplePattern, TermPattern, Query, QueryForm, SelectVariables, Expression, OrderExpression};
 use crate::query::plan::{ExecutionPlan, QueryPlanner};
 use crate::OxirsError;
 use std::collections::{HashMap, VecDeque};
@@ -344,7 +344,7 @@ impl AIQueryOptimizer {
         orders
     }
 
-    /// Estimate selectivity of a triple pattern
+    /// Estimate selectivity of a triple pattern  
     fn estimate_selectivity(&self, pattern: &TriplePattern) -> i64 {
         // Lower score = more selective (better to execute first)
         let mut score = 0;
@@ -374,12 +374,12 @@ impl AIQueryOptimizer {
         }
 
         let mut plan = ExecutionPlan::TripleScan {
-            pattern: patterns[order[0]].clone(),
+            pattern: crate::query::plan::convert_triple_pattern(&patterns[order[0]]),
         };
 
         for &idx in &order[1..] {
             let right_plan = ExecutionPlan::TripleScan {
-                pattern: patterns[idx].clone(),
+                pattern: crate::query::plan::convert_triple_pattern(&patterns[idx]),
             };
 
             plan = ExecutionPlan::HashJoin {
@@ -430,7 +430,7 @@ impl AIQueryOptimizer {
                 let mut cost = 100.0;
 
                 // Adjust based on predicate selectivity
-                if let TermPattern::NamedNode(pred) = &pattern.predicate {
+                if let Some(crate::model::pattern::PredicatePattern::NamedNode(pred)) = &pattern.predicate {
                     if let Some(&pred_cost) = params.scan_costs.get(pred.as_str()) {
                         cost *= pred_cost;
                     }
@@ -677,11 +677,11 @@ impl MultiQueryOptimizer {
                 common_subs.insert(
                     pattern_key,
                     ExecutionPlan::TripleScan {
-                        pattern: TriplePattern {
-                            subject: TermPattern::Variable(Variable::new("?s").unwrap()),
-                            predicate: TermPattern::Variable(Variable::new("?p").unwrap()),
-                            object: TermPattern::Variable(Variable::new("?o").unwrap()),
-                        },
+                        pattern: crate::model::pattern::TriplePattern::new(
+                            Some(crate::model::pattern::SubjectPattern::Variable(Variable::new("?s").unwrap())),
+                            Some(crate::model::pattern::PredicatePattern::Variable(Variable::new("?p").unwrap())),
+                            Some(crate::model::pattern::ObjectPattern::Variable(Variable::new("?o").unwrap())),
+                        ),
                     },
                 );
             }

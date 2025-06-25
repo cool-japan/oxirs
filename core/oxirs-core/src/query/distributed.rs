@@ -4,7 +4,7 @@
 //! edge computing distribution, and real-time collaborative filtering.
 
 use crate::model::*;
-use crate::query::algebra::*;
+use crate::query::algebra::{self, *};
 use crate::query::plan::ExecutionPlan;
 use crate::OxirsError;
 use async_trait::async_trait;
@@ -155,7 +155,7 @@ struct CachedPlan {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct QueryPattern {
     /// Triple patterns
-    patterns: Vec<TriplePattern>,
+    patterns: Vec<algebra::TriplePattern>,
     /// Join structure
     joins: Vec<JoinType>,
     /// Filter types
@@ -292,7 +292,7 @@ pub struct QueryFragment {
     /// Original query
     pub query: Query,
     /// Assigned patterns
-    pub patterns: Vec<TriplePattern>,
+    pub patterns: Vec<crate::model::pattern::TriplePattern>,
     /// Required variables
     pub required_vars: HashSet<Variable>,
     /// Output variables
@@ -749,7 +749,7 @@ impl QueryRouter {
     }
 
     /// Extract triple patterns from query
-    fn extract_patterns(&self, query: &Query) -> Result<Vec<TriplePattern>, OxirsError> {
+    fn extract_patterns(&self, query: &Query) -> Result<Vec<crate::model::pattern::TriplePattern>, OxirsError> {
         match &query.form {
             QueryForm::Select { where_clause, .. } => {
                 self.extract_patterns_from_graph_pattern(where_clause)
@@ -762,9 +762,14 @@ impl QueryRouter {
     fn extract_patterns_from_graph_pattern(
         &self,
         pattern: &GraphPattern,
-    ) -> Result<Vec<TriplePattern>, OxirsError> {
+    ) -> Result<Vec<crate::model::pattern::TriplePattern>, OxirsError> {
         match pattern {
-            GraphPattern::Bgp(patterns) => Ok(patterns.clone()),
+            GraphPattern::Bgp(patterns) => {
+                let converted_patterns = patterns.iter()
+                    .map(|p| crate::query::plan::convert_triple_pattern(p))
+                    .collect();
+                Ok(converted_patterns)
+            }
             _ => Ok(Vec::new()),
         }
     }

@@ -44,6 +44,7 @@ pub mod kinesis;
 pub mod monitoring;
 pub mod nats;
 pub mod patch;
+pub mod processing;
 pub mod pulsar;
 pub mod redis;
 
@@ -1426,14 +1427,17 @@ impl RdfPatch {
 
     /// Serialize patch to RDF Patch format
     pub fn to_rdf_patch_format(&self) -> Result<String> {
-        // TODO: Implement RDF Patch serialization
-        Ok(String::new())
+        let serializer = crate::patch::PatchSerializer::new()
+            .with_pretty_print(true)
+            .with_metadata(true);
+        serializer.serialize(self)
     }
 
     /// Parse from RDF Patch format
-    pub fn from_rdf_patch_format(_input: &str) -> Result<Self> {
-        // TODO: Implement RDF Patch parsing
-        Ok(Self::new())
+    pub fn from_rdf_patch_format(input: &str) -> Result<Self> {
+        let mut parser = crate::patch::PatchParser::new()
+            .with_strict_mode(false);
+        parser.parse(input)
     }
 }
 

@@ -4,7 +4,7 @@
 //! enabling enterprise directory integration.
 
 use crate::{
-    auth::{AuthResult, User, Permission},
+    auth::{AuthResult, Permission, User},
     config::LdapConfig,
     error::{FusekiError, FusekiResult},
 };
@@ -115,7 +115,7 @@ impl LdapService {
     /// Create new LDAP service
     pub fn new(config: LdapConfig) -> Self {
         let connection_pool = LdapConnectionPool::new(10); // Default max 10 connections
-        
+
         LdapService {
             config: Arc::new(config),
             connection_pool: Arc::new(RwLock::new(connection_pool)),
@@ -133,23 +133,29 @@ impl LdapService {
 
         // Check cache first
         if let Some(cached_user) = self.get_cached_user(username).await {
-            if self.verify_cached_user_password(&cached_user, password).await? {
-                info!("LDAP authentication successful from cache for user: {}", username);
+            if self
+                .verify_cached_user_password(&cached_user, password)
+                .await?
+            {
+                info!(
+                    "LDAP authentication successful from cache for user: {}",
+                    username
+                );
                 return Ok(AuthResult::Authenticated(cached_user.user));
             }
         }
 
         // Perform LDAP bind authentication
         let user_dn = self.find_user_dn(username).await?;
-        
+
         if self.bind_user(&user_dn, password).await? {
             // Authentication successful, get user attributes
             let user_attributes = self.get_user_attributes(&user_dn).await?;
             let user = self.map_ldap_user_to_internal(user_attributes).await?;
-            
+
             // Cache the user
             self.cache_user(username, user.clone(), user_dn).await;
-            
+
             info!("LDAP authentication successful for user: {}", username);
             Ok(AuthResult::Authenticated(user))
         } else {
@@ -164,7 +170,7 @@ impl LdapService {
 
         // Construct search filter
         let filter = self.config.user_filter.replace("{username}", username);
-        
+
         let search_params = LdapSearchParams {
             base_dn: self.config.user_base_dn.clone(),
             scope: LdapScope::Subtree,
@@ -175,9 +181,12 @@ impl LdapService {
         };
 
         let search_results = self.search(&search_params).await?;
-        
+
         if search_results.is_empty() {
-            return Err(FusekiError::authentication(format!("User not found: {}", username)));
+            return Err(FusekiError::authentication(format!(
+                "User not found: {}",
+                username
+            )));
         }
 
         Ok(search_results[0].dn.clone())
@@ -186,19 +195,19 @@ impl LdapService {
     /// Bind user to LDAP (authenticate)
     async fn bind_user(&self, user_dn: &str, password: &str) -> FusekiResult<bool> {
         debug!("Binding user: {}", user_dn);
-        
+
         // This is a simplified implementation
         // In a real implementation, this would use an LDAP client library
         // like ldap3 or rust-ldap to perform the actual bind operation
-        
+
         // Simulate LDAP bind
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        
+
         // Simple validation - in production this would be a real LDAP bind
         if password.is_empty() || user_dn.is_empty() {
             return Ok(false);
         }
-        
+
         // Mock successful bind for demonstration
         Ok(true)
     }
@@ -230,9 +239,11 @@ impl LdapService {
         };
 
         let search_results = self.search(&search_params).await?;
-        
+
         if search_results.is_empty() {
-            return Err(FusekiError::authentication("Failed to retrieve user attributes"));
+            return Err(FusekiError::authentication(
+                "Failed to retrieve user attributes",
+            ));
         }
 
         let result = &search_results[0];
@@ -259,11 +270,14 @@ impl LdapService {
 
     /// Search LDAP directory
     async fn search(&self, params: &LdapSearchParams) -> FusekiResult<Vec<LdapSearchResult>> {
-        debug!("LDAP search: base={}, filter={}", params.base_dn, params.filter);
+        debug!(
+            "LDAP search: base={}, filter={}",
+            params.base_dn, params.filter
+        );
 
         // This is a simplified mock implementation
         // In a real implementation, this would use an LDAP client library
-        
+
         // Simulate search delay
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
@@ -275,10 +289,13 @@ impl LdapService {
                 attrs.insert("cn".to_string(), vec!["testuser".to_string()]);
                 attrs.insert("mail".to_string(), vec!["testuser@example.com".to_string()]);
                 attrs.insert("displayName".to_string(), vec!["Test User".to_string()]);
-                attrs.insert("memberOf".to_string(), vec![
-                    format!("cn=users,{}", self.config.group_base_dn),
-                    format!("cn=developers,{}", self.config.group_base_dn),
-                ]);
+                attrs.insert(
+                    "memberOf".to_string(),
+                    vec![
+                        format!("cn=users,{}", self.config.group_base_dn),
+                        format!("cn=developers,{}", self.config.group_base_dn),
+                    ],
+                );
                 attrs
             },
         };
@@ -289,21 +306,22 @@ impl LdapService {
     /// Map LDAP user to internal user structure
     async fn map_ldap_user_to_internal(&self, ldap_user: LdapUserAttributes) -> FusekiResult<User> {
         // Extract username (prefer sAMAccountName for AD, uid for OpenLDAP)
-        let username = ldap_user.sam_account_name
+        let username = ldap_user
+            .sam_account_name
             .or(ldap_user.uid)
             .or(ldap_user.cn)
             .ok_or_else(|| FusekiError::authentication("No suitable username attribute found"))?;
 
         // Extract display name
-        let full_name = ldap_user.display_name
-            .or_else(|| {
-                match (&ldap_user.given_name, &ldap_user.sn) {
+        let full_name =
+            ldap_user
+                .display_name
+                .or_else(|| match (&ldap_user.given_name, &ldap_user.sn) {
                     (Some(given), Some(surname)) => Some(format!("{} {}", given, surname)),
                     (Some(given), None) => Some(given.clone()),
                     (None, Some(surname)) => Some(surname.clone()),
                     _ => ldap_user.cn.clone(),
-                }
-            });
+                });
 
         // Map LDAP groups to roles
         let roles = self.map_ldap_groups_to_roles(&ldap_user.member_of).await;
@@ -393,16 +411,10 @@ impl LdapService {
                     ]);
                 }
                 "reader" => {
-                    permissions.extend(vec![
-                        Permission::GlobalRead,
-                        Permission::SparqlQuery,
-                    ]);
+                    permissions.extend(vec![Permission::GlobalRead, Permission::SparqlQuery]);
                 }
                 "user" => {
-                    permissions.extend(vec![
-                        Permission::GlobalRead,
-                        Permission::SparqlQuery,
-                    ]);
+                    permissions.extend(vec![Permission::GlobalRead, Permission::SparqlQuery]);
                 }
                 _ => {}
             }
@@ -431,23 +443,27 @@ impl LdapService {
     /// Get cached user
     async fn get_cached_user(&self, username: &str) -> Option<CachedUser> {
         let cache = self.user_cache.read().await;
-        
+
         if let Some(cached_user) = cache.get(username) {
             if Utc::now() < cached_user.expires_at {
                 return Some(cached_user.clone());
             }
         }
-        
+
         None
     }
 
     /// Verify cached user password (simplified)
-    async fn verify_cached_user_password(&self, cached_user: &CachedUser, password: &str) -> FusekiResult<bool> {
+    async fn verify_cached_user_password(
+        &self,
+        cached_user: &CachedUser,
+        password: &str,
+    ) -> FusekiResult<bool> {
         // In a real implementation, this could either:
         // 1. Re-bind to LDAP to verify password (recommended)
         // 2. Use cached password hash (less secure)
         // 3. Skip password verification for cached users (least secure)
-        
+
         // For this implementation, we'll re-bind to LDAP
         self.bind_user(&cached_user.ldap_dn, password).await
     }
@@ -456,7 +472,7 @@ impl LdapService {
     pub async fn cleanup_expired_cache(&self) {
         let mut cache = self.user_cache.write().await;
         let now = Utc::now();
-        
+
         cache.retain(|_, cached_user| cached_user.expires_at > now);
     }
 
@@ -465,8 +481,10 @@ impl LdapService {
         debug!("Testing LDAP connection to: {}", self.config.server);
 
         // Attempt to bind with service account
-        let bind_result = self.bind_user(&self.config.bind_dn, &self.config.bind_password).await?;
-        
+        let bind_result = self
+            .bind_user(&self.config.bind_dn, &self.config.bind_password)
+            .await?;
+
         if bind_result {
             info!("LDAP connection test successful");
             Ok(true)
@@ -480,15 +498,15 @@ impl LdapService {
     pub async fn get_user_groups(&self, username: &str) -> FusekiResult<Vec<LdapGroup>> {
         let user_dn = self.find_user_dn(username).await?;
         let user_attributes = self.get_user_attributes(&user_dn).await?;
-        
+
         let mut groups = Vec::new();
-        
+
         for group_dn in &user_attributes.member_of {
             if let Ok(group) = self.get_group_info(group_dn).await {
                 groups.push(group);
             }
         }
-        
+
         Ok(groups)
     }
 
@@ -498,13 +516,17 @@ impl LdapService {
             base_dn: group_dn.to_string(),
             scope: LdapScope::Base,
             filter: "(objectClass=*)".to_string(),
-            attributes: vec!["cn".to_string(), "description".to_string(), "member".to_string()],
+            attributes: vec![
+                "cn".to_string(),
+                "description".to_string(),
+                "member".to_string(),
+            ],
             size_limit: Some(1),
             time_limit: Some(30),
         };
 
         let search_results = self.search(&search_params).await?;
-        
+
         if search_results.is_empty() {
             return Err(FusekiError::authentication("Group not found"));
         }
@@ -537,7 +559,9 @@ impl LdapConnectionPool {
     pub async fn get_connection(&mut self) -> Option<LdapConnection> {
         // Find available connection
         for connection in &mut self.connections {
-            if !connection.is_connected && Utc::now() - connection.last_used < chrono::Duration::minutes(5) {
+            if !connection.is_connected
+                && Utc::now() - connection.last_used < chrono::Duration::minutes(5)
+            {
                 connection.is_connected = true;
                 connection.last_used = Utc::now();
                 return Some(connection.clone());
@@ -553,10 +577,10 @@ impl LdapConnectionPool {
                 last_used: Utc::now(),
                 use_tls: false,
             };
-            
+
             self.connections.push(connection.clone());
             self.active_connections += 1;
-            
+
             Some(connection)
         } else {
             None
@@ -567,7 +591,7 @@ impl LdapConnectionPool {
     pub async fn return_connection(&mut self, mut connection: LdapConnection) {
         connection.is_connected = false;
         connection.last_used = Utc::now();
-        
+
         // Update connection in pool
         for pool_conn in &mut self.connections {
             if pool_conn.id == connection.id {
@@ -591,7 +615,8 @@ fn extract_cn_from_dn(dn: &str) -> Option<String> {
 
 /// Get first attribute value from LDAP attributes
 fn get_first_attribute(attrs: &HashMap<String, Vec<String>>, attr_name: &str) -> Option<String> {
-    attrs.get(attr_name)
+    attrs
+        .get(attr_name)
         .and_then(|values| values.first())
         .cloned()
 }
@@ -618,7 +643,7 @@ mod tests {
     async fn test_ldap_service_creation() {
         let config = create_test_ldap_config();
         let service = LdapService::new(config);
-        
+
         assert_eq!(service.config.server, "ldap://localhost:389");
         assert_eq!(service.config.user_base_dn, "ou=users,dc=example,dc=com");
     }
@@ -629,28 +654,25 @@ mod tests {
             extract_cn_from_dn("cn=users,ou=groups,dc=example,dc=com"),
             Some("users".to_string())
         );
-        
+
         assert_eq!(
             extract_cn_from_dn("CN=Administrators,OU=Groups,DC=example,DC=com"),
             Some("Administrators".to_string())
         );
-        
-        assert_eq!(
-            extract_cn_from_dn("ou=users,dc=example,dc=com"),
-            None
-        );
+
+        assert_eq!(extract_cn_from_dn("ou=users,dc=example,dc=com"), None);
     }
 
     #[tokio::test]
     async fn test_group_mapping() {
         let config = create_test_ldap_config();
         let service = LdapService::new(config);
-        
+
         let groups = vec![
             "cn=administrators,ou=groups,dc=example,dc=com".to_string(),
             "cn=users,ou=groups,dc=example,dc=com".to_string(),
         ];
-        
+
         let roles = service.map_ldap_groups_to_roles(&groups).await;
         assert!(roles.contains(&"admin".to_string()));
         assert!(roles.contains(&"reader".to_string()));
@@ -660,7 +682,7 @@ mod tests {
     async fn test_user_caching() {
         let config = create_test_ldap_config();
         let service = LdapService::new(config);
-        
+
         let user = User {
             username: "testuser".to_string(),
             roles: vec!["user".to_string()],
@@ -669,9 +691,15 @@ mod tests {
             last_login: Some(Utc::now()),
             permissions: vec![Permission::GlobalRead],
         };
-        
-        service.cache_user("testuser", user.clone(), "cn=testuser,ou=users,dc=example,dc=com".to_string()).await;
-        
+
+        service
+            .cache_user(
+                "testuser",
+                user.clone(),
+                "cn=testuser,ou=users,dc=example,dc=com".to_string(),
+            )
+            .await;
+
         let cached = service.get_cached_user("testuser").await;
         assert!(cached.is_some());
         assert_eq!(cached.unwrap().user.username, "testuser");
@@ -680,21 +708,21 @@ mod tests {
     #[tokio::test]
     async fn test_connection_pool() {
         let mut pool = LdapConnectionPool::new(2);
-        
+
         let conn1 = pool.get_connection().await;
         assert!(conn1.is_some());
-        
+
         let conn2 = pool.get_connection().await;
         assert!(conn2.is_some());
-        
+
         let conn3 = pool.get_connection().await;
         assert!(conn3.is_none()); // Pool limit reached
-        
+
         // Return connection
         if let Some(conn) = conn1 {
             pool.return_connection(conn).await;
         }
-        
+
         let conn4 = pool.get_connection().await;
         assert!(conn4.is_some()); // Should get returned connection
     }

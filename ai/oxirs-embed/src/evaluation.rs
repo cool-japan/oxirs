@@ -95,48 +95,60 @@ impl EvaluationSuite {
             config: EvaluationConfig::default(),
         }
     }
-    
+
     /// Configure evaluation parameters
     pub fn with_config(mut self, config: EvaluationConfig) -> Self {
         self.config = config;
         self
     }
-    
+
     /// Generate negative samples for evaluation
     pub fn generate_negative_samples(&mut self, model: &dyn EmbeddingModel) -> Result<()> {
         let entities = model.get_entities();
         let relations = model.get_relations();
-        
+
         if entities.is_empty() || relations.is_empty() {
             return Err(anyhow!("Model has no entities or relations"));
         }
-        
-        let positive_set: HashSet<_> = self.test_triples.iter()
+
+        let positive_set: HashSet<_> = self
+            .test_triples
+            .iter()
             .chain(self.validation_triples.iter())
             .collect();
-        
+
         let mut negative_samples = Vec::new();
         let mut rng = rand::thread_rng();
-        
+
         for positive_triple in &self.test_triples {
             let mut negatives_for_triple = 0;
             let max_attempts = self.config.negative_sample_ratio * 10;
             let mut attempts = 0;
-            
-            while negatives_for_triple < self.config.negative_sample_ratio && attempts < max_attempts {
+
+            while negatives_for_triple < self.config.negative_sample_ratio
+                && attempts < max_attempts
+            {
                 attempts += 1;
-                
+
                 // Corrupt either subject or object (not predicate)
                 let corrupt_subject = rand::random::<bool>();
-                
+
                 let negative_triple = if corrupt_subject {
                     let random_entity = &entities[rand::random::<usize>() % entities.len()];
-                    (random_entity.clone(), positive_triple.1.clone(), positive_triple.2.clone())
+                    (
+                        random_entity.clone(),
+                        positive_triple.1.clone(),
+                        positive_triple.2.clone(),
+                    )
                 } else {
                     let random_entity = &entities[rand::random::<usize>() % entities.len()];
-                    (positive_triple.0.clone(), positive_triple.1.clone(), random_entity.clone())
+                    (
+                        positive_triple.0.clone(),
+                        positive_triple.1.clone(),
+                        random_entity.clone(),
+                    )
                 };
-                
+
                 // Make sure it's actually negative
                 if !positive_set.contains(&negative_triple) {
                     negative_samples.push(negative_triple);
@@ -144,46 +156,49 @@ impl EvaluationSuite {
                 }
             }
         }
-        
+
         self.negative_samples = negative_samples;
-        info!("Generated {} negative samples for evaluation", self.negative_samples.len());
-        
+        info!(
+            "Generated {} negative samples for evaluation",
+            self.negative_samples.len()
+        );
+
         Ok(())
     }
-    
+
     /// Run comprehensive evaluation
     pub fn evaluate(&self, model: &dyn EmbeddingModel) -> Result<EvaluationResults> {
         let start_time = std::time::Instant::now();
         info!("Starting comprehensive model evaluation");
-        
+
         if self.test_triples.is_empty() {
             return Err(anyhow!("No test triples available for evaluation"));
         }
-        
+
         let detailed_results = if self.config.parallel_evaluation {
             self.evaluate_parallel(model)?
         } else {
             self.evaluate_sequential(model)?
         };
-        
+
         let results = self.compute_aggregate_metrics(&detailed_results);
         let evaluation_time = start_time.elapsed().as_secs_f64();
-        
+
         info!("Evaluation completed in {:.2} seconds", evaluation_time);
         info!("Mean Rank: {:.2}", results.mean_rank);
         info!("Mean Reciprocal Rank: {:.4}", results.mean_reciprocal_rank);
-        
+
         for (k, hits) in &results.hits_at_k {
             info!("Hits@{}: {:.4}", k, hits);
         }
-        
+
         Ok(EvaluationResults {
             evaluation_time_seconds: evaluation_time,
             detailed_results,
             ..results
         })
     }
-    
+
     /// Evaluate model performance in parallel
     fn evaluate_parallel(&self, model: &dyn EmbeddingModel) -> Result<Vec<TripleEvaluationResult>> {
         self.test_triples
@@ -191,29 +206,36 @@ impl EvaluationSuite {
             .map(|triple| self.evaluate_triple(model, triple))
             .collect()
     }
-    
+
     /// Evaluate model performance sequentially
-    fn evaluate_sequential(&self, model: &dyn EmbeddingModel) -> Result<Vec<TripleEvaluationResult>> {
+    fn evaluate_sequential(
+        &self,
+        model: &dyn EmbeddingModel,
+    ) -> Result<Vec<TripleEvaluationResult>> {
         self.test_triples
             .iter()
             .map(|triple| self.evaluate_triple(model, triple))
             .collect()
     }
-    
+
     /// Evaluate a single triple
-    fn evaluate_triple(&self, model: &dyn EmbeddingModel, triple: &(String, String, String)) -> Result<TripleEvaluationResult> {
+    fn evaluate_triple(
+        &self,
+        model: &dyn EmbeddingModel,
+        triple: &(String, String, String),
+    ) -> Result<TripleEvaluationResult> {
         let (subject, predicate, object) = triple;
-        
+
         // Score the positive triple
         let positive_score = model.score_triple(subject, predicate, object)?;
-        
+
         // Generate candidates for ranking
         let candidates = if self.config.use_filtered_ranking {
             self.generate_filtered_candidates(model, triple)?
         } else {
             self.generate_unfiltered_candidates(model, triple)?
         };
-        
+
         // Rank candidates
         let mut scored_candidates: Vec<_> = candidates
             .into_iter()
@@ -222,16 +244,17 @@ impl EvaluationSuite {
                 ((s, p, o), score)
             })
             .collect();
-        
-        scored_candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        
+
+        scored_candidates
+            .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
         // Find rank of positive triple
         let rank = scored_candidates
             .iter()
             .position(|((s, p, o), _)| s == subject && p == predicate && o == object)
             .map(|pos| pos + 1) // Convert to 1-indexed
             .unwrap_or(scored_candidates.len() + 1);
-        
+
         Ok(TripleEvaluationResult {
             triple: triple.clone(),
             rank,
@@ -239,18 +262,24 @@ impl EvaluationSuite {
             reciprocal_rank: 1.0 / rank as f64,
         })
     }
-    
+
     /// Generate filtered candidates (excluding known positives)
-    fn generate_filtered_candidates(&self, model: &dyn EmbeddingModel, triple: &(String, String, String)) -> Result<Vec<(String, String, String)>> {
+    fn generate_filtered_candidates(
+        &self,
+        model: &dyn EmbeddingModel,
+        triple: &(String, String, String),
+    ) -> Result<Vec<(String, String, String)>> {
         let entities = model.get_entities();
         let (subject, predicate, object) = triple;
-        
-        let known_positives: HashSet<_> = self.test_triples.iter()
+
+        let known_positives: HashSet<_> = self
+            .test_triples
+            .iter()
             .chain(self.validation_triples.iter())
             .collect();
-        
+
         let mut candidates = Vec::new();
-        
+
         // Generate candidates by replacing object
         for entity in &entities {
             let candidate = (subject.clone(), predicate.clone(), entity.clone());
@@ -258,7 +287,7 @@ impl EvaluationSuite {
                 candidates.push(candidate);
             }
         }
-        
+
         // Generate candidates by replacing subject
         for entity in &entities {
             let candidate = (entity.clone(), predicate.clone(), object.clone());
@@ -266,30 +295,34 @@ impl EvaluationSuite {
                 candidates.push(candidate);
             }
         }
-        
+
         Ok(candidates)
     }
-    
+
     /// Generate unfiltered candidates
-    fn generate_unfiltered_candidates(&self, model: &dyn EmbeddingModel, triple: &(String, String, String)) -> Result<Vec<(String, String, String)>> {
+    fn generate_unfiltered_candidates(
+        &self,
+        model: &dyn EmbeddingModel,
+        triple: &(String, String, String),
+    ) -> Result<Vec<(String, String, String)>> {
         let entities = model.get_entities();
         let (subject, predicate, object) = triple;
-        
+
         let mut candidates = Vec::new();
-        
+
         // Generate candidates by replacing object
         for entity in &entities {
             candidates.push((subject.clone(), predicate.clone(), entity.clone()));
         }
-        
+
         // Generate candidates by replacing subject
         for entity in &entities {
             candidates.push((entity.clone(), predicate.clone(), object.clone()));
         }
-        
+
         Ok(candidates)
     }
-    
+
     /// Compute aggregate metrics from detailed results
     fn compute_aggregate_metrics(&self, results: &[TripleEvaluationResult]) -> EvaluationResults {
         if results.is_empty() {
@@ -305,34 +338,36 @@ impl EvaluationSuite {
                 detailed_results: Vec::new(),
             };
         }
-        
+
         // Mean Rank
         let mean_rank = results.iter().map(|r| r.rank as f64).sum::<f64>() / results.len() as f64;
-        
+
         // Mean Reciprocal Rank
-        let mean_reciprocal_rank = results.iter().map(|r| r.reciprocal_rank).sum::<f64>() / results.len() as f64;
-        
+        let mean_reciprocal_rank =
+            results.iter().map(|r| r.reciprocal_rank).sum::<f64>() / results.len() as f64;
+
         // Hits@K
         let mut hits_at_k = HashMap::new();
         for &k in &self.config.k_values {
             let hits = results.iter().filter(|r| r.rank <= k).count() as f64 / results.len() as f64;
             hits_at_k.insert(k, hits);
         }
-        
+
         // NDCG@K (simplified implementation)
         let mut ndcg_at_k = HashMap::new();
         for &k in &self.config.k_values {
             let ndcg = self.compute_ndcg(results, k);
             ndcg_at_k.insert(k, ndcg);
         }
-        
+
         // Average Precision (simplified)
-        let average_precision = results.iter().map(|r| r.reciprocal_rank).sum::<f64>() / results.len() as f64;
-        
+        let average_precision =
+            results.iter().map(|r| r.reciprocal_rank).sum::<f64>() / results.len() as f64;
+
         // F1 Score (using Hits@1 as precision/recall approximation)
         let hits_at_1 = hits_at_k.get(&1).copied().unwrap_or(0.0);
         let f1_score = 2.0 * hits_at_1 * hits_at_1 / (hits_at_1 + hits_at_1 + 1e-10);
-        
+
         EvaluationResults {
             mean_rank,
             mean_reciprocal_rank,
@@ -345,7 +380,7 @@ impl EvaluationSuite {
             detailed_results: results.to_vec(),
         }
     }
-    
+
     /// Compute NDCG@K (simplified implementation)
     fn compute_ndcg(&self, results: &[TripleEvaluationResult], k: usize) -> f64 {
         // Simplified NDCG calculation
@@ -355,9 +390,9 @@ impl EvaluationSuite {
             .filter(|r| r.rank <= k)
             .map(|r| 1.0 / (r.rank as f64).log2())
             .sum();
-        
+
         let idcg = 1.0; // Ideal DCG for binary relevance
-        
+
         if idcg > 0.0 {
             dcg / idcg
         } else {
@@ -380,16 +415,16 @@ impl BenchmarkSuite {
             datasets: Vec::new(),
         }
     }
-    
+
     /// Add evaluation results for a model
     pub fn add_evaluation(&mut self, model_name: String, results: EvaluationResults) {
         self.evaluations.insert(model_name, results);
     }
-    
+
     /// Generate comparison report
     pub fn generate_report(&self) -> BenchmarkReport {
         let mut comparisons = Vec::new();
-        
+
         for (model_name, results) in &self.evaluations {
             comparisons.push(ModelComparison {
                 model_name: model_name.clone(),
@@ -400,12 +435,16 @@ impl BenchmarkSuite {
                 evaluation_time: results.evaluation_time_seconds,
             });
         }
-        
+
         // Sort by MRR (higher is better)
-        comparisons.sort_by(|a, b| b.mean_reciprocal_rank.partial_cmp(&a.mean_reciprocal_rank).unwrap());
-        
+        comparisons.sort_by(|a, b| {
+            b.mean_reciprocal_rank
+                .partial_cmp(&a.mean_reciprocal_rank)
+                .unwrap()
+        });
+
         let best_model = comparisons.first().map(|c| c.model_name.clone());
-        
+
         BenchmarkReport {
             comparisons,
             best_model,
@@ -442,29 +481,32 @@ pub struct ModelComparison {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::TransE;
     use crate::ModelConfig;
-    
+    use crate::TransE;
+
     #[test]
     fn test_evaluation_suite() {
         let test_triples = vec![
             ("alice".to_string(), "knows".to_string(), "bob".to_string()),
-            ("bob".to_string(), "knows".to_string(), "charlie".to_string()),
+            (
+                "bob".to_string(),
+                "knows".to_string(),
+                "charlie".to_string(),
+            ),
         ];
-        
-        let validation_triples = vec![
-            ("alice".to_string(), "likes".to_string(), "bob".to_string()),
-        ];
-        
+
+        let validation_triples =
+            vec![("alice".to_string(), "likes".to_string(), "bob".to_string())];
+
         let suite = EvaluationSuite::new(test_triples, validation_triples);
         assert_eq!(suite.test_triples.len(), 2);
         assert_eq!(suite.validation_triples.len(), 1);
     }
-    
+
     #[test]
     fn test_benchmark_suite() {
         let mut suite = BenchmarkSuite::new();
-        
+
         let results1 = EvaluationResults {
             mean_rank: 10.0,
             mean_reciprocal_rank: 0.5,
@@ -476,9 +518,9 @@ mod tests {
             evaluation_time_seconds: 5.0,
             detailed_results: Vec::new(),
         };
-        
+
         suite.add_evaluation("TransE".to_string(), results1);
-        
+
         let report = suite.generate_report();
         assert_eq!(report.num_models, 1);
         assert_eq!(report.best_model, Some("TransE".to_string()));

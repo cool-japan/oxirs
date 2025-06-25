@@ -6,7 +6,12 @@ use rand::prelude::*;
 use rand_distr::{Distribution, Uniform};
 
 /// Initialize embeddings with Xavier/Glorot initialization
-pub fn xavier_init(shape: (usize, usize), fan_in: usize, fan_out: usize, rng: &mut impl Rng) -> Array2<f64> {
+pub fn xavier_init(
+    shape: (usize, usize),
+    fan_in: usize,
+    fan_out: usize,
+    rng: &mut impl Rng,
+) -> Array2<f64> {
     let limit = (6.0 / (fan_in + fan_out) as f64).sqrt();
     let uniform = Uniform::new(-limit, limit);
     Array2::from_shape_fn(shape, |_| uniform.sample(rng))
@@ -57,7 +62,7 @@ pub fn cosine_similarity(a: &Array1<f64>, b: &Array1<f64>) -> f64 {
     let dot_product = a.dot(b);
     let norm_a = a.dot(a).sqrt();
     let norm_b = b.dot(b).sqrt();
-    
+
     if norm_a > 1e-10 && norm_b > 1e-10 {
         dot_product / (norm_a * norm_b)
     } else {
@@ -174,13 +179,22 @@ impl LearningRateSchedule {
     pub fn get_lr(&self, epoch: usize) -> f64 {
         match self {
             LearningRateSchedule::Constant(lr) => *lr,
-            LearningRateSchedule::ExponentialDecay { initial_lr, decay_rate, decay_steps } => {
-                initial_lr * decay_rate.powf(epoch as f64 / *decay_steps as f64)
-            }
-            LearningRateSchedule::StepDecay { initial_lr, step_size, factor } => {
-                initial_lr * factor.powf((epoch / step_size) as f64)
-            }
-            LearningRateSchedule::PolynomialDecay { initial_lr, final_lr, decay_steps, power } => {
+            LearningRateSchedule::ExponentialDecay {
+                initial_lr,
+                decay_rate,
+                decay_steps,
+            } => initial_lr * decay_rate.powf(epoch as f64 / *decay_steps as f64),
+            LearningRateSchedule::StepDecay {
+                initial_lr,
+                step_size,
+                factor,
+            } => initial_lr * factor.powf((epoch / step_size) as f64),
+            LearningRateSchedule::PolynomialDecay {
+                initial_lr,
+                final_lr,
+                decay_steps,
+                power,
+            } => {
                 if epoch >= *decay_steps {
                     *final_lr
                 } else {
@@ -212,7 +226,7 @@ impl EarlyStopping {
             stopped: false,
         }
     }
-    
+
     /// Update with current loss and check if should stop
     pub fn update(&mut self, current_loss: f64) -> bool {
         if current_loss < self.best_loss - self.min_delta {
@@ -224,15 +238,15 @@ impl EarlyStopping {
                 self.stopped = true;
             }
         }
-        
+
         self.stopped
     }
-    
+
     /// Check if training should stop
     pub fn should_stop(&self) -> bool {
         self.stopped
     }
-    
+
     /// Get best loss seen so far
     pub fn best_loss(&self) -> f64 {
         self.best_loss
@@ -243,22 +257,22 @@ impl EarlyStopping {
 mod tests {
     use super::*;
     use ndarray::Array1;
-    
+
     #[test]
     fn test_distance_functions() {
         let a = Array1::from_vec(vec![1.0, 2.0, 3.0]);
         let b = Array1::from_vec(vec![4.0, 5.0, 6.0]);
-        
+
         let l2_dist = l2_distance(&a, &b);
         assert!((l2_dist - 5.196152422706632).abs() < 1e-10);
-        
+
         let l1_dist = l1_distance(&a, &b);
         assert!((l1_dist - 9.0).abs() < 1e-10);
-        
+
         let cos_sim = cosine_similarity(&a, &b);
         assert!(cos_sim > 0.0 && cos_sim < 1.0);
     }
-    
+
     #[test]
     fn test_normalization() {
         let mut vec = Array1::from_vec(vec![3.0, 4.0]);
@@ -266,7 +280,7 @@ mod tests {
         let norm = vec.dot(&vec).sqrt();
         assert!((norm - 1.0).abs() < 1e-10);
     }
-    
+
     #[test]
     fn test_learning_rate_schedule() {
         let schedule = LearningRateSchedule::ExponentialDecay {
@@ -274,20 +288,20 @@ mod tests {
             decay_rate: 0.9,
             decay_steps: 10,
         };
-        
+
         let lr0 = schedule.get_lr(0);
         let lr10 = schedule.get_lr(10);
         let lr20 = schedule.get_lr(20);
-        
+
         assert!((lr0 - 0.1).abs() < 1e-10);
         assert!(lr10 < lr0);
         assert!(lr20 < lr10);
     }
-    
+
     #[test]
     fn test_early_stopping() {
         let mut early_stop = EarlyStopping::new(3, 0.01);
-        
+
         assert!(!early_stop.update(1.0));
         assert!(!early_stop.update(0.5));
         assert!(!early_stop.update(0.51));

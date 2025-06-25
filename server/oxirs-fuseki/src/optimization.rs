@@ -15,11 +15,11 @@ use crate::{
     store::Store,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, BTreeMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{RwLock, Semaphore};
-use tracing::{debug, info, warn, error, instrument};
+use tracing::{debug, error, info, instrument, warn};
 
 /// Query optimization service with advanced algorithms
 #[derive(Clone)]
@@ -188,7 +188,7 @@ impl QueryOptimizer {
     pub fn new(config: PerformanceConfig) -> FusekiResult<Self> {
         let statistics = Arc::new(RwLock::new(DatabaseStatistics::default()));
         let plan_cache = Arc::new(RwLock::new(HashMap::new()));
-        
+
         let cost_model = Arc::new(CostModel {
             triple_access_cost: 1.0,
             index_access_cost: 0.1,
@@ -201,7 +201,9 @@ impl QueryOptimizer {
         let execution_engine = Arc::new(ParallelExecutionEngine {
             max_parallelism: config.query_optimization.thread_pool_size,
             work_queue: Arc::new(RwLock::new(Vec::new())),
-            execution_semaphore: Arc::new(Semaphore::new(config.query_optimization.thread_pool_size)),
+            execution_semaphore: Arc::new(Semaphore::new(
+                config.query_optimization.thread_pool_size,
+            )),
             completion_tracker: Arc::new(RwLock::new(HashMap::new())),
         });
 
@@ -223,7 +225,7 @@ impl QueryOptimizer {
         dataset: &str,
     ) -> FusekiResult<OptimizedQueryPlan> {
         let plan_id = self.generate_plan_id(query);
-        
+
         // Check plan cache first
         if let Some(cached_plan) = self.get_cached_plan(&plan_id).await {
             info!("Using cached optimization plan: {}", plan_id);
@@ -231,29 +233,31 @@ impl QueryOptimizer {
         }
 
         debug!("Starting query optimization for: {}", plan_id);
-        
+
         // 1. Analyze query structure
         let analysis = self.analyze_query(query).await?;
-        
+
         // 2. Get fresh database statistics
         self.update_statistics(store, dataset).await?;
         let stats = self.statistics.read().await;
-        
+
         // 3. Generate multiple candidate plans
-        let candidate_plans = self.generate_candidate_plans(query, &analysis, &stats).await?;
-        
+        let candidate_plans = self
+            .generate_candidate_plans(query, &analysis, &stats)
+            .await?;
+
         // 4. Cost-based plan selection
         let best_plan = self.select_best_plan(candidate_plans, &stats).await?;
-        
+
         // 5. Apply index-aware optimizations
         let optimized_plan = self.apply_index_optimizations(best_plan, &stats).await?;
-        
+
         // 6. Generate parallel execution strategy
         let final_plan = self.generate_parallel_strategy(optimized_plan).await?;
-        
+
         // 7. Cache the optimized plan
         self.cache_plan(plan_id.clone(), final_plan.clone()).await;
-        
+
         info!("Query optimization completed for: {}", plan_id);
         Ok(final_plan)
     }
@@ -262,35 +266,40 @@ impl QueryOptimizer {
     #[instrument(skip(self))]
     async fn analyze_query(&self, query: &str) -> FusekiResult<QueryAnalysis> {
         debug!("Analyzing query structure");
-        
+
         let query_lower = query.to_lowercase();
         let join_count = query_lower.matches("join").count() as u32;
         let filter_count = query_lower.matches("filter").count() as u32;
-        
+
         // Extract triple patterns (simplified analysis)
         let triple_patterns = self.extract_triple_patterns(query).await?;
-        
+
         // Analyze query features
-        let has_aggregation = query_lower.contains("group by") || 
-                             query_lower.contains("count(") ||
-                             query_lower.contains("sum(") ||
-                             query_lower.contains("avg(");
-        
-        let has_subqueries = query_lower.contains("select") && 
-                            query_lower.matches("select").count() > 1;
-        
+        let has_aggregation = query_lower.contains("group by")
+            || query_lower.contains("count(")
+            || query_lower.contains("sum(")
+            || query_lower.contains("avg(");
+
+        let has_subqueries =
+            query_lower.contains("select") && query_lower.matches("select").count() > 1;
+
         let has_optional = query_lower.contains("optional");
         let has_union = query_lower.contains("union");
-        
+
         // Calculate complexity score
         let complexity = self.calculate_query_complexity(
-            &triple_patterns, join_count, filter_count, 
-            has_aggregation, has_subqueries, has_optional, has_union
+            &triple_patterns,
+            join_count,
+            filter_count,
+            has_aggregation,
+            has_subqueries,
+            has_optional,
+            has_union,
         );
-        
+
         // Estimate cardinality
         let estimated_cardinality = self.estimate_query_cardinality(&triple_patterns).await;
-        
+
         Ok(QueryAnalysis {
             query_complexity: complexity,
             join_count,
@@ -313,29 +322,38 @@ impl QueryOptimizer {
         stats: &DatabaseStatistics,
     ) -> FusekiResult<Vec<OptimizedQueryPlan>> {
         debug!("Generating candidate plans");
-        
+
         let mut plans = Vec::new();
-        
+
         // Plan 1: Left-to-right join order
-        let plan1 = self.create_left_to_right_plan(query, analysis, stats).await?;
+        let plan1 = self
+            .create_left_to_right_plan(query, analysis, stats)
+            .await?;
         plans.push(plan1);
-        
+
         // Plan 2: Optimal join order using dynamic programming
-        if analysis.join_count <= 10 { // Only for reasonably sized queries
-            let plan2 = self.create_optimal_join_plan(query, analysis, stats).await?;
+        if analysis.join_count <= 10 {
+            // Only for reasonably sized queries
+            let plan2 = self
+                .create_optimal_join_plan(query, analysis, stats)
+                .await?;
             plans.push(plan2);
         }
-        
+
         // Plan 3: Index-optimized plan
-        let plan3 = self.create_index_optimized_plan(query, analysis, stats).await?;
+        let plan3 = self
+            .create_index_optimized_plan(query, analysis, stats)
+            .await?;
         plans.push(plan3);
-        
+
         // Plan 4: Parallel-first plan
         if analysis.query_complexity > 5.0 {
-            let plan4 = self.create_parallel_first_plan(query, analysis, stats).await?;
+            let plan4 = self
+                .create_parallel_first_plan(query, analysis, stats)
+                .await?;
             plans.push(plan4);
         }
-        
+
         debug!("Generated {} candidate plans", plans.len());
         Ok(plans)
     }
@@ -348,20 +366,20 @@ impl QueryOptimizer {
         stats: &DatabaseStatistics,
     ) -> FusekiResult<OptimizedQueryPlan> {
         debug!("Selecting best plan from {} candidates", plans.len());
-        
+
         let mut best_plan = None;
         let mut best_cost = f64::INFINITY;
-        
+
         for plan in plans {
             let cost = self.calculate_plan_cost(&plan, stats).await;
             debug!("Plan {} cost: {:.2}", plan.plan_id, cost);
-            
+
             if cost < best_cost {
                 best_cost = cost;
                 best_plan = Some(plan);
             }
         }
-        
+
         best_plan.ok_or_else(|| FusekiError::internal("No valid execution plan found"))
     }
 
@@ -373,7 +391,7 @@ impl QueryOptimizer {
         stats: &DatabaseStatistics,
     ) -> FusekiResult<OptimizedQueryPlan> {
         debug!("Applying index optimizations");
-        
+
         // Analyze available indexes
         for step in &mut plan.execution_steps {
             if step.operation.contains("triple_pattern") {
@@ -384,7 +402,7 @@ impl QueryOptimizer {
                 }
             }
         }
-        
+
         // Add index optimization hints
         let index_hint = OptimizationHint {
             hint_type: "INDEX_OPTIMIZATION".to_string(),
@@ -393,7 +411,7 @@ impl QueryOptimizer {
             estimated_improvement: 0.8,
         };
         plan.optimization_hints.push(index_hint);
-        
+
         Ok(plan)
     }
 
@@ -404,30 +422,33 @@ impl QueryOptimizer {
         mut plan: OptimizedQueryPlan,
     ) -> FusekiResult<OptimizedQueryPlan> {
         debug!("Generating parallel execution strategy");
-        
+
         // Identify parallelizable operations
-        let parallelizable_ops: Vec<u32> = plan.execution_steps
+        let parallelizable_ops: Vec<u32> = plan
+            .execution_steps
             .iter()
             .filter(|step| step.can_parallelize)
             .map(|step| step.step_id)
             .collect();
-        
+
         if parallelizable_ops.len() > 1 {
             // Create parallel segments
-            let chunk_size = (parallelizable_ops.len() / self.execution_engine.max_parallelism).max(1);
+            let chunk_size =
+                (parallelizable_ops.len() / self.execution_engine.max_parallelism).max(1);
             let mut segment_id = 0;
-            
+
             for chunk in parallelizable_ops.chunks(chunk_size) {
                 let segment = ParallelSegment {
                     segment_id,
                     operations: chunk.to_vec(),
-                    estimated_parallelism: chunk.len().min(self.execution_engine.max_parallelism) as u32,
+                    estimated_parallelism: chunk.len().min(self.execution_engine.max_parallelism)
+                        as u32,
                     merge_strategy: "UNION_ALL".to_string(),
                 };
                 plan.parallel_segments.push(segment);
                 segment_id += 1;
             }
-            
+
             // Add parallelization hint
             let parallel_hint = OptimizationHint {
                 hint_type: "PARALLELIZATION".to_string(),
@@ -437,7 +458,7 @@ impl QueryOptimizer {
             };
             plan.optimization_hints.push(parallel_hint);
         }
-        
+
         Ok(plan)
     }
 
@@ -445,16 +466,17 @@ impl QueryOptimizer {
     #[instrument(skip(self, store))]
     async fn update_statistics(&self, store: &Store, dataset: &str) -> FusekiResult<()> {
         debug!("Updating database statistics for dataset: {}", dataset);
-        
+
         let mut stats = self.statistics.write().await;
-        
+
         // Mock statistics update - in real implementation would query the store
         stats.total_triples = 1000000; // Example value
         stats.total_graphs = 10;
         stats.last_updated = std::time::SystemTime::now();
-        
+
         // Update predicate statistics
-        stats.predicate_stats.insert("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(), 
+        stats.predicate_stats.insert(
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
             PredicateStatistics {
                 frequency: 100000,
                 selectivity: 0.1,
@@ -462,8 +484,9 @@ impl QueryOptimizer {
                 distinct_objects: 1000,
                 avg_subject_fanout: 2.0,
                 avg_object_fanout: 100.0,
-            });
-        
+            },
+        );
+
         Ok(())
     }
 
@@ -481,28 +504,34 @@ impl QueryOptimizer {
         let mut complexity = triple_patterns.len() as f64;
         complexity += join_count as f64 * 2.0;
         complexity += filter_count as f64 * 0.5;
-        
-        if has_aggregation { complexity += 3.0; }
-        if has_subqueries { complexity += 5.0; }
-        if has_optional { complexity += 2.0; }
-        if has_union { complexity += 1.5; }
-        
+
+        if has_aggregation {
+            complexity += 3.0;
+        }
+        if has_subqueries {
+            complexity += 5.0;
+        }
+        if has_optional {
+            complexity += 2.0;
+        }
+        if has_union {
+            complexity += 1.5;
+        }
+
         complexity
     }
 
     /// Extract triple patterns from query (simplified)
     async fn extract_triple_patterns(&self, query: &str) -> FusekiResult<Vec<TriplePattern>> {
         // Simplified pattern extraction - in real implementation would use SPARQL parser
-        let patterns = vec![
-            TriplePattern {
-                subject: "?s".to_string(),
-                predicate: "?p".to_string(),
-                object: "?o".to_string(),
-                graph: None,
-                is_bound: (false, false, false),
-                estimated_selectivity: 0.1,
-            }
-        ];
+        let patterns = vec![TriplePattern {
+            subject: "?s".to_string(),
+            predicate: "?p".to_string(),
+            object: "?o".to_string(),
+            graph: None,
+            is_bound: (false, false, false),
+            estimated_selectivity: 0.1,
+        }];
         Ok(patterns)
     }
 
@@ -510,7 +539,10 @@ impl QueryOptimizer {
     async fn estimate_query_cardinality(&self, patterns: &[TriplePattern]) -> u64 {
         // Simplified cardinality estimation
         let base_cardinality = 1000u64;
-        patterns.iter().map(|p| (base_cardinality as f64 * p.estimated_selectivity) as u64).sum()
+        patterns
+            .iter()
+            .map(|p| (base_cardinality as f64 * p.estimated_selectivity) as u64)
+            .sum()
     }
 
     // Helper methods for creating different plan types
@@ -594,11 +626,19 @@ impl QueryOptimizer {
         })
     }
 
-    async fn calculate_plan_cost(&self, plan: &OptimizedQueryPlan, _stats: &DatabaseStatistics) -> f64 {
+    async fn calculate_plan_cost(
+        &self,
+        plan: &OptimizedQueryPlan,
+        _stats: &DatabaseStatistics,
+    ) -> f64 {
         plan.estimated_cost
     }
 
-    async fn find_best_index_for_step(&self, _step: &ExecutionStep, _stats: &DatabaseStatistics) -> Option<String> {
+    async fn find_best_index_for_step(
+        &self,
+        _step: &ExecutionStep,
+        _stats: &DatabaseStatistics,
+    ) -> Option<String> {
         Some("SPO_INDEX".to_string())
     }
 
@@ -616,7 +656,7 @@ impl QueryOptimizer {
     fn generate_plan_id(&self, query: &str) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
         query.hash(&mut hasher);
         format!("plan_{:x}", hasher.finish())
@@ -625,14 +665,23 @@ impl QueryOptimizer {
     /// Get optimization statistics
     pub async fn get_optimization_stats(&self) -> HashMap<String, serde_json::Value> {
         let mut stats = HashMap::new();
-        
+
         let plan_cache = self.plan_cache.read().await;
-        stats.insert("cached_plans".to_string(), serde_json::json!(plan_cache.len()));
-        
+        stats.insert(
+            "cached_plans".to_string(),
+            serde_json::json!(plan_cache.len()),
+        );
+
         let db_stats = self.statistics.read().await;
-        stats.insert("total_triples".to_string(), serde_json::json!(db_stats.total_triples));
-        stats.insert("indexed_predicates".to_string(), serde_json::json!(db_stats.predicate_stats.len()));
-        
+        stats.insert(
+            "total_triples".to_string(),
+            serde_json::json!(db_stats.total_triples),
+        );
+        stats.insert(
+            "indexed_predicates".to_string(),
+            serde_json::json!(db_stats.predicate_stats.len()),
+        );
+
         stats
     }
 }
@@ -653,7 +702,7 @@ impl Default for DatabaseStatistics {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{QueryOptimizationConfig, CacheConfig, ConnectionPoolConfig};
+    use crate::config::{CacheConfig, ConnectionPoolConfig, QueryOptimizationConfig};
 
     fn create_test_optimizer() -> QueryOptimizer {
         let config = PerformanceConfig {
@@ -680,7 +729,7 @@ mod tests {
                 max_lifetime_secs: 3600,
             },
         };
-        
+
         QueryOptimizer::new(config).unwrap()
     }
 
@@ -688,7 +737,7 @@ mod tests {
     async fn test_query_analysis() {
         let optimizer = create_test_optimizer();
         let query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o . ?s rdf:type ?type }";
-        
+
         let analysis = optimizer.analyze_query(query).await.unwrap();
         assert!(analysis.query_complexity > 0.0);
         assert!(!analysis.has_aggregation);
@@ -699,10 +748,10 @@ mod tests {
         let optimizer = create_test_optimizer();
         let query = "SELECT * WHERE { ?s ?p ?o }";
         let plan_id = optimizer.generate_plan_id(query);
-        
+
         // Should not be cached initially
         assert!(optimizer.get_cached_plan(&plan_id).await.is_none());
-        
+
         // Create and cache a plan
         let plan = OptimizedQueryPlan {
             plan_id: plan_id.clone(),
@@ -716,9 +765,9 @@ mod tests {
             created_at: std::time::SystemTime::now(),
             hit_count: 0,
         };
-        
+
         optimizer.cache_plan(plan_id.clone(), plan).await;
-        
+
         // Should be cached now
         assert!(optimizer.get_cached_plan(&plan_id).await.is_some());
     }
@@ -727,11 +776,10 @@ mod tests {
     fn test_complexity_calculation() {
         let optimizer = create_test_optimizer();
         let patterns = vec![];
-        
-        let complexity = optimizer.calculate_query_complexity(
-            &patterns, 2, 1, true, false, true, false
-        );
-        
+
+        let complexity =
+            optimizer.calculate_query_complexity(&patterns, 2, 1, true, false, true, false);
+
         assert!(complexity > 0.0);
     }
 }

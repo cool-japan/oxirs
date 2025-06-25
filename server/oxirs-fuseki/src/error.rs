@@ -124,7 +124,7 @@ impl FusekiError {
     /// Get the HTTP status code for this error
     pub fn status_code(&self) -> StatusCode {
         match self {
-            FusekiError::InvalidQuery { .. } 
+            FusekiError::InvalidQuery { .. }
             | FusekiError::InvalidUpdate { .. }
             | FusekiError::Parse { .. }
             | FusekiError::Validation { .. }
@@ -193,7 +193,7 @@ impl FusekiError {
     /// Create an error response for this error
     pub fn to_error_response(&self, request_id: Option<String>) -> ErrorResponse {
         let mut response = ErrorResponse::new(self.error_type(), self.to_string());
-        
+
         if let Some(id) = request_id {
             response = response.with_request_id(id);
         }
@@ -210,7 +210,7 @@ impl FusekiError {
     /// Log this error at the appropriate level
     pub fn log(&self, request_id: Option<&str>) {
         let id = request_id.unwrap_or("unknown");
-        
+
         match self.status_code() {
             StatusCode::INTERNAL_SERVER_ERROR => {
                 error!(
@@ -220,12 +220,12 @@ impl FusekiError {
                     "Internal server error"
                 );
             }
-            StatusCode::BAD_REQUEST 
-            | StatusCode::UNAUTHORIZED 
-            | StatusCode::FORBIDDEN 
-            | StatusCode::NOT_FOUND 
-            | StatusCode::METHOD_NOT_ALLOWED 
-            | StatusCode::UNSUPPORTED_MEDIA_TYPE 
+            StatusCode::BAD_REQUEST
+            | StatusCode::UNAUTHORIZED
+            | StatusCode::FORBIDDEN
+            | StatusCode::NOT_FOUND
+            | StatusCode::METHOD_NOT_ALLOWED
+            | StatusCode::UNSUPPORTED_MEDIA_TYPE
             | StatusCode::TOO_MANY_REQUESTS => {
                 warn!(
                     request_id = id,
@@ -249,7 +249,7 @@ impl FusekiError {
 impl IntoResponse for FusekiError {
     fn into_response(self) -> Response {
         let status = self.status_code();
-        
+
         // Extract request ID from tracing context if available
         let request_id = tracing::Span::current()
             .field("request_id")
@@ -274,108 +274,108 @@ pub type FusekiResult<T> = Result<T, FusekiError>;
 /// Convenience functions for creating common errors
 impl FusekiError {
     pub fn invalid_query(message: impl Into<String>) -> Self {
-        Self::InvalidQuery { 
-            message: message.into() 
+        Self::InvalidQuery {
+            message: message.into(),
         }
     }
 
     pub fn invalid_update(message: impl Into<String>) -> Self {
-        Self::InvalidUpdate { 
-            message: message.into() 
+        Self::InvalidUpdate {
+            message: message.into(),
         }
     }
 
     pub fn query_execution(message: impl Into<String>) -> Self {
-        Self::QueryExecution { 
-            message: message.into() 
+        Self::QueryExecution {
+            message: message.into(),
         }
     }
 
     pub fn update_execution(message: impl Into<String>) -> Self {
-        Self::UpdateExecution { 
-            message: message.into() 
+        Self::UpdateExecution {
+            message: message.into(),
         }
     }
 
     pub fn authentication(message: impl Into<String>) -> Self {
-        Self::Authentication { 
-            message: message.into() 
+        Self::Authentication {
+            message: message.into(),
         }
     }
 
     pub fn authorization(message: impl Into<String>) -> Self {
-        Self::Authorization { 
-            message: message.into() 
+        Self::Authorization {
+            message: message.into(),
         }
     }
 
     pub fn configuration(message: impl Into<String>) -> Self {
-        Self::Configuration { 
-            message: message.into() 
+        Self::Configuration {
+            message: message.into(),
         }
     }
 
     pub fn store(message: impl Into<String>) -> Self {
-        Self::Store { 
-            message: message.into() 
+        Self::Store {
+            message: message.into(),
         }
     }
 
     pub fn parse(message: impl Into<String>) -> Self {
-        Self::Parse { 
-            message: message.into() 
+        Self::Parse {
+            message: message.into(),
         }
     }
 
     pub fn validation(message: impl Into<String>) -> Self {
-        Self::Validation { 
-            message: message.into() 
+        Self::Validation {
+            message: message.into(),
         }
     }
 
     pub fn not_found(resource: impl Into<String>) -> Self {
-        Self::NotFound { 
-            resource: resource.into() 
+        Self::NotFound {
+            resource: resource.into(),
         }
     }
 
     pub fn unsupported_media_type(media_type: impl Into<String>) -> Self {
-        Self::UnsupportedMediaType { 
-            media_type: media_type.into() 
+        Self::UnsupportedMediaType {
+            media_type: media_type.into(),
         }
     }
 
     pub fn service_unavailable(message: impl Into<String>) -> Self {
-        Self::ServiceUnavailable { 
-            message: message.into() 
+        Self::ServiceUnavailable {
+            message: message.into(),
         }
     }
 
     pub fn internal(message: impl Into<String>) -> Self {
-        Self::Internal { 
-            message: message.into() 
+        Self::Internal {
+            message: message.into(),
         }
     }
 
     pub fn bad_request(message: impl Into<String>) -> Self {
-        Self::Parse { 
-            message: message.into() 
+        Self::Parse {
+            message: message.into(),
         }
     }
-    
+
     pub fn conflict(message: impl Into<String>) -> Self {
-        Self::Internal { 
-            message: message.into() 
+        Self::Internal {
+            message: message.into(),
         }
     }
-    
+
     pub fn method_not_allowed(message: impl Into<String>) -> Self {
         Self::MethodNotAllowed
     }
-    
+
     pub fn forbidden(message: impl Into<String>) -> Self {
-        Self::Authorization { 
-            message: message.into() 
+        Self::Authorization {
+            message: message.into(),
         }
     }
 }
@@ -386,7 +386,7 @@ pub trait IntoFusekiError<T> {
     fn with_context(self, context: &str) -> FusekiResult<T>;
 }
 
-impl<T, E> IntoFusekiError<T> for Result<T, E> 
+impl<T, E> IntoFusekiError<T> for Result<T, E>
 where
     E: fmt::Display,
 {
@@ -441,17 +441,14 @@ mod tests {
             FusekiError::authentication("test").error_type(),
             "authentication_failed"
         );
-        assert_eq!(
-            FusekiError::RateLimit.error_type(),
-            "rate_limit_exceeded"
-        );
+        assert_eq!(FusekiError::RateLimit.error_type(), "rate_limit_exceeded");
     }
 
     #[test]
     fn test_error_response_creation() {
         let error = FusekiError::invalid_query("test query error");
         let response = error.to_error_response(Some("req-123".to_string()));
-        
+
         assert_eq!(response.error, "invalid_query");
         assert_eq!(response.message, "Invalid SPARQL query: test query error");
         assert_eq!(response.request_id, Some("req-123".to_string()));
@@ -461,10 +458,10 @@ mod tests {
     fn test_convenience_constructors() {
         let query_error = FusekiError::invalid_query("syntax error");
         assert!(matches!(query_error, FusekiError::InvalidQuery { .. }));
-        
+
         let auth_error = FusekiError::authentication("invalid token");
         assert!(matches!(auth_error, FusekiError::Authentication { .. }));
-        
+
         let not_found = FusekiError::not_found("dataset");
         assert!(matches!(not_found, FusekiError::NotFound { .. }));
     }
@@ -473,16 +470,19 @@ mod tests {
     fn test_into_fuseki_error_trait() {
         let result: Result<i32, &str> = Err("test error");
         let fuseki_result = result.into_fuseki_error();
-        
+
         assert!(fuseki_result.is_err());
-        assert!(matches!(fuseki_result.unwrap_err(), FusekiError::Internal { .. }));
+        assert!(matches!(
+            fuseki_result.unwrap_err(),
+            FusekiError::Internal { .. }
+        ));
     }
 
     #[test]
     fn test_with_context_trait() {
         let result: Result<i32, &str> = Err("original error");
         let fuseki_result = result.with_context("processing request");
-        
+
         assert!(fuseki_result.is_err());
         let error_message = fuseki_result.unwrap_err().to_string();
         assert!(error_message.contains("processing request"));
