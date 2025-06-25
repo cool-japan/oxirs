@@ -9,14 +9,23 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock, Weak};
 use std::hash::{Hash, Hasher};
 
-/// A thread-safe string interner that deduplicates strings
+/// A thread-safe string interner that deduplicates strings with ID mapping
 #[derive(Debug)]
 pub struct StringInterner {
     /// Map from string content to weak references of interned strings
     strings: RwLock<HashMap<String, Weak<str>>>,
+    /// Bidirectional mapping between strings and numeric IDs
+    string_to_id: RwLock<HashMap<String, u32>>,
+    /// Map from ID back to string
+    id_to_string: RwLock<HashMap<u32, Arc<str>>>,
+    /// Next available ID
+    next_id: AtomicU32,
     /// Statistics for monitoring performance
     stats: RwLock<InternerStats>,
 }
+
+/// Atomic 32-bit unsigned integer type for thread-safe ID generation
+use std::sync::atomic::AtomicU32;
 
 /// Statistics for monitoring string interner performance
 #[derive(Debug, Clone, Default)]
@@ -39,10 +48,13 @@ impl InternerStats {
 }
 
 impl StringInterner {
-    /// Create a new string interner
+    /// Create a new string interner with ID mapping
     pub fn new() -> Self {
         StringInterner {
             strings: RwLock::new(HashMap::new()),
+            string_to_id: RwLock::new(HashMap::new()),
+            id_to_string: RwLock::new(HashMap::new()),
+            next_id: AtomicU32::new(0),
             stats: RwLock::new(InternerStats::default()),
         }
     }
@@ -100,6 +112,61 @@ impl StringInterner {
         arc_str
     }
 
+    /// Intern a string and return both the Arc<str> and its numeric ID
+    pub fn intern_with_id(&self, s: &str) -> (Arc<str>, u32) {
+        // Fast path: check if we already have this string and its ID
+        {
+            let string_to_id = self.string_to_id.read().unwrap();
+            if let Some(&id) = string_to_id.get(s) {
+                // We have the ID, now get the Arc<str>
+                let id_to_string = self.id_to_string.read().unwrap();
+                if let Some(arc_str) = id_to_string.get(&id) {
+                    // Update stats
+                    {
+                        let mut stats = self.stats.write().unwrap();
+                        stats.total_requests += 1;
+                        stats.cache_hits += 1;
+                    }
+                    return (arc_str.clone(), id);
+                }
+            }
+        }
+
+        // Slow path: need to create new entry
+        let arc_str = self.intern(s); // This will handle the string interning
+        let id = self.next_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+        // Update the ID mappings
+        {
+            let mut string_to_id = self.string_to_id.write().unwrap();
+            string_to_id.insert(s.to_string(), id);
+        }
+        {
+            let mut id_to_string = self.id_to_string.write().unwrap();
+            id_to_string.insert(id, arc_str.clone());
+        }
+
+        (arc_str, id)
+    }
+
+    /// Get the ID for a string if it's already interned
+    pub fn get_id(&self, s: &str) -> Option<u32> {
+        let string_to_id = self.string_to_id.read().unwrap();
+        string_to_id.get(s).copied()
+    }
+
+    /// Get the string for an ID if it exists
+    pub fn get_string(&self, id: u32) -> Option<Arc<str>> {
+        let id_to_string = self.id_to_string.read().unwrap();
+        id_to_string.get(&id).cloned()
+    }
+
+    /// Get all ID mappings (useful for serialization/debugging)
+    pub fn get_all_mappings(&self) -> Vec<(u32, Arc<str>)> {
+        let id_to_string = self.id_to_string.read().unwrap();
+        id_to_string.iter().map(|(&id, s)| (id, s.clone())).collect()
+    }
+
     /// Clean up expired weak references to save memory
     pub fn cleanup(&self) {
         let mut strings = self.strings.write().unwrap();
@@ -113,7 +180,15 @@ impl StringInterner {
 
     /// Get the number of unique strings currently stored
     pub fn len(&self) -> usize {
-        self.strings.read().unwrap().len()
+        // Return the maximum of both counts to handle mixed usage
+        let id_count = self.string_to_id.read().unwrap().len();
+        let string_count = self.strings.read().unwrap().len();
+        std::cmp::max(id_count, string_count)
+    }
+
+    /// Get the number of strings with ID mappings
+    pub fn id_mapping_count(&self) -> usize {
+        self.string_to_id.read().unwrap().len()
     }
 
     /// Check if the interner is empty
@@ -492,5 +567,102 @@ mod tests {
 
         // Should have at most 3 unique strings (test0, test1, test2)
         assert!(interner.len() <= 3);
+    }
+
+    #[test]
+    fn test_term_id_mapping() {
+        let interner = StringInterner::new();
+        
+        // Test interning with ID
+        let (arc1, id1) = interner.intern_with_id("test_string");
+        let (arc2, id2) = interner.intern_with_id("test_string");
+        
+        // Same string should get same ID
+        assert_eq!(id1, id2);
+        assert!(Arc::ptr_eq(&arc1, &arc2));
+        
+        // Different strings should get different IDs
+        let (arc3, id3) = interner.intern_with_id("different_string");
+        assert_ne!(id1, id3);
+        assert!(!Arc::ptr_eq(&arc1, &arc3));
+        
+        // Test ID lookup
+        assert_eq!(interner.get_id("test_string"), Some(id1));
+        assert_eq!(interner.get_id("different_string"), Some(id3));
+        assert_eq!(interner.get_id("nonexistent"), None);
+        
+        // Test string lookup
+        assert_eq!(interner.get_string(id1).unwrap().as_ref(), "test_string");
+        assert_eq!(interner.get_string(id3).unwrap().as_ref(), "different_string");
+        assert_eq!(interner.get_string(999), None);
+    }
+
+    #[test]
+    fn test_id_mapping_stats() {
+        let interner = StringInterner::new();
+        
+        assert_eq!(interner.id_mapping_count(), 0);
+        
+        interner.intern_with_id("string1");
+        assert_eq!(interner.id_mapping_count(), 1);
+        
+        interner.intern_with_id("string2");
+        assert_eq!(interner.id_mapping_count(), 2);
+        
+        // Interning same string again shouldn't increase count
+        interner.intern_with_id("string1");
+        assert_eq!(interner.id_mapping_count(), 2);
+    }
+
+    #[test]
+    fn test_get_all_mappings() {
+        let interner = StringInterner::new();
+        
+        let (_, id1) = interner.intern_with_id("first");
+        let (_, id2) = interner.intern_with_id("second");
+        let (_, id3) = interner.intern_with_id("third");
+        
+        let mappings = interner.get_all_mappings();
+        assert_eq!(mappings.len(), 3);
+        
+        // Verify all mappings are present
+        let mut found_ids = vec![false; 3];
+        for (id, string) in mappings {
+            match string.as_ref() {
+                "first" => {
+                    assert_eq!(id, id1);
+                    found_ids[0] = true;
+                }
+                "second" => {
+                    assert_eq!(id, id2);
+                    found_ids[1] = true;
+                }
+                "third" => {
+                    assert_eq!(id, id3);
+                    found_ids[2] = true;
+                }
+                _ => panic!("Unexpected string in mappings"),
+            }
+        }
+        assert!(found_ids.iter().all(|&found| found));
+    }
+
+    #[test]
+    fn test_mixed_interning_modes() {
+        let interner = StringInterner::new();
+        
+        // Mix regular interning and ID interning
+        let arc1 = interner.intern("regular");
+        let (arc2, id2) = interner.intern_with_id("with_id");
+        let arc3 = interner.intern("regular"); // Same as first
+        
+        // Regular interning should still work
+        assert!(Arc::ptr_eq(&arc1, &arc3));
+        
+        // ID interning should work independently
+        assert_eq!(interner.get_string(id2).unwrap().as_ref(), "with_id");
+        
+        // Mixed mode length reporting should work
+        assert!(interner.len() >= 2);
     }
 }

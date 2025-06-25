@@ -41,6 +41,8 @@ impl QueryPlanner {
         let variables = self.extract_variables(query)?;
         let complexity = self.calculate_complexity(&patterns, &filters, &service_clauses);
 
+        let estimated_cost = self.estimate_query_cost(&patterns, &service_clauses);
+        
         Ok(QueryInfo {
             query_type,
             original_query: query.to_string(),
@@ -49,7 +51,7 @@ impl QueryPlanner {
             filters,
             variables,
             complexity,
-            estimated_cost: self.estimate_query_cost(&patterns, &service_clauses),
+            estimated_cost,
         })
     }
 

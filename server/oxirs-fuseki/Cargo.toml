@@ -82,6 +82,10 @@ validator = { version = "0.18", features = ["derive"] }
 # Random number generation
 rand = "0.8"
 
+# OAuth2 and HTTP client
+reqwest = { version = "0.12", features = ["json"] }
+percent-encoding = "2.3"
+
 # System utilities
 libc = "0.2"
 

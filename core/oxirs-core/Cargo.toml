@@ -13,16 +13,21 @@ rust-version.workspace = true
 
 [dependencies]
 oxigraph.workspace = true
+oxrdf.workspace = true
+oxjsonld.workspace = true
+json-event-parser = "0.2"
 rio_api.workspace = true
 rio_turtle.workspace = true
 rio_xml.workspace = true
 oxiri = "0.2"
+quick-xml = "0.36"
+oxilangtag = "0.1"
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-url = "2.5"
+url = "2.5.4"
 regex = "1.10"
 lazy_static = "1.5"
 

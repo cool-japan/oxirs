@@ -13,7 +13,7 @@ rust-version.workspace = true
 
 [dependencies]
 oxirs-core = { path = "../../core/oxirs-core" }
-oxirs-tdb = { path = "../oxirs-tdb" }
+# oxirs-tdb = { path = "../oxirs-tdb" }  # Temporarily commented out due to compilation issues
 openraft = { workspace = true, optional = true }
 tokio.workspace = true
 serde.workspace = true
@@ -21,6 +21,8 @@ serde_json.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+uuid.workspace = true
+async-trait.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true

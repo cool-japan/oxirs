@@ -41,7 +41,10 @@ pub mod handlers;
 pub mod auth;
 pub mod metrics;
 pub mod performance;
+pub mod optimization;
 pub mod store;
+pub mod federation;
+pub mod vector_search;
 
 use store::Store;
 

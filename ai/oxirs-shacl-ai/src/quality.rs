@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use oxirs_core::{
     model::{NamedNode, Term, Triple, Literal},
     store::Store,
+    RdfTerm,
 };
 
 use oxirs_shacl::{
@@ -650,7 +651,7 @@ impl QualityAssessor {
         Ok(AccuracyCheck { total: 75, accurate: 70 })
     }
     
-    fn generate_violation_recommendation(&self, _result: &oxirs_shacl::ValidationResult) -> String {
+    fn generate_violation_recommendation(&self, _result: &oxirs_shacl::ValidationReport) -> String {
         "Fix the shape violation".to_string()
     }
     

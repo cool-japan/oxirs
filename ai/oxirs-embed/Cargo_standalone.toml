@@ -1,0 +1,49 @@
+[package]
+name = "oxirs-embed"
+version = "0.1.0-alpha.1"
+authors = ["OxiRS Team"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/cool-japan/oxirs"
+homepage = "https://github.com/cool-japan/oxirs"
+description = "Knowledge graph embeddings with TransE, ComplEx, and custom models"
+keywords = ["rdf", "sparql", "knowledge-graph", "embeddings", "ai"]
+categories = ["database", "science", "data-structures", "algorithms"]
+rust-version = "1.70"
+
+[dependencies]
+# Core dependencies - avoiding broken oxirs-core for now
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+thiserror = "1.0"
+tracing = "0.1"
+ndarray = "0.16"
+rand = "0.8"
+rayon = "1.10"
+nalgebra = "0.33"
+uuid = "1.10"
+tokio = { version = "1.40", features = ["rt-multi-thread", "macros"] }
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+rand_distr = "0.4"
+
+[dev-dependencies]
+criterion = "0.5"
+
+[features]
+default = ["basic-models"]
+basic-models = ["transe", "complex", "distmult"]
+advanced-models = ["rotate", "conve", "tucker", "quatd"]
+neural-models = []
+transe = []
+complex = []
+distmult = []
+rotate = []
+conve = ["neural-models"]
+tucker = []
+quatd = []
+custom-models = []
+ontology-aware = []
+multi-modal = []
+gpu-acceleration = []

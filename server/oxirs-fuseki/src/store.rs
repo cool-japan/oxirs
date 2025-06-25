@@ -76,6 +76,28 @@ struct StoreMetadata {
     total_updates: u64,
     query_cache_hits: u64,
     query_cache_misses: u64,
+    change_log: Vec<StoreChange>,
+    last_change_id: u64,
+}
+
+/// Represents a change in the store for WebSocket notifications
+#[derive(Debug, Clone, Serialize)]
+pub struct StoreChange {
+    pub id: u64,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub operation_type: String,
+    pub affected_graphs: Vec<String>,
+    pub triple_count: usize,
+    pub dataset_name: Option<String>,
+}
+
+/// Parameters for change detection
+#[derive(Debug, Clone)]
+pub struct ChangeDetectionParams {
+    pub since: chrono::DateTime<chrono::Utc>,
+    pub graphs: Option<Vec<String>>,
+    pub operation_types: Option<Vec<String>>,
+    pub limit: Option<usize>,
 }
 
 impl Store {
@@ -271,6 +293,26 @@ impl Store {
         
         info!("Update executed successfully in {:?}: {} quads inserted, {} quads deleted", 
               execution_time, quads_inserted, quads_deleted);
+        
+        // Record the change for WebSocket notifications
+        if let Ok(mut metadata) = self.metadata.write() {
+            metadata.last_change_id += 1;
+            let change = StoreChange {
+                id: metadata.last_change_id,
+                timestamp: chrono::Utc::now(),
+                operation_type: operation_type.clone(),
+                affected_graphs: vec!["default".to_string()], // TODO: extract actual graphs
+                triple_count: quads_inserted + quads_deleted,
+                dataset_name: dataset_name.map(|s| s.to_string()),
+            };
+            
+            metadata.change_log.push(change);
+            
+            // Keep only the last 1000 changes to prevent memory issues
+            if metadata.change_log.len() > 1000 {
+                metadata.change_log.drain(0..metadata.change_log.len() - 1000);
+            }
+        }
         
         Ok(UpdateResult {
             stats: update_stats,
@@ -575,6 +617,100 @@ impl Store {
         Ok(serialized)
     }
 
+    /// Get changes since a specific timestamp for WebSocket notifications
+    pub async fn get_changes_since(&self, since: chrono::DateTime<chrono::Utc>) -> FusekiResult<Vec<StoreChange>> {
+        let metadata = self.metadata.read()
+            .map_err(|e| FusekiError::store(format!("Failed to acquire metadata read lock: {}", e)))?;
+        
+        let recent_changes = metadata.change_log
+            .iter()
+            .filter(|change| change.timestamp > since)
+            .cloned()
+            .collect();
+        
+        Ok(recent_changes)
+    }
+    
+    /// Get changes with advanced filtering
+    pub async fn get_changes_filtered(&self, params: ChangeDetectionParams) -> FusekiResult<Vec<StoreChange>> {
+        let metadata = self.metadata.read()
+            .map_err(|e| FusekiError::store(format!("Failed to acquire metadata read lock: {}", e)))?;
+        
+        let mut changes: Vec<StoreChange> = metadata.change_log
+            .iter()
+            .filter(|change| {
+                // Filter by timestamp
+                if change.timestamp <= params.since {
+                    return false;
+                }
+                
+                // Filter by graphs if specified
+                if let Some(ref graphs) = params.graphs {
+                    if !change.affected_graphs.iter().any(|g| graphs.contains(g)) {
+                        return false;
+                    }
+                }
+                
+                // Filter by operation types if specified
+                if let Some(ref op_types) = params.operation_types {
+                    if !op_types.contains(&change.operation_type) {
+                        return false;
+                    }
+                }
+                
+                true
+            })
+            .cloned()
+            .collect();
+        
+        // Apply limit if specified
+        if let Some(limit) = params.limit {
+            if changes.len() > limit {
+                changes.truncate(limit);
+            }
+        }
+        
+        Ok(changes)
+    }
+    
+    /// Clear old changes from the log
+    pub async fn cleanup_old_changes(&self, older_than: chrono::DateTime<chrono::Utc>) -> FusekiResult<usize> {
+        let mut metadata = self.metadata.write()
+            .map_err(|e| FusekiError::store(format!("Failed to acquire metadata write lock: {}", e)))?;
+        
+        let initial_count = metadata.change_log.len();
+        metadata.change_log.retain(|change| change.timestamp > older_than);
+        let removed_count = initial_count - metadata.change_log.len();
+        
+        if removed_count > 0 {
+            debug!("Cleaned up {} old change log entries", removed_count);
+        }
+        
+        Ok(removed_count)
+    }
+    
+    /// Get the latest change ID
+    pub async fn get_latest_change_id(&self) -> FusekiResult<u64> {
+        let metadata = self.metadata.read()
+            .map_err(|e| FusekiError::store(format!("Failed to acquire metadata read lock: {}", e)))?;
+        
+        Ok(metadata.last_change_id)
+    }
+    
+    /// Watch for changes (used by WebSocket subscriptions)
+    pub async fn watch_changes(&self, since_id: u64) -> FusekiResult<Vec<StoreChange>> {
+        let metadata = self.metadata.read()
+            .map_err(|e| FusekiError::store(format!("Failed to acquire metadata read lock: {}", e)))?;
+        
+        let new_changes = metadata.change_log
+            .iter()
+            .filter(|change| change.id > since_id)
+            .cloned()
+            .collect();
+        
+        Ok(new_changes)
+    }
+    
     /// Get store statistics
     pub fn get_stats(&self, dataset_name: Option<&str>) -> FusekiResult<StoreStats> {
         let store = self.get_dataset(dataset_name)?;
@@ -606,6 +742,8 @@ impl Store {
                 0.0
             },
             uptime_seconds: uptime.as_secs(),
+            change_log_size: metadata.change_log.len(),
+            latest_change_id: metadata.last_change_id,
         })
     }
 }
@@ -816,4 +954,6 @@ pub struct StoreStats {
     pub total_updates: u64,
     pub cache_hit_ratio: f64,
     pub uptime_seconds: u64,
+    pub change_log_size: usize,
+    pub latest_change_id: u64,
 }

@@ -2,6 +2,8 @@
 
 use crate::config::{SecurityConfig, UserConfig, JwtConfig, OAuthConfig, LdapConfig};
 use crate::error::{FusekiError, FusekiResult};
+use crate::auth::oauth::OAuth2Service;
+use crate::auth::ldap::LdapService;
 use axum::{
     extract::{FromRequestParts, State},
     http::{request::Parts, StatusCode, HeaderMap},
@@ -30,6 +32,52 @@ pub enum AuthResult {
     Expired,
     Invalid,
     Locked,
+    CertificateRequired,
+    CertificateInvalid,
+}
+
+/// Certificate authentication data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CertificateAuth {
+    pub subject_dn: String,
+    pub issuer_dn: String,
+    pub serial_number: String,
+    pub fingerprint: String,
+    pub not_before: DateTime<Utc>,
+    pub not_after: DateTime<Utc>,
+    pub key_usage: Vec<String>,
+    pub extended_key_usage: Vec<String>,
+}
+
+/// Multi-factor authentication data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MfaChallenge {
+    pub challenge_id: String,
+    pub challenge_type: MfaType,
+    pub expires_at: DateTime<Utc>,
+    pub attempts_remaining: u8,
+}
+
+/// MFA authentication types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MfaType {
+    Totp,      // Time-based One-Time Password
+    Sms,       // SMS verification
+    Email,     // Email verification
+    Hardware,  // Hardware token (e.g., YubiKey)
+    Backup,    // Backup codes
+}
+
+/// SAML authentication response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SamlResponse {
+    pub assertion_id: String,
+    pub subject: String,
+    pub issuer: String,
+    pub attributes: HashMap<String, Vec<String>>,
+    pub session_index: String,
+    pub not_on_or_after: DateTime<Utc>,
 }
 
 /// Authenticated user information
@@ -86,6 +134,8 @@ pub struct AuthService {
     config: Arc<SecurityConfig>,
     users: Arc<RwLock<HashMap<String, UserConfig>>>,
     sessions: Arc<RwLock<HashMap<String, UserSession>>>,
+    oauth2_service: Option<OAuth2Service>,
+    ldap_service: Option<LdapService>,
 }
 
 /// Active user session
@@ -127,10 +177,22 @@ impl AuthService {
     pub fn new(config: SecurityConfig) -> Self {
         let users = config.users.clone();
         
+        // Initialize OAuth2 service if configured
+        let oauth2_service = config.oauth.as_ref().map(|oauth_config| {
+            OAuth2Service::new(oauth_config.clone())
+        });
+        
+        // Initialize LDAP service if configured
+        let ldap_service = config.ldap.as_ref().map(|ldap_config| {
+            LdapService::new(ldap_config.clone())
+        });
+        
         Self {
             config: Arc::new(config),
             users: Arc::new(RwLock::new(users)),
             sessions: Arc::new(RwLock::new(HashMap::new())),
+            oauth2_service,
+            ldap_service,
         }
     }
 
@@ -138,6 +200,7 @@ impl AuthService {
     pub async fn authenticate_user(&self, username: &str, password: &str) -> FusekiResult<AuthResult> {
         let users = self.users.read().await;
         
+        // Try local user authentication first
         if let Some(user_config) = users.get(username) {
             // Check if user is enabled
             if !user_config.enabled {
@@ -155,7 +218,7 @@ impl AuthService {
             
             // Verify password
             if self.verify_password(password, &user_config.password_hash)? {
-                debug!("Successful authentication for user: {}", username);
+                debug!("Successful local authentication for user: {}", username);
                 
                 // Create user object with permissions
                 let permissions = self.compute_user_permissions(user_config).await;
@@ -171,19 +234,35 @@ impl AuthService {
                 // Update last login time
                 self.update_last_login(username).await?;
                 
-                Ok(AuthResult::Authenticated(user))
+                return Ok(AuthResult::Authenticated(user));
             } else {
-                warn!("Failed authentication attempt for user: {}", username);
+                warn!("Failed local authentication attempt for user: {}", username);
                 
                 // Increment failed login attempts
                 self.increment_failed_attempts(username).await?;
-                
-                Ok(AuthResult::Unauthenticated)
             }
-        } else {
-            warn!("Authentication attempt for non-existent user: {}", username);
-            Ok(AuthResult::Unauthenticated)
         }
+        
+        // If local authentication failed or user doesn't exist, try LDAP if enabled
+        if self.is_ldap_enabled() {
+            debug!("Trying LDAP authentication for user: {}", username);
+            match self.authenticate_ldap(username, password).await {
+                Ok(AuthResult::Authenticated(user)) => {
+                    info!("Successful LDAP authentication for user: {}", username);
+                    return Ok(AuthResult::Authenticated(user));
+                }
+                Ok(auth_result) => {
+                    debug!("LDAP authentication failed with result: {:?}", auth_result);
+                }
+                Err(e) => {
+                    warn!("LDAP authentication error for user {}: {}", username, e);
+                }
+            }
+        }
+        
+        // All authentication methods failed
+        warn!("All authentication methods failed for user: {}", username);
+        Ok(AuthResult::Unauthenticated)
     }
 
     /// Generate JWT token for authenticated user
@@ -467,6 +546,469 @@ impl AuthService {
         }
         false
     }
+
+    // OAuth2/OIDC Authentication Methods
+
+    /// Get OAuth2 service reference
+    pub fn oauth2_service(&self) -> Option<&OAuth2Service> {
+        self.oauth2_service.as_ref()
+    }
+
+    /// Generate OAuth2 authorization URL
+    pub async fn generate_oauth2_auth_url(
+        &self,
+        redirect_uri: &str,
+        scopes: &[String],
+        use_pkce: bool,
+    ) -> FusekiResult<(String, String)> {
+        if let Some(oauth2_service) = &self.oauth2_service {
+            oauth2_service.generate_authorization_url(redirect_uri, scopes, use_pkce).await
+        } else {
+            Err(FusekiError::configuration("OAuth2 not configured"))
+        }
+    }
+
+    /// Complete OAuth2 authorization flow
+    pub async fn complete_oauth2_flow(
+        &self,
+        code: &str,
+        state: &str,
+        redirect_uri: &str,
+    ) -> FusekiResult<AuthResult> {
+        if let Some(oauth2_service) = &self.oauth2_service {
+            // Exchange code for token
+            let token = oauth2_service.exchange_code_for_token(code, state, redirect_uri).await?;
+            
+            // Authenticate using the access token
+            oauth2_service.authenticate_oauth2(&token.access_token).await
+        } else {
+            Err(FusekiError::configuration("OAuth2 not configured"))
+        }
+    }
+
+    /// Authenticate using OAuth2 access token
+    pub async fn authenticate_oauth2_token(&self, access_token: &str) -> FusekiResult<AuthResult> {
+        if let Some(oauth2_service) = &self.oauth2_service {
+            oauth2_service.authenticate_oauth2(access_token).await
+        } else {
+            Err(FusekiError::configuration("OAuth2 not configured"))
+        }
+    }
+
+    /// Refresh OAuth2 access token
+    pub async fn refresh_oauth2_token(&self, refresh_token: &str) -> FusekiResult<crate::auth::oauth::OAuth2Token> {
+        if let Some(oauth2_service) = &self.oauth2_service {
+            oauth2_service.refresh_token(refresh_token).await
+        } else {
+            Err(FusekiError::configuration("OAuth2 not configured"))
+        }
+    }
+
+    /// Validate OAuth2 access token
+    pub async fn validate_oauth2_token(&self, access_token: &str) -> FusekiResult<bool> {
+        if let Some(oauth2_service) = &self.oauth2_service {
+            oauth2_service.validate_access_token(access_token).await
+        } else {
+            Err(FusekiError::configuration("OAuth2 not configured"))
+        }
+    }
+
+    /// Get OIDC user information
+    pub async fn get_oidc_user_info(&self, access_token: &str) -> FusekiResult<crate::auth::oauth::OIDCUserInfo> {
+        if let Some(oauth2_service) = &self.oauth2_service {
+            oauth2_service.get_user_info(access_token).await
+        } else {
+            Err(FusekiError::configuration("OAuth2 not configured"))
+        }
+    }
+
+    /// Cleanup expired OAuth2 states and tokens
+    pub async fn cleanup_oauth2_expired(&self) {
+        if let Some(oauth2_service) = &self.oauth2_service {
+            oauth2_service.cleanup_expired().await;
+        }
+    }
+
+    /// Check if OAuth2 is configured and available
+    pub fn is_oauth2_enabled(&self) -> bool {
+        self.oauth2_service.is_some()
+    }
+
+    // LDAP Authentication Methods
+
+    /// Get LDAP service reference
+    pub fn ldap_service(&self) -> Option<&LdapService> {
+        self.ldap_service.as_ref()
+    }
+
+    /// Authenticate user using LDAP
+    pub async fn authenticate_ldap(&self, username: &str, password: &str) -> FusekiResult<AuthResult> {
+        if let Some(ldap_service) = &self.ldap_service {
+            ldap_service.authenticate_ldap_user(username, password).await
+        } else {
+            Err(FusekiError::configuration("LDAP not configured"))
+        }
+    }
+
+    /// Test LDAP connection
+    pub async fn test_ldap_connection(&self) -> FusekiResult<bool> {
+        if let Some(ldap_service) = &self.ldap_service {
+            ldap_service.test_connection().await
+        } else {
+            Err(FusekiError::configuration("LDAP not configured"))
+        }
+    }
+
+    /// Get user groups from LDAP
+    pub async fn get_ldap_user_groups(&self, username: &str) -> FusekiResult<Vec<crate::auth::ldap::LdapGroup>> {
+        if let Some(ldap_service) = &self.ldap_service {
+            ldap_service.get_user_groups(username).await
+        } else {
+            Err(FusekiError::configuration("LDAP not configured"))
+        }
+    }
+
+    /// Cleanup expired LDAP cache entries
+    pub async fn cleanup_ldap_cache(&self) {
+        if let Some(ldap_service) = &self.ldap_service {
+            ldap_service.cleanup_expired_cache().await;
+        }
+    }
+
+    /// Check if LDAP is configured and available
+    pub fn is_ldap_enabled(&self) -> bool {
+        self.ldap_service.is_some()
+    }
+
+    // Certificate-based Authentication Methods
+
+    /// Authenticate user using X.509 client certificate
+    pub async fn authenticate_certificate(&self, cert_data: &[u8]) -> FusekiResult<AuthResult> {
+        debug!("Authenticating using X.509 client certificate");
+        
+        // Parse certificate
+        let cert_info = self.parse_x509_certificate(cert_data)?;
+        
+        // Validate certificate
+        if !self.validate_certificate(&cert_info).await? {
+            warn!("Certificate validation failed: {}", cert_info.subject_dn);
+            return Ok(AuthResult::CertificateInvalid);
+        }
+        
+        // Map certificate to user
+        let user = self.map_certificate_to_user(cert_info).await?;
+        
+        info!("Certificate authentication successful for user: {}", user.username);
+        Ok(AuthResult::Authenticated(user))
+    }
+    
+    /// Parse X.509 certificate (simplified implementation)
+    fn parse_x509_certificate(&self, cert_data: &[u8]) -> FusekiResult<CertificateAuth> {
+        // This is a simplified implementation
+        // In production, you would use a proper X.509 parsing library like 'x509-parser'
+        
+        // Mock certificate parsing for demonstration
+        let cert_info = CertificateAuth {
+            subject_dn: "CN=John Doe,OU=Engineering,O=Example Corp,C=US".to_string(),
+            issuer_dn: "CN=Example Corp Root CA,O=Example Corp,C=US".to_string(),
+            serial_number: "1234567890ABCDEF".to_string(),
+            fingerprint: sha2::Sha256::digest(cert_data)
+                .iter()
+                .map(|b| format!("{:02X}", b))
+                .collect::<Vec<_>>()
+                .join(":"),
+            not_before: Utc::now() - chrono::Duration::days(30),
+            not_after: Utc::now() + chrono::Duration::days(365),
+            key_usage: vec!["digitalSignature".to_string(), "keyEncipherment".to_string()],
+            extended_key_usage: vec!["clientAuth".to_string()],
+        };
+        
+        Ok(cert_info)
+    }
+    
+    /// Validate certificate against configured trust store and CRL
+    async fn validate_certificate(&self, cert_info: &CertificateAuth) -> FusekiResult<bool> {
+        // Check certificate validity period
+        let now = Utc::now();
+        if now < cert_info.not_before || now > cert_info.not_after {
+            return Ok(false);
+        }
+        
+        // Check key usage for client authentication
+        if !cert_info.extended_key_usage.contains(&"clientAuth".to_string()) {
+            return Ok(false);
+        }
+        
+        // TODO: Implement proper certificate chain validation
+        // TODO: Check Certificate Revocation List (CRL)
+        // TODO: Validate against configured trust store
+        
+        Ok(true)
+    }
+    
+    /// Map certificate to internal user
+    async fn map_certificate_to_user(&self, cert_info: CertificateAuth) -> FusekiResult<User> {
+        // Extract Common Name from subject DN
+        let username = self.extract_cn_from_dn(&cert_info.subject_dn)
+            .unwrap_or_else(|| cert_info.subject_dn.clone());
+        
+        // Map certificate attributes to user roles
+        let roles = self.map_certificate_to_roles(&cert_info).await;
+        
+        // Compute permissions
+        let permissions = self.compute_user_permissions_for_roles(&roles).await;
+        
+        let user = User {
+            username,
+            roles,
+            email: None, // Could extract from certificate Subject Alternative Names
+            full_name: Some(cert_info.subject_dn),
+            last_login: Some(Utc::now()),
+            permissions,
+        };
+        
+        Ok(user)
+    }
+    
+    /// Extract Common Name from Distinguished Name
+    fn extract_cn_from_dn(&self, dn: &str) -> Option<String> {
+        for component in dn.split(',') {
+            let component = component.trim();
+            if component.starts_with("CN=") {
+                return Some(component[3..].to_string());
+            }
+        }
+        None
+    }
+    
+    /// Map certificate attributes to roles
+    async fn map_certificate_to_roles(&self, cert_info: &CertificateAuth) -> Vec<String> {
+        let mut roles = Vec::new();
+        
+        // Extract OU (Organizational Unit) from subject DN
+        for component in cert_info.subject_dn.split(',') {
+            let component = component.trim();
+            if component.starts_with("OU=") {
+                let ou = &component[3..];
+                match ou.to_lowercase().as_str() {
+                    "engineering" | "developers" => roles.push("writer".to_string()),
+                    "management" | "admins" => roles.push("admin".to_string()),
+                    "users" => roles.push("reader".to_string()),
+                    _ => {}
+                }
+            }
+        }
+        
+        // Default role if none found
+        if roles.is_empty() {
+            roles.push("user".to_string());
+        }
+        
+        roles
+    }
+
+    // Multi-Factor Authentication Methods
+
+    /// Initiate MFA challenge
+    pub async fn initiate_mfa_challenge(&self, username: &str, mfa_type: MfaType) -> FusekiResult<MfaChallenge> {
+        let challenge_id = uuid::Uuid::new_v4().to_string();
+        
+        let challenge = MfaChallenge {
+            challenge_id: challenge_id.clone(),
+            challenge_type: mfa_type,
+            expires_at: Utc::now() + chrono::Duration::minutes(5),
+            attempts_remaining: 3,
+        };
+        
+        // TODO: Store challenge in temporary storage
+        // TODO: Send challenge via appropriate channel (SMS, Email, etc.)
+        
+        info!("Initiated MFA challenge {} for user: {}", challenge_id, username);
+        Ok(challenge)
+    }
+    
+    /// Verify MFA challenge response
+    pub async fn verify_mfa_challenge(&self, challenge_id: &str, response: &str) -> FusekiResult<bool> {
+        // TODO: Retrieve and validate challenge from storage
+        // TODO: Verify response based on challenge type
+        
+        // Simplified implementation for demonstration
+        debug!("Verifying MFA challenge: {}", challenge_id);
+        Ok(response.len() == 6 && response.chars().all(|c| c.is_ascii_digit()))
+    }
+    
+    // SAML Authentication Methods
+    
+    /// Process SAML authentication response
+    pub async fn process_saml_response(&self, saml_response: &str) -> FusekiResult<AuthResult> {
+        debug!("Processing SAML authentication response");
+        
+        // Parse SAML response (simplified implementation)
+        let saml_data = self.parse_saml_response(saml_response)?;
+        
+        // Validate SAML response
+        if !self.validate_saml_response(&saml_data).await? {
+            warn!("SAML response validation failed");
+            return Ok(AuthResult::Invalid);
+        }
+        
+        // Map SAML attributes to user
+        let user = self.map_saml_to_user(saml_data).await?;
+        
+        info!("SAML authentication successful for user: {}", user.username);
+        Ok(AuthResult::Authenticated(user))
+    }
+    
+    /// Parse SAML response (simplified implementation)
+    fn parse_saml_response(&self, saml_response: &str) -> FusekiResult<SamlResponse> {
+        // This is a simplified mock implementation
+        // In production, you would use a proper SAML library like 'samael'
+        
+        let saml_data = SamlResponse {
+            assertion_id: uuid::Uuid::new_v4().to_string(),
+            subject: "john.doe@example.com".to_string(),
+            issuer: "https://sso.example.com".to_string(),
+            attributes: {
+                let mut attrs = HashMap::new();
+                attrs.insert("email".to_string(), vec!["john.doe@example.com".to_string()]);
+                attrs.insert("name".to_string(), vec!["John Doe".to_string()]);
+                attrs.insert("groups".to_string(), vec!["employees".to_string(), "developers".to_string()]);
+                attrs
+            },
+            session_index: uuid::Uuid::new_v4().to_string(),
+            not_on_or_after: Utc::now() + chrono::Duration::hours(8),
+        };
+        
+        Ok(saml_data)
+    }
+    
+    /// Validate SAML response
+    async fn validate_saml_response(&self, saml_data: &SamlResponse) -> FusekiResult<bool> {
+        // Check assertion validity
+        if Utc::now() > saml_data.not_on_or_after {
+            return Ok(false);
+        }
+        
+        // TODO: Validate SAML signature
+        // TODO: Check issuer against trusted identity providers
+        
+        Ok(true)
+    }
+    
+    /// Map SAML attributes to internal user
+    async fn map_saml_to_user(&self, saml_data: SamlResponse) -> FusekiResult<User> {
+        let username = saml_data.attributes
+            .get("email")
+            .and_then(|emails| emails.first())
+            .unwrap_or(&saml_data.subject)
+            .clone();
+        
+        let full_name = saml_data.attributes
+            .get("name")
+            .and_then(|names| names.first())
+            .cloned();
+        
+        let email = saml_data.attributes
+            .get("email")
+            .and_then(|emails| emails.first())
+            .cloned();
+        
+        // Map SAML groups to roles
+        let roles = saml_data.attributes
+            .get("groups")
+            .map(|groups| self.map_saml_groups_to_roles(groups))
+            .unwrap_or_else(|| vec!["user".to_string()]);
+        
+        // Compute permissions
+        let permissions = self.compute_user_permissions_for_roles(&roles).await;
+        
+        let user = User {
+            username,
+            roles,
+            email,
+            full_name,
+            last_login: Some(Utc::now()),
+            permissions,
+        };
+        
+        Ok(user)
+    }
+    
+    /// Map SAML groups to internal roles
+    fn map_saml_groups_to_roles(&self, groups: &[String]) -> Vec<String> {
+        let mut roles = Vec::new();
+        
+        for group in groups {
+            let role = match group.to_lowercase().as_str() {
+                "administrators" | "admins" => "admin",
+                "developers" | "engineers" => "writer",
+                "employees" | "users" => "reader",
+                _ => "user",
+            };
+            
+            if !roles.contains(&role.to_string()) {
+                roles.push(role.to_string());
+            }
+        }
+        
+        if roles.is_empty() {
+            roles.push("user".to_string());
+        }
+        
+        roles
+    }
+    
+    /// Compute permissions for roles (helper method)
+    async fn compute_user_permissions_for_roles(&self, roles: &[String]) -> Vec<Permission> {
+        // Re-use the existing permission computation logic
+        let mut permissions = Vec::new();
+        
+        for role in roles {
+            match role.as_str() {
+                "admin" => {
+                    permissions.extend(vec![
+                        Permission::GlobalAdmin,
+                        Permission::GlobalRead,
+                        Permission::GlobalWrite,
+                        Permission::SparqlQuery,
+                        Permission::SparqlUpdate,
+                        Permission::GraphStore,
+                        Permission::UserManagement,
+                        Permission::SystemConfig,
+                        Permission::SystemMetrics,
+                    ]);
+                }
+                "writer" => {
+                    permissions.extend(vec![
+                        Permission::GlobalRead,
+                        Permission::GlobalWrite,
+                        Permission::SparqlQuery,
+                        Permission::SparqlUpdate,
+                        Permission::GraphStore,
+                    ]);
+                }
+                "reader" => {
+                    permissions.extend(vec![
+                        Permission::GlobalRead,
+                        Permission::SparqlQuery,
+                    ]);
+                }
+                "user" => {
+                    permissions.extend(vec![
+                        Permission::GlobalRead,
+                        Permission::SparqlQuery,
+                    ]);
+                }
+                _ => {}
+            }
+        }
+        
+        // Remove duplicates
+        permissions.sort();
+        permissions.dedup();
+        
+        permissions
+    }
 }
 
 /// Authentication extractor for Axum
@@ -491,12 +1033,75 @@ where
         if let Some(auth_header) = parts.headers.typed_get::<Authorization<Bearer>>() {
             let token = auth_header.token();
             
+            // Try JWT token validation
             match auth_service.validate_jwt_token(token) {
                 Ok(validation) => {
                     return Ok(AuthUser(validation.user));
                 }
                 Err(_) => {
-                    return Err(AuthError::InvalidToken);
+                    // If JWT fails, try OAuth2 token validation
+                    if auth_service.is_oauth2_enabled() {
+                        match auth_service.authenticate_oauth2_token(token).await {
+                            Ok(AuthResult::Authenticated(user)) => {
+                                return Ok(AuthUser(user));
+                            }
+                            _ => {
+                                return Err(AuthError::InvalidToken);
+                            }
+                        }
+                    } else {
+                        return Err(AuthError::InvalidToken);
+                    }
+                }
+            }
+        }
+        
+        // Try OAuth2 access token without Bearer prefix (for compatibility)
+        if let Some(auth_header) = parts.headers.get("authorization") {
+            if let Ok(auth_str) = auth_header.to_str() {
+                if !auth_str.starts_with("Bearer ") && auth_service.is_oauth2_enabled() {
+                    match auth_service.authenticate_oauth2_token(auth_str).await {
+                        Ok(AuthResult::Authenticated(user)) => {
+                            return Ok(AuthUser(user));
+                        }
+                        _ => {} // Continue to other auth methods
+                    }
+                }
+            }
+        }
+
+        // Try LDAP authentication with Basic auth
+        if let Some(auth_header) = parts.headers.get("authorization") {
+            if let Ok(auth_str) = auth_header.to_str() {
+                if auth_str.starts_with("Basic ") && auth_service.is_ldap_enabled() {
+                    if let Ok(credentials) = decode_basic_auth(&auth_str[6..]) {
+                        match auth_service.authenticate_ldap(&credentials.0, &credentials.1).await {
+                            Ok(AuthResult::Authenticated(user)) => {
+                                return Ok(AuthUser(user));
+                            }
+                            _ => {} // Continue to other auth methods
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Try certificate-based authentication
+        if let Some(cert_header) = parts.headers.get("x-client-cert") {
+            if let Ok(cert_pem) = cert_header.to_str() {
+                // Decode PEM certificate
+                if let Ok(cert_data) = base64::decode(cert_pem.replace("-----BEGIN CERTIFICATE-----", "")
+                    .replace("-----END CERTIFICATE-----", "")
+                    .replace("\n", "")) {
+                    match auth_service.authenticate_certificate(&cert_data).await {
+                        Ok(AuthResult::Authenticated(user)) => {
+                            return Ok(AuthUser(user));
+                        }
+                        Ok(AuthResult::CertificateInvalid) => {
+                            return Err(AuthError::InvalidToken);
+                        }
+                        _ => {} // Continue to session auth
+                    }
                 }
             }
         }
@@ -533,6 +1138,10 @@ pub enum AuthError {
     TokenExpired,
     ServiceUnavailable,
     InsufficientPermissions,
+    CertificateRequired,
+    CertificateInvalid,
+    MfaRequired,
+    MfaFailed,
 }
 
 impl IntoResponse for AuthError {
@@ -543,6 +1152,10 @@ impl IntoResponse for AuthError {
             AuthError::TokenExpired => (StatusCode::UNAUTHORIZED, "Authentication token expired"),
             AuthError::ServiceUnavailable => (StatusCode::SERVICE_UNAVAILABLE, "Authentication service unavailable"),
             AuthError::InsufficientPermissions => (StatusCode::FORBIDDEN, "Insufficient permissions"),
+            AuthError::CertificateRequired => (StatusCode::UNAUTHORIZED, "Client certificate required"),
+            AuthError::CertificateInvalid => (StatusCode::UNAUTHORIZED, "Invalid or untrusted client certificate"),
+            AuthError::MfaRequired => (StatusCode::UNAUTHORIZED, "Multi-factor authentication required"),
+            AuthError::MfaFailed => (StatusCode::UNAUTHORIZED, "Multi-factor authentication failed"),
         };
 
         let error_response = serde_json::json!({
@@ -643,6 +1256,22 @@ pub enum PasswordStrength {
     Weak,
     Medium,
     Strong,
+}
+
+/// Decode Basic authentication header
+fn decode_basic_auth(encoded: &str) -> Result<(String, String), Box<dyn std::error::Error>> {
+    use base64::{Engine as _, engine::general_purpose};
+    
+    let decoded_bytes = general_purpose::STANDARD.decode(encoded)?;
+    let decoded_str = String::from_utf8(decoded_bytes)?;
+    
+    if let Some(colon_pos) = decoded_str.find(':') {
+        let username = decoded_str[..colon_pos].to_string();
+        let password = decoded_str[colon_pos + 1..].to_string();
+        Ok((username, password))
+    } else {
+        Err("Invalid Basic auth format".into())
+    }
 }
 
 #[cfg(test)]

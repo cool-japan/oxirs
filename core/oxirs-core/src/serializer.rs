@@ -28,18 +28,18 @@ impl Serializer {
     /// Serialize a dataset to a string (supports quad-based formats)
     pub fn serialize_dataset(&self, dataset: &Dataset) -> Result<String> {
         match self.format {
-            RdfFormat::Turtle => Err(crate::OxirsError::Serialization(
+            RdfFormat::Turtle => Err(crate::OxirsError::Serialize(
                 "Turtle format does not support datasets (use TriG instead)".to_string()
             )),
-            RdfFormat::NTriples => Err(crate::OxirsError::Serialization(
+            RdfFormat::NTriples => Err(crate::OxirsError::Serialize(
                 "N-Triples format does not support datasets (use N-Quads instead)".to_string()
             )),
             RdfFormat::TriG => self.serialize_trig_dataset(dataset),
             RdfFormat::NQuads => self.serialize_nquads_dataset(dataset),
-            RdfFormat::RdfXml => Err(crate::OxirsError::Serialization(
+            RdfFormat::RdfXml => Err(crate::OxirsError::Serialize(
                 "RDF/XML dataset serialization not yet implemented".to_string()
             )),
-            RdfFormat::JsonLd => Err(crate::OxirsError::Serialization(
+            RdfFormat::JsonLd => Err(crate::OxirsError::Serialize(
                 "JSON-LD dataset serialization not yet implemented".to_string()
             )),
         }
@@ -68,7 +68,7 @@ impl Serializer {
                     result.push_str(node.as_str());
                 },
                 crate::model::Subject::Variable(_) => {
-                    return Err(crate::OxirsError::Serialization(
+                    return Err(crate::OxirsError::Serialize(
                         "Variables not supported in N-Triples serialization".to_string()
                     ));
                 }
@@ -82,7 +82,7 @@ impl Serializer {
                     result.push_str(&format!("<{}>", node.as_str()));
                 },
                 crate::model::Predicate::Variable(_) => {
-                    return Err(crate::OxirsError::Serialization(
+                    return Err(crate::OxirsError::Serialize(
                         "Variables not supported in N-Triples serialization".to_string()
                     ));
                 }
@@ -121,7 +121,7 @@ impl Serializer {
                     }
                 },
                 crate::model::Object::Variable(_) => {
-                    return Err(crate::OxirsError::Serialization(
+                    return Err(crate::OxirsError::Serialize(
                         "Variables not supported in N-Triples serialization".to_string()
                     ));
                 }
@@ -134,8 +134,8 @@ impl Serializer {
     }
 
     fn serialize_rdfxml(&self, _graph: &Graph) -> Result<String> {
-        // TODO: Implement RDF/XML serialization
-        Ok(String::new())
+        // TODO: Implement RDF/XML serialization when API is stable
+        Err(crate::OxirsError::Serialize("RDF/XML serialization not yet implemented".to_string()))
     }
 
     fn serialize_trig_graph(&self, _graph: &Graph) -> Result<String> {
@@ -181,7 +181,7 @@ impl Serializer {
                 result.push_str(node.as_str());
             },
             crate::model::Subject::Variable(_) => {
-                return Err(crate::OxirsError::Serialization(
+                return Err(crate::OxirsError::Serialize(
                     "Variables not supported in N-Quads serialization".to_string()
                 ));
             }
@@ -195,7 +195,7 @@ impl Serializer {
                 result.push_str(&format!("<{}>", node.as_str()));
             },
             crate::model::Predicate::Variable(_) => {
-                return Err(crate::OxirsError::Serialization(
+                return Err(crate::OxirsError::Serialize(
                     "Variables not supported in N-Quads serialization".to_string()
                 ));
             }
@@ -234,7 +234,7 @@ impl Serializer {
                 }
             },
             crate::model::Object::Variable(_) => {
-                return Err(crate::OxirsError::Serialization(
+                return Err(crate::OxirsError::Serialize(
                     "Variables not supported in N-Quads serialization".to_string()
                 ));
             }
@@ -251,7 +251,7 @@ impl Serializer {
                 result.push_str(node.as_str());
             },
             GraphName::Variable(_) => {
-                return Err(crate::OxirsError::Serialization(
+                return Err(crate::OxirsError::Serialize(
                     "Variables not supported in N-Quads serialization".to_string()
                 ));
             },
@@ -270,8 +270,8 @@ impl Serializer {
     }
 
     fn serialize_jsonld(&self, _graph: &Graph) -> Result<String> {
-        // TODO: Implement JSON-LD serialization
-        Ok(String::new())
+        // TODO: Implement JSON-LD serialization using oxjsonld
+        Err(crate::OxirsError::Serialize("JSON-LD serialization not yet implemented".to_string()))
     }
 }
 
@@ -434,7 +434,7 @@ impl TurtleSerializer {
             crate::model::Subject::NamedNode(node) => self.serialize_iri(node.as_str()),
             crate::model::Subject::BlankNode(node) => Ok(node.as_str().to_string()),
             crate::model::Subject::Variable(var) => {
-                Err(crate::OxirsError::Serialization(
+                Err(crate::OxirsError::Serialize(
                     "Variables not supported in Turtle serialization".to_string()
                 ))
             }
@@ -452,7 +452,7 @@ impl TurtleSerializer {
                 }
             }
             crate::model::Predicate::Variable(_) => {
-                Err(crate::OxirsError::Serialization(
+                Err(crate::OxirsError::Serialize(
                     "Variables not supported in Turtle serialization".to_string()
                 ))
             }
@@ -465,7 +465,7 @@ impl TurtleSerializer {
             crate::model::Object::BlankNode(node) => Ok(node.as_str().to_string()),
             crate::model::Object::Literal(literal) => self.serialize_literal(literal),
             crate::model::Object::Variable(_) => {
-                Err(crate::OxirsError::Serialization(
+                Err(crate::OxirsError::Serialize(
                     "Variables not supported in Turtle serialization".to_string()
                 ))
             }

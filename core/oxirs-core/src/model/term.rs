@@ -104,6 +104,12 @@ pub struct BlankNode {
     id: String,
 }
 
+impl Default for BlankNode {
+    fn default() -> Self {
+        Self::new_unique()
+    }
+}
+
 impl BlankNode {
     /// Creates a new blank node with the given identifier
     /// 

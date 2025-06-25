@@ -644,7 +644,7 @@ impl ValidationPredictor {
         let cached = CachedPrediction {
             prediction,
             timestamp: chrono::Utc::now(),
-            ttl: Duration::from_minutes(self.config.model_params.prediction_horizon_minutes as u64),
+            ttl: Duration::from_secs((self.config.model_params.prediction_horizon_minutes as u64) * 60),
         };
         
         self.prediction_cache.insert(key, cached);

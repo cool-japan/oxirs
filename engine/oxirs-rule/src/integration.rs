@@ -689,7 +689,7 @@ mod tests {
         let triple = Triple::new(subject, predicate, object);
         let rule_atom = integration.triple_to_rule_atom(&triple);
         
-        match rule_atom {
+        match &rule_atom {
             RuleAtom::Triple { subject: s, predicate: p, object: o } => {
                 assert!(matches!(s, Term::Constant(_)));
                 assert!(matches!(p, Term::Constant(_)));

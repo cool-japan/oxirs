@@ -1,87 +1,492 @@
 //! # Raft Consensus Implementation
 //!
 //! Raft consensus algorithm implementation for distributed RDF storage.
+//! Uses openraft for production-ready consensus.
 
 use anyhow::Result;
-use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Display;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
-/// Raft node state
-#[derive(Debug, Clone, PartialEq)]
-pub enum NodeState {
-    Follower,
-    Candidate, 
-    Leader,
+#[cfg(feature = "raft")]
+use openraft::{
+    BasicNode, Config, Entry, EntryPayload, LogId, Membership, Node, NodeId, Raft, RaftMetrics,
+    SnapshotMeta, StorageError,
+};
+
+/// Node ID type for Raft
+pub type OxirsNodeId = u64;
+
+/// Raft request ID type
+pub type OxirsRequestId = u64;
+
+/// RDF command types that can be replicated
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum RdfCommand {
+    /// Insert a triple
+    Insert {
+        subject: String,
+        predicate: String,
+        object: String,
+    },
+    /// Delete a triple  
+    Delete {
+        subject: String,
+        predicate: String,
+        object: String,
+    },
+    /// Clear all triples
+    Clear,
+    /// Begin transaction
+    BeginTransaction { tx_id: String },
+    /// Commit transaction
+    CommitTransaction { tx_id: String },
+    /// Rollback transaction
+    RollbackTransaction { tx_id: String },
 }
 
-/// Raft log entry
-#[derive(Debug, Clone)]
-pub struct LogEntry {
-    pub term: u64,
-    pub index: u64,
-    pub command: Vec<u8>,
+/// RDF response from command execution
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum RdfResponse {
+    /// Operation successful
+    Success,
+    /// Operation failed
+    Error(String),
+    /// Transaction started
+    TransactionStarted { tx_id: String },
+    /// Transaction committed
+    TransactionCommitted { tx_id: String },
+    /// Transaction rolled back
+    TransactionRolledBack { tx_id: String },
 }
 
-/// Raft node
-pub struct RaftNode {
-    node_id: u64,
-    state: NodeState,
-    current_term: u64,
-    voted_for: Option<u64>,
-    log: Vec<LogEntry>,
-    commit_index: u64,
-    last_applied: u64,
-    // Leader state
-    next_index: HashMap<u64, u64>,
-    match_index: HashMap<u64, u64>,
+/// Raft application data
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RdfApp {
+    /// In-memory triple store for demonstration
+    /// In production, this would interface with oxirs-tdb
+    pub triples: BTreeSet<(String, String, String)>,
+    /// Active transactions
+    pub transactions: BTreeMap<String, BTreeSet<(String, String, String)>>,
 }
 
-impl RaftNode {
-    pub fn new(node_id: u64) -> Self {
+impl Default for RdfApp {
+    fn default() -> Self {
         Self {
-            node_id,
-            state: NodeState::Follower,
-            current_term: 0,
-            voted_for: None,
-            log: Vec::new(),
-            commit_index: 0,
-            last_applied: 0,
-            next_index: HashMap::new(),
-            match_index: HashMap::new(),
+            triples: BTreeSet::new(),
+            transactions: BTreeMap::new(),
+        }
+    }
+}
+
+impl RdfApp {
+    /// Apply a command to the state machine
+    pub fn apply_command(&mut self, cmd: &RdfCommand) -> RdfResponse {
+        match cmd {
+            RdfCommand::Insert { subject, predicate, object } => {
+                self.triples.insert((subject.clone(), predicate.clone(), object.clone()));
+                RdfResponse::Success
+            }
+            RdfCommand::Delete { subject, predicate, object } => {
+                self.triples.remove(&(subject.clone(), predicate.clone(), object.clone()));
+                RdfResponse::Success
+            }
+            RdfCommand::Clear => {
+                self.triples.clear();
+                RdfResponse::Success
+            }
+            RdfCommand::BeginTransaction { tx_id } => {
+                self.transactions.insert(tx_id.clone(), BTreeSet::new());
+                RdfResponse::TransactionStarted { tx_id: tx_id.clone() }
+            }
+            RdfCommand::CommitTransaction { tx_id } => {
+                if let Some(tx_triples) = self.transactions.remove(tx_id) {
+                    self.triples.extend(tx_triples);
+                    RdfResponse::TransactionCommitted { tx_id: tx_id.clone() }
+                } else {
+                    RdfResponse::Error(format!("Transaction {} not found", tx_id))
+                }
+            }
+            RdfCommand::RollbackTransaction { tx_id } => {
+                if self.transactions.remove(tx_id).is_some() {
+                    RdfResponse::TransactionRolledBack { tx_id: tx_id.clone() }
+                } else {
+                    RdfResponse::Error(format!("Transaction {} not found", tx_id))
+                }
+            }
         }
     }
     
-    pub fn is_leader(&self) -> bool {
-        matches!(self.state, NodeState::Leader)
+    /// Get number of triples
+    pub fn len(&self) -> usize {
+        self.triples.len()
     }
     
-    pub fn current_term(&self) -> u64 {
-        self.current_term
+    /// Check if store is empty
+    pub fn is_empty(&self) -> bool {
+        self.triples.is_empty()
     }
     
-    pub fn append_entry(&mut self, _entry: LogEntry) -> Result<()> {
-        // TODO: Implement log entry appending
+    /// Query triples by pattern (simplified)
+    pub fn query(&self, subject: Option<&str>, predicate: Option<&str>, object: Option<&str>) -> Vec<(String, String, String)> {
+        self.triples
+            .iter()
+            .filter(|(s, p, o)| {
+                subject.map_or(true, |subj| s == subj) &&
+                predicate.map_or(true, |pred| p == pred) &&
+                object.map_or(true, |obj| o == obj)
+            })
+            .cloned()
+            .collect()
+    }
+}
+
+#[cfg(feature = "raft")]
+mod raft_impl {
+    use super::*;
+    use openraft::{
+        error::{AppendEntriesError, InstallSnapshotError, VoteError},
+        raft::{AppendEntriesRequest, AppendEntriesResponse, InstallSnapshotRequest, InstallSnapshotResponse, VoteRequest, VoteResponse},
+        storage::{LogState, Snapshot},
+        AppData, AppDataResponse, RaftLogReader, RaftSnapshotBuilder, RaftStorage,
+    };
+    use std::io::Cursor;
+    
+    /// Raft type configuration for OxiRS
+    #[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Ord, PartialOrd)]
+    pub struct OxirsTypeConfig;
+    
+    impl openraft::RaftTypeConfig for OxirsTypeConfig {
+        type D = RdfCommand;
+        type R = RdfResponse;
+        type NodeId = OxirsNodeId;
+        type Node = BasicNode;
+        type Entry = Entry<Self>;
+        type SnapshotData = Cursor<Vec<u8>>;
+        type AsyncRuntime = openraft::TokioRuntime;
+    }
+    
+    /// Raft storage implementation
+    pub struct OxirsStorage {
+        /// Current Raft state
+        pub state: Arc<RwLock<RdfApp>>,
+        /// Persistent log entries
+        pub log: Arc<RwLock<Vec<Entry<OxirsTypeConfig>>>>,
+        /// Hard state (term, vote, committed)
+        pub hard_state: Arc<RwLock<(u64, Option<OxirsNodeId>, Option<LogId<OxirsNodeId>>)>>,
+        /// Last applied log index
+        pub last_applied: Arc<RwLock<Option<LogId<OxirsNodeId>>>>,
+        /// Current snapshot
+        pub snapshot: Arc<RwLock<Option<Snapshot<OxirsTypeConfig>>>>,
+    }
+    
+    impl OxirsStorage {
+        pub fn new() -> Self {
+            Self {
+                state: Arc::new(RwLock::new(RdfApp::default())),
+                log: Arc::new(RwLock::new(Vec::new())),
+                hard_state: Arc::new(RwLock::new((0, None, None))),
+                last_applied: Arc::new(RwLock::new(None)),
+                snapshot: Arc::new(RwLock::new(None)),
+            }
+        }
+    }
+    
+    #[async_trait::async_trait]
+    impl RaftLogReader<OxirsTypeConfig> for OxirsStorage {
+        async fn try_get_log_entries<RB: openraft::RaftLogReaderExt<OxirsTypeConfig> + Send>(
+            &mut self,
+            range: std::ops::Range<u64>,
+        ) -> Result<Vec<Entry<OxirsTypeConfig>>, StorageError<OxirsNodeId>> {
+            let log = self.log.read().await;
+            let entries = log
+                .iter()
+                .filter(|entry| range.contains(&entry.log_id.index))
+                .cloned()
+                .collect();
+            Ok(entries)
+        }
+    }
+    
+    #[async_trait::async_trait]
+    impl RaftSnapshotBuilder<OxirsTypeConfig> for OxirsStorage {
+        async fn build_snapshot(&mut self) -> Result<Snapshot<OxirsTypeConfig>, StorageError<OxirsNodeId>> {
+            let state = self.state.read().await;
+            let last_applied = *self.last_applied.read().await;
+            
+            let data = serde_json::to_vec(&*state)
+                .map_err(|e| StorageError::read_state_machine(&e))?;
+            
+            let snapshot = Snapshot {
+                meta: SnapshotMeta {
+                    last_log_id: last_applied,
+                    last_membership: Membership::new(vec![BTreeSet::new()], None),
+                    snapshot_id: format!(
+                        "snapshot-{}",
+                        last_applied.map_or(0, |id| id.index)
+                    ),
+                },
+                snapshot: Box::new(Cursor::new(data)),
+            };
+            
+            *self.snapshot.write().await = Some(snapshot.clone());
+            Ok(snapshot)
+        }
+    }
+    
+    #[async_trait::async_trait]
+    impl RaftStorage<OxirsTypeConfig> for OxirsStorage {
+        type LogReader = Self;
+        type SnapshotBuilder = Self;
+        
+        async fn save_committed(&mut self, committed: Option<LogId<OxirsNodeId>>) -> Result<(), StorageError<OxirsNodeId>> {
+            self.hard_state.write().await.2 = committed;
+            Ok(())
+        }
+        
+        async fn read_committed(&mut self) -> Result<Option<LogId<OxirsNodeId>>, StorageError<OxirsNodeId>> {
+            Ok(self.hard_state.read().await.2)
+        }
+        
+        async fn save_hard_state(&mut self, hs: &openraft::storage::HardState<OxirsNodeId>) -> Result<(), StorageError<OxirsNodeId>> {
+            let mut hard_state = self.hard_state.write().await;
+            hard_state.0 = hs.current_term;
+            hard_state.1 = hs.voted_for;
+            Ok(())
+        }
+        
+        async fn read_hard_state(&mut self) -> Result<Option<openraft::storage::HardState<OxirsNodeId>>, StorageError<OxirsNodeId>> {
+            let hard_state = self.hard_state.read().await;
+            Ok(Some(openraft::storage::HardState {
+                current_term: hard_state.0,
+                voted_for: hard_state.1,
+            }))
+        }
+        
+        async fn get_log_reader(&mut self) -> Self::LogReader {
+            self.clone()
+        }
+        
+        async fn append_to_log<I>(&mut self, entries: I) -> Result<(), StorageError<OxirsNodeId>>
+        where
+            I: IntoIterator<Item = Entry<OxirsTypeConfig>> + Send,
+        {
+            let mut log = self.log.write().await;
+            log.extend(entries);
+            Ok(())
+        }
+        
+        async fn delete_conflict_logs_since(&mut self, log_id: LogId<OxirsNodeId>) -> Result<(), StorageError<OxirsNodeId>> {
+            let mut log = self.log.write().await;
+            log.retain(|entry| entry.log_id.index < log_id.index);
+            Ok(())
+        }
+        
+        async fn purge_logs_upto(&mut self, log_id: LogId<OxirsNodeId>) -> Result<(), StorageError<OxirsNodeId>> {
+            let mut log = self.log.write().await;
+            log.retain(|entry| entry.log_id.index > log_id.index);
+            Ok(())
+        }
+        
+        async fn last_applied_state(&mut self) -> Result<(
+            Option<LogId<OxirsNodeId>>,
+            openraft::storage::StoredMembership<OxirsNodeId, BasicNode>,
+        ), StorageError<OxirsNodeId>> {
+            let last_applied = *self.last_applied.read().await;
+            let membership = openraft::storage::StoredMembership::new(
+                None,
+                Membership::new(vec![BTreeSet::new()], None),
+            );
+            Ok((last_applied, membership))
+        }
+        
+        async fn apply_to_state_machine(&mut self, entries: &[Entry<OxirsTypeConfig>]) -> Result<Vec<RdfResponse>, StorageError<OxirsNodeId>> {
+            let mut responses = Vec::new();
+            let mut state = self.state.write().await;
+            
+            for entry in entries {
+                if let EntryPayload::Normal(cmd) = &entry.payload {
+                    let response = state.apply_command(cmd);
+                    responses.push(response);
+                }
+                *self.last_applied.write().await = Some(entry.log_id);
+            }
+            
+            Ok(responses)
+        }
+        
+        async fn get_snapshot_builder(&mut self) -> Self::SnapshotBuilder {
+            self.clone()
+        }
+        
+        async fn begin_receiving_snapshot(&mut self) -> Result<Box<Cursor<Vec<u8>>>, StorageError<OxirsNodeId>> {
+            Ok(Box::new(Cursor::new(Vec::new())))
+        }
+        
+        async fn install_snapshot(
+            &mut self,
+            meta: &SnapshotMeta<OxirsNodeId, BasicNode>,
+            snapshot: Box<Cursor<Vec<u8>>>,
+        ) -> Result<(), StorageError<OxirsNodeId>> {
+            let data = snapshot.get_ref();
+            let new_state: RdfApp = serde_json::from_slice(data)
+                .map_err(|e| StorageError::read_state_machine(&e))?;
+            
+            *self.state.write().await = new_state;
+            *self.last_applied.write().await = meta.last_log_id;
+            
+            Ok(())
+        }
+        
+        async fn get_current_snapshot(&mut self) -> Result<Option<Snapshot<OxirsTypeConfig>>, StorageError<OxirsNodeId>> {
+            Ok(self.snapshot.read().await.clone())
+        }
+    }
+    
+    impl Clone for OxirsStorage {
+        fn clone(&self) -> Self {
+            Self {
+                state: Arc::clone(&self.state),
+                log: Arc::clone(&self.log),
+                hard_state: Arc::clone(&self.hard_state),
+                last_applied: Arc::clone(&self.last_applied),
+                snapshot: Arc::clone(&self.snapshot),
+            }
+        }
+    }
+}
+
+#[cfg(feature = "raft")]
+pub use raft_impl::*;
+
+/// Raft node implementation
+pub struct RaftNode {
+    node_id: OxirsNodeId,
+    #[cfg(feature = "raft")]
+    raft: Option<Raft<OxirsTypeConfig>>,
+    storage: Arc<RwLock<RdfApp>>,
+}
+
+impl RaftNode {
+    pub fn new(node_id: OxirsNodeId) -> Self {
+        Self {
+            node_id,
+            #[cfg(feature = "raft")]
+            raft: None,
+            storage: Arc::new(RwLock::new(RdfApp::default())),
+        }
+    }
+    
+    /// Initialize Raft with storage
+    #[cfg(feature = "raft")]
+    pub async fn init_raft(&mut self, peers: BTreeSet<OxirsNodeId>) -> Result<()> {
+        let config = Config::default();
+        let storage = OxirsStorage::new();
+        
+        let raft = Raft::new(self.node_id, config, storage, BasicNode::default())
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to create Raft: {}", e))?;
+        
+        // Initialize cluster membership
+        if !peers.is_empty() {
+            let mut nodes = BTreeMap::new();
+            for peer in &peers {
+                nodes.insert(*peer, BasicNode::default());
+            }
+            nodes.insert(self.node_id, BasicNode::default());
+            
+            let membership = Membership::new(vec![peers], None);
+            raft.initialize(membership)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to initialize Raft: {}", e))?;
+        }
+        
+        self.raft = Some(raft);
         Ok(())
     }
     
-    pub fn start_election(&mut self) -> Result<()> {
-        // TODO: Implement leader election
-        self.state = NodeState::Candidate;
-        self.current_term += 1;
-        self.voted_for = Some(self.node_id);
-        Ok(())
+    /// Check if this node is the leader
+    pub async fn is_leader(&self) -> bool {
+        #[cfg(feature = "raft")]
+        {
+            if let Some(ref raft) = self.raft {
+                match raft.metrics().borrow().current_leader {
+                    Some(leader) => leader == self.node_id,
+                    None => false,
+                }
+            } else {
+                false
+            }
+        }
+        #[cfg(not(feature = "raft"))]
+        {
+            // Fallback for non-raft mode
+            true
+        }
     }
     
-    pub fn become_leader(&mut self) -> Result<()> {
-        // TODO: Implement leader initialization
-        self.state = NodeState::Leader;
-        Ok(())
+    /// Get current term
+    pub async fn current_term(&self) -> u64 {
+        #[cfg(feature = "raft")]
+        {
+            if let Some(ref raft) = self.raft {
+                raft.metrics().borrow().current_term
+            } else {
+                0
+            }
+        }
+        #[cfg(not(feature = "raft"))]
+        {
+            0
+        }
     }
     
-    pub fn become_follower(&mut self, term: u64) -> Result<()> {
-        // TODO: Implement follower state transition
-        self.state = NodeState::Follower;
-        self.current_term = term;
-        self.voted_for = None;
-        Ok(())
+    /// Submit a command for replication
+    pub async fn submit_command(&self, cmd: RdfCommand) -> Result<RdfResponse> {
+        #[cfg(feature = "raft")]
+        {
+            if let Some(ref raft) = self.raft {
+                let response = raft.client_write(cmd)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Failed to submit command: {}", e))?;
+                Ok(response.data)
+            } else {
+                // Fallback to local execution
+                let mut state = self.storage.write().await;
+                Ok(state.apply_command(&cmd))
+            }
+        }
+        #[cfg(not(feature = "raft"))]
+        {
+            // Fallback to local execution
+            let mut state = self.storage.write().await;
+            Ok(state.apply_command(&cmd))
+        }
+    }
+    
+    /// Get metrics
+    #[cfg(feature = "raft")]
+    pub async fn get_metrics(&self) -> Option<RaftMetrics<OxirsNodeId, BasicNode>> {
+        self.raft.as_ref().map(|raft| raft.metrics().borrow().clone())
+    }
+    
+    /// Query the local state machine
+    pub async fn query(&self, subject: Option<&str>, predicate: Option<&str>, object: Option<&str>) -> Vec<(String, String, String)> {
+        let state = self.storage.read().await;
+        state.query(subject, predicate, object)
+    }
+    
+    /// Get number of triples
+    pub async fn len(&self) -> usize {
+        let state = self.storage.read().await;
+        state.len()
+    }
+    
+    /// Check if store is empty
+    pub async fn is_empty(&self) -> bool {
+        let state = self.storage.read().await;
+        state.is_empty()
     }
 }

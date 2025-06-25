@@ -14,10 +14,10 @@ rust-version.workspace = true
 [dependencies]
 oxirs-core = { path = "../../core/oxirs-core" }
 oxirs-vec = { path = "../../engine/oxirs-vec" }
-oxirs-embed = { path = "../oxirs-embed" }
-tokio.workspace = true
-hyper.workspace = true
-serde.workspace = true
+# oxirs-embed = { path = "../oxirs-embed" } # Temporarily disabled due to compilation issues
+tokio = { workspace = true, features = ["full"] }
+hyper = { workspace = true, features = ["full"] }
+serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
@@ -25,6 +25,60 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 clap = { version = "4.0", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
+
+# HTTP Server and WebSocket
+axum = { version = "0.7", features = ["ws"] }
+axum-extra = { version = "0.9", features = ["typed-header"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+tokio-tungstenite = "0.21"
+futures-util = "0.3"
+
+# LLM Integration
+reqwest = { version = "0.12", features = ["json", "stream"] }
+async-openai = "0.25"
+async-stream = "0.3"
+# anthropic-sdk = "0.1" # Add when available
+
+# Storage and Caching
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid"] }
+redis = { version = "0.26", features = ["tokio-comp", "connection-manager"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# Configuration
+config = "0.14"
+toml = "0.8"
+
+# Metrics and Monitoring
+metrics = "0.24"
+metrics-exporter-prometheus = "0.15"
+
+# Template Engine for SPARQL
+handlebars = "5.1"
+regex = "1.10"
+
+# Vector Search Integration (disabled due to dependency conflicts)
+# candle-core = "0.6"
+# candle-nn = "0.6"
+# candle-transformers = "0.6"
+
+# Async traits
+async-trait = "0.1"
+
+# Session persistence and state management
+sled = "0.34"
+bincode = "1.3"
+
+# Natural Language Processing
+tokenizers = "0.19"
+# nlp = "0.6" # Add when needed for entity extraction
+
+# OpenTelemetry for monitoring
+opentelemetry = "0.22"
+opentelemetry-prometheus = "0.15"
+
+# Rate limiting
+governor = "0.6"
 
 [dev-dependencies]
 criterion.workspace = true

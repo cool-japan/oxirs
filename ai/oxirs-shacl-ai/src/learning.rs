@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use oxirs_core::{
     model::{NamedNode, Term, Triple, Literal},
     store::Store,
+    RdfTerm,
 };
 
 use oxirs_shacl::{
@@ -635,7 +636,7 @@ impl ShapeLearner {
         let mut accuracy = 0.0;
         let mut loss = 1.0;
         
-        for epoch in 0..self.config.algorithm_params.get("max_epochs").unwrap_or(&100.0) as usize {
+        for epoch in 0..*self.config.algorithm_params.get("max_epochs").unwrap_or(&100.0) as usize {
             // Simulate training epoch
             accuracy = 0.5 + (epoch as f64 / 100.0) * 0.4; // Improve over time
             loss = 1.0 - accuracy * 0.8; // Decrease loss
