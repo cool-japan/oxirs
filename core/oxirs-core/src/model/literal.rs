@@ -33,6 +33,37 @@ impl From<LanguageTagParseError> for OxirsError {
     }
 }
 
+/// A language tag following BCP 47 specification
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct LanguageTag {
+    tag: String,
+}
+
+impl LanguageTag {
+    /// Parses a language tag from a string
+    pub fn parse(tag: impl Into<String>) -> Result<Self, LanguageTagParseError> {
+        let tag = tag.into();
+        validate_language_tag(&tag)?;
+        Ok(LanguageTag { tag })
+    }
+
+    /// Returns the language tag as a string slice
+    pub fn as_str(&self) -> &str {
+        &self.tag
+    }
+
+    /// Consumes the language tag and returns the inner string
+    pub fn into_inner(self) -> String {
+        self.tag
+    }
+}
+
+impl fmt::Display for LanguageTag {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.tag)
+    }
+}
+
 lazy_static! {
     /// BCP 47 language tag validation regex
     /// Based on RFC 5646 - Tags for Identifying Languages

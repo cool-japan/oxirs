@@ -101,6 +101,32 @@ body {
     color: #2c3e50;
 }
 
+/* Nested results (sh:detail) */
+.nested-results {
+    margin-top: 15px;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 4px;
+}
+
+.nested-results p {
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.nested-results ul {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.nested-results li {
+    margin: 5px 0;
+    padding: 5px;
+    background: rgba(255, 255, 255, 0.7);
+    border-radius: 3px;
+    list-style-type: disc;
+}
+
 /* Responsive design */
 @media (max-width: 768px) {
     body {

@@ -10,8 +10,8 @@ use json_event_parser::{JsonEvent, ReaderJsonParser, SliceJsonParser};
 // use oxrdf::vocab::{rdf, xsd};
 // use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, Quad};
 use crate::model::*;
-use crate::OxirsError as IriParseError; // Temporary alias
-type Iri<T> = T; // Temporary alias
+use crate::model::iri::{Iri, IriParseError};
+use crate::vocab::{rdf, xsd};
 use std::error::Error;
 use std::fmt::Write;
 use std::io::Read;
@@ -1075,14 +1075,14 @@ impl JsonLdToRdfConverter {
                         if let Some(graph_name) = self.last_graph_name() {
                             results.push(Quad::new(
                                 previous_node,
-                                rdf::REST,
-                                rdf::NIL.into_owned(),
+                                rdf::REST.clone(),
+                                rdf::NIL.clone(),
                                 graph_name.clone(),
                             ));
                         }
                     } else {
                         self.emit_quads_for_new_object(
-                            Some(&rdf::NIL.into_owned().into()),
+                            Some(&rdf::NIL.clone().into()),
                             Vec::new(),
                             results,
                         )
@@ -1144,13 +1144,13 @@ impl JsonLdToRdfConverter {
             (self.last_subject(), self.last_predicate())
         {
             results.push(if reverse {
-                Quad::new(id.clone(), predicate, subject.clone(), graph_name.clone())
+                Quad::new(id.clone(), predicate.to_owned(), subject.clone(), graph_name.clone())
             } else {
-                Quad::new(subject.clone(), predicate, id.clone(), graph_name.clone())
+                Quad::new(subject.clone(), predicate.to_owned(), id.clone(), graph_name.clone())
             })
         }
         for t in types {
-            results.push(Quad::new(id.clone(), rdf::TYPE, t, graph_name.clone()))
+            results.push(Quad::new(id.clone(), rdf::TYPE.clone(), t, graph_name.clone()))
         }
     }
 
@@ -1172,7 +1172,7 @@ impl JsonLdToRdfConverter {
         }
         results.push(Quad::new(
             subject.clone(),
-            predicate,
+            predicate.to_owned(),
             literal,
             graph_name.clone(),
         ))
@@ -1188,7 +1188,7 @@ impl JsonLdToRdfConverter {
             if let Some(graph_name) = self.last_graph_name() {
                 results.push(Quad::new(
                     previous_node,
-                    rdf::REST,
+                    rdf::REST.clone(),
                     new_node.clone(),
                     graph_name.clone(),
                 ));
@@ -1235,7 +1235,7 @@ impl JsonLdToRdfConverter {
         Some(match value {
             JsonLdValue::String(value) => {
                 if let Some(language) = language {
-                    if r#type.is_some_and(|t| t != rdf::LANG_STRING) {
+                    if r#type.is_some_and(|t| t.as_str() != rdf::LANG_STRING.as_str()) {
                         return None; // Expansion already returns an error
                     }
                     if self.lenient {
@@ -1255,17 +1255,17 @@ impl JsonLdToRdfConverter {
                 }
                 let value = canonicalize_json_number(
                     &value,
-                    r#type.as_ref().is_some_and(|t| *t == xsd::DOUBLE),
+                    r#type.as_ref().is_some_and(|t| t.as_str() == xsd::DOUBLE.as_str()),
                 )
                 .unwrap_or(RdfJsonNumber::Double(value));
                 match value {
                     RdfJsonNumber::Integer(value) => Literal::new_typed_literal(
                         value,
-                        r#type.unwrap_or_else(|| xsd::INTEGER.into()),
+                        r#type.unwrap_or_else(|| xsd::INTEGER.clone()),
                     ),
                     RdfJsonNumber::Double(value) => Literal::new_typed_literal(
                         value,
-                        r#type.unwrap_or_else(|| xsd::DOUBLE.into()),
+                        r#type.unwrap_or_else(|| xsd::DOUBLE.clone()),
                     ),
                 }
             }
@@ -1275,7 +1275,7 @@ impl JsonLdToRdfConverter {
                 }
                 Literal::new_typed_literal(
                     if value { "true" } else { "false" },
-                    r#type.unwrap_or_else(|| xsd::BOOLEAN.into()),
+                    r#type.unwrap_or_else(|| xsd::BOOLEAN.clone()),
                 )
             }
         })
@@ -1307,7 +1307,7 @@ impl JsonLdToRdfConverter {
                     return Some((id.as_ref()?.as_ref(), *reverse));
                 }
                 JsonLdToRdfState::StartObject { .. } | JsonLdToRdfState::Object(_) => (),
-                JsonLdToRdfState::List(_) => return Some((rdf::FIRST, false)),
+                JsonLdToRdfState::List(_) => return Some((rdf::FIRST.as_ref(), false)),
                 JsonLdToRdfState::Graph(_) => {
                     return None;
                 }

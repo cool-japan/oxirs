@@ -461,7 +461,7 @@ impl QueryOptimizer {
 
         // Phase 2: Pushdown optimizations
         if self.config.filter_pushdown {
-            result = self.advanced_filter_pushdown(result)?;
+            result = self.optimize_filters(result)?;
         }
 
         if self.config.projection_pushdown {
@@ -1290,6 +1290,131 @@ impl QueryOptimizer {
             _ => Err(anyhow!(
                 "Unary operation not supported for constant folding"
             )),
+        }
+    }
+    
+    /// Decompose complex filters into conjunctive normal form (CNF)
+    fn decompose_filter_cnf(&self, expr: &Expression) -> Vec<Expression> {
+        match expr {
+            Expression::Binary { op: BinaryOperator::And, left, right } => {
+                let mut filters = self.decompose_filter_cnf(left);
+                filters.extend(self.decompose_filter_cnf(right));
+                filters
+            }
+            _ => vec![expr.clone()],
+        }
+    }
+    
+    /// Check if a filter expression uses only indexed properties
+    fn is_indexed_filter(&self, expr: &Expression) -> bool {
+        match expr {
+            Expression::Binary { op: BinaryOperator::Equal, left, right } => {
+                // Check if comparing a variable with a constant
+                matches!(
+                    (left.as_ref(), right.as_ref()),
+                    (Expression::Variable(_), Expression::Literal(_)) |
+                    (Expression::Literal(_), Expression::Variable(_)) |
+                    (Expression::Variable(_), Expression::Iri(_)) |
+                    (Expression::Iri(_), Expression::Variable(_))
+                )
+            }
+            Expression::Binary { op: BinaryOperator::And, left, right } => {
+                self.is_indexed_filter(left) || self.is_indexed_filter(right)
+            }
+            _ => false,
+        }
+    }
+    
+    /// Enhanced filter optimization with reordering and selectivity estimation
+    fn optimize_filters(&self, algebra: Algebra) -> Result<Algebra> {
+        // First apply filter pushdown
+        let pushed = self.filter_pushdown(algebra)?;
+        // Then reorder filters based on selectivity
+        self.reorder_filters(pushed)
+    }
+    
+    /// Reorder filters based on estimated selectivity
+    fn reorder_filters(&self, algebra: Algebra) -> Result<Algebra> {
+        match algebra {
+            Algebra::Filter { pattern, condition } => {
+                // Check if pattern is also a filter to enable reordering
+                if let Algebra::Filter { pattern: inner_pattern, condition: inner_condition } = *pattern {
+                    // Estimate selectivity of both conditions
+                    let outer_selectivity = self.estimate_filter_selectivity(&condition);
+                    let inner_selectivity = self.estimate_filter_selectivity(&inner_condition);
+                    
+                    // If outer filter is more selective, keep current order
+                    if outer_selectivity <= inner_selectivity {
+                        Ok(Algebra::Filter {
+                            pattern: Box::new(Algebra::Filter {
+                                pattern: inner_pattern,
+                                condition: inner_condition,
+                            }),
+                            condition,
+                        })
+                    } else {
+                        // Swap order - more selective filter goes first
+                        Ok(Algebra::Filter {
+                            pattern: Box::new(Algebra::Filter {
+                                pattern: inner_pattern,
+                                condition,
+                            }),
+                            condition: inner_condition,
+                        })
+                    }
+                } else {
+                    Ok(Algebra::Filter {
+                        pattern: Box::new(self.reorder_filters(*pattern)?),
+                        condition,
+                    })
+                }
+            }
+            _ => self.apply_to_children(algebra, |child| self.reorder_filters(child)),
+        }
+    }
+    
+    /// Estimate filter selectivity (lower is more selective)
+    fn estimate_filter_selectivity(&self, expr: &Expression) -> f64 {
+        match expr {
+            // Equality filters are usually very selective
+            Expression::Binary { op: BinaryOperator::Equal, .. } => 0.1,
+            
+            // Inequality filters are less selective
+            Expression::Binary { op: BinaryOperator::NotEqual, .. } => 0.9,
+            
+            // Range filters
+            Expression::Binary { op: BinaryOperator::Less, .. } => 0.3,
+            Expression::Binary { op: BinaryOperator::Greater, .. } => 0.3,
+            Expression::Binary { op: BinaryOperator::LessEqual, .. } => 0.35,
+            Expression::Binary { op: BinaryOperator::GreaterEqual, .. } => 0.35,
+            
+            // Logical operations
+            Expression::Binary { op: BinaryOperator::And, left, right } => {
+                self.estimate_filter_selectivity(left) * self.estimate_filter_selectivity(right)
+            }
+            Expression::Binary { op: BinaryOperator::Or, left, right } => {
+                let sel_left = self.estimate_filter_selectivity(left);
+                let sel_right = self.estimate_filter_selectivity(right);
+                sel_left + sel_right - (sel_left * sel_right)
+            }
+            
+            // Functions - depends on the function
+            Expression::Function { name, .. } => {
+                match name.as_str() {
+                    "bound" => 0.8,
+                    "isIRI" | "isBlank" | "isLiteral" => 0.3,
+                    "regex" => 0.2,
+                    "contains" | "strstarts" | "strends" => 0.15,
+                    _ => 0.5,
+                }
+            }
+            
+            // EXISTS/NOT EXISTS
+            Expression::Exists { .. } => 0.5,
+            Expression::NotExists { .. } => 0.5,
+            
+            // Default
+            _ => 0.5,
         }
     }
 }

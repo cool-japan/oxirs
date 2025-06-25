@@ -54,6 +54,15 @@ impl From<Variable> for GraphName {
     }
 }
 
+impl From<crate::model::node::NamedOrBlankNode> for GraphName {
+    fn from(node: crate::model::node::NamedOrBlankNode) -> Self {
+        match node {
+            crate::model::node::NamedOrBlankNode::NamedNode(n) => GraphName::NamedNode(n),
+            crate::model::node::NamedOrBlankNode::BlankNode(b) => GraphName::BlankNode(b),
+        }
+    }
+}
+
 /// An RDF Quad
 ///
 /// Represents an RDF statement with subject, predicate, object, and graph name.

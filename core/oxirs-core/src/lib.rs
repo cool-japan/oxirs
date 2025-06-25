@@ -36,8 +36,9 @@ pub mod storage;
 pub mod store;
 pub mod vocab;
 // pub mod config;
-// pub mod jsonld;
-// pub mod rdfxml; // Disabled due to oxiri/oxilangtag dependencies - needs native implementation
+pub mod jsonld; // Re-enabled after fixing StringInterner method calls
+// pub mod rdfxml; // TODO: Fix lifetime issues in serializer
+pub mod oxigraph_compat; // Oxigraph compatibility layer
 
 // Re-export core types for convenience
 pub use model::*;

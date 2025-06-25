@@ -294,23 +294,30 @@ impl ColumnarStorage {
                 .downcast_ref::<UInt64Array>()
                 .ok_or_else(|| OxirsError::Query("Invalid predicate column".to_string()))?;
 
-            let object_types = batch
-                .column(2)
-                .as_any()
-                .downcast_ref::<StringArray>()
-                .ok_or_else(|| OxirsError::Query("Invalid object type column".to_string()))?;
+            // Handle both Utf8 and Utf8View array types
+            let object_types_str: Vec<&str> = if let Some(arr) = batch.column(2).as_any().downcast_ref::<StringArray>() {
+                (0..batch.num_rows()).map(|i| arr.value(i)).collect()
+            } else if let Some(arr) = batch.column(2).as_any().downcast_ref::<arrow::array::StringViewArray>() {
+                (0..batch.num_rows()).map(|i| arr.value(i)).collect()
+            } else {
+                let col_type = batch.column(2).data_type();
+                return Err(OxirsError::Query(format!("Invalid object type column type: {:?}, expected Utf8 or Utf8View", col_type)));
+            };
 
-            let object_values = batch
-                .column(3)
-                .as_any()
-                .downcast_ref::<StringArray>()
-                .ok_or_else(|| OxirsError::Query("Invalid object value column".to_string()))?;
+            let object_values_str: Vec<&str> = if let Some(arr) = batch.column(3).as_any().downcast_ref::<StringArray>() {
+                (0..batch.num_rows()).map(|i| arr.value(i)).collect()
+            } else if let Some(arr) = batch.column(3).as_any().downcast_ref::<arrow::array::StringViewArray>() {
+                (0..batch.num_rows()).map(|i| arr.value(i)).collect()
+            } else {
+                let col_type = batch.column(3).data_type();
+                return Err(OxirsError::Query(format!("Invalid object value column type: {:?}, expected Utf8 or Utf8View", col_type)));
+            };
 
             for i in 0..batch.num_rows() {
                 let subject_id = subject_ids.value(i);
                 let predicate_id = predicate_ids.value(i);
-                let object_type = object_types.value(i);
-                let object_value = object_values.value(i);
+                let object_type = object_types_str[i];
+                let object_value = object_values_str[i];
 
                 // Reconstruct triple
                 let subject_uri = dict.get_uri(subject_id).ok_or_else(|| {
@@ -373,15 +380,16 @@ impl ColumnarStorage {
                         .as_any()
                         .downcast_ref::<UInt64Array>()
                         .unwrap();
+                    // COUNT(*) returns Int64, not UInt64
                     let count_values = batch
                         .column(1)
                         .as_any()
-                        .downcast_ref::<UInt64Array>()
-                        .unwrap();
+                        .downcast_ref::<arrow::array::Int64Array>()
+                        .ok_or_else(|| OxirsError::Query("Invalid count column type".to_string()))?;
 
                     for i in 0..batch.num_rows() {
                         let pred_id = predicate_ids.value(i);
-                        let count = count_values.value(i);
+                        let count = count_values.value(i) as u64;
 
                         if let Some(pred_uri) = dict.get_uri(pred_id) {
                             counts.insert(pred_uri.to_string(), count);
@@ -415,15 +423,16 @@ impl ColumnarStorage {
                         .as_any()
                         .downcast_ref::<UInt64Array>()
                         .unwrap();
+                    // COUNT(*) returns Int64, not UInt64
                     let count_values = batch
                         .column(1)
                         .as_any()
-                        .downcast_ref::<UInt64Array>()
-                        .unwrap();
+                        .downcast_ref::<arrow::array::Int64Array>()
+                        .ok_or_else(|| OxirsError::Query("Invalid count column type".to_string()))?;
 
                     for i in 0..batch.num_rows() {
                         let subj_id = subject_ids.value(i);
-                        let count = count_values.value(i);
+                        let count = count_values.value(i) as u64;
 
                         if let Some(subj_uri) = dict.get_uri(subj_id) {
                             subjects.push((subj_uri.to_string(), count));
@@ -483,6 +492,9 @@ impl ColumnarStorage {
                 ParquetReadOptions::default(),
             )
             .await?;
+            
+            // Create or update the unified triples view
+            self.create_triples_view(&ctx).await?;
 
             // Update stats
             let mut stats = self.stats.write().await;
@@ -499,7 +511,12 @@ impl ColumnarStorage {
             PartitionStrategy::None => "triples".to_string(),
             PartitionStrategy::ByPredicate => {
                 // In real implementation, would partition by predicate
-                format!("triples_{}", chrono::Utc::now().format("%Y%m%d_%H%M%S"))
+                format!("triples_{}_{}", 
+                    chrono::Utc::now().format("%Y%m%d_%H%M%S"),
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos())
             }
             PartitionStrategy::ByGraph => {
                 format!("graph_default_{}", chrono::Utc::now().format("%Y%m%d"))
@@ -522,6 +539,46 @@ impl ColumnarStorage {
             CompressionType::Lz4 => parquet::basic::Compression::LZ4,
             CompressionType::Zstd => parquet::basic::Compression::ZSTD(parquet::basic::ZstdLevel::default()),
         }
+    }
+    
+    /// Create or update the unified triples view
+    async fn create_triples_view(&self, ctx: &SessionContext) -> Result<(), OxirsError> {
+        // Get all registered tables
+        let tables = ctx.catalog_names();
+        let mut triple_tables = Vec::new();
+        
+        // Find all tables that are triple partitions
+        for catalog in tables {
+            let schemas = ctx.catalog(&catalog).unwrap().schema_names();
+            for schema in schemas {
+                let tables = ctx.catalog(&catalog).unwrap()
+                    .schema(&schema).unwrap()
+                    .table_names();
+                for table in tables {
+                    // Skip the view itself to avoid circular reference
+                    if table == "triples" {
+                        continue;
+                    }
+                    if table.starts_with("triples") || table.contains("time_bucket") || table.contains("graph_") {
+                        triple_tables.push(format!("{}.{}.{}", catalog, schema, table));
+                    }
+                }
+            }
+        }
+        
+        // Create a UNION ALL view if we have tables
+        if !triple_tables.is_empty() {
+            let union_query = triple_tables
+                .iter()
+                .map(|t| format!("SELECT * FROM {}", t))
+                .collect::<Vec<_>>()
+                .join(" UNION ALL ");
+            
+            let create_view_sql = format!("CREATE OR REPLACE VIEW triples AS {}", union_query);
+            ctx.sql(&create_view_sql).await?;
+        }
+        
+        Ok(())
     }
 
 }
@@ -619,8 +676,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_columnar_storage() {
+        let test_dir = format!("/tmp/oxirs_columnar_test_{}", 
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis());
         let config = ColumnarConfig {
-            path: PathBuf::from("/tmp/oxirs_columnar_test"),
+            path: PathBuf::from(&test_dir),
             ..Default::default()
         };
 
@@ -656,8 +718,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_analytical_queries() {
+        let test_dir = format!("/tmp/oxirs_columnar_analytics_{}", 
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis());
         let config = ColumnarConfig {
-            path: PathBuf::from("/tmp/oxirs_columnar_analytics"),
+            path: PathBuf::from(&test_dir),
             batch_size: 2,
             ..Default::default()
         };

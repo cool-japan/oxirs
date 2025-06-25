@@ -15,7 +15,7 @@ rust-version.workspace = true
 # oxigraph.workspace = true    # REMOVED: Replaced with native implementations
 # oxrdf.workspace = true       # REMOVED: Replaced with native implementations
 # oxjsonld.workspace = true    # REMOVED: Replaced with native implementations
-json-event-parser = "0.2"
+json-event-parser = { version = "0.2", features = ["async-tokio"] }
 rio_api.workspace = true
 rio_turtle.workspace = true
 rio_xml.workspace = true
@@ -91,4 +91,5 @@ tokio = { workspace = true, features = ["test-util", "rt", "io-util", "macros"] 
 default = ["serde"]
 serde = []
 async = []
+async-tokio = ["async"]
 

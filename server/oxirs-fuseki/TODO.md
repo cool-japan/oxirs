@@ -318,9 +318,9 @@
 
 ### Priority 1: Advanced Protocol Features
 - [ ] **SPARQL 1.2 Complete Implementation** (Q3 2025)
-  - [ ] SPARQL-star triple support
-  - [ ] Advanced property path optimizations
-  - [ ] Enhanced aggregation functions (GROUP_CONCAT, SAMPLE, etc.)
+  - [x] SPARQL-star triple support ✅
+  - [x] Advanced property path optimizations ✅
+  - [x] Enhanced aggregation functions (GROUP_CONCAT, SAMPLE, etc.) ✅
   - [ ] Subquery performance optimizations
   - [ ] BIND and VALUES clause enhancements
   - [ ] Federated query optimization

@@ -13,6 +13,9 @@ pub enum JsonLdParseError {
     /// An error in the file syntax.
     #[error(transparent)]
     Syntax(#[from] JsonLdSyntaxError),
+    /// Processing error during streaming operations
+    #[error("Processing error: {0}")]
+    ProcessingError(String),
 }
 
 impl From<JsonLdParseError> for io::Error {
@@ -21,6 +24,7 @@ impl From<JsonLdParseError> for io::Error {
         match error {
             JsonLdParseError::Io(error) => error,
             JsonLdParseError::Syntax(error) => error.into(),
+            JsonLdParseError::ProcessingError(msg) => io::Error::new(io::ErrorKind::Other, msg),
         }
     }
 }
@@ -33,6 +37,12 @@ impl From<JsonParseError> for JsonLdParseError {
             JsonParseError::Io(error) => Self::Io(error),
             JsonParseError::Syntax(error) => Self::Syntax(error.into()),
         }
+    }
+}
+
+impl From<crate::OxirsError> for JsonLdParseError {
+    fn from(err: crate::OxirsError) -> Self {
+        JsonLdParseError::ProcessingError(err.to_string())
     }
 }
 

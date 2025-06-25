@@ -648,7 +648,7 @@ impl QueryParser {
         let mut patterns = Vec::new();
 
         while !self.is_at_end() && !matches!(self.peek(), Some(Token::RightBrace)) {
-            let pattern = self.parse_graph_pattern()?;
+            let pattern = self.parse_graph_pattern_or_union()?;
             patterns.push(pattern);
 
             // Skip optional dots
@@ -668,6 +668,21 @@ impl QueryParser {
             }
             Ok(result)
         }
+    }
+    
+    fn parse_graph_pattern_or_union(&mut self) -> Result<Algebra> {
+        let mut left = self.parse_graph_pattern()?;
+        
+        // Check for UNION after the first pattern
+        while self.match_token(&Token::Union) {
+            let right = self.parse_graph_pattern()?;
+            left = Algebra::Union {
+                left: Box::new(left),
+                right: Box::new(right),
+            };
+        }
+        
+        Ok(left)
     }
 
     fn parse_graph_pattern(&mut self) -> Result<Algebra> {
@@ -926,9 +941,24 @@ impl QueryParser {
     }
 
     fn parse_union_pattern(&mut self) -> Result<Algebra> {
-        // This is incomplete - UNION parsing is complex
+        // This handles the edge case where UNION appears at the start of a pattern
+        // In standard SPARQL, UNION should appear between patterns, not at the start
+        // But we'll handle it gracefully by treating it as an empty pattern UNION { pattern }
         self.expect_token(Token::Union)?;
-        Ok(Algebra::Zero)
+        
+        // Parse the pattern after UNION
+        let pattern = if self.match_token(&Token::LeftBrace) {
+            let p = self.parse_group_graph_pattern()?;
+            self.expect_token(Token::RightBrace)?;
+            p
+        } else {
+            self.parse_graph_pattern()?
+        };
+        
+        Ok(Algebra::Union {
+            left: Box::new(Algebra::Table), // Empty pattern on the left
+            right: Box::new(pattern),
+        })
     }
 
     fn parse_minus_pattern(&mut self) -> Result<Algebra> {
@@ -1536,5 +1566,69 @@ mod tests {
         assert!(matches!(parser.tokens[0], Token::Select));
         assert!(matches!(parser.tokens[1], Token::Variable(_)));
         assert!(matches!(parser.tokens[2], Token::Where));
+    }
+    
+    #[test]
+    fn test_union_query() {
+        let query_str = r#"
+            SELECT ?name WHERE {
+                { ?person foaf:name ?name }
+                UNION
+                { ?person rdfs:label ?name }
+            }
+        "#;
+        
+        let query = parse_query(query_str).unwrap();
+        assert_eq!(query.query_type, QueryType::Select);
+        assert_eq!(query.select_variables, vec!["name".to_string()]);
+        
+        // Check that the where clause is a Union
+        match &query.where_clause {
+            Algebra::Union { left, right } => {
+                // Check left side is a BGP with one pattern
+                if let Algebra::Bgp(patterns) = left.as_ref() {
+                    assert_eq!(patterns.len(), 1);
+                } else {
+                    panic!("Expected BGP on left side of union");
+                }
+                
+                // Check right side is a BGP with one pattern
+                if let Algebra::Bgp(patterns) = right.as_ref() {
+                    assert_eq!(patterns.len(), 1);
+                } else {
+                    panic!("Expected BGP on right side of union");
+                }
+            }
+            _ => panic!("Expected Union algebra"),
+        }
+    }
+    
+    #[test]
+    fn test_multiple_union_query() {
+        let query_str = r#"
+            SELECT ?x WHERE {
+                { ?x a :ClassA }
+                UNION
+                { ?x a :ClassB }
+                UNION
+                { ?x a :ClassC }
+            }
+        "#;
+        
+        let query = parse_query(query_str).unwrap();
+        
+        // Check that we have nested unions (right-associative)
+        match &query.where_clause {
+            Algebra::Union { left: _, right } => {
+                // The right side should also be a Union
+                match right.as_ref() {
+                    Algebra::Union { .. } => {
+                        // Success - we have nested unions
+                    }
+                    _ => panic!("Expected nested Union on right side"),
+                }
+            }
+            _ => panic!("Expected Union algebra"),
+        }
     }
 }

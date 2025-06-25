@@ -58,6 +58,9 @@ pub mod raft;
 pub mod replication;
 pub mod storage;
 
+#[cfg(feature = "bft")]
+pub mod bft;
+
 use consensus::{ConsensusManager, ConsensusStatus};
 use discovery::{DiscoveryConfig, DiscoveryService, NodeInfo};
 use raft::{OxirsNodeId, RdfCommand, RdfResponse};

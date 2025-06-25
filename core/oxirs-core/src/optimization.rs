@@ -19,6 +19,68 @@ use std::marker::PhantomData;
 use std::ptr::NonNull;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use simd_json;
+use std::pin::Pin;
+
+/// Type alias for string interner used throughout optimization module
+pub type TermInterner = StringInterner;
+
+/// Extension trait for TermInterner to create RDF terms
+pub trait TermInternerExt {
+    /// Intern a named node and return it
+    fn intern_named_node(&self, iri: &str) -> Result<NamedNode, crate::OxirsError>;
+    
+    /// Create and intern a new blank node
+    fn intern_blank_node(&self) -> BlankNode;
+    
+    /// Intern a simple literal
+    fn intern_literal(&self, value: &str) -> Result<Literal, crate::OxirsError>;
+    
+    /// Intern a literal with datatype
+    fn intern_literal_with_datatype(&self, value: &str, datatype_iri: &str) -> Result<Literal, crate::OxirsError>;
+    
+    /// Intern a literal with language tag
+    fn intern_literal_with_language(&self, value: &str, language: &str) -> Result<Literal, crate::OxirsError>;
+}
+
+impl TermInternerExt for TermInterner {
+    fn intern_named_node(&self, iri: &str) -> Result<NamedNode, crate::OxirsError> {
+        // Intern the IRI string
+        let interned = self.intern(iri);
+        // Create NamedNode from the interned string
+        NamedNode::new(interned.as_ref())
+    }
+    
+    fn intern_blank_node(&self) -> BlankNode {
+        // Generate a unique blank node
+        BlankNode::new_unique()
+    }
+    
+    fn intern_literal(&self, value: &str) -> Result<Literal, crate::OxirsError> {
+        // Intern the literal value
+        let interned = self.intern(value);
+        // Create simple literal
+        Ok(Literal::new_simple_literal(interned.as_ref()))
+    }
+    
+    fn intern_literal_with_datatype(&self, value: &str, datatype_iri: &str) -> Result<Literal, crate::OxirsError> {
+        // Intern both value and datatype IRI
+        let value_interned = self.intern(value);
+        let datatype_interned = self.intern(datatype_iri);
+        // Create datatype node and literal
+        let datatype_node = NamedNode::new(datatype_interned.as_ref())?;
+        Ok(Literal::new_typed_literal(value_interned.as_ref(), datatype_node))
+    }
+    
+    fn intern_literal_with_language(&self, value: &str, language: &str) -> Result<Literal, crate::OxirsError> {
+        // Intern both value and language tag
+        let value_interned = self.intern(value);
+        let language_interned = self.intern(language);
+        // Create language-tagged literal
+        let literal = Literal::new_language_tagged_literal(value_interned.as_ref(), language_interned.as_ref())?;
+        Ok(literal)
+    }
+}
 
 /// Arena-based memory allocator for RDF terms
 ///
@@ -1036,5 +1098,131 @@ mod tests {
 
         let stats = graph.stats();
         assert_eq!(stats.triple_count, 10);
+    }
+}
+
+/// Zero-copy buffer for efficient data manipulation
+pub struct ZeroCopyBuffer {
+    data: Pin<Box<[u8]>>,
+    len: usize,
+}
+
+impl ZeroCopyBuffer {
+    /// Create a new zero-copy buffer with the given capacity
+    pub fn new(capacity: usize) -> Self {
+        Self::with_capacity(capacity)
+    }
+
+    /// Create a new zero-copy buffer with the given capacity
+    pub fn with_capacity(capacity: usize) -> Self {
+        let mut vec = Vec::with_capacity(capacity);
+        vec.resize(capacity, 0);
+        let data = vec.into_boxed_slice();
+        
+        ZeroCopyBuffer {
+            data: Pin::new(data),
+            len: 0,
+        }
+    }
+
+    /// Get a slice of the buffer data
+    pub fn as_slice(&self) -> &[u8] {
+        &self.data[..self.len]
+    }
+
+    /// Get a mutable slice of the entire buffer for reading into
+    pub fn as_mut_slice(&mut self) -> &mut [u8] {
+        &mut self.data[..]
+    }
+
+    /// Get the buffer capacity
+    pub fn capacity(&self) -> usize {
+        self.data.len()
+    }
+
+    /// Get the current length of data in the buffer
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Check if the buffer is empty
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// Clear the buffer
+    pub fn clear(&mut self) {
+        self.len = 0;
+    }
+    
+    /// Reset the buffer (alias for clear)
+    pub fn reset(&mut self) {
+        self.clear();
+    }
+
+    /// Set the length of valid data in the buffer
+    pub fn set_len(&mut self, len: usize) {
+        assert!(len <= self.capacity());
+        self.len = len;
+    }
+
+    /// Write data to the buffer
+    pub fn write(&mut self, data: &[u8]) -> Result<usize, std::io::Error> {
+        let available = self.capacity() - self.len;
+        let to_write = data.len().min(available);
+        
+        if to_write == 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::WriteZero,
+                "Buffer is full"
+            ));
+        }
+
+        // SAFETY: We're writing within bounds
+        unsafe {
+            let dst = self.data.as_mut_ptr().add(self.len);
+            std::ptr::copy_nonoverlapping(data.as_ptr(), dst, to_write);
+        }
+        
+        self.len += to_write;
+        Ok(to_write)
+    }
+}
+
+/// SIMD JSON processor for fast JSON parsing
+#[derive(Clone)]
+pub struct SimdJsonProcessor;
+
+impl SimdJsonProcessor {
+    /// Create a new SIMD JSON processor
+    pub fn new() -> Self {
+        SimdJsonProcessor
+    }
+
+    /// Parse JSON bytes into a Value
+    pub fn parse<'a>(&mut self, json: &'a mut [u8]) -> Result<simd_json::BorrowedValue<'a>, simd_json::Error> {
+        simd_json::to_borrowed_value(json)
+    }
+
+    /// Parse JSON string into a Value
+    pub fn parse_str<'a>(&mut self, json: &'a mut str) -> Result<simd_json::BorrowedValue<'a>, simd_json::Error> {
+        let bytes = unsafe { json.as_bytes_mut() };
+        simd_json::to_borrowed_value(bytes)
+    }
+
+    /// Parse JSON bytes into an owned Value
+    pub fn parse_owned(&mut self, json: &mut [u8]) -> Result<simd_json::OwnedValue, simd_json::Error> {
+        simd_json::to_owned_value(json)
+    }
+
+    /// Parse JSON bytes into a serde_json::Value (compatibility method)
+    pub fn parse_json(&self, json: &[u8]) -> Result<serde_json::Value, serde_json::Error> {
+        serde_json::from_slice(json)
+    }
+}
+
+impl Default for SimdJsonProcessor {
+    fn default() -> Self {
+        Self::new()
     }
 }

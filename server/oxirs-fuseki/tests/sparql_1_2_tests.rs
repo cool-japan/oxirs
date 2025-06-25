@@ -461,3 +461,214 @@ mod integration_tests {
         assert!(bind_opt.is_ok());
     }
 }
+
+#[cfg(test)]
+mod sparql_star_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_quoted_triple_detection() {
+        let queries_with_quoted_triples = vec![
+            "SELECT ?s WHERE { << ?s ?p ?o >> :confidence ?value }",
+            "SELECT ?stmt WHERE { ?stmt a rdf:Statement ; :hasTriple << :alice :knows :bob >> }",
+            "SELECT ?s ?p ?o WHERE { << ?s ?p ?o >> :source :wikipedia }",
+            "SELECT ?result WHERE { << << :a :b :c >> :d :e >> :f ?result }",
+        ];
+
+        for query in queries_with_quoted_triples {
+            assert!(
+                oxirs_fuseki::handlers::sparql::contains_sparql_star_features(query),
+                "Failed to detect quoted triple in: {}",
+                query
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_annotation_syntax_detection() {
+        let queries_with_annotations = vec![
+            "SELECT ?s WHERE { ?s :name ?name {| :confidence 0.9 |} }",
+            "SELECT ?s WHERE { ?s :age ?age {| :source :survey ; :date \"2023-01-01\" |} }",
+            "SELECT ?s WHERE { :alice :knows :bob {| :since 2020 ; :certainty \"high\" |} }",
+        ];
+
+        for query in queries_with_annotations {
+            assert!(
+                oxirs_fuseki::handlers::sparql::contains_sparql_star_features(query),
+                "Failed to detect annotation syntax in: {}",
+                query
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_sparql_star_functions() {
+        let queries_with_functions = vec![
+            "SELECT ?s WHERE { ?t a :Statement . BIND(SUBJECT(?t) AS ?s) }",
+            "SELECT ?p WHERE { ?t a :Statement . BIND(PREDICATE(?t) AS ?p) }",
+            "SELECT ?o WHERE { ?t a :Statement . BIND(OBJECT(?t) AS ?o) }",
+            "SELECT ?t WHERE { ?t ?p ?o . FILTER(ISTRIPLE(?t)) }",
+        ];
+
+        for query in queries_with_functions {
+            assert!(
+                oxirs_fuseki::handlers::sparql::contains_sparql_star_features(query),
+                "Failed to detect SPARQL-star function in: {}",
+                query
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_quoted_triple_parsing() {
+        // Simple quoted triple
+        let result = oxirs_fuseki::handlers::sparql::parse_quoted_triple_value(
+            "<< <http://example.org/alice> <http://example.org/knows> <http://example.org/bob> >>"
+        );
+        assert!(result.is_ok());
+        let parsed = result.unwrap();
+        assert_eq!(parsed.subject, "<http://example.org/alice>");
+        assert_eq!(parsed.predicate, "<http://example.org/knows>");
+        assert_eq!(parsed.object, "<http://example.org/bob>");
+
+        // Quoted triple with prefixed names
+        let result = oxirs_fuseki::handlers::sparql::parse_quoted_triple_value(
+            "<< ex:alice foaf:knows ex:bob >>"
+        );
+        assert!(result.is_ok());
+        let parsed = result.unwrap();
+        assert_eq!(parsed.subject, "ex:alice");
+        assert_eq!(parsed.predicate, "foaf:knows");
+        assert_eq!(parsed.object, "ex:bob");
+
+        // Quoted triple with literal
+        let result = oxirs_fuseki::handlers::sparql::parse_quoted_triple_value(
+            "<< ex:alice foaf:age \"30\"^^xsd:integer >>"
+        );
+        assert!(result.is_ok());
+        let parsed = result.unwrap();
+        assert_eq!(parsed.subject, "ex:alice");
+        assert_eq!(parsed.predicate, "foaf:age");
+        assert_eq!(parsed.object, "\"30\"^^xsd:integer");
+
+        // Quoted triple with language-tagged literal
+        let result = oxirs_fuseki::handlers::sparql::parse_quoted_triple_value(
+            "<< ex:alice foaf:name \"Alice\"@en >>"
+        );
+        assert!(result.is_ok());
+        let parsed = result.unwrap();
+        assert_eq!(parsed.object, "\"Alice\"@en");
+    }
+
+    #[tokio::test]
+    async fn test_quoted_triple_pattern_extraction() {
+        // Single quoted triple pattern
+        let query = "SELECT ?s WHERE { << ?s ?p ?o >> :confidence ?value }";
+        let patterns = oxirs_fuseki::handlers::sparql::extract_quoted_triple_patterns(query).unwrap();
+        assert_eq!(patterns.len(), 1);
+        assert_eq!(patterns[0], "<< ?s ?p ?o >>");
+
+        // Multiple quoted triple patterns
+        let query = "SELECT ?s WHERE { << ?s ?p ?o >> :confidence ?c . << ?x ?y ?z >> :source ?src }";
+        let patterns = oxirs_fuseki::handlers::sparql::extract_quoted_triple_patterns(query).unwrap();
+        assert_eq!(patterns.len(), 2);
+        assert!(patterns.contains(&"<< ?s ?p ?o >>".to_string()));
+        assert!(patterns.contains(&"<< ?x ?y ?z >>".to_string()));
+
+        // Nested quoted triples
+        let query = "SELECT ?s WHERE { << << ?a ?b ?c >> ?p ?o >> :confidence ?value }";
+        let patterns = oxirs_fuseki::handlers::sparql::extract_quoted_triple_patterns(query).unwrap();
+        assert_eq!(patterns.len(), 2);
+        assert!(patterns.contains(&"<< ?a ?b ?c >>".to_string()));
+        assert!(patterns.contains(&"<< << ?a ?b ?c >> ?p ?o >>".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_sparql_star_processing() {
+        // Test processing of bindings with quoted triples
+        let mut bindings = vec![
+            {
+                let mut binding = HashMap::new();
+                binding.insert(
+                    "stmt".to_string(),
+                    serde_json::json!("<< ex:alice ex:knows ex:bob >>"),
+                );
+                binding
+            },
+        ];
+
+        // Query that uses SUBJECT function
+        let query = "SELECT ?stmt ?s WHERE { ?stmt :confidence ?c . BIND(SUBJECT(?stmt) AS ?s) }";
+        let result = oxirs_fuseki::handlers::sparql::process_sparql_star_features(query, &mut bindings).await;
+        assert!(result.is_ok());
+
+        // Check that subject was extracted
+        assert!(bindings[0].contains_key("stmt_subject"));
+        assert_eq!(bindings[0]["stmt_subject"], serde_json::json!("ex:alice"));
+    }
+
+    #[tokio::test]
+    async fn test_annotation_processing() {
+        // Test annotation extraction
+        let query = "SELECT ?s WHERE { ?s :name ?name {| :confidence 0.9 ; :source :manual |} }";
+        let binding = HashMap::new();
+
+        let annotations = oxirs_fuseki::handlers::sparql::extract_annotations(query, &binding).unwrap();
+        assert!(!annotations.is_empty());
+        
+        // Should extract confidence and source annotations
+        let annotation_props: Vec<String> = annotations.iter().map(|(k, _)| k.clone()).collect();
+        assert!(annotation_props.iter().any(|p| p.contains("confidence")));
+        assert!(annotation_props.iter().any(|p| p.contains("source")));
+    }
+
+    #[tokio::test]
+    async fn test_complex_sparql_star_query() {
+        // Complex query combining multiple SPARQL-star features
+        let query = r#"
+            SELECT ?person ?stmt ?confidence WHERE {
+                ?stmt a rdf:Statement ;
+                      :hasTriple << ?person foaf:knows ?friend >> ;
+                      :confidence ?confidence .
+                
+                FILTER(?confidence > 0.8)
+                
+                ?person foaf:name ?name {| :verified true |} .
+                
+                BIND(OBJECT(?stmt) AS ?friend)
+                
+                SERVICE <http://example.org/sparql> {
+                    << ?friend foaf:age ?age >> :source :external .
+                }
+            }
+        "#;
+
+        // This query should be detected as containing SPARQL-star features
+        assert!(oxirs_fuseki::handlers::sparql::contains_sparql_star_features(query));
+
+        // Extract quoted triple patterns
+        let patterns = oxirs_fuseki::handlers::sparql::extract_quoted_triple_patterns(query).unwrap();
+        assert_eq!(patterns.len(), 2);
+        assert!(patterns.contains(&"<< ?person foaf:knows ?friend >>".to_string()));
+        assert!(patterns.contains(&"<< ?friend foaf:age ?age >>".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_sparql_star_with_aggregation() {
+        // Test SPARQL-star with aggregation functions
+        let query = r#"
+            SELECT ?source (COUNT(DISTINCT ?stmt) as ?count) WHERE {
+                ?stmt a rdf:Statement ;
+                      :hasTriple << ?s ?p ?o >> ;
+                      :source ?source .
+                
+                FILTER(ISTRIPLE(?stmt))
+            }
+            GROUP BY ?source
+            HAVING(?count > 10)
+        "#;
+
+        assert!(oxirs_fuseki::handlers::sparql::contains_sparql_star_features(query));
+        assert!(oxirs_fuseki::handlers::sparql::contains_aggregation_functions(query));
+    }
+}

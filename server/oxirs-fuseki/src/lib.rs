@@ -34,6 +34,7 @@
 
 use std::net::SocketAddr;
 
+pub mod aggregation;
 pub mod auth;
 pub mod config;
 pub mod error;
@@ -42,8 +43,10 @@ pub mod handlers;
 pub mod metrics;
 pub mod optimization;
 pub mod performance;
+pub mod property_path_optimizer;
 pub mod server;
 pub mod store;
+pub mod subquery_optimizer;
 pub mod vector_search;
 
 use store::Store;

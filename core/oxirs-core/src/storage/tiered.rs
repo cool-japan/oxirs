@@ -151,7 +151,8 @@ impl TieredStorageEngine {
         // Initialize warm tier
         let warm_path = PathBuf::from(&config.tiers.warm_tier.path);
         std::fs::create_dir_all(&warm_path)?;
-        let warm_opts = rocksdb::Options::default();
+        let mut warm_opts = rocksdb::Options::default();
+        warm_opts.create_if_missing(true);
         let warm_storage = rocksdb::DB::open(&warm_opts, warm_path.join("data"))?;
         let warm_tier = Arc::new(RwLock::new(WarmTier {
             path: warm_path,
@@ -162,7 +163,8 @@ impl TieredStorageEngine {
         // Initialize cold tier
         let cold_path = PathBuf::from(&config.tiers.cold_tier.path);
         std::fs::create_dir_all(&cold_path)?;
-        let cold_opts = rocksdb::Options::default();
+        let mut cold_opts = rocksdb::Options::default();
+        cold_opts.create_if_missing(true);
         let cold_storage = rocksdb::DB::open(&cold_opts, cold_path.join("data"))?;
         let cold_tier = Arc::new(RwLock::new(ColdTier {
             path: cold_path,
@@ -444,11 +446,18 @@ impl StorageEngine for TieredStorageEngine {
         // If not enough results, search warm tier
         if results.is_empty() {
             let warm = self.warm_tier.read().await;
-            // In a real implementation, we'd use indexes to avoid scanning all data
-            // For now, this is a placeholder
-            self.stats
-                .warm_hits
-                .fetch_add(results.len() as u64, Ordering::Relaxed);
+            // Iterate through warm tier storage
+            let iter = warm.storage.iterator(rocksdb::IteratorMode::Start);
+            for item in iter {
+                if let Ok((key, value)) = item {
+                    if let Ok(stored) = bincode::deserialize::<StoredTriple>(&value) {
+                        if pattern.matches(&stored.triple) {
+                            results.push(stored.triple.clone());
+                            self.stats.warm_hits.fetch_add(1, Ordering::Relaxed);
+                        }
+                    }
+                }
+            }
         }
 
         // Update access info for queried triples
@@ -783,10 +792,21 @@ mod compression {
 mod tests {
     use super::*;
     use crate::model::{Literal, NamedNode};
+    use crate::storage::ArchiveBackend;
 
     #[tokio::test]
     async fn test_tiered_storage() {
-        let config = StorageConfig::default();
+        let test_dir = format!("/tmp/oxirs_tiered_test_{}", 
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis());
+        
+        let mut config = StorageConfig::default();
+        config.tiers.warm_tier.path = format!("{}/warm", test_dir);
+        config.tiers.cold_tier.path = format!("{}/cold", test_dir);
+        config.tiers.archive_tier.backend = ArchiveBackend::Local(format!("{}/archive", test_dir));
+        
         let engine = TieredStorageEngine::new(config).await.unwrap();
 
         // Create test triple

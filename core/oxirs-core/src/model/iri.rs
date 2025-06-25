@@ -407,3 +407,235 @@ mod tests {
         assert_eq!(node.as_str(), "http://example.org/");
     }
 }
+
+/// An IRI (Internationalized Resource Identifier) similar to oxiri::Iri
+///
+/// This type provides compatibility with the oxiri crate interface
+/// used by the JSON-LD and RDF/XML parsers
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Iri<T = String> {
+    inner: T,
+}
+
+impl<T> Iri<T> {
+    /// Returns the inner value
+    pub fn into_inner(self) -> T {
+        self.inner
+    }
+}
+
+impl<T: AsRef<str>> Iri<T> {
+    /// Parses an IRI with validation
+    pub fn parse(iri: T) -> Result<Self, IriParseError> {
+        validate_iri(iri.as_ref()).map_err(|e| IriParseError { message: e.to_string() })?;
+        Ok(Iri { inner: iri })
+    }
+
+    /// Parses an IRI without validation
+    pub fn parse_unchecked(iri: T) -> Self {
+        Iri { inner: iri }
+    }
+
+    /// Returns the IRI as a string slice
+    pub fn as_str(&self) -> &str {
+        self.inner.as_ref()
+    }
+
+    /// Resolves a relative IRI against this base IRI
+    pub fn resolve(&self, relative: &str) -> Result<Iri<String>, IriParseError> {
+        let base = self.as_str();
+        
+        // If relative is already absolute, return it
+        if relative.contains("://") {
+            return Iri::parse(relative.to_string());
+        }
+        
+        // Handle different relative IRI patterns
+        let resolved = if relative.starts_with("//") {
+            // Authority-relative
+            if let Some(scheme_end) = base.find("://") {
+                format!("{}:{}", &base[..scheme_end], relative)
+            } else {
+                return Err(IriParseError {
+                    message: "Base IRI has no scheme".to_string(),
+                });
+            }
+        } else if relative.starts_with('/') {
+            // Absolute path
+            if let Some(authority_end) = base.find("://").and_then(|i| base[i+3..].find('/').map(|j| i + 3 + j)) {
+                format!("{}{}", &base[..authority_end], relative)
+            } else {
+                format!("{}{}", base.trim_end_matches('/'), relative)
+            }
+        } else if relative.starts_with('#') {
+            // Fragment only
+            if let Some(fragment_start) = base.find('#') {
+                format!("{}{}", &base[..fragment_start], relative)
+            } else {
+                format!("{}{}", base, relative)
+            }
+        } else if relative.is_empty() {
+            // Empty relative IRI means the base IRI itself
+            base.to_string()
+        } else {
+            // Relative path
+            if let Some(last_slash) = base.rfind('/') {
+                format!("{}/{}", &base[..last_slash], relative)
+            } else {
+                format!("{}/{}", base, relative)
+            }
+        };
+        
+        Iri::parse(resolved)
+    }
+    
+    /// Resolves a relative IRI against this base IRI without validation
+    pub fn resolve_unchecked(&self, relative: &str) -> String {
+        let base = self.as_str();
+        
+        // If relative is already absolute, return it
+        if relative.contains("://") {
+            return relative.to_string();
+        }
+        
+        // Handle different relative IRI patterns
+        if relative.starts_with("//") {
+            // Authority-relative
+            if let Some(scheme_end) = base.find("://") {
+                format!("{}:{}", &base[..scheme_end], relative)
+            } else {
+                relative.to_string()
+            }
+        } else if relative.starts_with('/') {
+            // Absolute path
+            if let Some(authority_end) = base.find("://").and_then(|i| base[i+3..].find('/').map(|j| i + 3 + j)) {
+                format!("{}{}", &base[..authority_end], relative)
+            } else {
+                format!("{}{}", base.trim_end_matches('/'), relative)
+            }
+        } else if relative.starts_with('#') {
+            // Fragment only
+            if let Some(fragment_start) = base.find('#') {
+                format!("{}{}", &base[..fragment_start], relative)
+            } else {
+                format!("{}{}", base, relative)
+            }
+        } else if relative.is_empty() {
+            // Empty relative IRI means the base IRI itself
+            base.to_string()
+        } else {
+            // Relative path
+            if let Some(last_slash) = base.rfind('/') {
+                format!("{}/{}", &base[..last_slash], relative)
+            } else {
+                format!("{}/{}", base, relative)
+            }
+        }
+    }
+
+    /// Relativizes this IRI against another IRI
+    ///
+    /// Returns a relative IRI if possible, otherwise returns an error
+    pub fn relativize(&self, other: &Iri<impl AsRef<str>>) -> Result<Iri<String>, IriParseError> {
+        let base = self.as_str();
+        let target = other.as_str();
+
+        // Simple relativization - if target starts with base, make it relative
+        if target.starts_with(base) {
+            let relative = &target[base.len()..];
+            // Remove leading slash if present
+            let relative = relative.strip_prefix('/').unwrap_or(relative);
+            Ok(Iri {
+                inner: relative.to_string(),
+            })
+        } else {
+            // Try more complex relativization
+            if let (Some(base_scheme_end), Some(target_scheme_end)) = (base.find("://"), target.find("://")) {
+                let base_scheme = &base[..base_scheme_end];
+                let target_scheme = &target[..target_scheme_end];
+                
+                if base_scheme == target_scheme {
+                    // Same scheme, check authority
+                    let base_rest = &base[base_scheme_end + 3..];
+                    let target_rest = &target[target_scheme_end + 3..];
+                    
+                    if let (Some(base_slash), Some(target_slash)) = (base_rest.find('/'), target_rest.find('/')) {
+                        let base_authority = &base_rest[..base_slash];
+                        let target_authority = &target_rest[..target_slash];
+                        
+                        if base_authority == target_authority {
+                            // Same authority, work with paths
+                            let base_path = &base_rest[base_slash..];
+                            let target_path = &target_rest[target_slash..];
+                            
+                            // Find common prefix
+                            let base_parts: Vec<&str> = base_path.split('/').filter(|s| !s.is_empty()).collect();
+                            let target_parts: Vec<&str> = target_path.split('/').filter(|s| !s.is_empty()).collect();
+                            
+                            let mut common_prefix_len = 0;
+                            for (i, (a, b)) in base_parts.iter().zip(target_parts.iter()).enumerate() {
+                                if a == b {
+                                    common_prefix_len = i + 1;
+                                } else {
+                                    break;
+                                }
+                            }
+                            
+                            // Build relative path
+                            let mut relative_parts = Vec::new();
+                            
+                            // Add ".." for each remaining base part
+                            for _ in common_prefix_len..base_parts.len() {
+                                relative_parts.push("..");
+                            }
+                            
+                            // Add remaining target parts
+                            for part in &target_parts[common_prefix_len..] {
+                                relative_parts.push(part);
+                            }
+                            
+                            if relative_parts.is_empty() {
+                                return Ok(Iri { inner: ".".to_string() });
+                            }
+                            
+                            return Ok(Iri {
+                                inner: relative_parts.join("/"),
+                            });
+                        }
+                    }
+                }
+            }
+            
+            // Cannot relativize, return the original
+            Err(IriParseError {
+                message: "Cannot relativize IRIs with different schemes or authorities".to_string(),
+            })
+        }
+    }
+}
+
+impl<T: fmt::Display> fmt::Display for Iri<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.inner.fmt(f)
+    }
+}
+
+/// IRI parsing error type
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IriParseError {
+    pub message: String,
+}
+
+impl fmt::Display for IriParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "IRI parse error: {}", self.message)
+    }
+}
+
+impl std::error::Error for IriParseError {}
+
+impl From<IriParseError> for OxirsError {
+    fn from(err: IriParseError) -> Self {
+        OxirsError::Parse(err.message)
+    }
+}

@@ -40,7 +40,39 @@ impl Default for VirtualStorageConfig {
             backends: vec![BackendConfig {
                 name: "primary".to_string(),
                 backend_type: BackendType::Tiered,
-                config: serde_json::json!({}),
+                config: serde_json::json!({
+                    "enable_tiering": true,
+                    "enable_columnar": false,
+                    "enable_temporal": false,
+                    "compression": {
+                        "Zstd": { "level": 3 }
+                    },
+                    "tiers": {
+                        "hot_tier": {
+                            "max_size_mb": 1024,
+                            "eviction_policy": "Lru",
+                            "ttl_seconds": 3600
+                        },
+                        "warm_tier": {
+                            "path": "/tmp/oxirs_virtual_warm",
+                            "max_size_gb": 10,
+                            "promotion_threshold": 10,
+                            "demotion_threshold_days": 7
+                        },
+                        "cold_tier": {
+                            "path": "/tmp/oxirs_virtual_cold",
+                            "max_size_tb": 1,
+                            "compression_level": 9,
+                            "archive_threshold_days": 90
+                        },
+                        "archive_tier": {
+                            "backend": { "Local": "/tmp/oxirs_virtual_archive" },
+                            "retention_years": 7,
+                            "immutable": true
+                        }
+                    },
+                    "cache_size_mb": 512
+                }),
                 weight: 1.0,
                 read_only: false,
             }],
@@ -1056,16 +1088,56 @@ mod tests {
 
     #[tokio::test]
     async fn test_virtual_storage() {
-        let config = VirtualStorageConfig {
-            path: PathBuf::from("/tmp/oxirs_virtual_test"),
+        let test_dir = format!("/tmp/oxirs_virtual_test_{}", 
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis());
+            
+        let mut config = VirtualStorageConfig {
+            path: PathBuf::from(&test_dir),
             ..Default::default()
         };
+        
+        // Update backend config with test-specific paths
+        if let Some(backend) = config.backends.get_mut(0) {
+            backend.config = serde_json::json!({
+                "enable_tiering": true,
+                "enable_columnar": false,
+                "enable_temporal": false,
+                "compression": {
+                    "Zstd": { "level": 3 }
+                },
+                "tiers": {
+                    "hot_tier": {
+                        "max_size_mb": 1024,
+                        "eviction_policy": "Lru",
+                        "ttl_seconds": 3600
+                    },
+                    "warm_tier": {
+                        "path": format!("{}/warm", test_dir),
+                        "max_size_gb": 10,
+                        "promotion_threshold": 10,
+                        "demotion_threshold_days": 7
+                    },
+                    "cold_tier": {
+                        "path": format!("{}/cold", test_dir),
+                        "max_size_tb": 1,
+                        "compression_level": 9,
+                        "archive_threshold_days": 90
+                    },
+                    "archive_tier": {
+                        "backend": { "Local": format!("{}/archive", test_dir) },
+                        "retention_years": 7,
+                        "immutable": true
+                    }
+                },
+                "cache_size_mb": 512
+            });
+        }
 
-        let mut storage = VirtualStorage::new(config).await.unwrap();
-        storage
-            .init(super::super::StorageConfig::default())
-            .await
-            .unwrap();
+        let storage = VirtualStorage::new(config).await.unwrap();
+        storage.initialize_backends().await.unwrap();
 
         // Create test triple
         let triple = Triple::new(

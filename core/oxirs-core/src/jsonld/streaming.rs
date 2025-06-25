@@ -5,8 +5,8 @@
 
 use crate::{
     jsonld::{JsonLdParser, JsonLdParseError, JsonLdSerializer},
-    model::{Triple, Quad, NamedNode},
-    optimization::{TermInterner, ZeroCopyBuffer, SimdJsonProcessor},
+    model::{Triple, Quad, NamedNode, Literal, BlankNode, Subject, Predicate, Object, Term},
+    optimization::{TermInterner, TermInternerExt, ZeroCopyBuffer, SimdJsonProcessor},
     interning::STRING_INTERNER,
 };
 use std::{
@@ -14,10 +14,12 @@ use std::{
     collections::VecDeque,
     pin::Pin,
     task::{Context, Poll},
+    error::Error as StdError,
+    future::Future,
 };
 use futures::{Stream, StreamExt, Sink, SinkExt};
 use tokio::{
-    io::{AsyncRead, AsyncWrite, AsyncBufRead, BufReader},
+    io::{AsyncRead, AsyncWrite, AsyncBufRead, AsyncReadExt, BufReader},
     sync::{mpsc, RwLock, Semaphore},
     time::{Duration, Instant},
 };
@@ -134,9 +136,9 @@ impl UltraStreamingJsonLdParser {
     pub fn new(config: StreamingConfig) -> Self {
         Self {
             context_cache: Arc::new(DashMap::with_capacity(config.context_cache_size)),
-            term_interner: Arc::new(TermInterner::with_capacity(1_000_000)),
+            term_interner: Arc::new(TermInterner::new()),
             performance_monitor: Arc::new(PerformanceMonitor::new()),
-            simd_processor: SimdJsonProcessor::new(config.enable_simd),
+            simd_processor: SimdJsonProcessor::new(),
             buffer_pool: Arc::new(BufferPool::new(config.buffer_size, 100)),
             config,
         }
@@ -149,12 +151,26 @@ impl UltraStreamingJsonLdParser {
         mut sink: S,
     ) -> Result<StreamingStatistics, JsonLdParseError>
     where
-        R: AsyncRead + Unpin + Send,
-        S: StreamingSink,
+        R: AsyncRead + Unpin + Send + 'static,
+        S: StreamingSink + Send + 'static,
     {
         let mut buf_reader = BufReader::with_capacity(self.config.chunk_size, reader);
         let (tx, mut rx) = mpsc::channel::<ProcessingChunk>(self.config.buffer_size);
+        let (triple_tx, mut triple_rx) = mpsc::channel::<Vec<Triple>>(100);
         let semaphore = Arc::new(Semaphore::new(self.config.max_concurrent_threads));
+        
+        // Spawn sink processing task
+        let sink_handle = tokio::spawn(async move {
+            while let Some(batch) = triple_rx.recv().await {
+                sink.process_triple_batch(batch).await
+                    .map_err(|e| JsonLdParseError::ProcessingError(e.to_string()))?;
+            }
+            
+            sink.flush().await
+                .map_err(|e| JsonLdParseError::ProcessingError(e.to_string()))?;
+            
+            Ok::<(), JsonLdParseError>(())
+        });
         
         // Spawn parallel processing tasks
         let processing_handle = tokio::spawn({
@@ -163,6 +179,7 @@ impl UltraStreamingJsonLdParser {
             let term_interner = Arc::clone(&self.term_interner);
             let performance_monitor = Arc::clone(&self.performance_monitor);
             let simd_processor = self.simd_processor.clone();
+            let triple_tx = triple_tx.clone();
             
             async move {
                 let mut batch_buffer = Vec::with_capacity(config.buffer_size);
@@ -191,15 +208,15 @@ impl UltraStreamingJsonLdParser {
                     // Adaptive batching based on performance metrics
                     if batch_buffer.len() >= config.buffer_size || 
                        performance_monitor.should_flush_batch() {
-                        sink.process_triple_batch(std::mem::take(&mut batch_buffer)).await
-                            .map_err(|e| JsonLdParseError::ProcessingError(e.to_string()))?;
+                        triple_tx.send(std::mem::take(&mut batch_buffer)).await
+                            .map_err(|_| JsonLdParseError::ProcessingError("Triple channel send failed".to_string()))?;
                     }
                 }
                 
                 // Flush remaining triples
                 if !batch_buffer.is_empty() {
-                    sink.process_triple_batch(batch_buffer).await
-                        .map_err(|e| JsonLdParseError::ProcessingError(e.to_string()))?;
+                    triple_tx.send(batch_buffer).await
+                        .map_err(|_| JsonLdParseError::ProcessingError("Triple channel send failed".to_string()))?;
                 }
                 
                 Ok::<(), JsonLdParseError>(())
@@ -211,9 +228,10 @@ impl UltraStreamingJsonLdParser {
         let mut total_bytes = 0;
         
         loop {
-            match buf_reader.read(&mut buffer.data).await {
+            match buf_reader.read(buffer.as_mut_slice()).await {
                 Ok(0) => break, // EOF
                 Ok(n) => {
+                    buffer.set_len(n);
                     total_bytes += n;
                     self.performance_monitor.record_bytes_processed(n);
                     
@@ -223,7 +241,7 @@ impl UltraStreamingJsonLdParser {
                     }
                     
                     let chunk = ProcessingChunk {
-                        data: buffer.data[..n].to_vec(),
+                        data: buffer.as_slice().to_vec(),
                         timestamp: Instant::now(),
                         sequence_id: total_bytes,
                     };
@@ -234,16 +252,17 @@ impl UltraStreamingJsonLdParser {
                     
                     buffer = self.buffer_pool.get_buffer().await;
                 }
-                Err(e) => return Err(JsonLdParseError::IoError(e.to_string())),
+                Err(e) => return Err(JsonLdParseError::Io(e)),
             }
         }
         
-        drop(tx); // Signal completion
+        drop(tx); // Signal completion to processing task
         processing_handle.await
             .map_err(|e| JsonLdParseError::ProcessingError(e.to_string()))??;
         
-        sink.flush().await
-            .map_err(|e| JsonLdParseError::ProcessingError(e.to_string()))?;
+        drop(triple_tx); // Signal completion to sink task
+        sink_handle.await
+            .map_err(|e| JsonLdParseError::ProcessingError(e.to_string()))??;
         
         Ok(self.performance_monitor.get_statistics())
     }
@@ -259,7 +278,7 @@ impl UltraStreamingJsonLdParser {
         
         // SIMD-accelerated JSON parsing
         let json_value = simd_processor.parse_json(&chunk.data)
-            .map_err(|e| JsonLdParseError::SyntaxError(e.to_string()))?;
+            .map_err(|e| JsonLdParseError::ProcessingError(e.to_string()))?;
         
         // Zero-copy context resolution
         let context = Self::resolve_context_zero_copy(&json_value, context_cache).await?;
@@ -282,7 +301,7 @@ impl UltraStreamingJsonLdParser {
     ) -> Result<Vec<Triple>, JsonLdParseError> {
         // Standard JSON parsing
         let json_value: Value = serde_json::from_slice(&chunk.data)
-            .map_err(|e| JsonLdParseError::SyntaxError(e.to_string()))?;
+            .map_err(|e| JsonLdParseError::ProcessingError(e.to_string()))?;
         
         // Context resolution with caching
         let context = Self::resolve_context_cached(&json_value, context_cache).await?;
@@ -363,15 +382,15 @@ impl UltraStreamingJsonLdParser {
         
         if let Value::Object(map) = obj {
             // Extract subject
-            let subject = if let Some(id) = map.get("@id") {
-                term_interner.intern_named_node(
+            let subject: Subject = if let Some(id) = map.get("@id") {
+                Subject::NamedNode(term_interner.intern_named_node(
                     id.as_str().ok_or_else(|| {
                         JsonLdParseError::ProcessingError("Invalid @id".to_string())
                     })?
-                )?
+                )?)
             } else {
                 // Generate blank node
-                term_interner.intern_blank_node()
+                Subject::BlankNode(term_interner.intern_blank_node())
             };
 
             // Process properties
@@ -419,29 +438,29 @@ impl UltraStreamingJsonLdParser {
 
     /// Create triple from JSON-LD value
     fn create_triple_from_value(
-        subject: crate::model::Term,
+        subject: Subject,
         predicate: NamedNode,
         value: &Value,
         context: &Value,
         term_interner: &TermInterner,
     ) -> Result<Option<Triple>, JsonLdParseError> {
-        let object = match value {
+        let object: Object = match value {
             Value::String(s) => {
                 // Check if it's an IRI or literal
                 if s.starts_with("http://") || s.starts_with("https://") {
-                    term_interner.intern_named_node(s)?.into()
+                    Object::NamedNode(term_interner.intern_named_node(s)?)
                 } else {
-                    term_interner.intern_literal(s)?.into()
+                    Object::Literal(term_interner.intern_literal(s)?)
                 }
             }
             Value::Object(obj) => {
                 if let Some(id) = obj.get("@id") {
                     // Object reference
-                    term_interner.intern_named_node(
+                    Object::NamedNode(term_interner.intern_named_node(
                         id.as_str().ok_or_else(|| {
                             JsonLdParseError::ProcessingError("Invalid @id in object".to_string())
                         })?
-                    )?.into()
+                    )?)
                 } else if let Some(val) = obj.get("@value") {
                     // Typed literal
                     let literal_value = val.as_str().ok_or_else(|| {
@@ -452,29 +471,29 @@ impl UltraStreamingJsonLdParser {
                         let datatype_iri = datatype.as_str().ok_or_else(|| {
                             JsonLdParseError::ProcessingError("Invalid @type".to_string())
                         })?;
-                        term_interner.intern_literal_with_datatype(literal_value, datatype_iri)?.into()
+                        Object::Literal(term_interner.intern_literal_with_datatype(literal_value, datatype_iri)?)
                     } else if let Some(lang) = obj.get("@language") {
                         let language = lang.as_str().ok_or_else(|| {
                             JsonLdParseError::ProcessingError("Invalid @language".to_string())
                         })?;
-                        term_interner.intern_literal_with_language(literal_value, language)?.into()
+                        Object::Literal(term_interner.intern_literal_with_language(literal_value, language)?)
                     } else {
-                        term_interner.intern_literal(literal_value)?.into()
+                        Object::Literal(term_interner.intern_literal(literal_value)?)
                     }
                 } else {
                     return Ok(None); // Skip complex nested objects for now
                 }
             }
             Value::Number(n) => {
-                term_interner.intern_literal(&n.to_string())?.into()
+                Object::Literal(term_interner.intern_literal(&n.to_string())?)
             }
             Value::Bool(b) => {
-                term_interner.intern_literal(&b.to_string())?.into()
+                Object::Literal(term_interner.intern_literal(&b.to_string())?)
             }
             _ => return Ok(None),
         };
         
-        Ok(Some(Triple::new(subject, predicate, object)))
+        Ok(Some(Triple::new(subject, Predicate::NamedNode(predicate), object)))
     }
 
     /// Expand property using JSON-LD context
@@ -629,19 +648,21 @@ impl BufferPool {
         }
     }
 
-    async fn get_buffer(&self) -> ZeroCopyBuffer {
-        let mut buffers = self.available_buffers.lock();
-        if let Some(buffer) = buffers.pop() {
-            buffer
-        } else if self.current_buffers.load(Ordering::Relaxed) < self.max_buffers {
-            self.current_buffers.fetch_add(1, Ordering::Relaxed);
-            ZeroCopyBuffer::new(self.buffer_size)
-        } else {
-            // Wait for a buffer to become available
-            drop(buffers);
-            tokio::time::sleep(Duration::from_millis(1)).await;
-            self.get_buffer().await
-        }
+    fn get_buffer(&self) -> Pin<Box<dyn std::future::Future<Output = ZeroCopyBuffer> + Send + '_>> {
+        Box::pin(async move {
+            let mut buffers = self.available_buffers.lock();
+            if let Some(buffer) = buffers.pop() {
+                buffer
+            } else if self.current_buffers.load(Ordering::Relaxed) < self.max_buffers {
+                self.current_buffers.fetch_add(1, Ordering::Relaxed);
+                ZeroCopyBuffer::new(self.buffer_size)
+            } else {
+                // Wait for a buffer to become available
+                drop(buffers);
+                tokio::time::sleep(Duration::from_millis(1)).await;
+                self.get_buffer().await
+            }
+        })
     }
 
     fn return_buffer(&self, mut buffer: ZeroCopyBuffer) {
@@ -686,8 +707,30 @@ impl MemoryStreamingSink {
     }
 }
 
+/// Error type for streaming operations
+#[derive(Debug)]
+pub struct StreamingError(Box<dyn StdError + Send + Sync>);
+
+impl std::fmt::Display for StreamingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Streaming error: {}", self.0)
+    }
+}
+
+impl StdError for StreamingError {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        Some(&*self.0)
+    }
+}
+
+impl From<Box<dyn StdError + Send + Sync>> for StreamingError {
+    fn from(err: Box<dyn StdError + Send + Sync>) -> Self {
+        StreamingError(err)
+    }
+}
+
 impl StreamingSink for MemoryStreamingSink {
-    type Error = Box<dyn std::error::Error + Send + Sync>;
+    type Error = StreamingError;
 
     async fn process_triple_batch(&mut self, triples: Vec<Triple>) -> Result<(), Self::Error> {
         let batch_size = triples.len();
@@ -730,7 +773,7 @@ impl StreamingSink for MemoryStreamingSink {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::io::Cursor;
+    use std::io::Cursor;
 
     #[tokio::test]
     async fn test_ultra_streaming_parser() {
@@ -750,14 +793,17 @@ mod tests {
         let config = StreamingConfig::default();
         let mut parser = UltraStreamingJsonLdParser::new(config);
         let reader = Cursor::new(json_ld_data.as_bytes());
-        let mut sink = MemoryStreamingSink::new();
+        let sink = MemoryStreamingSink::new();
+        
+        // Clone the Arc so we can access the data after parsing
+        let sink_data = Arc::clone(&sink.triples);
 
-        let stats = parser.stream_parse(reader, &mut sink).await.unwrap();
+        let stats = parser.stream_parse(reader, sink).await.unwrap();
         
         assert!(stats.total_bytes_processed > 0);
         assert!(stats.total_triples_parsed > 0);
         
-        let triples = sink.get_triples().await;
+        let triples = sink_data.read().await;
         assert!(!triples.is_empty());
     }
 }

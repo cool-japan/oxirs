@@ -12,10 +12,10 @@ mod wrapper;
 
 pub use error::{RdfXmlParseError, RdfXmlSyntaxError};
 pub use parser::{RdfXmlParser, RdfXmlPrefixesIter, ReaderRdfXmlParser, SliceRdfXmlParser};
-#[cfg(feature = "async")]
+#[cfg(feature = "async-tokio")]
 pub use parser::TokioAsyncReaderRdfXmlParser;
 pub use serializer::{RdfXmlSerializer, WriterRdfXmlSerializer};
-#[cfg(feature = "async")]
+#[cfg(feature = "async-tokio")]
 pub use serializer::TokioAsyncWriterRdfXmlSerializer;
 // pub use streaming::{
 //     DomFreeStreamingRdfXmlParser, RdfXmlStreamingConfig, RdfXmlStreamingSink,

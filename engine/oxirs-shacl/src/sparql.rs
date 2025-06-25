@@ -12,7 +12,8 @@ use oxirs_core::{
 };
 
 use crate::{
-    constraints::ConstraintValidator, vocabulary::SHACL_PREFIXES, Result, Severity, ShaclError,
+    constraints::{ConstraintContext, ConstraintEvaluationResult, ConstraintEvaluator, ConstraintValidator}, 
+    vocabulary::SHACL_PREFIXES, Result, Severity, ShaclError,
 };
 
 /// SPARQL-based constraint
@@ -168,6 +169,75 @@ impl ConstraintValidator for SparqlConstraint {
         // TODO: More thorough SPARQL syntax validation
 
         Ok(())
+    }
+}
+
+impl ConstraintEvaluator for SparqlConstraint {
+    fn evaluate(
+        &self,
+        store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
+        // Create the SPARQL executor
+        let executor = SparqlConstraintExecutor::new();
+        
+        // Create bindings from the context
+        let mut bindings = SparqlBindings::new()
+            .with_this(context.focus_node.clone());
+        
+        // Add value binding if we have values to check
+        if context.values.len() == 1 {
+            bindings = bindings.with_value(context.values[0].clone());
+        }
+        
+        // Add path binding if available
+        if let Some(path) = &context.path {
+            // Convert property path to SPARQL path string
+            // For now, only handle simple predicate paths
+            if let crate::PropertyPath::Predicate(pred) = path {
+                bindings = bindings.with_path(format!("<{}>", pred.as_str()));
+            }
+        }
+        
+        // Add current shape binding
+        bindings = bindings.with_current_shape(
+            Term::NamedNode(NamedNode::new(context.shape_id.as_str()).unwrap())
+        );
+        
+        // Execute the constraint
+        let result = executor.execute_constraint(
+            store,
+            self,
+            &bindings,
+            None, // TODO: Support graph name from context
+        )?;
+        
+        // Convert SPARQL result to constraint evaluation result
+        if result.is_violation() {
+            let message = self.message.clone().unwrap_or_else(|| {
+                format!(
+                    "SPARQL constraint violated: {} violations found",
+                    result.violation_count()
+                )
+            });
+            
+            match result {
+                SparqlConstraintResult::Ask(_) => {
+                    Ok(ConstraintEvaluationResult::violated(None, Some(message)))
+                }
+                SparqlConstraintResult::Select { solutions, .. } => {
+                    // For SELECT queries, we can provide more detailed information
+                    // Use the first solution's ?value binding if available
+                    let violating_value = solutions.first()
+                        .and_then(|sol| sol.get("value"))
+                        .cloned();
+                    
+                    Ok(ConstraintEvaluationResult::violated(violating_value, Some(message)))
+                }
+            }
+        } else {
+            Ok(ConstraintEvaluationResult::satisfied())
+        }
     }
 }
 

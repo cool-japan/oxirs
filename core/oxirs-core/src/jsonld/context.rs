@@ -1,7 +1,7 @@
 use super::error::{JsonLdErrorCode, JsonLdSyntaxError};
 use super::{JsonLdProcessingMode, JsonLdProfile, JsonLdProfileSet};
 use json_event_parser::{JsonEvent, JsonSyntaxError, SliceJsonParser};
-use oxiri::Iri;
+use crate::model::iri::Iri;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
@@ -274,7 +274,7 @@ impl JsonLdContextProcessor {
                     }
                 };
                 // 5.6.4)
-                let (_, loaded_context_content) = match self.load_remote_context(&import) {
+                let (_, loaded_context_content) = match self.load_remote_context(import.as_str()) {
                     Ok(r) => r,
                     Err(e) => {
                         errors.push(e);
@@ -316,7 +316,7 @@ impl JsonLdContextProcessor {
                         JsonNode::String(value) => {
                             if self.lenient {
                                 result.base_iri = Some(if let Some(base_iri) = &result.base_iri {
-                                    base_iri.resolve_unchecked(&value)
+                                    Iri::parse_unchecked(base_iri.resolve_unchecked(&value))
                                 } else {
                                     Iri::parse_unchecked(value.clone())
                                 })
@@ -1357,9 +1357,9 @@ impl JsonLdContextProcessor {
         if document_relative {
             if let Some(base_iri) = &active_context.base_iri {
                 if self.lenient {
-                    return Some(base_iri.resolve_unchecked(&value).into_inner().into());
+                    return Some(base_iri.resolve_unchecked(&value).into());
                 } else if let Ok(value) = base_iri.resolve(&value) {
-                    return Some(base_iri.resolve_unchecked(&value).into_inner().into());
+                    return Some(value.into_inner().into());
                 }
             }
         }

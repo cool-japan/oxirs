@@ -1026,10 +1026,34 @@ impl ConstraintEvaluator for EqualsConstraint {
         store: &Store,
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
-        // TODO: Implement sh:equals constraint evaluation
-        // This requires evaluating the property path on the focus node
-        // and comparing the resulting values
-        tracing::warn!("sh:equals constraint evaluation not yet implemented");
+        use crate::paths::PropertyPathEvaluator;
+        
+        // Evaluate the property path to get comparison values
+        let mut evaluator = PropertyPathEvaluator::new();
+        let comparison_values = evaluator.evaluate_path(
+            store, 
+            &context.focus_node, 
+            &self.property, 
+            None // TODO: Support graph name from context
+        ).map_err(|e| ShaclError::ConstraintValidation(
+            format!("Failed to evaluate property path for sh:equals: {}", e)
+        ))?;
+        
+        // Convert to sets for comparison
+        let current_values: HashSet<&Term> = context.values.iter().collect();
+        let comparison_set: HashSet<&Term> = comparison_values.iter().collect();
+        
+        // Check if the sets are equal
+        if current_values != comparison_set {
+            return Ok(ConstraintEvaluationResult::violated(
+                None,
+                Some(format!(
+                    "Values {:?} do not equal values at path {:?}: {:?}",
+                    context.values, self.property, comparison_values
+                )),
+            ));
+        }
+        
         Ok(ConstraintEvaluationResult::satisfied())
     }
 }
@@ -1052,10 +1076,34 @@ impl ConstraintEvaluator for DisjointConstraint {
         store: &Store,
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
-        // TODO: Implement sh:disjoint constraint evaluation
-        // This requires evaluating the property path on the focus node
-        // and ensuring no values overlap
-        tracing::warn!("sh:disjoint constraint evaluation not yet implemented");
+        use crate::paths::PropertyPathEvaluator;
+        
+        // Evaluate the property path to get comparison values
+        let mut evaluator = PropertyPathEvaluator::new();
+        let comparison_values = evaluator.evaluate_path(
+            store, 
+            &context.focus_node, 
+            &self.property, 
+            None // TODO: Support graph name from context
+        ).map_err(|e| ShaclError::ConstraintValidation(
+            format!("Failed to evaluate property path for sh:disjoint: {}", e)
+        ))?;
+        
+        // Check for any overlapping values
+        let comparison_set: HashSet<&Term> = comparison_values.iter().collect();
+        
+        for value in &context.values {
+            if comparison_set.contains(value) {
+                return Ok(ConstraintEvaluationResult::violated(
+                    Some(value.clone()),
+                    Some(format!(
+                        "Value {} is not disjoint from values at path {:?}",
+                        value, self.property
+                    )),
+                ));
+            }
+        }
+        
         Ok(ConstraintEvaluationResult::satisfied())
     }
 }
@@ -1078,10 +1126,48 @@ impl ConstraintEvaluator for LessThanConstraint {
         store: &Store,
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
-        // TODO: Implement sh:lessThan constraint evaluation
-        // This requires evaluating the property path and comparing values
-        tracing::warn!("sh:lessThan constraint evaluation not yet implemented");
+        use crate::paths::PropertyPathEvaluator;
+        
+        // Evaluate the property path to get comparison values
+        let mut evaluator = PropertyPathEvaluator::new();
+        let comparison_values = evaluator.evaluate_path(
+            store, 
+            &context.focus_node, 
+            &self.property, 
+            None // TODO: Support graph name from context
+        ).map_err(|e| ShaclError::ConstraintValidation(
+            format!("Failed to evaluate property path for sh:lessThan: {}", e)
+        ))?;
+        
+        // Check that all values are less than all comparison values
+        for value in &context.values {
+            for comp_value in &comparison_values {
+                if !self.compare_less_than(value, comp_value)? {
+                    return Ok(ConstraintEvaluationResult::violated(
+                        Some(value.clone()),
+                        Some(format!(
+                            "Value {} is not less than {}",
+                            value, comp_value
+                        )),
+                    ));
+                }
+            }
+        }
+        
         Ok(ConstraintEvaluationResult::satisfied())
+    }
+}
+
+impl LessThanConstraint {
+    fn compare_less_than(&self, value: &Term, other: &Term) -> Result<bool> {
+        match (value, other) {
+            (Term::Literal(v1), Term::Literal(v2)) => {
+                // Basic string comparison for now
+                // TODO: Implement proper typed comparison for numbers, dates, etc.
+                Ok(v1.value() < v2.value())
+            }
+            _ => Ok(false), // Non-literals cannot be compared
+        }
     }
 }
 
@@ -1103,10 +1189,48 @@ impl ConstraintEvaluator for LessThanOrEqualsConstraint {
         store: &Store,
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
-        // TODO: Implement sh:lessThanOrEquals constraint evaluation
-        // This requires evaluating the property path and comparing values
-        tracing::warn!("sh:lessThanOrEquals constraint evaluation not yet implemented");
+        use crate::paths::PropertyPathEvaluator;
+        
+        // Evaluate the property path to get comparison values
+        let mut evaluator = PropertyPathEvaluator::new();
+        let comparison_values = evaluator.evaluate_path(
+            store, 
+            &context.focus_node, 
+            &self.property, 
+            None // TODO: Support graph name from context
+        ).map_err(|e| ShaclError::ConstraintValidation(
+            format!("Failed to evaluate property path for sh:lessThanOrEquals: {}", e)
+        ))?;
+        
+        // Check that all values are less than or equal to all comparison values
+        for value in &context.values {
+            for comp_value in &comparison_values {
+                if !self.compare_less_than_or_equals(value, comp_value)? {
+                    return Ok(ConstraintEvaluationResult::violated(
+                        Some(value.clone()),
+                        Some(format!(
+                            "Value {} is not less than or equal to {}",
+                            value, comp_value
+                        )),
+                    ));
+                }
+            }
+        }
+        
         Ok(ConstraintEvaluationResult::satisfied())
+    }
+}
+
+impl LessThanOrEqualsConstraint {
+    fn compare_less_than_or_equals(&self, value: &Term, other: &Term) -> Result<bool> {
+        match (value, other) {
+            (Term::Literal(v1), Term::Literal(v2)) => {
+                // Basic string comparison for now
+                // TODO: Implement proper typed comparison for numbers, dates, etc.
+                Ok(v1.value() <= v2.value())
+            }
+            _ => Ok(false), // Non-literals cannot be compared
+        }
     }
 }
 
@@ -1361,10 +1485,52 @@ impl ConstraintEvaluator for QualifiedValueShapeConstraint {
         store: &Store,
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
-        // TODO: Implement sh:qualifiedValueShape constraint evaluation
-        // This requires validating qualified values against the shape and checking cardinality
-        tracing::warn!("sh:qualifiedValueShape constraint evaluation not yet implemented");
-        Ok(ConstraintEvaluationResult::satisfied())
+        // Count how many values conform to the qualified value shape
+        let mut conforming_count = 0;
+        let mut violations = Vec::new();
+        
+        // For each value, check if it conforms to the qualified value shape
+        for value in &context.values {
+            // Create a validation context for the value
+            let value_context = ConstraintContext::new(value.clone(), self.qualified_value_shape.clone())
+                .with_values(vec![value.clone()])
+                .with_depth(context.depth + 1);
+            
+            // TODO: We need access to the shape validator to check if the value conforms
+            // For now, we'll just count all values as conforming
+            // In a complete implementation, we would need to validate against the shape
+            tracing::warn!("Qualified value shape validation not fully implemented - counting all values as conforming");
+            conforming_count += 1;
+        }
+        
+        // Check minimum count
+        if let Some(min_count) = self.qualified_min_count {
+            if conforming_count < min_count as usize {
+                violations.push(format!(
+                    "Only {} values conform to the qualified value shape, but at least {} are required",
+                    conforming_count, min_count
+                ));
+            }
+        }
+        
+        // Check maximum count
+        if let Some(max_count) = self.qualified_max_count {
+            if conforming_count > max_count as usize {
+                violations.push(format!(
+                    "{} values conform to the qualified value shape, but at most {} are allowed",
+                    conforming_count, max_count
+                ));
+            }
+        }
+        
+        if violations.is_empty() {
+            Ok(ConstraintEvaluationResult::satisfied())
+        } else {
+            Ok(ConstraintEvaluationResult::violated(
+                None,
+                Some(violations.join("; ")),
+            ))
+        }
     }
 }
 
@@ -1389,9 +1555,99 @@ impl ConstraintEvaluator for ClosedConstraint {
         store: &Store,
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
-        // TODO: Implement sh:closed constraint evaluation
-        // This requires checking that the focus node only has properties allowed by the shape
-        tracing::warn!("sh:closed constraint evaluation not yet implemented");
+        if !self.closed {
+            // If the shape is not closed, it always conforms
+            return Ok(ConstraintEvaluationResult::satisfied());
+        }
+
+        use oxirs_core::model::{Predicate, Subject};
+        
+        // Get all predicates used with the focus node as subject
+        let focus_subject = match &context.focus_node {
+            Term::NamedNode(nn) => Subject::NamedNode(nn.clone()),
+            Term::BlankNode(bn) => Subject::BlankNode(bn.clone()),
+            _ => {
+                // Literals cannot be subjects
+                return Ok(ConstraintEvaluationResult::satisfied());
+            }
+        };
+        
+        // Query all triples with focus node as subject
+        let triples = store.query_triples(
+            Some(&focus_subject),
+            None,
+            None,
+            None
+        ).map_err(|e| ShaclError::ConstraintValidation(
+            format!("Failed to query triples for closed shape validation: {}", e)
+        ))?;
+        
+        // Collect all predicates used by the focus node
+        let mut used_predicates = HashSet::new();
+        for triple in triples {
+            if let Predicate::NamedNode(pred) = triple.predicate() {
+                used_predicates.insert(pred.clone());
+            }
+        }
+        
+        // System properties that are always allowed
+        let system_properties = vec![
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+            "http://www.w3.org/ns/shacl#targetClass",
+            "http://www.w3.org/ns/shacl#targetNode",
+            "http://www.w3.org/ns/shacl#targetObjectsOf",
+            "http://www.w3.org/ns/shacl#targetSubjectsOf",
+        ];
+        
+        // TODO: Get allowed properties from the shape
+        // This requires access to the shape's property constraints
+        // For now, we'll need to pass this information through the context
+        
+        // Check each used predicate
+        for predicate in used_predicates {
+            let pred_iri = predicate.as_str();
+            
+            // Check if it's a system property
+            if system_properties.contains(&pred_iri) {
+                continue;
+            }
+            
+            // Check if it's in the ignored properties list
+            let is_ignored = self.ignored_properties.iter().any(|ignored_path| {
+                match ignored_path {
+                    PropertyPath::Predicate(ignored_pred) => {
+                        ignored_pred.as_str() == pred_iri
+                    }
+                    _ => false, // Only simple paths can be ignored
+                }
+            });
+            
+            if is_ignored {
+                continue;
+            }
+            
+            // Check if the property is allowed by the shape
+            let is_allowed = context.allowed_properties.iter().any(|allowed_path| {
+                match allowed_path {
+                    PropertyPath::Predicate(allowed_pred) => {
+                        allowed_pred.as_str() == pred_iri
+                    }
+                    _ => false, // For closed shapes, only simple paths are considered
+                }
+            });
+            
+            if !is_allowed {
+                // This property is not allowed on the closed shape
+                return Ok(ConstraintEvaluationResult::violated(
+                    None,
+                    Some(format!(
+                        "Property <{}> is not allowed on closed shape",
+                        pred_iri
+                    )),
+                ));
+            }
+        }
+        
         Ok(ConstraintEvaluationResult::satisfied())
     }
 }
@@ -1416,6 +1672,10 @@ pub struct ConstraintContext {
 
     /// Custom validation context
     pub custom_context: HashMap<String, String>,
+    
+    /// Allowed properties for closed shape validation
+    /// Contains all property paths defined in the shape
+    pub allowed_properties: Vec<PropertyPath>,
 }
 
 impl ConstraintContext {
@@ -1427,6 +1687,7 @@ impl ConstraintContext {
             shape_id,
             depth: 0,
             custom_context: HashMap::new(),
+            allowed_properties: Vec::new(),
         }
     }
 
@@ -1442,6 +1703,11 @@ impl ConstraintContext {
 
     pub fn with_depth(mut self, depth: usize) -> Self {
         self.depth = depth;
+        self
+    }
+    
+    pub fn with_allowed_properties(mut self, properties: Vec<PropertyPath>) -> Self {
+        self.allowed_properties = properties;
         self
     }
 }

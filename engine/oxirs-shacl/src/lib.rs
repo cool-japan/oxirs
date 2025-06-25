@@ -400,7 +400,23 @@ impl Validator {
         let removed = self.shapes.remove(shape_id);
         if removed.is_some() {
             self.target_cache.clear();
-            // TODO: Update dependency graph
+            
+            // Remove from dependency graph
+            use petgraph::visit::IntoNodeReferences;
+            let mut node_to_remove = None;
+            
+            // Find the node index for this shape
+            for (node_idx, node_shape_id) in self.shape_dependencies.node_references() {
+                if node_shape_id == shape_id {
+                    node_to_remove = Some(node_idx);
+                    break;
+                }
+            }
+            
+            // Remove the node if found
+            if let Some(node_idx) = node_to_remove {
+                self.shape_dependencies.remove_node(node_idx);
+            }
         }
         removed
     }
@@ -507,12 +523,104 @@ impl Validator {
     }
 
     /// Update shape dependency graph
-    fn update_shape_dependencies(&mut self, _shape_id: ShapeId) -> Result<()> {
-        // TODO: Implement dependency graph update
-        // This is important for detecting circular dependencies and optimizing evaluation order
+    fn update_shape_dependencies(&mut self, shape_id: ShapeId) -> Result<()> {
+        use petgraph::graph::NodeIndex;
+        
+        // Find or create node for this shape
+        let shape_node = self.get_or_create_shape_node(&shape_id);
+        
+        if let Some(shape) = self.shapes.get(&shape_id) {
+            // Find dependencies from constraints
+            for (_, constraint) in &shape.constraints {
+                let dependencies = self.extract_constraint_dependencies(constraint);
+                for dep_shape_id in dependencies {
+                    // Create edge from this shape to dependency
+                    let dep_node = self.get_or_create_shape_node(&dep_shape_id);
+                    self.shape_dependencies.add_edge(shape_node, dep_node, ());
+                }
+            }
+        }
+        
+        // Check for circular dependencies
+        if petgraph::algo::is_cyclic_directed(&self.shape_dependencies) {
+            return Err(ShaclError::ShapeParsing(
+                "Circular dependency detected in shape definitions".to_string()
+            ));
+        }
+        
         Ok(())
     }
+    
+    /// Get or create a node in the dependency graph for a shape
+    fn get_or_create_shape_node(&mut self, shape_id: &ShapeId) -> NodeIndex {
+        use petgraph::visit::IntoNodeReferences;
+        
+        // Check if node already exists
+        for (node_idx, node_shape_id) in self.shape_dependencies.node_references() {
+            if node_shape_id == shape_id {
+                return node_idx;
+            }
+        }
+        
+        // Create new node
+        self.shape_dependencies.add_node(shape_id.clone())
+    }
+    
+    /// Extract shape dependencies from a constraint
+    fn extract_constraint_dependencies(&self, constraint: &Constraint) -> Vec<ShapeId> {
+        let mut dependencies = Vec::new();
+        
+        match constraint {
+            Constraint::Node(node_constraint) => {
+                dependencies.push(node_constraint.shape_id.clone());
+            }
+            Constraint::QualifiedValueShape(qualified_constraint) => {
+                dependencies.push(qualified_constraint.qualified_value_shape.clone());
+            }
+            Constraint::Not(not_constraint) => {
+                dependencies.push(not_constraint.shape_id.clone());
+            }
+            Constraint::And(and_constraint) => {
+                dependencies.extend(and_constraint.shape_ids.clone());
+            }
+            Constraint::Or(or_constraint) => {
+                dependencies.extend(or_constraint.shape_ids.clone());
+            }
+            Constraint::Xone(xone_constraint) => {
+                dependencies.extend(xone_constraint.shape_ids.clone());
+            }
+            _ => {
+                // Other constraints don't have shape dependencies
+            }
+        }
+        
+        dependencies
+    }
 
+    /// Get optimal shape evaluation order based on dependencies
+    pub fn get_evaluation_order(&self) -> Vec<ShapeId> {
+        use petgraph::algo::toposort;
+        use petgraph::visit::IntoNodeReferences;
+        
+        // Perform topological sort on the dependency graph
+        match toposort(&self.shape_dependencies, None) {
+            Ok(sorted_nodes) => {
+                // Map node indices back to shape IDs
+                sorted_nodes.into_iter()
+                    .filter_map(|node_idx| {
+                        self.shape_dependencies.node_weight(node_idx).cloned()
+                    })
+                    .collect()
+            }
+            Err(_) => {
+                // If there's a cycle (shouldn't happen as we check during add),
+                // fall back to arbitrary order
+                tracing::warn!("Dependency cycle detected during evaluation order calculation");
+                self.shapes.keys().cloned().collect()
+            }
+        }
+    }
+    
     /// Clear all internal caches
     pub fn clear_caches(&mut self) {
         self.target_cache.clear();

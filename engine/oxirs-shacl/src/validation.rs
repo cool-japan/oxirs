@@ -239,8 +239,20 @@ impl<'a> ValidationEngine<'a> {
         let mut results = Vec::new();
 
         for (component_id, constraint) in &shape.constraints {
+            // Collect allowed properties for closed shape validation
+            let mut allowed_properties = Vec::new();
+            
+            // Add the shape's own path if it's a property shape
+            if let Some(shape_path) = &shape.path {
+                allowed_properties.push(shape_path.clone());
+            }
+            
+            // TODO: In a complete implementation, we would need to collect paths from 
+            // all property shapes associated with this node shape
+            
             let context = ConstraintContext::new(focus_node.clone(), shape.id.clone())
-                .with_values(values.to_vec());
+                .with_values(values.to_vec())
+                .with_allowed_properties(allowed_properties);
 
             let constraint_result =
                 self.validate_constraint(store, constraint, &context, path, graph_name)?;
@@ -266,6 +278,7 @@ impl<'a> ValidationEngine<'a> {
                             .severity()
                             .unwrap_or_else(|| shape.severity.clone()),
                         details,
+                        nested_results: Vec::new(),
                     };
                     results.push(Some(violation));
                 }
@@ -1510,9 +1523,13 @@ impl<'a> ValidationEngine<'a> {
             // Collect allowed properties from the current shape's property shapes
             let mut allowed_properties = HashSet::new();
 
-            // Add properties from property shapes in the current shape
-            // Note: This would require access to the current shape being validated
-            // For now, we'll use a simplified approach
+            // Add properties from the context (these are collected from the shape)
+            for allowed_path in &context.allowed_properties {
+                if let PropertyPath::Predicate(predicate) = allowed_path {
+                    allowed_properties.insert(predicate.clone());
+                }
+                // TODO: Handle complex property paths
+            }
 
             // Add ignored properties from the constraint
             for ignored_path in &constraint.ignored_properties {
@@ -1755,6 +1772,10 @@ pub struct ValidationViolation {
 
     /// Additional details about the violation
     pub details: HashMap<String, String>,
+    
+    /// Nested validation results (sh:detail) for complex constraints
+    /// Used by logical constraints (and, or, xone) and shape-based constraints (node, qualifiedValueShape)
+    pub nested_results: Vec<ValidationViolation>,
 }
 
 impl ValidationViolation {
@@ -1773,6 +1794,7 @@ impl ValidationViolation {
             result_message: None,
             result_severity,
             details: HashMap::new(),
+            nested_results: Vec::new(),
         }
     }
 
@@ -1795,44 +1817,18 @@ impl ValidationViolation {
         self.details.insert(key, value);
         self
     }
-}
-
-/// Context for constraint evaluation
-#[derive(Debug, Clone)]
-pub struct ConstraintContext {
-    /// The focus node being validated
-    pub focus_node: Term,
-
-    /// The shape ID being validated
-    pub shape_id: ShapeId,
-
-    /// The values to be validated
-    pub values: Vec<Term>,
-
-    /// Additional context information
-    pub metadata: HashMap<String, String>,
-}
-
-impl ConstraintContext {
-    pub fn new(focus_node: Term, shape_id: ShapeId) -> Self {
-        Self {
-            focus_node,
-            shape_id,
-            values: Vec::new(),
-            metadata: HashMap::new(),
-        }
-    }
-
-    pub fn with_values(mut self, values: Vec<Term>) -> Self {
-        self.values = values;
+    
+    pub fn with_nested_result(mut self, nested: ValidationViolation) -> Self {
+        self.nested_results.push(nested);
         self
     }
-
-    pub fn with_metadata(mut self, key: String, value: String) -> Self {
-        self.metadata.insert(key, value);
+    
+    pub fn with_nested_results(mut self, nested: Vec<ValidationViolation>) -> Self {
+        self.nested_results.extend(nested);
         self
     }
 }
+
 
 /// Result of constraint evaluation
 #[derive(Debug, Clone)]

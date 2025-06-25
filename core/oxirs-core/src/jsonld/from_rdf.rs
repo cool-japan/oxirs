@@ -10,8 +10,13 @@ use json_event_parser::{JsonEvent, WriterJsonSerializer};
 //     GraphName, GraphNameRef, NamedNode, NamedOrBlankNode, NamedOrBlankNodeRef, QuadRef, TermRef,
 // };
 use crate::model::*;
-use crate::OxirsError as IriParseError; // Temporary alias
-type Iri<T> = T; // Temporary alias
+use crate::model::iri::{Iri, IriParseError, NamedNodeRef};
+use crate::model::term::{BlankNodeRef};
+use crate::model::triple::{PredicateRef, SubjectRef, ObjectRef};
+use crate::model::quad::GraphNameRef;
+use crate::model::node::NamedOrBlankNodeRef;
+use crate::vocab::xsd;
+use crate::optimization::TermRef;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io;
@@ -352,7 +357,7 @@ impl InnerJsonLdWriter {
         if self
             .current_graph_name
             .as_ref()
-            .is_some_and(|graph_name| graph_name.as_ref() != quad.graph_name)
+            .is_some_and(|graph_name| graph_name != &quad.graph_name().to_owned())
         {
             output.push(JsonEvent::EndArray);
             output.push(JsonEvent::EndObject);
@@ -371,12 +376,29 @@ impl InnerJsonLdWriter {
         } else if self
             .current_subject
             .as_ref()
-            .is_some_and(|subject| subject.as_ref() != quad.subject)
+            .is_some_and(|subject| {
+                match quad.subject() {
+                    SubjectRef::NamedNode(n) => subject != &NamedOrBlankNode::NamedNode(n.to_owned()),
+                    SubjectRef::BlankNode(b) => subject != &NamedOrBlankNode::BlankNode(b.to_owned()),
+                    _ => true, // Variable and QuotedTriple are not supported in JSON-LD
+                }
+            })
             || self
                 .current_predicate
                 .as_ref()
-                .is_some_and(|predicate| predicate.as_ref() != quad.predicate)
-                && self.emitted_predicates.contains(quad.predicate.as_str())
+                .is_some_and(|predicate| {
+                    match quad.predicate() {
+                        PredicateRef::NamedNode(n) => predicate != &n.to_owned(),
+                        _ => true, // Variable predicates are not supported in JSON-LD
+                    }
+                })
+                && {
+                    let pred_str = match quad.predicate() {
+                        PredicateRef::NamedNode(n) => n.as_str(),
+                        PredicateRef::Variable(v) => v.as_str(),
+                    };
+                    self.emitted_predicates.contains(pred_str)
+                }
         {
             output.push(JsonEvent::EndArray);
             output.push(JsonEvent::EndObject);
@@ -386,7 +408,12 @@ impl InnerJsonLdWriter {
         } else if self
             .current_predicate
             .as_ref()
-            .is_some_and(|predicate| predicate.as_ref() != quad.predicate)
+            .is_some_and(|predicate| {
+                match quad.predicate() {
+                    PredicateRef::NamedNode(n) => predicate != &n.to_owned(),
+                    _ => true, // Variable predicates are not supported in JSON-LD
+                }
+            })
         {
             output.push(JsonEvent::EndArray);
             if let Some(current_predicate) = self.current_predicate.take() {
@@ -396,19 +423,20 @@ impl InnerJsonLdWriter {
         }
 
         if self.current_graph_name.is_none() {
-            if !quad.graph_name.is_default_graph() {
+            if !quad.graph_name().is_default_graph() {
                 // We open a new graph name
                 output.push(JsonEvent::StartObject);
                 output.push(JsonEvent::ObjectKey("@id".into()));
-                output.push(JsonEvent::String(self.id_value(match quad.graph_name {
-                    GraphNameRef::NamedNode(iri) => iri.into(),
-                    GraphNameRef::BlankNode(bnode) => bnode.into(),
+                output.push(JsonEvent::String(self.id_value(match quad.graph_name() {
+                    GraphNameRef::NamedNode(iri) => NamedOrBlankNodeRef::NamedNode(iri),
+                    GraphNameRef::BlankNode(bnode) => NamedOrBlankNodeRef::BlankNode(bnode),
                     GraphNameRef::DefaultGraph => unreachable!(),
+                    GraphNameRef::Variable(_) => unreachable!(), // Variables shouldn't appear in actual data
                 })));
                 output.push(JsonEvent::ObjectKey("@graph".into()));
                 output.push(JsonEvent::StartArray);
             }
-            self.current_graph_name = Some(quad.graph_name.into_owned());
+            self.current_graph_name = Some(quad.graph_name().to_owned());
         }
 
         // We open a new subject block if useful (ie. new subject or already used predicate)
@@ -420,9 +448,9 @@ impl InnerJsonLdWriter {
                 clippy::match_wildcard_for_single_variants,
                 clippy::allow_attributes
             )]
-            output.push(JsonEvent::String(self.id_value(match quad.subject {
-                NamedOrBlankNodeRef::NamedNode(iri) => iri.into(),
-                NamedOrBlankNodeRef::BlankNode(bnode) => bnode.into(),
+            output.push(JsonEvent::String(self.id_value(match quad.subject() {
+                SubjectRef::NamedNode(iri) => NamedOrBlankNodeRef::NamedNode(iri),
+                SubjectRef::BlankNode(bnode) => NamedOrBlankNodeRef::BlankNode(bnode),
                 _ => {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
@@ -430,20 +458,50 @@ impl InnerJsonLdWriter {
                     ));
                 }
             })));
-            self.current_subject = Some(quad.subject.into_owned());
+            self.current_subject = Some(match quad.subject() {
+                SubjectRef::NamedNode(n) => NamedOrBlankNode::NamedNode(n.to_owned()),
+                SubjectRef::BlankNode(b) => NamedOrBlankNode::BlankNode(b.to_owned()),
+                _ => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "JSON-LD does not support variables or quoted triples as subjects",
+                    ));
+                }
+            });
         }
 
         // We open a predicate key
         if self.current_predicate.is_none() {
             output.push(JsonEvent::ObjectKey(
                 // TODO: use @type
-                quad.predicate.as_str().into(), // TODO: prefixes including @vocab
+                match quad.predicate() {
+                    PredicateRef::NamedNode(n) => n.as_str(),
+                    PredicateRef::Variable(v) => v.as_str(),
+                }.into(), // TODO: prefixes including @vocab
             ));
             output.push(JsonEvent::StartArray);
-            self.current_predicate = Some(quad.predicate.into_owned());
+            self.current_predicate = Some(match quad.predicate() {
+                PredicateRef::NamedNode(n) => n.to_owned(),
+                _ => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "JSON-LD does not support variables as predicates",
+                    ));
+                }
+            });
         }
 
-        self.serialize_term(quad.object, output)
+        let object_ref = match quad.object() {
+            ObjectRef::NamedNode(n) => TermRef::NamedNode(n.as_str()),
+            ObjectRef::BlankNode(b) => TermRef::BlankNode(b.as_str()),
+            ObjectRef::Literal(l) => TermRef::from_literal(l),
+            ObjectRef::Variable(v) => TermRef::Variable(v.as_str()),
+            _ => return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "JSON-LD does not support quoted triples as objects",
+            )),
+        };
+        self.serialize_term(object_ref, output)
     }
 
     fn serialize_start(&self, output: &mut Vec<JsonEvent<'_>>) {
@@ -483,35 +541,27 @@ impl InnerJsonLdWriter {
         match term {
             TermRef::NamedNode(iri) => {
                 output.push(JsonEvent::ObjectKey("@id".into()));
-                output.push(JsonEvent::String(self.id_value(iri.into())));
+                // For named nodes, we can use the IRI directly with base IRI processing
+                output.push(JsonEvent::String(self.id_value_from_str(iri, false)));
             }
             TermRef::BlankNode(bnode) => {
                 output.push(JsonEvent::ObjectKey("@id".into()));
-                output.push(JsonEvent::String(self.id_value(bnode.into())));
+                // For blank nodes, we need to add the "_:" prefix
+                output.push(JsonEvent::String(self.id_value_from_str(bnode, true)));
             }
-            TermRef::Literal(literal) => {
-                if let Some(language) = literal.language() {
+            TermRef::Literal(value, datatype, language) => {
+                if let Some(lang) = language {
                     output.push(JsonEvent::ObjectKey("@language".into()));
-                    output.push(JsonEvent::String(language.into()));
-                    #[cfg(feature = "rdf-12")]
-                    if let Some(direction) = literal.direction() {
-                        output.push(JsonEvent::ObjectKey("@direction".into()));
-                        output.push(JsonEvent::String(
-                            match direction {
-                                BaseDirection::Ltr => "ltr",
-                                BaseDirection::Rtl => "rtl",
-                            }
-                            .into(),
-                        ));
+                    output.push(JsonEvent::String(lang.into()));
+                } else if let Some(dt) = datatype {
+                    if dt != xsd::STRING.as_str() {
+                        output.push(JsonEvent::ObjectKey("@type".into()));
+                        // For datatypes, use the IRI directly
+                        output.push(JsonEvent::String(dt.into()));
                     }
-                } else if literal.datatype() != xsd::STRING {
-                    output.push(JsonEvent::ObjectKey("@type".into()));
-                    output.push(JsonEvent::String(Self::type_value(
-                        literal.datatype().into(),
-                    )));
                 }
                 output.push(JsonEvent::ObjectKey("@value".into()));
-                output.push(JsonEvent::String(literal.value().into()));
+                output.push(JsonEvent::String(value.into()));
             }
             _ => {
                 return Err(io::Error::new(
@@ -541,6 +591,27 @@ impl InnerJsonLdWriter {
                 iri.as_str().into()
             }
             NamedOrBlankNodeRef::BlankNode(bnode) => bnode.to_string().into(),
+        }
+    }
+
+    fn id_value_from_str<'a>(&self, id: &'a str, is_blank_node: bool) -> Cow<'a, str> {
+        if is_blank_node {
+            // For blank nodes, add the "_:" prefix
+            format!("_:{}", id).into()
+        } else {
+            // For IRIs, apply base IRI relativization
+            if let Some(base_iri) = &self.base_iri {
+                if let Ok(relative) = base_iri.relativize(&Iri::parse_unchecked(id)) {
+                    let relative = relative.into_inner();
+                    // We check the relative IRI is not considered as absolute by IRI expansion
+                    if !relative.split_once(':').is_some_and(|(prefix, suffix)| {
+                        prefix == "_" || suffix.starts_with("//")
+                    }) {
+                        return relative.into();
+                    }
+                }
+            }
+            id.into()
         }
     }
 

@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 
 use oxirs_core::{
     graph::Graph,
-    model::{BlankNode, Literal, NamedNode, RdfTerm, Term, Triple},
+    model::{BlankNode, Literal, NamedNode, RdfTerm, Term, Triple, Quad, GraphName},
     store::Store,
     OxirsError,
 };
@@ -91,11 +91,18 @@ impl ShapeParser {
         format: &str,
         base_iri: Option<&str>,
     ) -> Result<Vec<Shape>> {
-        // TODO: Implement shape parsing from RDF string
-        // This would parse the RDF data and extract shape definitions
-
+        // For now, we'll parse the RDF into a Store instead of a Graph
+        // since we need store functionality for shape parsing
+        let mut store = Store::new().map_err(|e| 
+            ShaclError::ShapeParsing(format!("Failed to create store: {}", e))
+        )?;
+        
+        // TODO: Implement RDF parsing into the store based on format
+        // This would require RDF parser functionality in oxirs_core
+        // For now, return an error indicating this needs implementation
+        
         Err(ShaclError::ShapeParsing(
-            "RDF string-based shape parsing not yet implemented".to_string(),
+            "RDF string parsing requires RDF parser implementation in oxirs_core".to_string()
         ))
     }
 
@@ -118,24 +125,676 @@ impl ShapeParser {
     }
 
     /// Find all IRIs that represent shapes in a graph
-    fn find_shape_iris(&self, _graph: &Graph) -> Result<Vec<String>> {
-        // TODO: Implement shape IRI discovery from graph
-        Ok(Vec::new())
+    fn find_shape_iris(&self, graph: &Graph) -> Result<Vec<String>> {
+        use oxirs_core::model::{Subject, Predicate, Object};
+        
+        let mut shape_iris = HashSet::new();
+        
+        // SHACL namespace
+        let shacl_ns = "http://www.w3.org/ns/shacl#";
+        let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid RDF type IRI: {}", e)))?;
+        
+        // Find explicit NodeShape and PropertyShape instances
+        let shape_types = vec![
+            NamedNode::new(&format!("{}NodeShape", shacl_ns))
+                .map_err(|e| ShaclError::ShapeParsing(format!("Invalid NodeShape IRI: {}", e)))?,
+            NamedNode::new(&format!("{}PropertyShape", shacl_ns))
+                .map_err(|e| ShaclError::ShapeParsing(format!("Invalid PropertyShape IRI: {}", e)))?,
+        ];
+        
+        for shape_type in shape_types {
+            let triples = graph.query_triples(
+                None,
+                Some(&Predicate::NamedNode(rdf_type.clone())),
+                Some(&Object::NamedNode(shape_type))
+            );
+            
+            for triple in triples {
+                if let Subject::NamedNode(shape_node) = triple.subject() {
+                    shape_iris.insert(shape_node.as_str().to_string());
+                }
+            }
+        }
+        
+        // Find shapes by properties that indicate shape-ness
+        let shape_properties = vec![
+            "targetClass", "targetNode", "targetObjectsOf", "targetSubjectsOf",
+            "property", "path", "node", "class", "datatype", "minCount", "maxCount",
+        ];
+        
+        for prop_name in shape_properties {
+            let prop_iri = NamedNode::new(&format!("{}{}", shacl_ns, prop_name))
+                .map_err(|e| ShaclError::ShapeParsing(format!("Invalid property IRI: {}", e)))?;
+            
+            let triples = graph.query_triples(
+                None,
+                Some(&Predicate::NamedNode(prop_iri)),
+                None
+            );
+            
+            for triple in triples {
+                if let Subject::NamedNode(shape_node) = triple.subject() {
+                    shape_iris.insert(shape_node.as_str().to_string());
+                }
+            }
+        }
+        
+        tracing::info!("Discovered {} shape IRIs in graph", shape_iris.len());
+        Ok(shape_iris.into_iter().collect())
     }
 
     /// Parse a single shape from a graph
     fn parse_shape(
         &mut self,
-        _graph: &Graph,
-        _shape_iri: &str,
-        _visited: &mut HashSet<String>,
-        _depth: usize,
+        graph: &Graph,
+        shape_iri: &str,
+        visited: &mut HashSet<String>,
+        depth: usize,
     ) -> Result<Shape> {
-        // TODO: Implement shape parsing from graph
-        Ok(Shape::new(
-            ShapeId(_shape_iri.to_string()),
-            ShapeType::NodeShape,
-        ))
+        use oxirs_core::model::{Subject, Predicate, Object};
+        
+        if depth > self.max_depth {
+            return Err(ShaclError::ShapeParsing(format!(
+                "Maximum parsing depth {} exceeded for shape {}",
+                self.max_depth, shape_iri
+            )));
+        }
+        
+        // Mark as visited
+        visited.insert(shape_iri.to_string());
+        
+        // Check cache first
+        if let Some(cached_shape) = self.shape_cache.get(shape_iri) {
+            return Ok(cached_shape.clone());
+        }
+        
+        let shape_node = NamedNode::new(shape_iri)
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid shape IRI {}: {}", shape_iri, e)))?;
+        
+        // Determine shape type
+        let shape_type = self.determine_shape_type(graph, &shape_node)?;
+        
+        // Create the shape
+        let mut shape = Shape::new(ShapeId::new(shape_iri), shape_type);
+        
+        // Parse targets
+        self.parse_shape_targets_from_graph(graph, &shape_node, &mut shape)?;
+        
+        // Parse property path (for property shapes)
+        if shape.shape_type == ShapeType::PropertyShape {
+            self.parse_property_path_from_graph(graph, &shape_node, &mut shape)?;
+        }
+        
+        // Parse constraints
+        self.parse_shape_constraints_from_graph(graph, &shape_node, &mut shape)?;
+        
+        // Parse severity
+        self.parse_shape_severity_from_graph(graph, &shape_node, &mut shape)?;
+        
+        // Parse message
+        self.parse_shape_message_from_graph(graph, &shape_node, &mut shape)?;
+        
+        // Parse deactivated status
+        self.parse_shape_deactivated_from_graph(graph, &shape_node, &mut shape)?;
+        
+        // Cache the parsed shape
+        if self.shape_cache.len() < 1000 { // Limit cache size
+            self.shape_cache.insert(shape_iri.to_string(), shape.clone());
+        }
+        
+        Ok(shape)
+    }
+    
+    /// Determine the type of a shape from the graph
+    fn determine_shape_type(&self, graph: &Graph, shape_node: &NamedNode) -> Result<ShapeType> {
+        use oxirs_core::model::{Subject, Predicate, Object};
+        
+        let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid RDF type IRI: {}", e)))?;
+        
+        let node_shape_type = NamedNode::new("http://www.w3.org/ns/shacl#NodeShape")
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid NodeShape IRI: {}", e)))?;
+        
+        let property_shape_type = NamedNode::new("http://www.w3.org/ns/shacl#PropertyShape")
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid PropertyShape IRI: {}", e)))?;
+        
+        // Check for explicit type declarations
+        let type_triples = graph.query_triples(
+            Some(&Subject::NamedNode(shape_node.clone())),
+            Some(&Predicate::NamedNode(rdf_type)),
+            None
+        );
+        
+        for triple in type_triples {
+            if let Object::NamedNode(type_node) = triple.object() {
+                if type_node == &property_shape_type {
+                    return Ok(ShapeType::PropertyShape);
+                } else if type_node == &node_shape_type {
+                    return Ok(ShapeType::NodeShape);
+                }
+            }
+        }
+        
+        // If no explicit type, check for property shape indicators
+        let path_predicate = NamedNode::new("http://www.w3.org/ns/shacl#path")
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid path IRI: {}", e)))?;
+        
+        let has_path = !graph.query_triples(
+            Some(&Subject::NamedNode(shape_node.clone())),
+            Some(&Predicate::NamedNode(path_predicate)),
+            None
+        ).is_empty();
+        
+        if has_path {
+            Ok(ShapeType::PropertyShape)
+        } else {
+            Ok(ShapeType::NodeShape)
+        }
+    }
+    
+    /// Parse shape targets from a graph
+    fn parse_shape_targets_from_graph(
+        &self,
+        graph: &Graph,
+        shape_node: &NamedNode,
+        shape: &mut Shape,
+    ) -> Result<()> {
+        use oxirs_core::model::{Subject, Predicate, Object};
+        
+        // Parse sh:targetClass
+        let target_class_pred = NamedNode::new("http://www.w3.org/ns/shacl#targetClass")
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid targetClass IRI: {}", e)))?;
+        
+        for triple in graph.query_triples(
+            Some(&Subject::NamedNode(shape_node.clone())),
+            Some(&Predicate::NamedNode(target_class_pred)),
+            None
+        ) {
+            if let Object::NamedNode(class_node) = triple.object() {
+                shape.add_target(Target::class(class_node.clone()));
+            }
+        }
+        
+        // Parse sh:targetNode
+        let target_node_pred = NamedNode::new("http://www.w3.org/ns/shacl#targetNode")
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid targetNode IRI: {}", e)))?;
+        
+        for triple in graph.query_triples(
+            Some(&Subject::NamedNode(shape_node.clone())),
+            Some(&Predicate::NamedNode(target_node_pred)),
+            None
+        ) {
+            shape.add_target(Target::node(object_to_term(triple.object())?));
+        }
+        
+        // Parse sh:targetObjectsOf
+        let target_objects_of_pred = NamedNode::new("http://www.w3.org/ns/shacl#targetObjectsOf")
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid targetObjectsOf IRI: {}", e)))?;
+        
+        for triple in graph.query_triples(
+            Some(&Subject::NamedNode(shape_node.clone())),
+            Some(&Predicate::NamedNode(target_objects_of_pred)),
+            None
+        ) {
+            if let Object::NamedNode(prop_node) = triple.object() {
+                shape.add_target(Target::objects_of(prop_node.clone()));
+            }
+        }
+        
+        // Parse sh:targetSubjectsOf
+        let target_subjects_of_pred = NamedNode::new("http://www.w3.org/ns/shacl#targetSubjectsOf")
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid targetSubjectsOf IRI: {}", e)))?;
+        
+        for triple in graph.query_triples(
+            Some(&Subject::NamedNode(shape_node.clone())),
+            Some(&Predicate::NamedNode(target_subjects_of_pred)),
+            None
+        ) {
+            if let Object::NamedNode(prop_node) = triple.object() {
+                shape.add_target(Target::subjects_of(prop_node.clone()));
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Parse property path from a graph
+    fn parse_property_path_from_graph(
+        &self,
+        graph: &Graph,
+        shape_node: &NamedNode,
+        shape: &mut Shape,
+    ) -> Result<()> {
+        use oxirs_core::model::{Subject, Predicate};
+        
+        let path_pred = NamedNode::new("http://www.w3.org/ns/shacl#path")
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid path IRI: {}", e)))?;
+        
+        let path_triples = graph.query_triples(
+            Some(&Subject::NamedNode(shape_node.clone())),
+            Some(&Predicate::NamedNode(path_pred)),
+            None
+        );
+        
+        if let Some(triple) = path_triples.first() {
+            let path_term = object_to_term(triple.object())?;
+            // Parse path directly from graph instead of using store
+            let path = self.parse_property_path_from_term_with_graph(graph, &path_term)?;
+            shape.path = Some(path);
+        }
+        
+        Ok(())
+    }
+    
+    /// Parse property path from an RDF term using a graph
+    fn parse_property_path_from_term_with_graph(
+        &self,
+        graph: &Graph,
+        path_term: &Term,
+    ) -> Result<PropertyPath> {
+        use crate::paths::PropertyPath;
+        
+        match path_term {
+            Term::NamedNode(predicate_node) => Ok(PropertyPath::predicate(predicate_node.clone())),
+            Term::BlankNode(blank_node) => {
+                // Complex property path - need to analyze the structure
+                self.parse_complex_property_path_from_graph(graph, blank_node)
+            }
+            _ => Err(ShaclError::PropertyPath(
+                "Invalid property path term - must be a named node or blank node".to_string(),
+            )),
+        }
+    }
+    
+    /// Parse complex property paths from graph
+    fn parse_complex_property_path_from_graph(
+        &self,
+        graph: &Graph,
+        blank_node: &BlankNode,
+    ) -> Result<PropertyPath> {
+        use crate::paths::PropertyPath;
+        use oxirs_core::model::{Subject, Predicate};
+        
+        // Check for inverse path (sh:inversePath)
+        let inverse_pred = NamedNode::new("http://www.w3.org/ns/shacl#inversePath")
+            .map_err(|e| ShaclError::PropertyPath(format!("Invalid inversePath IRI: {}", e)))?;
+        
+        let inverse_triples = graph.query_triples(
+            Some(&Subject::BlankNode(blank_node.clone())),
+            Some(&Predicate::NamedNode(inverse_pred)),
+            None
+        );
+        
+        if let Some(triple) = inverse_triples.first() {
+            let inner_term = object_to_term(triple.object())?;
+            let inner_path = self.parse_property_path_from_term_with_graph(graph, &inner_term)?;
+            return Ok(PropertyPath::inverse(inner_path));
+        }
+        
+        // Check for alternative path (sh:alternativePath)
+        let alt_pred = NamedNode::new("http://www.w3.org/ns/shacl#alternativePath")
+            .map_err(|e| ShaclError::PropertyPath(format!("Invalid alternativePath IRI: {}", e)))?;
+        
+        let alt_triples = graph.query_triples(
+            Some(&Subject::BlankNode(blank_node.clone())),
+            Some(&Predicate::NamedNode(alt_pred)),
+            None
+        );
+        
+        if let Some(triple) = alt_triples.first() {
+            if let Ok(Term::BlankNode(list_blank)) = object_to_term(triple.object()) {
+                if let Some(paths) = self.parse_path_list_from_graph(graph, &list_blank)? {
+                    return Ok(PropertyPath::alternative(paths));
+                }
+            }
+        }
+        
+        // Check for zero-or-more path (sh:zeroOrMorePath)
+        let zero_or_more_pred = NamedNode::new("http://www.w3.org/ns/shacl#zeroOrMorePath")
+            .map_err(|e| ShaclError::PropertyPath(format!("Invalid zeroOrMorePath IRI: {}", e)))?;
+        
+        let zero_or_more_triples = graph.query_triples(
+            Some(&Subject::BlankNode(blank_node.clone())),
+            Some(&Predicate::NamedNode(zero_or_more_pred)),
+            None
+        );
+        
+        if let Some(triple) = zero_or_more_triples.first() {
+            let inner_term = object_to_term(triple.object())?;
+            let inner_path = self.parse_property_path_from_term_with_graph(graph, &inner_term)?;
+            return Ok(PropertyPath::zero_or_more(inner_path));
+        }
+        
+        // Check for one-or-more path (sh:oneOrMorePath)
+        let one_or_more_pred = NamedNode::new("http://www.w3.org/ns/shacl#oneOrMorePath")
+            .map_err(|e| ShaclError::PropertyPath(format!("Invalid oneOrMorePath IRI: {}", e)))?;
+        
+        let one_or_more_triples = graph.query_triples(
+            Some(&Subject::BlankNode(blank_node.clone())),
+            Some(&Predicate::NamedNode(one_or_more_pred)),
+            None
+        );
+        
+        if let Some(triple) = one_or_more_triples.first() {
+            let inner_term = object_to_term(triple.object())?;
+            let inner_path = self.parse_property_path_from_term_with_graph(graph, &inner_term)?;
+            return Ok(PropertyPath::one_or_more(inner_path));
+        }
+        
+        // Check for zero-or-one path (sh:zeroOrOnePath)
+        let zero_or_one_pred = NamedNode::new("http://www.w3.org/ns/shacl#zeroOrOnePath")
+            .map_err(|e| ShaclError::PropertyPath(format!("Invalid zeroOrOnePath IRI: {}", e)))?;
+        
+        let zero_or_one_triples = graph.query_triples(
+            Some(&Subject::BlankNode(blank_node.clone())),
+            Some(&Predicate::NamedNode(zero_or_one_pred)),
+            None
+        );
+        
+        if let Some(triple) = zero_or_one_triples.first() {
+            let inner_term = object_to_term(triple.object())?;
+            let inner_path = self.parse_property_path_from_term_with_graph(graph, &inner_term)?;
+            return Ok(PropertyPath::zero_or_one(inner_path));
+        }
+        
+        // Try to parse as a list (sequence path)
+        if let Some(paths) = self.parse_path_list_from_graph(graph, blank_node)? {
+            if paths.len() > 1 {
+                return Ok(PropertyPath::sequence(paths));
+            } else if paths.len() == 1 {
+                return Ok(paths.into_iter().next().unwrap());
+            }
+        }
+        
+        Err(ShaclError::PropertyPath(format!(
+            "Unable to parse complex property path from blank node: {}",
+            blank_node.as_str()
+        )))
+    }
+    
+    /// Parse an RDF list of property paths from graph
+    fn parse_path_list_from_graph(
+        &self,
+        graph: &Graph,
+        list_node: &BlankNode,
+    ) -> Result<Option<Vec<PropertyPath>>> {
+        use oxirs_core::model::{Subject, Predicate};
+        
+        let mut paths = Vec::new();
+        let mut current = Term::BlankNode(list_node.clone());
+        
+        let first_pred = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#first")
+            .map_err(|e| ShaclError::PropertyPath(format!("Invalid rdf:first IRI: {}", e)))?;
+        let rest_pred = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest")
+            .map_err(|e| ShaclError::PropertyPath(format!("Invalid rdf:rest IRI: {}", e)))?;
+        let nil = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil")
+            .map_err(|e| ShaclError::PropertyPath(format!("Invalid rdf:nil IRI: {}", e)))?;
+        
+        loop {
+            // Get the subject for the query
+            let subject = match &current {
+                Term::BlankNode(bn) => Subject::BlankNode(bn.clone()),
+                Term::NamedNode(nn) => Subject::NamedNode(nn.clone()),
+                _ => return Ok(None),
+            };
+            
+            // Get the first element
+            let first_triples = graph.query_triples(
+                Some(&subject),
+                Some(&Predicate::NamedNode(first_pred.clone())),
+                None
+            );
+            
+            if let Some(triple) = first_triples.first() {
+                let first_term = object_to_term(triple.object())?;
+                let path = self.parse_property_path_from_term_with_graph(graph, &first_term)?;
+                paths.push(path);
+                
+                // Get the rest of the list
+                let rest_triples = graph.query_triples(
+                    Some(&subject),
+                    Some(&Predicate::NamedNode(rest_pred.clone())),
+                    None
+                );
+                
+                if let Some(rest_triple) = rest_triples.first() {
+                    let rest_term = object_to_term(rest_triple.object())?;
+                    
+                    // Check if we've reached rdf:nil
+                    if let Term::NamedNode(nn) = &rest_term {
+                        if nn == &nil {
+                            break;
+                        }
+                    }
+                    current = rest_term;
+                } else {
+                    break;
+                }
+            } else {
+                // Not a valid list
+                return Ok(None);
+            }
+        }
+        
+        if paths.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(paths))
+        }
+    }
+    
+    /// Parse shape constraints from a graph
+    fn parse_shape_constraints_from_graph(
+        &self,
+        graph: &Graph,
+        shape_node: &NamedNode,
+        shape: &mut Shape,
+    ) -> Result<()> {
+        use crate::constraints::*;
+        use crate::{Constraint, ConstraintComponentId};
+        use oxirs_core::model::{Subject, Predicate};
+        
+        let shacl_ns = "http://www.w3.org/ns/shacl#";
+        
+        // Parse sh:class constraint
+        let class_pred = NamedNode::new(&format!("{}class", shacl_ns))
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid class predicate: {}", e)))?;
+        
+        for triple in graph.query_triples(
+            Some(&Subject::NamedNode(shape_node.clone())),
+            Some(&Predicate::NamedNode(class_pred)),
+            None
+        ) {
+            if let Ok(Term::NamedNode(class_node)) = object_to_term(triple.object()) {
+                let constraint = Constraint::Class(ClassConstraint {
+                    class_iri: class_node,
+                });
+                shape.add_constraint(
+                    ConstraintComponentId::new("sh:ClassConstraintComponent"),
+                    constraint
+                );
+            }
+        }
+        
+        // Parse sh:datatype constraint
+        let datatype_pred = NamedNode::new(&format!("{}datatype", shacl_ns))
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid datatype predicate: {}", e)))?;
+        
+        for triple in graph.query_triples(
+            Some(&Subject::NamedNode(shape_node.clone())),
+            Some(&Predicate::NamedNode(datatype_pred)),
+            None
+        ) {
+            if let Ok(Term::NamedNode(datatype_node)) = object_to_term(triple.object()) {
+                let constraint = Constraint::Datatype(DatatypeConstraint {
+                    datatype_iri: datatype_node,
+                });
+                shape.add_constraint(
+                    ConstraintComponentId::new("sh:DatatypeConstraintComponent"),
+                    constraint
+                );
+            }
+        }
+        
+        // Parse sh:qualifiedValueShape constraint
+        let qualified_shape_pred = NamedNode::new(&format!("{}qualifiedValueShape", shacl_ns))
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid qualifiedValueShape predicate: {}", e)))?;
+        
+        let qualified_min_pred = NamedNode::new(&format!("{}qualifiedMinCount", shacl_ns))
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid qualifiedMinCount predicate: {}", e)))?;
+            
+        let qualified_max_pred = NamedNode::new(&format!("{}qualifiedMaxCount", shacl_ns))
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid qualifiedMaxCount predicate: {}", e)))?;
+            
+        let qualified_disjoint_pred = NamedNode::new(&format!("{}qualifiedValueShapesDisjoint", shacl_ns))
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid qualifiedValueShapesDisjoint predicate: {}", e)))?;
+        
+        // Look for qualified value shape
+        if let Some(triple) = graph.query_triples(
+            Some(&Subject::NamedNode(shape_node.clone())),
+            Some(&Predicate::NamedNode(qualified_shape_pred)),
+            None
+        ).first() {
+            if let Ok(Term::NamedNode(shape_ref)) = object_to_term(triple.object()) {
+                let mut qualified_min_count = None;
+                let mut qualified_max_count = None;
+                let mut qualified_disjoint = false;
+                
+                // Get qualified min count
+                if let Some(min_triple) = graph.query_triples(
+                    Some(&Subject::NamedNode(shape_node.clone())),
+                    Some(&Predicate::NamedNode(qualified_min_pred)),
+                    None
+                ).first() {
+                    if let Ok(Term::Literal(literal)) = object_to_term(min_triple.object()) {
+                        qualified_min_count = literal.value().parse::<u32>().ok();
+                    }
+                }
+                
+                // Get qualified max count
+                if let Some(max_triple) = graph.query_triples(
+                    Some(&Subject::NamedNode(shape_node.clone())),
+                    Some(&Predicate::NamedNode(qualified_max_pred)),
+                    None
+                ).first() {
+                    if let Ok(Term::Literal(literal)) = object_to_term(max_triple.object()) {
+                        qualified_max_count = literal.value().parse::<u32>().ok();
+                    }
+                }
+                
+                // Get qualified disjoint
+                if let Some(disjoint_triple) = graph.query_triples(
+                    Some(&Subject::NamedNode(shape_node.clone())),
+                    Some(&Predicate::NamedNode(qualified_disjoint_pred)),
+                    None
+                ).first() {
+                    if let Ok(Term::Literal(literal)) = object_to_term(disjoint_triple.object()) {
+                        qualified_disjoint = literal.value() == "true";
+                    }
+                }
+                
+                let constraint = Constraint::QualifiedValueShape(QualifiedValueShapeConstraint {
+                    qualified_value_shape: ShapeId::new(shape_ref.as_str()),
+                    qualified_min_count,
+                    qualified_max_count,
+                    qualified_value_shapes_disjoint: qualified_disjoint,
+                });
+                
+                shape.add_constraint(
+                    ConstraintComponentId::new("sh:QualifiedValueShapeConstraintComponent"),
+                    constraint
+                );
+            }
+        }
+        
+        // TODO: Add more constraint parsing as needed
+        
+        Ok(())
+    }
+    
+    /// Parse shape severity from a graph
+    fn parse_shape_severity_from_graph(
+        &self,
+        graph: &Graph,
+        shape_node: &NamedNode,
+        shape: &mut Shape,
+    ) -> Result<()> {
+        use oxirs_core::model::{Subject, Predicate};
+        
+        let severity_pred = NamedNode::new("http://www.w3.org/ns/shacl#severity")
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid severity predicate: {}", e)))?;
+        
+        if let Some(triple) = graph.query_triples(
+            Some(&Subject::NamedNode(shape_node.clone())),
+            Some(&Predicate::NamedNode(severity_pred)),
+            None
+        ).first() {
+            if let Ok(Term::NamedNode(severity_node)) = object_to_term(triple.object()) {
+                shape.severity = match severity_node.as_str() {
+                    "http://www.w3.org/ns/shacl#Violation" => Severity::Violation,
+                    "http://www.w3.org/ns/shacl#Warning" => Severity::Warning,
+                    "http://www.w3.org/ns/shacl#Info" => Severity::Info,
+                    _ => Severity::Violation, // Default
+                };
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Parse shape message from a graph
+    fn parse_shape_message_from_graph(
+        &self,
+        graph: &Graph,
+        shape_node: &NamedNode,
+        shape: &mut Shape,
+    ) -> Result<()> {
+        use oxirs_core::model::{Subject, Predicate};
+        
+        let message_pred = NamedNode::new("http://www.w3.org/ns/shacl#message")
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid message predicate: {}", e)))?;
+        
+        for (i, triple) in graph.query_triples(
+            Some(&Subject::NamedNode(shape_node.clone())),
+            Some(&Predicate::NamedNode(message_pred)),
+            None
+        ).into_iter().enumerate() {
+            if let Ok(Term::Literal(literal)) = object_to_term(triple.object()) {
+                // Messages is an IndexMap, so we need to insert with a key
+                shape.messages.insert(
+                    format!("message_{}", i),
+                    literal.value().to_string()
+                );
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Parse shape deactivated status from a graph
+    fn parse_shape_deactivated_from_graph(
+        &self,
+        graph: &Graph,
+        shape_node: &NamedNode,
+        shape: &mut Shape,
+    ) -> Result<()> {
+        use oxirs_core::model::{Subject, Predicate};
+        
+        let deactivated_pred = NamedNode::new("http://www.w3.org/ns/shacl#deactivated")
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid deactivated predicate: {}", e)))?;
+        
+        if let Some(triple) = graph.query_triples(
+            Some(&Subject::NamedNode(shape_node.clone())),
+            Some(&Predicate::NamedNode(deactivated_pred)),
+            None
+        ).first() {
+            if let Ok(Term::Literal(literal)) = object_to_term(triple.object()) {
+                shape.deactivated = literal.value() == "true";
+            }
+        }
+        
+        Ok(())
     }
 
     /// Find all IRIs that represent shapes in the store
@@ -797,30 +1456,235 @@ impl ShapeParser {
         Ok(())
     }
 
-    /// Parse property path from an RDF term (simple implementation)
+    /// Parse property path from an RDF term (supports complex paths)
     fn parse_property_path_from_term(
         &self,
-        _store: &Store,
+        store: &Store,
         path_term: &Term,
-        _graph_name: Option<&str>,
+        graph_name: Option<&str>,
     ) -> Result<PropertyPath> {
         use crate::paths::PropertyPath;
 
-        // For now, implement simple predicate paths only
-        // TODO: Implement complex property path parsing (inverse, sequence, alternative, etc.)
         match path_term {
             Term::NamedNode(predicate_node) => Ok(PropertyPath::predicate(predicate_node.clone())),
-            Term::BlankNode(_) => {
-                // This would be a complex property path (sequence, alternative, etc.)
-                // For now, return an error
-                Err(ShaclError::PropertyPath(
-                    "Complex property paths (sequences, alternatives, etc.) not yet implemented"
-                        .to_string(),
-                ))
+            Term::BlankNode(blank_node) => {
+                // Complex property path - need to analyze the structure
+                self.parse_complex_property_path(store, blank_node, graph_name)
             }
             _ => Err(ShaclError::PropertyPath(
                 "Invalid property path term - must be a named node or blank node".to_string(),
             )),
+        }
+    }
+    
+    /// Parse complex property paths (sequences, alternatives, inverse paths, etc.)
+    fn parse_complex_property_path(
+        &self,
+        store: &Store,
+        blank_node: &BlankNode,
+        graph_name: Option<&str>,
+    ) -> Result<PropertyPath> {
+        use crate::paths::PropertyPath;
+        
+        // Check for inverse path (sh:inversePath)
+        if let Some(inverse_path) = self.get_property_value(
+            store, 
+            &Term::BlankNode(blank_node.clone()), 
+            "http://www.w3.org/ns/shacl#inversePath",
+            graph_name
+        )? {
+            let inner_path = self.parse_property_path_from_term(store, &inverse_path, graph_name)?;
+            return Ok(PropertyPath::inverse(inner_path));
+        }
+        
+        // Check for sequence path (represented as RDF list)
+        if let Some(paths) = self.parse_path_list(store, blank_node, graph_name)? {
+            if paths.len() > 1 {
+                return Ok(PropertyPath::sequence(paths));
+            } else if paths.len() == 1 {
+                return Ok(paths.into_iter().next().unwrap());
+            }
+        }
+        
+        // Check for alternative path (sh:alternativePath)
+        if let Some(alt_list_node) = self.get_property_value(
+            store,
+            &Term::BlankNode(blank_node.clone()),
+            "http://www.w3.org/ns/shacl#alternativePath",
+            graph_name
+        )? {
+            if let Term::BlankNode(list_blank) = alt_list_node {
+                if let Some(paths) = self.parse_path_list(store, &list_blank, graph_name)? {
+                    return Ok(PropertyPath::alternative(paths));
+                }
+            }
+        }
+        
+        // Check for zero-or-more path (sh:zeroOrMorePath)
+        if let Some(zero_or_more_path) = self.get_property_value(
+            store,
+            &Term::BlankNode(blank_node.clone()),
+            "http://www.w3.org/ns/shacl#zeroOrMorePath",
+            graph_name
+        )? {
+            let inner_path = self.parse_property_path_from_term(store, &zero_or_more_path, graph_name)?;
+            return Ok(PropertyPath::zero_or_more(inner_path));
+        }
+        
+        // Check for one-or-more path (sh:oneOrMorePath)
+        if let Some(one_or_more_path) = self.get_property_value(
+            store,
+            &Term::BlankNode(blank_node.clone()),
+            "http://www.w3.org/ns/shacl#oneOrMorePath",
+            graph_name
+        )? {
+            let inner_path = self.parse_property_path_from_term(store, &one_or_more_path, graph_name)?;
+            return Ok(PropertyPath::one_or_more(inner_path));
+        }
+        
+        // Check for zero-or-one path (sh:zeroOrOnePath)
+        if let Some(zero_or_one_path) = self.get_property_value(
+            store,
+            &Term::BlankNode(blank_node.clone()),
+            "http://www.w3.org/ns/shacl#zeroOrOnePath",
+            graph_name
+        )? {
+            let inner_path = self.parse_property_path_from_term(store, &zero_or_one_path, graph_name)?;
+            return Ok(PropertyPath::zero_or_one(inner_path));
+        }
+        
+        // If none of the above, it might be a direct RDF list (sequence path)
+        // Try to parse as a list
+        if self.is_rdf_list(store, blank_node, graph_name)? {
+            if let Some(paths) = self.parse_path_list(store, blank_node, graph_name)? {
+                if paths.len() > 1 {
+                    return Ok(PropertyPath::sequence(paths));
+                } else if paths.len() == 1 {
+                    return Ok(paths.into_iter().next().unwrap());
+                }
+            }
+        }
+        
+        Err(ShaclError::PropertyPath(format!(
+            "Unable to parse complex property path from blank node: {}",
+            blank_node.as_str()
+        )))
+    }
+    
+    /// Get a property value from the store
+    fn get_property_value(
+        &self,
+        store: &Store,
+        subject: &Term,
+        predicate: &str,
+        graph_name: Option<&str>,
+    ) -> Result<Option<Term>> {
+        let query = if let Some(graph) = graph_name {
+            format!(
+                r#"
+                SELECT ?value WHERE {{
+                    GRAPH <{}> {{
+                        {} <{}> ?value .
+                    }}
+                }}
+                LIMIT 1
+                "#,
+                graph, 
+                format_term_for_sparql(subject)?,
+                predicate
+            )
+        } else {
+            format!(
+                r#"
+                SELECT ?value WHERE {{
+                    {} <{}> ?value .
+                }}
+                LIMIT 1
+                "#,
+                format_term_for_sparql(subject)?,
+                predicate
+            )
+        };
+        
+        match self.execute_shape_query(store, &query) {
+            Ok(results) => {
+                if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = results {
+                    if let Some(binding) = bindings.first() {
+                        return Ok(binding.get("value").cloned());
+                    }
+                }
+                Ok(None)
+            }
+            Err(_) => Ok(None),
+        }
+    }
+    
+    /// Check if a blank node represents an RDF list
+    fn is_rdf_list(
+        &self,
+        store: &Store,
+        blank_node: &BlankNode,
+        graph_name: Option<&str>,
+    ) -> Result<bool> {
+        let first_value = self.get_property_value(
+            store,
+            &Term::BlankNode(blank_node.clone()),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#first",
+            graph_name
+        )?;
+        
+        Ok(first_value.is_some())
+    }
+    
+    /// Parse an RDF list of property paths
+    fn parse_path_list(
+        &self,
+        store: &Store,
+        list_node: &BlankNode,
+        graph_name: Option<&str>,
+    ) -> Result<Option<Vec<PropertyPath>>> {
+        let mut paths = Vec::new();
+        let mut current = Term::BlankNode(list_node.clone());
+        
+        loop {
+            // Get the first element
+            if let Some(first) = self.get_property_value(
+                store,
+                &current,
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#first",
+                graph_name
+            )? {
+                // Parse the path element
+                let path = self.parse_property_path_from_term(store, &first, graph_name)?;
+                paths.push(path);
+                
+                // Get the rest of the list
+                if let Some(rest) = self.get_property_value(
+                    store,
+                    &current,
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest",
+                    graph_name
+                )? {
+                    // Check if we've reached rdf:nil
+                    if let Term::NamedNode(nn) = &rest {
+                        if nn.as_str() == "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil" {
+                            break;
+                        }
+                    }
+                    current = rest;
+                } else {
+                    break;
+                }
+            } else {
+                // Not a valid list
+                return Ok(None);
+            }
+        }
+        
+        if paths.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(paths))
         }
     }
 
@@ -1544,6 +2408,35 @@ impl ShapeFactory {
         }
 
         shape
+    }
+}
+
+/// Format a term for use in SPARQL queries
+fn format_term_for_sparql(term: &Term) -> Result<String> {
+    match term {
+        Term::NamedNode(node) => Ok(format!("<{}>", node.as_str())),
+        Term::BlankNode(node) => Ok(node.as_str().to_string()),
+        Term::Literal(literal) => {
+            // TODO: Proper literal formatting with datatype and language
+            Ok(format!("\"{}\"", literal.as_str().replace('"', "\\\"")))
+        }
+        Term::Variable(var) => Ok(format!("?{}", var.name())),
+        Term::QuotedTriple(_) => Err(ShaclError::PropertyPath(
+            "Quoted triples not supported in property paths".to_string()
+        )),
+    }
+}
+
+/// Convert an RDF Object to a Term
+fn object_to_term(object: &oxirs_core::model::Object) -> Result<Term> {
+    use oxirs_core::model::Object;
+    
+    match object {
+        Object::NamedNode(nn) => Ok(Term::NamedNode(nn.clone())),
+        Object::BlankNode(bn) => Ok(Term::BlankNode(bn.clone())),
+        Object::Literal(lit) => Ok(Term::Literal(lit.clone())),
+        Object::Variable(var) => Ok(Term::Variable(var.clone())),
+        Object::QuotedTriple(qt) => Ok(Term::QuotedTriple(qt.clone())),
     }
 }
 

@@ -24,6 +24,11 @@ tracing.workspace = true
 uuid.workspace = true
 async-trait.workspace = true
 
+# Byzantine fault tolerance dependencies
+sha2 = "0.10"
+ed25519-dalek = "2.1"
+rand = "0.8"
+
 [dev-dependencies]
 criterion.workspace = true
 tempfile = "3.0"
@@ -31,4 +36,5 @@ tempfile = "3.0"
 [features]
 default = []
 raft = ["openraft"]
+bft = []
 

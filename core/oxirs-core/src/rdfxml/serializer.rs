@@ -1,6 +1,6 @@
 use crate::rdfxml::utils::*;
-use crate::rdfxml::parser::{NamedOrBlankNode, NamedOrBlankNodeRef};
-use oxiri::{Iri, IriParseError};
+use crate::model::{NamedOrBlankNode, NamedOrBlankNodeRef};
+use crate::model::iri::{Iri, IriParseError};
 use crate::model::*;
 use crate::vocab::{rdf, xsd};
 use crate::optimization::TermRef;
@@ -358,7 +358,7 @@ pub struct InnerRdfXmlWriter {
 
 impl InnerRdfXmlWriter {
     fn serialize_triple<'a>(
-        &'a mut self,
+        &mut self,
         t: impl Into<TripleRef<'a>>,
         output: &mut Vec<Event<'a>>,
     ) -> io::Result<()> {

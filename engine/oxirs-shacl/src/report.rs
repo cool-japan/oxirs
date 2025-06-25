@@ -228,8 +228,27 @@ impl ValidationReport {
                 message.replace('"', "\\\"")
             ));
         }
+        
+        // Add nested results (sh:detail) if present
+        if !violation.nested_results.is_empty() {
+            turtle.push_str(";\n    sh:detail ");
+            for (i, nested) in violation.nested_results.iter().enumerate() {
+                if i > 0 {
+                    turtle.push_str(",\n               ");
+                }
+                let nested_iri = format!("{}_detail_{}", violation_iri, i);
+                turtle.push_str(&nested_iri);
+            }
+            turtle.push_str(" ");
+        }
 
         turtle.push_str(" .\n");
+        
+        // Generate turtle for nested violations
+        for (i, nested) in violation.nested_results.iter().enumerate() {
+            let nested_iri = format!("{}_detail_{}", violation_iri, i);
+            turtle.push_str(&self.violation_to_turtle(nested, &nested_iri)?);
+        }
 
         Ok(turtle)
     }
@@ -377,6 +396,26 @@ impl ValidationReport {
 
                 if let Some(message) = &violation.result_message {
                     html.push_str(&format!("<p><strong>Message:</strong> {}</p>\n", message));
+                }
+                
+                // Add nested results if present
+                if !violation.nested_results.is_empty() {
+                    html.push_str("<div class=\"nested-results\">\n");
+                    html.push_str("<p><strong>Details:</strong></p>\n");
+                    html.push_str("<ul>\n");
+                    for nested in &violation.nested_results {
+                        html.push_str("<li>\n");
+                        if let Some(nested_msg) = &nested.result_message {
+                            html.push_str(&format!("{} ", nested_msg));
+                        }
+                        html.push_str(&format!("({})", nested.source_constraint_component.as_str()));
+                        if let Some(nested_value) = &nested.value {
+                            html.push_str(&format!(" - Value: {}", nested_value.as_str()));
+                        }
+                        html.push_str("</li>\n");
+                    }
+                    html.push_str("</ul>\n");
+                    html.push_str("</div>\n");
                 }
 
                 html.push_str("</div>\n");

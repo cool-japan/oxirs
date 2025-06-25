@@ -6,7 +6,7 @@ use super::error::JsonLdErrorCode;
 use super::profile::JsonLdProcessingMode;
 use super::{JsonLdSyntaxError, MAX_CONTEXT_RECURSION};
 use json_event_parser::JsonEvent;
-use oxiri::Iri;
+use crate::model::iri::Iri;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::error::Error;

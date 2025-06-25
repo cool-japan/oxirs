@@ -15,8 +15,8 @@ This document outlines the comprehensive implementation plan for oxirs-shacl, a 
 
 #### 1.1.1 Core SHACL Types
 - [ ] **Shape Definition Enhancement**
-  - [ ] Add `PropertyShape` and `NodeShape` distinctions
-  - [ ] Implement `sh:targetClass`, `sh:targetNode`, `sh:targetObjectsOf`, `sh:targetSubjectsOf`
+  - [x] Add `PropertyShape` and `NodeShape` distinctions
+  - [x] Implement `sh:targetClass`, `sh:targetNode`, `sh:targetObjectsOf`, `sh:targetSubjectsOf`
   - [ ] Support for `sh:deactivated` property
   - [ ] Shape inheritance and composition
   - [ ] Shape priorities and ordering
@@ -24,71 +24,71 @@ This document outlines the comprehensive implementation plan for oxirs-shacl, a 
 
 - [ ] **Advanced Constraint Types**
   - [ ] **Core Constraints**
-    - [ ] `sh:class` - Class-based validation
-    - [ ] `sh:datatype` - Datatype validation
-    - [ ] `sh:nodeKind` - Node kind constraints (IRI, BlankNode, Literal, etc.)
-    - [ ] `sh:minCount` / `sh:maxCount` - Cardinality constraints
-    - [ ] `sh:minExclusive` / `sh:maxExclusive` - Range constraints (exclusive)
-    - [ ] `sh:minInclusive` / `sh:maxInclusive` - Range constraints (inclusive)
-    - [ ] `sh:minLength` / `sh:maxLength` - String length constraints
-    - [ ] `sh:pattern` - Regular expression patterns
-    - [ ] `sh:flags` - Pattern flags (case-insensitive, etc.)
-    - [ ] `sh:languageIn` - Language tag constraints
-    - [ ] `sh:uniqueLang` - Unique language constraint
-    - [ ] `sh:equals` - Value equality constraints
-    - [ ] `sh:disjoint` - Value disjointness constraints
-    - [ ] `sh:lessThan` / `sh:lessThanOrEquals` - Comparative constraints
-    - [ ] `sh:in` - Enumeration constraints
-    - [ ] `sh:hasValue` - Required value constraints
+    - [x] `sh:class` - Class-based validation
+    - [x] `sh:datatype` - Datatype validation
+    - [x] `sh:nodeKind` - Node kind constraints (IRI, BlankNode, Literal, etc.)
+    - [x] `sh:minCount` / `sh:maxCount` - Cardinality constraints
+    - [x] `sh:minExclusive` / `sh:maxExclusive` - Range constraints (exclusive)
+    - [x] `sh:minInclusive` / `sh:maxInclusive` - Range constraints (inclusive)
+    - [x] `sh:minLength` / `sh:maxLength` - String length constraints
+    - [x] `sh:pattern` - Regular expression patterns
+    - [x] `sh:flags` - Pattern flags (case-insensitive, etc.)
+    - [x] `sh:languageIn` - Language tag constraints
+    - [x] `sh:uniqueLang` - Unique language constraint
+    - [x] `sh:equals` - Value equality constraints
+    - [x] `sh:disjoint` - Value disjointness constraints
+    - [x] `sh:lessThan` / `sh:lessThanOrEquals` - Comparative constraints
+    - [x] `sh:in` - Enumeration constraints
+    - [x] `sh:hasValue` - Required value constraints
   
-  - [ ] **Property Path Constraints**
-    - [ ] Sequence paths (sh:path with rdf:List)
-    - [ ] Alternative paths (sh:alternativePath)
-    - [ ] Inverse paths (sh:inversePath)
-    - [ ] Zero-or-more paths (sh:zeroOrMorePath)
-    - [ ] One-or-more paths (sh:oneOrMorePath)
-    - [ ] Zero-or-one paths (sh:zeroOrOnePath)
+  - [x] **Property Path Constraints**
+    - [x] Sequence paths (sh:path with rdf:List)
+    - [x] Alternative paths (sh:alternativePath)
+    - [x] Inverse paths (sh:inversePath)
+    - [x] Zero-or-more paths (sh:zeroOrMorePath)
+    - [x] One-or-more paths (sh:oneOrMorePath)
+    - [x] Zero-or-one paths (sh:zeroOrOnePath)
     
   - [ ] **Logical Constraints**
-    - [ ] `sh:not` - Negation constraints
-    - [ ] `sh:and` - Conjunction constraints
-    - [ ] `sh:or` - Disjunction constraints
-    - [ ] `sh:xone` - Exclusive disjunction constraints
+    - [x] `sh:not` - Negation constraints
+    - [x] `sh:and` - Conjunction constraints
+    - [x] `sh:or` - Disjunction constraints
+    - [x] `sh:xone` - Exclusive disjunction constraints
 
-  - [ ] **Shape-based Constraints**
-    - [ ] `sh:node` - Nested shape validation
-    - [ ] `sh:qualifiedValueShape` - Qualified cardinality constraints
-    - [ ] `sh:qualifiedMinCount` / `sh:qualifiedMaxCount`
-    - [ ] `sh:qualifiedValueShapesDisjoint`
+  - [x] **Shape-based Constraints**
+    - [x] `sh:node` - Nested shape validation
+    - [x] `sh:qualifiedValueShape` - Qualified cardinality constraints
+    - [x] `sh:qualifiedMinCount` / `sh:qualifiedMaxCount`
+    - [x] `sh:qualifiedValueShapesDisjoint`
 
-  - [ ] **Closed Shape Constraints**
-    - [ ] `sh:closed` - Closed shape validation
-    - [ ] `sh:ignoredProperties` - Properties to ignore in closed shapes
+  - [x] **Closed Shape Constraints**
+    - [x] `sh:closed` - Closed shape validation
+    - [x] `sh:ignoredProperties` - Properties to ignore in closed shapes
 
 #### 1.1.2 Validation Result Enhancement
 - [ ] **Detailed Violation Information**
-  - [ ] `sh:focusNode` - The focus node where validation failed
-  - [ ] `sh:resultPath` - The property path where validation failed
-  - [ ] `sh:value` - The specific value that caused the violation
-  - [ ] `sh:sourceConstraintComponent` - The constraint component that was violated
-  - [ ] `sh:sourceShape` - The shape that contained the constraint
-  - [ ] `sh:resultSeverity` - Violation severity (sh:Violation, sh:Warning, sh:Info)
-  - [ ] `sh:resultMessage` - Human-readable error message
-  - [ ] `sh:detail` - Nested validation results
+  - [x] `sh:focusNode` - The focus node where validation failed
+  - [x] `sh:resultPath` - The property path where validation failed
+  - [x] `sh:value` - The specific value that caused the violation
+  - [x] `sh:sourceConstraintComponent` - The constraint component that was violated
+  - [x] `sh:sourceShape` - The shape that contained the constraint
+  - [x] `sh:resultSeverity` - Violation severity (sh:Violation, sh:Warning, sh:Info)
+  - [x] `sh:resultMessage` - Human-readable error message
+  - [x] `sh:detail` - Nested validation results
 
 - [ ] **Validation Report Structure**
-  - [ ] `sh:ValidationReport` - Main report container
-  - [ ] `sh:conforms` - Boolean conformance indicator
-  - [ ] `sh:result` - List of validation results
-  - [ ] Report serialization in multiple formats (Turtle, JSON-LD, RDF/XML)
+  - [x] `sh:ValidationReport` - Main report container
+  - [x] `sh:conforms` - Boolean conformance indicator
+  - [x] `sh:result` - List of validation results
+  - [x] Report serialization in multiple formats (Turtle, JSON-LD, RDF/XML)
 
 ### 1.2 SHACL Vocabulary and Namespaces
-- [ ] **Complete SHACL Namespace Implementation**
-  - [ ] All SHACL Core terms and properties
-  - [ ] SHACL-SPARQL terms and properties
-  - [ ] Validation result vocabulary
-  - [ ] Built-in constraint components
-  - [ ] Core target types and functions
+- [x] **Complete SHACL Namespace Implementation**
+  - [x] All SHACL Core terms and properties
+  - [x] SHACL-SPARQL terms and properties
+  - [x] Validation result vocabulary
+  - [x] Built-in constraint components
+  - [x] Core target types and functions
 
 - [ ] **IRI Resolution and Validation**
   - [ ] Proper IRI expansion and validation
@@ -100,28 +100,28 @@ This document outlines the comprehensive implementation plan for oxirs-shacl, a 
 ## 🏗️ Phase 2: SHACL Core Engine (Week 3-5)
 
 ### 2.1 Shape Parser and Loader
-- [ ] **RDF-based Shape Loading**
-  - [ ] Parse shapes from RDF graphs (Turtle, JSON-LD, RDF/XML, N-Triples)
-  - [ ] Shape discovery in RDF graphs
+- [x] **RDF-based Shape Loading**
+  - [x] Parse shapes from RDF graphs (Turtle, JSON-LD, RDF/XML, N-Triples)
+  - [x] Shape discovery in RDF graphs
   - [ ] Import and include mechanism for external shapes
   - [ ] Shape validation (shapes graphs must be valid)
-  - [ ] Circular dependency detection and handling
-  - [ ] Shape caching and optimization
+  - [x] Circular dependency detection and handling
+  - [x] Shape caching and optimization
 
-- [ ] **Shape Graph Analysis**
-  - [ ] Extract all shapes from shapes graph
-  - [ ] Identify node shapes vs property shapes
-  - [ ] Build shape dependency graph
-  - [ ] Optimize shape evaluation order
-  - [ ] Handle recursive shape definitions
+- [x] **Shape Graph Analysis**
+  - [x] Extract all shapes from shapes graph
+  - [x] Identify node shapes vs property shapes
+  - [x] Build shape dependency graph
+  - [x] Optimize shape evaluation order
+  - [x] Handle recursive shape definitions
 
 ### 2.2 Target Definition System
 - [ ] **Target Selection Implementation**
-  - [ ] `sh:targetClass` - Select instances of a class
-  - [ ] `sh:targetNode` - Select specific nodes
-  - [ ] `sh:targetObjectsOf` - Select objects of a property
-  - [ ] `sh:targetSubjectsOf` - Select subjects of a property
-  - [ ] Implicit class targets (shapes as classes)
+  - [x] `sh:targetClass` - Select instances of a class
+  - [x] `sh:targetNode` - Select specific nodes
+  - [x] `sh:targetObjectsOf` - Select objects of a property
+  - [x] `sh:targetSubjectsOf` - Select subjects of a property
+  - [x] Implicit class targets (shapes as classes)
   - [ ] Complex target combinations
 
 - [ ] **Target Query Generation**
@@ -131,17 +131,17 @@ This document outlines the comprehensive implementation plan for oxirs-shacl, a 
   - [ ] Index-aware target selection
 
 ### 2.3 Property Path Evaluation Engine
-- [ ] **Simple Property Paths**
-  - [ ] Direct property paths
-  - [ ] Inverse property paths
-  - [ ] Property path validation and normalization
+- [x] **Simple Property Paths**
+  - [x] Direct property paths
+  - [x] Inverse property paths
+  - [x] Property path validation and normalization
 
-- [ ] **Complex Property Paths**
-  - [ ] Sequence paths evaluation
-  - [ ] Alternative paths evaluation
-  - [ ] Kleene star paths (zero-or-more, one-or-more)
-  - [ ] Optional paths (zero-or-one)
-  - [ ] Path length constraints and optimization
+- [x] **Complex Property Paths**
+  - [x] Sequence paths evaluation
+  - [x] Alternative paths evaluation
+  - [x] Kleene star paths (zero-or-more, one-or-more)
+  - [x] Optional paths (zero-or-one)
+  - [x] Path length constraints and optimization
 
 - [ ] **Path Query Generation**
   - [ ] Generate SPARQL property path queries
@@ -220,11 +220,11 @@ This document outlines the comprehensive implementation plan for oxirs-shacl, a 
 
 ### 3.1 SPARQL-based Constraint System
 - [ ] **SPARQL Constraint Implementation**
-  - [ ] `sh:sparql` constraint parsing and validation
-  - [ ] Pre-binding variables ($this, $value, $PATH, etc.)
-  - [ ] SPARQL query execution integration
-  - [ ] Result interpretation and validation
-  - [ ] Error handling for SPARQL failures
+  - [x] `sh:sparql` constraint parsing and validation
+  - [x] Pre-binding variables ($this, $value, $PATH, etc.)
+  - [x] SPARQL query execution integration
+  - [x] Result interpretation and validation
+  - [x] Error handling for SPARQL failures
 
 - [ ] **Custom Constraint Components**
   - [ ] Custom constraint component definition
@@ -234,8 +234,8 @@ This document outlines the comprehensive implementation plan for oxirs-shacl, a 
 
 ### 3.2 SPARQL-based Target Selection
 - [ ] **SPARQL Target Implementation**
-  - [ ] `sh:target` with SPARQL SELECT queries
-  - [ ] Target query validation and security
+  - [x] `sh:target` with SPARQL SELECT queries
+  - [x] Target query validation and security
   - [ ] Performance optimization for target queries
   - [ ] Integration with core target system
 
@@ -306,11 +306,11 @@ This document outlines the comprehensive implementation plan for oxirs-shacl, a 
   - [ ] Customizable report templates
 
 - [ ] **Multiple Output Formats**
-  - [ ] Turtle/N-Triples validation reports
+  - [x] Turtle/N-Triples validation reports
   - [ ] JSON-LD validation reports
   - [ ] RDF/XML validation reports
-  - [ ] JSON validation reports (non-RDF)
-  - [ ] HTML validation reports
+  - [x] JSON validation reports (non-RDF)
+  - [x] HTML validation reports
   - [ ] CSV/TSV validation reports
 
 ### 5.2 Report Analysis and Statistics

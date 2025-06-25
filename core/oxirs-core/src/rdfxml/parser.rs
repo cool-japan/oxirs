@@ -1,9 +1,9 @@
 use crate::rdfxml::error::{RdfXmlParseError, RdfXmlSyntaxError};
 use crate::rdfxml::utils::*;
-use crate::model::{BlankNode, Literal, NamedNode, Term, Triple};
+use crate::model::{BlankNode, Literal, NamedNode, Term, Triple, NamedOrBlankNode, NamedOrBlankNodeRef};
 use crate::model::term::{Object, Subject, Predicate};
-use oxilangtag::LanguageTag;
-use oxiri::{Iri, IriParseError};
+use crate::model::literal::LanguageTag;
+use crate::model::iri::{Iri, IriParseError};
 use quick_xml::escape::{resolve_xml_entity, unescape_with};
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::*;
@@ -16,49 +16,6 @@ use std::str;
 #[cfg(feature = "async-tokio")]
 use tokio::io::{AsyncRead, BufReader as AsyncBufReader};
 
-/// Define NamedOrBlankNode type for internal use
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum NamedOrBlankNode {
-    NamedNode(NamedNode),
-    BlankNode(BlankNode),
-}
-
-impl From<NamedNode> for NamedOrBlankNode {
-    fn from(node: NamedNode) -> Self {
-        NamedOrBlankNode::NamedNode(node)
-    }
-}
-
-impl From<BlankNode> for NamedOrBlankNode {
-    fn from(node: BlankNode) -> Self {
-        NamedOrBlankNode::BlankNode(node)
-    }
-}
-
-impl From<NamedOrBlankNode> for crate::model::term::Subject {
-    fn from(node: NamedOrBlankNode) -> Self {
-        match node {
-            NamedOrBlankNode::NamedNode(n) => crate::model::term::Subject::NamedNode(n),
-            NamedOrBlankNode::BlankNode(n) => crate::model::term::Subject::BlankNode(n),
-        }
-    }
-}
-
-impl NamedOrBlankNode {
-    pub fn as_ref(&self) -> NamedOrBlankNodeRef<'_> {
-        match self {
-            NamedOrBlankNode::NamedNode(n) => NamedOrBlankNodeRef::NamedNode(n),
-            NamedOrBlankNode::BlankNode(n) => NamedOrBlankNodeRef::BlankNode(n),
-        }
-    }
-}
-
-/// Reference variant of NamedOrBlankNode
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum NamedOrBlankNodeRef<'a> {
-    NamedNode(&'a NamedNode),
-    BlankNode(&'a BlankNode),
-}
 
 impl From<NamedOrBlankNode> for Term {
     fn from(node: NamedOrBlankNode) -> Self {
@@ -1460,16 +1417,16 @@ impl<R> InternalRdfXmlParser<R> {
                     results.push(Triple::new(
                         crate::model::term::Subject::from(subject.clone()), 
                         NamedNode::new_unchecked(RDF_FIRST), 
-                        object.into()
+                        object
                     ));
                     results.push(Triple::new(
                         crate::model::term::Subject::from(subject.clone()), 
                         NamedNode::new_unchecked(RDF_REST), 
-                        current_node.clone().into()
+                        crate::model::term::Object::from(current_node.clone())
                     ));
                     current_node = subject;
                 }
-                let triple = Triple::new(crate::model::term::Subject::from(subject), iri, current_node.into());
+                let triple = Triple::new(crate::model::term::Subject::from(subject), iri, crate::model::term::Object::from(current_node));
                 if let Some(id_attr) = id_attr {
                     Self::reify(triple.clone(), id_attr, results);
                 }
@@ -1622,8 +1579,8 @@ impl<R> InternalRdfXmlParser<R> {
                     base_iri
                         .resolve(&relative_iri)
                         .map_err(|error| RdfXmlSyntaxError::invalid_iri(relative_iri, error))?
-                }
-                .into_inner(),
+                        .into_inner()
+                },
             ))
         } else {
             self.parse_iri(relative_iri)
