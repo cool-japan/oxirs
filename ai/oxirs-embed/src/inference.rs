@@ -2,7 +2,7 @@
 
 use crate::{EmbeddingModel, ModelStats};
 use anyhow::Result;
-use oxirs_vec::Vector;
+use crate::Vector;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use tokio::sync::Semaphore;

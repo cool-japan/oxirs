@@ -404,9 +404,11 @@ impl BenchmarkSuite {
         // Sort by MRR (higher is better)
         comparisons.sort_by(|a, b| b.mean_reciprocal_rank.partial_cmp(&a.mean_reciprocal_rank).unwrap());
         
+        let best_model = comparisons.first().map(|c| c.model_name.clone());
+        
         BenchmarkReport {
             comparisons,
-            best_model: comparisons.first().map(|c| c.model_name.clone()),
+            best_model,
             num_models: self.evaluations.len(),
         }
     }
@@ -440,7 +442,7 @@ pub struct ModelComparison {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::TransE;
+    use crate::TransE;
     use crate::ModelConfig;
     
     #[test]

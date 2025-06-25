@@ -82,7 +82,7 @@ pub fn gradient_update(
     learning_rate: f64,
     l2_reg: f64,
 ) {
-    *embeddings = embeddings.clone() - learning_rate * (gradients + l2_reg * embeddings);
+    *embeddings = embeddings.clone() - learning_rate * (gradients + l2_reg * &*embeddings);
 }
 
 /// Apply gradient descent update for a single embedding
@@ -92,7 +92,7 @@ pub fn gradient_update_single(
     learning_rate: f64,
     l2_reg: f64,
 ) {
-    *embedding = embedding.clone() - learning_rate * (gradient + l2_reg * embedding);
+    *embedding = embedding.clone() - learning_rate * (gradient + l2_reg * &*embedding);
 }
 
 /// Sigmoid activation function
@@ -132,14 +132,14 @@ pub fn create_batches<T: Clone>(data: &[T], batch_size: usize) -> Vec<Vec<T>> {
         .collect()
 }
 
-/// Convert ndarray to oxirs_vec::Vector
-pub fn ndarray_to_vector(array: &Array1<f64>) -> oxirs_vec::Vector {
+/// Convert ndarray to Vector
+pub fn ndarray_to_vector(array: &Array1<f64>) -> crate::Vector {
     let values: Vec<f32> = array.iter().map(|&x| x as f32).collect();
-    oxirs_vec::Vector::new(values)
+    crate::Vector::new(values)
 }
 
-/// Convert oxirs_vec::Vector to ndarray
-pub fn vector_to_ndarray(vector: &oxirs_vec::Vector) -> Array1<f64> {
+/// Convert Vector to ndarray
+pub fn vector_to_ndarray(vector: &crate::Vector) -> Array1<f64> {
     let values: Vec<f64> = vector.values.iter().map(|&x| x as f64).collect();
     Array1::from_vec(values)
 }

@@ -15,7 +15,7 @@ use axum::{
     http::{Method, StatusCode, HeaderMap},
     middleware::{self, Next},
     response::{Html, Json, Response},
-    routing::{get, post},
+    routing::{get, post, delete},
     Router,
 };
 use std::collections::HashMap;
@@ -229,6 +229,27 @@ impl Runtime {
                 .route("/auth/oauth2/validate", get(handlers::oauth2::validate_oauth2_token))
                 .route("/auth/oauth2/config", get(handlers::oauth2::get_oauth2_config))
                 .route("/auth/oauth2/.well-known/openid_configuration", get(handlers::oauth2::oauth2_discovery));
+        }
+
+        // SAML 2.0 authentication routes (if SAML is configured)
+        if self.config.security.saml.is_some() {
+            app = app
+                .route("/auth/saml/login", get(handlers::saml::initiate_saml_sso))
+                .route("/auth/saml/acs", post(handlers::saml::handle_saml_acs))
+                .route("/auth/saml/slo", get(handlers::saml::handle_saml_slo).post(handlers::saml::handle_saml_slo))
+                .route("/auth/saml/logout", get(handlers::saml::initiate_saml_logout))
+                .route("/auth/saml/metadata", get(handlers::saml::get_saml_metadata));
+        }
+
+        // Multi-Factor Authentication routes (if MFA is enabled)
+        if self.config.security.mfa.enabled {
+            app = app
+                .route("/auth/mfa/enroll", post(handlers::mfa::enroll_mfa))
+                .route("/auth/mfa/challenge/:type", post(handlers::mfa::create_mfa_challenge))
+                .route("/auth/mfa/verify", post(handlers::mfa::verify_mfa))
+                .route("/auth/mfa/status", get(handlers::mfa::get_mfa_status))
+                .route("/auth/mfa/disable/:type", delete(handlers::mfa::disable_mfa))
+                .route("/auth/mfa/backup-codes", post(handlers::mfa::regenerate_backup_codes));
         }
 
         // Health check routes

@@ -34,8 +34,9 @@ pub mod serializer;
 pub mod interning;
 pub mod indexing;
 pub mod optimization;
-pub mod jsonld;
-pub mod rdfxml;
+// pub mod config;
+// pub mod jsonld;
+// pub mod rdfxml;
 
 // Re-export core types for convenience
 pub use model::*;

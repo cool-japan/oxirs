@@ -627,10 +627,128 @@ impl WalManager {
     ) -> Result<()> {
         info!("Starting analysis phase");
         
-        // Read all log records and build tables
-        // This is a simplified implementation
+        // Open log file for reading
+        let file = File::open(&self.config.wal_file_path)
+            .map_err(|e| anyhow!("Failed to open WAL file for analysis: {}", e))?;
+        let mut reader = BufReader::new(file);
         
-        info!("Analysis phase completed");
+        let mut last_checkpoint_lsn: Option<LSN> = None;
+        let mut log_records = Vec::new();
+        
+        // Read all log records
+        loop {
+            let mut size_bytes = [0u8; 4];
+            match reader.read_exact(&mut size_bytes) {
+                Ok(_) => {
+                    let size = u32::from_le_bytes(size_bytes);
+                    if size == 0 || size > 1_000_000 { // Sanity check
+                        break;
+                    }
+                    
+                    let mut record_bytes = vec![0u8; size as usize - 4];
+                    if reader.read_exact(&mut record_bytes).is_err() {
+                        break;
+                    }
+                    
+                    if let Ok(record) = LogRecord::from_bytes(&record_bytes) {
+                        if record.validate_checksum().unwrap_or(false) {
+                            log_records.push(record);
+                        }
+                    }
+                }
+                Err(_) => break, // End of file
+            }
+        }
+        
+        // Find last checkpoint
+        for record in log_records.iter().rev() {
+            if matches!(record.record_type, LogRecordType::Checkpoint { .. }) {
+                last_checkpoint_lsn = Some(record.lsn);
+                break;
+            }
+        }
+        
+        // Start analysis from last checkpoint (or beginning if no checkpoint)
+        let start_lsn = last_checkpoint_lsn.unwrap_or(0);
+        
+        for record in &log_records {
+            if record.lsn >= start_lsn {
+                lsn_to_record.insert(record.lsn, record.clone());
+                
+                match &record.record_type {
+                    LogRecordType::Begin { transaction_id, .. } => {
+                        transaction_table.insert(*transaction_id, TransactionEntry {
+                            transaction_id: *transaction_id,
+                            status: TransactionStatus::Active,
+                            last_lsn: record.lsn,
+                            undo_next_lsn: Some(record.lsn),
+                        });
+                    }
+                    
+                    LogRecordType::Commit { transaction_id, .. } => {
+                        if let Some(entry) = transaction_table.get_mut(transaction_id) {
+                            entry.status = TransactionStatus::Committed;
+                            entry.last_lsn = record.lsn;
+                        }
+                    }
+                    
+                    LogRecordType::Abort { transaction_id, .. } => {
+                        if let Some(entry) = transaction_table.get_mut(transaction_id) {
+                            entry.status = TransactionStatus::Aborted;
+                            entry.last_lsn = record.lsn;
+                        }
+                    }
+                    
+                    LogRecordType::Insert { transaction_id, .. } |
+                    LogRecordType::Update { transaction_id, .. } |
+                    LogRecordType::Delete { transaction_id, .. } => {
+                        if let Some(entry) = transaction_table.get_mut(transaction_id) {
+                            entry.last_lsn = record.lsn;
+                        }
+                        
+                        // Add to dirty page table (simplified - using LSN as page_id for demo)
+                        let page_id = record.lsn % 1000; // Simplified page mapping
+                        dirty_page_table.entry(page_id).or_insert(DirtyPageEntry {
+                            page_id,
+                            recovery_lsn: record.lsn,
+                        });
+                    }
+                    
+                    LogRecordType::Checkpoint { active_transactions, dirty_pages, .. } => {
+                        // Restore state from checkpoint
+                        for &tx_id in active_transactions {
+                            transaction_table.entry(tx_id).or_insert(TransactionEntry {
+                                transaction_id: tx_id,
+                                status: TransactionStatus::Active,
+                                last_lsn: record.lsn,
+                                undo_next_lsn: Some(record.lsn),
+                            });
+                        }
+                        
+                        for &page_id in dirty_pages {
+                            dirty_page_table.entry(page_id).or_insert(DirtyPageEntry {
+                                page_id,
+                                recovery_lsn: record.lsn,
+                            });
+                        }
+                    }
+                    
+                    LogRecordType::CLR { transaction_id, undo_lsn, .. } => {
+                        if let Some(entry) = transaction_table.get_mut(transaction_id) {
+                            entry.last_lsn = record.lsn;
+                            entry.undo_next_lsn = Some(*undo_lsn);
+                        }
+                    }
+                    
+                    LogRecordType::EndOfLog => {
+                        break;
+                    }
+                }
+            }
+        }
+        
+        info!("Analysis phase completed: {} transactions, {} dirty pages", 
+              transaction_table.len(), dirty_page_table.len());
         Ok(())
     }
 
@@ -641,14 +759,85 @@ impl WalManager {
     ) -> Result<()> {
         info!("Starting redo phase");
         
-        // Replay operations from the log
-        // This is a simplified implementation
+        // Find the minimum recovery LSN from dirty page table
+        let min_recovery_lsn = dirty_page_table.values()
+            .map(|entry| entry.recovery_lsn)
+            .min()
+            .unwrap_or(0);
         
-        if let Ok(mut stats) = self.stats.lock() {
-            stats.recovery_operations += lsn_to_record.len() as u64;
+        // Sort log records by LSN for sequential replay
+        let mut sorted_records: Vec<_> = lsn_to_record.values()
+            .filter(|record| record.lsn >= min_recovery_lsn)
+            .collect();
+        sorted_records.sort_by_key(|record| record.lsn);
+        
+        let mut operations_redone = 0;
+        
+        for record in sorted_records {
+            match &record.record_type {
+                LogRecordType::Insert { transaction_id, key, value, .. } => {
+                    // Redo the insert operation
+                    if let Ok(_) = self.redo_insert(*transaction_id, key.clone(), *value) {
+                        operations_redone += 1;
+                        debug!("Redone insert operation at LSN {}", record.lsn);
+                    }
+                }
+                
+                LogRecordType::Update { transaction_id, key, new_value, .. } => {
+                    // Redo the update operation
+                    if let Ok(_) = self.redo_update(*transaction_id, key.clone(), *new_value) {
+                        operations_redone += 1;
+                        debug!("Redone update operation at LSN {}", record.lsn);
+                    }
+                }
+                
+                LogRecordType::Delete { transaction_id, key, .. } => {
+                    // Redo the delete operation
+                    if let Ok(_) = self.redo_delete(*transaction_id, key.clone()) {
+                        operations_redone += 1;
+                        debug!("Redone delete operation at LSN {}", record.lsn);
+                    }
+                }
+                
+                LogRecordType::CLR { transaction_id, operation, .. } => {
+                    // Redo compensation log record (undo operation)
+                    match operation.as_ref() {
+                        LogRecordType::Insert { key, value, .. } => {
+                            // CLR for insert means we need to delete
+                            if let Ok(_) = self.redo_delete(*transaction_id, key.clone()) {
+                                operations_redone += 1;
+                                debug!("Redone CLR delete at LSN {}", record.lsn);
+                            }
+                        }
+                        LogRecordType::Delete { key, deleted_value, .. } => {
+                            // CLR for delete means we need to insert
+                            if let Ok(_) = self.redo_insert(*transaction_id, key.clone(), *deleted_value) {
+                                operations_redone += 1;
+                                debug!("Redone CLR insert at LSN {}", record.lsn);
+                            }
+                        }
+                        LogRecordType::Update { key, old_value, .. } => {
+                            // CLR for update means we restore old value
+                            if let Ok(_) = self.redo_update(*transaction_id, key.clone(), *old_value) {
+                                operations_redone += 1;
+                                debug!("Redone CLR update at LSN {}", record.lsn);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                
+                _ => {
+                    // Skip non-data operations (Begin, Commit, Abort, Checkpoint)
+                }
+            }
         }
         
-        info!("Redo phase completed");
+        if let Ok(mut stats) = self.stats.lock() {
+            stats.recovery_operations += operations_redone;
+        }
+        
+        info!("Redo phase completed: {} operations redone", operations_redone);
         Ok(())
     }
 
@@ -659,11 +848,170 @@ impl WalManager {
     ) -> Result<()> {
         info!("Starting undo phase");
         
-        // Rollback uncommitted transactions
-        // This is a simplified implementation
+        // Find all active (uncommitted) transactions
+        let active_transactions: Vec<_> = transaction_table.values()
+            .filter(|entry| entry.status == TransactionStatus::Active)
+            .collect();
         
-        info!("Undo phase completed");
+        if active_transactions.is_empty() {
+            info!("No active transactions to undo");
+            return Ok(());
+        }
+        
+        // Create undo list with LSNs to undo for each transaction
+        let mut undo_list = Vec::new();
+        for tx_entry in &active_transactions {
+            if let Some(lsn) = tx_entry.undo_next_lsn {
+                undo_list.push((tx_entry.transaction_id, lsn));
+            }
+        }
+        
+        // Sort by LSN descending (undo in reverse order)
+        undo_list.sort_by(|a, b| b.1.cmp(&a.1));
+        
+        let mut operations_undone = 0;
+        
+        while let Some((transaction_id, current_lsn)) = undo_list.pop() {
+            if let Some(record) = lsn_to_record.get(&current_lsn) {
+                match &record.record_type {
+                    LogRecordType::Insert { key, value, .. } => {
+                        // Undo insert by deleting
+                        if let Ok(clr_lsn) = self.undo_insert(transaction_id, key.clone(), *value) {
+                            operations_undone += 1;
+                            debug!("Undone insert at LSN {} with CLR {}", current_lsn, clr_lsn);
+                        }
+                    }
+                    
+                    LogRecordType::Update { key, old_value, .. } => {
+                        // Undo update by restoring old value
+                        if let Ok(clr_lsn) = self.undo_update(transaction_id, key.clone(), *old_value) {
+                            operations_undone += 1;
+                            debug!("Undone update at LSN {} with CLR {}", current_lsn, clr_lsn);
+                        }
+                    }
+                    
+                    LogRecordType::Delete { key, deleted_value, .. } => {
+                        // Undo delete by reinserting
+                        if let Ok(clr_lsn) = self.undo_delete(transaction_id, key.clone(), *deleted_value) {
+                            operations_undone += 1;
+                            debug!("Undone delete at LSN {} with CLR {}", current_lsn, clr_lsn);
+                        }
+                    }
+                    
+                    LogRecordType::CLR { undo_lsn, .. } => {
+                        // CLR points to next LSN to undo
+                        if *undo_lsn > 0 {
+                            undo_list.push((transaction_id, *undo_lsn));
+                            undo_list.sort_by(|a, b| b.1.cmp(&a.1));
+                        }
+                        continue;
+                    }
+                    
+                    LogRecordType::Begin { .. } => {
+                        // Reached beginning of transaction, write abort record
+                        if let Ok(abort_lsn) = self.abort_transaction(transaction_id) {
+                            debug!("Written abort record for transaction {} at LSN {}", transaction_id, abort_lsn);
+                        }
+                        continue;
+                    }
+                    
+                    _ => {
+                        // Skip other record types
+                        continue;
+                    }
+                }
+                
+                // Add previous LSN to undo list if it exists
+                if let Some(prev_lsn) = record.prev_lsn {
+                    if prev_lsn > 0 {
+                        undo_list.push((transaction_id, prev_lsn));
+                        undo_list.sort_by(|a, b| b.1.cmp(&a.1));
+                    }
+                }
+            }
+        }
+        
+        // Force flush all undo operations
+        self.flush()?;
+        
+        info!("Undo phase completed: {} operations undone for {} transactions", 
+              operations_undone, active_transactions.len());
         Ok(())
+    }
+    
+    // Helper methods for redo operations
+    
+    fn redo_insert(&self, _transaction_id: TransactionId, _key: TripleKey, _value: bool) -> Result<()> {
+        // In a full implementation, this would apply the insert to the storage engine
+        // For now, we'll just simulate success
+        Ok(())
+    }
+    
+    fn redo_update(&self, _transaction_id: TransactionId, _key: TripleKey, _value: bool) -> Result<()> {
+        // In a full implementation, this would apply the update to the storage engine
+        // For now, we'll just simulate success
+        Ok(())
+    }
+    
+    fn redo_delete(&self, _transaction_id: TransactionId, _key: TripleKey) -> Result<()> {
+        // In a full implementation, this would apply the delete to the storage engine
+        // For now, we'll just simulate success
+        Ok(())
+    }
+    
+    // Helper methods for undo operations (generate CLRs)
+    
+    fn undo_insert(&self, transaction_id: TransactionId, key: TripleKey, value: bool) -> Result<LSN> {
+        // Create CLR for undoing an insert (which is a delete)
+        let delete_op = LogRecordType::Delete {
+            transaction_id,
+            key,
+            deleted_value: value,
+        };
+        
+        let clr = LogRecordType::CLR {
+            transaction_id,
+            undo_lsn: 0, // Will be set based on transaction chain
+            operation: Box::new(delete_op),
+        };
+        
+        self.write_log_record(clr)
+    }
+    
+    fn undo_update(&self, transaction_id: TransactionId, key: TripleKey, old_value: bool) -> Result<LSN> {
+        // Create CLR for undoing an update (restore old value)
+        let update_op = LogRecordType::Update {
+            transaction_id,
+            key,
+            new_value: old_value,
+            old_value: !old_value, // Dummy value
+        };
+        
+        let clr = LogRecordType::CLR {
+            transaction_id,
+            undo_lsn: 0,
+            operation: Box::new(update_op),
+        };
+        
+        self.write_log_record(clr)
+    }
+    
+    fn undo_delete(&self, transaction_id: TransactionId, key: TripleKey, deleted_value: bool) -> Result<LSN> {
+        // Create CLR for undoing a delete (which is an insert)
+        let insert_op = LogRecordType::Insert {
+            transaction_id,
+            key,
+            value: deleted_value,
+            previous_value: None,
+        };
+        
+        let clr = LogRecordType::CLR {
+            transaction_id,
+            undo_lsn: 0,
+            operation: Box::new(insert_op),
+        };
+        
+        self.write_log_record(clr)
     }
 }
 

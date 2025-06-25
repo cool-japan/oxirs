@@ -1,15 +1,15 @@
 //! Base functionality shared across embedding models
 
-use crate::{ModelConfig, ModelStats, TrainingStats, EmbeddingError};
+use crate::{ModelConfig, ModelStats, TrainingStats, EmbeddingError, Triple, Vector};
 use anyhow::Result;
-use oxirs_core::Triple;
-use oxirs_vec::Vector;
+use rand::prelude::SliceRandom;
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 use ndarray::{Array1, Array2};
 use chrono::{DateTime, Utc};
 
 /// Core data structures and functionality shared by all embedding models
+#[derive(Debug)]
 pub struct BaseModel {
     /// Model configuration
     pub config: ModelConfig,

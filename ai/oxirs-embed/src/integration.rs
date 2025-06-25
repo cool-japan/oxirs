@@ -2,13 +2,12 @@
 
 use crate::{EmbeddingModel, ModelStats};
 use anyhow::{anyhow, Result};
-use oxirs_vec::{Vector, VectorStore, EmbeddingStrategy};
+use crate::Vector;
 use std::collections::HashMap;
 use tracing::{debug, info, warn};
 
-/// Integration bridge between oxirs-embed and oxirs-vec
+/// Integration bridge between oxirs-embed and vector stores
 pub struct VectorStoreBridge {
-    vector_store: VectorStore,
     entity_mappings: HashMap<String, String>,
     relation_mappings: HashMap<String, String>,
     prefix_config: PrefixConfig,
@@ -33,20 +32,18 @@ impl Default for PrefixConfig {
 }
 
 impl VectorStoreBridge {
-    /// Create a new bridge with default vector store
+    /// Create a new bridge
     pub fn new() -> Self {
         Self {
-            vector_store: VectorStore::new(),
             entity_mappings: HashMap::new(),
             relation_mappings: HashMap::new(),
             prefix_config: PrefixConfig::default(),
         }
     }
     
-    /// Create bridge with custom vector store
-    pub fn with_vector_store(vector_store: VectorStore) -> Self {
+    /// Create bridge with custom prefix config
+    pub fn with_prefix_config(prefix_config: PrefixConfig) -> Self {
         Self {
-            vector_store,
             entity_mappings: HashMap::new(),
             relation_mappings: HashMap::new(),
             prefix_config: PrefixConfig::default(),

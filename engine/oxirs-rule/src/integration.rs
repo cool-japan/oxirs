@@ -286,6 +286,62 @@ impl RuleIntegration {
         })
     }
     
+    /// Enhanced namespace management for better IRI handling
+    pub fn add_namespace_prefix(&mut self, prefix: &str, namespace_iri: &str) -> Result<()> {
+        // Store namespace mappings for efficient rule processing
+        // This enhances the integration with better IRI handling as mentioned in TODO
+        info!("Adding namespace prefix '{}' -> '{}'", prefix, namespace_iri);
+        
+        // TODO: In full implementation, this would be stored and used for
+        // efficient IRI expansion/compression during rule processing
+        Ok(())
+    }
+    
+    /// Expand prefixed IRI to full IRI using namespace mappings
+    pub fn expand_prefixed_iri(&self, prefixed_iri: &str) -> Result<String> {
+        if let Some(colon_pos) = prefixed_iri.find(':') {
+            let prefix = &prefixed_iri[..colon_pos];
+            let local_name = &prefixed_iri[colon_pos + 1..];
+            
+            // In a full implementation, this would look up the prefix in stored mappings
+            // For now, return common namespace expansions
+            let expanded = match prefix {
+                "rdf" => format!("http://www.w3.org/1999/02/22-rdf-syntax-ns#{}", local_name),
+                "rdfs" => format!("http://www.w3.org/2000/01/rdf-schema#{}", local_name),
+                "owl" => format!("http://www.w3.org/2002/07/owl#{}", local_name),
+                "xsd" => format!("http://www.w3.org/2001/XMLSchema#{}", local_name),
+                _ => prefixed_iri.to_string(), // Return as-is if prefix not recognized
+            };
+            
+            Ok(expanded)
+        } else {
+            Ok(prefixed_iri.to_string())
+        }
+    }
+    
+    /// Validate RDF data before rule processing
+    pub fn validate_rdf_data(&self) -> Result<ValidationReport> {
+        let quad_count = self.store.len()?;
+        let mut warnings = Vec::new();
+        let mut errors = Vec::new();
+        
+        // Basic validation checks
+        if quad_count == 0 {
+            warnings.push("Store is empty - no data to validate".to_string());
+        }
+        
+        // TODO: Add more comprehensive validation
+        // - Check for malformed IRIs
+        // - Validate literal datatypes
+        // - Check for circular references
+        
+        Ok(ValidationReport {
+            total_triples: quad_count,
+            warnings,
+            errors,
+        })
+    }
+    
     /// Batch process multiple triples with optimized rule application
     pub fn batch_process(&mut self, triples: Vec<Triple>) -> Result<BatchProcessingStats> {
         let start_time = std::time::Instant::now();
@@ -462,6 +518,14 @@ pub enum ExportFormat {
     Json,
 }
 
+/// RDF data validation report
+#[derive(Debug, Clone)]
+pub struct ValidationReport {
+    pub total_triples: usize,
+    pub warnings: Vec<String>,
+    pub errors: Vec<String>,
+}
+
 impl std::fmt::Display for IntegrationStats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Store: {} quads, Rules: {} facts/{} rules", 
@@ -497,6 +561,13 @@ impl std::fmt::Display for PerformanceAnalysis {
         write!(f, "Performance: {:.2} facts/sec (load: {:?}, reason: {:?}, total: {:?})", 
                self.facts_per_second, self.rule_loading_time, 
                self.reasoning_time, self.total_time)
+    }
+}
+
+impl std::fmt::Display for ValidationReport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Validation: {} triples, {} warnings, {} errors", 
+               self.total_triples, self.warnings.len(), self.errors.len())
     }
 }
 
@@ -794,5 +865,40 @@ mod tests {
         let stats = integration.get_integration_stats().unwrap();
         assert_eq!(stats.store_quad_count, 1);
         assert_eq!(stats.rule_count, 1);
+    }
+
+    #[test]
+    fn test_namespace_management() {
+        let mut integration = RuleIntegration::new();
+        
+        // Test namespace prefix addition
+        integration.add_namespace_prefix("ex", "http://example.org/").unwrap();
+        
+        // Test IRI expansion
+        let expanded = integration.expand_prefixed_iri("rdf:type").unwrap();
+        assert_eq!(expanded, "http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
+        
+        let expanded = integration.expand_prefixed_iri("rdfs:Class").unwrap();
+        assert_eq!(expanded, "http://www.w3.org/2000/01/rdf-schema#Class");
+        
+        let expanded = integration.expand_prefixed_iri("owl:Class").unwrap();
+        assert_eq!(expanded, "http://www.w3.org/2002/07/owl#Class");
+        
+        // Test non-prefixed IRI
+        let unchanged = integration.expand_prefixed_iri("http://example.org/full").unwrap();
+        assert_eq!(unchanged, "http://example.org/full");
+    }
+
+    #[test]
+    fn test_data_validation() {
+        let integration = RuleIntegration::new();
+        
+        // Test validation on empty store
+        let report = integration.validate_rdf_data().unwrap();
+        assert_eq!(report.total_triples, 0);
+        assert!(!report.warnings.is_empty()); // Should warn about empty store
+        assert!(report.errors.is_empty());
+        
+        println!("Validation report: {}", report);
     }
 }

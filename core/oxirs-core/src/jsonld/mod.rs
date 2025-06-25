@@ -1,13 +1,15 @@
 //! JSON-LD processing functionality for OxiRS Core
 //!
 //! This module provides JSON-LD parsing and serialization capabilities,
-//! ported from Oxigraph's oxjsonld implementation.
+//! ported from Oxigraph's oxjsonld implementation with ultra-high performance
+//! streaming enhancements.
 
 mod context;
 mod error;
 mod expansion;
 mod from_rdf;
 mod profile;
+mod streaming;
 mod to_rdf;
 
 pub use context::{JsonLdLoadDocumentOptions, JsonLdRemoteDocument};
@@ -18,6 +20,10 @@ pub use from_rdf::{JsonLdSerializer, WriterJsonLdSerializer};
 #[doc(hidden)]
 pub use profile::JsonLdProcessingMode;
 pub use profile::{JsonLdProfile, JsonLdProfileSet};
+pub use streaming::{
+    UltraStreamingJsonLdParser, StreamingConfig, StreamingSink, StreamingStatistics,
+    MemoryStreamingSink, ZeroCopyLevel, SinkStatistics
+};
 #[cfg(feature = "async")]
 pub use to_rdf::TokioAsyncReaderJsonLdParser;
 pub use to_rdf::{JsonLdParser, JsonLdPrefixesIter, ReaderJsonLdParser, SliceJsonLdParser};

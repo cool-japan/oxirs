@@ -5,15 +5,14 @@
 //!
 //! Reference: Bordes et al. "Translating Embeddings for Modeling Multi-relational Data" (2013)
 
-use crate::{EmbeddingModel, ModelConfig, TrainingStats, ModelStats, EmbeddingError};
+use crate::{EmbeddingModel, ModelConfig, TrainingStats, ModelStats, EmbeddingError, Triple, Vector};
 use crate::models::{BaseModel, common::*};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use ndarray::{Array1, Array2, Axis};
-use oxirs_core::Triple;
-use oxirs_vec::Vector;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::ops::{AddAssign, SubAssign};
 use std::time::Instant;
 use tracing::{debug, info};
 use uuid::Uuid;
@@ -351,7 +350,7 @@ impl EmbeddingModel for TransE {
         let entity_id = self.base.get_entity_id(entity)
             .ok_or_else(|| anyhow!("Entity not found: {}", entity))?;
         
-        let embedding = self.entity_embeddings.row(entity_id);
+        let embedding = self.entity_embeddings.row(entity_id).to_owned();
         Ok(ndarray_to_vector(&embedding))
     }
     
@@ -363,7 +362,7 @@ impl EmbeddingModel for TransE {
         let relation_id = self.base.get_relation_id(relation)
             .ok_or_else(|| anyhow!("Relation not found: {}", relation))?;
         
-        let embedding = self.relation_embeddings.row(relation_id);
+        let embedding = self.relation_embeddings.row(relation_id).to_owned();
         Ok(ndarray_to_vector(&embedding))
     }
     

@@ -58,6 +58,173 @@
 
 **Next Steps**: Complete integration with oxirs-core and optimize RETE network for production use
 
+---
+
+## ⚡ URGENT: OxiGraph Extraction Plan - Zero Dependencies Implementation
+
+*Updated to eliminate OxiGraph dependencies and implement native OxiRS components by extracting and adapting code from OxiGraph source*
+
+### High-Priority Components to Extract (Immediate Tasks)
+
+#### Phase 1: Core RDF Model Extraction (Week 1-2)
+- [ ] **Extract oxrdf data model** (`~/work/oxigraph/lib/oxrdf/src/`)
+  - [ ] `literal.rs` - Literal value handling and datatypes → `src/model/literal.rs`
+  - [ ] `named_node.rs` - IRI validation and interning → `src/model/iri.rs`
+  - [ ] `blank_node.rs` - Blank node handling → `src/model/term.rs`
+  - [ ] `triple.rs` - Triple/Quad structures → `src/model/triple.rs`
+  - [ ] `dataset.rs` - Graph/Dataset implementations → `src/model/dataset.rs`
+  - [ ] `graph.rs` - Graph container → `src/model/graph.rs`
+  - [ ] `vocab.rs` - Common vocabulary terms → `src/model/vocab.rs`
+  - [ ] `parser.rs` - Basic term parsing → `src/parser.rs`
+
+#### Phase 2: SPARQL Engine Extraction (Week 3-4)
+- [ ] **Extract spargebra** (`~/work/oxigraph/lib/spargebra/src/`)
+  - [ ] `algebra.rs` - Query algebra representation → `src/query/algebra.rs`
+  - [ ] `parser.rs` - SPARQL query parsing → `src/query/parser.rs`
+  - [ ] `query.rs` - Query structure → `src/query/mod.rs`
+  - [ ] `term.rs` - Query terms → `src/query/terms.rs`
+  - [ ] `update.rs` - SPARQL UPDATE → `src/query/update.rs`
+
+- [ ] **Extract spareval** (`~/work/oxigraph/lib/spareval/src/`)
+  - [ ] `eval.rs` - Query evaluation engine → `src/query/eval.rs`
+  - [ ] `model.rs` - Evaluation model → `src/query/model.rs`
+  - [ ] `dataset.rs` - Dataset evaluation → `src/query/dataset.rs`
+  - [ ] `service.rs` - SERVICE delegation → `src/query/service.rs`
+
+#### Phase 3: Format Support Extraction (Week 5-6)
+- [ ] **Extract oxttl** (`~/work/oxigraph/lib/oxttl/src/`)
+  - [ ] `turtle.rs` - Turtle parser/serializer → `src/rdfxml/turtle.rs`
+  - [ ] `ntriples.rs` - N-Triples → `src/rdfxml/ntriples.rs`
+  - [ ] `nquads.rs` - N-Quads → `src/rdfxml/nquads.rs`
+  - [ ] `trig.rs` - TriG → `src/rdfxml/trig.rs`
+  - [ ] `lexer.rs` - Turtle lexer → `src/rdfxml/lexer.rs`
+
+- [ ] **Extract oxrdfxml** (`~/work/oxigraph/lib/oxrdfxml/src/`)
+  - [ ] `parser.rs` - RDF/XML parser → `src/rdfxml/parser.rs`
+  - [ ] `serializer.rs` - RDF/XML serializer → `src/rdfxml/serializer.rs`
+  - [ ] `utils.rs` - XML utilities → `src/rdfxml/utils.rs`
+
+- [ ] **Extract oxjsonld** (`~/work/oxigraph/lib/oxjsonld/src/`)
+  - [ ] `context.rs` - JSON-LD context → `src/jsonld/context.rs`
+  - [ ] `expansion.rs` - JSON-LD expansion → `src/jsonld/expansion.rs`
+  - [ ] `to_rdf.rs` - JSON-LD to RDF → `src/jsonld/to_rdf.rs`
+  - [ ] `from_rdf.rs` - RDF to JSON-LD → `src/jsonld/from_rdf.rs`
+
+#### Phase 4: Storage Layer Extraction (Week 7-8)
+- [ ] **Extract oxigraph storage** (`~/work/oxigraph/lib/oxigraph/src/`)
+  - [ ] `storage/numeric_encoder.rs` - Efficient encoding → `src/store/encoding.rs`
+  - [ ] `storage/binary_encoder.rs` - Binary encoding → `src/store/binary.rs`
+  - [ ] `storage/small_string.rs` - String optimization → `src/store/strings.rs`
+  - [ ] `storage/memory.rs` - Memory backend → `src/store/memory.rs`
+  - [ ] `model.rs` - Store model → `src/store/model.rs`
+  - [ ] `store.rs` - Main store interface → `src/store/mod.rs`
+
+#### Phase 5: Remove Dependencies (Week 9)
+- [ ] **Update Cargo.toml files**
+  - [ ] Remove `oxigraph = "0.4.11"` from workspace
+  - [ ] Remove `oxrdf = "0.2.0"` from workspace
+  - [ ] Remove `oxjsonld = "0.1.0"` from workspace
+  - [ ] Update individual crate dependencies
+  - [ ] Add required parsing dependencies (quick-xml, serde_json, etc.)
+
+#### Phase 6: Integration and Testing (Week 10)
+- [ ] **Adapt extracted code to OxiRS architecture**
+  - [ ] Update module structure and imports
+  - [ ] Implement OxiRS-specific traits and interfaces
+  - [ ] Fix compilation errors and type mismatches
+  - [ ] Update error handling to use anyhow/thiserror consistently
+  - [ ] Add comprehensive unit tests for each extracted component
+
+- [ ] **Performance validation**
+  - [ ] Create benchmark suite comparing with original OxiGraph
+  - [ ] Memory usage profiling
+  - [ ] Query execution performance tests
+  - [ ] Storage operation benchmarks
+
+### Extraction Strategy
+
+#### Code Adaptation Process
+1. **Copy source files** from OxiGraph to corresponding OxiRS locations
+2. **Update imports** to use OxiRS module structure
+3. **Adapt data structures** to fit OxiRS architecture
+4. **Remove unused features** that don't apply to OxiRS
+5. **Add OxiRS-specific optimizations** and enhancements
+6. **Comprehensive testing** to ensure compatibility
+
+#### Key Files to Extract First (Critical Path)
+
+##### Core RDF (`~/work/oxigraph/lib/oxrdf/src/`)
+```rust
+// Priority 1: Basic types
+literal.rs       → src/model/literal.rs
+named_node.rs    → src/model/iri.rs
+blank_node.rs    → src/model/term.rs (merge)
+triple.rs        → src/model/triple.rs
+
+// Priority 2: Containers
+dataset.rs       → src/model/dataset.rs
+graph.rs         → src/model/graph.rs
+```
+
+##### SPARQL Engine (`~/work/oxigraph/lib/spargebra/src/`)
+```rust
+// Priority 1: Query algebra
+algebra.rs       → src/query/algebra.rs
+parser.rs        → src/query/parser.rs
+
+// Priority 2: Evaluation
+~/work/oxigraph/lib/spareval/src/eval.rs → src/query/eval.rs
+```
+
+##### Storage Backend (`~/work/oxigraph/lib/oxigraph/src/storage/`)
+```rust
+// Priority 1: Encoding
+numeric_encoder.rs → src/store/encoding.rs
+binary_encoder.rs  → src/store/binary.rs
+
+// Priority 2: Backends
+memory.rs         → src/store/memory.rs
+```
+
+### Benefits of Native Implementation
+
+#### Advantages
+- **Complete control** over implementation details and performance
+- **No dependency conflicts** or version constraints
+- **Custom optimizations** tailored to OxiRS use cases
+- **Independent evolution** of APIs and features
+- **Reduced binary size** and compilation complexity
+- **Enhanced security** through reduced attack surface
+- **Custom error handling** and debugging capabilities
+
+#### Implementation Philosophy
+- **Selective extraction** - Only take what we need
+- **Rust-native design** - Leverage Rust's strengths (ownership, zero-cost abstractions)
+- **Performance-first** - Optimize for speed and memory usage
+- **Type safety** - Use Rust's type system for correctness
+- **Async-ready** - Design for async/await from the ground up
+- **Modular architecture** - Clean separation of concerns
+
+### Timeline (10 Weeks to Zero Dependencies)
+
+**Week 1-2**: Core RDF model extraction and adaptation
+**Week 3-4**: SPARQL engine extraction and integration
+**Week 5-6**: Format parsers/serializers extraction
+**Week 7-8**: Storage layer extraction and optimization
+**Week 9**: Dependency removal and clean-up
+**Week 10**: Integration testing and performance validation
+
+### Next Immediate Actions
+
+1. **Start with Core RDF Model** - Extract `literal.rs`, `named_node.rs`, `triple.rs`
+2. **Update build system** - Prepare Cargo.toml for native dependencies
+3. **Set up testing** - Create compatibility test suite
+4. **Performance baseline** - Establish benchmarks before extraction
+
+This aggressive but achievable timeline eliminates all OxiGraph dependencies while maintaining full compatibility and adding OxiRS-specific enhancements.
+
+---
+
 ## 0.1.0-alpha.1 - Boot & Serve (2025 Q2)
 
 ### Core Foundation (Port from Oxigraph)
@@ -340,262 +507,26 @@
     - [ ] Parallel query execution
     - [ ] Advanced join algorithms
     - [ ] Cost-based optimization
-- [ ] **oxirs-gql**: Complete GraphQL implementation based on Juniper (`~/work/juniper/`)
-  - [ ] **Core GraphQL Engine** (Port from Juniper core)
-    - [ ] **AST and Parser** (`~/work/juniper/juniper/src/ast.rs`, `~/work/juniper/juniper/src/parser/`)
-      - [ ] GraphQL document parsing and lexing
-      - [ ] Complete GraphQL grammar support (October 2021 spec)
-      - [ ] Syntax error handling and recovery
-      - [ ] Source location tracking for debugging
-      - [ ] Document validation and transformation
-    - [ ] **Type System** (`~/work/juniper/juniper/src/types/`)
-      - [ ] Scalar types (String, Int, Float, Boolean, ID, custom scalars)
-      - [ ] Object types with field resolution
-      - [ ] Interface types and polymorphism
-      - [ ] Union types and variant handling
-      - [ ] Enum types and value mapping
-      - [ ] Input object types for mutations
-      - [ ] List and non-null type modifiers
-      - [ ] Type introspection system
-    - [ ] **Schema System** (`~/work/juniper/juniper/src/schema/`)
-      - [ ] Schema definition and metadata
-      - [ ] Root types (Query, Mutation, Subscription)
-      - [ ] Schema introspection queries
-      - [ ] Schema language output generation
-      - [ ] Type validation and consistency checking
-    - [ ] **Query Executor** (`~/work/juniper/juniper/src/executor/`)
-      - [ ] Synchronous and asynchronous execution
-      - [ ] Field resolution and context management
-      - [ ] Error propagation and collection
-      - [ ] Look-ahead optimization for efficient queries
-      - [ ] Variable substitution and validation
-      - [ ] Fragment handling (inline and named)
-    - [ ] **Validation System** (`~/work/juniper/juniper/src/validation/`)
-      - [ ] Complete GraphQL validation rules
-      - [ ] Query document validation
-      - [ ] Schema validation
-      - [ ] Input value validation
-      - [ ] Variable usage validation
-      - [ ] Fragment validation
-      - [ ] Directive validation
-  - [ ] **Code Generation System** (Port from juniper_codegen)
-    - [ ] **Procedural Macros** (`~/work/juniper/juniper_codegen/`)
-      - [ ] `#[derive(GraphQLObject)]` for RDF resources
-      - [ ] `#[derive(GraphQLEnum)]` for RDF enumerations
-      - [ ] `#[derive(GraphQLInterface)]` for RDF class hierarchies
-      - [ ] `#[derive(GraphQLUnion)]` for RDF union types
-      - [ ] `#[derive(GraphQLInputObject)]` for mutation inputs
-      - [ ] `#[derive(GraphQLScalar)]` for custom RDF datatypes
-      - [ ] `#[graphql_object]` attribute macro
-      - [ ] `#[graphql_subscription]` for real-time updates
-    - [ ] **RDF-Specific Code Generation**
-      - [ ] Automatic resolver generation from RDF properties
-      - [ ] Ontology-aware type derivation
-      - [ ] SPARQL query generation from GraphQL schema
-      - [ ] Namespace and IRI handling in generated code
-  - [ ] **RDF-GraphQL Bridge Layer**
-    - [ ] **Schema Generation from RDF**
-      - [ ] Automatic GraphQL schema from RDF ontologies (RDFS/OWL)
-      - [ ] Type mapping (RDF classes → GraphQL types)
-      - [ ] Property mapping (RDF properties → GraphQL fields)
-      - [ ] Interface generation from class hierarchies
-      - [ ] Union type generation from RDF unions
-      - [ ] Custom scalar generation from XSD datatypes
-    - [ ] **Query Translation Engine**
-      - [ ] GraphQL → SPARQL translation
-      - [ ] Nested query optimization
-      - [ ] Pagination support (limit/offset/cursor)
-      - [ ] Filtering and sorting integration
-      - [ ] Aggregation query support
-      - [ ] Complex path traversal optimization
-    - [ ] **Mutation Support**
-      - [ ] Insert/update/delete operations → SPARQL UPDATE
-      - [ ] Transaction handling and rollback
-      - [ ] SHACL validation integration
-      - [ ] Optimistic locking for concurrent updates
-      - [ ] Batch operation support
-    - [ ] **Subscription Support**
-      - [ ] Real-time RDF change notifications
-      - [ ] SPARQL UPDATE streaming
-      - [ ] Filtered subscription support
-      - [ ] Connection management for subscriptions
-  - [ ] **HTTP Integration** (Port from Juniper HTTP)
-    - [ ] **Core HTTP Support** (`~/work/juniper/juniper/src/http/`)
-      - [ ] GraphQL request/response handling
-      - [ ] Content negotiation (JSON, GraphQL)
-      - [ ] HTTP method support (GET, POST)
-      - [ ] Error formatting and status codes
-      - [ ] CORS support and configuration
-    - [ ] **Web Framework Integration** (Port from Juniper integrations)
-      - [ ] **Axum integration** (`~/work/juniper/juniper_axum/`)
-        - [ ] Request extraction and response types
-        - [ ] Async handler support
-        - [ ] Middleware integration
-        - [ ] WebSocket subscription support
-      - [ ] **Actix-Web integration** (`~/work/juniper/juniper_actix/`)
-        - [ ] Actor-based request handling
-        - [ ] Streaming response support
-        - [ ] Session and authentication integration
-      - [ ] **Hyper integration** (`~/work/juniper/juniper_hyper/`)
-        - [ ] Low-level HTTP handling
-        - [ ] Performance-optimized request processing
-        - [ ] Custom service implementations
-      - [ ] **Warp integration** (`~/work/juniper/juniper_warp/`)
-        - [ ] Filter-based routing
-        - [ ] Composition with other Warp filters
-        - [ ] Efficient async handling
-      - [ ] **Rocket integration** (`~/work/juniper/juniper_rocket/`)
-        - [ ] Route handler integration
-        - [ ] Request guard support
-        - [ ] Type-safe parameter extraction
-    - [ ] **GraphQL IDE Integration**
-      - [ ] **GraphiQL** (`~/work/juniper/juniper/src/http/graphiql.rs`)
-        - [ ] Embedded GraphiQL interface
-        - [ ] Query history and persistence
-        - [ ] Schema documentation integration
-        - [ ] Custom styling and configuration
-      - [ ] **GraphQL Playground** (`~/work/juniper/juniper/src/http/playground.rs`)
-        - [ ] Modern GraphQL IDE interface
-        - [ ] Advanced query features
-        - [ ] Multiple endpoint support
-        - [ ] Schema exploration tools
-  - [ ] **Subscription System** (Port from Juniper subscriptions)
-    - [ ] **Core Subscriptions** (`~/work/juniper/juniper_subscriptions/`)
-      - [ ] Subscription coordinator and management
-      - [ ] Real-time event streaming
-      - [ ] Connection lifecycle management
-      - [ ] Error handling and recovery
-    - [ ] **WebSocket Support** (`~/work/juniper/juniper_graphql_ws/`)
-      - [ ] GraphQL-WS protocol implementation
-      - [ ] GraphQL-Transport-WS protocol support
-      - [ ] Connection init and heartbeat
-      - [ ] Subscription start/stop/complete handling
-      - [ ] Multiple subscription management
-    - [ ] **RDF-Specific Subscriptions**
-      - [ ] RDF change event streaming
-      - [ ] SPARQL result streaming
-      - [ ] Dataset modification notifications
-      - [ ] Reasoning result updates
-      - [ ] Transaction commit notifications
-  - [ ] **Type Integration System** (Port from Juniper integrations)
-    - [ ] **Standard Rust Types** (`~/work/juniper/juniper/src/integrations/`)
-      - [ ] UUID scalar type integration
-      - [ ] URL scalar type support
-      - [ ] DateTime types (chrono, time, jiff)
-      - [ ] Decimal types (BigDecimal, rust_decimal)
-      - [ ] BSON integration
-      - [ ] Serde compatibility layer
-    - [ ] **RDF-Specific Types**
-      - [ ] IRI/URI scalar types
-      - [ ] Blank node identifier types
-      - [ ] Language-tagged string types
-      - [ ] XSD datatype scalar implementations
-      - [ ] RDF term union types
-      - [ ] Namespace-aware string types
-  - [ ] **Performance Optimization**
-    - [ ] Query complexity analysis and limiting
-    - [ ] DataLoader pattern for N+1 problem
-    - [ ] SPARQL query batching
-    - [ ] Result caching strategies
-    - [ ] Parallel field resolution
-    - [ ] Memory usage optimization
-  - [ ] **Error Handling and Debugging**
-    - [ ] Comprehensive error types and messages
-    - [ ] Source location mapping for errors
-    - [ ] Query execution tracing
-    - [ ] Performance metrics collection
-    - [ ] Debug information generation
-    - [ ] Error recovery strategies
 
-### RDF-star Support (Extend Oxigraph)
-- [ ] **oxirs-star**: RDF-star and SPARQL-star support
-  - [ ] **Port Oxigraph RDF-star support** (if available)
-    - [ ] Quoted triple parsing
-    - [ ] RDF-star serialization formats
-    - [ ] Storage encoding for quoted triples
-  - [ ] **Extend with full SPARQL-star**
-    - [ ] SPARQL-star query grammar
-    - [ ] Quoted triple patterns in BGPs
-    - [ ] RDF-star construction in CONSTRUCT
-    - [ ] Integration with reasoning engine
+### AI & ML Integration Features
 
-### Query Engine Enhancement (Extend Oxigraph)
-- [ ] **oxirs-arq**: Enhanced algebra implementation
-  - [ ] **SPARQL 1.2 support** (when spec available)
-    - [ ] New grammar features
-    - [ ] Additional built-in functions
-    - [ ] Enhanced property paths
-  - [ ] **Extension points for custom functions**
-    - [ ] Plugin architecture
-    - [ ] Custom aggregates
-    - [ ] Custom operators
-  - [ ] **Performance enhancements**
-    - [ ] Parallel query execution
-    - [ ] Advanced join algorithms
-    - [ ] Cost-based optimization
+#### Vector Embeddings and Similarity
+- [ ] **oxirs-vector**: Vector embeddings for RDF
+  - [ ] RDF term vector representations
+  - [ ] Ontology-aware embeddings
+  - [ ] Similarity search integration
+  - [ ] Vector storage optimization
+  - [ ] Semantic similarity queries
+  - [ ] Embedding model integration
 
-## 1.0.0 - Reasoning & Validation (2025 Q3-Q4)
-
-### Rule Engine (New - Beyond Oxigraph) ✅ COMPLETED
-- [x] **oxirs-rule**: Forward/backward rule engine
-  - [x] **RDFS reasoning implementation**
-    - [x] Class hierarchy inference
-    - [x] Property hierarchy inference
-    - [x] Domain/range inference
-    - [x] RDFS rule set implementation
-  - [x] **OWL reasoning (basic subset)**
-    - [x] OWL RL profile support
-    - [x] Class expressions (intersection, union)
-    - [x] Property characteristics (functional, inverse)
-    - [x] Consistency checking
-  - [x] **SWRL rule support**
-    - [x] SWRL rule parsing
-    - [x] Built-in predicates
-    - [x] Rule execution engine
-    - [x] Conflict resolution strategies
-  - [x] **RETE network implementation**
-    - [x] Pattern matching network
-    - [x] Incremental updates
-    - [x] Memory optimization
-
-### SHACL Validation (New - Beyond Oxigraph)
-- [ ] **oxirs-shacl**: SHACL Core + SHACL-SPARQL validator
-  - [ ] **SHACL Core implementation**
-    - [ ] Shape parsing and representation
-    - [ ] Core constraints (minCount, datatype, etc.)
-    - [ ] Target selectors
-    - [ ] Validation reporting
-  - [ ] **SHACL-SPARQL implementation**
-    - [ ] SPARQL-based constraints
-    - [ ] Complex shape expressions
-    - [ ] Custom constraint components
-  - [ ] **Integration with reasoning**
-    - [ ] Pre-validation inference
-    - [ ] Closed-world assumption handling
-    - [ ] Performance optimization
-  - [ ] **Test suite compatibility**
-    - [ ] W3C SHACL test suite
-    - [ ] Performance benchmarks
-    - [ ] Integration tests
-
-### AI Augmentation Features
-- [ ] **Vector Search** (oxirs-vec): Vector index abstractions
-  - [ ] Core vector operations
-  - [ ] Similarity search algorithms
-  - [ ] Integration with hnsw_rs
-  - [ ] SciRS2 integration for advanced linear algebra
-  - [ ] SPARQL SERVICE integration
-  - [ ] `vec:similar` service function
-  - [ ] Vector similarity in SPARQL queries
-  - [ ] Hybrid symbolic-vector queries
-
-- [ ] **Graph Embeddings** (oxirs-embed): Knowledge graph embeddings
-  - [ ] Embedding algorithms (TransE, ComplEx)
-  - [ ] Custom embedding models
-  - [ ] Training pipeline optimization
-  - [ ] Integration with vector search
-  - [ ] Automatic embedding generation
-  - [ ] Entity linking and disambiguation
+#### Knowledge Graph AI
+- [ ] **oxirs-kg-ai**: Knowledge graph AI features
+  - [ ] Graph neural network integration
+  - [ ] Link prediction algorithms
+  - [ ] Entity resolution
+  - [ ] Knowledge completion
+  - [ ] Anomaly detection
+  - [ ] Pattern mining
 
 - [ ] **AI Chat Interface** (oxirs-chat): RAG chat API
   - [ ] Core RAG pipeline

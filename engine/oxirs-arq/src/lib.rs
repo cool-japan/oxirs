@@ -92,9 +92,80 @@ impl SparqlEngine {
     
     /// Convert parsed query to algebra expression
     fn convert_query_to_algebra(&self, query: query::Query) -> Result<Algebra> {
-        // TODO: Implement proper query-to-algebra conversion
-        // For now, return the where clause
-        Ok(query.where_clause)
+        let mut algebra = query.where_clause;
+        
+        // Apply query modifiers in reverse order of precedence
+        
+        // 1. Apply GROUP BY and aggregates if present
+        if !query.group_by.is_empty() {
+            algebra = Algebra::Group {
+                pattern: Box::new(algebra),
+                variables: query.group_by,
+                aggregates: Vec::new(), // TODO: Extract from select variables
+            };
+        }
+        
+        // 2. Apply HAVING clause if present
+        if let Some(having_condition) = query.having {
+            algebra = Algebra::Having {
+                pattern: Box::new(algebra),
+                condition: having_condition,
+            };
+        }
+        
+        // 3. Apply projection (SELECT variables)
+        match query.query_type {
+            query::QueryType::Select => {
+                if !query.select_variables.is_empty() {
+                    algebra = Algebra::Project {
+                        pattern: Box::new(algebra),
+                        variables: query.select_variables,
+                    };
+                }
+                
+                // Apply DISTINCT or REDUCED
+                if query.distinct {
+                    algebra = Algebra::Distinct {
+                        pattern: Box::new(algebra),
+                    };
+                } else if query.reduced {
+                    algebra = Algebra::Reduced {
+                        pattern: Box::new(algebra),
+                    };
+                }
+            }
+            query::QueryType::Construct => {
+                // For CONSTRUCT queries, we need to handle the construct template
+                // This is a simplified implementation
+                if query.distinct {
+                    algebra = Algebra::Distinct {
+                        pattern: Box::new(algebra),
+                    };
+                }
+            }
+            query::QueryType::Ask | query::QueryType::Describe => {
+                // ASK and DESCRIBE don't need projection modifications
+            }
+        }
+        
+        // 4. Apply ORDER BY if present
+        if !query.order_by.is_empty() {
+            algebra = Algebra::OrderBy {
+                pattern: Box::new(algebra),
+                conditions: query.order_by,
+            };
+        }
+        
+        // 5. Apply SLICE (LIMIT and OFFSET) if present
+        if query.limit.is_some() || query.offset.is_some() {
+            algebra = Algebra::Slice {
+                pattern: Box::new(algebra),
+                offset: query.offset,
+                limit: query.limit,
+            };
+        }
+        
+        Ok(algebra)
     }
 }
 

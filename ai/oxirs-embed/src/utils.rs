@@ -2,8 +2,7 @@
 
 use anyhow::{anyhow, Result};
 use ndarray::{Array1, Array2};
-use oxirs_core::Triple;
-use oxirs_vec::Vector;
+use crate::{Triple, Vector};
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};

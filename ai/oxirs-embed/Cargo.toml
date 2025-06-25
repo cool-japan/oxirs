@@ -23,7 +23,7 @@ rand = "0.8"
 rayon = "1.10"
 nalgebra = "0.33"
 uuid = { version = "1.10", features = ["v4"] }
-tokio = { version = "1.40", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "sync"] }
 async-trait = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
 rand_distr = "0.4"

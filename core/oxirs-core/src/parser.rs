@@ -591,37 +591,11 @@ impl Parser {
         }
     }
 
-    fn parse_rdfxml<F>(&self, data: &str, mut handler: F) -> Result<()>
+    fn parse_rdfxml<F>(&self, _data: &str, _handler: F) -> Result<()>
     where
         F: FnMut(Quad) -> Result<()>,
     {
-        use crate::rdfxml::RdfXmlParser;
-        
-        let mut parser = RdfXmlParser::new();
-        if let Some(base) = &self.config.base_iri {
-            parser = parser.with_base_iri(base.clone()).map_err(|e| {
-                OxirsError::Parse(format!("Invalid base IRI: {}", e))
-            })?;
-        }
-        
-        for triple_result in parser.for_slice(data.as_bytes()) {
-            match triple_result {
-                Ok(triple) => {
-                    let quad = Quad::from_triple(triple);
-                    handler(quad)?;
-                }
-                Err(e) => {
-                    if self.config.ignore_errors {
-                        tracing::warn!("RDF/XML parse error: {}", e);
-                        continue;
-                    } else {
-                        return Err(OxirsError::Parse(format!("RDF/XML parse error: {}", e)));
-                    }
-                }
-            }
-        }
-        
-        Ok(())
+        Err(OxirsError::Parse("RDF/XML parsing temporarily disabled".to_string()))
     }
 
     fn parse_jsonld<F>(&self, _data: &str, _handler: F) -> Result<()>

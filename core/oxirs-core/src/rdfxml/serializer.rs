@@ -384,7 +384,7 @@ impl InnerRdfXmlWriter {
             )]
             match triple.subject {
                 NamedOrBlankNodeRef::NamedNode(node) => description_open
-                    .push_attribute(("rdf:about", relative_iri(node.as_str(), &self.base_iri))),
+                    .push_attribute(("rdf:about", relative_iri(node.as_str(), &self.base_iri).as_ref())),
                 NamedOrBlankNodeRef::BlankNode(node) => {
                     description_open.push_attribute(("rdf:nodeID", node.as_str()))
                 }
@@ -420,7 +420,7 @@ impl InnerRdfXmlWriter {
         let content = match triple.object {
             TermRef::NamedNode(node) => {
                 property_open
-                    .push_attribute(("rdf:resource", relative_iri(node.as_str(), &self.base_iri)));
+                    .push_attribute(("rdf:resource", relative_iri(node.as_str(), &self.base_iri).as_ref()));
                 None
             }
             TermRef::BlankNode(node) => {
@@ -433,7 +433,7 @@ impl InnerRdfXmlWriter {
                 } else if literal.datatype() != xsd::STRING {
                     property_open.push_attribute((
                         "rdf:datatype",
-                        relative_iri(literal.datatype().as_str(), &self.base_iri),
+                        relative_iri(literal.datatype().as_str(), &self.base_iri).as_ref(),
                     ));
                 }
                 Some(literal.value())

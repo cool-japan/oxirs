@@ -560,6 +560,46 @@ impl From<Variable> for Object {
     }
 }
 
+// Term to position conversions (needed for rdfxml parser)
+impl TryFrom<Term> for Subject {
+    type Error = OxirsError;
+    
+    fn try_from(term: Term) -> Result<Self, Self::Error> {
+        match term {
+            Term::NamedNode(n) => Ok(Subject::NamedNode(n)),
+            Term::BlankNode(b) => Ok(Subject::BlankNode(b)),
+            Term::Variable(v) => Ok(Subject::Variable(v)),
+            Term::Literal(_) => Err(OxirsError::Parse("Literals cannot be used as subjects".to_string())),
+        }
+    }
+}
+
+impl TryFrom<Term> for Predicate {
+    type Error = OxirsError;
+    
+    fn try_from(term: Term) -> Result<Self, Self::Error> {
+        match term {
+            Term::NamedNode(n) => Ok(Predicate::NamedNode(n)),
+            Term::Variable(v) => Ok(Predicate::Variable(v)),
+            Term::BlankNode(_) => Err(OxirsError::Parse("Blank nodes cannot be used as predicates".to_string())),
+            Term::Literal(_) => Err(OxirsError::Parse("Literals cannot be used as predicates".to_string())),
+        }
+    }
+}
+
+impl TryFrom<Term> for Object {
+    type Error = OxirsError;
+    
+    fn try_from(term: Term) -> Result<Self, Self::Error> {
+        match term {
+            Term::NamedNode(n) => Ok(Object::NamedNode(n)),
+            Term::BlankNode(b) => Ok(Object::BlankNode(b)),
+            Term::Literal(l) => Ok(Object::Literal(l)),
+            Term::Variable(v) => Ok(Object::Variable(v)),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

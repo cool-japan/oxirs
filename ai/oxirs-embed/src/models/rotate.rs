@@ -6,13 +6,11 @@
 //!
 //! Reference: Sun et al. "RotatE: Knowledge Graph Embedding by Relational Rotation in Complex Space" (2019)
 
-use crate::{EmbeddingModel, ModelConfig, TrainingStats, ModelStats, EmbeddingError};
+use crate::{EmbeddingModel, ModelConfig, TrainingStats, ModelStats, EmbeddingError, Triple, Vector};
 use crate::models::{BaseModel, common::*};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use ndarray::{Array1, Array2};
-use oxirs_core::Triple;
-use oxirs_vec::Vector;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
@@ -694,7 +692,6 @@ impl EmbeddingModel for RotatE {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oxirs_core::NamedNode;
     
     #[tokio::test]
     async fn test_rotate_basic() -> Result<()> {
@@ -705,11 +702,11 @@ mod tests {
         
         let mut model = RotatE::new(config);
         
-        let alice = NamedNode::new("http://example.org/alice")?;
-        let knows = NamedNode::new("http://example.org/knows")?;
-        let bob = NamedNode::new("http://example.org/bob")?;
+        let alice = crate::NamedNode::new("http://example.org/alice")?;
+        let knows = crate::NamedNode::new("http://example.org/knows")?;
+        let bob = crate::NamedNode::new("http://example.org/bob")?;
         
-        model.add_triple(Triple::new(alice.clone(), knows.clone(), bob.clone()))?;
+        model.add_triple(crate::Triple::new(alice.clone(), knows.clone(), bob.clone()))?;
         
         let stats = model.train(Some(3)).await?;
         assert!(stats.epochs_completed > 0);

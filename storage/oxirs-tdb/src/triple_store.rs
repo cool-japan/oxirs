@@ -438,14 +438,56 @@ impl TripleStore {
         // Choose the best index for this query pattern
         let best_index = IndexType::best_for_pattern(subject, predicate, object);
         
-        // For now, we'll do a simple scan of the MVCC storage
-        // In a full implementation, we would use the B+ tree indices for efficient queries
         let mut results = Vec::new();
         
-        // This is a simplified implementation - in reality, we would:
-        // 1. Use the chosen index to find matching keys efficiently
-        // 2. Implement range scans in the B+ tree
-        // 3. Convert back from index ordering to original triple format
+        // Create search patterns for each index type to find matching triples
+        match (subject, predicate, object) {
+            // All bound - exact lookup
+            (Some(s), Some(p), Some(o)) => {
+                let triple = Triple::new(s, p, o);
+                let key = best_index.triple_to_key(&triple);
+                
+                if let Some(exists) = self.mvcc_storage.get_tx(tx_id, &key)? {
+                    if exists {
+                        results.push(triple);
+                    }
+                }
+            }
+            
+            // Two bound - need to scan for matches
+            (Some(s), Some(p), None) => {
+                // Subject and predicate bound, find all objects
+                results.extend(self.scan_for_pattern_tx(tx_id, best_index, s, p, None)?);
+            }
+            
+            (Some(s), None, Some(o)) => {
+                // Subject and object bound, find all predicates
+                results.extend(self.scan_for_pattern_tx(tx_id, best_index, s, None, Some(o))?);
+            }
+            
+            (None, Some(p), Some(o)) => {
+                // Predicate and object bound, find all subjects
+                results.extend(self.scan_for_pattern_tx(tx_id, best_index, None, Some(p), Some(o))?);
+            }
+            
+            // One bound - broader scan
+            (Some(s), None, None) => {
+                results.extend(self.scan_for_pattern_tx(tx_id, best_index, s, None, None)?);
+            }
+            
+            (None, Some(p), None) => {
+                results.extend(self.scan_for_pattern_tx(tx_id, best_index, None, Some(p), None)?);
+            }
+            
+            (None, None, Some(o)) => {
+                results.extend(self.scan_for_pattern_tx(tx_id, best_index, None, None, Some(o))?);
+            }
+            
+            // None bound - full scan (expensive!)
+            (None, None, None) => {
+                results.extend(self.full_scan_tx(tx_id)?);
+            }
+        }
         
         // Update query stats
         if let Ok(mut stats) = self.stats.lock() {
@@ -619,6 +661,156 @@ impl TripleStore {
         
         // Additional validation logic would go here
         Ok(true)
+    }
+
+    // Private helper methods for query implementation
+    
+    /// Scan for triples matching a pattern using the specified index
+    fn scan_for_pattern_tx(
+        &self,
+        tx_id: TransactionId,
+        index_type: IndexType,
+        s: Option<NodeId>,
+        p: Option<NodeId>,
+        o: Option<NodeId>,
+    ) -> Result<Vec<Triple>> {
+        let mut results = Vec::new();
+        
+        // This is a simplified implementation that scans the MVCC storage
+        // In a full implementation, this would use B+ tree range scans
+        
+        // Generate all possible node combinations within reasonable limits
+        // For now, we'll use a brute force approach for demonstration
+        let max_node_id = 10000; // Reasonable upper bound for scanning
+        
+        match index_type {
+            IndexType::SPO => {
+                if let Some(subj) = s {
+                    if let Some(pred) = p {
+                        // SP? pattern - scan for all objects
+                        for obj in 1..=max_node_id {
+                            let triple = Triple::new(subj, pred, obj);
+                            let key = index_type.triple_to_key(&triple);
+                            if let Some(exists) = self.mvcc_storage.get_tx(tx_id, &key)? {
+                                if exists {
+                                    results.push(triple);
+                                }
+                            }
+                        }
+                    } else if let Some(obj) = o {
+                        // S?O pattern - scan for all predicates
+                        for pred in 1..=max_node_id {
+                            let triple = Triple::new(subj, pred, obj);
+                            let key = index_type.triple_to_key(&triple);
+                            if let Some(exists) = self.mvcc_storage.get_tx(tx_id, &key)? {
+                                if exists {
+                                    results.push(triple);
+                                }
+                            }
+                        }
+                    } else {
+                        // S?? pattern - scan for all predicates and objects
+                        for pred in 1..=max_node_id {
+                            for obj in 1..=max_node_id {
+                                let triple = Triple::new(subj, pred, obj);
+                                let key = index_type.triple_to_key(&triple);
+                                if let Some(exists) = self.mvcc_storage.get_tx(tx_id, &key)? {
+                                    if exists {
+                                        results.push(triple);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else if let Some(pred) = p {
+                    if let Some(obj) = o {
+                        // ?PO pattern - scan for all subjects
+                        for subj in 1..=max_node_id {
+                            let triple = Triple::new(subj, pred, obj);
+                            let key = index_type.triple_to_key(&triple);
+                            if let Some(exists) = self.mvcc_storage.get_tx(tx_id, &key)? {
+                                if exists {
+                                    results.push(triple);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            IndexType::POS => {
+                // Similar logic for POS index ordering
+                // Implementation would be optimized based on the index structure
+                if let Some(pred) = p {
+                    if let Some(obj) = o {
+                        for subj in 1..=max_node_id {
+                            let triple = Triple::new(subj, pred, obj);
+                            let key = index_type.triple_to_key(&triple);
+                            if let Some(exists) = self.mvcc_storage.get_tx(tx_id, &key)? {
+                                if exists {
+                                    results.push(triple);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            IndexType::OSP => {
+                // Similar logic for OSP index ordering
+                if let Some(obj) = o {
+                    if let Some(subj) = s {
+                        for pred in 1..=max_node_id {
+                            let triple = Triple::new(subj, pred, obj);
+                            let key = index_type.triple_to_key(&triple);
+                            if let Some(exists) = self.mvcc_storage.get_tx(tx_id, &key)? {
+                                if exists {
+                                    results.push(triple);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            _ => {
+                // For other index types, fall back to full scan
+                return self.full_scan_tx(tx_id);
+            }
+        }
+        
+        Ok(results)
+    }
+    
+    /// Perform a full scan of all triples (expensive operation)
+    fn full_scan_tx(&self, tx_id: TransactionId) -> Result<Vec<Triple>> {
+        let mut results = Vec::new();
+        
+        // This is a brute force implementation for demonstration
+        // In a real system, we would iterate through stored keys
+        let max_node_id = 1000; // Limit for performance
+        
+        for s in 1..=max_node_id {
+            for p in 1..=max_node_id {
+                for o in 1..=max_node_id {
+                    let triple = Triple::new(s, p, o);
+                    let key = IndexType::SPO.triple_to_key(&triple);
+                    if let Some(exists) = self.mvcc_storage.get_tx(tx_id, &key)? {
+                        if exists {
+                            results.push(triple);
+                        }
+                    }
+                    
+                    // Early termination if we have enough results
+                    if results.len() > 10000 {
+                        warn!("Full scan returning partial results to avoid memory exhaustion");
+                        break;
+                    }
+                }
+            }
+        }
+        
+        Ok(results)
     }
 }
 

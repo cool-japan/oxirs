@@ -575,6 +575,25 @@ impl Literal {
         }
         Ok(())
     }
+    
+    /// Creates a new typed literal (alias for compatibility)
+    pub fn new_typed_literal(value: impl Into<String>, datatype: NamedNode) -> Self {
+        Self::new_typed(value, datatype)
+    }
+    
+    /// Creates a new language-tagged literal without validation (unsafe)
+    pub fn new_language_tagged_literal_unchecked(value: impl Into<String>, language: impl Into<String>) -> Self {
+        Literal {
+            value: value.into(),
+            datatype: None,
+            language: Some(language.into()),
+        }
+    }
+    
+    /// Creates a new simple literal (alias for new)
+    pub fn new_simple_literal(value: impl Into<String>) -> Self {
+        Self::new(value)
+    }
 }
 
 impl fmt::Display for Literal {

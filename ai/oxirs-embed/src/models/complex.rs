@@ -6,15 +6,14 @@
 //!
 //! Reference: Trouillon et al. "Complex Embeddings for Simple Link Prediction" (2016)
 
-use crate::{EmbeddingModel, ModelConfig, TrainingStats, ModelStats, EmbeddingError};
+use crate::{EmbeddingModel, ModelConfig, TrainingStats, ModelStats, EmbeddingError, Triple, Vector};
 use crate::models::{BaseModel, common::*};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use ndarray::{Array1, Array2};
-use oxirs_core::Triple;
-use oxirs_vec::Vector;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::ops::{AddAssign, SubAssign};
 use std::time::Instant;
 use tracing::{debug, info};
 use uuid::Uuid;

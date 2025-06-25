@@ -16,7 +16,7 @@ use std::str;
 use tokio::io::{AsyncRead, BufReader as AsyncBufReader};
 
 /// Define NamedOrBlankNode type for internal use
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum NamedOrBlankNode {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
@@ -31,6 +31,15 @@ impl From<NamedNode> for NamedOrBlankNode {
 impl From<BlankNode> for NamedOrBlankNode {
     fn from(node: BlankNode) -> Self {
         NamedOrBlankNode::BlankNode(node)
+    }
+}
+
+impl From<NamedOrBlankNode> for crate::model::term::Subject {
+    fn from(node: NamedOrBlankNode) -> Self {
+        match node {
+            NamedOrBlankNode::NamedNode(n) => crate::model::term::Subject::NamedNode(n),
+            NamedOrBlankNode::BlankNode(n) => crate::model::term::Subject::BlankNode(n),
+        }
     }
 }
 
@@ -1154,9 +1163,9 @@ impl<R> InternalRdfXmlParser<R> {
                             );
                             if let Some(type_attr) = type_attr {
                                 results.push(Triple::new(
-                                    object.clone().into(), 
-                                    Term::NamedNode(NamedNode::new_unchecked(RDF_TYPE)), 
-                                    Term::NamedNode(type_attr)
+                                    crate::model::term::Subject::from(object.clone()), 
+                                    NamedNode::new_unchecked(RDF_TYPE), 
+                                    type_attr
                                 ));
                             }
                             RdfXmlState::PropertyElt {
@@ -1347,17 +1356,17 @@ impl<R> InternalRdfXmlParser<R> {
 
         if let Some(type_attr) = type_attr {
             results.push(Triple::new(
-                subject.clone().into(), 
-                Term::NamedNode(NamedNode::new_unchecked(RDF_TYPE)), 
-                Term::NamedNode(type_attr)
+                crate::model::term::Subject::from(subject.clone()), 
+                NamedNode::new_unchecked(RDF_TYPE), 
+                type_attr
             ));
         }
 
         if iri.as_str() != RDF_DESCRIPTION {
             results.push(Triple::new(
-                subject.clone().into(), 
-                Term::NamedNode(NamedNode::new_unchecked(RDF_TYPE)), 
-                Term::NamedNode(iri)
+                crate::model::term::Subject::from(subject.clone()), 
+                NamedNode::new_unchecked(RDF_TYPE), 
+                iri
             ));
         }
         Ok(RdfXmlState::NodeElt {
@@ -1377,7 +1386,7 @@ impl<R> InternalRdfXmlParser<R> {
         results: &mut Vec<Triple>,
     ) -> RdfXmlState {
         let object = BlankNode::default();
-        let triple = Triple::new(subject.into(), Term::NamedNode(iri), Term::BlankNode(object.clone()));
+        let triple = Triple::new(crate::model::term::Subject::from(subject), iri, object.clone());
         if let Some(id_attr) = id_attr {
             Self::reify(triple.clone(), id_attr, results);
         }
@@ -1412,7 +1421,7 @@ impl<R> InternalRdfXmlParser<R> {
                     }
                     None => Term::Literal(self.new_literal(String::new(), language, datatype_attr)),
                 };
-                let triple = Triple::new(subject.into(), Term::NamedNode(iri), object);
+                let triple = Triple::new(crate::model::term::Subject::from(subject), iri, object);
                 if let Some(id_attr) = id_attr {
                     Self::reify(triple.clone(), id_attr, results);
                 }
@@ -1429,18 +1438,18 @@ impl<R> InternalRdfXmlParser<R> {
                 for object in objects.into_iter().rev() {
                     let subject = NamedOrBlankNode::from(BlankNode::default());
                     results.push(Triple::new(
-                        subject.clone().into(), 
-                        Term::NamedNode(NamedNode::new_unchecked(RDF_FIRST)), 
+                        crate::model::term::Subject::from(subject.clone()), 
+                        NamedNode::new_unchecked(RDF_FIRST), 
                         object.into()
                     ));
                     results.push(Triple::new(
-                        subject.clone().into(), 
-                        Term::NamedNode(NamedNode::new_unchecked(RDF_REST)), 
+                        crate::model::term::Subject::from(subject.clone()), 
+                        NamedNode::new_unchecked(RDF_REST), 
                         current_node.clone().into()
                     ));
                     current_node = subject;
                 }
-                let triple = Triple::new(subject.into(), Term::NamedNode(iri), current_node.into());
+                let triple = Triple::new(crate::model::term::Subject::from(subject), iri, current_node.into());
                 if let Some(id_attr) = id_attr {
                     Self::reify(triple.clone(), id_attr, results);
                 }
@@ -1462,16 +1471,16 @@ impl<R> InternalRdfXmlParser<R> {
                         )));
                     }
                     let triple = Triple::new(
-                        subject.into(),
-                        Term::NamedNode(iri),
-                        Term::Literal(Literal::new_typed_literal(
+                        crate::model::term::Subject::from(subject),
+                        iri,
+                        Literal::new_typed_literal(
                             str::from_utf8(&object).map_err(|_| {
                                 RdfXmlSyntaxError::msg(
                                     "The XML literal is not in valid UTF-8".to_owned(),
                                 )
                             })?,
                             NamedNode::new_unchecked(RDF_XML_LITERAL),
-                        )),
+                        ),
                     );
                     if let Some(id_attr) = id_attr {
                         Self::reify(triple.clone(), id_attr, results);
@@ -1517,24 +1526,24 @@ impl<R> InternalRdfXmlParser<R> {
 
     fn reify(triple: Triple, statement_id: NamedNode, results: &mut Vec<Triple>) {
         results.push(Triple::new(
-            Term::NamedNode(statement_id.clone()), 
-            Term::NamedNode(NamedNode::new_unchecked(RDF_TYPE)), 
-            Term::NamedNode(NamedNode::new_unchecked(RDF_STATEMENT))
+            statement_id.clone(), 
+            NamedNode::new_unchecked(RDF_TYPE), 
+            NamedNode::new_unchecked(RDF_STATEMENT)
         ));
         results.push(Triple::new(
-            Term::NamedNode(statement_id.clone()),
-            Term::NamedNode(NamedNode::new_unchecked(RDF_SUBJECT)),
-            triple.subject,
+            statement_id.clone(),
+            NamedNode::new_unchecked(RDF_SUBJECT),
+            triple.subject().clone(),
         ));
         results.push(Triple::new(
-            Term::NamedNode(statement_id.clone()),
-            Term::NamedNode(NamedNode::new_unchecked(RDF_PREDICATE)),
-            triple.predicate,
+            statement_id.clone(),
+            NamedNode::new_unchecked(RDF_PREDICATE),
+            triple.predicate().clone(),
         ));
         results.push(Triple::new(
-            Term::NamedNode(statement_id), 
-            Term::NamedNode(NamedNode::new_unchecked(RDF_OBJECT)), 
-            triple.object
+            statement_id, 
+            NamedNode::new_unchecked(RDF_OBJECT), 
+            triple.object().clone()
         ));
     }
 
@@ -1547,13 +1556,13 @@ impl<R> InternalRdfXmlParser<R> {
     ) {
         for (literal_predicate, literal_value) in literal_attributes {
             results.push(Triple::new(
-                subject.clone().into(),
-                Term::NamedNode(literal_predicate),
-                Term::Literal(if let Some(language) = language.or_else(|| self.current_language()) {
+                crate::model::term::Subject::from(subject.clone()),
+                literal_predicate,
+                if let Some(language) = language.or_else(|| self.current_language()) {
                     Literal::new_lang(literal_value, language).unwrap_or_else(|_| Literal::new(literal_value))
                 } else {
                     Literal::new(literal_value)
-                }),
+                }
             ));
         }
     }

@@ -898,3 +898,154 @@ impl Default for ParallelismType {
         ParallelismType::DataParallel
     }
 }
+
+impl Literal {
+    /// Create a new literal with value only
+    pub fn new(value: String, language: Option<String>, datatype: Option<Iri>) -> Self {
+        Literal { value, language, datatype }
+    }
+
+    /// Create a simple string literal
+    pub fn string(value: impl Into<String>) -> Self {
+        Literal {
+            value: value.into(),
+            language: None,
+            datatype: None,
+        }
+    }
+
+    /// Create a language-tagged literal
+    pub fn lang_string(value: impl Into<String>, language: impl Into<String>) -> Self {
+        Literal {
+            value: value.into(),
+            language: Some(language.into()),
+            datatype: None,
+        }
+    }
+
+    /// Create a typed literal
+    pub fn typed(value: impl Into<String>, datatype: Iri) -> Self {
+        Literal {
+            value: value.into(),
+            language: None,
+            datatype: Some(datatype),
+        }
+    }
+
+    /// Create an integer literal
+    pub fn integer(value: i64) -> Self {
+        Literal::typed(
+            value.to_string(),
+            Iri("http://www.w3.org/2001/XMLSchema#integer".to_string()),
+        )
+    }
+
+    /// Create a decimal literal
+    pub fn decimal(value: f64) -> Self {
+        Literal::typed(
+            value.to_string(),
+            Iri("http://www.w3.org/2001/XMLSchema#decimal".to_string()),
+        )
+    }
+
+    /// Create a boolean literal
+    pub fn boolean(value: bool) -> Self {
+        Literal::typed(
+            value.to_string(),
+            Iri("http://www.w3.org/2001/XMLSchema#boolean".to_string()),
+        )
+    }
+
+    /// Create a date literal
+    pub fn date(value: impl Into<String>) -> Self {
+        Literal::typed(
+            value.into(),
+            Iri("http://www.w3.org/2001/XMLSchema#date".to_string()),
+        )
+    }
+
+    /// Create a datetime literal
+    pub fn datetime(value: impl Into<String>) -> Self {
+        Literal::typed(
+            value.into(),
+            Iri("http://www.w3.org/2001/XMLSchema#dateTime".to_string()),
+        )
+    }
+
+    /// Get the effective datatype (with default string type if none specified)
+    pub fn effective_datatype(&self) -> Iri {
+        if let Some(ref dt) = self.datatype {
+            dt.clone()
+        } else if self.language.is_some() {
+            Iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString".to_string())
+        } else {
+            Iri("http://www.w3.org/2001/XMLSchema#string".to_string())
+        }
+    }
+
+    /// Check if this is a numeric literal
+    pub fn is_numeric(&self) -> bool {
+        if let Some(ref dt) = self.datatype {
+            matches!(dt.0.as_str(),
+                "http://www.w3.org/2001/XMLSchema#integer" |
+                "http://www.w3.org/2001/XMLSchema#decimal" |
+                "http://www.w3.org/2001/XMLSchema#float" |
+                "http://www.w3.org/2001/XMLSchema#double" |
+                "http://www.w3.org/2001/XMLSchema#long" |
+                "http://www.w3.org/2001/XMLSchema#int" |
+                "http://www.w3.org/2001/XMLSchema#short" |
+                "http://www.w3.org/2001/XMLSchema#byte" |
+                "http://www.w3.org/2001/XMLSchema#unsignedLong" |
+                "http://www.w3.org/2001/XMLSchema#unsignedInt" |
+                "http://www.w3.org/2001/XMLSchema#unsignedShort" |
+                "http://www.w3.org/2001/XMLSchema#unsignedByte" |
+                "http://www.w3.org/2001/XMLSchema#positiveInteger" |
+                "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" |
+                "http://www.w3.org/2001/XMLSchema#negativeInteger" |
+                "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
+            )
+        } else {
+            false
+        }
+    }
+
+    /// Check if this is a string literal
+    pub fn is_string(&self) -> bool {
+        self.datatype.is_none() && self.language.is_none()
+    }
+
+    /// Check if this is a language-tagged literal
+    pub fn is_lang_string(&self) -> bool {
+        self.language.is_some()
+    }
+
+    /// Check if this is a boolean literal
+    pub fn is_boolean(&self) -> bool {
+        if let Some(ref dt) = self.datatype {
+            dt.0 == "http://www.w3.org/2001/XMLSchema#boolean"
+        } else {
+            false
+        }
+    }
+
+    /// Check if this is a date/time literal
+    pub fn is_datetime(&self) -> bool {
+        if let Some(ref dt) = self.datatype {
+            matches!(dt.0.as_str(),
+                "http://www.w3.org/2001/XMLSchema#date" |
+                "http://www.w3.org/2001/XMLSchema#dateTime" |
+                "http://www.w3.org/2001/XMLSchema#time" |
+                "http://www.w3.org/2001/XMLSchema#gYear" |
+                "http://www.w3.org/2001/XMLSchema#gYearMonth" |
+                "http://www.w3.org/2001/XMLSchema#gMonth" |
+                "http://www.w3.org/2001/XMLSchema#gMonthDay" |
+                "http://www.w3.org/2001/XMLSchema#gDay" |
+                "http://www.w3.org/2001/XMLSchema#duration" |
+                "http://www.w3.org/2001/XMLSchema#dayTimeDuration" |
+                "http://www.w3.org/2001/XMLSchema#yearMonthDuration"
+            )
+        } else {
+            false
+        }
+    }
+}
