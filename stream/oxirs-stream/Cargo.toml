@@ -44,4 +44,5 @@ kafka = ["rdkafka"]
 nats = ["async-nats"]
 kinesis = ["aws-config", "aws-sdk-kinesis", "aws-smithy-types"]
 redis = []
+pulsar = []
 

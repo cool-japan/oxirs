@@ -99,11 +99,77 @@ pub struct FederationConfig {
 pub struct FederatedQueryPlan {
     pub plan_id: String,
     pub original_query: String,
-    pub execution_stages: Vec<ExecutionStage>,
+    pub execution_steps: Vec<ExecutionStep>,
     pub estimated_cost: f64,
-    pub estimated_result_count: u64,
-    pub parallelizable: bool,
-    pub created_at: DateTime<Utc>,
+    pub parallel_sections: Vec<ParallelSection>,
+    pub data_flow: DataFlowGraph,
+    pub resource_requirements: ResourceRequirements,
+}
+
+/// Individual execution step in federated plan
+#[derive(Debug, Clone)]
+pub struct ExecutionStep {
+    pub step_id: String,
+    pub step_type: ExecutionStepType,
+    pub target_endpoint: Option<String>,
+    pub query_fragment: String,
+    pub dependencies: Vec<String>,
+    pub estimated_execution_time: Duration,
+    pub estimated_result_size: usize,
+}
+
+/// Types of execution steps
+#[derive(Debug, Clone)]
+pub enum ExecutionStepType {
+    LocalQuery,
+    RemoteServiceCall,
+    Join,
+    Union,
+    Filter,
+    Project,
+    Sort,
+    Limit,
+    Aggregation,
+}
+
+/// Parallel execution section
+#[derive(Debug, Clone)]
+pub struct ParallelSection {
+    pub section_id: String,
+    pub parallel_steps: Vec<String>, // Step IDs that can run in parallel
+    pub synchronization_point: String,
+    pub max_parallelism: usize,
+}
+
+/// Data flow graph for query execution
+#[derive(Debug, Clone)]
+pub struct DataFlowGraph {
+    pub nodes: HashMap<String, DataFlowNode>,
+    pub edges: Vec<DataFlowEdge>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DataFlowNode {
+    pub node_id: String,
+    pub operation: String,
+    pub estimated_cardinality: u64,
+    pub estimated_selectivity: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct DataFlowEdge {
+    pub from_node: String,
+    pub to_node: String,
+    pub data_transfer_cost: f64,
+}
+
+/// Resource requirements for query execution
+#[derive(Debug, Clone)]
+pub struct ResourceRequirements {
+    pub estimated_memory_mb: f64,
+    pub estimated_cpu_seconds: f64,
+    pub estimated_network_mb: f64,
+    pub required_endpoints: HashSet<String>,
 }
 
 /// Query execution stage
@@ -144,6 +210,343 @@ pub struct CachedQueryPlan {
 /// Federation statistics
 #[derive(Debug, Clone, Default)]
 pub struct FederationStatistics {
+    pub total_federated_queries: u64,
+    pub average_execution_time: f64,
+    pub endpoint_performance: HashMap<String, EndpointPerformanceMetrics>,
+    pub query_distribution: HashMap<String, u64>,
+    pub failure_rates: HashMap<String, f64>,
+}
+
+/// Performance metrics per endpoint
+#[derive(Debug, Clone, Default)]
+pub struct EndpointPerformanceMetrics {
+    pub average_response_time: f64,
+    pub success_rate: f64,
+    pub throughput_queries_per_second: f64,
+    pub current_load: f64,
+}
+
+impl FederationPlanner {
+    /// Create new federation planner
+    pub fn new() -> Self {
+        Self {
+            endpoints: Arc::new(RwLock::new(HashMap::new())),
+            query_cache: Arc::new(RwLock::new(HashMap::new())),
+            statistics: Arc::new(RwLock::new(FederationStatistics::default())),
+            config: FederationConfig::default(),
+        }
+    }
+    
+    /// Create execution plan for federated query
+    pub async fn create_execution_plan(&self, query: &str) -> FusekiResult<FederatedQueryPlan> {
+        let plan_id = uuid::Uuid::new_v4().to_string();
+        
+        // Check cache first
+        let cache_key = self.generate_cache_key(query);
+        if let Ok(cache) = self.query_cache.read().await {
+            if let Some(cached_plan) = cache.get(&cache_key) {
+                info!("Using cached federated query plan: {}", plan_id);
+                return Ok(cached_plan.plan.clone());
+            }
+        }
+        
+        // Parse query and identify SERVICE clauses
+        let service_clauses = self.extract_service_clauses(query)?;
+        
+        // Analyze query complexity and data requirements
+        let query_analysis = self.analyze_query_complexity(query).await?;
+        
+        // Create execution steps
+        let execution_steps = self.create_execution_steps(query, &service_clauses).await?;
+        
+        // Determine parallel execution opportunities
+        let parallel_sections = self.identify_parallel_sections(&execution_steps)?;
+        
+        // Build data flow graph
+        let data_flow = self.build_data_flow_graph(&execution_steps)?;
+        
+        // Estimate resource requirements
+        let resource_requirements = self.estimate_resource_requirements(&execution_steps, &query_analysis).await?;
+        
+        let plan = FederatedQueryPlan {
+            plan_id: plan_id.clone(),
+            original_query: query.to_string(),
+            execution_steps,
+            estimated_cost: query_analysis.estimated_cost,
+            parallel_sections,
+            data_flow,
+            resource_requirements,
+        };
+        
+        // Cache the plan if enabled
+        if self.config.cache_query_plans {
+            if let Ok(mut cache) = self.query_cache.write().await {
+                cache.insert(cache_key, CachedQueryPlan {
+                    plan: plan.clone(),
+                    cached_at: Utc::now(),
+                    hits: 0,
+                    average_execution_time: 0.0,
+                });
+            }
+        }
+        
+        info!("Created federated query plan: {} with {} steps", 
+              plan_id, plan.execution_steps.len());
+        
+        Ok(plan)
+    }
+    
+    /// Add endpoint to federation
+    pub async fn add_endpoint(&self, endpoint: ServiceEndpoint) -> FusekiResult<()> {
+        let mut endpoints = self.endpoints.write().await;
+        endpoints.insert(endpoint.url.clone(), endpoint);
+        Ok(())
+    }
+    
+    /// Remove endpoint from federation
+    pub async fn remove_endpoint(&self, url: &str) -> FusekiResult<bool> {
+        let mut endpoints = self.endpoints.write().await;
+        Ok(endpoints.remove(url).is_some())
+    }
+    
+    /// Get endpoint information
+    pub async fn get_endpoint(&self, url: &str) -> Option<ServiceEndpoint> {
+        let endpoints = self.endpoints.read().await;
+        endpoints.get(url).cloned()
+    }
+    
+    /// Update endpoint health status
+    pub async fn update_endpoint_health(&self, url: &str, status: HealthStatus) -> FusekiResult<()> {
+        let mut endpoints = self.endpoints.write().await;
+        if let Some(endpoint) = endpoints.get_mut(url) {
+            endpoint.health_status = status;
+        }
+        Ok(())
+    }
+    
+    /// Get federation statistics
+    pub async fn get_statistics(&self) -> FederationStatistics {
+        let stats = self.statistics.read().await;
+        stats.clone()
+    }
+    
+    // Helper methods
+    
+    fn generate_cache_key(&self, query: &str) -> String {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let mut hasher = DefaultHasher::new();
+        query.hash(&mut hasher);
+        format!("federated_plan_{:x}", hasher.finish())
+    }
+    
+    fn extract_service_clauses(&self, query: &str) -> FusekiResult<Vec<ServiceClause>> {
+        let mut service_clauses = Vec::new();
+        
+        // Simple regex-based extraction (in production, use proper SPARQL parser)
+        if let Ok(service_regex) = regex::Regex::new(r"SERVICE\s+<([^>]+)>\s*\{([^}]+)\}") {
+            for captures in service_regex.captures_iter(query) {
+                if let (Some(endpoint), Some(query_fragment)) = 
+                   (captures.get(1), captures.get(2)) {
+                    service_clauses.push(ServiceClause {
+                        endpoint_url: endpoint.as_str().to_string(),
+                        query_fragment: query_fragment.as_str().to_string(),
+                        variables: self.extract_variables(query_fragment.as_str()),
+                        optional: query.contains("OPTIONAL"),
+                    });
+                }
+            }
+        }
+        
+        Ok(service_clauses)
+    }
+    
+    fn extract_variables(&self, query_fragment: &str) -> Vec<String> {
+        let mut variables = Vec::new();
+        if let Ok(var_regex) = regex::Regex::new(r"\?(\w+)") {
+            for captures in var_regex.captures_iter(query_fragment) {
+                if let Some(var) = captures.get(1) {
+                    variables.push(var.as_str().to_string());
+                }
+            }
+        }
+        variables
+    }
+    
+    async fn analyze_query_complexity(&self, query: &str) -> FusekiResult<QueryAnalysis> {
+        // Analyze query complexity based on various factors
+        let triple_patterns = query.matches("?").count();
+        let has_optional = query.contains("OPTIONAL");
+        let has_union = query.contains("UNION");
+        let has_filter = query.contains("FILTER");
+        let has_order_by = query.contains("ORDER BY");
+        let has_group_by = query.contains("GROUP BY");
+        
+        let complexity_score = (triple_patterns as f64) * 1.0 +
+                              (if has_optional { 2.0 } else { 0.0 }) +
+                              (if has_union { 1.5 } else { 0.0 }) +
+                              (if has_filter { 1.0 } else { 0.0 }) +
+                              (if has_order_by { 1.0 } else { 0.0 }) +
+                              (if has_group_by { 2.0 } else { 0.0 });
+        
+        Ok(QueryAnalysis {
+            complexity_score,
+            estimated_cost: complexity_score * 100.0,
+            triple_pattern_count: triple_patterns,
+            has_aggregation: has_group_by,
+            has_sorting: has_order_by,
+            estimated_cardinality: 1000, // Default estimate
+        })
+    }
+    
+    async fn create_execution_steps(
+        &self, 
+        query: &str, 
+        service_clauses: &[ServiceClause]
+    ) -> FusekiResult<Vec<ExecutionStep>> {
+        let mut steps = Vec::new();
+        
+        // Create steps for SERVICE clauses
+        for (i, service) in service_clauses.iter().enumerate() {
+            steps.push(ExecutionStep {
+                step_id: format!("service_{}", i),
+                step_type: ExecutionStepType::RemoteServiceCall,
+                target_endpoint: Some(service.endpoint_url.clone()),
+                query_fragment: service.query_fragment.clone(),
+                dependencies: Vec::new(),
+                estimated_execution_time: Duration::from_millis(500),
+                estimated_result_size: 100,
+            });
+        }
+        
+        // Add local processing steps if needed
+        if service_clauses.len() > 1 {
+            steps.push(ExecutionStep {
+                step_id: "join_results".to_string(),
+                step_type: ExecutionStepType::Join,
+                target_endpoint: None,
+                query_fragment: "JOIN results".to_string(),
+                dependencies: (0..service_clauses.len()).map(|i| format!("service_{}", i)).collect(),
+                estimated_execution_time: Duration::from_millis(100),
+                estimated_result_size: 500,
+            });
+        }
+        
+        Ok(steps)
+    }
+    
+    fn identify_parallel_sections(&self, steps: &[ExecutionStep]) -> FusekiResult<Vec<ParallelSection>> {
+        let mut parallel_sections = Vec::new();
+        
+        // Find steps that can run in parallel (no dependencies)
+        let independent_steps: Vec<String> = steps.iter()
+            .filter(|step| step.dependencies.is_empty())
+            .map(|step| step.step_id.clone())
+            .collect();
+        
+        if independent_steps.len() > 1 {
+            parallel_sections.push(ParallelSection {
+                section_id: "parallel_services".to_string(),
+                parallel_steps: independent_steps,
+                synchronization_point: "join_results".to_string(),
+                max_parallelism: self.config.max_concurrent_requests,
+            });
+        }
+        
+        Ok(parallel_sections)
+    }
+    
+    fn build_data_flow_graph(&self, steps: &[ExecutionStep]) -> FusekiResult<DataFlowGraph> {
+        let mut nodes = HashMap::new();
+        let mut edges = Vec::new();
+        
+        // Create nodes for each step
+        for step in steps {
+            nodes.insert(step.step_id.clone(), DataFlowNode {
+                node_id: step.step_id.clone(),
+                operation: format!("{:?}", step.step_type),
+                estimated_cardinality: step.estimated_result_size as u64,
+                estimated_selectivity: 0.5, // Default selectivity
+            });
+        }
+        
+        // Create edges based on dependencies
+        for step in steps {
+            for dependency in &step.dependencies {
+                edges.push(DataFlowEdge {
+                    from_node: dependency.clone(),
+                    to_node: step.step_id.clone(),
+                    data_transfer_cost: 1.0, // Default cost
+                });
+            }
+        }
+        
+        Ok(DataFlowGraph { nodes, edges })
+    }
+    
+    async fn estimate_resource_requirements(
+        &self, 
+        steps: &[ExecutionStep], 
+        analysis: &QueryAnalysis
+    ) -> FusekiResult<ResourceRequirements> {
+        let estimated_memory = steps.iter()
+            .map(|step| step.estimated_result_size as f64 * 0.001) // 1KB per result
+            .sum::<f64>();
+        
+        let estimated_cpu = analysis.complexity_score * 0.1; // seconds
+        
+        let estimated_network = steps.iter()
+            .filter(|step| step.target_endpoint.is_some())
+            .map(|step| step.estimated_result_size as f64 * 0.002) // 2KB per remote result
+            .sum::<f64>();
+        
+        let required_endpoints = steps.iter()
+            .filter_map(|step| step.target_endpoint.as_ref())
+            .cloned()
+            .collect();
+        
+        Ok(ResourceRequirements {
+            estimated_memory_mb: estimated_memory,
+            estimated_cpu_seconds: estimated_cpu,
+            estimated_network_mb: estimated_network,
+            required_endpoints,
+        })
+    }
+}
+
+impl FederationConfig {
+    pub fn default() -> Self {
+        Self {
+            max_concurrent_requests: 10,
+            default_timeout_ms: 30000,
+            enable_query_optimization: true,
+            cache_query_plans: true,
+            enable_parallel_execution: true,
+            cost_threshold: 1000.0,
+        }
+    }
+}
+
+/// Service clause extracted from query
+#[derive(Debug, Clone)]
+pub struct ServiceClause {
+    pub endpoint_url: String,
+    pub query_fragment: String,
+    pub variables: Vec<String>,
+    pub optional: bool,
+}
+
+/// Query analysis results
+#[derive(Debug, Clone)]
+pub struct QueryAnalysis {
+    pub complexity_score: f64,
+    pub estimated_cost: f64,
+    pub triple_pattern_count: usize,
+    pub has_aggregation: bool,
+    pub has_sorting: bool,
+    pub estimated_cardinality: u64,
+}
     pub total_federated_queries: u64,
     pub successful_queries: u64,
     pub failed_queries: u64,

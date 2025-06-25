@@ -106,6 +106,703 @@ mod content_types {
     pub const FORM_URLENCODED: &str = "application/x-www-form-urlencoded";
 }
 
+/// SPARQL 1.2 enhanced query features and optimization
+#[derive(Debug, Clone)]
+pub struct Sparql12Features {
+    pub property_path_optimizer: PropertyPathOptimizer,
+    pub aggregation_engine: AggregationEngine,
+    pub subquery_optimizer: SubqueryOptimizer,
+    pub bind_values_processor: BindValuesProcessor,
+    pub service_delegator: ServiceDelegator,
+}
+
+/// Enhanced property path optimization for SPARQL 1.2
+#[derive(Debug, Clone)]
+pub struct PropertyPathOptimizer {
+    pub path_cache: Arc<RwLock<HashMap<String, OptimizedPath>>>,
+    pub statistics: Arc<RwLock<PathStatistics>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct OptimizedPath {
+    pub original_path: String,
+    pub optimized_form: String,
+    pub estimated_cardinality: u64,
+    pub execution_plan: PathExecutionPlan,
+}
+
+#[derive(Debug, Clone)]
+pub struct PathExecutionPlan {
+    pub strategy: PathStrategy,
+    pub estimated_cost: f64,
+    pub intermediate_steps: Vec<PathStep>,
+}
+
+#[derive(Debug, Clone)]
+pub enum PathStrategy {
+    ForwardTraversal,
+    BackwardTraversal,
+    BidirectionalMeet,
+    IndexLookup,
+    MaterializedView,
+}
+
+#[derive(Debug, Clone)]
+pub struct PathStep {
+    pub operation: String,
+    pub predicate: Option<String>,
+    pub direction: TraversalDirection,
+    pub estimated_selectivity: f64,
+}
+
+#[derive(Debug, Clone)]
+pub enum TraversalDirection {
+    Forward,
+    Backward,
+    Both,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct PathStatistics {
+    pub total_path_queries: u64,
+    pub average_path_length: f64,
+    pub most_common_paths: HashMap<String, u64>,
+    pub performance_by_length: HashMap<usize, f64>,
+}
+
+/// Advanced aggregation engine supporting SPARQL 1.2 functions
+#[derive(Debug, Clone)]
+pub struct AggregationEngine {
+    pub supported_functions: HashSet<String>,
+    pub custom_aggregates: HashMap<String, CustomAggregate>,
+    pub optimization_rules: Vec<AggregationOptimization>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CustomAggregate {
+    pub name: String,
+    pub definition: String,
+    pub return_type: String,
+    pub implementation: AggregateImplementation,
+}
+
+#[derive(Debug, Clone)]
+pub enum AggregateImplementation {
+    Native(String),
+    External { url: String, method: String },
+    Computed { algorithm: String },
+}
+
+#[derive(Debug, Clone)]
+pub struct AggregationOptimization {
+    pub pattern: String,
+    pub optimization: String,
+    pub conditions: Vec<String>,
+    pub performance_gain: f64,
+}
+
+/// Enhanced subquery optimization for nested queries
+#[derive(Debug, Clone)]
+pub struct SubqueryOptimizer {
+    pub rewrite_rules: Vec<SubqueryRewriteRule>,
+    pub materialization_cache: Arc<RwLock<HashMap<String, MaterializedSubquery>>>,
+    pub cost_estimator: SubqueryCostEstimator,
+}
+
+#[derive(Debug, Clone)]
+pub struct SubqueryRewriteRule {
+    pub name: String,
+    pub pattern: String,
+    pub rewrite: String,
+    pub applicability_conditions: Vec<String>,
+    pub estimated_improvement: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct MaterializedSubquery {
+    pub query_hash: String,
+    pub materialized_results: String, // JSON representation
+    pub created_at: DateTime<Utc>,
+    pub access_count: u64,
+    pub last_accessed: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SubqueryCostEstimator {
+    pub base_cost: f64,
+    pub complexity_multiplier: f64,
+    pub join_cost_factor: f64,
+}
+
+/// BIND and VALUES clause processor
+#[derive(Debug, Clone)]
+pub struct BindValuesProcessor {
+    pub bind_optimizer: BindOptimizer,
+    pub values_optimizer: ValuesOptimizer,
+    pub injection_detector: InjectionDetector,
+}
+
+#[derive(Debug, Clone)]
+pub struct BindOptimizer {
+    pub expression_cache: HashMap<String, CompiledExpression>,
+    pub optimization_patterns: Vec<BindOptimizationPattern>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CompiledExpression {
+    pub original: String,
+    pub compiled_form: String,
+    pub dependencies: Vec<String>,
+    pub execution_time_estimate: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct BindOptimizationPattern {
+    pub pattern: String,
+    pub optimization: String,
+    pub conditions: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ValuesOptimizer {
+    pub inline_threshold: usize,
+    pub join_strategies: Vec<ValuesJoinStrategy>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ValuesJoinStrategy {
+    pub name: String,
+    pub applicable_when: Vec<String>,
+    pub estimated_performance: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct InjectionDetector {
+    pub enabled: bool,
+    pub suspicious_patterns: Vec<String>,
+    pub validation_rules: Vec<ValidationRule>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ValidationRule {
+    pub name: String,
+    pub pattern: String,
+    pub severity: String,
+    pub action: String,
+}
+
+/// Advanced SERVICE delegation with parallel execution
+#[derive(Debug, Clone)]
+pub struct ServiceDelegator {
+    pub federation_planner: crate::federation::FederationPlanner,
+    pub parallel_executor: ParallelServiceExecutor,
+    pub result_merger: ServiceResultMerger,
+    pub endpoint_discovery: EndpointDiscovery,
+}
+
+#[derive(Debug, Clone)]
+pub struct ParallelServiceExecutor {
+    pub max_concurrent_services: usize,
+    pub timeout_per_service: Duration,
+    pub retry_policy: RetryPolicy,
+    pub circuit_breaker: CircuitBreakerConfig,
+}
+
+#[derive(Debug, Clone)]
+pub struct RetryPolicy {
+    pub max_retries: u32,
+    pub base_delay_ms: u64,
+    pub max_delay_ms: u64,
+    pub backoff_multiplier: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct CircuitBreakerConfig {
+    pub failure_threshold: u32,
+    pub recovery_timeout: Duration,
+    pub half_open_max_calls: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct ServiceResultMerger {
+    pub merge_strategies: HashMap<String, MergeStrategy>,
+    pub conflict_resolution: ConflictResolution,
+}
+
+#[derive(Debug, Clone)]
+pub enum MergeStrategy {
+    Union,
+    Intersection,
+    LeftOuterJoin,
+    RightOuterJoin,
+    FullOuterJoin,
+    Custom(String),
+}
+
+#[derive(Debug, Clone)]
+pub enum ConflictResolution {
+    TakeFirst,
+    TakeLast,
+    PreferLocal,
+    PreferRemote,
+    Merge,
+    Error,
+}
+
+#[derive(Debug, Clone)]
+pub struct EndpointDiscovery {
+    pub discovery_methods: Vec<DiscoveryMethod>,
+    pub cache_ttl: Duration,
+    pub health_check_interval: Duration,
+}
+
+#[derive(Debug, Clone)]
+pub enum DiscoveryMethod {
+    Static(Vec<String>),
+    Dns(String),
+    Consul(String),
+    Etcd(String),
+    Kubernetes(String),
+}
+
+use std::sync::RwLock;
+use std::collections::HashSet;
+use chrono::{DateTime, Utc};
+
+impl Sparql12Features {
+    pub fn new() -> Self {
+        Self {
+            property_path_optimizer: PropertyPathOptimizer::new(),
+            aggregation_engine: AggregationEngine::new(),
+            subquery_optimizer: SubqueryOptimizer::new(),
+            bind_values_processor: BindValuesProcessor::new(),
+            service_delegator: ServiceDelegator::new(),
+        }
+    }
+}
+
+impl PropertyPathOptimizer {
+    pub fn new() -> Self {
+        Self {
+            path_cache: Arc::new(RwLock::new(HashMap::new())),
+            statistics: Arc::new(RwLock::new(PathStatistics::default())),
+        }
+    }
+    
+    pub async fn optimize_path(&self, path: &str) -> FusekiResult<OptimizedPath> {
+        // Check cache first
+        if let Ok(cache) = self.path_cache.read() {
+            if let Some(cached) = cache.get(path) {
+                return Ok(cached.clone());
+            }
+        }
+        
+        // Analyze path complexity and choose strategy
+        let strategy = self.choose_path_strategy(path).await?;
+        let execution_plan = self.create_execution_plan(path, strategy).await?;
+        
+        let optimized = OptimizedPath {
+            original_path: path.to_string(),
+            optimized_form: self.rewrite_path_for_strategy(path, &execution_plan.strategy)?,
+            estimated_cardinality: self.estimate_path_cardinality(path).await?,
+            execution_plan,
+        };
+        
+        // Cache the optimized path
+        if let Ok(mut cache) = self.path_cache.write() {
+            cache.insert(path.to_string(), optimized.clone());
+        }
+        
+        Ok(optimized)
+    }
+    
+    async fn choose_path_strategy(&self, path: &str) -> FusekiResult<PathStrategy> {
+        // Analyze path characteristics
+        let path_length = self.estimate_path_length(path);
+        let has_inverse = path.contains("^");
+        let has_alternatives = path.contains("|");
+        let has_repetition = path.contains("*") || path.contains("+");
+        
+        // Choose strategy based on characteristics
+        if path_length <= 2 && !has_repetition {
+            Ok(PathStrategy::IndexLookup)
+        } else if has_inverse && path_length > 3 {
+            Ok(PathStrategy::BidirectionalMeet)
+        } else if has_alternatives {
+            Ok(PathStrategy::ForwardTraversal)
+        } else {
+            Ok(PathStrategy::ForwardTraversal)
+        }
+    }
+    
+    async fn create_execution_plan(&self, path: &str, strategy: PathStrategy) -> FusekiResult<PathExecutionPlan> {
+        let steps = self.decompose_path_into_steps(path)?;
+        let estimated_cost = self.estimate_execution_cost(&steps, &strategy).await?;
+        
+        Ok(PathExecutionPlan {
+            strategy,
+            estimated_cost,
+            intermediate_steps: steps,
+        })
+    }
+    
+    fn estimate_path_length(&self, path: &str) -> usize {
+        // Simple heuristic - count path separators
+        path.matches('/').count() + 1
+    }
+    
+    fn decompose_path_into_steps(&self, path: &str) -> FusekiResult<Vec<PathStep>> {
+        // Simplified path decomposition
+        let mut steps = Vec::new();
+        
+        // This would parse the actual path expression
+        steps.push(PathStep {
+            operation: "traverse".to_string(),
+            predicate: Some(path.to_string()),
+            direction: TraversalDirection::Forward,
+            estimated_selectivity: 0.5,
+        });
+        
+        Ok(steps)
+    }
+    
+    async fn estimate_execution_cost(&self, steps: &[PathStep], strategy: &PathStrategy) -> FusekiResult<f64> {
+        let base_cost = steps.len() as f64 * 10.0;
+        let strategy_multiplier = match strategy {
+            PathStrategy::IndexLookup => 1.0,
+            PathStrategy::ForwardTraversal => 2.0,
+            PathStrategy::BackwardTraversal => 2.5,
+            PathStrategy::BidirectionalMeet => 1.5,
+            PathStrategy::MaterializedView => 0.5,
+        };
+        
+        Ok(base_cost * strategy_multiplier)
+    }
+    
+    fn rewrite_path_for_strategy(&self, path: &str, strategy: &PathStrategy) -> FusekiResult<String> {
+        // Path rewriting logic would go here
+        match strategy {
+            PathStrategy::BidirectionalMeet => {
+                Ok(format!("OPTIMIZED_BIDIRECTIONAL({})", path))
+            }
+            PathStrategy::MaterializedView => {
+                Ok(format!("MATERIALIZED_VIEW({})", path))
+            }
+            _ => Ok(path.to_string())
+        }
+    }
+    
+    async fn estimate_path_cardinality(&self, path: &str) -> FusekiResult<u64> {
+        // This would use actual statistics from the store
+        Ok(1000) // Placeholder
+    }
+}
+
+impl AggregationEngine {
+    pub fn new() -> Self {
+        let mut supported_functions = HashSet::new();
+        
+        // Standard SPARQL 1.1 aggregates
+        supported_functions.insert("COUNT".to_string());
+        supported_functions.insert("SUM".to_string());
+        supported_functions.insert("AVG".to_string());
+        supported_functions.insert("MIN".to_string());
+        supported_functions.insert("MAX".to_string());
+        supported_functions.insert("GROUP_CONCAT".to_string());
+        supported_functions.insert("SAMPLE".to_string());
+        
+        // SPARQL 1.2 enhanced aggregates
+        supported_functions.insert("MEDIAN".to_string());
+        supported_functions.insert("MODE".to_string());
+        supported_functions.insert("STDDEV".to_string());
+        supported_functions.insert("VARIANCE".to_string());
+        supported_functions.insert("PERCENTILE".to_string());
+        supported_functions.insert("DISTINCT_COUNT".to_string());
+        
+        Self {
+            supported_functions,
+            custom_aggregates: HashMap::new(),
+            optimization_rules: Vec::new(),
+        }
+    }
+    
+    pub fn register_custom_aggregate(&mut self, aggregate: CustomAggregate) {
+        self.custom_aggregates.insert(aggregate.name.clone(), aggregate);
+    }
+    
+    pub async fn optimize_aggregation(&self, query: &str) -> FusekiResult<String> {
+        // Apply aggregation optimizations
+        let mut optimized = query.to_string();
+        
+        for rule in &self.optimization_rules {
+            if query.contains(&rule.pattern) {
+                optimized = optimized.replace(&rule.pattern, &rule.optimization);
+            }
+        }
+        
+        Ok(optimized)
+    }
+}
+
+impl SubqueryOptimizer {
+    pub fn new() -> Self {
+        Self {
+            rewrite_rules: Self::create_default_rewrite_rules(),
+            materialization_cache: Arc::new(RwLock::new(HashMap::new())),
+            cost_estimator: SubqueryCostEstimator {
+                base_cost: 100.0,
+                complexity_multiplier: 1.5,
+                join_cost_factor: 2.0,
+            },
+        }
+    }
+    
+    fn create_default_rewrite_rules() -> Vec<SubqueryRewriteRule> {
+        vec![
+            SubqueryRewriteRule {
+                name: "EXISTS_TO_JOIN".to_string(),
+                pattern: "EXISTS { ?s ?p ?o }".to_string(),
+                rewrite: "JOIN_OPTIMIZE(?s ?p ?o)".to_string(),
+                applicability_conditions: vec!["small_subquery".to_string()],
+                estimated_improvement: 0.3,
+            },
+            SubqueryRewriteRule {
+                name: "SUBQUERY_PULLUP".to_string(),
+                pattern: "{ SELECT * WHERE { ?s ?p ?o } }".to_string(),
+                rewrite: "?s ?p ?o".to_string(),
+                applicability_conditions: vec!["simple_projection".to_string()],
+                estimated_improvement: 0.5,
+            },
+        ]
+    }
+    
+    pub async fn optimize_subqueries(&self, query: &str) -> FusekiResult<String> {
+        let mut optimized = query.to_string();
+        
+        // Apply rewrite rules
+        for rule in &self.rewrite_rules {
+            if self.rule_applicable(&optimized, rule)? {
+                optimized = optimized.replace(&rule.pattern, &rule.rewrite);
+            }
+        }
+        
+        Ok(optimized)
+    }
+    
+    fn rule_applicable(&self, query: &str, rule: &SubqueryRewriteRule) -> FusekiResult<bool> {
+        // Check if rule conditions are met
+        for condition in &rule.applicability_conditions {
+            match condition.as_str() {
+                "small_subquery" => {
+                    if query.len() > 1000 {
+                        return Ok(false);
+                    }
+                }
+                "simple_projection" => {
+                    if query.contains("DISTINCT") || query.contains("ORDER BY") {
+                        return Ok(false);
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(true)
+    }
+}
+
+impl BindValuesProcessor {
+    pub fn new() -> Self {
+        Self {
+            bind_optimizer: BindOptimizer::new(),
+            values_optimizer: ValuesOptimizer::new(),
+            injection_detector: InjectionDetector::new(),
+        }
+    }
+    
+    pub async fn process_bind_values(&self, query: &str) -> FusekiResult<String> {
+        // First, check for injection attempts
+        self.injection_detector.validate(query)?;
+        
+        // Optimize BIND expressions
+        let mut optimized = self.bind_optimizer.optimize_binds(query).await?;
+        
+        // Optimize VALUES clauses
+        optimized = self.values_optimizer.optimize_values(&optimized).await?;
+        
+        Ok(optimized)
+    }
+}
+
+impl BindOptimizer {
+    pub fn new() -> Self {
+        Self {
+            expression_cache: HashMap::new(),
+            optimization_patterns: Vec::new(),
+        }
+    }
+    
+    pub async fn optimize_binds(&self, query: &str) -> FusekiResult<String> {
+        // Extract BIND expressions and optimize them
+        // This is a simplified implementation
+        Ok(query.to_string())
+    }
+}
+
+impl ValuesOptimizer {
+    pub fn new() -> Self {
+        Self {
+            inline_threshold: 1000,
+            join_strategies: vec![
+                ValuesJoinStrategy {
+                    name: "HASH_JOIN".to_string(),
+                    applicable_when: vec!["large_values_set".to_string()],
+                    estimated_performance: 0.8,
+                },
+                ValuesJoinStrategy {
+                    name: "NESTED_LOOP".to_string(),
+                    applicable_when: vec!["small_values_set".to_string()],
+                    estimated_performance: 0.6,
+                },
+            ],
+        }
+    }
+    
+    pub async fn optimize_values(&self, query: &str) -> FusekiResult<String> {
+        // Optimize VALUES clauses based on size and join strategy
+        Ok(query.to_string())
+    }
+}
+
+impl InjectionDetector {
+    pub fn new() -> Self {
+        Self {
+            enabled: true,
+            suspicious_patterns: vec![
+                "DROP".to_string(),
+                "INSERT DATA".to_string(),
+                "DELETE DATA".to_string(),
+                "CLEAR".to_string(),
+            ],
+            validation_rules: vec![
+                ValidationRule {
+                    name: "NO_DANGEROUS_OPERATIONS".to_string(),
+                    pattern: r"(?i)(DROP|CLEAR)\s+(?:GRAPH|ALL)".to_string(),
+                    severity: "HIGH".to_string(),
+                    action: "BLOCK".to_string(),
+                },
+            ],
+        }
+    }
+    
+    pub fn validate(&self, query: &str) -> FusekiResult<()> {
+        if !self.enabled {
+            return Ok(());
+        }
+        
+        for rule in &self.validation_rules {
+            if regex::Regex::new(&rule.pattern)
+                .map_err(|e| FusekiError::internal(format!("Invalid regex: {}", e)))?
+                .is_match(query) 
+            {
+                if rule.action == "BLOCK" {
+                    return Err(FusekiError::forbidden(format!(
+                        "Query blocked by security rule: {}", rule.name
+                    )));
+                }
+            }
+        }
+        
+        Ok(())
+    }
+}
+
+impl ServiceDelegator {
+    pub fn new() -> Self {
+        Self {
+            federation_planner: crate::federation::FederationPlanner::new(),
+            parallel_executor: ParallelServiceExecutor::new(),
+            result_merger: ServiceResultMerger::new(),
+            endpoint_discovery: EndpointDiscovery::new(),
+        }
+    }
+    
+    pub async fn execute_federated_query(&self, query: &str) -> FusekiResult<QueryResult> {
+        // Plan federated execution
+        let plan = self.federation_planner.create_execution_plan(query).await?;
+        
+        // Execute in parallel
+        let results = self.parallel_executor.execute_plan(&plan).await?;
+        
+        // Merge results
+        let merged = self.result_merger.merge_results(results).await?;
+        
+        Ok(merged)
+    }
+}
+
+impl ParallelServiceExecutor {
+    pub fn new() -> Self {
+        Self {
+            max_concurrent_services: 10,
+            timeout_per_service: Duration::from_secs(30),
+            retry_policy: RetryPolicy {
+                max_retries: 3,
+                base_delay_ms: 100,
+                max_delay_ms: 5000,
+                backoff_multiplier: 2.0,
+            },
+            circuit_breaker: CircuitBreakerConfig {
+                failure_threshold: 5,
+                recovery_timeout: Duration::from_secs(60),
+                half_open_max_calls: 3,
+            },
+        }
+    }
+    
+    pub async fn execute_plan(&self, plan: &crate::federation::FederatedQueryPlan) -> FusekiResult<Vec<QueryResult>> {
+        // Execute federated query plan with parallel service calls
+        // This would implement the actual parallel execution logic
+        Ok(Vec::new())
+    }
+}
+
+impl ServiceResultMerger {
+    pub fn new() -> Self {
+        Self {
+            merge_strategies: HashMap::new(),
+            conflict_resolution: ConflictResolution::TakeFirst,
+        }
+    }
+    
+    pub async fn merge_results(&self, results: Vec<QueryResult>) -> FusekiResult<QueryResult> {
+        // Implement result merging logic
+        if results.is_empty() {
+            return Ok(QueryResult {
+                query_type: "SELECT".to_string(),
+                execution_time_ms: 0,
+                result_count: Some(0),
+                bindings: Some(Vec::new()),
+                boolean: None,
+                construct_graph: None,
+                describe_graph: None,
+            });
+        }
+        
+        // For now, return the first result
+        Ok(results[0].clone())
+    }
+}
+
+impl EndpointDiscovery {
+    pub fn new() -> Self {
+        Self {
+            discovery_methods: vec![DiscoveryMethod::Static(Vec::new())],
+            cache_ttl: Duration::from_secs(300),
+            health_check_interval: Duration::from_secs(30),
+        }
+    }
+}
+
 /// SPARQL query handler supporting both GET and POST methods
 #[instrument(skip(state, headers, body))]
 pub async fn query_handler(

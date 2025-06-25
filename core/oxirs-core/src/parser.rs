@@ -1686,7 +1686,7 @@ ex:alice ex:age "30"^^<http://www.w3.org/2001/XMLSchema#integer> ."#;
         original_graph.insert(Triple::new(alice.clone(), name_pred, name_literal));
         
         let age_pred = NamedNode::new("http://xmlns.com/foaf/0.1/age").unwrap();
-        let age_literal = Literal::new_typed("30", crate::model::literal::xsd::integer());
+        let age_literal = Literal::new_typed("30", crate::vocab::xsd::INTEGER.clone());
         original_graph.insert(Triple::new(alice.clone(), age_pred, age_literal));
         
         let desc_pred = NamedNode::new("http://example.org/description").unwrap();

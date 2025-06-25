@@ -82,6 +82,17 @@ validator = { version = "0.18", features = ["derive"] }
 # Random number generation
 rand = "0.8"
 
+# Regular expressions for query validation
+regex = "1.11"
+
+# Additional dependencies for MFA and authentication
+urlencoding = "2.1"
+base32 = "0.5"
+qrcode = "0.14"
+hmac = "0.12"
+sha1 = "0.10"
+flate2 = "1.0"
+
 # OAuth2 and HTTP client
 reqwest = { version = "0.12", features = ["json"] }
 percent-encoding = "2.3"

@@ -7,7 +7,7 @@
 
 ## Vision
 
-OxiRS aims to be a **Rust-first, JVM-free** alternative to Apache Jena + Fuseki, providing:
+OxiRS aims to be a **Rust-first, JVM-free** alternative to Apache Jena + Fuseki and to Jupiper, providing:
 
 - **Protocol choice, not lock-in**: Expose both SPARQL 1.2 and GraphQL endpoints from the same dataset
 - **Incremental adoption**: Each crate works stand-alone; opt into advanced features via Cargo features

@@ -1017,6 +1017,31 @@ impl StreamConsumer {
                 consumer.connect().await?;
                 BackendConsumer::Kinesis(consumer)
             },
+            #[cfg(feature = "pulsar")]
+            StreamBackend::Pulsar { service_url, auth_config } => {
+                let stream_config = crate::StreamConfig {
+                    backend: crate::StreamBackend::Pulsar {
+                        service_url: service_url.clone(),
+                        auth_config: auth_config.clone(),
+                    },
+                    topic: config.topic.clone(),
+                    batch_size: config.batch_size,
+                    flush_interval_ms: config.flush_interval_ms,
+                    max_connections: config.max_connections,
+                    connection_timeout: config.connection_timeout,
+                    enable_compression: config.enable_compression,
+                    compression_type: config.compression_type.clone(),
+                    retry_config: config.retry_config.clone(),
+                    circuit_breaker: config.circuit_breaker.clone(),
+                    security: config.security.clone(),
+                    performance: config.performance.clone(),
+                    monitoring: config.monitoring.clone(),
+                };
+                
+                let mut consumer = pulsar::PulsarConsumer::new(stream_config)?;
+                consumer.connect().await?;
+                BackendConsumer::Pulsar(consumer)
+            },
             StreamBackend::Memory { max_size: _, persistence: _ } => {
                 BackendConsumer::Memory(MemoryConsumer::new())
             },
@@ -1031,6 +1056,8 @@ impl StreamConsumer {
                 BackendConsumer::Redis(_) => "redis".to_string(),
                 #[cfg(feature = "kinesis")]
                 BackendConsumer::Kinesis(_) => "kinesis".to_string(),
+                #[cfg(feature = "pulsar")]
+                BackendConsumer::Pulsar(_) => "pulsar".to_string(),
                 BackendConsumer::Memory(_) => "memory".to_string(),
             },
             batch_size: config.batch_size,
@@ -1110,6 +1137,10 @@ impl StreamConsumer {
             },
             #[cfg(feature = "kinesis")]
             BackendConsumer::Kinesis(consumer) => {
+                consumer.consume().await
+            },
+            #[cfg(feature = "pulsar")]
+            BackendConsumer::Pulsar(consumer) => {
                 consumer.consume().await
             },
             BackendConsumer::Memory(consumer) => {

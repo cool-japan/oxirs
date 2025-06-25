@@ -154,7 +154,7 @@ pub async fn initiate_saml_sso(
     let target_url = params.target.unwrap_or_else(|| "/".to_string());
     let force_authn = params.force_authn.unwrap_or(false);
     let relay_state = params.relay_state.unwrap_or_else(|| 
-        base64::encode(serde_json::json!({
+        general_purpose::STANDARD.encode(serde_json::json!({
             "target": target_url,
             "timestamp": Utc::now().timestamp()
         }).to_string())

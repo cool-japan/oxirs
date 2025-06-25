@@ -116,8 +116,11 @@ impl Serializer {
                     // Add language tag or datatype
                     if let Some(lang) = literal.language() {
                         result.push_str(&format!("@{}", lang));
-                    } else if let Some(datatype) = literal.datatype() {
-                        result.push_str(&format!("^^<{}>", datatype.as_str()));
+                    } else {
+                        let datatype = literal.datatype();
+                        if datatype.as_str() != "http://www.w3.org/2001/XMLSchema#string" {
+                            result.push_str(&format!("^^<{}>", datatype.as_str()));
+                        }
                     }
                 },
                 crate::model::Object::Variable(_) => {
@@ -229,8 +232,11 @@ impl Serializer {
                 // Add language tag or datatype
                 if let Some(lang) = literal.language() {
                     result.push_str(&format!("@{}", lang));
-                } else if let Some(datatype) = literal.datatype() {
-                    result.push_str(&format!("^^<{}>", datatype.as_str()));
+                } else {
+                    let datatype = literal.datatype();
+                    if datatype.as_str() != "http://www.w3.org/2001/XMLSchema#string" {
+                        result.push_str(&format!("^^<{}>", datatype.as_str()));
+                    }
                 }
             },
             crate::model::Object::Variable(_) => {
@@ -408,10 +414,9 @@ impl TurtleSerializer {
                 }
             }
             crate::model::Object::Literal(literal) => {
-                if let Some(datatype) = literal.datatype() {
-                    if let Some(namespace) = self.extract_namespace(datatype.as_str()) {
-                        self.used_namespaces.insert(namespace);
-                    }
+                let datatype = literal.datatype();
+                if let Some(namespace) = self.extract_namespace(datatype.as_str()) {
+                    self.used_namespaces.insert(namespace);
                 }
             }
             _ => {}
@@ -552,7 +557,7 @@ mod tests {
         
         // Add a typed literal triple
         let age_pred = NamedNode::new("http://xmlns.com/foaf/0.1/age").unwrap();
-        let age_obj = Literal::new_typed("30", crate::model::literal::xsd::integer());
+        let age_obj = Literal::new_typed("30", crate::vocab::xsd::INTEGER.clone());
         let triple2 = Triple::new(subject.clone(), age_pred, age_obj);
         
         // Add a language-tagged literal triple
@@ -708,7 +713,7 @@ mod tests {
         let age_pred = NamedNode::new("http://xmlns.com/foaf/0.1/age").unwrap();
         
         let name_literal = Literal::new("Alice");
-        let age_literal = Literal::new_typed("30", crate::model::literal::xsd::integer());
+        let age_literal = Literal::new_typed("30", crate::vocab::xsd::INTEGER.clone());
         
         graph.insert(Triple::new(alice.clone(), name_pred, name_literal));
         graph.insert(Triple::new(alice, age_pred, age_literal));
@@ -734,7 +739,7 @@ mod tests {
         // Language-tagged literal
         let desc_literal = Literal::new_lang("Une description", "fr").unwrap();
         // Typed literal
-        let age_literal = Literal::new_typed("25", crate::model::literal::xsd::integer());
+        let age_literal = Literal::new_typed("25", crate::vocab::xsd::INTEGER.clone());
         
         graph.insert(Triple::new(subject.clone(), desc_pred, desc_literal));
         graph.insert(Triple::new(subject, age_pred, age_literal));
