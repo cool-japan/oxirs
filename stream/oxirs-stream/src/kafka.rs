@@ -947,7 +947,7 @@ impl ConsumerContext for KafkaConsumerContext {
             Rebalance::Assign(topic_partition_list) => {
                 info!("Partition assignment: {:?}", topic_partition_list);
             }
-            Rebalance::Revoke => {
+            Rebalance::Revoke(_) => {
                 info!("Partition revoked");
             }
             Rebalance::Error(err) => {
@@ -972,9 +972,7 @@ impl ConsumerContext for KafkaConsumerContext {
         }
     }
 
-    fn stats(&self, statistics: Statistics) {
-        debug!("Kafka consumer statistics: {:?}", statistics);
-    }
+    // Note: stats method removed as it's not part of ConsumerContext trait in newer rdkafka versions
 }
 
 #[cfg(feature = "kafka")]

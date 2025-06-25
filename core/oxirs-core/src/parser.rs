@@ -1661,10 +1661,15 @@ ex:alice ex:age "30"^^<http://www.w3.org/2001/XMLSchema#integer> ."#;
                 if literal.language().is_some() {
                     found_lang_literal = true;
                     assert_eq!(literal.language(), Some("en"));
-                }
-                if literal.datatype().is_some() {
-                    found_typed_literal = true;
-                    assert!(literal.datatype().unwrap().as_str().contains("integer"));
+                } else {
+                    let datatype = literal.datatype();
+                    // Check for typed literal (not language-tagged and not plain string)
+                    if datatype.as_str() != "http://www.w3.org/2001/XMLSchema#string" &&
+                       datatype.as_str() != "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString" {
+                        found_typed_literal = true;
+                        assert!(datatype.as_str().contains("integer"), 
+                                "Expected integer datatype but got: {}", datatype.as_str());
+                    }
                 }
             }
         }

@@ -136,6 +136,63 @@ pub struct ValidatedSamlAssertion {
     pub assertion_id: String,
     pub signature_valid: bool,
     pub conditions_valid: bool,
+    pub authn_context_class: Option<String>,
+    pub name_id_format: String,
+    pub encryption_valid: bool,
+}
+
+/// SAML 2.0 Multi-Factor Authentication support
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SamlMfaRequirement {
+    pub required: bool,
+    pub accepted_contexts: Vec<String>,
+    pub minimum_strength: AuthnStrength,
+    pub timeout_minutes: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AuthnStrength {
+    Low,     // Password only
+    Medium,  // Password + SMS/Email
+    High,    // Hardware token, biometric
+    Highest, // Multi-factor with PKI
+}
+
+/// Enhanced SAML configuration with enterprise features
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnhancedSamlConfig {
+    pub sp_config: SamlSpConfig,
+    pub idp_configs: HashMap<String, SamlIdpConfig>,
+    pub mfa_requirements: SamlMfaRequirement,
+    pub session_config: SamlSessionConfig,
+    pub federation_config: SamlFederationConfig,
+    pub compliance_config: SamlComplianceConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SamlSessionConfig {
+    pub max_session_duration_hours: u32,
+    pub idle_timeout_minutes: u32,
+    pub concurrent_sessions_allowed: u32,
+    pub session_fixation_protection: bool,
+    pub secure_cookie_only: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SamlFederationConfig {
+    pub enable_cross_domain: bool,
+    pub trusted_domains: Vec<String>,
+    pub metadata_refresh_interval_hours: u32,
+    pub discovery_service_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SamlComplianceConfig {
+    pub audit_all_assertions: bool,
+    pub require_encryption: bool,
+    pub minimum_signature_algorithm: String,
+    pub blacklisted_algorithms: Vec<String>,
+    pub require_destination_validation: bool,
 }
 
 /// Initiate SAML SSO flow (SP-initiated)
@@ -406,6 +463,9 @@ async fn validate_saml_assertion(
         assertion_id: generate_assertion_id(),
         signature_valid,
         conditions_valid,
+        authn_context_class: extract_authn_context_class(response_xml),
+        name_id_format: "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress".to_string(),
+        encryption_valid: validate_saml_encryption(response_xml, auth_service).await?,
     })
 }
 
@@ -577,6 +637,125 @@ fn is_slo_response_successful(_xml: &str) -> FusekiResult<bool> {
 
 fn extract_session_id_from_headers(_headers: &HeaderMap) -> FusekiResult<String> {
     Ok("session123".to_string())
+}
+
+fn extract_authn_context_class(_xml: &str) -> Option<String> {
+    // In production, this would parse the actual AuthnContextClassRef
+    Some("urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport".to_string())
+}
+
+async fn validate_saml_encryption(_xml: &str, _auth_service: &AuthService) -> FusekiResult<bool> {
+    // In production, this would validate SAML encryption
+    Ok(true)
+}
+
+/// Enhanced SAML assertion validation with compliance checks
+pub async fn validate_enhanced_saml_assertion(
+    response_xml: &str,
+    auth_service: &AuthService,
+    compliance_config: &SamlComplianceConfig,
+) -> FusekiResult<ValidatedSamlAssertion> {
+    // Standard validation
+    let mut assertion = validate_saml_assertion(response_xml, auth_service).await?;
+    
+    // Additional compliance checks
+    if compliance_config.require_encryption && !assertion.encryption_valid {
+        return Err(FusekiError::authentication("SAML assertion encryption required but not valid"));
+    }
+    
+    if compliance_config.require_destination_validation {
+        if !validate_assertion_destination(response_xml)? {
+            return Err(FusekiError::authentication("SAML assertion destination validation failed"));
+        }
+    }
+    
+    // Check signature algorithm compliance
+    let signature_algorithm = extract_signature_algorithm(response_xml)?;
+    if compliance_config.blacklisted_algorithms.contains(&signature_algorithm) {
+        return Err(FusekiError::authentication("SAML signature algorithm not allowed"));
+    }
+    
+    if !meets_minimum_signature_strength(&signature_algorithm, &compliance_config.minimum_signature_algorithm)? {
+        return Err(FusekiError::authentication("SAML signature algorithm too weak"));
+    }
+    
+    Ok(assertion)
+}
+
+/// Validate MFA requirements from SAML assertion
+pub fn validate_mfa_requirements(
+    assertion: &ValidatedSamlAssertion,
+    mfa_config: &SamlMfaRequirement,
+) -> FusekiResult<bool> {
+    if !mfa_config.required {
+        return Ok(true);
+    }
+    
+    let authn_context = assertion.authn_context_class.as_ref()
+        .ok_or_else(|| FusekiError::authentication("MFA required but no authentication context provided"))?;
+    
+    if !mfa_config.accepted_contexts.contains(authn_context) {
+        return Err(FusekiError::authentication("Authentication context does not meet MFA requirements"));
+    }
+    
+    // Check authentication strength
+    let context_strength = determine_authn_strength(authn_context);
+    if !meets_minimum_strength(&context_strength, &mfa_config.minimum_strength) {
+        return Err(FusekiError::authentication("Authentication strength insufficient for MFA requirements"));
+    }
+    
+    Ok(true)
+}
+
+fn validate_assertion_destination(_xml: &str) -> FusekiResult<bool> {
+    // In production, validate the Destination attribute
+    Ok(true)
+}
+
+fn extract_signature_algorithm(_xml: &str) -> FusekiResult<String> {
+    // In production, extract actual signature algorithm
+    Ok("http://www.w3.org/2001/04/xmldsig-more#rsa-sha256".to_string())
+}
+
+fn meets_minimum_signature_strength(
+    algorithm: &str,
+    minimum: &str,
+) -> FusekiResult<bool> {
+    // Simplified strength comparison
+    let strength_order = vec![
+        "http://www.w3.org/2000/09/xmldsig#rsa-sha1",           // Weak
+        "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256",    // Medium
+        "http://www.w3.org/2001/04/xmldsig-more#rsa-sha384",    // Strong
+        "http://www.w3.org/2001/04/xmldsig-more#rsa-sha512",    // Very Strong
+    ];
+    
+    let alg_pos = strength_order.iter().position(|&x| x == algorithm).unwrap_or(0);
+    let min_pos = strength_order.iter().position(|&x| x == minimum).unwrap_or(0);
+    
+    Ok(alg_pos >= min_pos)
+}
+
+fn determine_authn_strength(context_class: &str) -> AuthnStrength {
+    match context_class {
+        "urn:oasis:names:tc:SAML:2.0:ac:classes:Password" => AuthnStrength::Low,
+        "urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport" => AuthnStrength::Low,
+        "urn:oasis:names:tc:SAML:2.0:ac:classes:MobileOneFactorUnregistered" => AuthnStrength::Medium,
+        "urn:oasis:names:tc:SAML:2.0:ac:classes:MobileTwoFactorContract" => AuthnStrength::High,
+        "urn:oasis:names:tc:SAML:2.0:ac:classes:Smartcard" => AuthnStrength::High,
+        "urn:oasis:names:tc:SAML:2.0:ac:classes:SmartcardPKI" => AuthnStrength::Highest,
+        _ => AuthnStrength::Low,
+    }
+}
+
+fn meets_minimum_strength(actual: &AuthnStrength, required: &AuthnStrength) -> bool {
+    let strength_values = |s: &AuthnStrength| match s {
+        AuthnStrength::Low => 1,
+        AuthnStrength::Medium => 2,
+        AuthnStrength::High => 3,
+        AuthnStrength::Highest => 4,
+    };
+    
+    strength_values(actual) >= strength_values(required)
 }
 
 #[cfg(test)]

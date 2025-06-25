@@ -499,6 +499,855 @@ impl ValidationPredictor {
                 errors.push(PredictedError {
                     error_type: PredictedErrorType::ResourceExhaustion,
                     constraint_component: None,
+                    description: "High memory usage may cause resource exhaustion".to_string(),
+                    probability: 0.7,
+                    estimated_affected_nodes: 0,
+                    severity: PredictedErrorSeverity::High,
+                });
+            }
+        }
+        
+        // Timeout prediction
+        if let Some(complexity) = features.get("processing_complexity") {
+            if *complexity > 80.0 {
+                errors.push(PredictedError {
+                    error_type: PredictedErrorType::Timeout,
+                    constraint_component: None,
+                    description: "High processing complexity may cause timeouts".to_string(),
+                    probability: 0.5,
+                    estimated_affected_nodes: 0,
+                    severity: PredictedErrorSeverity::Medium,
+                });
+            }
+        }
+        
+        Ok(errors)
+    }
+    
+    /// Calculate graph statistics for prediction
+    fn calculate_graph_stats(&self, store: &Store) -> Result<GraphStats> {
+        // Query for basic graph statistics
+        let triple_count_query = r#"
+            SELECT (COUNT(*) as ?count) WHERE {
+                ?s ?p ?o .
+            }
+        "#;
+        
+        let result = self.execute_prediction_query(store, triple_count_query)?;
+        let mut triple_count = 0;
+        
+        if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = result {
+            if let Some(binding) = bindings.first() {
+                if let Some(count_term) = binding.get("count") {
+                    if let Term::Literal(count_literal) = count_term {
+                        triple_count = count_literal.as_str().parse::<u64>().unwrap_or(0);
+                    }
+                }
+            }
+        }
+        
+        // Calculate other statistics
+        let density = if triple_count > 0 { 
+            (triple_count as f64 / (triple_count as f64 + 1000.0)).min(1.0) 
+        } else { 
+            0.0 
+        };
+        
+        let unique_predicates = self.count_unique_predicates(store)?;
+        let unique_classes = self.count_unique_classes(store)?;
+        
+        Ok(GraphStats {
+            triple_count,
+            density,
+            unique_predicates,
+            unique_classes,
+            estimated_memory_mb: (triple_count as f64 / 1000.0 * 50.0).max(10.0),
+            cpu_complexity_score: (triple_count as f64 / 10000.0 * 30.0).min(100.0),
+        })
+    }
+    
+    /// Count unique predicates in the store
+    fn count_unique_predicates(&self, store: &Store) -> Result<u32> {
+        let query = r#"
+            SELECT (COUNT(DISTINCT ?p) as ?count) WHERE {
+                ?s ?p ?o .
+            }
+        "#;
+        
+        let result = self.execute_prediction_query(store, query)?;
+        
+        if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = result {
+            if let Some(binding) = bindings.first() {
+                if let Some(count_term) = binding.get("count") {
+                    if let Term::Literal(count_literal) = count_term {
+                        return Ok(count_literal.as_str().parse::<u32>().unwrap_or(0));
+                    }
+                }
+            }
+        }
+        
+        Ok(0)
+    }
+    
+    /// Count unique classes in the store
+    fn count_unique_classes(&self, store: &Store) -> Result<u32> {
+        let query = r#"
+            SELECT (COUNT(DISTINCT ?class) as ?count) WHERE {
+                ?instance a ?class .
+                FILTER(isIRI(?class))
+            }
+        "#;
+        
+        let result = self.execute_prediction_query(store, query)?;
+        
+        if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = result {
+            if let Some(binding) = bindings.first() {
+                if let Some(count_term) = binding.get("count") {
+                    if let Term::Literal(count_literal) = count_term {
+                        return Ok(count_literal.as_str().parse::<u32>().unwrap_or(0));
+                    }
+                }
+            }
+        }
+        
+        Ok(0)
+    }
+    
+    /// Calculate shape complexity metrics
+    fn calculate_shape_complexity(&self, shapes: &[Shape]) -> ShapeComplexityStats {
+        let mut total_constraints = 0;
+        let mut max_path_complexity = 0;
+        let mut total_path_complexity = 0;
+        
+        for shape in shapes {
+            let constraints = shape.get_constraints();
+            total_constraints += constraints.len();
+            
+            if let Some(path) = shape.get_path() {
+                let complexity = path.complexity();
+                max_path_complexity = max_path_complexity.max(complexity);
+                total_path_complexity += complexity;
+            }
+        }
+        
+        let avg_constraints_per_shape = if shapes.is_empty() {
+            0.0
+        } else {
+            total_constraints as f64 / shapes.len() as f64
+        };
+        
+        ShapeComplexityStats {
+            total_constraints,
+            avg_constraints_per_shape,
+            max_path_complexity,
+        }
+    }
+    
+    /// Estimate processing complexity
+    fn estimate_processing_complexity(&self, shapes: &[Shape]) -> f64 {
+        let mut complexity = 0.0;
+        
+        for shape in shapes {
+            // Base complexity for the shape
+            complexity += 10.0;
+            
+            // Add complexity for each constraint
+            for (_, constraint) in shape.get_constraints() {
+                complexity += match constraint {
+                    Constraint::Pattern(_) => 15.0,
+                    Constraint::Sparql(_) => 25.0,
+                    Constraint::MinCount(_) | Constraint::MaxCount(_) => 8.0,
+                    Constraint::Datatype(_) => 5.0,
+                    _ => 7.0,
+                };
+            }
+            
+            // Add complexity for path complexity
+            if let Some(path) = shape.get_path() {
+                complexity += path.complexity() as f64 * 5.0;
+            }
+        }
+        
+        complexity
+    }
+    
+    /// Count recursive patterns in shapes
+    fn count_recursive_patterns(&self, shapes: &[Shape]) -> usize {
+        let mut recursive_count = 0;
+        
+        for shape in shapes {
+            // Check if shape references itself in constraints
+            let shape_id = shape.get_id();
+            
+            for (_, constraint) in shape.get_constraints() {
+                if let Constraint::NodeShape(ref referenced_shape_id) = constraint {
+                    if referenced_shape_id == shape_id {
+                        recursive_count += 1;
+                    }
+                }
+            }
+        }
+        
+        recursive_count
+    }
+    
+    /// Count SPARQL constraints in shapes
+    fn count_sparql_constraints(&self, shapes: &[Shape]) -> usize {
+        let mut sparql_count = 0;
+        
+        for shape in shapes {
+            for (_, constraint) in shape.get_constraints() {
+                if matches!(constraint, Constraint::Sparql(_)) {
+                    sparql_count += 1;
+                }
+            }
+        }
+        
+        sparql_count
+    }
+    
+    /// Get historical performance data
+    fn get_historical_performance(&self) -> Option<HistoricalPerformance> {
+        if self.validation_history.is_empty() {
+            return None;
+        }
+        
+        let mut total_time = Duration::from_secs(0);
+        let mut total_violations = 0;
+        let mut total_validations = 0;
+        let mut successful_validations = 0;
+        
+        for historical in &self.validation_history {
+            if let Some(duration) = historical.actual_result.execution_time {
+                total_time += duration;
+            }
+            
+            total_violations += historical.actual_result.violation_count;
+            total_validations += 1;
+            
+            if historical.actual_result.success {
+                successful_validations += 1;
+            }
+        }
+        
+        let avg_validation_time = total_time / total_validations.max(1) as u32;
+        let avg_violation_rate = total_violations as f64 / total_validations as f64;
+        let success_rate = successful_validations as f64 / total_validations as f64;
+        
+        Some(HistoricalPerformance {
+            avg_validation_time,
+            avg_violation_rate,
+            success_rate,
+        })
+    }
+    
+    /// Calculate overall confidence in prediction
+    fn calculate_overall_confidence(&self, features: &HashMap<String, f64>) -> f64 {
+        let mut confidence = 0.7; // Base confidence
+        
+        // Increase confidence based on historical data availability
+        if !self.validation_history.is_empty() {
+            confidence += 0.2 * (self.validation_history.len() as f64 / 100.0).min(1.0);
+        }
+        
+        // Adjust confidence based on feature completeness
+        let feature_completeness = features.len() as f64 / 10.0; // Assume 10 ideal features
+        confidence += 0.1 * feature_completeness.min(1.0);
+        
+        confidence.min(1.0)
+    }
+    
+    /// Calculate outcome confidence
+    fn calculate_outcome_confidence(&self, features: &HashMap<String, f64>) -> f64 {
+        let mut confidence = 0.6;
+        
+        if features.contains_key("success_rate") {
+            confidence += 0.3;
+        }
+        
+        if features.contains_key("graph_size") && features.contains_key("total_constraint_count") {
+            confidence += 0.2;
+        }
+        
+        confidence.min(1.0)
+    }
+    
+    /// Calculate performance confidence
+    fn calculate_performance_confidence(&self, features: &HashMap<String, f64>) -> f64 {
+        let mut confidence = 0.5;
+        
+        if features.contains_key("avg_validation_time") {
+            confidence += 0.3;
+        }
+        
+        if features.contains_key("memory_estimate") {
+            confidence += 0.2;
+        }
+        
+        confidence.min(1.0)
+    }
+    
+    /// Calculate error prediction confidence
+    fn calculate_error_confidence(&self, features: &HashMap<String, f64>) -> f64 {
+        let mut confidence = 0.4;
+        
+        if features.contains_key("graph_density") {
+            confidence += 0.2;
+        }
+        
+        if features.contains_key("processing_complexity") {
+            confidence += 0.2;
+        }
+        
+        if !self.validation_history.is_empty() {
+            confidence += 0.2;
+        }
+        
+        confidence.min(1.0)
+    }
+    
+    /// Predict bottlenecks
+    fn predict_bottlenecks(&self, features: &HashMap<String, f64>) -> Vec<PredictedBottleneck> {
+        let mut bottlenecks = Vec::new();
+        
+        // Memory bottleneck
+        if let Some(memory_estimate) = features.get("memory_estimate") {
+            if *memory_estimate > 500.0 {
+                bottlenecks.push(PredictedBottleneck {
+                    bottleneck_type: BottleneckType::Memory,
+                    description: "High memory usage predicted".to_string(),
+                    severity: if *memory_estimate > 1000.0 { 
+                        PredictedErrorSeverity::High 
+                    } else { 
+                        PredictedErrorSeverity::Medium 
+                    },
+                    estimated_impact: *memory_estimate / 1000.0,
+                });
+            }
+        }
+        
+        // CPU bottleneck
+        if let Some(cpu_complexity) = features.get("cpu_complexity") {
+            if *cpu_complexity > 70.0 {
+                bottlenecks.push(PredictedBottleneck {
+                    bottleneck_type: BottleneckType::Cpu,
+                    description: "High CPU usage predicted".to_string(),
+                    severity: if *cpu_complexity > 90.0 { 
+                        PredictedErrorSeverity::High 
+                    } else { 
+                        PredictedErrorSeverity::Medium 
+                    },
+                    estimated_impact: *cpu_complexity / 100.0,
+                });
+            }
+        }
+        
+        // IO bottleneck
+        if let Some(graph_size) = features.get("graph_size") {
+            if *graph_size > 100000.0 {
+                bottlenecks.push(PredictedBottleneck {
+                    bottleneck_type: BottleneckType::Io,
+                    description: "High I/O load predicted due to large graph size".to_string(),
+                    severity: PredictedErrorSeverity::Medium,
+                    estimated_impact: (*graph_size / 100000.0).min(1.0),
+                });
+            }
+        }
+        
+        bottlenecks
+    }
+    
+    /// Calculate overall error probability
+    fn calculate_overall_error_probability(&self, features: &HashMap<String, f64>) -> f64 {
+        let mut probability = 0.1; // Base error probability
+        
+        // Increase probability based on complexity
+        if let Some(complexity) = features.get("processing_complexity") {
+            probability += complexity / 1000.0;
+        }
+        
+        // Increase probability based on graph size
+        if let Some(graph_size) = features.get("graph_size") {
+            probability += (graph_size / 100000.0) * 0.05;
+        }
+        
+        // Adjust based on historical success rate
+        if let Some(success_rate) = features.get("success_rate") {
+            probability = probability * (1.0 - success_rate) + probability * 0.1;
+        }
+        
+        probability.min(0.9)
+    }
+    
+    /// Update model from feedback
+    fn update_model_from_feedback(&mut self, prediction: &ValidationPrediction, actual_result: &ValidationReport) -> Result<()> {
+        // Calculate prediction accuracy
+        let predicted_success = prediction.outcome.will_succeed;
+        let actual_success = actual_result.is_conformant();
+        let outcome_accuracy = if predicted_success == actual_success { 1.0 } else { 0.0 };
+        
+        // Update model accuracy running average
+        let alpha = 0.1; // Learning rate
+        self.model_state.accuracy = self.model_state.accuracy * (1.0 - alpha) + outcome_accuracy * alpha;
+        
+        // Update prediction statistics
+        self.stats.feedback_accuracy = (self.stats.feedback_accuracy * self.stats.feedback_received as f64 + outcome_accuracy) / (self.stats.feedback_received + 1) as f64;
+        
+        Ok(())
+    }
+    
+    /// Create prediction cache key
+    fn create_prediction_cache_key(&self, store: &Store, shapes: &[Shape], config: &ValidationConfig) -> String {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let mut hasher = DefaultHasher::new();
+        
+        // Hash store identifier (simplified)
+        format!("{:p}", store).hash(&mut hasher);
+        
+        // Hash shapes
+        for shape in shapes {
+            shape.get_id().as_str().hash(&mut hasher);
+        }
+        
+        // Hash config
+        config.fail_fast.hash(&mut hasher);
+        config.max_violations.hash(&mut hasher);
+        
+        format!("prediction_{}", hasher.finish())
+    }
+    
+    /// Cache prediction result
+    fn cache_prediction(&mut self, key: String, prediction: ValidationPrediction) {
+        if self.prediction_cache.len() >= self.config.max_cache_size {
+            // Remove oldest entry (simplified LRU)
+            if let Some(oldest_key) = self.prediction_cache.keys().next().cloned() {
+                self.prediction_cache.remove(&oldest_key);
+            }
+        }
+        
+        let cached = CachedPrediction {
+            prediction,
+            timestamp: chrono::Utc::now(),
+            ttl: Duration::from_secs(1800), // 30 minutes
+        };
+        
+        self.prediction_cache.insert(key, cached);
+    }
+    
+    /// Execute prediction query
+    fn execute_prediction_query(&self, store: &Store, query: &str) -> Result<oxirs_core::query::QueryResult> {
+        use oxirs_core::query::QueryEngine;
+        
+        let query_engine = QueryEngine::new();
+        let result = query_engine.query(query, store)
+            .map_err(|e| ShaclAiError::ValidationPrediction(format!("Prediction query failed: {}", e)))?;
+        
+        Ok(result)
+    }
+}
+
+impl Default for ValidationPredictor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Validation prediction result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationPrediction {
+    /// Predicted outcome
+    pub outcome: OutcomePrediction,
+    
+    /// Predicted performance metrics
+    pub performance: PerformancePrediction,
+    
+    /// Predicted errors
+    pub errors: ErrorPrediction,
+    
+    /// Overall confidence in prediction
+    pub confidence: f64,
+    
+    /// Features used for prediction
+    pub features_used: Vec<String>,
+    
+    /// When this prediction was made
+    pub prediction_timestamp: chrono::DateTime<chrono::Utc>,
+    
+    /// Model version used
+    pub model_version: String,
+}
+
+/// Outcome prediction
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OutcomePrediction {
+    /// Whether validation will succeed
+    pub will_succeed: bool,
+    
+    /// Probability of success
+    pub success_probability: f64,
+    
+    /// Estimated number of violations
+    pub estimated_violations: u32,
+    
+    /// Estimated number of warnings
+    pub estimated_warnings: u32,
+    
+    /// Confidence in outcome prediction
+    pub confidence: f64,
+}
+
+/// Performance prediction
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PerformancePrediction {
+    /// Estimated execution duration
+    pub estimated_duration: Duration,
+    
+    /// Estimated memory usage in MB
+    pub estimated_memory_mb: u64,
+    
+    /// Estimated CPU usage percentage
+    pub estimated_cpu_percent: u8,
+    
+    /// Estimated I/O operations
+    pub estimated_io_operations: u64,
+    
+    /// Predicted bottlenecks
+    pub bottleneck_predictions: Vec<PredictedBottleneck>,
+    
+    /// Confidence in performance prediction
+    pub confidence: f64,
+}
+
+impl Default for PerformancePrediction {
+    fn default() -> Self {
+        Self {
+            estimated_duration: Duration::from_secs(1),
+            estimated_memory_mb: 50,
+            estimated_cpu_percent: 30,
+            estimated_io_operations: 100,
+            bottleneck_predictions: Vec::new(),
+            confidence: 0.5,
+        }
+    }
+}
+
+/// Error prediction
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ErrorPrediction {
+    /// List of predicted errors
+    pub predicted_errors: Vec<PredictedError>,
+    
+    /// Overall error probability
+    pub overall_error_probability: f64,
+    
+    /// Confidence in error prediction
+    pub confidence: f64,
+}
+
+impl Default for ErrorPrediction {
+    fn default() -> Self {
+        Self {
+            predicted_errors: Vec::new(),
+            overall_error_probability: 0.1,
+            confidence: 0.5,
+        }
+    }
+}
+
+/// Predicted error
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PredictedError {
+    /// Type of error
+    pub error_type: PredictedErrorType,
+    
+    /// Constraint component that may cause the error
+    pub constraint_component: Option<oxirs_shacl::ConstraintComponentId>,
+    
+    /// Error description
+    pub description: String,
+    
+    /// Probability of this error occurring
+    pub probability: f64,
+    
+    /// Estimated number of affected nodes
+    pub estimated_affected_nodes: usize,
+    
+    /// Predicted severity
+    pub severity: PredictedErrorSeverity,
+}
+
+/// Types of predicted errors
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PredictedErrorType {
+    ConstraintViolation,
+    PatternMismatch,
+    DatatypeMismatch,
+    CardinalityViolation,
+    ResourceExhaustion,
+    Timeout,
+    ParseError,
+    SystemError,
+}
+
+/// Predicted error severity levels
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PredictedErrorSeverity {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+/// Predicted bottleneck
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PredictedBottleneck {
+    /// Type of bottleneck
+    pub bottleneck_type: BottleneckType,
+    
+    /// Description of the bottleneck
+    pub description: String,
+    
+    /// Severity of the bottleneck
+    pub severity: PredictedErrorSeverity,
+    
+    /// Estimated impact (0.0 - 1.0)
+    pub estimated_impact: f64,
+}
+
+/// Types of performance bottlenecks
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BottleneckType {
+    Memory,
+    Cpu,
+    Io,
+    Network,
+    Disk,
+}
+
+/// Graph statistics for prediction
+#[derive(Debug, Clone)]
+struct GraphStats {
+    triple_count: u64,
+    density: f64,
+    unique_predicates: u32,
+    unique_classes: u32,
+    estimated_memory_mb: f64,
+    cpu_complexity_score: f64,
+}
+
+/// Shape complexity statistics
+#[derive(Debug, Clone)]
+struct ShapeComplexityStats {
+    total_constraints: usize,
+    avg_constraints_per_shape: f64,
+    max_path_complexity: usize,
+}
+
+/// Historical performance data
+#[derive(Debug, Clone)]
+struct HistoricalPerformance {
+    avg_validation_time: Duration,
+    avg_violation_rate: f64,
+    success_rate: f64,
+}
+
+/// Historical validation data
+#[derive(Debug, Clone)]
+struct HistoricalValidation {
+    prediction: ValidationPrediction,
+    actual_result: ValidationOutcome,
+    timestamp: chrono::DateTime<chrono::Utc>,
+}
+
+/// Validation outcome from actual results
+#[derive(Debug, Clone)]
+struct ValidationOutcome {
+    success: bool,
+    violation_count: u32,
+    warning_count: u32,
+    execution_time: Option<Duration>,
+}
+
+impl ValidationOutcome {
+    fn from_report(report: &ValidationReport) -> Self {
+        let results = report.get_results();
+        let violation_count = results.iter()
+            .filter(|result| !result.conforms() && matches!(result.get_severity(), oxirs_shacl::Severity::Violation))
+            .count() as u32;
+            
+        let warning_count = results.iter()
+            .filter(|result| !result.conforms() && matches!(result.get_severity(), oxirs_shacl::Severity::Warning))
+            .count() as u32;
+        
+        Self {
+            success: report.is_conformant(),
+            violation_count,
+            warning_count,
+            execution_time: report.get_execution_time(),
+        }
+    }
+}
+
+/// Prediction model state
+#[derive(Debug)]
+struct PredictionModelState {
+    version: String,
+    accuracy: f64,
+    loss: f64,
+    training_epochs: usize,
+    last_training: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl PredictionModelState {
+    fn new() -> Self {
+        Self {
+            version: "1.0.0".to_string(),
+            accuracy: 0.7,
+            loss: 0.3,
+            training_epochs: 0,
+            last_training: None,
+        }
+    }
+}
+
+/// Cached prediction result
+#[derive(Debug, Clone)]
+struct CachedPrediction {
+    prediction: ValidationPrediction,
+    timestamp: chrono::DateTime<chrono::Utc>,
+    ttl: Duration,
+}
+
+impl CachedPrediction {
+    fn is_expired(&self) -> bool {
+        let now = chrono::Utc::now();
+        let expiry = self.timestamp + chrono::Duration::from_std(self.ttl).unwrap_or_default();
+        now > expiry
+    }
+}
+
+/// Prediction statistics
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PredictionStatistics {
+    pub total_predictions: usize,
+    pub total_prediction_time: Duration,
+    pub cache_hits: usize,
+    pub cache_misses: usize,
+    pub feedback_received: usize,
+    pub feedback_accuracy: f64,
+    pub model_trained: bool,
+}
+
+/// Training data for prediction models
+#[derive(Debug, Clone)]
+pub struct PredictionTrainingData {
+    pub examples: Vec<PredictionExample>,
+    pub validation_examples: Vec<PredictionExample>,
+}
+
+/// Training example for prediction
+#[derive(Debug, Clone)]
+pub struct PredictionExample {
+    pub features: HashMap<String, f64>,
+    pub expected_outcome: OutcomePrediction,
+    pub expected_performance: PerformancePrediction,
+    pub actual_result: ValidationOutcome,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_validation_predictor_creation() {
+        let predictor = ValidationPredictor::new();
+        assert!(predictor.config.enable_prediction);
+        assert_eq!(predictor.config.min_confidence_threshold, 0.7);
+    }
+    
+    #[test]
+    fn test_prediction_config_default() {
+        let config = PredictionConfig::default();
+        assert!(config.enable_prediction);
+        assert!(config.enable_performance_prediction);
+        assert!(config.enable_error_anticipation);
+        assert_eq!(config.min_confidence_threshold, 0.7);
+        assert_eq!(config.max_cache_size, 1000);
+    }
+    
+    #[test]
+    fn test_prediction_model_params() {
+        let params = PredictionModelParams::default();
+        assert_eq!(params.learning_rate, 0.01);
+        assert_eq!(params.regularization, 0.1);
+        assert_eq!(params.prediction_horizon_minutes, 60);
+        assert_eq!(params.ensemble_size, 5);
+        assert!(params.feature_weights.contains_key("graph_size"));
+    }
+    
+    #[test]
+    fn test_outcome_prediction() {
+        let prediction = OutcomePrediction {
+            will_succeed: true,
+            success_probability: 0.85,
+            estimated_violations: 5,
+            estimated_warnings: 2,
+            confidence: 0.9,
+        };
+        
+        assert!(prediction.will_succeed);
+        assert_eq!(prediction.success_probability, 0.85);
+        assert_eq!(prediction.estimated_violations, 5);
+        assert_eq!(prediction.confidence, 0.9);
+    }
+    
+    #[test]
+    fn test_predicted_error() {
+        let error = PredictedError {
+            error_type: PredictedErrorType::ConstraintViolation,
+            constraint_component: None,
+            description: "Test error".to_string(),
+            probability: 0.7,
+            estimated_affected_nodes: 10,
+            severity: PredictedErrorSeverity::Medium,
+        };
+        
+        assert_eq!(error.error_type, PredictedErrorType::ConstraintViolation);
+        assert_eq!(error.probability, 0.7);
+        assert_eq!(error.estimated_affected_nodes, 10);
+        assert_eq!(error.severity, PredictedErrorSeverity::Medium);
+    }
+    
+    #[test]
+    fn test_cached_prediction_expiry() {
+        let prediction = ValidationPrediction {
+            outcome: OutcomePrediction {
+                will_succeed: true,
+                success_probability: 0.8,
+                estimated_violations: 0,
+                estimated_warnings: 0,
+                confidence: 0.9,
+            },
+            performance: PerformancePrediction::default(),
+            errors: ErrorPrediction::default(),
+            confidence: 0.9,
+            features_used: vec!["graph_size".to_string()],
+            prediction_timestamp: chrono::Utc::now(),
+            model_version: "1.0.0".to_string(),
+        };
+        
+        let cached = CachedPrediction {
+            prediction,
+            timestamp: chrono::Utc::now() - chrono::Duration::hours(1),
+            ttl: Duration::from_secs(1800), // 30 minutes
+        };
+        
+        assert!(cached.is_expired());
+    }
+}
+                    constraint_component: None,
                     description: "High memory usage may cause out-of-memory errors".to_string(),
                     probability: 0.7,
                     estimated_affected_nodes: 0,

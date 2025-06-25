@@ -104,6 +104,7 @@ impl Triple {
             Subject::NamedNode(_) => 0,
             Subject::BlankNode(_) => 1,
             Subject::Variable(_) => 2,
+            Subject::QuotedTriple(_) => 3,
         };
         
         let predicate_ord = match &self.predicate {
@@ -116,6 +117,7 @@ impl Triple {
             Object::BlankNode(_) => 1,
             Object::Literal(_) => 2,
             Object::Variable(_) => 3,
+            Object::QuotedTriple(_) => 4,
         };
         
         (
@@ -134,6 +136,7 @@ impl Triple {
             Subject::NamedNode(n) => n.as_str(),
             Subject::BlankNode(b) => b.as_str(),
             Subject::Variable(v) => v.as_str(),
+            Subject::QuotedTriple(_) => "<<quoted-triple>>",
         }
     }
     
@@ -152,6 +155,7 @@ impl Triple {
             Object::BlankNode(b) => b.as_str(),
             Object::Literal(l) => l.as_str(),
             Object::Variable(v) => v.as_str(),
+            Object::QuotedTriple(_) => "<<quoted-triple>>",
         }
     }
 }
@@ -170,6 +174,7 @@ impl fmt::Display for Subject {
             Subject::NamedNode(n) => write!(f, "{}", n),
             Subject::BlankNode(b) => write!(f, "{}", b),
             Subject::Variable(v) => write!(f, "{}", v),
+            Subject::QuotedTriple(qt) => write!(f, "{}", qt),
         }
     }
 }
@@ -190,6 +195,7 @@ impl fmt::Display for Object {
             Object::BlankNode(b) => write!(f, "{}", b),
             Object::Literal(l) => write!(f, "{}", l),
             Object::Variable(v) => write!(f, "{}", v),
+            Object::QuotedTriple(qt) => write!(f, "{}", qt),
         }
     }
 }
@@ -341,6 +347,7 @@ impl<'a> From<&'a Subject> for SubjectRef<'a> {
             Subject::NamedNode(n) => SubjectRef::NamedNode(n),
             Subject::BlankNode(b) => SubjectRef::BlankNode(b),
             Subject::Variable(v) => SubjectRef::Variable(v),
+            Subject::QuotedTriple(_) => panic!("QuotedTriple not supported in SubjectRef"),
         }
     }
 }
@@ -361,6 +368,7 @@ impl<'a> From<&'a Object> for ObjectRef<'a> {
             Object::BlankNode(b) => ObjectRef::BlankNode(b),
             Object::Literal(l) => ObjectRef::Literal(l),
             Object::Variable(v) => ObjectRef::Variable(v),
+            Object::QuotedTriple(_) => panic!("QuotedTriple not supported in ObjectRef"),
         }
     }
 }

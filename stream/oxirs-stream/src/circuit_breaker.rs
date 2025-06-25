@@ -850,6 +850,56 @@ pub mod shared_helpers {
     }
 }
 
+/// Extension trait for SharedCircuitBreaker to provide async interface
+#[async_trait::async_trait]
+pub trait SharedCircuitBreakerExt {
+    async fn can_execute(&self) -> bool;
+    async fn record_success_with_duration(&self, duration: Duration);
+    async fn record_failure_with_type(&self, failure_type: FailureType);
+    async fn is_healthy(&self) -> bool;
+    async fn reset(&self);
+    async fn get_enhanced_stats(&self) -> EnhancedCircuitBreakerStats;
+}
+
+#[async_trait::async_trait]
+impl SharedCircuitBreakerExt for SharedCircuitBreaker {
+    /// Check if the circuit breaker allows execution
+    async fn can_execute(&self) -> bool {
+        let mut cb = self.write().await;
+        cb.can_execute()
+    }
+    
+    /// Record a successful operation with execution duration
+    async fn record_success_with_duration(&self, duration: Duration) {
+        let mut cb = self.write().await;
+        cb.record_success_with_duration(duration);
+    }
+    
+    /// Record a failure with specific failure type
+    async fn record_failure_with_type(&self, failure_type: FailureType) {
+        let mut cb = self.write().await;
+        cb.record_failure_with_type(failure_type);
+    }
+    
+    /// Check if the circuit breaker is healthy
+    async fn is_healthy(&self) -> bool {
+        let cb = self.read().await;
+        cb.is_healthy()
+    }
+    
+    /// Reset the circuit breaker to closed state
+    async fn reset(&self) {
+        let mut cb = self.write().await;
+        cb.reset();
+    }
+    
+    /// Get enhanced statistics
+    async fn get_enhanced_stats(&self) -> EnhancedCircuitBreakerStats {
+        let cb = self.read().await;
+        cb.get_enhanced_stats()
+    }
+}
+
 /// Circuit breaker manager for handling multiple circuit breakers
 pub struct CircuitBreakerManager {
     circuit_breakers: Arc<RwLock<HashMap<String, SharedCircuitBreaker>>>,

@@ -303,6 +303,10 @@ impl Clone for IndexStats {
 }
 
 impl IndexStats {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
     pub fn hit_ratio(&self) -> f64 {
         let hits = self.cache_hits.load(Ordering::Relaxed);
         let total = hits + self.cache_misses.load(Ordering::Relaxed);

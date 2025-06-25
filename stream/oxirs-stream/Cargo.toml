@@ -25,6 +25,7 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.0", features = ["v4"] }
 regex = "1.10"
 futures-util = "0.3"
+futures = "0.3"
 async-trait = "0.1"
 parking_lot = "0.12"
 fastrand = "2.0"

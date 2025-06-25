@@ -114,7 +114,7 @@ impl SparqlParser {
                 offset: 0,
                 limit: None,
             },
-            dataset: Dataset::default(),
+            dataset: crate::query::algebra::Dataset::default(),
         })
     }
     
@@ -133,7 +133,7 @@ impl SparqlParser {
             base: self.base_iri.clone(),
             prefixes: self.prefixes.clone(),
             form: QueryForm::Ask { where_clause },
-            dataset: Dataset::default(),
+            dataset: crate::query::algebra::Dataset::default(),
         })
     }
     

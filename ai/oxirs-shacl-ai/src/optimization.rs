@@ -498,6 +498,1323 @@ impl OptimizationEngine {
     
     /// Optimize caching strategy
     fn optimize_caching_strategy(&self, shapes: &[Shape], store: &Store) -> Result<CacheStrategy> {
+        // Analyze cache usage patterns
+        let cache_analysis = self.analyze_cache_usage_patterns(shapes, store)?;
+        
+        let strategy = CacheStrategy {
+            cache_type: CacheType::LRU,
+            cache_size_mb: self.calculate_optimal_cache_size(&cache_analysis),
+            ttl_seconds: self.calculate_optimal_ttl(&cache_analysis),
+            cache_levels: self.determine_cache_levels(&cache_analysis),
+            preload_strategy: self.determine_preload_strategy(&cache_analysis),
+        };
+        
+        Ok(strategy)
+    }
+    
+    /// Optimize memory usage
+    fn optimize_memory_usage(&self, shapes: &[Shape], store: &Store) -> Result<MemoryOptimization> {
+        let memory_analysis = self.analyze_memory_usage(shapes, store)?;
+        
+        let optimization = MemoryOptimization {
+            heap_size_mb: self.calculate_optimal_heap_size(&memory_analysis),
+            gc_strategy: GcStrategy::G1,
+            memory_pools: self.optimize_memory_pools(&memory_analysis),
+            object_reuse_strategy: ObjectReuseStrategy::Pooling,
+            streaming_threshold: self.calculate_streaming_threshold(&memory_analysis),
+        };
+        
+        Ok(optimization)
+    }
+    
+    /// Calculate performance improvements
+    fn calculate_performance_improvements(&self, strategy: &OptimizedValidationStrategy) -> Result<PerformanceImprovements> {
+        let mut improvements = PerformanceImprovements::new();
+        
+        // Estimate execution time improvement
+        if let Some(ref parallel_strategy) = strategy.parallel_execution {
+            let parallelization_factor = parallel_strategy.recommended_thread_count as f64;
+            improvements.execution_time_improvement = (1.0 - 1.0 / parallelization_factor) * 0.7; // 70% theoretical maximum
+        }
+        
+        // Estimate memory improvement
+        if let Some(ref memory_opt) = strategy.memory_optimization {
+            improvements.memory_usage_improvement = 0.2; // 20% improvement typical
+        }
+        
+        // Estimate cache hit rate improvement
+        if let Some(ref cache_strategy) = strategy.cache_strategy {
+            improvements.cache_hit_rate_improvement = 0.3; // 30% improvement typical
+        }
+        
+        // Calculate overall improvement
+        improvements.overall_improvement = (improvements.execution_time_improvement + 
+                                          improvements.memory_usage_improvement + 
+                                          improvements.cache_hit_rate_improvement) / 3.0;
+        
+        Ok(improvements)
+    }
+    
+    /// Analyze performance bottlenecks
+    fn analyze_performance_bottlenecks(&self, validation_history: &[ValidationReport]) -> Result<Vec<PerformanceBottleneck>> {
+        let mut bottlenecks = Vec::new();
+        
+        // Analyze execution time patterns
+        let execution_times: Vec<Duration> = validation_history.iter()
+            .filter_map(|report| report.get_execution_time())
+            .collect();
+        
+        if !execution_times.is_empty() {
+            let avg_time = execution_times.iter().sum::<Duration>() / execution_times.len() as u32;
+            let max_time = execution_times.iter().max().unwrap();
+            
+            if max_time.as_secs_f64() > avg_time.as_secs_f64() * 3.0 {
+                bottlenecks.push(PerformanceBottleneck {
+                    bottleneck_type: BottleneckType::ExecutionTime,
+                    description: "Inconsistent execution times detected".to_string(),
+                    severity: BottleneckSeverity::Medium,
+                    impact_score: 0.6,
+                    affected_operations: vec!["validation".to_string()],
+                });
+            }
+        }
+        
+        // Analyze memory usage patterns
+        let memory_bottleneck = self.analyze_memory_bottlenecks(validation_history)?;
+        bottlenecks.extend(memory_bottleneck);
+        
+        // Analyze constraint complexity bottlenecks
+        let constraint_bottlenecks = self.analyze_constraint_bottlenecks(validation_history)?;
+        bottlenecks.extend(constraint_bottlenecks);
+        
+        Ok(bottlenecks)
+    }
+    
+    /// Generate recommendation for bottleneck
+    fn generate_recommendation_for_bottleneck(&self, bottleneck: &PerformanceBottleneck, _store: &Store, _shapes: &[Shape]) -> Result<OptimizationRecommendation> {
+        let recommendation = match bottleneck.bottleneck_type {
+            BottleneckType::ExecutionTime => OptimizationRecommendation {
+                category: OptimizationCategory::Performance,
+                priority: RecommendationPriority::High,
+                title: "Optimize Execution Time".to_string(),
+                description: "Reduce validation execution time through parallel processing and constraint reordering".to_string(),
+                estimated_improvement: 0.4,
+                implementation_effort: ImplementationEffort::Medium,
+                actions: vec![
+                    "Enable parallel validation".to_string(),
+                    "Reorder constraints by selectivity".to_string(),
+                    "Implement constraint short-circuiting".to_string(),
+                ],
+                confidence: 0.8,
+            },
+            BottleneckType::Memory => OptimizationRecommendation {
+                category: OptimizationCategory::Memory,
+                priority: RecommendationPriority::High,
+                title: "Optimize Memory Usage".to_string(),
+                description: "Reduce memory consumption through streaming and object pooling".to_string(),
+                estimated_improvement: 0.3,
+                implementation_effort: ImplementationEffort::High,
+                actions: vec![
+                    "Implement streaming validation".to_string(),
+                    "Add object pooling".to_string(),
+                    "Optimize garbage collection".to_string(),
+                ],
+                confidence: 0.7,
+            },
+            _ => OptimizationRecommendation {
+                category: OptimizationCategory::General,
+                priority: RecommendationPriority::Medium,
+                title: "General Optimization".to_string(),
+                description: "Apply general optimization techniques".to_string(),
+                estimated_improvement: 0.2,
+                implementation_effort: ImplementationEffort::Low,
+                actions: vec!["Review configuration".to_string()],
+                confidence: 0.6,
+            },
+        };
+        
+        Ok(recommendation)
+    }
+    
+    /// Analyze shape complexity for recommendations
+    fn analyze_shape_complexity_for_recommendations(&self, shapes: &[Shape]) -> Result<Vec<OptimizationRecommendation>> {
+        let mut recommendations = Vec::new();
+        
+        // Analyze overall complexity
+        let total_constraints: usize = shapes.iter().map(|s| s.get_constraints().len()).sum();
+        let avg_constraints = total_constraints as f64 / shapes.len() as f64;
+        
+        if avg_constraints > 20.0 {
+            recommendations.push(OptimizationRecommendation {
+                category: OptimizationCategory::ShapeDesign,
+                priority: RecommendationPriority::Medium,
+                title: "Reduce Shape Complexity".to_string(),
+                description: format!("Average shape has {:.1} constraints, consider simplification", avg_constraints),
+                estimated_improvement: 0.25,
+                implementation_effort: ImplementationEffort::High,
+                actions: vec![
+                    "Review constraint necessity".to_string(),
+                    "Merge similar constraints".to_string(),
+                    "Split complex shapes".to_string(),
+                ],
+                confidence: 0.7,
+            });
+        }
+        
+        // Analyze specific shape issues
+        for shape in shapes {
+            let constraint_count = shape.get_constraints().len();
+            
+            if constraint_count > 50 {
+                recommendations.push(OptimizationRecommendation {
+                    category: OptimizationCategory::ShapeDesign,
+                    priority: RecommendationPriority::High,
+                    title: format!("Simplify Shape {}", shape.get_id().as_str()),
+                    description: format!("Shape has {} constraints, consider refactoring", constraint_count),
+                    estimated_improvement: 0.3,
+                    implementation_effort: ImplementationEffort::Medium,
+                    actions: vec![
+                        "Split into multiple shapes".to_string(),
+                        "Remove redundant constraints".to_string(),
+                    ],
+                    confidence: 0.8,
+                });
+            }
+        }
+        
+        Ok(recommendations)
+    }
+    
+    /// Analyze graph structure for recommendations
+    fn analyze_graph_structure_for_recommendations(&self, store: &Store) -> Result<Vec<OptimizationRecommendation>> {
+        let mut recommendations = Vec::new();
+        
+        // Analyze graph size
+        let stats = self.calculate_graph_statistics(store)?;
+        
+        if stats.triple_count > 1_000_000 {
+            recommendations.push(OptimizationRecommendation {
+                category: OptimizationCategory::DataStructure,
+                priority: RecommendationPriority::High,
+                title: "Optimize Large Graph Processing".to_string(),
+                description: format!("Graph has {} triples, consider optimization", stats.triple_count),
+                estimated_improvement: 0.4,
+                implementation_effort: ImplementationEffort::High,
+                actions: vec![
+                    "Implement graph partitioning".to_string(),
+                    "Add specialized indexes".to_string(),
+                    "Consider distributed processing".to_string(),
+                ],
+                confidence: 0.8,
+            });
+        }
+        
+        if stats.density < 0.1 {
+            recommendations.push(OptimizationRecommendation {
+                category: OptimizationCategory::DataStructure,
+                priority: RecommendationPriority::Medium,
+                title: "Optimize Sparse Graph".to_string(),
+                description: "Graph is sparse, consider sparse data structures".to_string(),
+                estimated_improvement: 0.2,
+                implementation_effort: ImplementationEffort::Medium,
+                actions: vec![
+                    "Use sparse matrices".to_string(),
+                    "Optimize storage format".to_string(),
+                ],
+                confidence: 0.7,
+            });
+        }
+        
+        Ok(recommendations)
+    }
+    
+    /// Reorder constraints by selectivity
+    fn reorder_constraints_by_selectivity(&self, constraints: &[(oxirs_shacl::ConstraintComponentId, Constraint)], store: &Store) -> Result<Vec<(oxirs_shacl::ConstraintComponentId, Constraint)>> {
+        let mut constraint_selectivity: Vec<(f64, (oxirs_shacl::ConstraintComponentId, Constraint))> = Vec::new();
+        
+        for (component_id, constraint) in constraints {
+            let selectivity = self.estimate_constraint_selectivity(constraint, store)?;
+            constraint_selectivity.push((selectivity, (component_id.clone(), constraint.clone())));
+        }
+        
+        // Sort by selectivity (highest first for early pruning)
+        constraint_selectivity.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        
+        Ok(constraint_selectivity.into_iter().map(|(_, constraint)| constraint).collect())
+    }
+    
+    /// Estimate constraint selectivity
+    fn estimate_constraint_selectivity(&self, constraint: &Constraint, _store: &Store) -> Result<f64> {
+        // Estimate how selective a constraint is (higher = more selective = fewer results)
+        let selectivity = match constraint {
+            Constraint::Pattern(_) => 0.9, // Patterns are highly selective
+            Constraint::Datatype(_) => 0.7, // Datatypes are moderately selective
+            Constraint::MinCount(_) | Constraint::MaxCount(_) => 0.6, // Cardinality constraints
+            Constraint::Class(_) => 0.5, // Class constraints are less selective
+            Constraint::NodeKind(_) => 0.3, // Node kind is not very selective
+            _ => 0.4, // Default selectivity
+        };
+        
+        Ok(selectivity)
+    }
+    
+    /// Identify merge candidates
+    fn identify_merge_candidates(&self, shapes: &[Shape]) -> Result<Vec<MergeCandidate>> {
+        let mut candidates = Vec::new();
+        
+        for (i, shape1) in shapes.iter().enumerate() {
+            for (j, shape2) in shapes.iter().enumerate().skip(i + 1) {
+                let similarity = self.calculate_shape_similarity(shape1, shape2)?;
+                
+                if similarity > 0.8 {
+                    candidates.push(MergeCandidate {
+                        shape1_id: shape1.get_id().clone(),
+                        shape2_id: shape2.get_id().clone(),
+                        similarity_score: similarity,
+                        merge_strategy: MergeStrategy::Union,
+                    });
+                }
+            }
+        }
+        
+        Ok(candidates)
+    }
+    
+    /// Calculate shape similarity
+    fn calculate_shape_similarity(&self, shape1: &Shape, shape2: &Shape) -> Result<f64> {
+        let constraints1: HashSet<_> = shape1.get_constraints().iter().map(|(id, _)| id.as_str()).collect();
+        let constraints2: HashSet<_> = shape2.get_constraints().iter().map(|(id, _)| id.as_str()).collect();
+        
+        let intersection = constraints1.intersection(&constraints2).count();
+        let union = constraints1.union(&constraints2).count();
+        
+        let jaccard_similarity = if union > 0 {
+            intersection as f64 / union as f64
+        } else {
+            0.0
+        };
+        
+        Ok(jaccard_similarity)
+    }
+    
+    /// Calculate graph statistics
+    fn calculate_graph_statistics(&self, store: &Store) -> Result<GraphStatistics> {
+        // Query for basic statistics
+        let triple_count_query = r#"
+            SELECT (COUNT(*) as ?count) WHERE {
+                ?s ?p ?o .
+            }
+        "#;
+        
+        let result = self.execute_optimization_query(store, triple_count_query)?;
+        let mut triple_count = 0;
+        
+        if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = result {
+            if let Some(binding) = bindings.first() {
+                if let Some(count_term) = binding.get("count") {
+                    if let Term::Literal(count_literal) = count_term {
+                        triple_count = count_literal.as_str().parse::<u64>().unwrap_or(0);
+                    }
+                }
+            }
+        }
+        
+        // Calculate density (simplified)
+        let density = if triple_count > 0 {
+            (triple_count as f64 / (triple_count as f64 + 10000.0)).min(1.0)
+        } else {
+            0.0
+        };
+        
+        Ok(GraphStatistics {
+            triple_count,
+            unique_subjects: 0, // Would need separate query
+            unique_predicates: 0, // Would need separate query
+            unique_objects: 0, // Would need separate query
+            density,
+            clustering_coefficient: 0.0, // Would need complex calculation
+        })
+    }
+    
+    /// Analyze graph connectivity
+    fn analyze_graph_connectivity(&self, _store: &Store) -> Result<ConnectivityAnalysis> {
+        // Simplified connectivity analysis
+        Ok(ConnectivityAnalysis {
+            connected_components: 1,
+            largest_component_size: 1000,
+            average_degree: 5.0,
+            diameter: 10,
+        })
+    }
+    
+    /// Identify optimization opportunities
+    fn identify_optimization_opportunities(&self, stats: &GraphStatistics, _connectivity: &ConnectivityAnalysis) -> Result<Vec<OptimizationOpportunity>> {
+        let mut opportunities = Vec::new();
+        
+        if stats.triple_count > 100000 {
+            opportunities.push(OptimizationOpportunity {
+                opportunity_type: OpportunityType::Parallelization,
+                description: "Large graph benefits from parallel processing".to_string(),
+                estimated_benefit: 0.5,
+                implementation_complexity: ComplexityLevel::Medium,
+            });
+        }
+        
+        if stats.density < 0.2 {
+            opportunities.push(OptimizationOpportunity {
+                opportunity_type: OpportunityType::SparseOptimization,
+                description: "Sparse graph can benefit from specialized data structures".to_string(),
+                estimated_benefit: 0.3,
+                implementation_complexity: ComplexityLevel::High,
+            });
+        }
+        
+        Ok(opportunities)
+    }
+    
+    /// Calculate shape complexity
+    fn calculate_shape_complexity(&self, shape: &Shape) -> u32 {
+        let mut complexity = 1; // Base complexity
+        
+        // Add complexity for constraints
+        complexity += shape.get_constraints().len() as u32 * 2;
+        
+        // Add complexity for path complexity
+        if let Some(path) = shape.get_path() {
+            complexity += path.complexity() as u32;
+        }
+        
+        // Add complexity for targets
+        complexity += shape.get_targets().len() as u32;
+        
+        complexity
+    }
+    
+    /// Estimate shape selectivity
+    fn estimate_shape_selectivity(&self, shape: &Shape, store: &Store) -> Result<f64> {
+        // Estimate how many instances this shape will match
+        let mut selectivity = 1.0;
+        
+        // Analyze targets
+        for target in shape.get_targets() {
+            match target {
+                Target::Class(class) => {
+                    // Query for class instance count
+                    let query = format!(r#"
+                        SELECT (COUNT(?instance) as ?count) WHERE {{
+                            ?instance a <{}> .
+                        }}
+                    "#, class.as_str());
+                    
+                    if let Ok(result) = self.execute_optimization_query(store, &query) {
+                        if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = result {
+                            if let Some(binding) = bindings.first() {
+                                if let Some(count_term) = binding.get("count") {
+                                    if let Term::Literal(count_literal) = count_term {
+                                        if let Ok(count) = count_literal.as_str().parse::<u32>() {
+                                            selectivity *= count as f64 / 10000.0; // Normalize
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => selectivity *= 0.5, // Default reduction for other targets
+            }
+        }
+        
+        Ok(selectivity.min(1.0))
+    }
+    
+    /// Analyze shape dependencies
+    fn analyze_shape_dependencies(&self, shape: &Shape, all_shapes: &[Shape]) -> Result<Vec<ShapeId>> {
+        let mut dependencies = Vec::new();
+        
+        // Check for shape references in constraints
+        for (_, constraint) in shape.get_constraints() {
+            if let Constraint::NodeShape(ref referenced_shape_id) = constraint {
+                if all_shapes.iter().any(|s| s.get_id() == referenced_shape_id) {
+                    dependencies.push(referenced_shape_id.clone());
+                }
+            }
+        }
+        
+        Ok(dependencies)
+    }
+    
+    /// Identify parallelizable shape groups
+    fn identify_parallelizable_shape_groups(&self, shapes: &[Shape]) -> Result<Vec<Vec<ShapeId>>> {
+        let mut groups = Vec::new();
+        let mut remaining_shapes: HashSet<ShapeId> = shapes.iter().map(|s| s.get_id().clone()).collect();
+        
+        while !remaining_shapes.is_empty() {
+            let mut current_group = Vec::new();
+            let mut group_dependencies = HashSet::new();
+            
+            for shape in shapes {
+                let shape_id = shape.get_id();
+                if remaining_shapes.contains(shape_id) {
+                    let dependencies = self.analyze_shape_dependencies(shape, shapes).unwrap_or_default();
+                    
+                    // Check if this shape can be added to current group
+                    let has_dependency_conflict = dependencies.iter().any(|dep| group_dependencies.contains(dep));
+                    
+                    if !has_dependency_conflict {
+                        current_group.push(shape_id.clone());
+                        group_dependencies.extend(dependencies);
+                        remaining_shapes.remove(shape_id);
+                    }
+                }
+            }
+            
+            if !current_group.is_empty() {
+                groups.push(current_group);
+            } else {
+                // Prevent infinite loop
+                break;
+            }
+        }
+        
+        Ok(groups)
+    }
+    
+    /// Calculate optimal thread count
+    fn calculate_optimal_thread_count(&self, shapes: &[Shape]) -> u32 {
+        let cpu_cores = num_cpus::get() as u32;
+        let shape_count = shapes.len() as u32;
+        
+        // Use at most CPU cores, but not more than shapes
+        cpu_cores.min(shape_count).max(1)
+    }
+    
+    /// Identify synchronization points
+    fn identify_synchronization_points(&self, shapes: &[Shape]) -> Result<Vec<SynchronizationPoint>> {
+        let mut sync_points = Vec::new();
+        
+        // Add synchronization points for dependent shapes
+        for shape in shapes {
+            let dependencies = self.analyze_shape_dependencies(shape, shapes)?;
+            if !dependencies.is_empty() {
+                sync_points.push(SynchronizationPoint {
+                    shape_id: shape.get_id().clone(),
+                    dependencies,
+                    sync_type: SyncType::DependencyWait,
+                });
+            }
+        }
+        
+        Ok(sync_points)
+    }
+    
+    /// Analyze cache usage patterns
+    fn analyze_cache_usage_patterns(&self, _shapes: &[Shape], _store: &Store) -> Result<CacheAnalysis> {
+        // Simplified cache analysis
+        Ok(CacheAnalysis {
+            hit_rate: 0.7,
+            miss_rate: 0.3,
+            average_access_time: Duration::from_millis(10),
+            memory_usage_mb: 100,
+            eviction_rate: 0.1,
+        })
+    }
+    
+    /// Calculate optimal cache size
+    fn calculate_optimal_cache_size(&self, analysis: &CacheAnalysis) -> u64 {
+        // Calculate based on hit rate and memory usage
+        let base_size = analysis.memory_usage_mb as u64;
+        let hit_rate_factor = (analysis.hit_rate * 2.0) as u64;
+        
+        (base_size * hit_rate_factor).max(50).min(1000)
+    }
+    
+    /// Calculate optimal TTL
+    fn calculate_optimal_ttl(&self, analysis: &CacheAnalysis) -> u64 {
+        // Calculate based on access patterns
+        let base_ttl = 300; // 5 minutes
+        let hit_rate_factor = analysis.hit_rate;
+        
+        (base_ttl as f64 * hit_rate_factor * 2.0) as u64
+    }
+    
+    /// Determine cache levels
+    fn determine_cache_levels(&self, _analysis: &CacheAnalysis) -> Vec<CacheLevel> {
+        vec![
+            CacheLevel::L1Memory,
+            CacheLevel::L2Disk,
+        ]
+    }
+    
+    /// Determine preload strategy
+    fn determine_preload_strategy(&self, analysis: &CacheAnalysis) -> PreloadStrategy {
+        if analysis.hit_rate > 0.8 {
+            PreloadStrategy::Aggressive
+        } else if analysis.hit_rate > 0.5 {
+            PreloadStrategy::Moderate
+        } else {
+            PreloadStrategy::Conservative
+        }
+    }
+    
+    /// Analyze memory usage
+    fn analyze_memory_usage(&self, shapes: &[Shape], _store: &Store) -> Result<MemoryAnalysis> {
+        let total_constraints: usize = shapes.iter().map(|s| s.get_constraints().len()).sum();
+        let estimated_memory_mb = (total_constraints as f64 * 0.1).max(50.0);
+        
+        Ok(MemoryAnalysis {
+            current_usage_mb: estimated_memory_mb as u64,
+            peak_usage_mb: (estimated_memory_mb * 1.5) as u64,
+            gc_frequency: Duration::from_secs(30),
+            allocation_rate_mb_per_sec: 10.0,
+            fragmentation_ratio: 0.2,
+        })
+    }
+    
+    /// Calculate optimal heap size
+    fn calculate_optimal_heap_size(&self, analysis: &MemoryAnalysis) -> u64 {
+        // Use 2x peak usage as a safe margin
+        analysis.peak_usage_mb * 2
+    }
+    
+    /// Optimize memory pools
+    fn optimize_memory_pools(&self, _analysis: &MemoryAnalysis) -> Vec<MemoryPool> {
+        vec![
+            MemoryPool {
+                pool_type: PoolType::SmallObjects,
+                size_mb: 50,
+                object_size_bytes: 64,
+            },
+            MemoryPool {
+                pool_type: PoolType::LargeObjects,
+                size_mb: 200,
+                object_size_bytes: 1024,
+            },
+        ]
+    }
+    
+    /// Calculate streaming threshold
+    fn calculate_streaming_threshold(&self, analysis: &MemoryAnalysis) -> u64 {
+        // Stream when objects exceed 10% of available memory
+        analysis.current_usage_mb / 10
+    }
+    
+    /// Analyze memory bottlenecks
+    fn analyze_memory_bottlenecks(&self, _validation_history: &[ValidationReport]) -> Result<Vec<PerformanceBottleneck>> {
+        // Simplified memory bottleneck analysis
+        Ok(vec![])
+    }
+    
+    /// Analyze constraint bottlenecks
+    fn analyze_constraint_bottlenecks(&self, _validation_history: &[ValidationReport]) -> Result<Vec<PerformanceBottleneck>> {
+        // Simplified constraint bottleneck analysis
+        Ok(vec![])
+    }
+    
+    /// Create shapes cache key
+    fn create_shapes_cache_key(&self, shapes: &[Shape]) -> String {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let mut hasher = DefaultHasher::new();
+        for shape in shapes {
+            shape.get_id().as_str().hash(&mut hasher);
+        }
+        format!("shapes_{}", hasher.finish())
+    }
+    
+    /// Create strategy cache key
+    fn create_strategy_cache_key(&self, store: &Store, shapes: &[Shape]) -> String {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let mut hasher = DefaultHasher::new();
+        format!("{:p}", store).hash(&mut hasher);
+        for shape in shapes {
+            shape.get_id().as_str().hash(&mut hasher);
+        }
+        format!("strategy_{}", hasher.finish())
+    }
+    
+    /// Cache optimization result
+    fn cache_optimization(&mut self, key: String, result: OptimizationResult) {
+        if self.optimization_cache.len() >= self.config.cache_settings.max_cache_size {
+            // Remove oldest entry
+            if let Some(oldest_key) = self.optimization_cache.keys().next().cloned() {
+                self.optimization_cache.remove(&oldest_key);
+            }
+        }
+        
+        let cached = CachedOptimization {
+            result,
+            timestamp: chrono::Utc::now(),
+            ttl: Duration::from_secs(self.config.cache_settings.cache_ttl_seconds),
+        };
+        
+        self.optimization_cache.insert(key, cached);
+    }
+    
+    /// Execute optimization query
+    fn execute_optimization_query(&self, store: &Store, query: &str) -> Result<oxirs_core::query::QueryResult> {
+        use oxirs_core::query::QueryEngine;
+        
+        let query_engine = QueryEngine::new();
+        let result = query_engine.query(query, store)
+            .map_err(|e| ShaclAiError::Optimization(format!("Optimization query failed: {}", e)))?;
+        
+        Ok(result)
+    }
+}
+
+impl Default for OptimizationEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Optimized validation strategy
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OptimizedValidationStrategy {
+    /// Graph analysis results
+    pub graph_analysis: Option<GraphAnalysis>,
+    
+    /// Optimized shape execution order
+    pub shape_execution_order: Vec<ShapeExecutionPlan>,
+    
+    /// Parallel execution strategy
+    pub parallel_execution: Option<ParallelExecutionStrategy>,
+    
+    /// Cache optimization strategy
+    pub cache_strategy: Option<CacheStrategy>,
+    
+    /// Memory optimization strategy
+    pub memory_optimization: Option<MemoryOptimization>,
+    
+    /// Expected performance improvements
+    pub performance_improvements: PerformanceImprovements,
+}
+
+impl OptimizedValidationStrategy {
+    pub fn new() -> Self {
+        Self {
+            graph_analysis: None,
+            shape_execution_order: Vec::new(),
+            parallel_execution: None,
+            cache_strategy: None,
+            memory_optimization: None,
+            performance_improvements: PerformanceImprovements::new(),
+        }
+    }
+}
+
+impl Default for OptimizedValidationStrategy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Shape execution plan
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShapeExecutionPlan {
+    /// Shape identifier
+    pub shape_id: ShapeId,
+    
+    /// Execution order
+    pub execution_order: usize,
+    
+    /// Estimated complexity
+    pub estimated_complexity: u32,
+    
+    /// Estimated selectivity
+    pub estimated_selectivity: f64,
+    
+    /// Shape dependencies
+    pub dependencies: Vec<ShapeId>,
+    
+    /// Whether this shape can be executed in parallel
+    pub parallel_eligible: bool,
+}
+
+/// Parallel execution strategy
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParallelExecutionStrategy {
+    /// Groups of shapes that can be executed in parallel
+    pub parallel_groups: Vec<Vec<ShapeId>>,
+    
+    /// Recommended thread count
+    pub recommended_thread_count: u32,
+    
+    /// Load balancing strategy
+    pub load_balancing_strategy: LoadBalancingStrategy,
+    
+    /// Synchronization points
+    pub synchronization_points: Vec<SynchronizationPoint>,
+}
+
+/// Load balancing strategies
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LoadBalancingStrategy {
+    RoundRobin,
+    WorkStealing,
+    CostBased,
+}
+
+/// Synchronization point
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SynchronizationPoint {
+    /// Shape that requires synchronization
+    pub shape_id: ShapeId,
+    
+    /// Dependencies that must complete first
+    pub dependencies: Vec<ShapeId>,
+    
+    /// Type of synchronization
+    pub sync_type: SyncType,
+}
+
+/// Synchronization types
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SyncType {
+    DependencyWait,
+    BarrierSync,
+    ResultMerge,
+}
+
+/// Cache strategy
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CacheStrategy {
+    /// Type of cache
+    pub cache_type: CacheType,
+    
+    /// Cache size in MB
+    pub cache_size_mb: u64,
+    
+    /// Time-to-live in seconds
+    pub ttl_seconds: u64,
+    
+    /// Cache levels
+    pub cache_levels: Vec<CacheLevel>,
+    
+    /// Preload strategy
+    pub preload_strategy: PreloadStrategy,
+}
+
+/// Cache types
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CacheType {
+    LRU,
+    LFU,
+    FIFO,
+    Adaptive,
+}
+
+/// Cache levels
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CacheLevel {
+    L1Memory,
+    L2Disk,
+    L3Network,
+}
+
+/// Preload strategies
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PreloadStrategy {
+    Conservative,
+    Moderate,
+    Aggressive,
+}
+
+/// Memory optimization strategy
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryOptimization {
+    /// Optimal heap size in MB
+    pub heap_size_mb: u64,
+    
+    /// Garbage collection strategy
+    pub gc_strategy: GcStrategy,
+    
+    /// Memory pools configuration
+    pub memory_pools: Vec<MemoryPool>,
+    
+    /// Object reuse strategy
+    pub object_reuse_strategy: ObjectReuseStrategy,
+    
+    /// Streaming threshold in MB
+    pub streaming_threshold: u64,
+}
+
+/// Garbage collection strategies
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GcStrategy {
+    Serial,
+    Parallel,
+    G1,
+    ZGC,
+    Shenandoah,
+}
+
+/// Memory pool configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryPool {
+    /// Type of pool
+    pub pool_type: PoolType,
+    
+    /// Pool size in MB
+    pub size_mb: u64,
+    
+    /// Object size in bytes
+    pub object_size_bytes: u32,
+}
+
+/// Pool types
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PoolType {
+    SmallObjects,
+    MediumObjects,
+    LargeObjects,
+    StringPool,
+}
+
+/// Object reuse strategies
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ObjectReuseStrategy {
+    None,
+    Pooling,
+    Recycling,
+    Copy,
+}
+
+/// Performance improvements
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PerformanceImprovements {
+    /// Execution time improvement (0.0 - 1.0)
+    pub execution_time_improvement: f64,
+    
+    /// Memory usage improvement (0.0 - 1.0)
+    pub memory_usage_improvement: f64,
+    
+    /// Cache hit rate improvement (0.0 - 1.0)
+    pub cache_hit_rate_improvement: f64,
+    
+    /// Overall improvement (0.0 - 1.0)
+    pub overall_improvement: f64,
+}
+
+impl PerformanceImprovements {
+    pub fn new() -> Self {
+        Self {
+            execution_time_improvement: 0.0,
+            memory_usage_improvement: 0.0,
+            cache_hit_rate_improvement: 0.0,
+            overall_improvement: 0.0,
+        }
+    }
+}
+
+impl Default for PerformanceImprovements {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Optimization recommendation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OptimizationRecommendation {
+    /// Category of optimization
+    pub category: OptimizationCategory,
+    
+    /// Priority level
+    pub priority: RecommendationPriority,
+    
+    /// Recommendation title
+    pub title: String,
+    
+    /// Detailed description
+    pub description: String,
+    
+    /// Estimated improvement (0.0 - 1.0)
+    pub estimated_improvement: f64,
+    
+    /// Implementation effort required
+    pub implementation_effort: ImplementationEffort,
+    
+    /// Specific actions to take
+    pub actions: Vec<String>,
+    
+    /// Confidence in recommendation
+    pub confidence: f64,
+}
+
+/// Optimization categories
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OptimizationCategory {
+    Performance,
+    Memory,
+    ShapeDesign,
+    DataStructure,
+    Parallelization,
+    Caching,
+    General,
+}
+
+/// Recommendation priority
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum RecommendationPriority {
+    Critical,
+    High,
+    Medium,
+    Low,
+}
+
+/// Implementation effort
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ImplementationEffort {
+    Low,
+    Medium,
+    High,
+    VeryHigh,
+}
+
+/// Performance bottleneck
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PerformanceBottleneck {
+    /// Type of bottleneck
+    pub bottleneck_type: BottleneckType,
+    
+    /// Description
+    pub description: String,
+    
+    /// Severity
+    pub severity: BottleneckSeverity,
+    
+    /// Impact score (0.0 - 1.0)
+    pub impact_score: f64,
+    
+    /// Affected operations
+    pub affected_operations: Vec<String>,
+}
+
+/// Bottleneck types
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BottleneckType {
+    ExecutionTime,
+    Memory,
+    Cpu,
+    Io,
+    Network,
+    Constraint,
+}
+
+/// Bottleneck severity
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BottleneckSeverity {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+/// Graph analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GraphAnalysis {
+    /// Basic graph statistics
+    pub statistics: GraphStatistics,
+    
+    /// Connectivity analysis
+    pub connectivity_analysis: ConnectivityAnalysis,
+    
+    /// Optimization opportunities
+    pub optimization_opportunities: Vec<OptimizationOpportunity>,
+    
+    /// Analysis time
+    pub analysis_time: Duration,
+}
+
+/// Graph statistics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GraphStatistics {
+    /// Total number of triples
+    pub triple_count: u64,
+    
+    /// Number of unique subjects
+    pub unique_subjects: u64,
+    
+    /// Number of unique predicates
+    pub unique_predicates: u64,
+    
+    /// Number of unique objects
+    pub unique_objects: u64,
+    
+    /// Graph density
+    pub density: f64,
+    
+    /// Clustering coefficient
+    pub clustering_coefficient: f64,
+}
+
+/// Connectivity analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectivityAnalysis {
+    /// Number of connected components
+    pub connected_components: u32,
+    
+    /// Size of largest component
+    pub largest_component_size: u32,
+    
+    /// Average degree
+    pub average_degree: f64,
+    
+    /// Graph diameter
+    pub diameter: u32,
+}
+
+/// Optimization opportunity
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OptimizationOpportunity {
+    /// Type of opportunity
+    pub opportunity_type: OpportunityType,
+    
+    /// Description
+    pub description: String,
+    
+    /// Estimated benefit (0.0 - 1.0)
+    pub estimated_benefit: f64,
+    
+    /// Implementation complexity
+    pub implementation_complexity: ComplexityLevel,
+}
+
+/// Opportunity types
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OpportunityType {
+    Parallelization,
+    SparseOptimization,
+    Indexing,
+    Caching,
+    Streaming,
+}
+
+/// Complexity levels
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ComplexityLevel {
+    VeryLow,
+    Low,
+    Medium,
+    High,
+    VeryHigh,
+}
+
+/// Merge candidate
+#[derive(Debug, Clone)]
+struct MergeCandidate {
+    shape1_id: ShapeId,
+    shape2_id: ShapeId,
+    similarity_score: f64,
+    merge_strategy: MergeStrategy,
+}
+
+/// Merge strategies
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum MergeStrategy {
+    Union,
+    Intersection,
+    Custom,
+}
+
+/// Cache analysis
+#[derive(Debug, Clone)]
+struct CacheAnalysis {
+    hit_rate: f64,
+    miss_rate: f64,
+    average_access_time: Duration,
+    memory_usage_mb: u64,
+    eviction_rate: f64,
+}
+
+/// Memory analysis
+#[derive(Debug, Clone)]
+struct MemoryAnalysis {
+    current_usage_mb: u64,
+    peak_usage_mb: u64,
+    gc_frequency: Duration,
+    allocation_rate_mb_per_sec: f64,
+    fragmentation_ratio: f64,
+}
+
+/// Optimization model state
+#[derive(Debug)]
+struct OptimizationModelState {
+    version: String,
+    accuracy: f64,
+    loss: f64,
+    training_epochs: usize,
+    last_training: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl OptimizationModelState {
+    fn new() -> Self {
+        Self {
+            version: "1.0.0".to_string(),
+            accuracy: 0.8,
+            loss: 0.2,
+            training_epochs: 0,
+            last_training: None,
+        }
+    }
+}
+
+/// Cached optimization result
+#[derive(Debug, Clone)]
+struct CachedOptimization {
+    result: OptimizationResult,
+    timestamp: chrono::DateTime<chrono::Utc>,
+    ttl: Duration,
+}
+
+impl CachedOptimization {
+    fn is_expired(&self) -> bool {
+        let now = chrono::Utc::now();
+        let expiry = self.timestamp + chrono::Duration::from_std(self.ttl).unwrap_or_default();
+        now > expiry
+    }
+}
+
+/// Optimization result
+#[derive(Debug, Clone)]
+enum OptimizationResult {
+    OptimizedShapes(Vec<Shape>),
+    ValidationStrategy(OptimizedValidationStrategy),
+    Recommendations(Vec<OptimizationRecommendation>),
+}
+
+/// Optimization statistics
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct OptimizationStatistics {
+    pub total_optimizations: usize,
+    pub shape_optimizations: usize,
+    pub strategy_optimizations: usize,
+    pub total_optimization_time: Duration,
+    pub cache_hits: usize,
+    pub cache_misses: usize,
+    pub model_trained: bool,
+}
+
+/// Training data for optimization models
+#[derive(Debug, Clone)]
+pub struct OptimizationTrainingData {
+    pub examples: Vec<OptimizationExample>,
+    pub validation_examples: Vec<OptimizationExample>,
+}
+
+/// Training example for optimization
+#[derive(Debug, Clone)]
+pub struct OptimizationExample {
+    pub original_shapes: Vec<Shape>,
+    pub optimized_shapes: Vec<Shape>,
+    pub performance_before: PerformanceMetrics,
+    pub performance_after: PerformanceMetrics,
+    pub optimization_strategy: OptimizedValidationStrategy,
+}
+
+/// Performance metrics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PerformanceMetrics {
+    pub execution_time: Duration,
+    pub memory_usage_mb: u64,
+    pub cpu_usage_percent: u8,
+    pub cache_hit_rate: f64,
+    pub validation_success_rate: f64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_optimization_engine_creation() {
+        let engine = OptimizationEngine::new();
+        assert!(engine.config.enable_shape_optimization);
+        assert!(engine.config.enable_strategy_optimization);
+    }
+    
+    #[test]
+    fn test_optimization_config_default() {
+        let config = OptimizationConfig::default();
+        assert!(config.enable_shape_optimization);
+        assert!(config.enable_performance_optimization);
+        assert!(config.algorithms.enable_genetic_algorithm);
+        assert!(!config.algorithms.enable_shape_merging); // Should be false by default (risky)
+    }
+    
+    #[test]
+    fn test_performance_targets() {
+        let targets = PerformanceTargets::default();
+        assert_eq!(targets.target_execution_time, 5.0);
+        assert_eq!(targets.target_memory_mb, 512);
+        assert_eq!(targets.target_cpu_percent, 70);
+        assert_eq!(targets.target_throughput, 100.0);
+    }
+    
+    #[test]
+    fn test_parallel_execution_strategy() {
+        let strategy = ParallelExecutionStrategy {
+            parallel_groups: vec![vec![], vec![]],
+            recommended_thread_count: 4,
+            load_balancing_strategy: LoadBalancingStrategy::WorkStealing,
+            synchronization_points: vec![],
+        };
+        
+        assert_eq!(strategy.recommended_thread_count, 4);
+        assert_eq!(strategy.load_balancing_strategy, LoadBalancingStrategy::WorkStealing);
+        assert_eq!(strategy.parallel_groups.len(), 2);
+    }
+    
+    #[test]
+    fn test_cache_strategy() {
+        let strategy = CacheStrategy {
+            cache_type: CacheType::LRU,
+            cache_size_mb: 100,
+            ttl_seconds: 300,
+            cache_levels: vec![CacheLevel::L1Memory, CacheLevel::L2Disk],
+            preload_strategy: PreloadStrategy::Moderate,
+        };
+        
+        assert_eq!(strategy.cache_type, CacheType::LRU);
+        assert_eq!(strategy.cache_size_mb, 100);
+        assert_eq!(strategy.preload_strategy, PreloadStrategy::Moderate);
+    }
+    
+    #[test]
+    fn test_performance_improvements() {
+        let mut improvements = PerformanceImprovements::new();
+        improvements.execution_time_improvement = 0.3;
+        improvements.memory_usage_improvement = 0.2;
+        improvements.cache_hit_rate_improvement = 0.1;
+        improvements.overall_improvement = 0.2;
+        
+        assert_eq!(improvements.execution_time_improvement, 0.3);
+        assert_eq!(improvements.memory_usage_improvement, 0.2);
+        assert_eq!(improvements.overall_improvement, 0.2);
+    }
+    
+    #[test]
+    fn test_optimization_recommendation() {
+        let recommendation = OptimizationRecommendation {
+            category: OptimizationCategory::Performance,
+            priority: RecommendationPriority::High,
+            title: "Test Optimization".to_string(),
+            description: "Test description".to_string(),
+            estimated_improvement: 0.4,
+            implementation_effort: ImplementationEffort::Medium,
+            actions: vec!["Action 1".to_string(), "Action 2".to_string()],
+            confidence: 0.8,
+        };
+        
+        assert_eq!(recommendation.category, OptimizationCategory::Performance);
+        assert_eq!(recommendation.priority, RecommendationPriority::High);
+        assert_eq!(recommendation.estimated_improvement, 0.4);
+        assert_eq!(recommendation.actions.len(), 2);
+    }
+}
         // Analyze caching opportunities
         let cache_opportunities = self.analyze_cache_opportunities(shapes, store)?;
         

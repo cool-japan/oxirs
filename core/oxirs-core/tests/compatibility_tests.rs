@@ -71,8 +71,9 @@ mod blank_node_tests {
         let bn1 = BlankNode::new_unique();
         let bn2 = BlankNode::new_unique();
         assert_ne!(bn1.id(), bn2.id());
-        assert!(bn1.id().starts_with("_:b"));
-        assert!(bn2.id().starts_with("_:b"));
+        // Unique blank nodes are created with hex IDs that start with a-f for RDF/XML compatibility
+        assert!(matches!(bn1.id().as_bytes().first(), Some(b'a'..=b'f')));
+        assert!(matches!(bn2.id().as_bytes().first(), Some(b'a'..=b'f')));
     }
     
     #[test]
@@ -90,7 +91,7 @@ mod literal_tests {
     fn test_simple_literal() {
         let lit = Literal::new("hello world");
         assert_eq!(lit.value(), "hello world");
-        assert!(lit.datatype().is_none());
+        assert_eq!(lit.datatype().as_str(), "http://www.w3.org/2001/XMLSchema#string");
         assert!(lit.language().is_none());
         assert_eq!(format!("{}", lit), "\"hello world\"");
     }
@@ -100,7 +101,7 @@ mod literal_tests {
         let datatype = NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap();
         let lit = Literal::new_typed("42", datatype.clone());
         assert_eq!(lit.value(), "42");
-        assert_eq!(lit.datatype().unwrap().as_str(), "http://www.w3.org/2001/XMLSchema#integer");
+        assert_eq!(lit.datatype().as_str(), "http://www.w3.org/2001/XMLSchema#integer");
         assert_eq!(format!("{}", lit), "\"42\"^^<http://www.w3.org/2001/XMLSchema#integer>");
     }
     

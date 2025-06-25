@@ -65,11 +65,16 @@ impl Serializer {
                     result.push_str(&format!("<{}>", node.as_str()));
                 },
                 crate::model::Subject::BlankNode(node) => {
-                    result.push_str(node.as_str());
+                    result.push_str(&format!("{}", node));
                 },
                 crate::model::Subject::Variable(_) => {
                     return Err(crate::OxirsError::Serialize(
                         "Variables not supported in N-Triples serialization".to_string()
+                    ));
+                }
+                crate::model::Subject::QuotedTriple(_) => {
+                    return Err(crate::OxirsError::Serialize(
+                        "Quoted triples not supported in N-Triples serialization".to_string()
                     ));
                 }
             }
@@ -96,7 +101,7 @@ impl Serializer {
                     result.push_str(&format!("<{}>", node.as_str()));
                 },
                 crate::model::Object::BlankNode(node) => {
-                    result.push_str(node.as_str());
+                    result.push_str(&format!("{}", node));
                 },
                 crate::model::Object::Literal(literal) => {
                     result.push('"');
@@ -126,6 +131,11 @@ impl Serializer {
                 crate::model::Object::Variable(_) => {
                     return Err(crate::OxirsError::Serialize(
                         "Variables not supported in N-Triples serialization".to_string()
+                    ));
+                }
+                crate::model::Object::QuotedTriple(_) => {
+                    return Err(crate::OxirsError::Serialize(
+                        "Quoted triples not supported in N-Triples serialization".to_string()
                     ));
                 }
             }
@@ -181,11 +191,16 @@ impl Serializer {
                 result.push_str(&format!("<{}>", node.as_str()));
             },
             crate::model::Subject::BlankNode(node) => {
-                result.push_str(node.as_str());
+                result.push_str(&format!("{}", node));
             },
             crate::model::Subject::Variable(_) => {
                 return Err(crate::OxirsError::Serialize(
                     "Variables not supported in N-Quads serialization".to_string()
+                ));
+            }
+            crate::model::Subject::QuotedTriple(_) => {
+                return Err(crate::OxirsError::Serialize(
+                    "Quoted triples not supported in N-Quads serialization".to_string()
                 ));
             }
         }
@@ -212,7 +227,7 @@ impl Serializer {
                 result.push_str(&format!("<{}>", node.as_str()));
             },
             crate::model::Object::BlankNode(node) => {
-                result.push_str(node.as_str());
+                result.push_str(&format!("{}", node));
             },
             crate::model::Object::Literal(literal) => {
                 result.push('"');
@@ -244,6 +259,11 @@ impl Serializer {
                     "Variables not supported in N-Quads serialization".to_string()
                 ));
             }
+            crate::model::Object::QuotedTriple(_) => {
+                return Err(crate::OxirsError::Serialize(
+                    "Quoted triples not supported in N-Quads serialization".to_string()
+                ));
+            }
         }
         
         result.push(' ');
@@ -254,7 +274,7 @@ impl Serializer {
                 result.push_str(&format!("<{}>", node.as_str()));
             },
             GraphName::BlankNode(node) => {
-                result.push_str(node.as_str());
+                result.push_str(&format!("{}", node));
             },
             GraphName::Variable(_) => {
                 return Err(crate::OxirsError::Serialize(
@@ -443,6 +463,12 @@ impl TurtleSerializer {
                     "Variables not supported in Turtle serialization".to_string()
                 ))
             }
+            crate::model::Subject::QuotedTriple(qt) => {
+                Ok(format!("<< {} {} {} >>", 
+                    self.serialize_subject(qt.subject())?,
+                    self.serialize_predicate(qt.predicate())?,
+                    self.serialize_object(qt.object())?))
+            }
         }
     }
     
@@ -473,6 +499,12 @@ impl TurtleSerializer {
                 Err(crate::OxirsError::Serialize(
                     "Variables not supported in Turtle serialization".to_string()
                 ))
+            }
+            crate::model::Object::QuotedTriple(qt) => {
+                Ok(format!("<< {} {} {} >>", 
+                    self.serialize_subject(qt.subject())?,
+                    self.serialize_predicate(qt.predicate())?,
+                    self.serialize_object(qt.object())?))
             }
         }
     }
@@ -528,7 +560,8 @@ impl TurtleSerializer {
         // Add language tag or datatype
         if let Some(lang) = literal.language() {
             result.push_str(&format!("@{}", lang));
-        } else if let Some(datatype) = literal.datatype() {
+        } else {
+            let datatype = literal.datatype();
             // Check if it's the default string type
             if datatype.as_str() != "http://www.w3.org/2001/XMLSchema#string" {
                 result.push_str("^^");

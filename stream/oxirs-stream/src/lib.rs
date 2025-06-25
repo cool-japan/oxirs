@@ -30,7 +30,7 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 /// Re-export commonly used types for convenience
-pub use circuit_breaker::{CircuitBreakerError, FailureType};
+pub use circuit_breaker::{CircuitBreakerError, FailureType, SharedCircuitBreakerExt};
 pub use connection_pool::{PoolConfig, PoolStatus, DetailedPoolMetrics};
 
 #[cfg(test)]
@@ -486,6 +486,58 @@ impl StreamProducer {
         
         // Initialize backend-specific producer
         let backend_producer = match &config.backend {
+            #[cfg(feature = "kafka")]
+            StreamBackend::Kafka { brokers, security_protocol, sasl_config } => {
+                let stream_config = crate::StreamConfig {
+                    backend: crate::StreamBackend::Kafka {
+                        brokers: brokers.clone(),
+                        security_protocol: security_protocol.clone(),
+                        sasl_config: sasl_config.clone(),
+                    },
+                    topic: config.topic.clone(),
+                    batch_size: config.batch_size,
+                    flush_interval_ms: config.flush_interval_ms,
+                    max_connections: config.max_connections,
+                    connection_timeout: config.connection_timeout,
+                    enable_compression: config.enable_compression,
+                    compression_type: config.compression_type.clone(),
+                    retry_config: config.retry_config.clone(),
+                    circuit_breaker: config.circuit_breaker.clone(),
+                    security: config.security.clone(),
+                    performance: config.performance.clone(),
+                    monitoring: config.monitoring.clone(),
+                };
+                
+                let mut producer = kafka::KafkaProducer::new(stream_config)?;
+                producer.connect().await?;
+                BackendProducer::Kafka(producer)
+            },
+            #[cfg(feature = "nats")]
+            StreamBackend::Nats { url, cluster_urls, jetstream_config } => {
+                let stream_config = crate::StreamConfig {
+                    backend: crate::StreamBackend::Nats {
+                        url: url.clone(),
+                        cluster_urls: cluster_urls.clone(),
+                        jetstream_config: jetstream_config.clone(),
+                    },
+                    topic: config.topic.clone(),
+                    batch_size: config.batch_size,
+                    flush_interval_ms: config.flush_interval_ms,
+                    max_connections: config.max_connections,
+                    connection_timeout: config.connection_timeout,
+                    enable_compression: config.enable_compression,
+                    compression_type: config.compression_type.clone(),
+                    retry_config: config.retry_config.clone(),
+                    circuit_breaker: config.circuit_breaker.clone(),
+                    security: config.security.clone(),
+                    performance: config.performance.clone(),
+                    monitoring: config.monitoring.clone(),
+                };
+                
+                let mut producer = nats::NatsProducer::new(stream_config)?;
+                producer.connect().await?;
+                BackendProducer::Nats(producer)
+            },
             #[cfg(feature = "redis")]
             StreamBackend::Redis { url, cluster_urls, pool_size } => {
                 let stream_config = crate::StreamConfig {
@@ -573,6 +625,10 @@ impl StreamProducer {
         
         let stats = Arc::new(RwLock::new(ProducerStats {
             backend_type: match backend_producer {
+                #[cfg(feature = "kafka")]
+                BackendProducer::Kafka(_) => "kafka".to_string(),
+                #[cfg(feature = "nats")]
+                BackendProducer::Nats(_) => "nats".to_string(),
                 #[cfg(feature = "redis")]
                 BackendProducer::Redis(_) => "redis".to_string(),
                 #[cfg(feature = "kinesis")]
@@ -658,6 +714,14 @@ impl StreamProducer {
     /// Publish a single event to the backend
     async fn publish_single_event(&mut self, event: StreamEvent) -> Result<()> {
         match &mut self.backend_producer {
+            #[cfg(feature = "kafka")]
+            BackendProducer::Kafka(producer) => {
+                producer.publish(event).await
+            },
+            #[cfg(feature = "nats")]
+            BackendProducer::Nats(producer) => {
+                producer.publish(event).await
+            },
             #[cfg(feature = "redis")]
             BackendProducer::Redis(producer) => {
                 producer.publish(event).await
@@ -691,6 +755,14 @@ impl StreamProducer {
         let event_count = events.len();
         
         let result = match &mut self.backend_producer {
+            #[cfg(feature = "kafka")]
+            BackendProducer::Kafka(producer) => {
+                producer.publish_batch(events).await
+            },
+            #[cfg(feature = "nats")]
+            BackendProducer::Nats(producer) => {
+                producer.publish_batch(events).await
+            },
             #[cfg(feature = "redis")]
             BackendProducer::Redis(producer) => {
                 producer.publish_batch(events).await
@@ -750,6 +822,14 @@ impl StreamProducer {
         
         // Flush backend-specific buffers
         let result = match &mut self.backend_producer {
+            #[cfg(feature = "kafka")]
+            BackendProducer::Kafka(producer) => {
+                producer.flush().await
+            },
+            #[cfg(feature = "nats")]
+            BackendProducer::Nats(producer) => {
+                producer.flush().await
+            },
             #[cfg(feature = "redis")]
             BackendProducer::Redis(producer) => {
                 producer.flush().await

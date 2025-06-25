@@ -2,6 +2,8 @@
 
 use oxirs_core::model::*;
 use oxirs_core::query::*;
+use oxirs_core::plan::QueryPlanner;
+use oxirs_core::execution::QueryExecutor;
 use oxirs_core::store::Store;
 
 #[cfg(test)]

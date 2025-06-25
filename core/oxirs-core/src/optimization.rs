@@ -119,9 +119,10 @@ impl<'a> TermRef<'a> {
 
     /// Create a term reference from a literal
     pub fn from_literal(literal: &'a Literal) -> Self {
-        let datatype = literal.datatype().map(|dt| dt.as_str());
         let language = literal.language();
-        TermRef::Literal(literal.value(), datatype, language)
+        // Always include datatype IRI for now to avoid lifetime issues
+        // Skip datatype for now due to lifetime issues - would need redesign
+        TermRef::Literal(literal.value(), None, language)
     }
 
     /// Get the string representation of this term
@@ -215,6 +216,7 @@ impl<'a> TripleRef<'a> {
                 Subject::NamedNode(n) => TermRef::NamedNode(n.as_str()),
                 Subject::BlankNode(b) => TermRef::BlankNode(b.as_str()),
                 Subject::Variable(v) => TermRef::Variable(v.as_str()),
+                Subject::QuotedTriple(_) => TermRef::NamedNode("<<quoted-triple>>"),
             },
             predicate: match triple.predicate() {
                 Predicate::NamedNode(n) => TermRef::NamedNode(n.as_str()),
@@ -225,6 +227,7 @@ impl<'a> TripleRef<'a> {
                 Object::BlankNode(b) => TermRef::BlankNode(b.as_str()),
                 Object::Literal(l) => TermRef::from_literal(l),
                 Object::Variable(v) => TermRef::Variable(v.as_str()),
+                Object::QuotedTriple(_) => TermRef::NamedNode("<<quoted-triple>>"),
             },
         }
     }
@@ -540,6 +543,7 @@ impl OptimizedGraph {
             Subject::NamedNode(n) => InternedString::new_with_interner(n.as_str(), &self.interner),
             Subject::BlankNode(b) => InternedString::new_with_interner(b.as_str(), &self.interner),
             Subject::Variable(v) => InternedString::new_with_interner(v.as_str(), &self.interner),
+            Subject::QuotedTriple(_) => InternedString::new_with_interner("<<quoted-triple>>", &self.interner),
         }
     }
 
@@ -562,6 +566,7 @@ impl OptimizedGraph {
                 InternedString::new_with_interner(&serialized, &self.interner)
             }
             Object::Variable(v) => InternedString::new_with_interner(v.as_str(), &self.interner),
+            Object::QuotedTriple(_) => InternedString::new_with_interner("<<quoted-triple>>", &self.interner),
         }
     }
 

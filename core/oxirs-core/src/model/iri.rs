@@ -171,7 +171,7 @@ pub fn normalize_iri(iri: &str) -> String {
             // Find the previous slash
             if let Some(prev_slash) = normalized[..pos].rfind('/') {
                 let before = &normalized[..prev_slash];
-                let after = &normalized[pos + 3..];
+                let after = &normalized[pos + 4..]; // Skip the leading slash too
                 normalized = format!("{}/{}", before, after);
             } else {
                 break; // Can't normalize further
@@ -231,6 +231,11 @@ impl NamedNode {
     pub fn into_string(self) -> String {
         self.iri
     }
+    
+    /// Returns a reference to this NamedNode as a NamedNodeRef
+    pub fn as_ref(&self) -> NamedNodeRef<'_> {
+        NamedNodeRef::new_unchecked(&self.iri)
+    }
 }
 
 impl FromStr for NamedNode {
@@ -261,6 +266,7 @@ impl SubjectTerm for NamedNode {}
 impl PredicateTerm for NamedNode {}
 impl ObjectTerm for NamedNode {}
 impl GraphNameTerm for NamedNode {}
+
 
 /// A borrowed named node
 /// 

@@ -447,7 +447,7 @@ impl Literal {
     pub fn new_typed_literal(value: impl Into<String>, datatype: impl Into<NamedNode>) -> Self {
         let value = value.into();
         let datatype = datatype.into();
-        Self(if datatype == **xsd::STRING {
+        Self(if datatype == *xsd::STRING {
             LiteralContent::String(value)
         } else {
             LiteralContent::TypedLiteral { value, datatype }
@@ -473,8 +473,8 @@ impl Literal {
         value: impl Into<String>,
         language: impl Into<String>,
     ) -> Result<Self, LanguageTagParseError> {
-        let mut language = language.into();
-        language.make_ascii_lowercase();
+        let language = language.into();
+        // Validate without modifying case to preserve RFC 5646 conventions
         validate_language_tag(&language)?;
         Ok(Self::new_language_tagged_literal_unchecked(
             value,
@@ -618,7 +618,7 @@ impl Literal {
             },
             LiteralContent::TypedLiteral { value, datatype } => LiteralRefContent::TypedLiteral {
                 value,
-                datatype: datatype.as_ref(),
+                datatype: NamedNodeRef::new_unchecked(datatype.as_str()),
             },
         })
     }
@@ -818,10 +818,10 @@ impl Literal {
                 }
             }
             LiteralContent::LanguageTaggedString { value, language } => {
-                // Normalize language tag to lowercase
+                // Keep original case for language tags to match RFC 5646 best practices
                 return Self(LiteralContent::LanguageTaggedString {
                     value: value.clone(),
-                    language: language.to_lowercase(),
+                    language: language.clone(),
                 });
             }
             _ => {}
@@ -922,7 +922,7 @@ impl<'a> LiteralRef<'a> {
     #[inline]
     pub fn new_typed_literal(value: &'a str, datatype: impl Into<NamedNodeRef<'a>>) -> Self {
         let datatype = datatype.into();
-        LiteralRef(if datatype == (**xsd::STRING).as_ref() {
+        LiteralRef(if datatype == xsd::STRING.as_ref() {
             LiteralRefContent::String(value)
         } else {
             LiteralRefContent::TypedLiteral { value, datatype }
@@ -1017,7 +1017,7 @@ impl<'a> LiteralRef<'a> {
     /// The datatype of [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string) is always [rdf:langString](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string).
     /// The datatype of [simple literals](https://www.w3.org/TR/rdf11-concepts/#dfn-simple-literal) is [xsd:string](https://www.w3.org/TR/xmlschema11-2/#string).
     #[inline]
-    pub const fn datatype(self) -> NamedNodeRef<'a> {
+    pub fn datatype(self) -> NamedNodeRef<'a> {
         match self.0 {
             LiteralRefContent::String(_) => xsd::STRING.as_ref(),
             LiteralRefContent::LanguageTaggedString { .. } => rdf::LANG_STRING.as_ref(),
@@ -1062,7 +1062,7 @@ impl<'a> LiteralRef<'a> {
             },
             LiteralRefContent::TypedLiteral { value, datatype } => LiteralContent::TypedLiteral {
                 value: value.to_owned(),
-                datatype: datatype.into_owned(),
+                datatype: datatype.to_owned(),
             },
         })
     }
@@ -1406,7 +1406,7 @@ mod tests {
         assert_eq!(literal.language(), Some("en"));
         #[allow(deprecated)]
         {
-            assert!(!literal.is_plain());
+            assert!(literal.is_plain());
         }
         assert!(literal.is_lang_string());
         assert!(!literal.is_typed());

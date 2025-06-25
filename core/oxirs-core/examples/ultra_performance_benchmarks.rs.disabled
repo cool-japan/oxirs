@@ -355,10 +355,10 @@ impl UltraPerformanceBenchmarks {
         println!("----------------------------------");
 
         // Test JSON-LD streaming parser
-        await self.benchmark_jsonld_streaming().await?;
+        self.benchmark_jsonld_streaming().await?;
         
         // Test RDF/XML streaming parser
-        await self.benchmark_rdfxml_streaming().await?;
+        self.benchmark_rdfxml_streaming().await?;
         
         Ok(())
     }

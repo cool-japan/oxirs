@@ -210,6 +210,24 @@ impl From<Literal> for TermPattern {
     }
 }
 
+impl TermPattern {
+    /// Check if this pattern is a variable
+    pub fn is_variable(&self) -> bool {
+        matches!(self, TermPattern::Variable(_))
+    }
+}
+
+impl fmt::Display for TermPattern {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TermPattern::NamedNode(n) => write!(f, "{}", n),
+            TermPattern::BlankNode(b) => write!(f, "{}", b),
+            TermPattern::Literal(l) => write!(f, "{}", l),
+            TermPattern::Variable(v) => write!(f, "{}", v),
+        }
+    }
+}
+
 /// A graph pattern
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum GraphPattern {

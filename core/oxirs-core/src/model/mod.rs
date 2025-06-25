@@ -10,6 +10,7 @@ pub mod graph;
 pub mod dataset;
 pub mod literal;
 pub mod iri;
+pub mod star;
 
 // Re-export core types
 pub use term::*;
@@ -19,6 +20,7 @@ pub use graph::*;
 pub use dataset::*;
 pub use literal::*;
 pub use iri::*;
+pub use star::*;
 
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -40,6 +42,9 @@ pub trait RdfTerm {
     
     /// Returns true if this is a variable
     fn is_variable(&self) -> bool { false }
+    
+    /// Returns true if this is a quoted triple (RDF-star)
+    fn is_quoted_triple(&self) -> bool { false }
 }
 
 /// A trait for terms that can be used as subjects in RDF triples

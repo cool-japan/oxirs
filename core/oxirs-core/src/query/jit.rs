@@ -75,7 +75,7 @@ struct CompiledQuery {
 type QueryHash = u64;
 
 /// Native query function type
-type QueryFunction = Box<dyn Fn(&QueryContext) -> Result<QueryOutput, OxirsError> + Send + Sync>;
+type QueryFunction = Arc<dyn Fn(&QueryContext) -> Result<QueryOutput, OxirsError> + Send + Sync>;
 
 /// Query execution context
 pub struct QueryContext {
@@ -166,7 +166,7 @@ impl JitCompiler {
         
         // Check if already compiled
         if let Some(compiled) = self.get_compiled(hash) {
-            return compiled(context);
+            return (compiled)(&context);
         }
         
         // Execute interpreted first
@@ -260,17 +260,20 @@ impl JitCompiler {
         let mut bindings = existing.clone();
         
         // Match subject
-        if !self.match_term(&triple.subject().into(), &pattern.subject, &mut bindings) {
+        let subject_term = Term::from_subject(triple.subject());
+        if !self.match_term(&subject_term, &pattern.subject, &mut bindings) {
             return None;
         }
         
         // Match predicate
-        if !self.match_term(&triple.predicate().into(), &pattern.predicate, &mut bindings) {
+        let predicate_term = Term::from_predicate(triple.predicate());
+        if !self.match_term(&predicate_term, &pattern.predicate, &mut bindings) {
             return None;
         }
         
         // Match object
-        if !self.match_term(&triple.object().into(), &pattern.object, &mut bindings) {
+        let object_term = Term::from_object(triple.object());
+        if !self.match_term(&object_term, &pattern.object, &mut bindings) {
             return None;
         }
         
@@ -335,12 +338,13 @@ impl JitCompiler {
             }
         }
         
+        let results_count = results.len();
         Ok(QueryOutput {
             bindings: results,
             stats: QueryStats {
                 triples_scanned: left_output.stats.triples_scanned + 
                                 right_output.stats.triples_scanned,
-                results_count: results.len(),
+                results_count,
                 execution_time: left_output.stats.execution_time + 
                                right_output.stats.execution_time,
                 memory_used: left_output.stats.memory_used + 
@@ -405,7 +409,7 @@ impl JitCompiler {
         // Generate specialized matching function
         let pattern = pattern.clone();
         
-        Ok(Box::new(move |context: &QueryContext| {
+        Ok(Arc::new(move |context: &QueryContext| {
             let mut results = Vec::new();
             
             // Optimized scanning based on pattern
@@ -429,11 +433,12 @@ impl JitCompiler {
                 }
             }
             
+            let results_count = results.len();
             Ok(QueryOutput {
                 bindings: results,
                 stats: QueryStats {
                     triples_scanned: context.data.triples.len(),
-                    results_count: results.len(),
+                    results_count,
                     execution_time: Duration::ZERO,
                     memory_used: 0,
                 },
@@ -445,7 +450,7 @@ impl JitCompiler {
     fn compile_hash_join(&self, _left: &ExecutionPlan, _right: &ExecutionPlan,
         _join_vars: &[Variable]) -> Result<QueryFunction, OxirsError> {
         // Would generate optimized join code
-        Ok(Box::new(move |_context: &QueryContext| {
+        Ok(Arc::new(move |_context: &QueryContext| {
             Ok(QueryOutput {
                 bindings: Vec::new(),
                 stats: QueryStats {
@@ -468,11 +473,11 @@ fn match_triple_fast(triple: &Triple, pattern: &TriplePattern,
     match &pattern.subject {
         TermPattern::Variable(v) => {
             if let Some(bound) = bindings.get(v) {
-                if bound != &triple.subject().into() {
+                if bound != &Term::from_subject(triple.subject()) {
                     return None;
                 }
             } else {
-                result.insert(v.clone(), triple.subject().into());
+                result.insert(v.clone(), Term::from_subject(triple.subject()));
             }
         }
         TermPattern::NamedNode(n) => {

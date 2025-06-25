@@ -43,12 +43,40 @@ simd-json = "0.13"
 wide = "0.7"
 num_cpus = "1.16"
 tokio = { workspace = true, optional = true }
+async-trait = "0.1"
+futures = "0.3"
+
+# Hash function dependencies for SPARQL 1.2
+sha1 = "0.10"
+sha2 = "0.10"
+md5 = "0.7"
+
+# Additional dependencies for SPARQL functions
+chrono = "0.4"
+rand = "0.8"
+uuid = { version = "1.6", features = ["v4"] }
+urlencoding = "2.1"
+
+# Storage engine dependencies
+rocksdb = "0.22"
+bincode = "1.3"
+lru = "0.12"
+glob = "0.3"
+
+# Columnar storage dependencies (temporarily disabled due to version conflicts)
+# arrow = "53"
+# datafusion = "40"
+# parquet = "53"
+
+# Compression dependencies
+lz4 = "1.28"
 
 [dev-dependencies]
 criterion.workspace = true
 tokio = { workspace = true, features = ["test-util", "rt", "io-util", "macros"] }
 
 [features]
-default = []
+default = ["serde"]
+serde = []
 async = ["tokio"]
 
