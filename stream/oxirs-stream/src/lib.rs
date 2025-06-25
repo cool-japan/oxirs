@@ -20,32 +20,32 @@
 //! - **Scalability**: Linear scaling to 1000+ partitions
 
 use anyhow::{anyhow, Result};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
 use std::sync::Arc;
-use tokio::sync::{RwLock, mpsc, Semaphore};
-use tracing::{debug, info, warn, error};
-use chrono::{DateTime, Utc};
+use std::time::{Duration, Instant};
+use tokio::sync::{mpsc, RwLock, Semaphore};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 /// Re-export commonly used types for convenience
 pub use circuit_breaker::{CircuitBreakerError, FailureType, SharedCircuitBreakerExt};
-pub use connection_pool::{PoolConfig, PoolStatus, DetailedPoolMetrics};
+pub use connection_pool::{DetailedPoolMetrics, PoolConfig, PoolStatus};
 
 #[cfg(test)]
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-pub mod kafka;
-pub mod nats;
-pub mod patch;
-pub mod delta;
-pub mod redis;
-pub mod kinesis;
-pub mod pulsar;
-pub mod monitoring;
 pub mod circuit_breaker;
 pub mod connection_pool;
+pub mod delta;
+pub mod kafka;
+pub mod kinesis;
+pub mod monitoring;
+pub mod nats;
+pub mod patch;
+pub mod pulsar;
+pub mod redis;
 
 /// Enhanced stream configuration with advanced features
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -159,19 +159,19 @@ pub struct MonitoringConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum StreamBackend {
     #[cfg(feature = "kafka")]
-    Kafka { 
+    Kafka {
         brokers: Vec<String>,
         security_protocol: Option<String>,
         sasl_config: Option<SaslConfig>,
     },
     #[cfg(feature = "nats")]
-    Nats { 
+    Nats {
         url: String,
         cluster_urls: Option<Vec<String>>,
         jetstream_config: Option<NatsJetStreamConfig>,
     },
     #[cfg(feature = "redis")]
-    Redis { 
+    Redis {
         url: String,
         cluster_urls: Option<Vec<String>>,
         pool_size: Option<usize>,
@@ -187,7 +187,7 @@ pub enum StreamBackend {
         service_url: String,
         auth_config: Option<PulsarAuthConfig>,
     },
-    Memory { 
+    Memory {
         max_size: Option<usize>,
         persistence: bool,
     },
@@ -229,16 +229,16 @@ pub enum PulsarAuthMethod {
 /// Enhanced RDF streaming events with metadata and provenance
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum StreamEvent {
-    TripleAdded { 
-        subject: String, 
-        predicate: String, 
+    TripleAdded {
+        subject: String,
+        predicate: String,
         object: String,
         graph: Option<String>,
         metadata: EventMetadata,
     },
-    TripleRemoved { 
-        subject: String, 
-        predicate: String, 
+    TripleRemoved {
+        subject: String,
+        predicate: String,
         object: String,
         graph: Option<String>,
         metadata: EventMetadata,
@@ -257,11 +257,11 @@ pub enum StreamEvent {
         graph: String,
         metadata: EventMetadata,
     },
-    GraphCreated { 
+    GraphCreated {
         graph: String,
         metadata: EventMetadata,
     },
-    GraphCleared { 
+    GraphCleared {
         graph: Option<String>,
         metadata: EventMetadata,
     },
@@ -269,7 +269,7 @@ pub enum StreamEvent {
         graph: String,
         metadata: EventMetadata,
     },
-    SparqlUpdate { 
+    SparqlUpdate {
         query: String,
         operation_type: SparqlOperationType,
         metadata: EventMetadata,
@@ -426,40 +426,43 @@ impl MemoryProducer {
             },
         }
     }
-    
+
     async fn publish(&mut self, event: StreamEvent) -> Result<()> {
         let start_time = Instant::now();
         let mut events = self.events.write().await;
-        
+
         // Enforce max size if specified
         if let Some(max_size) = self.max_size {
             while events.len() >= max_size {
                 events.remove(0);
             }
         }
-        
+
         events.push((Utc::now(), event));
-        
+
         // Update stats
         self.stats.events_published += 1;
         let latency = start_time.elapsed().as_millis() as u64;
         self.stats.max_latency_ms = self.stats.max_latency_ms.max(latency);
         self.stats.avg_latency_ms = (self.stats.avg_latency_ms + latency as f64) / 2.0;
         self.stats.last_publish = Some(Utc::now());
-        
+
         debug!("Memory producer: published event (total: {})", events.len());
         Ok(())
     }
-    
+
     async fn flush(&mut self) -> Result<()> {
         if self.persistence {
             // In a real implementation, this would persist to disk
-            debug!("Memory producer: persisted {} events", self.events.read().await.len());
+            debug!(
+                "Memory producer: persisted {} events",
+                self.events.read().await.len()
+            );
         }
         self.stats.flush_count += 1;
         Ok(())
     }
-    
+
     fn get_stats(&self) -> &ProducerStats {
         &self.stats
     }
@@ -478,16 +481,20 @@ impl StreamProducer {
                     timeout: config.circuit_breaker.timeout,
                     half_open_max_calls: config.circuit_breaker.half_open_max_calls,
                     ..Default::default()
-                }
+                },
             ))
         } else {
             None
         };
-        
+
         // Initialize backend-specific producer
         let backend_producer = match &config.backend {
             #[cfg(feature = "kafka")]
-            StreamBackend::Kafka { brokers, security_protocol, sasl_config } => {
+            StreamBackend::Kafka {
+                brokers,
+                security_protocol,
+                sasl_config,
+            } => {
                 let stream_config = crate::StreamConfig {
                     backend: crate::StreamBackend::Kafka {
                         brokers: brokers.clone(),
@@ -507,13 +514,17 @@ impl StreamProducer {
                     performance: config.performance.clone(),
                     monitoring: config.monitoring.clone(),
                 };
-                
+
                 let mut producer = kafka::KafkaProducer::new(stream_config)?;
                 producer.connect().await?;
                 BackendProducer::Kafka(producer)
-            },
+            }
             #[cfg(feature = "nats")]
-            StreamBackend::Nats { url, cluster_urls, jetstream_config } => {
+            StreamBackend::Nats {
+                url,
+                cluster_urls,
+                jetstream_config,
+            } => {
                 let stream_config = crate::StreamConfig {
                     backend: crate::StreamBackend::Nats {
                         url: url.clone(),
@@ -533,13 +544,17 @@ impl StreamProducer {
                     performance: config.performance.clone(),
                     monitoring: config.monitoring.clone(),
                 };
-                
+
                 let mut producer = nats::NatsProducer::new(stream_config)?;
                 producer.connect().await?;
                 BackendProducer::Nats(producer)
-            },
+            }
             #[cfg(feature = "redis")]
-            StreamBackend::Redis { url, cluster_urls, pool_size } => {
+            StreamBackend::Redis {
+                url,
+                cluster_urls,
+                pool_size,
+            } => {
                 let stream_config = crate::StreamConfig {
                     backend: crate::StreamBackend::Redis {
                         url: url.clone(),
@@ -559,13 +574,17 @@ impl StreamProducer {
                     performance: config.performance.clone(),
                     monitoring: config.monitoring.clone(),
                 };
-                
+
                 let mut producer = redis::RedisProducer::new(stream_config)?;
                 producer.connect().await?;
                 BackendProducer::Redis(producer)
-            },
+            }
             #[cfg(feature = "kinesis")]
-            StreamBackend::Kinesis { region, stream_name, credentials } => {
+            StreamBackend::Kinesis {
+                region,
+                stream_name,
+                credentials,
+            } => {
                 let stream_config = crate::StreamConfig {
                     backend: crate::StreamBackend::Kinesis {
                         region: region.clone(),
@@ -585,13 +604,16 @@ impl StreamProducer {
                     performance: config.performance.clone(),
                     monitoring: config.monitoring.clone(),
                 };
-                
+
                 let mut producer = kinesis::KinesisProducer::new(stream_config)?;
                 producer.connect().await?;
                 BackendProducer::Kinesis(producer)
-            },
+            }
             #[cfg(feature = "pulsar")]
-            StreamBackend::Pulsar { service_url, auth_config } => {
+            StreamBackend::Pulsar {
+                service_url,
+                auth_config,
+            } => {
                 let stream_config = crate::StreamConfig {
                     backend: crate::StreamBackend::Pulsar {
                         service_url: service_url.clone(),
@@ -610,19 +632,20 @@ impl StreamProducer {
                     performance: config.performance.clone(),
                     monitoring: config.monitoring.clone(),
                 };
-                
+
                 let mut producer = pulsar::PulsarProducer::new(stream_config)?;
                 producer.connect().await?;
                 BackendProducer::Pulsar(producer)
-            },
-            StreamBackend::Memory { max_size, persistence } => {
-                BackendProducer::Memory(MemoryProducer::new(*max_size, *persistence))
-            },
+            }
+            StreamBackend::Memory {
+                max_size,
+                persistence,
+            } => BackendProducer::Memory(MemoryProducer::new(*max_size, *persistence)),
             _ => {
                 return Err(anyhow!("Backend not supported or feature not enabled"));
             }
         };
-        
+
         let stats = Arc::new(RwLock::new(ProducerStats {
             backend_type: match backend_producer {
                 #[cfg(feature = "kafka")]
@@ -639,9 +662,12 @@ impl StreamProducer {
             },
             ..Default::default()
         }));
-        
-        info!("Created stream producer with backend: {}", stats.read().await.backend_type);
-        
+
+        info!(
+            "Created stream producer with backend: {}",
+            stats.read().await.backend_type
+        );
+
         Ok(Self {
             config,
             backend_producer,
@@ -653,11 +679,11 @@ impl StreamProducer {
             flush_semaphore: Arc::new(Semaphore::new(1)),
         })
     }
-    
+
     /// Publish a stream event with circuit breaker protection and batching
     pub async fn publish(&mut self, event: StreamEvent) -> Result<()> {
         let start_time = Instant::now();
-        
+
         // Check circuit breaker if enabled
         if let Some(cb) = &self.circuit_breaker {
             if !cb.can_execute().await {
@@ -665,31 +691,31 @@ impl StreamProducer {
                 return Err(anyhow!("Circuit breaker is open - cannot publish events"));
             }
         }
-        
+
         // Handle batching if enabled
         if self.config.performance.enable_batching {
             let mut batch_buffer = self.batch_buffer.write().await;
             batch_buffer.push(event);
-            
+
             if batch_buffer.len() >= self.config.batch_size {
                 let events = std::mem::take(&mut *batch_buffer);
                 drop(batch_buffer);
                 return self.publish_batch_internal(events).await;
             }
-            
+
             return Ok(());
         }
-        
+
         // Publish single event
         let result = self.publish_single_event(event).await;
-        
+
         // Update circuit breaker and stats
         match &result {
             Ok(_) => {
                 if let Some(cb) = &self.circuit_breaker {
                     cb.record_success_with_duration(start_time.elapsed()).await;
                 }
-                
+
                 let mut stats = self.stats.write().await;
                 stats.events_published += 1;
                 let latency = start_time.elapsed().as_millis() as u64;
@@ -699,90 +725,67 @@ impl StreamProducer {
             }
             Err(_) => {
                 if let Some(cb) = &self.circuit_breaker {
-                    cb.record_failure_with_type(
-                        circuit_breaker::FailureType::NetworkError
-                    ).await;
+                    cb.record_failure_with_type(circuit_breaker::FailureType::NetworkError)
+                        .await;
                 }
-                
+
                 self.stats.write().await.events_failed += 1;
             }
         }
-        
+
         result
     }
-    
+
     /// Publish a single event to the backend
     async fn publish_single_event(&mut self, event: StreamEvent) -> Result<()> {
         match &mut self.backend_producer {
             #[cfg(feature = "kafka")]
-            BackendProducer::Kafka(producer) => {
-                producer.publish(event).await
-            },
+            BackendProducer::Kafka(producer) => producer.publish(event).await,
             #[cfg(feature = "nats")]
-            BackendProducer::Nats(producer) => {
-                producer.publish(event).await
-            },
+            BackendProducer::Nats(producer) => producer.publish(event).await,
             #[cfg(feature = "redis")]
-            BackendProducer::Redis(producer) => {
-                producer.publish(event).await
-            },
+            BackendProducer::Redis(producer) => producer.publish(event).await,
             #[cfg(feature = "kinesis")]
-            BackendProducer::Kinesis(producer) => {
-                producer.publish(event).await
-            },
+            BackendProducer::Kinesis(producer) => producer.publish(event).await,
             #[cfg(feature = "pulsar")]
-            BackendProducer::Pulsar(producer) => {
-                producer.publish(event).await
-            },
-            BackendProducer::Memory(producer) => {
-                producer.publish(event).await
-            },
+            BackendProducer::Pulsar(producer) => producer.publish(event).await,
+            BackendProducer::Memory(producer) => producer.publish(event).await,
         }
     }
-    
+
     /// Publish multiple events as a batch
     pub async fn publish_batch(&mut self, events: Vec<StreamEvent>) -> Result<()> {
         if events.is_empty() {
             return Ok(());
         }
-        
+
         self.publish_batch_internal(events).await
     }
-    
+
     /// Internal batch publishing implementation
     async fn publish_batch_internal(&mut self, events: Vec<StreamEvent>) -> Result<()> {
         let start_time = Instant::now();
         let event_count = events.len();
-        
+
         let result = match &mut self.backend_producer {
             #[cfg(feature = "kafka")]
-            BackendProducer::Kafka(producer) => {
-                producer.publish_batch(events).await
-            },
+            BackendProducer::Kafka(producer) => producer.publish_batch(events).await,
             #[cfg(feature = "nats")]
-            BackendProducer::Nats(producer) => {
-                producer.publish_batch(events).await
-            },
+            BackendProducer::Nats(producer) => producer.publish_batch(events).await,
             #[cfg(feature = "redis")]
-            BackendProducer::Redis(producer) => {
-                producer.publish_batch(events).await
-            },
+            BackendProducer::Redis(producer) => producer.publish_batch(events).await,
             #[cfg(feature = "kinesis")]
-            BackendProducer::Kinesis(producer) => {
-                producer.publish_batch(events).await
-            },
+            BackendProducer::Kinesis(producer) => producer.publish_batch(events).await,
             #[cfg(feature = "pulsar")]
-            BackendProducer::Pulsar(producer) => {
-                producer.publish_batch(events).await
-            },
+            BackendProducer::Pulsar(producer) => producer.publish_batch(events).await,
             BackendProducer::Memory(producer) => {
                 for event in events {
                     producer.publish(event).await?;
                 }
                 Ok(())
-            },
+            }
         };
-        
+
         // Update stats
         let mut stats = self.stats.write().await;
         match &result {
@@ -798,18 +801,25 @@ impl StreamProducer {
                 stats.events_failed += event_count as u64;
             }
         }
-        
-        debug!("Published batch of {} events in {:?}", event_count, start_time.elapsed());
+
+        debug!(
+            "Published batch of {} events in {:?}",
+            event_count,
+            start_time.elapsed()
+        );
         result
     }
-    
+
     /// Flush any pending events and buffers
     pub async fn flush(&mut self) -> Result<()> {
-        let _permit = self.flush_semaphore.acquire().await
+        let _permit = self
+            .flush_semaphore
+            .acquire()
+            .await
             .map_err(|_| anyhow!("Failed to acquire flush semaphore"))?;
-        
+
         let start_time = Instant::now();
-        
+
         // Flush any pending batch buffer
         if self.config.performance.enable_batching {
             let mut batch_buffer = self.batch_buffer.write().await;
@@ -819,101 +829,93 @@ impl StreamProducer {
                 self.publish_batch_internal(events).await?;
             }
         }
-        
+
         // Flush backend-specific buffers
         let result = match &mut self.backend_producer {
             #[cfg(feature = "kafka")]
-            BackendProducer::Kafka(producer) => {
-                producer.flush().await
-            },
+            BackendProducer::Kafka(producer) => producer.flush().await,
             #[cfg(feature = "nats")]
-            BackendProducer::Nats(producer) => {
-                producer.flush().await
-            },
+            BackendProducer::Nats(producer) => producer.flush().await,
             #[cfg(feature = "redis")]
-            BackendProducer::Redis(producer) => {
-                producer.flush().await
-            },
+            BackendProducer::Redis(producer) => producer.flush().await,
             #[cfg(feature = "kinesis")]
-            BackendProducer::Kinesis(producer) => {
-                producer.flush().await
-            },
+            BackendProducer::Kinesis(producer) => producer.flush().await,
             #[cfg(feature = "pulsar")]
-            BackendProducer::Pulsar(producer) => {
-                producer.flush().await
-            },
-            BackendProducer::Memory(producer) => {
-                producer.flush().await
-            },
+            BackendProducer::Pulsar(producer) => producer.flush().await,
+            BackendProducer::Memory(producer) => producer.flush().await,
         };
-        
+
         // Update stats
         if result.is_ok() {
             self.stats.write().await.flush_count += 1;
             self.last_flush = Instant::now();
             debug!("Flushed producer buffers in {:?}", start_time.elapsed());
         }
-        
+
         result
     }
-    
+
     /// Publish an RDF patch as a series of events
     pub async fn publish_patch(&mut self, patch: &RdfPatch) -> Result<()> {
-        let events: Vec<StreamEvent> = patch.operations.iter().map(|op| {
-            let metadata = EventMetadata {
-                event_id: Uuid::new_v4().to_string(),
-                timestamp: patch.timestamp,
-                source: "rdf_patch".to_string(),
-                user: None,
-                context: Some(patch.id.clone()),
-                caused_by: None,
-                version: "1.0".to_string(),
-                properties: HashMap::new(),
-                checksum: None,
-            };
-            
-            match op {
-                PatchOperation::Add { subject, predicate, object } => {
-                    StreamEvent::TripleAdded {
+        let events: Vec<StreamEvent> = patch
+            .operations
+            .iter()
+            .map(|op| {
+                let metadata = EventMetadata {
+                    event_id: Uuid::new_v4().to_string(),
+                    timestamp: patch.timestamp,
+                    source: "rdf_patch".to_string(),
+                    user: None,
+                    context: Some(patch.id.clone()),
+                    caused_by: None,
+                    version: "1.0".to_string(),
+                    properties: HashMap::new(),
+                    checksum: None,
+                };
+
+                match op {
+                    PatchOperation::Add {
+                        subject,
+                        predicate,
+                        object,
+                    } => StreamEvent::TripleAdded {
                         subject: subject.clone(),
                         predicate: predicate.clone(),
                         object: object.clone(),
                         graph: None,
                         metadata,
-                    }
-                }
-                PatchOperation::Delete { subject, predicate, object } => {
-                    StreamEvent::TripleRemoved {
+                    },
+                    PatchOperation::Delete {
+                        subject,
+                        predicate,
+                        object,
+                    } => StreamEvent::TripleRemoved {
                         subject: subject.clone(),
                         predicate: predicate.clone(),
                         object: object.clone(),
                         graph: None,
                         metadata,
-                    }
-                }
-                PatchOperation::AddGraph { graph } => {
-                    StreamEvent::GraphCreated {
+                    },
+                    PatchOperation::AddGraph { graph } => StreamEvent::GraphCreated {
                         graph: graph.clone(),
                         metadata,
-                    }
-                }
-                PatchOperation::DeleteGraph { graph } => {
-                    StreamEvent::GraphDeleted {
+                    },
+                    PatchOperation::DeleteGraph { graph } => StreamEvent::GraphDeleted {
                         graph: graph.clone(),
                         metadata,
-                    }
+                    },
                 }
-            }
-        }).collect();
-        
+            })
+            .collect();
+
         self.publish_batch(events).await
     }
-    
+
     /// Get producer statistics
     pub async fn get_stats(&self) -> ProducerStats {
         self.stats.read().await.clone()
     }
-    
+
     /// Get producer health status
     pub async fn health_check(&self) -> bool {
         if let Some(cb) = &self.circuit_breaker {
@@ -979,40 +981,46 @@ impl MemoryConsumer {
             },
         }
     }
-    
+
     /// Set events for testing (simulates published events)
     async fn set_events(&mut self, events: Vec<(DateTime<Utc>, StreamEvent)>) {
         *self.events.write().await = events;
         self.current_index = 0;
     }
-    
+
     async fn consume(&mut self) -> Result<Option<StreamEvent>> {
         let start_time = Instant::now();
         let events = self.events.read().await;
-        
+
         if self.current_index < events.len() {
             let (_, event) = &events[self.current_index];
             let event_clone = event.clone();
             self.current_index += 1;
-            
+
             // Update stats
             self.stats.events_consumed += 1;
             let processing_time = start_time.elapsed().as_millis() as u64;
-            self.stats.max_processing_time_ms = self.stats.max_processing_time_ms.max(processing_time);
-            self.stats.avg_processing_time_ms = (self.stats.avg_processing_time_ms + processing_time as f64) / 2.0;
+            self.stats.max_processing_time_ms =
+                self.stats.max_processing_time_ms.max(processing_time);
+            self.stats.avg_processing_time_ms =
+                (self.stats.avg_processing_time_ms + processing_time as f64) / 2.0;
             self.stats.last_message = Some(Utc::now());
-            
-            debug!("Memory consumer: consumed event {}/{}", self.current_index, events.len());
+
+            debug!(
+                "Memory consumer: consumed event {}/{}",
+                self.current_index,
+                events.len()
+            );
             Ok(Some(event_clone))
         } else {
             Ok(None)
         }
     }
-    
+
     fn get_stats(&self) -> &ConsumerStats {
         &self.stats
     }
-    
+
     /// Reset consumer position for testing
     fn reset(&mut self) {
         self.current_index = 0;
@@ -1024,9 +1032,12 @@ impl StreamConsumer {
     pub async fn new(config: StreamConfig) -> Result<Self> {
         Self::new_with_group(config, None).await
     }
-    
+
     /// Create a new stream consumer with a specific consumer group
-    pub async fn new_with_group(config: StreamConfig, consumer_group: Option<String>) -> Result<Self> {
+    pub async fn new_with_group(
+        config: StreamConfig,
+        consumer_group: Option<String>,
+    ) -> Result<Self> {
         // Initialize circuit breaker if enabled
         let circuit_breaker = if config.circuit_breaker.enabled {
             Some(circuit_breaker::new_shared_circuit_breaker(
@@ -1037,16 +1048,20 @@ impl StreamConsumer {
                     timeout: config.circuit_breaker.timeout,
                     half_open_max_calls: config.circuit_breaker.half_open_max_calls,
                     ..Default::default()
-                }
+                },
             ))
         } else {
             None
         };
-        
+
         // Initialize backend-specific consumer
         let backend_consumer = match &config.backend {
             #[cfg(feature = "redis")]
-            StreamBackend::Redis { url, cluster_urls, pool_size } => {
+            StreamBackend::Redis {
+                url,
+                cluster_urls,
+                pool_size,
+            } => {
                 let stream_config = crate::StreamConfig {
                     backend: crate::StreamBackend::Redis {
                         url: url.clone(),
@@ -1066,13 +1081,17 @@ impl StreamConsumer {
                     performance: config.performance.clone(),
                     monitoring: config.monitoring.clone(),
                 };
-                
+
                 let mut consumer = redis::RedisConsumer::new(stream_config)?;
                 consumer.connect().await?;
                 BackendConsumer::Redis(consumer)
-            },
+            }
             #[cfg(feature = "kinesis")]
-            StreamBackend::Kinesis { region, stream_name, credentials } => {
+            StreamBackend::Kinesis {
+                region,
+                stream_name,
+                credentials,
+            } => {
                 let stream_config = crate::StreamConfig {
                     backend: crate::StreamBackend::Kinesis {
                         region: region.clone(),
@@ -1092,13 +1111,16 @@ impl StreamConsumer {
                     performance: config.performance.clone(),
                     monitoring: config.monitoring.clone(),
                 };
-                
+
                 let mut consumer = kinesis::KinesisConsumer::new(stream_config)?;
                 consumer.connect().await?;
                 BackendConsumer::Kinesis(consumer)
-            },
+            }
             #[cfg(feature = "pulsar")]
-            StreamBackend::Pulsar { service_url, auth_config } => {
+            StreamBackend::Pulsar {
+                service_url,
+                auth_config,
+            } => {
                 let stream_config = crate::StreamConfig {
                     backend: crate::StreamBackend::Pulsar {
                         service_url: service_url.clone(),
@@ -1117,19 +1139,20 @@ impl StreamConsumer {
                     performance: config.performance.clone(),
                     monitoring: config.monitoring.clone(),
                 };
-                
+
                 let mut consumer = pulsar::PulsarConsumer::new(stream_config)?;
                 consumer.connect().await?;
                 BackendConsumer::Pulsar(consumer)
-            },
-            StreamBackend::Memory { max_size: _, persistence: _ } => {
-                BackendConsumer::Memory(MemoryConsumer::new())
-            },
+            }
+            StreamBackend::Memory {
+                max_size: _,
+                persistence: _,
+            } => BackendConsumer::Memory(MemoryConsumer::new()),
             _ => {
                 return Err(anyhow!("Backend not supported or feature not enabled"));
             }
         };
-        
+
         let stats = Arc::new(RwLock::new(ConsumerStats {
             backend_type: match backend_consumer {
                 #[cfg(feature = "redis")]
@@ -1143,10 +1166,13 @@ impl StreamConsumer {
             batch_size: config.batch_size,
             ..Default::default()
         }));
-        
-        info!("Created stream consumer with backend: {} and group: {:?}", 
-              stats.read().await.backend_type, consumer_group);
-        
+
+        info!(
+            "Created stream consumer with backend: {} and group: {:?}",
+            stats.read().await.backend_type,
+            consumer_group
+        );
+
         Ok(Self {
             config,
             backend_consumer,
@@ -1157,11 +1183,11 @@ impl StreamConsumer {
             consumer_group,
         })
     }
-    
+
     /// Consume stream events with circuit breaker protection
     pub async fn consume(&mut self) -> Result<Option<StreamEvent>> {
         let start_time = Instant::now();
-        
+
         // Check circuit breaker if enabled
         if let Some(cb) = &self.circuit_breaker {
             if !cb.can_execute().await {
@@ -1169,22 +1195,23 @@ impl StreamConsumer {
                 return Err(anyhow!("Circuit breaker is open - cannot consume events"));
             }
         }
-        
+
         // Consume from backend
         let result = self.consume_single_event().await;
-        
+
         // Update circuit breaker and stats
         match &result {
             Ok(Some(_)) => {
                 if let Some(cb) = &self.circuit_breaker {
                     cb.record_success_with_duration(start_time.elapsed()).await;
                 }
-                
+
                 let mut stats = self.stats.write().await;
                 stats.events_consumed += 1;
                 let processing_time = start_time.elapsed().as_millis() as u64;
                 stats.max_processing_time_ms = stats.max_processing_time_ms.max(processing_time);
-                stats.avg_processing_time_ms = (stats.avg_processing_time_ms + processing_time as f64) / 2.0;
+                stats.avg_processing_time_ms =
+                    (stats.avg_processing_time_ms + processing_time as f64) / 2.0;
                 stats.last_message = Some(Utc::now());
             }
             Ok(None) => {
@@ -1195,45 +1222,40 @@ impl StreamConsumer {
             }
             Err(_) => {
                 if let Some(cb) = &self.circuit_breaker {
-                    cb.record_failure_with_type(
-                        circuit_breaker::FailureType::NetworkError
-                    ).await;
+                    cb.record_failure_with_type(circuit_breaker::FailureType::NetworkError)
+                        .await;
                 }
-                
+
                 self.stats.write().await.events_failed += 1;
             }
         }
-        
+
         self.last_poll = Instant::now();
         result
     }
-    
+
     /// Consume a single event from the backend
     async fn consume_single_event(&mut self) -> Result<Option<StreamEvent>> {
         match &mut self.backend_consumer {
             #[cfg(feature = "redis")]
-            BackendConsumer::Redis(consumer) => {
-                consumer.consume().await
-            },
+            BackendConsumer::Redis(consumer) => consumer.consume().await,
             #[cfg(feature = "kinesis")]
-            BackendConsumer::Kinesis(consumer) => {
-                consumer.consume().await
-            },
+            BackendConsumer::Kinesis(consumer) => consumer.consume().await,
             #[cfg(feature = "pulsar")]
-            BackendConsumer::Pulsar(consumer) => {
-                consumer.consume().await
-            },
-            BackendConsumer::Memory(consumer) => {
-                consumer.consume().await
-            },
+            BackendConsumer::Pulsar(consumer) => consumer.consume().await,
+            BackendConsumer::Memory(consumer) => consumer.consume().await,
         }
     }
-    
+
     /// Consume multiple events as a batch
-    pub async fn consume_batch(&mut self, max_events: usize, timeout: Duration) -> Result<Vec<StreamEvent>> {
+    pub async fn consume_batch(
+        &mut self,
+        max_events: usize,
+        timeout: Duration,
+    ) -> Result<Vec<StreamEvent>> {
         let mut events = Vec::new();
         let start_time = Instant::now();
-        
+
         while events.len() < max_events && start_time.elapsed() < timeout {
             match tokio::time::timeout(Duration::from_millis(50), self.consume()).await {
                 Ok(Ok(Some(event))) => events.push(event),
@@ -1242,21 +1264,25 @@ impl StreamConsumer {
                 Err(_) => break, // Timeout
             }
         }
-        
+
         if !events.is_empty() {
-            debug!("Consumed batch of {} events in {:?}", events.len(), start_time.elapsed());
+            debug!(
+                "Consumed batch of {} events in {:?}",
+                events.len(),
+                start_time.elapsed()
+            );
         }
-        
+
         Ok(events)
     }
-    
+
     /// Start consuming events with a callback function
     pub async fn start_consuming<F>(&mut self, mut callback: F) -> Result<()>
     where
         F: FnMut(StreamEvent) -> Result<()> + Send,
     {
         info!("Starting stream consumer loop");
-        
+
         loop {
             match self.consume().await {
                 Ok(Some(event)) => {
@@ -1276,7 +1302,7 @@ impl StreamConsumer {
             }
         }
     }
-    
+
     /// Start consuming events with an async callback function
     pub async fn start_consuming_async<F, Fut>(&mut self, mut callback: F) -> Result<()>
     where
@@ -1284,7 +1310,7 @@ impl StreamConsumer {
         Fut: std::future::Future<Output = Result<()>> + Send,
     {
         info!("Starting async stream consumer loop");
-        
+
         loop {
             match self.consume().await {
                 Ok(Some(event)) => {
@@ -1304,12 +1330,12 @@ impl StreamConsumer {
             }
         }
     }
-    
+
     /// Get consumer statistics
     pub async fn get_stats(&self) -> ConsumerStats {
         self.stats.read().await.clone()
     }
-    
+
     /// Get consumer health status
     pub async fn health_check(&self) -> bool {
         if let Some(cb) = &self.circuit_breaker {
@@ -1318,26 +1344,26 @@ impl StreamConsumer {
             true
         }
     }
-    
+
     /// Get the consumer group name if any
     pub fn consumer_group(&self) -> Option<&String> {
         self.consumer_group.as_ref()
     }
-    
+
     /// Reset consumer position (for testing with memory backend)
     pub async fn reset_position(&mut self) -> Result<()> {
         match &mut self.backend_consumer {
             BackendConsumer::Memory(consumer) => {
                 consumer.reset();
                 Ok(())
-            },
+            }
             _ => {
                 warn!("Reset position not supported for this backend");
                 Ok(())
             }
         }
     }
-    
+
     /// Set test events for memory backend (for testing)
     pub async fn set_test_events(&mut self, events: Vec<StreamEvent>) -> Result<()> {
         match &mut self.backend_consumer {
@@ -1348,10 +1374,8 @@ impl StreamConsumer {
                     .collect();
                 consumer.set_events(timestamped_events).await;
                 Ok(())
-            },
-            _ => {
-                Err(anyhow!("Set test events only supported for memory backend"))
             }
+            _ => Err(anyhow!("Set test events only supported for memory backend")),
         }
     }
 }
@@ -1359,10 +1383,22 @@ impl StreamConsumer {
 /// RDF patch operations
 #[derive(Debug, Clone)]
 pub enum PatchOperation {
-    Add { subject: String, predicate: String, object: String },
-    Delete { subject: String, predicate: String, object: String },
-    AddGraph { graph: String },
-    DeleteGraph { graph: String },
+    Add {
+        subject: String,
+        predicate: String,
+        object: String,
+    },
+    Delete {
+        subject: String,
+        predicate: String,
+        object: String,
+    },
+    AddGraph {
+        graph: String,
+    },
+    DeleteGraph {
+        graph: String,
+    },
 }
 
 /// RDF patch for atomic updates
@@ -1382,18 +1418,18 @@ impl RdfPatch {
             id: uuid::Uuid::new_v4().to_string(),
         }
     }
-    
+
     /// Add an operation to the patch
     pub fn add_operation(&mut self, operation: PatchOperation) {
         self.operations.push(operation);
     }
-    
+
     /// Serialize patch to RDF Patch format
     pub fn to_rdf_patch_format(&self) -> Result<String> {
         // TODO: Implement RDF Patch serialization
         Ok(String::new())
     }
-    
+
     /// Parse from RDF Patch format
     pub fn from_rdf_patch_format(_input: &str) -> Result<Self> {
         // TODO: Implement RDF Patch parsing
@@ -1411,9 +1447,9 @@ impl Default for RdfPatch {
 impl Default for StreamConfig {
     fn default() -> Self {
         Self {
-            backend: StreamBackend::Memory { 
-                max_size: Some(10000), 
-                persistence: false 
+            backend: StreamBackend::Memory {
+                max_size: Some(10000),
+                persistence: false,
             },
             topic: "oxirs-stream".to_string(),
             batch_size: 100,
@@ -1509,7 +1545,7 @@ impl StreamConfig {
             ..Default::default()
         }
     }
-    
+
     /// Create a Kinesis configuration
     #[cfg(feature = "kinesis")]
     pub fn kinesis(region: String, stream_name: String) -> Self {
@@ -1522,7 +1558,7 @@ impl StreamConfig {
             ..Default::default()
         }
     }
-    
+
     /// Create a memory configuration for testing
     pub fn memory() -> Self {
         Self {
@@ -1533,7 +1569,7 @@ impl StreamConfig {
             ..Default::default()
         }
     }
-    
+
     /// Enable high-performance configuration
     pub fn high_performance(mut self) -> Self {
         self.performance.enable_batching = true;
@@ -1545,14 +1581,14 @@ impl StreamConfig {
         self.flush_interval_ms = 10;
         self
     }
-    
+
     /// Enable compression
     pub fn with_compression(mut self, compression_type: CompressionType) -> Self {
         self.enable_compression = true;
         self.compression_type = compression_type;
         self
     }
-    
+
     /// Configure circuit breaker
     pub fn with_circuit_breaker(mut self, enabled: bool, failure_threshold: u32) -> Self {
         self.circuit_breaker.enabled = enabled;

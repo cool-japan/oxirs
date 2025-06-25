@@ -4,16 +4,15 @@
 //! including merging, deduplication, sorting, and error handling.
 
 use anyhow::{anyhow, Result};
+use oxirs_core::{BlankNode, Literal, NamedNode, Term};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use tracing::{debug, info, warn};
-use oxirs_core::{Term, NamedNode, Literal, BlankNode};
 
 use crate::{
-    FederatedResult, QueryResult, ExecutionMetadata, FederationError,
-    StepResult, QueryResultData, SparqlResults, GraphQLResponse,
-    SparqlBinding, SparqlValue, ExecutionStatus
+    ExecutionMetadata, ExecutionStatus, FederatedResult, FederationError, GraphQLResponse,
+    QueryResult, QueryResultData, SparqlBinding, SparqlResults, SparqlValue, StepResult,
 };
 
 /// Result integrator for federated queries
@@ -36,7 +35,10 @@ impl ResultIntegrator {
     }
 
     /// Integrate SPARQL query results from multiple services
-    pub async fn integrate_sparql_results(&self, step_results: Vec<StepResult>) -> Result<FederatedResult> {
+    pub async fn integrate_sparql_results(
+        &self,
+        step_results: Vec<StepResult>,
+    ) -> Result<FederatedResult> {
         info!("Integrating {} SPARQL result steps", step_results.len());
 
         let start_time = std::time::Instant::now();
@@ -68,7 +70,10 @@ impl ResultIntegrator {
                 }
                 ExecutionStatus::Failed => {
                     let error = FederationError::ServiceUnavailable {
-                        service_id: step_result.service_id.clone().unwrap_or("unknown".to_string()),
+                        service_id: step_result
+                            .service_id
+                            .clone()
+                            .unwrap_or("unknown".to_string()),
                     };
                     errors.push(error);
                 }
@@ -80,7 +85,10 @@ impl ResultIntegrator {
                 }
                 ExecutionStatus::Cancelled => {
                     let error = FederationError::ServiceUnavailable {
-                        service_id: step_result.service_id.clone().unwrap_or("cancelled".to_string()),
+                        service_id: step_result
+                            .service_id
+                            .clone()
+                            .unwrap_or("cancelled".to_string()),
                     };
                     errors.push(error);
                 }
@@ -145,7 +153,10 @@ impl ResultIntegrator {
     }
 
     /// Integrate GraphQL query results from multiple services
-    pub async fn integrate_graphql_results(&self, step_results: Vec<StepResult>) -> Result<FederatedResult> {
+    pub async fn integrate_graphql_results(
+        &self,
+        step_results: Vec<StepResult>,
+    ) -> Result<FederatedResult> {
         info!("Integrating {} GraphQL result steps", step_results.len());
 
         let start_time = std::time::Instant::now();
@@ -182,7 +193,7 @@ impl ResultIntegrator {
                                             // Attempt to merge values
                                             if let Some(merged_value) = self.merge_graphql_values(
                                                 merged_data.get(key).unwrap(),
-                                                value
+                                                value,
                                             ) {
                                                 merged_data.insert(key.clone(), merged_value);
                                             } else {
@@ -192,9 +203,14 @@ impl ResultIntegrator {
                                             }
                                         }
                                         ConflictResolution::Error => {
-                                            federation_errors.push(FederationError::SchemaConflict {
-                                                conflict: format!("Field '{}' exists in multiple services", key),
-                                            });
+                                            federation_errors.push(
+                                                FederationError::SchemaConflict {
+                                                    conflict: format!(
+                                                        "Field '{}' exists in multiple services",
+                                                        key
+                                                    ),
+                                                },
+                                            );
                                         }
                                     }
                                 } else {
@@ -209,7 +225,10 @@ impl ResultIntegrator {
                 }
                 ExecutionStatus::Failed => {
                     federation_errors.push(FederationError::ServiceUnavailable {
-                        service_id: step_result.service_id.clone().unwrap_or("unknown".to_string()),
+                        service_id: step_result
+                            .service_id
+                            .clone()
+                            .unwrap_or("unknown".to_string()),
                     });
                 }
                 ExecutionStatus::Timeout => {
@@ -219,7 +238,10 @@ impl ResultIntegrator {
                 }
                 ExecutionStatus::Cancelled => {
                     federation_errors.push(FederationError::ServiceUnavailable {
-                        service_id: step_result.service_id.clone().unwrap_or("cancelled".to_string()),
+                        service_id: step_result
+                            .service_id
+                            .clone()
+                            .unwrap_or("cancelled".to_string()),
                     });
                 }
             }
@@ -263,21 +285,27 @@ impl ResultIntegrator {
             }
         }
 
-        debug!("Deduplicated {} bindings to {}", seen.len() + deduplicated.len() - seen.len(), deduplicated.len());
+        debug!(
+            "Deduplicated {} bindings to {}",
+            seen.len() + deduplicated.len() - seen.len(),
+            deduplicated.len()
+        );
         deduplicated
     }
 
     /// Sort SPARQL bindings according to configuration
-    fn sort_sparql_bindings(&self, mut bindings: Vec<SparqlBinding>, sort_config: &SortConfig) -> Result<Vec<SparqlBinding>> {
+    fn sort_sparql_bindings(
+        &self,
+        mut bindings: Vec<SparqlBinding>,
+        sort_config: &SortConfig,
+    ) -> Result<Vec<SparqlBinding>> {
         bindings.sort_by(|a, b| {
             for sort_key in &sort_config.sort_keys {
                 let a_value = a.get(&sort_key.variable);
                 let b_value = b.get(&sort_key.variable);
 
                 let ordering = match (a_value, b_value) {
-                    (Some(a_val), Some(b_val)) => {
-                        self.compare_sparql_values(a_val, b_val)
-                    }
+                    (Some(a_val), Some(b_val)) => self.compare_sparql_values(a_val, b_val),
                     (Some(_), None) => std::cmp::Ordering::Greater,
                     (None, Some(_)) => std::cmp::Ordering::Less,
                     (None, None) => std::cmp::Ordering::Equal,
@@ -302,7 +330,9 @@ impl ResultIntegrator {
     /// Compare two SPARQL values for sorting
     fn compare_sparql_values(&self, a: &SparqlValue, b: &SparqlValue) -> std::cmp::Ordering {
         // First compare by type
-        let type_order = self.get_type_order(&a.value_type).cmp(&self.get_type_order(&b.value_type));
+        let type_order = self
+            .get_type_order(&a.value_type)
+            .cmp(&self.get_type_order(&b.value_type));
         if type_order != std::cmp::Ordering::Equal {
             return type_order;
         }
@@ -329,19 +359,21 @@ impl ResultIntegrator {
     fn compare_typed_literals(&self, a: &SparqlValue, b: &SparqlValue) -> std::cmp::Ordering {
         if let Some(datatype) = &a.datatype {
             match datatype.as_str() {
-                "http://www.w3.org/2001/XMLSchema#integer" |
-                "http://www.w3.org/2001/XMLSchema#int" |
-                "http://www.w3.org/2001/XMLSchema#long" => {
+                "http://www.w3.org/2001/XMLSchema#integer"
+                | "http://www.w3.org/2001/XMLSchema#int"
+                | "http://www.w3.org/2001/XMLSchema#long" => {
                     match (a.value.parse::<i64>(), b.value.parse::<i64>()) {
                         (Ok(a_int), Ok(b_int)) => a_int.cmp(&b_int),
                         _ => a.value.cmp(&b.value),
                     }
                 }
-                "http://www.w3.org/2001/XMLSchema#decimal" |
-                "http://www.w3.org/2001/XMLSchema#double" |
-                "http://www.w3.org/2001/XMLSchema#float" => {
+                "http://www.w3.org/2001/XMLSchema#decimal"
+                | "http://www.w3.org/2001/XMLSchema#double"
+                | "http://www.w3.org/2001/XMLSchema#float" => {
                     match (a.value.parse::<f64>(), b.value.parse::<f64>()) {
-                        (Ok(a_float), Ok(b_float)) => a_float.partial_cmp(&b_float).unwrap_or(std::cmp::Ordering::Equal),
+                        (Ok(a_float), Ok(b_float)) => a_float
+                            .partial_cmp(&b_float)
+                            .unwrap_or(std::cmp::Ordering::Equal),
                         _ => a.value.cmp(&b.value),
                     }
                 }
@@ -370,15 +402,26 @@ impl ResultIntegrator {
     fn create_binding_hash(&self, binding: &SparqlBinding) -> String {
         let mut pairs: Vec<_> = binding.iter().collect();
         pairs.sort_by_key(|(var, _)| *var);
-        
-        pairs.into_iter()
-            .map(|(var, value)| format!("{}:{}", var, serde_json::to_string(value).unwrap_or_default()))
+
+        pairs
+            .into_iter()
+            .map(|(var, value)| {
+                format!(
+                    "{}:{}",
+                    var,
+                    serde_json::to_string(value).unwrap_or_default()
+                )
+            })
             .collect::<Vec<_>>()
             .join("|")
     }
 
     /// Merge two GraphQL values
-    fn merge_graphql_values(&self, a: &serde_json::Value, b: &serde_json::Value) -> Option<serde_json::Value> {
+    fn merge_graphql_values(
+        &self,
+        a: &serde_json::Value,
+        b: &serde_json::Value,
+    ) -> Option<serde_json::Value> {
         match (a, b) {
             (serde_json::Value::Object(a_obj), serde_json::Value::Object(b_obj)) => {
                 let mut merged = a_obj.clone();
@@ -408,7 +451,10 @@ impl ResultIntegrator {
     }
 
     /// Convert SPARQL binding to oxirs-core Terms
-    fn convert_sparql_binding_to_terms(&self, binding: SparqlBinding) -> Result<HashMap<String, Term>> {
+    fn convert_sparql_binding_to_terms(
+        &self,
+        binding: SparqlBinding,
+    ) -> Result<HashMap<String, Term>> {
         let mut term_binding = HashMap::new();
 
         for (var, sparql_value) in binding {
@@ -420,8 +466,9 @@ impl ResultIntegrator {
                 }
                 "literal" => {
                     if let Some(datatype_str) = sparql_value.datatype {
-                        let datatype = NamedNode::new(&datatype_str)
-                            .map_err(|e| anyhow!("Invalid datatype IRI '{}': {}", datatype_str, e))?;
+                        let datatype = NamedNode::new(&datatype_str).map_err(|e| {
+                            anyhow!("Invalid datatype IRI '{}': {}", datatype_str, e)
+                        })?;
                         Term::Literal(Literal::new_typed(&sparql_value.value, datatype))
                     } else if let Some(lang) = sparql_value.lang {
                         Term::Literal(Literal::new_lang(&sparql_value.value, &lang)?)
@@ -429,11 +476,12 @@ impl ResultIntegrator {
                         Term::Literal(Literal::new(&sparql_value.value))
                     }
                 }
-                "bnode" => {
-                    Term::BlankNode(BlankNode::new(&sparql_value.value)?)
-                }
+                "bnode" => Term::BlankNode(BlankNode::new(&sparql_value.value)?),
                 _ => {
-                    return Err(anyhow!("Unknown SPARQL value type: {}", sparql_value.value_type));
+                    return Err(anyhow!(
+                        "Unknown SPARQL value type: {}",
+                        sparql_value.value_type
+                    ));
                 }
             };
 
@@ -498,7 +546,10 @@ pub enum ConflictResolution {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{StepResult, StepType, QueryResultData, executor::{SparqlResults, SparqlHead, SparqlResultSet}};
+    use crate::{
+        executor::{SparqlHead, SparqlResultSet, SparqlResults},
+        QueryResultData, StepResult, StepType,
+    };
     use std::time::Duration;
 
     #[tokio::test]
@@ -512,7 +563,9 @@ mod tests {
         let integrator = ResultIntegrator::new();
 
         let sparql_result = SparqlResults {
-            head: SparqlHead { vars: vec!["s".to_string()] },
+            head: SparqlHead {
+                vars: vec!["s".to_string()],
+            },
             results: SparqlResultSet { bindings: vec![] },
         };
 
@@ -554,7 +607,9 @@ mod tests {
             service_id: Some("test-service".to_string()),
         };
 
-        let result = integrator.integrate_graphql_results(vec![step_result]).await;
+        let result = integrator
+            .integrate_graphql_results(vec![step_result])
+            .await;
         assert!(result.is_ok());
 
         let federated_result = result.unwrap();
@@ -565,12 +620,15 @@ mod tests {
     fn test_binding_hash() {
         let integrator = ResultIntegrator::new();
         let mut binding = HashMap::new();
-        binding.insert("x".to_string(), SparqlValue {
-            value_type: "uri".to_string(),
-            value: "http://example.org".to_string(),
-            datatype: None,
-            lang: None,
-        });
+        binding.insert(
+            "x".to_string(),
+            SparqlValue {
+                value_type: "uri".to_string(),
+                value: "http://example.org".to_string(),
+                datatype: None,
+                lang: None,
+            },
+        );
 
         let hash = integrator.create_binding_hash(&binding);
         assert!(!hash.is_empty());
@@ -579,16 +637,16 @@ mod tests {
     #[test]
     fn test_conflict_resolution() {
         let integrator = ResultIntegrator::new();
-        
+
         let a = serde_json::json!({"field": "value1"});
         let b = serde_json::json!({"field": "value2"});
-        
+
         let result = integrator.merge_graphql_values(&a, &b);
         assert!(result.is_none()); // Cannot merge conflicting primitives
-        
+
         let a_obj = serde_json::json!({"field1": "value1"});
         let b_obj = serde_json::json!({"field2": "value2"});
-        
+
         let merged = integrator.merge_graphql_values(&a_obj, &b_obj);
         assert!(merged.is_some());
     }

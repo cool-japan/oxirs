@@ -3,8 +3,11 @@
 //! This module provides comprehensive validation for GraphQL queries, including
 //! security features like depth limiting, complexity analysis, and schema validation.
 
-use crate::ast::{Document, Definition, OperationDefinition, Selection, SelectionSet, Field, Value, VariableDefinition};
-use crate::types::{Schema, GraphQLType};
+use crate::ast::{
+    Definition, Document, Field, OperationDefinition, Selection, SelectionSet, Value,
+    VariableDefinition,
+};
+use crate::types::{GraphQLType, Schema};
 use anyhow::{anyhow, Result};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
@@ -216,18 +219,21 @@ impl QueryValidator {
 
         // Get root type based on operation type
         let root_type_name = match operation.operation_type {
-            crate::ast::OperationType::Query => {
-                self.schema.query_type.as_ref()
-                    .ok_or_else(|| anyhow!("Schema has no query type"))?
-            }
-            crate::ast::OperationType::Mutation => {
-                self.schema.mutation_type.as_ref()
-                    .ok_or_else(|| anyhow!("Schema has no mutation type"))?
-            }
-            crate::ast::OperationType::Subscription => {
-                self.schema.subscription_type.as_ref()
-                    .ok_or_else(|| anyhow!("Schema has no subscription type"))?
-            }
+            crate::ast::OperationType::Query => self
+                .schema
+                .query_type
+                .as_ref()
+                .ok_or_else(|| anyhow!("Schema has no query type"))?,
+            crate::ast::OperationType::Mutation => self
+                .schema
+                .mutation_type
+                .as_ref()
+                .ok_or_else(|| anyhow!("Schema has no mutation type"))?,
+            crate::ast::OperationType::Subscription => self
+                .schema
+                .subscription_type
+                .as_ref()
+                .ok_or_else(|| anyhow!("Schema has no subscription type"))?,
         };
 
         // Validate selection set
@@ -246,7 +252,10 @@ impl QueryValidator {
         if result.depth > self.config.max_depth {
             let current_depth = result.depth;
             result = result.with_error(ValidationError::new(
-                format!("Query depth {} exceeds maximum allowed depth {}", current_depth, self.config.max_depth),
+                format!(
+                    "Query depth {} exceeds maximum allowed depth {}",
+                    current_depth, self.config.max_depth
+                ),
                 ValidationRule::MaxDepth,
             ));
         }
@@ -255,7 +264,10 @@ impl QueryValidator {
         if result.complexity_score > self.config.max_complexity {
             let current_complexity = result.complexity_score;
             result = result.with_error(ValidationError::new(
-                format!("Query complexity {} exceeds maximum allowed complexity {}", current_complexity, self.config.max_complexity),
+                format!(
+                    "Query complexity {} exceeds maximum allowed complexity {}",
+                    current_complexity, self.config.max_complexity
+                ),
                 ValidationRule::MaxComplexity,
             ));
         }
@@ -275,7 +287,9 @@ impl QueryValidator {
         let mut total_complexity = 0;
         let mut alias_count = 0;
 
-        let parent_type = self.schema.get_type(parent_type_name)
+        let parent_type = self
+            .schema
+            .get_type(parent_type_name)
             .ok_or_else(|| anyhow!("Type '{}' not found in schema", parent_type_name))?;
 
         for selection in &selection_set.selections {
@@ -321,12 +335,13 @@ impl QueryValidator {
                     }
                 }
                 Selection::InlineFragment(inline_fragment) => {
-                    let fragment_type = if let Some(ref type_condition) = inline_fragment.type_condition {
-                        type_condition
-                    } else {
-                        parent_type_name
-                    };
-                    
+                    let fragment_type =
+                        if let Some(ref type_condition) = inline_fragment.type_condition {
+                            type_condition
+                        } else {
+                            parent_type_name
+                        };
+
                     let (nested_depth, nested_complexity) = self.validate_selection_set(
                         &inline_fragment.selection_set,
                         fragment_type,
@@ -338,7 +353,8 @@ impl QueryValidator {
                     total_complexity += nested_complexity;
                 }
                 Selection::FragmentSpread(fragment_spread) => {
-                    if let Some(fragment_def) = context.get_fragment(&fragment_spread.fragment_name) {
+                    if let Some(fragment_def) = context.get_fragment(&fragment_spread.fragment_name)
+                    {
                         let (nested_depth, nested_complexity) = self.validate_selection_set(
                             &fragment_def.selection_set,
                             &fragment_def.type_condition,
@@ -349,7 +365,10 @@ impl QueryValidator {
                         max_depth = max_depth.max(nested_depth);
                         total_complexity += nested_complexity;
                     } else {
-                        return Err(anyhow!("Fragment '{}' not found", fragment_spread.fragment_name));
+                        return Err(anyhow!(
+                            "Fragment '{}' not found",
+                            fragment_spread.fragment_name
+                        ));
                     }
                 }
             }
@@ -357,7 +376,11 @@ impl QueryValidator {
 
         // Check alias limit
         if alias_count > self.config.max_aliases {
-            return Err(anyhow!("Too many aliases: {} exceeds limit {}", alias_count, self.config.max_aliases));
+            return Err(anyhow!(
+                "Too many aliases: {} exceeds limit {}",
+                alias_count,
+                self.config.max_aliases
+            ));
         }
 
         Ok((max_depth, total_complexity))
@@ -373,7 +396,10 @@ impl QueryValidator {
             // Validate variable type exists in schema
             if !self.type_exists(&var_def.type_) {
                 result = result.with_error(ValidationError::new(
-                    format!("Variable type '{}' not found in schema", var_def.type_.name()),
+                    format!(
+                        "Variable type '{}' not found in schema",
+                        var_def.type_.name()
+                    ),
                     ValidationRule::VariableValidation,
                 ));
             }
@@ -382,8 +408,11 @@ impl QueryValidator {
             if let Some(ref default_value) = var_def.default_value {
                 if !self.is_value_compatible_with_type(default_value, &var_def.type_) {
                     result = result.with_error(ValidationError::new(
-                        format!("Default value for variable '{}' is not compatible with type '{}'", 
-                               var_def.variable.name, var_def.type_.name()),
+                        format!(
+                            "Default value for variable '{}' is not compatible with type '{}'",
+                            var_def.variable.name,
+                            var_def.type_.name()
+                        ),
                         ValidationRule::VariableValidation,
                     ));
                 }
@@ -400,8 +429,11 @@ impl QueryValidator {
     ) -> Result<ValidationResult> {
         if context.fragments.len() > self.config.max_fragments {
             result = result.with_error(ValidationError::new(
-                format!("Too many fragments: {} exceeds limit {}", 
-                       context.fragments.len(), self.config.max_fragments),
+                format!(
+                    "Too many fragments: {} exceeds limit {}",
+                    context.fragments.len(),
+                    self.config.max_fragments
+                ),
                 ValidationRule::MaxFragments,
             ));
         }
@@ -410,8 +442,10 @@ impl QueryValidator {
         for (fragment_name, fragment) in &context.fragments {
             if !self.schema.types.contains_key(&fragment.type_condition) {
                 result = result.with_error(ValidationError::new(
-                    format!("Fragment '{}' has unknown type condition '{}'", 
-                           fragment_name, fragment.type_condition),
+                    format!(
+                        "Fragment '{}' has unknown type condition '{}'",
+                        fragment_name, fragment.type_condition
+                    ),
                     ValidationRule::FragmentValidation,
                 ));
             }
@@ -435,8 +469,10 @@ impl QueryValidator {
 
         if root_field_count > self.config.max_root_fields {
             result = result.with_error(ValidationError::new(
-                format!("Too many root fields: {} exceeds limit {}", 
-                       root_field_count, self.config.max_root_fields),
+                format!(
+                    "Too many root fields: {} exceeds limit {}",
+                    root_field_count, self.config.max_root_fields
+                ),
                 ValidationRule::MaxRootFields,
             ));
         }
@@ -444,19 +480,38 @@ impl QueryValidator {
         Ok(result)
     }
 
-    fn get_field_type<'a>(&self, parent_type: &'a GraphQLType, field_name: &str) -> Result<&'a GraphQLType> {
+    fn get_field_type<'a>(
+        &self,
+        parent_type: &'a GraphQLType,
+        field_name: &str,
+    ) -> Result<&'a GraphQLType> {
         match parent_type {
-            GraphQLType::Object(obj) => {
-                obj.fields.get(field_name)
-                    .map(|field| &field.field_type)
-                    .ok_or_else(|| anyhow!("Field '{}' not found on object type '{}'", field_name, obj.name))
-            }
-            GraphQLType::Interface(iface) => {
-                iface.fields.get(field_name)
-                    .map(|field| &field.field_type)
-                    .ok_or_else(|| anyhow!("Field '{}' not found on interface type '{}'", field_name, iface.name))
-            }
-            _ => Err(anyhow!("Cannot select field '{}' on non-composite type", field_name)),
+            GraphQLType::Object(obj) => obj
+                .fields
+                .get(field_name)
+                .map(|field| &field.field_type)
+                .ok_or_else(|| {
+                    anyhow!(
+                        "Field '{}' not found on object type '{}'",
+                        field_name,
+                        obj.name
+                    )
+                }),
+            GraphQLType::Interface(iface) => iface
+                .fields
+                .get(field_name)
+                .map(|field| &field.field_type)
+                .ok_or_else(|| {
+                    anyhow!(
+                        "Field '{}' not found on interface type '{}'",
+                        field_name,
+                        iface.name
+                    )
+                }),
+            _ => Err(anyhow!(
+                "Cannot select field '{}' on non-composite type",
+                field_name
+            )),
         }
     }
 
@@ -497,8 +552,8 @@ impl QueryValidator {
     fn type_exists(&self, ast_type: &crate::ast::Type) -> bool {
         match ast_type {
             crate::ast::Type::NamedType(name) => {
-                self.schema.types.contains_key(name) || 
-                matches!(name.as_str(), "String" | "Int" | "Float" | "Boolean" | "ID")
+                self.schema.types.contains_key(name)
+                    || matches!(name.as_str(), "String" | "Int" | "Float" | "Boolean" | "ID")
             }
             crate::ast::Type::ListType(inner) => self.type_exists(inner),
             crate::ast::Type::NonNullType(inner) => self.type_exists(inner),
@@ -521,9 +576,9 @@ impl QueryValidator {
             (Value::BooleanValue(_), crate::ast::Type::NamedType(name)) => {
                 matches!(name.as_str(), "Boolean")
             }
-            (Value::ListValue(list), crate::ast::Type::ListType(inner_type)) => {
-                list.iter().all(|item| self.is_value_compatible_with_type(item, inner_type))
-            }
+            (Value::ListValue(list), crate::ast::Type::ListType(inner_type)) => list
+                .iter()
+                .all(|item| self.is_value_compatible_with_type(item, inner_type)),
             (_, crate::ast::Type::NonNullType(inner)) => {
                 self.is_value_compatible_with_type(value, inner)
             }
@@ -579,11 +634,11 @@ impl Default for RateLimitConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{BuiltinScalars, ObjectType, FieldType};
+    use crate::types::{BuiltinScalars, FieldType, ObjectType};
 
     fn create_test_schema() -> Schema {
         let mut schema = Schema::new();
-        
+
         let query_type = ObjectType::new("Query".to_string())
             .with_field(
                 "hello".to_string(),
@@ -599,10 +654,10 @@ mod tests {
                     GraphQLType::Scalar(BuiltinScalars::string()),
                 ),
             );
-        
+
         schema.add_type(GraphQLType::Object(query_type));
         schema.set_query_type("Query".to_string());
-        
+
         schema
     }
 
@@ -617,7 +672,10 @@ mod tests {
     #[test]
     fn test_validation_result_creation() {
         let result = ValidationResult::new()
-            .with_error(ValidationError::new("Test error".to_string(), ValidationRule::MaxDepth))
+            .with_error(ValidationError::new(
+                "Test error".to_string(),
+                ValidationRule::MaxDepth,
+            ))
             .with_warning(ValidationWarning::new("Test warning".to_string()))
             .with_complexity(100)
             .with_depth(5);
@@ -642,7 +700,11 @@ mod tests {
     #[test]
     fn test_validation_error_with_path() {
         let error = ValidationError::new("Test error".to_string(), ValidationRule::FieldValidation)
-            .with_path(vec!["query".to_string(), "user".to_string(), "name".to_string()]);
+            .with_path(vec![
+                "query".to_string(),
+                "user".to_string(),
+                "name".to_string(),
+            ]);
 
         assert_eq!(error.message, "Test error");
         assert_eq!(error.path, vec!["query", "user", "name"]);
@@ -655,7 +717,10 @@ mod tests {
             .with_suggestion("Consider using pagination".to_string());
 
         assert_eq!(warning.message, "Performance warning");
-        assert_eq!(warning.suggestion, Some("Consider using pagination".to_string()));
+        assert_eq!(
+            warning.suggestion,
+            Some("Consider using pagination".to_string())
+        );
     }
 
     #[test]
@@ -674,14 +739,12 @@ mod tests {
         let fragment = crate::ast::FragmentDefinition {
             name: "TestFragment".to_string(),
             type_condition: "Query".to_string(),
-            selection_set: crate::ast::SelectionSet {
-                selections: vec![]
-            },
+            selection_set: crate::ast::SelectionSet { selections: vec![] },
             directives: vec![],
         };
 
         context.add_fragment("TestFragment".to_string(), fragment.clone());
-        
+
         let retrieved = context.get_fragment("TestFragment");
         assert!(retrieved.is_some());
         assert_eq!(retrieved.unwrap().name, "TestFragment");

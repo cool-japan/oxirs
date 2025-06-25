@@ -1,9 +1,9 @@
 //! Common utilities for CLI tools
 
-use std::path::{Path, PathBuf};
+use super::ToolResult;
 use std::fs;
 use std::io::{self, BufRead, BufReader, Write};
-use super::ToolResult;
+use std::path::{Path, PathBuf};
 
 /// Detect RDF format from file extension
 pub fn detect_rdf_format(file: &Path) -> String {
@@ -16,7 +16,7 @@ pub fn detect_rdf_format(file: &Path) -> String {
             "trig" => "trig".to_string(),
             "nq" | "nquads" => "nquads".to_string(),
             "owl" => "rdfxml".to_string(), // OWL is typically RDF/XML
-            _ => "turtle".to_string(), // Default fallback
+            _ => "turtle".to_string(),     // Default fallback
         }
     } else {
         "turtle".to_string() // Default fallback
@@ -25,12 +25,18 @@ pub fn detect_rdf_format(file: &Path) -> String {
 
 /// Check if a format is supported for input
 pub fn is_supported_input_format(format: &str) -> bool {
-    matches!(format, "turtle" | "ntriples" | "rdfxml" | "jsonld" | "trig" | "nquads")
+    matches!(
+        format,
+        "turtle" | "ntriples" | "rdfxml" | "jsonld" | "trig" | "nquads"
+    )
 }
 
 /// Check if a format is supported for output
 pub fn is_supported_output_format(format: &str) -> bool {
-    matches!(format, "turtle" | "ntriples" | "rdfxml" | "jsonld" | "trig" | "nquads")
+    matches!(
+        format,
+        "turtle" | "ntriples" | "rdfxml" | "jsonld" | "trig" | "nquads"
+    )
 }
 
 /// Check if a SPARQL results format is supported
@@ -83,12 +89,12 @@ pub fn format_file_size(bytes: u64) -> String {
     const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
     let mut size = bytes as f64;
     let mut unit_index = 0;
-    
+
     while size >= 1024.0 && unit_index < UNITS.len() - 1 {
         size /= 1024.0;
         unit_index += 1;
     }
-    
+
     if unit_index == 0 {
         format!("{} {}", bytes, UNITS[unit_index])
     } else {
@@ -103,7 +109,7 @@ pub fn format_duration(duration: std::time::Duration) -> String {
     let minutes = (total_secs % 3600) / 60;
     let seconds = total_secs % 60;
     let millis = duration.subsec_millis();
-    
+
     if hours > 0 {
         format!("{}h {}m {}s", hours, minutes, seconds)
     } else if minutes > 0 {
@@ -121,17 +127,17 @@ pub fn validate_iri(iri: &str) -> Result<String, String> {
     if iri.is_empty() {
         return Err("IRI cannot be empty".to_string());
     }
-    
+
     // Check for basic IRI structure
     if iri.contains(' ') {
         return Err("IRI cannot contain spaces".to_string());
     }
-    
+
     // Basic scheme check
     if !iri.contains(':') {
         return Err("IRI must contain a scheme".to_string());
     }
-    
+
     // Normalize by trimming whitespace
     Ok(iri.trim().to_string())
 }
@@ -142,25 +148,28 @@ pub fn validate_language_tag(tag: &str) -> Result<String, String> {
     if tag.is_empty() {
         return Err("Language tag cannot be empty".to_string());
     }
-    
+
     // Basic pattern: language[-script][-region][-variant]
     let normalized = tag.to_lowercase();
-    
+
     // Check for valid characters (letters, numbers, hyphens)
-    if !normalized.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+    if !normalized
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-')
+    {
         return Err("Language tag contains invalid characters".to_string());
     }
-    
+
     // Should not start or end with hyphen
     if normalized.starts_with('-') || normalized.ends_with('-') {
         return Err("Language tag cannot start or end with hyphen".to_string());
     }
-    
+
     // Should not have consecutive hyphens
     if normalized.contains("--") {
         return Err("Language tag cannot have consecutive hyphens".to_string());
     }
-    
+
     Ok(normalized)
 }
 
@@ -181,25 +190,29 @@ pub fn url_encode(input: &str) -> String {
 pub fn url_decode(input: &str) -> Result<String, String> {
     let mut result = String::new();
     let mut chars = input.chars().peekable();
-    
+
     while let Some(c) = chars.next() {
         match c {
             '+' => result.push(' '),
             '%' => {
                 // Decode hex sequence
-                let hex1 = chars.next().ok_or("Invalid URL encoding: incomplete hex sequence")?;
-                let hex2 = chars.next().ok_or("Invalid URL encoding: incomplete hex sequence")?;
-                
+                let hex1 = chars
+                    .next()
+                    .ok_or("Invalid URL encoding: incomplete hex sequence")?;
+                let hex2 = chars
+                    .next()
+                    .ok_or("Invalid URL encoding: incomplete hex sequence")?;
+
                 let hex_str = format!("{}{}", hex1, hex2);
                 let byte = u8::from_str_radix(&hex_str, 16)
                     .map_err(|_| "Invalid URL encoding: invalid hex sequence")?;
-                
+
                 result.push(byte as char);
             }
             _ => result.push(c),
         }
     }
-    
+
     Ok(result)
 }
 
@@ -208,15 +221,14 @@ pub fn check_file_readable(path: &Path) -> ToolResult<()> {
     if !path.exists() {
         return Err(format!("File does not exist: {}", path.display()).into());
     }
-    
+
     if !path.is_file() {
         return Err(format!("Path is not a file: {}", path.display()).into());
     }
-    
+
     // Try to open file to check readability
-    fs::File::open(path)
-        .map_err(|e| format!("Cannot read file {}: {}", path.display(), e))?;
-    
+    fs::File::open(path).map_err(|e| format!("Cannot read file {}: {}", path.display(), e))?;
+
     Ok(())
 }
 
@@ -240,7 +252,7 @@ impl ProgressIndicator {
             interval: std::time::Duration::from_millis(500), // Update every 500ms
         }
     }
-    
+
     pub fn update(&mut self, current: usize, total: Option<usize>) {
         let now = std::time::Instant::now();
         if now.duration_since(self.last_update) >= self.interval {
@@ -257,7 +269,7 @@ impl ProgressIndicator {
             self.last_update = now;
         }
     }
-    
+
     pub fn finish(&self, total: usize) {
         println!("\rCompleted: {} items", total);
     }

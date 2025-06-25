@@ -1,15 +1,16 @@
 //! RDF Quad implementation
 
+use crate::model::{
+    BlankNode, NamedNode, Object, ObjectRef, Predicate, PredicateRef, Subject, SubjectRef, Triple,
+    TripleRef, Variable,
+};
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use crate::model::{
-    NamedNode, BlankNode, Variable,
-    Subject, Predicate, Object, Triple, TripleRef,
-    SubjectRef, PredicateRef, ObjectRef
-};
 
 /// Union type for terms that can be graph names
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum GraphName {
     NamedNode(NamedNode),
     BlankNode(BlankNode),
@@ -54,10 +55,12 @@ impl From<Variable> for GraphName {
 }
 
 /// An RDF Quad
-/// 
+///
 /// Represents an RDF statement with subject, predicate, object, and graph name.
 /// This is used in RDF datasets where triples can belong to different named graphs.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub struct Quad {
     subject: Subject,
     predicate: Predicate,
@@ -80,7 +83,7 @@ impl Quad {
             graph_name: graph_name.into(),
         }
     }
-    
+
     /// Creates a new quad in the default graph
     pub fn new_default_graph(
         subject: impl Into<Subject>,
@@ -94,44 +97,44 @@ impl Quad {
             graph_name: GraphName::DefaultGraph,
         }
     }
-    
+
     /// Creates a quad from a triple, placing it in the default graph
     pub fn from_triple(triple: Triple) -> Self {
         let (subject, predicate, object) = triple.into_parts();
         Quad::new_default_graph(subject, predicate, object)
     }
-    
+
     /// Creates a quad from a triple with a specific graph name
     pub fn from_triple_in_graph(triple: Triple, graph_name: impl Into<GraphName>) -> Self {
         let (subject, predicate, object) = triple.into_parts();
         Quad::new(subject, predicate, object, graph_name)
     }
-    
+
     /// Returns the subject of this quad
     pub fn subject(&self) -> &Subject {
         &self.subject
     }
-    
+
     /// Returns the predicate of this quad
     pub fn predicate(&self) -> &Predicate {
         &self.predicate
     }
-    
+
     /// Returns the object of this quad
     pub fn object(&self) -> &Object {
         &self.object
     }
-    
+
     /// Returns the graph name of this quad
     pub fn graph_name(&self) -> &GraphName {
         &self.graph_name
     }
-    
+
     /// Decomposes the quad into its components
     pub fn into_parts(self) -> (Subject, Predicate, Object, GraphName) {
         (self.subject, self.predicate, self.object, self.graph_name)
     }
-    
+
     /// Converts this quad to a triple, discarding the graph name
     pub fn to_triple(&self) -> Triple {
         Triple::new(
@@ -140,20 +143,20 @@ impl Quad {
             self.object.clone(),
         )
     }
-    
+
     /// Returns true if this quad contains any variables
     pub fn has_variables(&self) -> bool {
-        matches!(self.subject, Subject::Variable(_)) ||
-        matches!(self.predicate, Predicate::Variable(_)) ||
-        matches!(self.object, Object::Variable(_)) ||
-        matches!(self.graph_name, GraphName::Variable(_))
+        matches!(self.subject, Subject::Variable(_))
+            || matches!(self.predicate, Predicate::Variable(_))
+            || matches!(self.object, Object::Variable(_))
+            || matches!(self.graph_name, GraphName::Variable(_))
     }
-    
+
     /// Returns true if this quad is ground (contains no variables)
     pub fn is_ground(&self) -> bool {
         !self.has_variables()
     }
-    
+
     /// Returns true if this quad is in the default graph
     pub fn is_default_graph(&self) -> bool {
         self.graph_name.is_default_graph()
@@ -163,8 +166,14 @@ impl Quad {
 impl fmt::Display for Quad {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.graph_name {
-            GraphName::DefaultGraph => write!(f, "{} {} {} .", self.subject, self.predicate, self.object),
-            graph => write!(f, "{} {} {} {} .", self.subject, self.predicate, self.object, graph),
+            GraphName::DefaultGraph => {
+                write!(f, "{} {} {} .", self.subject, self.predicate, self.object)
+            }
+            graph => write!(
+                f,
+                "{} {} {} {} .",
+                self.subject, self.predicate, self.object, graph
+            ),
         }
     }
 }
@@ -193,27 +202,27 @@ impl<'a> QuadRef<'a> {
             graph_name,
         }
     }
-    
+
     /// Returns the subject
     pub fn subject(&self) -> SubjectRef<'a> {
         self.subject
     }
-    
+
     /// Returns the predicate
     pub fn predicate(&self) -> PredicateRef<'a> {
         self.predicate
     }
-    
+
     /// Returns the object
     pub fn object(&self) -> ObjectRef<'a> {
         self.object
     }
-    
+
     /// Returns the graph name
     pub fn graph_name(&self) -> GraphNameRef<'a> {
         self.graph_name
     }
-    
+
     /// Converts to an owned quad
     pub fn to_owned(&self) -> Quad {
         Quad {
@@ -223,7 +232,7 @@ impl<'a> QuadRef<'a> {
             graph_name: self.graph_name.to_owned(),
         }
     }
-    
+
     /// Converts to a triple reference, discarding the graph name
     pub fn to_triple_ref(&self) -> TripleRef<'a> {
         TripleRef::new(self.subject, self.predicate, self.object)
@@ -233,8 +242,14 @@ impl<'a> QuadRef<'a> {
 impl<'a> fmt::Display for QuadRef<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.graph_name {
-            GraphNameRef::DefaultGraph => write!(f, "{} {} {} .", self.subject, self.predicate, self.object),
-            graph => write!(f, "{} {} {} {} .", self.subject, self.predicate, self.object, graph),
+            GraphNameRef::DefaultGraph => {
+                write!(f, "{} {} {} .", self.subject, self.predicate, self.object)
+            }
+            graph => write!(
+                f,
+                "{} {} {} {} .",
+                self.subject, self.predicate, self.object, graph
+            ),
         }
     }
 }
@@ -253,7 +268,7 @@ impl<'a> GraphNameRef<'a> {
     pub fn is_default_graph(&self) -> bool {
         matches!(self, GraphNameRef::DefaultGraph)
     }
-    
+
     /// Converts to an owned graph name
     pub fn to_owned(&self) -> GraphName {
         match self {
@@ -314,73 +329,78 @@ impl From<Triple> for Quad {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{NamedNode, BlankNode, Literal};
-    
+    use crate::model::{BlankNode, Literal, NamedNode};
+
     #[test]
     fn test_quad_creation() {
         let subject = NamedNode::new("http://example.org/subject").unwrap();
         let predicate = NamedNode::new("http://example.org/predicate").unwrap();
         let object = Literal::new("object");
         let graph = NamedNode::new("http://example.org/graph").unwrap();
-        
-        let quad = Quad::new(subject.clone(), predicate.clone(), object.clone(), graph.clone());
-        
+
+        let quad = Quad::new(
+            subject.clone(),
+            predicate.clone(),
+            object.clone(),
+            graph.clone(),
+        );
+
         assert!(quad.is_ground());
         assert!(!quad.has_variables());
         assert!(!quad.is_default_graph());
     }
-    
+
     #[test]
     fn test_quad_default_graph() {
         let subject = NamedNode::new("http://example.org/subject").unwrap();
         let predicate = NamedNode::new("http://example.org/predicate").unwrap();
         let object = Literal::new("object");
-        
+
         let quad = Quad::new_default_graph(subject, predicate, object);
-        
+
         assert!(quad.is_default_graph());
         assert!(quad.graph_name().is_default_graph());
     }
-    
+
     #[test]
     fn test_quad_from_triple() {
         let subject = NamedNode::new("http://example.org/subject").unwrap();
         let predicate = NamedNode::new("http://example.org/predicate").unwrap();
         let object = Literal::new("object");
-        
+
         let triple = Triple::new(subject.clone(), predicate.clone(), object.clone());
         let quad = Quad::from_triple(triple.clone());
-        
+
         assert!(quad.is_default_graph());
         assert_eq!(quad.to_triple().subject(), triple.subject());
         assert_eq!(quad.to_triple().predicate(), triple.predicate());
         assert_eq!(quad.to_triple().object(), triple.object());
     }
-    
+
     #[test]
     fn test_quad_with_variable() {
         let subject = Variable::new("x").unwrap();
         let predicate = NamedNode::new("http://example.org/predicate").unwrap();
         let object = Literal::new("object");
         let graph = Variable::new("g").unwrap();
-        
+
         let quad = Quad::new(subject, predicate, object, graph);
-        
+
         assert!(!quad.is_ground());
         assert!(quad.has_variables());
     }
-    
+
     #[test]
     fn test_quad_ref() {
         let subject = NamedNode::new("http://example.org/s").unwrap();
         let predicate = NamedNode::new("http://example.org/p").unwrap();
         let object = Literal::new("o");
         let graph = NamedNode::new("http://example.org/g").unwrap();
-        
+
         let quad = Quad::new(subject, predicate, object, graph);
         let quad_ref = QuadRef::from(&quad);
         let quad_owned = quad_ref.to_owned();
-        
+
         assert_eq!(quad, quad_owned);
     }
 }

@@ -3,8 +3,8 @@
 //! Implementation of goal-driven backward chaining inference.
 //! Starts with a goal and works backwards to find supporting facts and rules.
 
-use crate::{Rule, RuleAtom, Term};
 use crate::forward::Substitution;
+use crate::{Rule, RuleAtom, Term};
 use anyhow::Result;
 use std::collections::{HashMap, HashSet, VecDeque};
 use tracing::{debug, info, trace, warn};
@@ -136,10 +136,10 @@ impl BackwardChainer {
     /// Prove a goal using backward chaining
     pub fn prove(&mut self, goal: &RuleAtom) -> Result<bool> {
         info!("Starting backward chaining proof for goal: {:?}", goal);
-        
+
         let context = ProofContext::default();
         let result = self.prove_goal(goal, &context)?;
-        
+
         match result {
             ProofResult::Success(_) => {
                 info!("Goal successfully proven");
@@ -150,7 +150,10 @@ impl BackwardChainer {
                 Ok(false)
             }
             ProofResult::Partial(remaining) => {
-                info!("Goal partially proven, {} remaining subgoals", remaining.len());
+                info!(
+                    "Goal partially proven, {} remaining subgoals",
+                    remaining.len()
+                );
                 Ok(false)
             }
         }
@@ -159,11 +162,11 @@ impl BackwardChainer {
     /// Prove a goal and return all valid substitutions
     pub fn prove_all(&mut self, goal: &RuleAtom) -> Result<Vec<Substitution>> {
         info!("Finding all proofs for goal: {:?}", goal);
-        
+
         let context = ProofContext::default();
         let mut substitutions = Vec::new();
         self.find_all_proofs(goal, &context, &mut substitutions)?;
-        
+
         info!("Found {} valid proofs", substitutions.len());
         Ok(substitutions)
     }
@@ -193,15 +196,19 @@ impl BackwardChainer {
         }
 
         let result = self.prove_goal_internal(goal, context)?;
-        
+
         // Cache the result
         self.proof_cache.insert(goal.clone(), result.clone());
-        
+
         Ok(result)
     }
 
     /// Internal goal proving implementation
-    fn prove_goal_internal(&mut self, goal: &RuleAtom, context: &ProofContext) -> Result<ProofResult> {
+    fn prove_goal_internal(
+        &mut self,
+        goal: &RuleAtom,
+        context: &ProofContext,
+    ) -> Result<ProofResult> {
         if self.debug_mode {
             debug!("Proving goal at depth {}: {:?}", context.depth, goal);
         }
@@ -219,19 +226,28 @@ impl BackwardChainer {
     }
 
     /// Match a goal against known facts
-    fn match_against_facts(&self, goal: &RuleAtom, context_sub: &Substitution) -> Result<Option<Substitution>> {
+    fn match_against_facts(
+        &self,
+        goal: &RuleAtom,
+        context_sub: &Substitution,
+    ) -> Result<Option<Substitution>> {
         match goal {
-            RuleAtom::Triple { subject, predicate, object } => {
+            RuleAtom::Triple {
+                subject,
+                predicate,
+                object,
+            } => {
                 for fact in &self.facts {
-                    if let RuleAtom::Triple { 
-                        subject: fact_subject, 
-                        predicate: fact_predicate, 
-                        object: fact_object 
-                    } = fact {
+                    if let RuleAtom::Triple {
+                        subject: fact_subject,
+                        predicate: fact_predicate,
+                        object: fact_object,
+                    } = fact
+                    {
                         if let Some(substitution) = self.unify_triple(
                             (subject, predicate, object),
                             (fact_subject, fact_predicate, fact_object),
-                            context_sub.clone()
+                            context_sub.clone(),
                         )? {
                             return Ok(Some(substitution));
                         }
@@ -247,11 +263,17 @@ impl BackwardChainer {
     }
 
     /// Prove a goal using available rules
-    fn prove_using_rules(&mut self, goal: &RuleAtom, context: &ProofContext) -> Result<ProofResult> {
+    fn prove_using_rules(
+        &mut self,
+        goal: &RuleAtom,
+        context: &ProofContext,
+    ) -> Result<ProofResult> {
         for rule in &self.rules.clone() {
             // Try to unify goal with rule head
             for head_atom in &rule.head {
-                if let Some(head_substitution) = self.unify_atoms(goal, head_atom, context.substitution.clone())? {
+                if let Some(head_substitution) =
+                    self.unify_atoms(goal, head_atom, context.substitution.clone())?
+                {
                     if self.debug_mode {
                         debug!("Trying rule '{}' for goal: {:?}", rule.name, goal);
                     }
@@ -263,7 +285,9 @@ impl BackwardChainer {
                     new_context.depth += 1;
 
                     // Try to prove all conditions in the rule body
-                    if let Some(final_substitution) = self.prove_rule_body(&rule.body, &new_context)? {
+                    if let Some(final_substitution) =
+                        self.prove_rule_body(&rule.body, &new_context)?
+                    {
                         if self.debug_mode {
                             debug!("Rule '{}' successfully proven", rule.name);
                         }
@@ -277,13 +301,17 @@ impl BackwardChainer {
     }
 
     /// Prove all conditions in a rule body
-    fn prove_rule_body(&mut self, body: &[RuleAtom], context: &ProofContext) -> Result<Option<Substitution>> {
+    fn prove_rule_body(
+        &mut self,
+        body: &[RuleAtom],
+        context: &ProofContext,
+    ) -> Result<Option<Substitution>> {
         let mut current_substitution = context.substitution.clone();
 
         for atom in body {
             // Apply current substitution to the atom
             let instantiated_atom = self.apply_substitution(atom, &current_substitution)?;
-            
+
             // Create context for this subgoal
             let subgoal_context = ProofContext {
                 path: context.path.clone(),
@@ -295,7 +323,8 @@ impl BackwardChainer {
             match self.prove_goal(&instantiated_atom, &subgoal_context)? {
                 ProofResult::Success(new_substitution) => {
                     // Merge substitutions
-                    current_substitution = self.merge_substitutions(current_substitution, new_substitution)?;
+                    current_substitution =
+                        self.merge_substitutions(current_substitution, new_substitution)?;
                 }
                 ProofResult::Failure => {
                     return Ok(None);
@@ -310,7 +339,12 @@ impl BackwardChainer {
     }
 
     /// Find all valid proofs for a goal
-    fn find_all_proofs(&mut self, goal: &RuleAtom, context: &ProofContext, results: &mut Vec<Substitution>) -> Result<()> {
+    fn find_all_proofs(
+        &mut self,
+        goal: &RuleAtom,
+        context: &ProofContext,
+        results: &mut Vec<Substitution>,
+    ) -> Result<()> {
         // Check depth limit
         if context.depth > self.max_depth {
             return Ok(());
@@ -329,13 +363,17 @@ impl BackwardChainer {
         // Try all applicable rules
         for rule in &self.rules.clone() {
             for head_atom in &rule.head {
-                if let Some(head_substitution) = self.unify_atoms(goal, head_atom, context.substitution.clone())? {
+                if let Some(head_substitution) =
+                    self.unify_atoms(goal, head_atom, context.substitution.clone())?
+                {
                     let mut new_context = context.clone();
                     new_context.path.push(goal.clone());
                     new_context.substitution = head_substitution;
                     new_context.depth += 1;
 
-                    if let Some(final_substitution) = self.prove_rule_body(&rule.body, &new_context)? {
+                    if let Some(final_substitution) =
+                        self.prove_rule_body(&rule.body, &new_context)?
+                    {
                         results.push(final_substitution);
                     }
                 }
@@ -346,14 +384,29 @@ impl BackwardChainer {
     }
 
     /// Unify two atoms
-    fn unify_atoms(&self, atom1: &RuleAtom, atom2: &RuleAtom, mut substitution: Substitution) -> Result<Option<Substitution>> {
+    fn unify_atoms(
+        &self,
+        atom1: &RuleAtom,
+        atom2: &RuleAtom,
+        mut substitution: Substitution,
+    ) -> Result<Option<Substitution>> {
         match (atom1, atom2) {
-            (RuleAtom::Triple { subject: s1, predicate: p1, object: o1 },
-             RuleAtom::Triple { subject: s2, predicate: p2, object: o2 }) => {
-                self.unify_triple((s1, p1, o1), (s2, p2, o2), substitution)
-            }
-            (RuleAtom::Builtin { name: n1, args: a1 },
-             RuleAtom::Builtin { name: n2, args: a2 }) => {
+            (
+                RuleAtom::Triple {
+                    subject: s1,
+                    predicate: p1,
+                    object: o1,
+                },
+                RuleAtom::Triple {
+                    subject: s2,
+                    predicate: p2,
+                    object: o2,
+                },
+            ) => self.unify_triple((s1, p1, o1), (s2, p2, o2), substitution),
+            (
+                RuleAtom::Builtin { name: n1, args: a1 },
+                RuleAtom::Builtin { name: n2, args: a2 },
+            ) => {
                 if n1 == n2 && a1.len() == a2.len() {
                     for (arg1, arg2) in a1.iter().zip(a2.iter()) {
                         if !self.unify_terms(arg1, arg2, &mut substitution)? {
@@ -416,15 +469,18 @@ impl BackwardChainer {
     /// Apply substitution to an atom
     fn apply_substitution(&self, atom: &RuleAtom, substitution: &Substitution) -> Result<RuleAtom> {
         match atom {
-            RuleAtom::Triple { subject, predicate, object } => {
-                Ok(RuleAtom::Triple {
-                    subject: self.substitute_term(subject, substitution),
-                    predicate: self.substitute_term(predicate, substitution),
-                    object: self.substitute_term(object, substitution),
-                })
-            }
+            RuleAtom::Triple {
+                subject,
+                predicate,
+                object,
+            } => Ok(RuleAtom::Triple {
+                subject: self.substitute_term(subject, substitution),
+                predicate: self.substitute_term(predicate, substitution),
+                object: self.substitute_term(object, substitution),
+            }),
             RuleAtom::Builtin { name, args } => {
-                let substituted_args = args.iter()
+                let substituted_args = args
+                    .iter()
                     .map(|arg| self.substitute_term(arg, substitution))
                     .collect();
                 Ok(RuleAtom::Builtin {
@@ -438,9 +494,10 @@ impl BackwardChainer {
     /// Substitute variables in a term
     fn substitute_term(&self, term: &Term, substitution: &Substitution) -> Term {
         match term {
-            Term::Variable(var) => {
-                substitution.get(var).cloned().unwrap_or_else(|| term.clone())
-            }
+            Term::Variable(var) => substitution
+                .get(var)
+                .cloned()
+                .unwrap_or_else(|| term.clone()),
             _ => term.clone(),
         }
     }
@@ -451,7 +508,10 @@ impl BackwardChainer {
         for (var, term) in sub2 {
             if let Some(existing) = merged.get(&var) {
                 if !self.terms_equal(existing, &term) {
-                    return Err(anyhow::anyhow!("Inconsistent substitutions for variable {}", var));
+                    return Err(anyhow::anyhow!(
+                        "Inconsistent substitutions for variable {}",
+                        var
+                    ));
                 }
             } else {
                 merged.insert(var, term);
@@ -472,7 +532,12 @@ impl BackwardChainer {
     }
 
     /// Evaluate built-in predicates
-    fn evaluate_builtin(&self, name: &str, args: &[Term], substitution: Substitution) -> Result<Option<Substitution>> {
+    fn evaluate_builtin(
+        &self,
+        name: &str,
+        args: &[Term],
+        substitution: Substitution,
+    ) -> Result<Option<Substitution>> {
         match name {
             "equal" => {
                 if args.len() != 2 {
@@ -547,7 +612,7 @@ impl BackwardChainer {
     /// Query for facts that match a pattern
     pub fn query(&mut self, pattern: &RuleAtom) -> Result<Vec<RuleAtom>> {
         let mut results = Vec::new();
-        
+
         // Check facts directly
         for fact in &self.facts {
             if self.unify_atoms(pattern, fact, HashMap::new())?.is_some() {
@@ -578,8 +643,11 @@ pub struct BackwardChainingStats {
 
 impl std::fmt::Display for BackwardChainingStats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Facts: {}, Rules: {}, Cache: {}", 
-               self.total_facts, self.total_rules, self.cache_size)
+        write!(
+            f,
+            "Facts: {}, Rules: {}, Cache: {}",
+            self.total_facts, self.total_rules, self.cache_size
+        )
     }
 }
 

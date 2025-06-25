@@ -10,42 +10,42 @@ use std::path::PathBuf;
 pub type ToolResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
 // === Data Processing Tools ===
-pub mod riot;
 pub mod rdfcat;
 pub mod rdfcopy;
 pub mod rdfdiff;
 pub mod rdfparse;
+pub mod riot;
 
 // === Advanced Query Tools ===
 pub mod arq;
+pub mod qparse;
 pub mod rsparql;
 pub mod rupdate;
-pub mod qparse;
 pub mod uparse;
 
 // === Storage Tools ===
-pub mod tdbloader;
-pub mod tdbdump;
-pub mod tdbquery;
-pub mod tdbupdate;
-pub mod tdbstats;
 pub mod tdbbackup;
 pub mod tdbcompact;
+pub mod tdbdump;
+pub mod tdbloader;
+pub mod tdbquery;
+pub mod tdbstats;
+pub mod tdbupdate;
 
 // === Validation Tools ===
-pub mod shacl;
-pub mod shex;
 pub mod infer;
 pub mod schemagen;
+pub mod shacl;
+pub mod shex;
 
 // === Utility Tools ===
 pub mod iri;
-pub mod langtag;
 pub mod juuid;
-pub mod utf8;
-pub mod wwwenc;
-pub mod wwwdec;
+pub mod langtag;
 pub mod rset;
+pub mod utf8;
+pub mod wwwdec;
+pub mod wwwenc;
 
 /// Common utilities for tools
 pub mod utils;
@@ -70,11 +70,11 @@ impl ToolStats {
             warnings: 0,
         }
     }
-    
+
     pub fn finish(&mut self) {
         self.duration = self.start_time.elapsed();
     }
-    
+
     pub fn rate(&self) -> f64 {
         if self.duration.as_secs_f64() > 0.0 {
             self.items_processed as f64 / self.duration.as_secs_f64()
@@ -82,7 +82,7 @@ impl ToolStats {
             0.0
         }
     }
-    
+
     pub fn print_summary(&self, tool_name: &str) {
         println!("\n{} completed:", tool_name);
         println!("  Duration: {:.3}s", self.duration.as_secs_f64());

@@ -4,11 +4,11 @@
 //! converting SPARQL query strings into algebraic expressions for execution.
 
 use crate::algebra::{
-    Algebra, Expression, TriplePattern, Term, Variable, Iri, Literal, 
-    BinaryOperator, UnaryOperator, Aggregate, OrderCondition, GroupCondition, Binding,
-    PropertyPath, PropertyPathPattern
+    Aggregate, Algebra, BinaryOperator, Binding, Expression, GroupCondition, Iri, Literal,
+    OrderCondition, PropertyPath, PropertyPathPattern, Term, TriplePattern, UnaryOperator,
+    Variable,
 };
-use anyhow::{Result, anyhow, bail, Context};
+use anyhow::{anyhow, bail, Context, Result};
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
@@ -90,7 +90,7 @@ pub enum Token {
     Values,
     Exists,
     NotExists,
-    
+
     // Operators
     Equal,
     NotEqual,
@@ -105,15 +105,15 @@ pub enum Token {
     Minus_,
     Multiply,
     Divide,
-    
+
     // Property Path Operators
-    Pipe,           // |
-    Caret,          // ^
-    Slash,          // /
-    Question,       // ?
-    Star,           // *
-    Bang,           // !
-    
+    Pipe,     // |
+    Caret,    // ^
+    Slash,    // /
+    Question, // ?
+    Star,     // *
+    Bang,     // !
+
     // Delimiters
     LeftParen,
     RightParen,
@@ -124,7 +124,7 @@ pub enum Token {
     Dot,
     Semicolon,
     Comma,
-    
+
     // Literals
     Iri(String),
     PrefixedName(String, String),
@@ -133,7 +133,7 @@ pub enum Token {
     NumericLiteral(String),
     BooleanLiteral(bool),
     BlankNode(String),
-    
+
     // Special
     Eof,
     Newline,
@@ -150,18 +150,18 @@ impl QueryParser {
             blank_node_counter: 0,
         }
     }
-    
+
     /// Parse a SPARQL query string into a Query AST
     pub fn parse(&mut self, query_str: &str) -> Result<Query> {
         self.tokenize(query_str)?;
         self.parse_query()
     }
-    
+
     /// Tokenize SPARQL query string
     fn tokenize(&mut self, input: &str) -> Result<()> {
         let mut chars = input.chars().peekable();
         let mut tokens = Vec::new();
-        
+
         while let Some(&ch) = chars.peek() {
             match ch {
                 ' ' | '\t' | '\r' => {
@@ -368,13 +368,13 @@ impl QueryParser {
                 }
             }
         }
-        
+
         tokens.push(Token::Eof);
         self.tokens = tokens;
         self.position = 0;
         Ok(())
     }
-    
+
     fn parse_identifier(&self, chars: &mut std::iter::Peekable<std::str::Chars>) -> String {
         let mut identifier = String::new();
         while let Some(&ch) = chars.peek() {
@@ -387,11 +387,12 @@ impl QueryParser {
         }
         identifier
     }
-    
+
     fn parse_number(&self, chars: &mut std::iter::Peekable<std::str::Chars>) -> String {
         let mut number = String::new();
         while let Some(&ch) = chars.peek() {
-            if ch.is_ascii_digit() || ch == '.' || ch == 'e' || ch == 'E' || ch == '+' || ch == '-' {
+            if ch.is_ascii_digit() || ch == '.' || ch == 'e' || ch == 'E' || ch == '+' || ch == '-'
+            {
                 number.push(ch);
                 chars.next();
             } else {
@@ -400,7 +401,7 @@ impl QueryParser {
         }
         number
     }
-    
+
     fn classify_identifier(&self, identifier: &str) -> Token {
         match identifier.to_uppercase().as_str() {
             "SELECT" => Token::Select,
@@ -450,7 +451,7 @@ impl QueryParser {
             }
         }
     }
-    
+
     fn parse_query(&mut self) -> Result<Query> {
         let mut query = Query {
             query_type: QueryType::Select,
@@ -468,10 +469,10 @@ impl QueryParser {
             base_iri: None,
             dataset: DatasetClause::default(),
         };
-        
+
         // Parse prologue (PREFIX and BASE declarations)
         self.parse_prologue(&mut query)?;
-        
+
         // Parse main query
         match self.peek() {
             Some(Token::Select) => {
@@ -492,10 +493,10 @@ impl QueryParser {
             }
             _ => bail!("Expected query type (SELECT, CONSTRUCT, ASK, DESCRIBE)"),
         }
-        
+
         Ok(query)
     }
-    
+
     fn parse_prologue(&mut self, query: &mut Query) -> Result<()> {
         while let Some(token) = self.peek() {
             match token {
@@ -517,22 +518,24 @@ impl QueryParser {
         }
         Ok(())
     }
-    
+
     fn parse_select_query(&mut self, query: &mut Query) -> Result<()> {
         self.expect_token(Token::Select)?;
-        
+
         // Parse DISTINCT/REDUCED
         if self.match_token(&Token::Distinct) {
             query.distinct = true;
         } else if self.match_token(&Token::Reduced) {
             query.reduced = true;
         }
-        
+
         // Parse selection variables or *
         if self.match_token(&Token::Multiply) {
             // SELECT * - will be resolved later to all variables in WHERE clause
         } else {
-            while !self.is_at_end() && !matches!(self.peek(), Some(Token::Where) | Some(Token::From)) {
+            while !self.is_at_end()
+                && !matches!(self.peek(), Some(Token::Where) | Some(Token::From))
+            {
                 if let Some(Token::Variable(var)) = self.peek() {
                     query.select_variables.push(var.clone());
                     self.advance();
@@ -541,90 +544,93 @@ impl QueryParser {
                 }
             }
         }
-        
+
         // Parse dataset clause
         self.parse_dataset_clause(&mut query.dataset)?;
-        
+
         // Parse WHERE clause
         self.expect_token(Token::Where)?;
         self.expect_token(Token::LeftBrace)?;
         query.where_clause = self.parse_group_graph_pattern()?;
         self.expect_token(Token::RightBrace)?;
-        
+
         // Parse solution modifiers
         self.parse_solution_modifiers(query)?;
-        
+
         Ok(())
     }
-    
+
     fn parse_construct_query(&mut self, query: &mut Query) -> Result<()> {
         self.expect_token(Token::Construct)?;
-        
+
         // Parse construct template
         if self.match_token(&Token::LeftBrace) {
             query.construct_template = self.parse_construct_template()?;
             self.expect_token(Token::RightBrace)?;
         }
-        
+
         // Parse dataset clause
         self.parse_dataset_clause(&mut query.dataset)?;
-        
+
         // Parse WHERE clause
         self.expect_token(Token::Where)?;
         self.expect_token(Token::LeftBrace)?;
         query.where_clause = self.parse_group_graph_pattern()?;
         self.expect_token(Token::RightBrace)?;
-        
+
         // Parse solution modifiers
         self.parse_solution_modifiers(query)?;
-        
+
         Ok(())
     }
-    
+
     fn parse_ask_query(&mut self, query: &mut Query) -> Result<()> {
         self.expect_token(Token::Ask)?;
-        
+
         // Parse dataset clause
         self.parse_dataset_clause(&mut query.dataset)?;
-        
+
         // Parse WHERE clause
         self.expect_token(Token::Where)?;
         self.expect_token(Token::LeftBrace)?;
         query.where_clause = self.parse_group_graph_pattern()?;
         self.expect_token(Token::RightBrace)?;
-        
+
         Ok(())
     }
-    
+
     fn parse_describe_query(&mut self, query: &mut Query) -> Result<()> {
         self.expect_token(Token::Describe)?;
-        
+
         // Parse variables or IRIs to describe
         while !self.is_at_end() && !matches!(self.peek(), Some(Token::Where) | Some(Token::From)) {
             if let Some(Token::Variable(var)) = self.peek() {
                 query.select_variables.push(var.clone());
                 self.advance();
-            } else if matches!(self.peek(), Some(Token::Iri(_)) | Some(Token::PrefixedName(_, _))) {
+            } else if matches!(
+                self.peek(),
+                Some(Token::Iri(_)) | Some(Token::PrefixedName(_, _))
+            ) {
                 // Skip IRIs for now
                 self.advance();
             } else {
                 break;
             }
         }
-        
+
         // Parse dataset clause
         self.parse_dataset_clause(&mut query.dataset)?;
-        
+
         // Parse optional WHERE clause
         if self.match_token(&Token::Where) {
             self.expect_token(Token::LeftBrace)?;
             query.where_clause = self.parse_group_graph_pattern()?;
             self.expect_token(Token::RightBrace)?;
         }
-        
+
         Ok(())
     }
-    
+
     fn parse_dataset_clause(&mut self, dataset: &mut DatasetClause) -> Result<()> {
         while self.match_token(&Token::From) {
             if self.match_token(&Token::Named) {
@@ -637,18 +643,18 @@ impl QueryParser {
         }
         Ok(())
     }
-    
+
     fn parse_group_graph_pattern(&mut self) -> Result<Algebra> {
         let mut patterns = Vec::new();
-        
+
         while !self.is_at_end() && !matches!(self.peek(), Some(Token::RightBrace)) {
             let pattern = self.parse_graph_pattern()?;
             patterns.push(pattern);
-            
+
             // Skip optional dots
             self.match_token(&Token::Dot);
         }
-        
+
         if patterns.is_empty() {
             Ok(Algebra::Table)
         } else if patterns.len() == 1 {
@@ -663,7 +669,7 @@ impl QueryParser {
             Ok(result)
         }
     }
-    
+
     fn parse_graph_pattern(&mut self) -> Result<Algebra> {
         match self.peek() {
             Some(Token::Optional) => self.parse_optional_pattern(),
@@ -683,30 +689,30 @@ impl QueryParser {
             _ => self.parse_basic_graph_pattern(),
         }
     }
-    
+
     fn parse_basic_graph_pattern(&mut self) -> Result<Algebra> {
         let mut triples = Vec::new();
-        
+
         while !self.is_at_end() && !self.is_pattern_end() {
             let triple = self.parse_triple_pattern()?;
             triples.push(triple);
-            
+
             if !self.match_token(&Token::Dot) {
                 break;
             }
         }
-        
+
         Ok(Algebra::Bgp(triples))
     }
-    
+
     fn parse_triple_pattern(&mut self) -> Result<TriplePattern> {
         let subject = self.parse_term()?;
-        
+
         // Check if we have a property path instead of a simple predicate
         if self.is_property_path_start() {
             let path = self.parse_property_path()?;
             let object = self.parse_term()?;
-            
+
             // Convert property path pattern to BGP with property path algebra
             // For now, we'll treat it as a regular triple pattern with a path term
             // TODO: Create separate handling for property paths in the algebra
@@ -716,54 +722,58 @@ impl QueryParser {
                 object,
             ));
         }
-        
+
         let predicate = self.parse_term()?;
         let object = self.parse_term()?;
-        
+
         Ok(TriplePattern::new(subject, predicate, object))
     }
-    
+
     /// Check if current position starts a property path
     fn is_property_path_start(&self) -> bool {
-        matches!(self.peek(), 
-            Some(Token::Caret) | Some(Token::Iri(_)) | Some(Token::PrefixedName(_, _)) |
-            Some(Token::LeftParen) | Some(Token::Bang)
+        matches!(
+            self.peek(),
+            Some(Token::Caret)
+                | Some(Token::Iri(_))
+                | Some(Token::PrefixedName(_, _))
+                | Some(Token::LeftParen)
+                | Some(Token::Bang)
         )
     }
-    
+
     /// Parse property path expression
     fn parse_property_path(&mut self) -> Result<PropertyPath> {
         self.parse_property_path_alternative()
     }
-    
+
     /// Parse property path alternatives (highest precedence)
     fn parse_property_path_alternative(&mut self) -> Result<PropertyPath> {
         let mut left = self.parse_property_path_sequence()?;
-        
+
         while self.match_token(&Token::Pipe) {
             let right = self.parse_property_path_sequence()?;
             left = PropertyPath::alternative(left, right);
         }
-        
+
         Ok(left)
     }
-    
+
     /// Parse property path sequences
     fn parse_property_path_sequence(&mut self) -> Result<PropertyPath> {
         let mut left = self.parse_property_path_postfix()?;
-        
+
         while self.match_token(&Token::Slash) {
             let right = self.parse_property_path_postfix()?;
             left = PropertyPath::sequence(left, right);
         }
-        
+
         Ok(left)
     }
-    
+
     /// Parse property path with postfix operators (*, +, ?)
     fn parse_property_path_postfix(&mut self) -> Result<PropertyPath> {
         let mut path = self.parse_property_path_primary()?;
-        
+
         loop {
             match self.peek() {
                 Some(Token::Star) => {
@@ -781,10 +791,10 @@ impl QueryParser {
                 _ => break,
             }
         }
-        
+
         Ok(path)
     }
-    
+
     /// Parse primary property path expressions
     fn parse_property_path_primary(&mut self) -> Result<PropertyPath> {
         match self.peek() {
@@ -802,7 +812,7 @@ impl QueryParser {
                 let prefix = prefix.clone();
                 let local = local.clone();
                 self.advance();
-                
+
                 let full_iri = if let Some(base) = self.prefixes.get(&prefix) {
                     format!("{}{}", base, local)
                 } else {
@@ -825,21 +835,21 @@ impl QueryParser {
                 self.advance(); // consume !
                 self.expect_token(Token::LeftParen)?;
                 let mut negated_paths = Vec::new();
-                
+
                 loop {
                     negated_paths.push(self.parse_property_path_primary()?);
                     if !self.match_token(&Token::Pipe) {
                         break;
                     }
                 }
-                
+
                 self.expect_token(Token::RightParen)?;
                 Ok(PropertyPath::NegatedPropertySet(negated_paths))
             }
             _ => bail!("Expected property path expression"),
         }
     }
-    
+
     fn parse_term(&mut self) -> Result<Term> {
         match self.peek() {
             Some(Token::Variable(var)) => {
@@ -857,7 +867,7 @@ impl QueryParser {
                 let prefix = prefix.clone();
                 let local = local.clone();
                 self.advance();
-                
+
                 let full_iri = if let Some(base) = self.prefixes.get(&prefix) {
                     format!("{}{}", base, local)
                 } else {
@@ -900,13 +910,13 @@ impl QueryParser {
             _ => bail!("Expected term"),
         }
     }
-    
+
     fn parse_optional_pattern(&mut self) -> Result<Algebra> {
         self.expect_token(Token::Optional)?;
         self.expect_token(Token::LeftBrace)?;
         let pattern = self.parse_group_graph_pattern()?;
         self.expect_token(Token::RightBrace)?;
-        
+
         // Return as left join with no left pattern (will be filled by join operation)
         Ok(Algebra::LeftJoin {
             left: Box::new(Algebra::Table),
@@ -914,35 +924,35 @@ impl QueryParser {
             filter: None,
         })
     }
-    
+
     fn parse_union_pattern(&mut self) -> Result<Algebra> {
         // This is incomplete - UNION parsing is complex
         self.expect_token(Token::Union)?;
         Ok(Algebra::Zero)
     }
-    
+
     fn parse_minus_pattern(&mut self) -> Result<Algebra> {
         self.expect_token(Token::Minus)?;
         self.expect_token(Token::LeftBrace)?;
         let pattern = self.parse_group_graph_pattern()?;
         self.expect_token(Token::RightBrace)?;
-        
+
         Ok(Algebra::Minus {
             left: Box::new(Algebra::Table),
             right: Box::new(pattern),
         })
     }
-    
+
     fn parse_filter_pattern(&mut self) -> Result<Algebra> {
         self.expect_token(Token::Filter)?;
         let condition = self.parse_expression()?;
-        
+
         Ok(Algebra::Filter {
             pattern: Box::new(Algebra::Table),
             condition,
         })
     }
-    
+
     fn parse_bind_pattern(&mut self) -> Result<Algebra> {
         self.expect_token(Token::Bind)?;
         self.expect_token(Token::LeftParen)?;
@@ -950,14 +960,14 @@ impl QueryParser {
         self.expect_token(Token::As)?;
         let var = self.expect_variable()?;
         self.expect_token(Token::RightParen)?;
-        
+
         Ok(Algebra::Extend {
             pattern: Box::new(Algebra::Table),
             variable: var,
             expr,
         })
     }
-    
+
     fn parse_service_pattern(&mut self) -> Result<Algebra> {
         self.expect_token(Token::Service)?;
         let silent = self.match_token(&Token::Not); // SILENT
@@ -965,32 +975,32 @@ impl QueryParser {
         self.expect_token(Token::LeftBrace)?;
         let pattern = self.parse_group_graph_pattern()?;
         self.expect_token(Token::RightBrace)?;
-        
+
         Ok(Algebra::Service {
             endpoint,
             pattern: Box::new(pattern),
             silent,
         })
     }
-    
+
     fn parse_graph_pattern_named(&mut self) -> Result<Algebra> {
         self.expect_token(Token::Graph)?;
         let graph = self.parse_term()?;
         self.expect_token(Token::LeftBrace)?;
         let pattern = self.parse_group_graph_pattern()?;
         self.expect_token(Token::RightBrace)?;
-        
+
         Ok(Algebra::Graph {
             graph,
             pattern: Box::new(pattern),
         })
     }
-    
+
     fn parse_values_pattern(&mut self) -> Result<Algebra> {
         self.expect_token(Token::Values)?;
         let mut variables = Vec::new();
         let mut bindings = Vec::new();
-        
+
         // Parse variables
         if self.match_token(&Token::LeftParen) {
             while !self.match_token(&Token::RightParen) {
@@ -999,12 +1009,12 @@ impl QueryParser {
         } else {
             variables.push(self.expect_variable()?);
         }
-        
+
         // Parse values
         self.expect_token(Token::LeftBrace)?;
         while !self.match_token(&Token::RightBrace) {
             let mut binding = HashMap::new();
-            
+
             if self.match_token(&Token::LeftParen) {
                 for var in &variables {
                     let term = self.parse_term()?;
@@ -1017,20 +1027,23 @@ impl QueryParser {
                     binding.insert(variables[0].clone(), term);
                 }
             }
-            
+
             bindings.push(binding);
         }
-        
-        Ok(Algebra::Values { variables, bindings })
+
+        Ok(Algebra::Values {
+            variables,
+            bindings,
+        })
     }
-    
+
     fn parse_expression(&mut self) -> Result<Expression> {
         self.parse_or_expression()
     }
-    
+
     fn parse_or_expression(&mut self) -> Result<Expression> {
         let mut expr = self.parse_and_expression()?;
-        
+
         while self.match_token(&Token::Or) {
             let right = self.parse_and_expression()?;
             expr = Expression::Binary {
@@ -1039,13 +1052,13 @@ impl QueryParser {
                 right: Box::new(right),
             };
         }
-        
+
         Ok(expr)
     }
-    
+
     fn parse_and_expression(&mut self) -> Result<Expression> {
         let mut expr = self.parse_equality_expression()?;
-        
+
         while self.match_token(&Token::And) {
             let right = self.parse_equality_expression()?;
             expr = Expression::Binary {
@@ -1054,13 +1067,13 @@ impl QueryParser {
                 right: Box::new(right),
             };
         }
-        
+
         Ok(expr)
     }
-    
+
     fn parse_equality_expression(&mut self) -> Result<Expression> {
         let mut expr = self.parse_relational_expression()?;
-        
+
         while let Some(op) = self.match_equality_operator() {
             let right = self.parse_relational_expression()?;
             expr = Expression::Binary {
@@ -1069,13 +1082,13 @@ impl QueryParser {
                 right: Box::new(right),
             };
         }
-        
+
         Ok(expr)
     }
-    
+
     fn parse_relational_expression(&mut self) -> Result<Expression> {
         let mut expr = self.parse_additive_expression()?;
-        
+
         while let Some(op) = self.match_relational_operator() {
             let right = self.parse_additive_expression()?;
             expr = Expression::Binary {
@@ -1084,13 +1097,13 @@ impl QueryParser {
                 right: Box::new(right),
             };
         }
-        
+
         Ok(expr)
     }
-    
+
     fn parse_additive_expression(&mut self) -> Result<Expression> {
         let mut expr = self.parse_multiplicative_expression()?;
-        
+
         while let Some(op) = self.match_additive_operator() {
             let right = self.parse_multiplicative_expression()?;
             expr = Expression::Binary {
@@ -1099,13 +1112,13 @@ impl QueryParser {
                 right: Box::new(right),
             };
         }
-        
+
         Ok(expr)
     }
-    
+
     fn parse_multiplicative_expression(&mut self) -> Result<Expression> {
         let mut expr = self.parse_unary_expression()?;
-        
+
         while let Some(op) = self.match_multiplicative_operator() {
             let right = self.parse_unary_expression()?;
             expr = Expression::Binary {
@@ -1114,10 +1127,10 @@ impl QueryParser {
                 right: Box::new(right),
             };
         }
-        
+
         Ok(expr)
     }
-    
+
     fn parse_unary_expression(&mut self) -> Result<Expression> {
         if let Some(op) = self.match_unary_operator() {
             let expr = self.parse_unary_expression()?;
@@ -1129,7 +1142,7 @@ impl QueryParser {
             self.parse_primary_expression()
         }
     }
-    
+
     fn parse_primary_expression(&mut self) -> Result<Expression> {
         match self.peek() {
             Some(Token::Variable(var)) => {
@@ -1172,7 +1185,7 @@ impl QueryParser {
                 let local = local.clone();
                 let name = format!("{}:{}", prefix, local);
                 self.advance();
-                
+
                 if self.match_token(&Token::LeftParen) {
                     let mut args = Vec::new();
                     while !self.match_token(&Token::RightParen) {
@@ -1196,7 +1209,7 @@ impl QueryParser {
             _ => bail!("Expected primary expression"),
         }
     }
-    
+
     fn parse_solution_modifiers(&mut self, query: &mut Query) -> Result<()> {
         // Parse GROUP BY
         if self.match_token(&Token::GroupBy) {
@@ -1210,12 +1223,12 @@ impl QueryParser {
                 query.group_by.push(GroupCondition { expr, alias });
             }
         }
-        
+
         // Parse HAVING
         if self.match_token(&Token::Having) {
             query.having = Some(self.parse_expression()?);
         }
-        
+
         // Parse ORDER BY
         if self.match_token(&Token::OrderBy) {
             while !self.is_at_end() && !self.is_solution_modifier_end() {
@@ -1225,12 +1238,12 @@ impl QueryParser {
                     self.match_token(&Token::Asc);
                     true
                 };
-                
+
                 let expr = self.parse_expression()?;
                 query.order_by.push(OrderCondition { expr, ascending });
             }
         }
-        
+
         // Parse LIMIT
         if self.match_token(&Token::Limit) {
             if let Some(Token::NumericLiteral(num)) = self.peek() {
@@ -1238,7 +1251,7 @@ impl QueryParser {
                 self.advance();
             }
         }
-        
+
         // Parse OFFSET
         if self.match_token(&Token::Offset) {
             if let Some(Token::NumericLiteral(num)) = self.peek() {
@@ -1246,41 +1259,41 @@ impl QueryParser {
                 self.advance();
             }
         }
-        
+
         Ok(())
     }
-    
+
     fn parse_construct_template(&mut self) -> Result<Vec<TriplePattern>> {
         let mut triples = Vec::new();
-        
+
         while !self.is_at_end() && !matches!(self.peek(), Some(Token::RightBrace)) {
             let triple = self.parse_triple_pattern()?;
             triples.push(triple);
-            
+
             if !self.match_token(&Token::Dot) {
                 break;
             }
         }
-        
+
         Ok(triples)
     }
-    
+
     // Helper methods
     fn peek(&self) -> Option<&Token> {
         self.tokens.get(self.position)
     }
-    
+
     fn advance(&mut self) -> Option<&Token> {
         if !self.is_at_end() {
             self.position += 1;
         }
         self.tokens.get(self.position - 1)
     }
-    
+
     fn is_at_end(&self) -> bool {
         matches!(self.peek(), Some(Token::Eof) | None)
     }
-    
+
     fn match_token(&mut self, token: &Token) -> bool {
         if self.check(token) {
             self.advance();
@@ -1289,7 +1302,7 @@ impl QueryParser {
             false
         }
     }
-    
+
     fn check(&self, token: &Token) -> bool {
         if let Some(current) = self.peek() {
             std::mem::discriminant(current) == std::mem::discriminant(token)
@@ -1297,7 +1310,7 @@ impl QueryParser {
             false
         }
     }
-    
+
     fn expect_token(&mut self, token: Token) -> Result<()> {
         if self.check(&token) {
             self.advance();
@@ -1306,7 +1319,7 @@ impl QueryParser {
             bail!("Expected {:?}, found {:?}", token, self.peek())
         }
     }
-    
+
     fn expect_variable(&mut self) -> Result<Variable> {
         if let Some(Token::Variable(var)) = self.peek() {
             let var = var.clone();
@@ -1316,7 +1329,7 @@ impl QueryParser {
             bail!("Expected variable")
         }
     }
-    
+
     fn expect_iri(&mut self) -> Result<String> {
         match self.peek() {
             Some(Token::Iri(iri)) => {
@@ -1328,7 +1341,7 @@ impl QueryParser {
                 let prefix = prefix.clone();
                 let local = local.clone();
                 self.advance();
-                
+
                 if let Some(base) = self.prefixes.get(&prefix) {
                     Ok(format!("{}{}", base, local))
                 } else {
@@ -1338,7 +1351,7 @@ impl QueryParser {
             _ => bail!("Expected IRI"),
         }
     }
-    
+
     fn expect_prefixed_name(&mut self) -> Result<(String, String)> {
         if let Some(Token::PrefixedName(prefix, local)) = self.peek() {
             let result = (prefix.clone(), local.clone());
@@ -1348,33 +1361,35 @@ impl QueryParser {
             bail!("Expected prefixed name")
         }
     }
-    
+
     fn is_pattern_end(&self) -> bool {
-        matches!(self.peek(), 
-            Some(Token::RightBrace) | 
-            Some(Token::Optional) | 
-            Some(Token::Union) | 
-            Some(Token::Minus) | 
-            Some(Token::Filter) | 
-            Some(Token::Bind) | 
-            Some(Token::Service) | 
-            Some(Token::Graph) | 
-            Some(Token::Values) |
-            Some(Token::Eof)
+        matches!(
+            self.peek(),
+            Some(Token::RightBrace)
+                | Some(Token::Optional)
+                | Some(Token::Union)
+                | Some(Token::Minus)
+                | Some(Token::Filter)
+                | Some(Token::Bind)
+                | Some(Token::Service)
+                | Some(Token::Graph)
+                | Some(Token::Values)
+                | Some(Token::Eof)
         )
     }
-    
+
     fn is_solution_modifier_end(&self) -> bool {
-        matches!(self.peek(), 
-            Some(Token::Limit) | 
-            Some(Token::Offset) | 
-            Some(Token::OrderBy) | 
-            Some(Token::GroupBy) | 
-            Some(Token::Having) |
-            Some(Token::Eof)
+        matches!(
+            self.peek(),
+            Some(Token::Limit)
+                | Some(Token::Offset)
+                | Some(Token::OrderBy)
+                | Some(Token::GroupBy)
+                | Some(Token::Having)
+                | Some(Token::Eof)
         )
     }
-    
+
     fn match_equality_operator(&mut self) -> Option<BinaryOperator> {
         match self.peek() {
             Some(Token::Equal) => {
@@ -1388,7 +1403,7 @@ impl QueryParser {
             _ => None,
         }
     }
-    
+
     fn match_relational_operator(&mut self) -> Option<BinaryOperator> {
         match self.peek() {
             Some(Token::Less) => {
@@ -1410,7 +1425,7 @@ impl QueryParser {
             _ => None,
         }
     }
-    
+
     fn match_additive_operator(&mut self) -> Option<BinaryOperator> {
         match self.peek() {
             Some(Token::Plus) => {
@@ -1424,7 +1439,7 @@ impl QueryParser {
             _ => None,
         }
     }
-    
+
     fn match_multiplicative_operator(&mut self) -> Option<BinaryOperator> {
         match self.peek() {
             Some(Token::Star) => {
@@ -1438,7 +1453,7 @@ impl QueryParser {
             _ => None,
         }
     }
-    
+
     fn match_unary_operator(&mut self) -> Option<UnaryOperator> {
         match self.peek() {
             Some(Token::Not) => {
@@ -1473,7 +1488,7 @@ pub fn parse_query(query_str: &str) -> Result<Query> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_simple_select_query() {
         let query_str = r#"
@@ -1482,39 +1497,42 @@ mod tests {
                 ?person foaf:name ?name .
             }
         "#;
-        
+
         let query = parse_query(query_str).unwrap();
         assert_eq!(query.query_type, QueryType::Select);
-        assert_eq!(query.select_variables, vec!["person".to_string(), "name".to_string()]);
+        assert_eq!(
+            query.select_variables,
+            vec!["person".to_string(), "name".to_string()]
+        );
         assert!(!query.prefixes.is_empty());
     }
-    
+
     #[test]
     fn test_construct_query() {
         let query_str = r#"
             CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }
         "#;
-        
+
         let query = parse_query(query_str).unwrap();
         assert_eq!(query.query_type, QueryType::Construct);
         assert_eq!(query.construct_template.len(), 1);
     }
-    
+
     #[test]
     fn test_ask_query() {
         let query_str = r#"
             ASK WHERE { ?s ?p ?o }
         "#;
-        
+
         let query = parse_query(query_str).unwrap();
         assert_eq!(query.query_type, QueryType::Ask);
     }
-    
+
     #[test]
     fn test_tokenization() {
         let mut parser = QueryParser::new();
         parser.tokenize("SELECT ?x WHERE { ?x ?y ?z }").unwrap();
-        
+
         assert!(matches!(parser.tokens[0], Token::Select));
         assert!(matches!(parser.tokens[1], Token::Variable(_)));
         assert!(matches!(parser.tokens[2], Token::Where));

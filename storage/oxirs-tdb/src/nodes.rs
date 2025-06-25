@@ -4,12 +4,12 @@
 //! Provides efficient serialization with dictionary compression and term interning.
 
 use anyhow::{anyhow, Result};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::hash::{Hash, Hasher};
-use std::sync::{Arc, RwLock, Mutex};
 use std::fmt::{self, Debug, Display};
-use chrono::{DateTime, Utc};
+use std::hash::{Hash, Hasher};
+use std::sync::{Arc, Mutex, RwLock};
 
 /// Node identifier type - unique ID for each term
 pub type NodeId = u64;
@@ -121,10 +121,14 @@ impl Term {
     pub fn estimated_size(&self) -> usize {
         match self {
             Term::Iri(iri) => 1 + iri.len(),
-            Term::Literal { value, datatype, language } => {
-                1 + value.len() + 
-                datatype.as_ref().map_or(0, |dt| dt.len()) +
-                language.as_ref().map_or(0, |lang| lang.len())
+            Term::Literal {
+                value,
+                datatype,
+                language,
+            } => {
+                1 + value.len()
+                    + datatype.as_ref().map_or(0, |dt| dt.len())
+                    + language.as_ref().map_or(0, |lang| lang.len())
             }
             Term::BlankNode(id) => 1 + id.len(),
             Term::Variable(name) => 1 + name.len(),
@@ -136,7 +140,11 @@ impl Display for Term {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Term::Iri(iri) => write!(f, "<{}>", iri),
-            Term::Literal { value, datatype, language } => {
+            Term::Literal {
+                value,
+                datatype,
+                language,
+            } => {
                 write!(f, "\"{}\"", value)?;
                 if let Some(lang) = language {
                     write!(f, "@{}", lang)?;
@@ -177,7 +185,12 @@ pub enum CompressionType {
 
 impl EncodedNode {
     /// Create a new encoded node
-    pub fn new(node_type: u8, data: Vec<u8>, compression: CompressionType, original_size: u32) -> Self {
+    pub fn new(
+        node_type: u8,
+        data: Vec<u8>,
+        compression: CompressionType,
+        original_size: u32,
+    ) -> Self {
         Self {
             node_type,
             data,
@@ -229,11 +242,11 @@ impl StringDictionary {
         } else {
             let id = self.next_id;
             self.next_id += 1;
-            
+
             self.string_to_id.insert(s.to_string(), id);
             self.id_to_string.insert(id, s.to_string());
             self.ref_counts.insert(id, 1);
-            
+
             id
         }
     }
@@ -266,7 +279,11 @@ impl StringDictionary {
 
     /// Get dictionary statistics
     pub fn stats(&self) -> (usize, usize, u32) {
-        (self.string_to_id.len(), self.id_to_string.len(), self.next_id)
+        (
+            self.string_to_id.len(),
+            self.id_to_string.len(),
+            self.next_id,
+        )
     }
 }
 
@@ -383,7 +400,7 @@ impl NodeTable {
     /// Create a new node table with configuration
     pub fn with_config(config: NodeTableConfig) -> Self {
         let mut iri_prefixes = HashMap::new();
-        
+
         // Add common RDF prefixes
         iri_prefixes.insert("http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string(), 1);
         iri_prefixes.insert("http://www.w3.org/2000/01/rdf-schema#".to_string(), 2);
@@ -418,14 +435,18 @@ impl NodeTable {
 
         // Store encoded node
         {
-            let mut nodes = self.nodes.write()
+            let mut nodes = self
+                .nodes
+                .write()
                 .map_err(|_| anyhow!("Failed to acquire nodes lock"))?;
             nodes.insert(node_id, encoded);
         }
 
         // Update term to ID mapping
         {
-            let mut term_to_id = self.term_to_id.write()
+            let mut term_to_id = self
+                .term_to_id
+                .write()
                 .map_err(|_| anyhow!("Failed to acquire term_to_id lock"))?;
             term_to_id.insert(term.clone(), node_id);
         }
@@ -451,7 +472,9 @@ impl NodeTable {
 
         // Get encoded node
         let encoded = {
-            let nodes = self.nodes.read()
+            let nodes = self
+                .nodes
+                .read()
                 .map_err(|_| anyhow!("Failed to acquire nodes lock"))?;
             nodes.get(&node_id).cloned()
         };
@@ -484,7 +507,9 @@ impl NodeTable {
     pub fn remove_node(&self, node_id: NodeId) -> Result<()> {
         // Remove from nodes
         let encoded = {
-            let mut nodes = self.nodes.write()
+            let mut nodes = self
+                .nodes
+                .write()
                 .map_err(|_| anyhow!("Failed to acquire nodes lock"))?;
             nodes.remove(&node_id)
         };
@@ -492,17 +517,21 @@ impl NodeTable {
         if let Some(encoded) = encoded {
             // Decode to get the term for removal from term_to_id mapping
             let term = self.decode_term(&encoded)?;
-            
+
             // Remove from term_to_id mapping
             {
-                let mut term_to_id = self.term_to_id.write()
+                let mut term_to_id = self
+                    .term_to_id
+                    .write()
                     .map_err(|_| anyhow!("Failed to acquire term_to_id lock"))?;
                 term_to_id.remove(&term);
             }
 
             // Remove from cache
             {
-                let mut cache = self.cache.write()
+                let mut cache = self
+                    .cache
+                    .write()
                     .map_err(|_| anyhow!("Failed to acquire cache lock"))?;
                 cache.remove(&node_id);
             }
@@ -516,24 +545,28 @@ impl NodeTable {
 
     /// Get node table statistics
     pub fn get_stats(&self) -> Result<NodeTableStats> {
-        let stats = self.stats.lock()
+        let stats = self
+            .stats
+            .lock()
             .map_err(|_| anyhow!("Failed to acquire stats lock"))?;
         Ok(stats.clone())
     }
 
     /// Compact the node table (cleanup unused dictionary entries)
     pub fn compact(&self) -> Result<usize> {
-        let mut dictionary = self.dictionary.write()
+        let mut dictionary = self
+            .dictionary
+            .write()
             .map_err(|_| anyhow!("Failed to acquire dictionary lock"))?;
-        
+
         let (before_size, _, _) = dictionary.stats();
-        
+
         // In a real implementation, we would scan all nodes and rebuild the dictionary
         // For now, this is a placeholder
-        
+
         let (after_size, _, _) = dictionary.stats();
         let cleaned = before_size.saturating_sub(after_size);
-        
+
         // Update stats
         if let Ok(mut stats) = self.stats.lock() {
             stats.dictionary_size = after_size;
@@ -545,37 +578,49 @@ impl NodeTable {
     /// Clear all nodes
     pub fn clear(&self) -> Result<()> {
         {
-            let mut nodes = self.nodes.write()
+            let mut nodes = self
+                .nodes
+                .write()
                 .map_err(|_| anyhow!("Failed to acquire nodes lock"))?;
             nodes.clear();
         }
 
         {
-            let mut term_to_id = self.term_to_id.write()
+            let mut term_to_id = self
+                .term_to_id
+                .write()
                 .map_err(|_| anyhow!("Failed to acquire term_to_id lock"))?;
             term_to_id.clear();
         }
 
         {
-            let mut cache = self.cache.write()
+            let mut cache = self
+                .cache
+                .write()
                 .map_err(|_| anyhow!("Failed to acquire cache lock"))?;
             cache.clear();
         }
 
         {
-            let mut dictionary = self.dictionary.write()
+            let mut dictionary = self
+                .dictionary
+                .write()
                 .map_err(|_| anyhow!("Failed to acquire dictionary lock"))?;
             *dictionary = StringDictionary::new();
         }
 
         {
-            let mut next_node_id = self.next_node_id.write()
+            let mut next_node_id = self
+                .next_node_id
+                .write()
                 .map_err(|_| anyhow!("Failed to acquire next_node_id lock"))?;
             *next_node_id = 1;
         }
 
         {
-            let mut stats = self.stats.lock()
+            let mut stats = self
+                .stats
+                .lock()
                 .map_err(|_| anyhow!("Failed to acquire stats lock"))?;
             *stats = NodeTableStats::default();
         }
@@ -585,7 +630,9 @@ impl NodeTable {
 
     /// Get the total number of stored nodes
     pub fn len(&self) -> Result<usize> {
-        let nodes = self.nodes.read()
+        let nodes = self
+            .nodes
+            .read()
             .map_err(|_| anyhow!("Failed to acquire nodes lock"))?;
         Ok(nodes.len())
     }
@@ -598,13 +645,17 @@ impl NodeTable {
     // Private helper methods
 
     fn get_existing_node_id(&self, term: &Term) -> Result<Option<NodeId>> {
-        let term_to_id = self.term_to_id.read()
+        let term_to_id = self
+            .term_to_id
+            .read()
             .map_err(|_| anyhow!("Failed to acquire term_to_id lock"))?;
         Ok(term_to_id.get(term).copied())
     }
 
     fn allocate_node_id(&self) -> Result<NodeId> {
-        let mut next_node_id = self.next_node_id.write()
+        let mut next_node_id = self
+            .next_node_id
+            .write()
             .map_err(|_| anyhow!("Failed to acquire next_node_id lock"))?;
         let id = *next_node_id;
         *next_node_id += 1;
@@ -619,20 +670,26 @@ impl NodeTable {
             Term::Variable(_) => 4,
         };
 
-        let serialized = bincode::serialize(term)
-            .map_err(|e| anyhow!("Failed to serialize term: {}", e))?;
-        
+        let serialized =
+            bincode::serialize(term).map_err(|e| anyhow!("Failed to serialize term: {}", e))?;
+
         let original_size = serialized.len() as u32;
 
         // Apply compression if enabled and beneficial
-        let (data, compression) = if self.config.enable_compression && 
-                                     serialized.len() > self.config.compression_threshold {
+        let (data, compression) = if self.config.enable_compression
+            && serialized.len() > self.config.compression_threshold
+        {
             self.compress_data(&serialized, term)?
         } else {
             (serialized, CompressionType::None)
         };
 
-        Ok(EncodedNode::new(node_type, data, compression, original_size))
+        Ok(EncodedNode::new(
+            node_type,
+            data,
+            compression,
+            original_size,
+        ))
     }
 
     fn decode_term(&self, encoded: &EncodedNode) -> Result<Term> {
@@ -641,8 +698,7 @@ impl NodeTable {
             _ => self.decompress_data(&encoded.data, encoded.compression)?,
         };
 
-        bincode::deserialize(&data)
-            .map_err(|e| anyhow!("Failed to deserialize term: {}", e))
+        bincode::deserialize(&data).map_err(|e| anyhow!("Failed to deserialize term: {}", e))
     }
 
     fn compress_data(&self, data: &[u8], term: &Term) -> Result<(Vec<u8>, CompressionType)> {
@@ -689,9 +745,11 @@ impl NodeTable {
             Term::Variable(name) => name,
         };
 
-        let mut dictionary = self.dictionary.write()
+        let mut dictionary = self
+            .dictionary
+            .write()
             .map_err(|_| anyhow!("Failed to acquire dictionary lock"))?;
-        
+
         let dict_id = dictionary.intern(term_str);
         Ok(dict_id.to_le_bytes().to_vec())
     }
@@ -702,9 +760,11 @@ impl NodeTable {
         }
 
         let dict_id = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
-        let dictionary = self.dictionary.read()
+        let dictionary = self
+            .dictionary
+            .read()
             .map_err(|_| anyhow!("Failed to acquire dictionary lock"))?;
-        
+
         if let Some(string) = dictionary.get_string(dict_id) {
             bincode::serialize(string)
                 .map_err(|e| anyhow!("Failed to serialize dictionary string: {}", e))
@@ -714,7 +774,9 @@ impl NodeTable {
     }
 
     fn prefix_compress(&self, iri: &str) -> Result<Vec<u8>> {
-        let iri_prefixes = self.iri_prefixes.read()
+        let iri_prefixes = self
+            .iri_prefixes
+            .read()
             .map_err(|_| anyhow!("Failed to acquire IRI prefixes lock"))?;
 
         for (prefix, &prefix_id) in iri_prefixes.iter() {
@@ -739,10 +801,13 @@ impl NodeTable {
         let suffix = std::str::from_utf8(&data[4..])
             .map_err(|e| anyhow!("Invalid UTF-8 in suffix: {}", e))?;
 
-        let iri_prefixes = self.iri_prefixes.read()
+        let iri_prefixes = self
+            .iri_prefixes
+            .read()
             .map_err(|_| anyhow!("Failed to acquire IRI prefixes lock"))?;
 
-        let prefix = iri_prefixes.iter()
+        let prefix = iri_prefixes
+            .iter()
             .find(|(_, &id)| id == prefix_id)
             .map(|(prefix, _)| prefix)
             .ok_or_else(|| anyhow!("Prefix ID {} not found", prefix_id))?;
@@ -753,15 +818,19 @@ impl NodeTable {
     }
 
     fn get_from_cache(&self, node_id: NodeId) -> Result<Option<Term>> {
-        let cache = self.cache.read()
+        let cache = self
+            .cache
+            .read()
             .map_err(|_| anyhow!("Failed to acquire cache lock"))?;
         Ok(cache.get(&node_id).cloned())
     }
 
     fn update_cache(&self, node_id: NodeId, term: Term) -> Result<()> {
-        let mut cache = self.cache.write()
+        let mut cache = self
+            .cache
+            .write()
             .map_err(|_| anyhow!("Failed to acquire cache lock"))?;
-        
+
         // Simple LRU eviction if cache is full
         if cache.len() >= self.config.cache_size {
             // Remove oldest entry (this is a simplified implementation)
@@ -770,15 +839,17 @@ impl NodeTable {
                 cache.remove(&oldest_id);
             }
         }
-        
+
         cache.insert(node_id, term);
         Ok(())
     }
 
     fn update_stats_on_store(&self, term: &Term) -> Result<()> {
-        let mut stats = self.stats.lock()
+        let mut stats = self
+            .stats
+            .lock()
             .map_err(|_| anyhow!("Failed to acquire stats lock"))?;
-        
+
         stats.total_nodes += 1;
         match term {
             Term::Iri(_) => stats.iri_nodes += 1,
@@ -794,9 +865,11 @@ impl NodeTable {
     }
 
     fn update_stats_on_remove(&self, term: &Term) -> Result<()> {
-        let mut stats = self.stats.lock()
+        let mut stats = self
+            .stats
+            .lock()
             .map_err(|_| anyhow!("Failed to acquire stats lock"))?;
-        
+
         stats.total_nodes = stats.total_nodes.saturating_sub(1);
         match term {
             Term::Iri(_) => stats.iri_nodes = stats.iri_nodes.saturating_sub(1),
@@ -862,27 +935,27 @@ mod tests {
     #[test]
     fn test_node_table_basic_operations() {
         let node_table = NodeTable::new();
-        
+
         let term1 = Term::iri("http://example.org/person");
         let term2 = Term::literal("John Doe");
-        
+
         // Store terms
         let node_id1 = node_table.store_term(&term1).unwrap();
         let node_id2 = node_table.store_term(&term2).unwrap();
-        
+
         assert_ne!(node_id1, node_id2);
-        
+
         // Retrieve terms
         let retrieved1 = node_table.get_term(node_id1).unwrap().unwrap();
         let retrieved2 = node_table.get_term(node_id2).unwrap().unwrap();
-        
+
         assert_eq!(retrieved1, term1);
         assert_eq!(retrieved2, term2);
-        
+
         // Store same term again (should return same ID)
         let node_id1_again = node_table.store_term(&term1).unwrap();
         assert_eq!(node_id1, node_id1_again);
-        
+
         // Get node ID without storing
         let found_id = node_table.get_node_id(&term1).unwrap().unwrap();
         assert_eq!(found_id, node_id1);
@@ -891,19 +964,19 @@ mod tests {
     #[test]
     fn test_node_table_removal() {
         let node_table = NodeTable::new();
-        
+
         let term = Term::iri("http://example.org/test");
         let node_id = node_table.store_term(&term).unwrap();
-        
+
         // Verify term exists
         assert!(node_table.get_term(node_id).unwrap().is_some());
-        
+
         // Remove term
         assert!(node_table.remove_term(&term).unwrap());
-        
+
         // Verify term is gone
         assert!(node_table.get_term(node_id).unwrap().is_none());
-        
+
         // Try to remove again
         assert!(!node_table.remove_term(&term).unwrap());
     }
@@ -911,18 +984,18 @@ mod tests {
     #[test]
     fn test_node_table_stats() {
         let node_table = NodeTable::new();
-        
+
         let terms = vec![
             Term::iri("http://example.org/person"),
             Term::literal("John Doe"),
             Term::blank_node("b1"),
             Term::variable("x"),
         ];
-        
+
         for term in &terms {
             node_table.store_term(term).unwrap();
         }
-        
+
         let stats = node_table.get_stats().unwrap();
         assert_eq!(stats.total_nodes, 4);
         assert_eq!(stats.iri_nodes, 1);
@@ -934,17 +1007,17 @@ mod tests {
     #[test]
     fn test_string_dictionary() {
         let mut dict = StringDictionary::new();
-        
+
         let id1 = dict.intern("hello");
         let id2 = dict.intern("world");
         let id3 = dict.intern("hello"); // Same string
-        
+
         assert_eq!(id1, id3); // Same ID for same string
         assert_ne!(id1, id2); // Different IDs for different strings
-        
+
         assert_eq!(dict.get_string(id1), Some(&"hello".to_string()));
         assert_eq!(dict.get_string(id2), Some(&"world".to_string()));
-        
+
         assert_eq!(dict.get_id("hello"), Some(id1));
         assert_eq!(dict.get_id("world"), Some(id2));
     }

@@ -1,7 +1,7 @@
 //! RDF Copy tool - Copy RDF datasets with format conversion
 
-use std::path::PathBuf;
 use super::ToolResult;
+use std::path::PathBuf;
 
 /// Run rdfcopy command
 pub async fn run(

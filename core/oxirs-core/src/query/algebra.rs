@@ -1,12 +1,12 @@
 //! SPARQL 1.1 Query Algebra representation
-//! 
+//!
 //! Based on the W3C SPARQL 1.1 Query specification:
 //! https://www.w3.org/TR/sparql11-query/#sparqlQuery
 
 use crate::model::*;
-use std::fmt;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
+use std::fmt;
 
 /// A property path expression for navigating RDF graphs
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -133,14 +133,14 @@ pub enum Function {
     Concat,
     Replace,
     Regex,
-    
+
     // Numeric functions
     Abs,
     Round,
     Ceil,
     Floor,
     Rand,
-    
+
     // Date/Time functions
     Now,
     Year,
@@ -151,20 +151,20 @@ pub enum Function {
     Seconds,
     Timezone,
     Tz,
-    
+
     // Hash functions
     Md5,
     Sha1,
     Sha256,
     Sha384,
     Sha512,
-    
+
     // Type checking
     IsIri,
     IsBlank,
     IsLiteral,
     IsNumeric,
-    
+
     // Custom function
     Custom(NamedNode),
 }
@@ -427,17 +427,11 @@ pub struct Dataset {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum UpdateOperation {
     /// INSERT DATA
-    InsertData {
-        data: Vec<Quad>,
-    },
+    InsertData { data: Vec<Quad> },
     /// DELETE DATA
-    DeleteData {
-        data: Vec<Quad>,
-    },
+    DeleteData { data: Vec<Quad> },
     /// DELETE WHERE
-    DeleteWhere {
-        pattern: Vec<QuadPattern>,
-    },
+    DeleteWhere { pattern: Vec<QuadPattern> },
     /// INSERT/DELETE with WHERE
     Modify {
         delete: Option<Vec<QuadPattern>>,
@@ -452,20 +446,11 @@ pub enum UpdateOperation {
         silent: bool,
     },
     /// CLEAR
-    Clear {
-        graph: GraphTarget,
-        silent: bool,
-    },
+    Clear { graph: GraphTarget, silent: bool },
     /// CREATE
-    Create {
-        graph: NamedNode,
-        silent: bool,
-    },
+    Create { graph: NamedNode, silent: bool },
     /// DROP
-    Drop {
-        graph: GraphTarget,
-        silent: bool,
-    },
+    Drop { graph: GraphTarget, silent: bool },
     /// COPY
     Copy {
         source: GraphTarget,

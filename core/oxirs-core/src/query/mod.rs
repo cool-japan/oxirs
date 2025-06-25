@@ -1,21 +1,21 @@
 //! SPARQL query processing module
 
 pub mod algebra;
-pub mod parser;
-pub mod plan;
+pub mod distributed;
 pub mod exec;
-pub mod optimizer;
+pub mod functions;
 pub mod gpu;
 pub mod jit;
-pub mod distributed;
-pub mod wasm;
-pub mod functions;
+pub mod optimizer;
+pub mod parser;
+pub mod plan;
 pub mod property_paths;
+pub mod wasm;
 
 pub use algebra::*;
-pub use parser::*;
-pub use optimizer::{AIQueryOptimizer, MultiQueryOptimizer};
-pub use gpu::{GpuQueryExecutor, GpuBackend};
+pub use distributed::{DistributedConfig, DistributedQueryEngine, FederatedEndpoint};
+pub use gpu::{GpuBackend, GpuQueryExecutor};
 pub use jit::{JitCompiler, JitConfig};
-pub use distributed::{DistributedQueryEngine, FederatedEndpoint, DistributedConfig};
-pub use wasm::{WasmQueryCompiler, WasmTarget, OptimizationLevel};
+pub use optimizer::{AIQueryOptimizer, MultiQueryOptimizer};
+pub use parser::*;
+pub use wasm::{OptimizationLevel, WasmQueryCompiler, WasmTarget};

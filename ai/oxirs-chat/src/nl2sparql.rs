@@ -1,5 +1,5 @@
 //! Natural Language to SPARQL Conversion Module
-//! 
+//!
 //! Implements template-based and LLM-powered SPARQL query generation from natural language,
 //! with validation, optimization, and explanation features.
 
@@ -14,8 +14,8 @@ use std::{
 use tracing::{debug, error, info, warn};
 
 use crate::{
-    llm::{LLMManager, LLMRequest, ChatMessage, ChatRole, UseCase, Priority},
-    rag::{QueryContext, QueryIntent, ExtractedEntity, ExtractedRelationship},
+    llm::{ChatMessage, ChatRole, LLMManager, LLMRequest, Priority, UseCase},
+    rag::{ExtractedEntity, ExtractedRelationship, QueryContext, QueryIntent},
 };
 
 /// NL2SPARQL system configuration
@@ -383,10 +383,7 @@ pub struct NL2SPARQLSystem {
 }
 
 impl NL2SPARQLSystem {
-    pub fn new(
-        config: NL2SPARQLConfig,
-        llm_manager: Option<Arc<LLMManager>>,
-    ) -> Result<Self> {
+    pub fn new(config: NL2SPARQLConfig, llm_manager: Option<Arc<LLMManager>>) -> Result<Self> {
         let mut system = Self {
             config,
             llm_manager,
@@ -395,35 +392,30 @@ impl NL2SPARQLSystem {
             validator: SPARQLValidator::new(),
             optimizer: SPARQLOptimizer::new(),
         };
-        
+
         system.initialize_templates()?;
         Ok(system)
     }
 
     /// Generate SPARQL query from natural language
-    pub async fn generate_sparql(&mut self, query_context: &QueryContext) -> Result<SPARQLGenerationResult> {
+    pub async fn generate_sparql(
+        &mut self,
+        query_context: &QueryContext,
+    ) -> Result<SPARQLGenerationResult> {
         let start_time = std::time::Instant::now();
-        
+
         info!("Starting SPARQL generation for: {}", query_context.query);
-        
+
         let mut result = match self.config.generation.strategy {
-            GenerationStrategy::Template => {
-                self.generate_with_templates(query_context).await?
-            }
-            GenerationStrategy::LLM => {
-                self.generate_with_llm(query_context).await?
-            }
-            GenerationStrategy::Hybrid => {
-                self.generate_hybrid(query_context).await?
-            }
-            GenerationStrategy::RuleBased => {
-                self.generate_rule_based(query_context).await?
-            }
+            GenerationStrategy::Template => self.generate_with_templates(query_context).await?,
+            GenerationStrategy::LLM => self.generate_with_llm(query_context).await?,
+            GenerationStrategy::Hybrid => self.generate_hybrid(query_context).await?,
+            GenerationStrategy::RuleBased => self.generate_rule_based(query_context).await?,
         };
 
         // Validate the generated query
         result.validation_result = self.validator.validate(&result.query)?;
-        
+
         // Apply optimizations if enabled
         if self.config.optimization.enable_optimization {
             let (optimized_query, hints) = self.optimizer.optimize(&result.query)?;
@@ -437,20 +429,23 @@ impl NL2SPARQLSystem {
         }
 
         result.metadata.generation_time_ms = start_time.elapsed().as_millis() as u64;
-        
-        info!("SPARQL generation completed in {}ms", result.metadata.generation_time_ms);
+
+        info!(
+            "SPARQL generation completed in {}ms",
+            result.metadata.generation_time_ms
+        );
         Ok(result)
     }
 
     fn initialize_templates(&mut self) -> Result<()> {
         // Define built-in SPARQL templates
         self.add_built_in_templates()?;
-        
+
         // Load custom templates if configured
         if let Some(ref template_dir) = self.config.templates.template_dir {
             self.load_templates_from_directory(template_dir)?;
         }
-        
+
         Ok(())
     }
 
@@ -500,9 +495,10 @@ SELECT ?answer WHERE {
             ],
             complexity: QueryComplexity::Simple,
         };
-        
-        self.templates.insert("factual_lookup".to_string(), factual_template);
-        
+
+        self.templates
+            .insert("factual_lookup".to_string(), factual_template);
+
         // Relationship query template
         let relationship_template = SPARQLTemplate {
             name: "relationship_query".to_string(),
@@ -524,14 +520,18 @@ UNION {
     BIND(CONCAT(STR(?p1), " -> ", STR(?p2)) AS ?path)
     BIND(?p1 AS ?relation)
 }
-"#.to_string(),
+"#
+            .to_string(),
             parameters: vec![
                 TemplateParameter {
                     name: "entity1".to_string(),
                     parameter_type: ParameterType::Entity,
                     required: true,
                     default_value: None,
-                    extraction_pattern: Some(r"(?:how|what) (?:is|are) (.+?) (?:related to|connected to) (.+?)".to_string()),
+                    extraction_pattern: Some(
+                        r"(?:how|what) (?:is|are) (.+?) (?:related to|connected to) (.+?)"
+                            .to_string(),
+                    ),
                 },
                 TemplateParameter {
                     name: "entity2".to_string(),
@@ -544,9 +544,10 @@ UNION {
             examples: vec![],
             complexity: QueryComplexity::Medium,
         };
-        
-        self.templates.insert("relationship_query".to_string(), relationship_template);
-        
+
+        self.templates
+            .insert("relationship_query".to_string(), relationship_template);
+
         // List query template
         let list_template = SPARQLTemplate {
             name: "list_query".to_string(),
@@ -569,14 +570,17 @@ SELECT DISTINCT ?item ?label WHERE {
 }
 ORDER BY ?label
 LIMIT {{limit}}
-"#.to_string(),
+"#
+            .to_string(),
             parameters: vec![
                 TemplateParameter {
                     name: "type".to_string(),
                     parameter_type: ParameterType::Class,
                     required: true,
                     default_value: None,
-                    extraction_pattern: Some(r"(?:list all|show me|what are) (.+?)(?:\?|$)".to_string()),
+                    extraction_pattern: Some(
+                        r"(?:list all|show me|what are) (.+?)(?:\?|$)".to_string(),
+                    ),
                 },
                 TemplateParameter {
                     name: "limit".to_string(),
@@ -589,9 +593,10 @@ LIMIT {{limit}}
             examples: vec![],
             complexity: QueryComplexity::Simple,
         };
-        
-        self.templates.insert("list_query".to_string(), list_template);
-        
+
+        self.templates
+            .insert("list_query".to_string(), list_template);
+
         Ok(())
     }
 
@@ -600,16 +605,19 @@ LIMIT {{limit}}
         Ok(())
     }
 
-    async fn generate_with_templates(&self, query_context: &QueryContext) -> Result<SPARQLGenerationResult> {
+    async fn generate_with_templates(
+        &self,
+        query_context: &QueryContext,
+    ) -> Result<SPARQLGenerationResult> {
         // Select best matching template
         let template = self.select_template(query_context)?;
-        
+
         // Extract parameters from the query
         let parameters = self.extract_parameters(&template, query_context)?;
-        
+
         // Fill template with parameters
         let sparql_query = self.fill_template(&template, &parameters)?;
-        
+
         Ok(SPARQLGenerationResult {
             query: sparql_query,
             confidence: 0.8, // TODO: Calculate actual confidence
@@ -634,7 +642,10 @@ LIMIT {{limit}}
         })
     }
 
-    async fn generate_with_llm(&mut self, query_context: &QueryContext) -> Result<SPARQLGenerationResult> {
+    async fn generate_with_llm(
+        &mut self,
+        query_context: &QueryContext,
+    ) -> Result<SPARQLGenerationResult> {
         if let Some(ref mut llm_manager) = self.llm_manager {
             let system_prompt = self.create_sparql_generation_prompt();
             let user_message = format!(
@@ -643,13 +654,11 @@ LIMIT {{limit}}
             );
 
             let llm_request = LLMRequest {
-                messages: vec![
-                    ChatMessage {
-                        role: ChatRole::User,
-                        content: user_message,
-                        metadata: None,
-                    },
-                ],
+                messages: vec![ChatMessage {
+                    role: ChatRole::User,
+                    content: user_message,
+                    metadata: None,
+                }],
                 system_prompt: Some(system_prompt),
                 temperature: 0.3, // Lower temperature for more deterministic code generation
                 max_tokens: Some(1000),
@@ -661,7 +670,7 @@ LIMIT {{limit}}
             match llm_manager.generate_response(llm_request).await {
                 Ok(response) => {
                     let sparql_query = self.extract_sparql_from_response(&response.content)?;
-                    
+
                     Ok(SPARQLGenerationResult {
                         query: sparql_query,
                         confidence: 0.7, // TODO: Calculate based on LLM confidence
@@ -699,10 +708,13 @@ LIMIT {{limit}}
         }
     }
 
-    async fn generate_hybrid(&mut self, query_context: &QueryContext) -> Result<SPARQLGenerationResult> {
+    async fn generate_hybrid(
+        &mut self,
+        query_context: &QueryContext,
+    ) -> Result<SPARQLGenerationResult> {
         // Try template-based first, then enhance with LLM if needed
         let template_result = self.generate_with_templates(query_context).await?;
-        
+
         if template_result.confidence < self.config.generation.confidence_threshold {
             // Template confidence is low, try LLM enhancement
             if let Ok(llm_result) = self.generate_with_llm(query_context).await {
@@ -714,21 +726,24 @@ LIMIT {{limit}}
                 }
             }
         }
-        
+
         Ok(SPARQLGenerationResult {
             generation_method: GenerationMethod::Hybrid,
             ..template_result
         })
     }
 
-    async fn generate_rule_based(&self, _query_context: &QueryContext) -> Result<SPARQLGenerationResult> {
+    async fn generate_rule_based(
+        &self,
+        _query_context: &QueryContext,
+    ) -> Result<SPARQLGenerationResult> {
         // TODO: Implement rule-based generation
         Err(anyhow!("Rule-based generation not yet implemented"))
     }
 
     fn select_template(&self, query_context: &QueryContext) -> Result<&SPARQLTemplate> {
         let query_lower = query_context.query.to_lowercase();
-        
+
         // Match based on intent and patterns
         for template in self.templates.values() {
             for pattern in &template.intent_patterns {
@@ -737,15 +752,20 @@ LIMIT {{limit}}
                 }
             }
         }
-        
+
         // Default to factual lookup if no specific pattern matches
-        self.templates.get("factual_lookup")
+        self.templates
+            .get("factual_lookup")
             .ok_or_else(|| anyhow!("No suitable template found"))
     }
 
-    fn extract_parameters(&self, template: &SPARQLTemplate, query_context: &QueryContext) -> Result<HashMap<String, String>> {
+    fn extract_parameters(
+        &self,
+        template: &SPARQLTemplate,
+        query_context: &QueryContext,
+    ) -> Result<HashMap<String, String>> {
         let mut parameters = HashMap::new();
-        
+
         for param in &template.parameters {
             if let Some(ref pattern) = param.extraction_pattern {
                 if let Ok(regex) = Regex::new(pattern) {
@@ -756,7 +776,7 @@ LIMIT {{limit}}
                     }
                 }
             }
-            
+
             // Use default value if parameter not extracted and has default
             if !parameters.contains_key(&param.name) {
                 if let Some(ref default) = param.default_value {
@@ -766,12 +786,18 @@ LIMIT {{limit}}
                 }
             }
         }
-        
+
         Ok(parameters)
     }
 
-    fn fill_template(&self, template: &SPARQLTemplate, parameters: &HashMap<String, String>) -> Result<String> {
-        let template_obj = self.template_engine.render_template(&template.template, &parameters)?;
+    fn fill_template(
+        &self,
+        template: &SPARQLTemplate,
+        parameters: &HashMap<String, String>,
+    ) -> Result<String> {
+        let template_obj = self
+            .template_engine
+            .render_template(&template.template, &parameters)?;
         Ok(template_obj)
     }
 
@@ -787,40 +813,46 @@ Guidelines:
 6. Use proper variable naming
 7. Include comments explaining complex parts
 
-Always respond with just the SPARQL query, no additional explanation unless requested."#.to_string()
+Always respond with just the SPARQL query, no additional explanation unless requested."#
+            .to_string()
     }
 
     fn extract_sparql_from_response(&self, response: &str) -> Result<String> {
         // Extract SPARQL query from LLM response
         // Look for patterns like ```sparql ... ``` or just return the whole response if it looks like SPARQL
-        
+
         if let Some(start) = response.find("```sparql") {
             if let Some(end) = response[start..].find("```") {
                 let query = &response[start + 9..start + end];
                 return Ok(query.trim().to_string());
             }
         }
-        
+
         if let Some(start) = response.find("```") {
             if let Some(end) = response[start + 3..].find("```") {
                 let query = &response[start + 3..start + 3 + end];
                 return Ok(query.trim().to_string());
             }
         }
-        
+
         // If no code blocks found, check if the response looks like SPARQL
         let trimmed = response.trim();
-        if trimmed.to_uppercase().contains("SELECT") || 
-           trimmed.to_uppercase().contains("CONSTRUCT") ||
-           trimmed.to_uppercase().contains("ASK") ||
-           trimmed.to_uppercase().contains("DESCRIBE") {
+        if trimmed.to_uppercase().contains("SELECT")
+            || trimmed.to_uppercase().contains("CONSTRUCT")
+            || trimmed.to_uppercase().contains("ASK")
+            || trimmed.to_uppercase().contains("DESCRIBE")
+        {
             return Ok(trimmed.to_string());
         }
-        
+
         Err(anyhow!("Could not extract SPARQL query from response"))
     }
 
-    async fn generate_explanation(&self, result: &SPARQLGenerationResult, query_context: &QueryContext) -> Result<QueryExplanation> {
+    async fn generate_explanation(
+        &self,
+        result: &SPARQLGenerationResult,
+        query_context: &QueryContext,
+    ) -> Result<QueryExplanation> {
         // TODO: Implement explanation generation
         Ok(QueryExplanation {
             natural_language: format!("Generated SPARQL query for: {}", query_context.query),
@@ -840,42 +872,58 @@ pub struct SPARQLValidator {
 impl SPARQLValidator {
     pub fn new() -> Self {
         let mut syntax_patterns = HashMap::new();
-        
+
         // Basic SPARQL syntax patterns
         syntax_patterns.insert(
             "select_pattern".to_string(),
-            Regex::new(r"(?i)^\s*SELECT\s+(?:DISTINCT\s+)?(?:\*|\?\w+(?:\s+\?\w+)*)\s+WHERE\s*\{").unwrap()
+            Regex::new(r"(?i)^\s*SELECT\s+(?:DISTINCT\s+)?(?:\*|\?\w+(?:\s+\?\w+)*)\s+WHERE\s*\{")
+                .unwrap(),
         );
         syntax_patterns.insert(
             "construct_pattern".to_string(),
-            Regex::new(r"(?i)^\s*CONSTRUCT\s*\{").unwrap()
+            Regex::new(r"(?i)^\s*CONSTRUCT\s*\{").unwrap(),
         );
         syntax_patterns.insert(
             "ask_pattern".to_string(),
-            Regex::new(r"(?i)^\s*ASK\s*\{").unwrap()
+            Regex::new(r"(?i)^\s*ASK\s*\{").unwrap(),
         );
         syntax_patterns.insert(
             "describe_pattern".to_string(),
-            Regex::new(r"(?i)^\s*DESCRIBE\s+").unwrap()
+            Regex::new(r"(?i)^\s*DESCRIBE\s+").unwrap(),
         );
         syntax_patterns.insert(
             "variable_pattern".to_string(),
-            Regex::new(r"\?[a-zA-Z][a-zA-Z0-9_]*").unwrap()
+            Regex::new(r"\?[a-zA-Z][a-zA-Z0-9_]*").unwrap(),
         );
         syntax_patterns.insert(
             "iri_pattern".to_string(),
-            Regex::new(r"<[^<>\s]+>").unwrap()
+            Regex::new(r"<[^<>\s]+>").unwrap(),
         );
-        
+
         // Common SPARQL prefixes
         let mut common_prefixes = HashMap::new();
-        common_prefixes.insert("rdf".to_string(), "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string());
-        common_prefixes.insert("rdfs".to_string(), "http://www.w3.org/2000/01/rdf-schema#".to_string());
-        common_prefixes.insert("owl".to_string(), "http://www.w3.org/2002/07/owl#".to_string());
-        common_prefixes.insert("xsd".to_string(), "http://www.w3.org/2001/XMLSchema#".to_string());
+        common_prefixes.insert(
+            "rdf".to_string(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string(),
+        );
+        common_prefixes.insert(
+            "rdfs".to_string(),
+            "http://www.w3.org/2000/01/rdf-schema#".to_string(),
+        );
+        common_prefixes.insert(
+            "owl".to_string(),
+            "http://www.w3.org/2002/07/owl#".to_string(),
+        );
+        common_prefixes.insert(
+            "xsd".to_string(),
+            "http://www.w3.org/2001/XMLSchema#".to_string(),
+        );
         common_prefixes.insert("foaf".to_string(), "http://xmlns.com/foaf/0.1/".to_string());
-        common_prefixes.insert("skos".to_string(), "http://www.w3.org/2004/02/skos/core#".to_string());
-        
+        common_prefixes.insert(
+            "skos".to_string(),
+            "http://www.w3.org/2004/02/skos/core#".to_string(),
+        );
+
         Self {
             syntax_patterns,
             common_prefixes,
@@ -887,31 +935,33 @@ impl SPARQLValidator {
         let mut semantic_warnings = Vec::new();
         let mut schema_issues = Vec::new();
         let mut suggestions = Vec::new();
-        
+
         // Basic syntax validation
         if !self.validate_basic_syntax(query) {
             syntax_errors.push(SyntaxError {
                 message: "Query does not match any valid SPARQL query pattern".to_string(),
                 position: Some(0),
                 error_type: SyntaxErrorType::InvalidSyntax,
-                suggestion: Some("Ensure query starts with SELECT, CONSTRUCT, ASK, or DESCRIBE".to_string()),
+                suggestion: Some(
+                    "Ensure query starts with SELECT, CONSTRUCT, ASK, or DESCRIBE".to_string(),
+                ),
             });
         }
-        
+
         // Validate query structure
         self.validate_query_structure(query, &mut syntax_errors, &mut semantic_warnings)?;
-        
+
         // Check for common issues
         self.check_common_issues(query, &mut semantic_warnings, &mut suggestions)?;
-        
+
         // Validate prefixes
         self.validate_prefixes(query, &mut syntax_errors, &mut suggestions)?;
-        
+
         // Check for performance issues
         self.check_performance_issues(query, &mut semantic_warnings)?;
-        
+
         let is_valid = syntax_errors.is_empty();
-        
+
         Ok(ValidationResult {
             is_valid,
             syntax_errors,
@@ -920,41 +970,53 @@ impl SPARQLValidator {
             suggestions,
         })
     }
-    
+
     fn validate_basic_syntax(&self, query: &str) -> bool {
         let query_trimmed = query.trim();
-        
+
         // Check if query starts with valid SPARQL keyword
         for pattern in self.syntax_patterns.values() {
             if pattern.is_match(query_trimmed) {
                 return true;
             }
         }
-        
+
         false
     }
-    
-    fn validate_query_structure(&self, query: &str, syntax_errors: &mut Vec<SyntaxError>, semantic_warnings: &mut Vec<SemanticWarning>) -> Result<()> {
+
+    fn validate_query_structure(
+        &self,
+        query: &str,
+        syntax_errors: &mut Vec<SyntaxError>,
+        semantic_warnings: &mut Vec<SemanticWarning>,
+    ) -> Result<()> {
         // Check for balanced braces
         let open_braces = query.matches('{').count();
         let close_braces = query.matches('}').count();
-        
+
         if open_braces != close_braces {
             syntax_errors.push(SyntaxError {
-                message: format!("Unbalanced braces: {} open, {} close", open_braces, close_braces),
+                message: format!(
+                    "Unbalanced braces: {} open, {} close",
+                    open_braces, close_braces
+                ),
                 position: None,
                 error_type: SyntaxErrorType::InvalidSyntax,
-                suggestion: Some("Check that all opening braces have matching closing braces".to_string()),
+                suggestion: Some(
+                    "Check that all opening braces have matching closing braces".to_string(),
+                ),
             });
         }
-        
+
         // Check for variables in SELECT that aren't used in WHERE
         if let Some(var_pattern) = self.syntax_patterns.get("variable_pattern") {
-            let variables: HashSet<&str> = var_pattern.find_iter(query)
-                .map(|m| m.as_str())
-                .collect();
-                
-            if variables.is_empty() && query.to_uppercase().contains("SELECT") && !query.contains("*") {
+            let variables: HashSet<&str> =
+                var_pattern.find_iter(query).map(|m| m.as_str()).collect();
+
+            if variables.is_empty()
+                && query.to_uppercase().contains("SELECT")
+                && !query.contains("*")
+            {
                 semantic_warnings.push(SemanticWarning {
                     message: "No variables found in SELECT query".to_string(),
                     warning_type: SemanticWarningType::UnboundVariable,
@@ -962,56 +1024,74 @@ impl SPARQLValidator {
                 });
             }
         }
-        
+
         Ok(())
     }
-    
-    fn check_common_issues(&self, query: &str, semantic_warnings: &mut Vec<SemanticWarning>, suggestions: &mut Vec<String>) -> Result<()> {
+
+    fn check_common_issues(
+        &self,
+        query: &str,
+        semantic_warnings: &mut Vec<SemanticWarning>,
+        suggestions: &mut Vec<String>,
+    ) -> Result<()> {
         let query_upper = query.to_uppercase();
-        
+
         // Check for potential Cartesian products
         if !query_upper.contains("FILTER") && query_upper.matches(".").count() > 3 {
             semantic_warnings.push(SemanticWarning {
-                message: "Query may produce Cartesian product - consider adding FILTER clauses".to_string(),
+                message: "Query may produce Cartesian product - consider adding FILTER clauses"
+                    .to_string(),
                 warning_type: SemanticWarningType::PossibleCartesianProduct,
                 severity: WarningSeverity::Medium,
             });
-            suggestions.push("Add FILTER clauses to constrain results and improve performance".to_string());
+            suggestions.push(
+                "Add FILTER clauses to constrain results and improve performance".to_string(),
+            );
         }
-        
+
         // Check for missing LIMIT
         if !query_upper.contains("LIMIT") && query_upper.contains("SELECT") {
-            suggestions.push("Consider adding a LIMIT clause to prevent large result sets".to_string());
+            suggestions
+                .push("Consider adding a LIMIT clause to prevent large result sets".to_string());
         }
-        
+
         // Check for complex queries without ORDER BY
-        if query.len() > 200 && !query_upper.contains("ORDER BY") && query_upper.contains("SELECT") {
+        if query.len() > 200 && !query_upper.contains("ORDER BY") && query_upper.contains("SELECT")
+        {
             suggestions.push("Consider adding ORDER BY for consistent result ordering".to_string());
         }
-        
+
         Ok(())
     }
-    
-    fn validate_prefixes(&self, query: &str, syntax_errors: &mut Vec<SyntaxError>, suggestions: &mut Vec<String>) -> Result<()> {
+
+    fn validate_prefixes(
+        &self,
+        query: &str,
+        syntax_errors: &mut Vec<SyntaxError>,
+        suggestions: &mut Vec<String>,
+    ) -> Result<()> {
         // Extract used prefixes
         let prefix_usage_pattern = Regex::new(r"(\w+):")?;
-        let used_prefixes: HashSet<&str> = prefix_usage_pattern.find_iter(query)
+        let used_prefixes: HashSet<&str> = prefix_usage_pattern
+            .find_iter(query)
             .map(|m| m.as_str().trim_end_matches(':'))
             .collect();
-        
+
         // Extract declared prefixes
-        let prefix_declaration_pattern = Regex::new(r"(?i)PREFIX\s+(\w+):").unwrap_or_else(|_| Regex::new(r"PREFIX").unwrap());
-        let declared_prefixes: HashSet<&str> = prefix_declaration_pattern.captures_iter(query)
+        let prefix_declaration_pattern =
+            Regex::new(r"(?i)PREFIX\s+(\w+):").unwrap_or_else(|_| Regex::new(r"PREFIX").unwrap());
+        let declared_prefixes: HashSet<&str> = prefix_declaration_pattern
+            .captures_iter(query)
             .filter_map(|cap| cap.get(1))
             .map(|m| m.as_str())
             .collect();
-        
+
         // Check for undeclared prefixes
         for prefix in &used_prefixes {
             if !declared_prefixes.contains(prefix) && self.common_prefixes.contains_key(*prefix) {
                 suggestions.push(format!(
-                    "Add prefix declaration: PREFIX {}: <{}>", 
-                    prefix, 
+                    "Add prefix declaration: PREFIX {}: <{}>",
+                    prefix,
                     self.common_prefixes.get(*prefix).unwrap()
                 ));
             } else if !declared_prefixes.contains(prefix) {
@@ -1023,22 +1103,27 @@ impl SPARQLValidator {
                 });
             }
         }
-        
+
         Ok(())
     }
-    
-    fn check_performance_issues(&self, query: &str, semantic_warnings: &mut Vec<SemanticWarning>) -> Result<()> {
+
+    fn check_performance_issues(
+        &self,
+        query: &str,
+        semantic_warnings: &mut Vec<SemanticWarning>,
+    ) -> Result<()> {
         let query_upper = query.to_uppercase();
-        
+
         // Check for expensive operations
         if query_upper.contains("REGEX") {
             semantic_warnings.push(SemanticWarning {
-                message: "REGEX operations can be expensive - consider alternatives if possible".to_string(),
+                message: "REGEX operations can be expensive - consider alternatives if possible"
+                    .to_string(),
                 warning_type: SemanticWarningType::PerformanceIssue,
                 severity: WarningSeverity::Low,
             });
         }
-        
+
         if query_upper.contains("UNION") && query_upper.matches("UNION").count() > 2 {
             semantic_warnings.push(SemanticWarning {
                 message: "Multiple UNION clauses may impact performance".to_string(),
@@ -1046,7 +1131,7 @@ impl SPARQLValidator {
                 severity: WarningSeverity::Medium,
             });
         }
-        
+
         if query.len() > 1000 {
             semantic_warnings.push(SemanticWarning {
                 message: "Very long query may be difficult to optimize".to_string(),
@@ -1054,7 +1139,7 @@ impl SPARQLValidator {
                 severity: WarningSeverity::Low,
             });
         }
-        
+
         Ok(())
     }
 }
@@ -1075,7 +1160,7 @@ struct OptimizationRule {
 impl SPARQLOptimizer {
     pub fn new() -> Self {
         let mut optimization_rules = Vec::new();
-        
+
         // Add DISTINCT optimization
         optimization_rules.push(OptimizationRule {
             name: "redundant_distinct".to_string(),
@@ -1084,7 +1169,7 @@ impl SPARQLOptimizer {
             description: "Remove redundant DISTINCT clauses".to_string(),
             estimated_improvement: 0.1,
         });
-        
+
         // Add LIMIT pushdown optimization
         optimization_rules.push(OptimizationRule {
             name: "limit_optimization".to_string(),
@@ -1093,18 +1178,21 @@ impl SPARQLOptimizer {
             description: "Add default LIMIT for safety".to_string(),
             estimated_improvement: 0.3,
         });
-        
+
         Self { optimization_rules }
     }
 
     pub fn optimize(&self, query: &str) -> Result<(String, Vec<OptimizationHint>)> {
         let mut optimized_query = query.to_string();
         let mut hints = Vec::new();
-        
+
         // Apply optimization rules
         for rule in &self.optimization_rules {
             if rule.pattern.is_match(&optimized_query) {
-                optimized_query = rule.pattern.replace_all(&optimized_query, &rule.replacement).to_string();
+                optimized_query = rule
+                    .pattern
+                    .replace_all(&optimized_query, &rule.replacement)
+                    .to_string();
                 hints.push(OptimizationHint {
                     hint_type: OptimizationHintType::SimplifyExpression,
                     description: rule.description.clone(),
@@ -1112,98 +1200,110 @@ impl SPARQLOptimizer {
                 });
             }
         }
-        
+
         // Additional optimizations
         let additional_hints = self.analyze_query_structure(&optimized_query)?;
         hints.extend(additional_hints);
-        
+
         // Query rewriting optimizations
         optimized_query = self.rewrite_query_patterns(optimized_query)?;
-        
+
         Ok((optimized_query, hints))
     }
-    
+
     fn analyze_query_structure(&self, query: &str) -> Result<Vec<OptimizationHint>> {
         let mut hints = Vec::new();
         let query_upper = query.to_uppercase();
-        
+
         // Suggest index hints for large result sets
         if !query_upper.contains("LIMIT") && query_upper.contains("SELECT") {
             hints.push(OptimizationHint {
                 hint_type: OptimizationHintType::AddIndex,
-                description: "Consider adding LIMIT clause to prevent large result sets".to_string(),
+                description: "Consider adding LIMIT clause to prevent large result sets"
+                    .to_string(),
                 estimated_improvement: Some(0.5),
             });
         }
-        
+
         // Suggest reordering for better join performance
         if query_upper.contains("OPTIONAL") && query_upper.contains("FILTER") {
             let optional_pos = query_upper.find("OPTIONAL").unwrap_or(0);
             let filter_pos = query_upper.find("FILTER").unwrap_or(0);
-            
+
             if filter_pos > optional_pos {
                 hints.push(OptimizationHint {
                     hint_type: OptimizationHintType::ReorderTriples,
-                    description: "Consider moving FILTER clauses before OPTIONAL for better performance".to_string(),
+                    description:
+                        "Consider moving FILTER clauses before OPTIONAL for better performance"
+                            .to_string(),
                     estimated_improvement: Some(0.3),
                 });
             }
         }
-        
+
         // Check for Cartesian products
         let triple_count = query_upper.matches(" . ").count();
         if triple_count > 5 && !query_upper.contains("FILTER") {
             hints.push(OptimizationHint {
                 hint_type: OptimizationHintType::UseFilter,
-                description: "Multiple triple patterns without filters may create Cartesian products".to_string(),
+                description:
+                    "Multiple triple patterns without filters may create Cartesian products"
+                        .to_string(),
                 estimated_improvement: Some(0.7),
             });
         }
-        
+
         Ok(hints)
     }
-    
+
     fn rewrite_query_patterns(&self, query: String) -> Result<String> {
         let mut rewritten = query;
-        
+
         // Rewrite inefficient UNION patterns
         let union_pattern = Regex::new(r"(?i)\{\s*(.+?)\s*\}\s*UNION\s*\{\s*(.+?)\s*\}")?;
         if union_pattern.is_match(&rewritten) {
             // This is a simplified rewrite - in practice, we'd need more sophisticated analysis
             info!("Detected UNION pattern that could potentially be optimized");
         }
-        
+
         // Rewrite FILTER patterns for better performance
-        let filter_pattern = Regex::new(r#"(?i)FILTER\s*\(\s*regex\s*\(\s*\?(\w+)\s*,\s*"([^"]+)"\s*\)\s*\)"#)?;
-        rewritten = filter_pattern.replace_all(&rewritten, |caps: &regex::Captures| {
-            format!("FILTER(CONTAINS(LCASE(?{}), LCASE(\"{}\")))", &caps[1], &caps[2])
-        }).to_string();
-        
+        let filter_pattern =
+            Regex::new(r#"(?i)FILTER\s*\(\s*regex\s*\(\s*\?(\w+)\s*,\s*"([^"]+)"\s*\)\s*\)"#)?;
+        rewritten = filter_pattern
+            .replace_all(&rewritten, |caps: &regex::Captures| {
+                format!(
+                    "FILTER(CONTAINS(LCASE(?{}), LCASE(\"{}\")))",
+                    &caps[1], &caps[2]
+                )
+            })
+            .to_string();
+
         Ok(rewritten)
     }
-    
+
     /// Get optimization recommendations for a query
     pub fn get_recommendations(&self, query: &str) -> Result<Vec<String>> {
         let mut recommendations = Vec::new();
         let query_upper = query.to_uppercase();
-        
+
         // Basic recommendations
         if !query_upper.contains("PREFIX") && query.contains(":") {
             recommendations.push("Add PREFIX declarations for better readability".to_string());
         }
-        
+
         if query.len() > 500 && !query_upper.contains("LIMIT") {
             recommendations.push("Add LIMIT clause for large queries".to_string());
         }
-        
+
         if query_upper.contains("SELECT *") {
-            recommendations.push("Select specific variables instead of * for better performance".to_string());
+            recommendations
+                .push("Select specific variables instead of * for better performance".to_string());
         }
-        
+
         if query_upper.matches("OPTIONAL").count() > 3 {
             recommendations.push("Consider restructuring multiple OPTIONAL clauses".to_string());
         }
-        
+
         Ok(recommendations)
     }
 }

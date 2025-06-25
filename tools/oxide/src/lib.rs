@@ -1,6 +1,6 @@
 //! # Oxide - OxiRS CLI Tool
 //!
-//! Command-line interface for OxiRS providing import, export, migration, 
+//! Command-line interface for OxiRS providing import, export, migration,
 //! benchmarking, and server management tools.
 //!
 //! ## Commands
@@ -20,25 +20,25 @@
 //! ```bash
 //! # Initialize a new dataset
 //! oxide init mykg --format tdb2
-//! 
+//!
 //! # Import data
 //! oxide import mykg data.ttl --format turtle
-//! 
+//!
 //! # Start server
 //! oxide serve mykg.toml --port 3030
-//! 
+//!
 //! # Run benchmarks
 //! oxide benchmark mykg --suite sp2bench
 //! ```
 
-use std::path::PathBuf;
 use clap::{Parser, Subcommand};
+use std::path::PathBuf;
 
+pub mod benchmark;
 pub mod commands;
 pub mod config;
-pub mod import;
 pub mod export;
-pub mod benchmark;
+pub mod import;
 pub mod server;
 pub mod tools;
 
@@ -50,11 +50,11 @@ pub mod tools;
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
-    
+
     /// Enable verbose logging
     #[arg(short, long, global = true)]
     pub verbose: bool,
-    
+
     /// Configuration file
     #[arg(short, long, global = true)]
     pub config: Option<PathBuf>,
@@ -169,7 +169,7 @@ pub enum Commands {
         #[command(subcommand)]
         action: ConfigAction,
     },
-    
+
     // === Data Processing Tools ===
     /// RDF parsing and serialization (Jena riot equivalent)
     Riot {
@@ -195,7 +195,7 @@ pub enum Commands {
         #[arg(long)]
         count: bool,
     },
-    
+
     /// Concatenate and convert RDF files
     RdfCat {
         /// Input files
@@ -208,7 +208,7 @@ pub enum Commands {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
-    
+
     /// Copy RDF datasets with format conversion
     RdfCopy {
         /// Source dataset/file
@@ -222,7 +222,7 @@ pub enum Commands {
         #[arg(long)]
         target_format: Option<String>,
     },
-    
+
     /// Compare RDF datasets
     RdfDiff {
         /// First dataset/file
@@ -233,7 +233,7 @@ pub enum Commands {
         #[arg(short, long, default_value = "text")]
         format: String,
     },
-    
+
     /// Validate RDF syntax
     RdfParse {
         /// Input file
@@ -245,7 +245,7 @@ pub enum Commands {
         #[arg(short, long)]
         base: Option<String>,
     },
-    
+
     // === Advanced Query Tools ===
     /// Advanced SPARQL query processor (Jena arq equivalent)
     Arq {
@@ -277,7 +277,7 @@ pub enum Commands {
         #[arg(long)]
         time: bool,
     },
-    
+
     /// Remote SPARQL query execution
     RSparql {
         /// SPARQL endpoint URL
@@ -296,7 +296,7 @@ pub enum Commands {
         #[arg(long, default_value = "30")]
         timeout: u64,
     },
-    
+
     /// Remote SPARQL update execution
     RUpdate {
         /// SPARQL endpoint URL
@@ -312,7 +312,7 @@ pub enum Commands {
         #[arg(long, default_value = "30")]
         timeout: u64,
     },
-    
+
     /// SPARQL query parsing and validation
     QParse {
         /// Query string or file
@@ -327,7 +327,7 @@ pub enum Commands {
         #[arg(long)]
         print_algebra: bool,
     },
-    
+
     /// SPARQL update parsing and validation
     UParse {
         /// Update string or file
@@ -339,7 +339,7 @@ pub enum Commands {
         #[arg(long)]
         print_ast: bool,
     },
-    
+
     // === Storage Tools ===
     /// Bulk data loading
     TdbLoader {
@@ -357,7 +357,7 @@ pub enum Commands {
         #[arg(long)]
         stats: bool,
     },
-    
+
     /// Dataset export and dumping
     TdbDump {
         /// Source dataset location
@@ -372,7 +372,7 @@ pub enum Commands {
         #[arg(short, long)]
         graph: Option<String>,
     },
-    
+
     /// Direct TDB querying
     TdbQuery {
         /// Dataset location
@@ -386,7 +386,7 @@ pub enum Commands {
         #[arg(long, default_value = "table")]
         results: String,
     },
-    
+
     /// Direct TDB updates
     TdbUpdate {
         /// Dataset location
@@ -397,7 +397,7 @@ pub enum Commands {
         #[arg(short, long)]
         file: bool,
     },
-    
+
     /// Database statistics
     TdbStats {
         /// Dataset location
@@ -409,7 +409,7 @@ pub enum Commands {
         #[arg(long, default_value = "text")]
         format: String,
     },
-    
+
     /// Database backup utilities
     TdbBackup {
         /// Source dataset location
@@ -423,7 +423,7 @@ pub enum Commands {
         #[arg(long)]
         incremental: bool,
     },
-    
+
     /// Database compaction
     TdbCompact {
         /// Dataset location
@@ -432,7 +432,7 @@ pub enum Commands {
         #[arg(long)]
         delete_old: bool,
     },
-    
+
     // === Validation Tools ===
     /// SHACL validation
     Shacl {
@@ -452,7 +452,7 @@ pub enum Commands {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
-    
+
     /// ShEx validation
     Shex {
         /// Data to validate
@@ -471,7 +471,7 @@ pub enum Commands {
         #[arg(long, default_value = "text")]
         format: String,
     },
-    
+
     /// Inference and reasoning
     Infer {
         /// Input data
@@ -489,7 +489,7 @@ pub enum Commands {
         #[arg(long, default_value = "turtle")]
         format: String,
     },
-    
+
     /// Schema generation from RDF
     SchemaGen {
         /// Input RDF data
@@ -504,7 +504,7 @@ pub enum Commands {
         #[arg(long)]
         stats: bool,
     },
-    
+
     // === Utility Tools ===
     /// IRI validation and processing
     Iri {
@@ -520,7 +520,7 @@ pub enum Commands {
         #[arg(long)]
         normalize: bool,
     },
-    
+
     /// Language tag validation
     LangTag {
         /// Language tag to validate
@@ -532,7 +532,7 @@ pub enum Commands {
         #[arg(long)]
         normalize: bool,
     },
-    
+
     /// UUID generation for blank nodes
     JUuid {
         /// Number of UUIDs to generate
@@ -542,7 +542,7 @@ pub enum Commands {
         #[arg(short, long, default_value = "uuid")]
         format: String,
     },
-    
+
     /// UTF-8 encoding utilities
     Utf8 {
         /// Input file or string
@@ -557,7 +557,7 @@ pub enum Commands {
         #[arg(long)]
         fix: bool,
     },
-    
+
     /// URL encoding
     WwwEnc {
         /// String to encode
@@ -566,7 +566,7 @@ pub enum Commands {
         #[arg(long, default_value = "url")]
         encoding: String,
     },
-    
+
     /// URL decoding
     WwwDec {
         /// String to decode
@@ -575,7 +575,7 @@ pub enum Commands {
         #[arg(long, default_value = "url")]
         decoding: String,
     },
-    
+
     /// Result set processing
     RSet {
         /// Input results file
@@ -621,132 +621,224 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     } else {
         tracing::Level::INFO
     };
-    
-    tracing_subscriber::fmt()
-        .with_max_level(level)
-        .init();
+
+    tracing_subscriber::fmt().with_max_level(level).init();
 
     match cli.command {
-        Commands::Init { name, format, location } => {
-            commands::init::run(name, format, location).await
-        }
-        Commands::Serve { config, port, host, graphql } => {
-            commands::serve::run(config, port, host, graphql).await
-        }
-        Commands::Import { dataset, file, format, graph } => {
-            commands::import::run(dataset, file, format, graph).await
-        }
-        Commands::Export { dataset, file, format, graph } => {
-            commands::export::run(dataset, file, format, graph).await
-        }
-        Commands::Query { dataset, query, file, output } => {
-            commands::query::run(dataset, query, file, output).await
-        }
-        Commands::Update { dataset, update, file } => {
-            commands::update::run(dataset, update, file).await
-        }
-        Commands::Benchmark { dataset, suite, iterations, output } => {
-            commands::benchmark::run(dataset, suite, iterations, output).await
-        }
-        Commands::Migrate { source, target, from, to } => {
-            commands::migrate::run(source, target, from, to).await
-        }
-        Commands::Config { action } => {
-            commands::config::run(action).await
-        }
-        
+        Commands::Init {
+            name,
+            format,
+            location,
+        } => commands::init::run(name, format, location).await,
+        Commands::Serve {
+            config,
+            port,
+            host,
+            graphql,
+        } => commands::serve::run(config, port, host, graphql).await,
+        Commands::Import {
+            dataset,
+            file,
+            format,
+            graph,
+        } => commands::import::run(dataset, file, format, graph).await,
+        Commands::Export {
+            dataset,
+            file,
+            format,
+            graph,
+        } => commands::export::run(dataset, file, format, graph).await,
+        Commands::Query {
+            dataset,
+            query,
+            file,
+            output,
+        } => commands::query::run(dataset, query, file, output).await,
+        Commands::Update {
+            dataset,
+            update,
+            file,
+        } => commands::update::run(dataset, update, file).await,
+        Commands::Benchmark {
+            dataset,
+            suite,
+            iterations,
+            output,
+        } => commands::benchmark::run(dataset, suite, iterations, output).await,
+        Commands::Migrate {
+            source,
+            target,
+            from,
+            to,
+        } => commands::migrate::run(source, target, from, to).await,
+        Commands::Config { action } => commands::config::run(action).await,
+
         // Data Processing Tools
-        Commands::Riot { input, output, out, syntax, base, validate, count } => {
-            tools::riot::run(input, output, out, syntax, base, validate, count).await
-        }
-        Commands::RdfCat { files, format, output } => {
-            tools::rdfcat::run(files, format, output).await
-        }
-        Commands::RdfCopy { source, target, source_format, target_format } => {
-            tools::rdfcopy::run(source, target, source_format, target_format).await
-        }
-        Commands::RdfDiff { first, second, format } => {
-            tools::rdfdiff::run(first, second, format).await
-        }
-        Commands::RdfParse { file, format, base } => {
-            tools::rdfparse::run(file, format, base).await
-        }
-        
+        Commands::Riot {
+            input,
+            output,
+            out,
+            syntax,
+            base,
+            validate,
+            count,
+        } => tools::riot::run(input, output, out, syntax, base, validate, count).await,
+        Commands::RdfCat {
+            files,
+            format,
+            output,
+        } => tools::rdfcat::run(files, format, output).await,
+        Commands::RdfCopy {
+            source,
+            target,
+            source_format,
+            target_format,
+        } => tools::rdfcopy::run(source, target, source_format, target_format).await,
+        Commands::RdfDiff {
+            first,
+            second,
+            format,
+        } => tools::rdfdiff::run(first, second, format).await,
+        Commands::RdfParse { file, format, base } => tools::rdfparse::run(file, format, base).await,
+
         // Advanced Query Tools
-        Commands::Arq { query, query_file, data, namedgraph, results, dataset, explain, optimize, time } => {
-            tools::arq::run(query, query_file, data, namedgraph, results, dataset, explain, optimize, time).await
+        Commands::Arq {
+            query,
+            query_file,
+            data,
+            namedgraph,
+            results,
+            dataset,
+            explain,
+            optimize,
+            time,
+        } => {
+            tools::arq::run(
+                query, query_file, data, namedgraph, results, dataset, explain, optimize, time,
+            )
+            .await
         }
-        Commands::RSparql { service, query, query_file, results, timeout } => {
-            tools::rsparql::run(service, query, query_file, results, timeout).await
-        }
-        Commands::RUpdate { service, update, update_file, timeout } => {
-            tools::rupdate::run(service, update, update_file, timeout).await
-        }
-        Commands::QParse { query, file, print_ast, print_algebra } => {
-            tools::qparse::run(query, file, print_ast, print_algebra).await
-        }
-        Commands::UParse { update, file, print_ast } => {
-            tools::uparse::run(update, file, print_ast).await
-        }
-        
+        Commands::RSparql {
+            service,
+            query,
+            query_file,
+            results,
+            timeout,
+        } => tools::rsparql::run(service, query, query_file, results, timeout).await,
+        Commands::RUpdate {
+            service,
+            update,
+            update_file,
+            timeout,
+        } => tools::rupdate::run(service, update, update_file, timeout).await,
+        Commands::QParse {
+            query,
+            file,
+            print_ast,
+            print_algebra,
+        } => tools::qparse::run(query, file, print_ast, print_algebra).await,
+        Commands::UParse {
+            update,
+            file,
+            print_ast,
+        } => tools::uparse::run(update, file, print_ast).await,
+
         // Storage Tools
-        Commands::TdbLoader { location, files, graph, progress, stats } => {
-            tools::tdbloader::run(location, files, graph, progress, stats).await
-        }
-        Commands::TdbDump { location, output, format, graph } => {
-            tools::tdbdump::run(location, output, format, graph).await
-        }
-        Commands::TdbQuery { location, query, file, results } => {
-            tools::tdbquery::run(location, query, file, results).await
-        }
-        Commands::TdbUpdate { location, update, file } => {
-            tools::tdbupdate::run(location, update, file).await
-        }
-        Commands::TdbStats { location, detailed, format } => {
-            tools::tdbstats::run(location, detailed, format).await
-        }
-        Commands::TdbBackup { source, target, compress, incremental } => {
-            tools::tdbbackup::run(source, target, compress, incremental).await
-        }
-        Commands::TdbCompact { location, delete_old } => {
-            tools::tdbcompact::run(location, delete_old).await
-        }
-        
+        Commands::TdbLoader {
+            location,
+            files,
+            graph,
+            progress,
+            stats,
+        } => tools::tdbloader::run(location, files, graph, progress, stats).await,
+        Commands::TdbDump {
+            location,
+            output,
+            format,
+            graph,
+        } => tools::tdbdump::run(location, output, format, graph).await,
+        Commands::TdbQuery {
+            location,
+            query,
+            file,
+            results,
+        } => tools::tdbquery::run(location, query, file, results).await,
+        Commands::TdbUpdate {
+            location,
+            update,
+            file,
+        } => tools::tdbupdate::run(location, update, file).await,
+        Commands::TdbStats {
+            location,
+            detailed,
+            format,
+        } => tools::tdbstats::run(location, detailed, format).await,
+        Commands::TdbBackup {
+            source,
+            target,
+            compress,
+            incremental,
+        } => tools::tdbbackup::run(source, target, compress, incremental).await,
+        Commands::TdbCompact {
+            location,
+            delete_old,
+        } => tools::tdbcompact::run(location, delete_old).await,
+
         // Validation Tools
-        Commands::Shacl { data, dataset, shapes, format, output } => {
-            tools::shacl::run(data, dataset, shapes, format, output).await
-        }
-        Commands::Shex { data, dataset, schema, shape_map, format } => {
-            tools::shex::run(data, dataset, schema, shape_map, format).await
-        }
-        Commands::Infer { data, ontology, profile, output, format } => {
-            tools::infer::run(data, ontology, profile, output, format).await
-        }
-        Commands::SchemaGen { data, schema_type, output, stats } => {
-            tools::schemagen::run(data, schema_type, output, stats).await
-        }
-        
+        Commands::Shacl {
+            data,
+            dataset,
+            shapes,
+            format,
+            output,
+        } => tools::shacl::run(data, dataset, shapes, format, output).await,
+        Commands::Shex {
+            data,
+            dataset,
+            schema,
+            shape_map,
+            format,
+        } => tools::shex::run(data, dataset, schema, shape_map, format).await,
+        Commands::Infer {
+            data,
+            ontology,
+            profile,
+            output,
+            format,
+        } => tools::infer::run(data, ontology, profile, output, format).await,
+        Commands::SchemaGen {
+            data,
+            schema_type,
+            output,
+            stats,
+        } => tools::schemagen::run(data, schema_type, output, stats).await,
+
         // Utility Tools
-        Commands::Iri { iri, resolve, validate, normalize } => {
-            tools::iri::run(iri, resolve, validate, normalize).await
-        }
-        Commands::LangTag { tag, validate, normalize } => {
-            tools::langtag::run(tag, validate, normalize).await
-        }
-        Commands::JUuid { count, format } => {
-            tools::juuid::run(count, format).await
-        }
-        Commands::Utf8 { input, file, validate, fix } => {
-            tools::utf8::run(input, file, validate, fix).await
-        }
-        Commands::WwwEnc { input, encoding } => {
-            tools::wwwenc::run(input, encoding).await
-        }
-        Commands::WwwDec { input, decoding } => {
-            tools::wwwdec::run(input, decoding).await
-        }
-        Commands::RSet { input, input_format, output_format, output } => {
-            tools::rset::run(input, input_format, output_format, output).await
-        }
+        Commands::Iri {
+            iri,
+            resolve,
+            validate,
+            normalize,
+        } => tools::iri::run(iri, resolve, validate, normalize).await,
+        Commands::LangTag {
+            tag,
+            validate,
+            normalize,
+        } => tools::langtag::run(tag, validate, normalize).await,
+        Commands::JUuid { count, format } => tools::juuid::run(count, format).await,
+        Commands::Utf8 {
+            input,
+            file,
+            validate,
+            fix,
+        } => tools::utf8::run(input, file, validate, fix).await,
+        Commands::WwwEnc { input, encoding } => tools::wwwenc::run(input, encoding).await,
+        Commands::WwwDec { input, decoding } => tools::wwwdec::run(input, decoding).await,
+        Commands::RSet {
+            input,
+            input_format,
+            output_format,
+            output,
+        } => tools::rset::run(input, input_format, output_format, output).await,
     }
 }

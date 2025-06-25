@@ -1,14 +1,14 @@
 //! WebAssembly compilation for client-side SPARQL execution
-//! 
+//!
 //! This module provides WASM compilation of SPARQL queries for efficient
 //! client-side execution in web browsers and edge environments.
 
-use std::sync::{Arc, RwLock};
-use std::collections::HashMap;
+use crate::model::*;
 use crate::query::algebra::*;
 use crate::query::plan::ExecutionPlan;
-use crate::model::*;
 use crate::OxirsError;
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
 
 /// WASM query compiler
 pub struct WasmQueryCompiler {
@@ -110,8 +110,8 @@ pub enum WasmType {
     I64,
     F32,
     F64,
-    V128,     // SIMD vector
-    FuncRef,  // Function reference
+    V128,      // SIMD vector
+    FuncRef,   // Function reference
     ExternRef, // External reference
 }
 
@@ -163,10 +163,7 @@ pub enum ImportType {
         max_size: Option<u32>,
     },
     /// Global import
-    Global {
-        value_type: WasmType,
-        mutable: bool,
-    },
+    Global { value_type: WasmType, mutable: bool },
 }
 
 /// Optimization statistics
@@ -188,10 +185,10 @@ pub struct OptimizationStats {
 pub trait WasmRuntime: Send + Sync {
     /// Instantiate WASM module
     fn instantiate(&self, wasm_bytes: &[u8]) -> Result<Box<dyn WasmInstance>, OxirsError>;
-    
+
     /// Validate WASM module
     fn validate(&self, wasm_bytes: &[u8]) -> Result<(), OxirsError>;
-    
+
     /// Get runtime capabilities
     fn capabilities(&self) -> RuntimeCapabilities;
 }
@@ -200,10 +197,10 @@ pub trait WasmRuntime: Send + Sync {
 pub trait WasmInstance: Send + Sync {
     /// Execute query
     fn execute_query(&mut self, input: &QueryInput) -> Result<QueryOutput, OxirsError>;
-    
+
     /// Get memory usage
     fn memory_usage(&self) -> usize;
-    
+
     /// Reset instance state
     fn reset(&mut self);
 }
@@ -274,190 +271,255 @@ impl WasmQueryCompiler {
             optimization,
         }
     }
-    
+
     /// Compile query to WASM
     pub fn compile(&self, plan: &ExecutionPlan) -> Result<Vec<u8>, OxirsError> {
         let hash = self.hash_plan(plan);
-        
+
         // Check cache
         if let Some(module) = self.get_cached(hash) {
             return Ok(module);
         }
-        
+
         // Generate WASM
         let wasm_bytes = self.generate_wasm(plan)?;
-        
+
         // Optimize
         let optimized = self.optimize_wasm(wasm_bytes)?;
-        
+
         // Cache result
         self.cache_module(hash, optimized.clone())?;
-        
+
         Ok(optimized)
     }
-    
+
     /// Generate WASM module from execution plan
     fn generate_wasm(&self, plan: &ExecutionPlan) -> Result<Vec<u8>, OxirsError> {
         let mut builder = WasmModuleBuilder::new(self.target.clone());
-        
+
         // Add memory
         builder.add_memory(1, Some(1024))?; // 1-1024 pages
-        
+
         // Add imports
         self.add_imports(&mut builder)?;
-        
+
         // Add data structures
         self.add_data_structures(&mut builder)?;
-        
+
         // Generate query execution function
         self.generate_query_function(&mut builder, plan)?;
-        
+
         // Generate helper functions
         self.generate_helpers(&mut builder)?;
-        
+
         // Build module
         builder.build()
     }
-    
+
     /// Add required imports
     fn add_imports(&self, builder: &mut WasmModuleBuilder) -> Result<(), OxirsError> {
         // Import host functions
-        builder.add_import("host", "alloc", ImportType::Function {
-            params: vec![WasmType::I32],
-            returns: vec![WasmType::I32],
-        })?;
-        
-        builder.add_import("host", "free", ImportType::Function {
-            params: vec![WasmType::I32],
-            returns: vec![],
-        })?;
-        
-        builder.add_import("host", "log", ImportType::Function {
-            params: vec![WasmType::I32, WasmType::I32],
-            returns: vec![],
-        })?;
-        
+        builder.add_import(
+            "host",
+            "alloc",
+            ImportType::Function {
+                params: vec![WasmType::I32],
+                returns: vec![WasmType::I32],
+            },
+        )?;
+
+        builder.add_import(
+            "host",
+            "free",
+            ImportType::Function {
+                params: vec![WasmType::I32],
+                returns: vec![],
+            },
+        )?;
+
+        builder.add_import(
+            "host",
+            "log",
+            ImportType::Function {
+                params: vec![WasmType::I32, WasmType::I32],
+                returns: vec![],
+            },
+        )?;
+
         Ok(())
     }
-    
+
     /// Add data structures
     fn add_data_structures(&self, builder: &mut WasmModuleBuilder) -> Result<(), OxirsError> {
         // Define term structure
-        builder.add_struct("Term", vec![
-            ("kind", WasmType::I32),
-            ("value_ptr", WasmType::I32),
-            ("value_len", WasmType::I32),
-            ("datatype_ptr", WasmType::I32),
-            ("datatype_len", WasmType::I32),
-            ("lang_ptr", WasmType::I32),
-            ("lang_len", WasmType::I32),
-        ])?;
-        
+        builder.add_struct(
+            "Term",
+            vec![
+                ("kind", WasmType::I32),
+                ("value_ptr", WasmType::I32),
+                ("value_len", WasmType::I32),
+                ("datatype_ptr", WasmType::I32),
+                ("datatype_len", WasmType::I32),
+                ("lang_ptr", WasmType::I32),
+                ("lang_len", WasmType::I32),
+            ],
+        )?;
+
         // Define triple structure
-        builder.add_struct("Triple", vec![
-            ("subject", WasmType::I32),
-            ("predicate", WasmType::I32),
-            ("object", WasmType::I32),
-        ])?;
-        
+        builder.add_struct(
+            "Triple",
+            vec![
+                ("subject", WasmType::I32),
+                ("predicate", WasmType::I32),
+                ("object", WasmType::I32),
+            ],
+        )?;
+
         // Define binding structure
-        builder.add_struct("Binding", vec![
-            ("var_ptr", WasmType::I32),
-            ("var_len", WasmType::I32),
-            ("term", WasmType::I32),
-        ])?;
-        
+        builder.add_struct(
+            "Binding",
+            vec![
+                ("var_ptr", WasmType::I32),
+                ("var_len", WasmType::I32),
+                ("term", WasmType::I32),
+            ],
+        )?;
+
         Ok(())
     }
-    
+
     /// Generate main query function
-    fn generate_query_function(&self, builder: &mut WasmModuleBuilder, plan: &ExecutionPlan) 
-        -> Result<(), OxirsError> {
+    fn generate_query_function(
+        &self,
+        builder: &mut WasmModuleBuilder,
+        plan: &ExecutionPlan,
+    ) -> Result<(), OxirsError> {
         match plan {
             ExecutionPlan::TripleScan { pattern } => {
                 self.generate_triple_scan(builder, pattern)?;
             }
-            ExecutionPlan::HashJoin { left, right, join_vars } => {
+            ExecutionPlan::HashJoin {
+                left,
+                right,
+                join_vars,
+            } => {
                 self.generate_hash_join(builder, left, right, join_vars)?;
             }
-            _ => return Err(OxirsError::Query("Unsupported plan type for WASM".to_string())),
+            _ => {
+                return Err(OxirsError::Query(
+                    "Unsupported plan type for WASM".to_string(),
+                ))
+            }
         }
-        
+
         Ok(())
     }
-    
+
     /// Generate triple scan function
-    fn generate_triple_scan(&self, builder: &mut WasmModuleBuilder, pattern: &TriplePattern) 
-        -> Result<(), OxirsError> {
-        builder.add_function("query_exec", vec![
-            WasmType::I32, // input data pointer
-            WasmType::I32, // input data length
-            WasmType::I32, // output buffer pointer
-            WasmType::I32, // output buffer length
-        ], vec![WasmType::I32], |fb| {
-            // Function body would be generated here
-            // This is a simplified placeholder
-            fb.local_get(0);
-            fb.local_get(1);
-            fb.call("scan_triples");
-            fb.i32_const(0); // Return success
-        })?;
-        
+    fn generate_triple_scan(
+        &self,
+        builder: &mut WasmModuleBuilder,
+        pattern: &TriplePattern,
+    ) -> Result<(), OxirsError> {
+        builder.add_function(
+            "query_exec",
+            vec![
+                WasmType::I32, // input data pointer
+                WasmType::I32, // input data length
+                WasmType::I32, // output buffer pointer
+                WasmType::I32, // output buffer length
+            ],
+            vec![WasmType::I32],
+            |fb| {
+                // Function body would be generated here
+                // This is a simplified placeholder
+                fb.local_get(0);
+                fb.local_get(1);
+                fb.call("scan_triples");
+                fb.i32_const(0); // Return success
+            },
+        )?;
+
         Ok(())
     }
-    
+
     /// Generate hash join function
-    fn generate_hash_join(&self, builder: &mut WasmModuleBuilder, 
-        left: &ExecutionPlan, right: &ExecutionPlan, join_vars: &[Variable]) 
-        -> Result<(), OxirsError> {
+    fn generate_hash_join(
+        &self,
+        builder: &mut WasmModuleBuilder,
+        left: &ExecutionPlan,
+        right: &ExecutionPlan,
+        join_vars: &[Variable],
+    ) -> Result<(), OxirsError> {
         // Generate left and right sub-plans
         self.generate_query_function(builder, left)?;
         self.generate_query_function(builder, right)?;
-        
+
         // Generate join function
-        builder.add_function("hash_join", vec![
-            WasmType::I32, // left results
-            WasmType::I32, // right results
-            WasmType::I32, // join variables
-            WasmType::I32, // output buffer
-        ], vec![WasmType::I32], |fb| {
-            // Hash join implementation
-            fb.i32_const(0);
-        })?;
-        
+        builder.add_function(
+            "hash_join",
+            vec![
+                WasmType::I32, // left results
+                WasmType::I32, // right results
+                WasmType::I32, // join variables
+                WasmType::I32, // output buffer
+            ],
+            vec![WasmType::I32],
+            |fb| {
+                // Hash join implementation
+                fb.i32_const(0);
+            },
+        )?;
+
         Ok(())
     }
-    
+
     /// Generate helper functions
     fn generate_helpers(&self, builder: &mut WasmModuleBuilder) -> Result<(), OxirsError> {
         // String comparison
-        builder.add_function("str_eq", vec![
-            WasmType::I32, WasmType::I32, // str1 ptr, len
-            WasmType::I32, WasmType::I32, // str2 ptr, len
-        ], vec![WasmType::I32], |fb| {
-            // Compare lengths first
-            fb.local_get(1);
-            fb.local_get(3);
-            fb.i32_ne();
-            fb.if_else(WasmType::I32, |fb| {
-                fb.i32_const(0); // Different lengths
-            }, |fb| {
-                // Compare bytes
-                fb.i32_const(1); // Placeholder
-            });
-        })?;
-        
+        builder.add_function(
+            "str_eq",
+            vec![
+                WasmType::I32,
+                WasmType::I32, // str1 ptr, len
+                WasmType::I32,
+                WasmType::I32, // str2 ptr, len
+            ],
+            vec![WasmType::I32],
+            |fb| {
+                // Compare lengths first
+                fb.local_get(1);
+                fb.local_get(3);
+                fb.i32_ne();
+                fb.if_else(
+                    WasmType::I32,
+                    |fb| {
+                        fb.i32_const(0); // Different lengths
+                    },
+                    |fb| {
+                        // Compare bytes
+                        fb.i32_const(1); // Placeholder
+                    },
+                );
+            },
+        )?;
+
         // Term matching
-        builder.add_function("match_term", vec![
-            WasmType::I32, // term1
-            WasmType::I32, // term2
-        ], vec![WasmType::I32], |fb| {
-            fb.i32_const(1); // Placeholder
-        })?;
-        
+        builder.add_function(
+            "match_term",
+            vec![
+                WasmType::I32, // term1
+                WasmType::I32, // term2
+            ],
+            vec![WasmType::I32],
+            |fb| {
+                fb.i32_const(1); // Placeholder
+            },
+        )?;
+
         Ok(())
     }
-    
+
     /// Optimize WASM module
     fn optimize_wasm(&self, wasm_bytes: Vec<u8>) -> Result<Vec<u8>, OxirsError> {
         match self.optimization {
@@ -468,30 +530,30 @@ impl WasmQueryCompiler {
             }
         }
     }
-    
+
     /// Hash execution plan
     fn hash_plan(&self, plan: &ExecutionPlan) -> QueryHash {
-        use std::hash::{Hash, Hasher};
         use std::collections::hash_map::DefaultHasher;
-        
+        use std::hash::{Hash, Hasher};
+
         let mut hasher = DefaultHasher::new();
         format!("{:?}", plan).hash(&mut hasher);
         hasher.finish()
     }
-    
+
     /// Get cached module
     fn get_cached(&self, hash: QueryHash) -> Option<Vec<u8>> {
         let cache = self.cache.read().ok()?;
-        cache.modules.get(&hash).map(|m| {
-            m.wasm_bytes.clone()
-        })
+        cache.modules.get(&hash).map(|m| m.wasm_bytes.clone())
     }
-    
+
     /// Cache compiled module
     fn cache_module(&self, hash: QueryHash, wasm_bytes: Vec<u8>) -> Result<(), OxirsError> {
-        let mut cache = self.cache.write()
+        let mut cache = self
+            .cache
+            .write()
             .map_err(|_| OxirsError::Query("Failed to acquire cache lock".to_string()))?;
-        
+
         let metadata = ModuleMetadata {
             size: wasm_bytes.len(),
             memory_pages: 1,
@@ -499,14 +561,17 @@ impl WasmQueryCompiler {
             imports: vec![],
             optimization_stats: OptimizationStats::default(),
         };
-        
-        cache.add(hash, CachedModule {
-            wasm_bytes,
-            metadata,
-            compile_time: std::time::Duration::from_millis(10),
-            usage_count: 0,
-        });
-        
+
+        cache.add(
+            hash,
+            CachedModule {
+                wasm_bytes,
+                metadata,
+                compile_time: std::time::Duration::from_millis(10),
+                usage_count: 0,
+            },
+        );
+
         Ok(())
     }
 }
@@ -566,31 +631,32 @@ impl FunctionBuilder {
             instructions: Vec::new(),
         }
     }
-    
+
     fn local_get(&mut self, idx: u32) {
         self.instructions.push(WasmInstruction::LocalGet(idx));
     }
-    
+
     fn local_set(&mut self, idx: u32) {
         self.instructions.push(WasmInstruction::LocalSet(idx));
     }
-    
+
     fn i32_const(&mut self, val: i32) {
         self.instructions.push(WasmInstruction::I32Const(val));
     }
-    
+
     fn i32_add(&mut self) {
         self.instructions.push(WasmInstruction::I32Add);
     }
-    
+
     fn i32_ne(&mut self) {
         self.instructions.push(WasmInstruction::I32Ne);
     }
-    
+
     fn call(&mut self, func: &str) {
-        self.instructions.push(WasmInstruction::Call(func.to_string()));
+        self.instructions
+            .push(WasmInstruction::Call(func.to_string()));
     }
-    
+
     fn if_else<F1, F2>(&mut self, result_type: WasmType, then_fn: F1, else_fn: F2)
     where
         F1: FnOnce(&mut Self),
@@ -598,10 +664,10 @@ impl FunctionBuilder {
     {
         let mut then_builder = FunctionBuilder::new();
         then_fn(&mut then_builder);
-        
+
         let mut else_builder = FunctionBuilder::new();
         else_fn(&mut else_builder);
-        
+
         self.instructions.push(WasmInstruction::IfElse(
             result_type,
             then_builder.instructions,
@@ -620,9 +686,13 @@ impl WasmModuleBuilder {
             structs: Vec::new(),
         }
     }
-    
-    fn add_import(&mut self, module: &str, name: &str, import_type: ImportType) 
-        -> Result<(), OxirsError> {
+
+    fn add_import(
+        &mut self,
+        module: &str,
+        name: &str,
+        import_type: ImportType,
+    ) -> Result<(), OxirsError> {
         self.imports.push(RequiredImport {
             module: module.to_string(),
             name: name.to_string(),
@@ -630,7 +700,7 @@ impl WasmModuleBuilder {
         });
         Ok(())
     }
-    
+
     fn add_memory(&mut self, min: u32, max: Option<u32>) -> Result<(), OxirsError> {
         self.memory = Some(MemoryDef {
             min_pages: min,
@@ -638,35 +708,41 @@ impl WasmModuleBuilder {
         });
         Ok(())
     }
-    
+
     fn add_struct(&mut self, name: &str, fields: Vec<(&str, WasmType)>) -> Result<(), OxirsError> {
         self.structs.push(StructDef {
             name: name.to_string(),
-            fields: fields.into_iter()
+            fields: fields
+                .into_iter()
                 .map(|(n, t)| (n.to_string(), t))
                 .collect(),
         });
         Ok(())
     }
-    
-    fn add_function<F>(&mut self, name: &str, params: Vec<WasmType>, 
-        returns: Vec<WasmType>, body_fn: F) -> Result<(), OxirsError>
+
+    fn add_function<F>(
+        &mut self,
+        name: &str,
+        params: Vec<WasmType>,
+        returns: Vec<WasmType>,
+        body_fn: F,
+    ) -> Result<(), OxirsError>
     where
         F: FnOnce(&mut FunctionBuilder),
     {
         let mut builder = FunctionBuilder::new();
         body_fn(&mut builder);
-        
+
         self.functions.push(FunctionDef {
             name: name.to_string(),
             params,
             returns,
             body: builder.instructions,
         });
-        
+
         Ok(())
     }
-    
+
     fn build(self) -> Result<Vec<u8>, OxirsError> {
         // Would generate actual WASM bytes
         // This is a placeholder
@@ -682,16 +758,15 @@ impl CompilationCache {
             max_size: 100 * 1024 * 1024, // 100MB
         }
     }
-    
+
     fn add(&mut self, hash: QueryHash, module: CachedModule) {
         self.total_size += module.wasm_bytes.len();
         self.modules.insert(hash, module);
-        
+
         // Evict if needed
         while self.total_size > self.max_size && !self.modules.is_empty() {
             // Remove least used
-            if let Some((&hash, _)) = self.modules.iter()
-                .min_by_key(|(_, m)| m.usage_count) {
+            if let Some((&hash, _)) = self.modules.iter().min_by_key(|(_, m)| m.usage_count) {
                 if let Some(removed) = self.modules.remove(&hash) {
                     self.total_size -= removed.wasm_bytes.len();
                 }
@@ -714,21 +789,23 @@ impl StreamingWasmCompiler {
             chunk_size: 1024 * 1024, // 1MB chunks
         }
     }
-    
+
     /// Compile query in streaming fashion
-    pub async fn compile_streaming(&self, plan: &ExecutionPlan) 
-        -> Result<impl futures::Stream<Item = Result<Vec<u8>, OxirsError>>, OxirsError> {
+    pub async fn compile_streaming(
+        &self,
+        plan: &ExecutionPlan,
+    ) -> Result<impl futures::Stream<Item = Result<Vec<u8>, OxirsError>>, OxirsError> {
         use futures::stream;
-        
+
         // Generate full module
         let wasm_bytes = self.base_compiler.compile(plan)?;
-        
+
         // Split into chunks
         let chunks: Vec<Vec<u8>> = wasm_bytes
             .chunks(self.chunk_size)
             .map(|c| c.to_vec())
             .collect();
-        
+
         Ok(stream::iter(chunks.into_iter().map(Ok)))
     }
 }
@@ -736,36 +813,41 @@ impl StreamingWasmCompiler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_wasm_compiler_creation() {
-        let compiler = WasmQueryCompiler::new(
-            WasmTarget::Wasm1_0,
-            OptimizationLevel::Standard
-        );
-        
+        let compiler = WasmQueryCompiler::new(WasmTarget::Wasm1_0, OptimizationLevel::Standard);
+
         let cache = compiler.cache.read().unwrap();
         assert_eq!(cache.modules.len(), 0);
     }
-    
+
     #[test]
     fn test_module_builder() {
         let mut builder = WasmModuleBuilder::new(WasmTarget::Wasm1_0);
-        
+
         builder.add_memory(1, Some(16)).unwrap();
-        builder.add_import("host", "log", ImportType::Function {
-            params: vec![WasmType::I32],
-            returns: vec![],
-        }).unwrap();
-        
-        builder.add_function("test", vec![], vec![WasmType::I32], |fb| {
-            fb.i32_const(42);
-        }).unwrap();
-        
+        builder
+            .add_import(
+                "host",
+                "log",
+                ImportType::Function {
+                    params: vec![WasmType::I32],
+                    returns: vec![],
+                },
+            )
+            .unwrap();
+
+        builder
+            .add_function("test", vec![], vec![WasmType::I32], |fb| {
+                fb.i32_const(42);
+            })
+            .unwrap();
+
         let wasm = builder.build().unwrap();
         assert!(wasm.len() > 0);
     }
-    
+
     #[test]
     fn test_optimization_levels() {
         assert_eq!(OptimizationLevel::None as u8, 0);

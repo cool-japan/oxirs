@@ -6,8 +6,8 @@
 use crate::ast::*;
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
-use std::str::Chars;
 use std::iter::Peekable;
+use std::str::Chars;
 
 /// GraphQL parser for converting query strings to AST
 pub struct Parser {
@@ -48,8 +48,12 @@ impl Parser {
 
     fn parse_definition(&mut self) -> Result<Definition> {
         self.skip_whitespace();
-        
-        if self.peek_keyword("query") || self.peek_keyword("mutation") || self.peek_keyword("subscription") || self.peek_char('{') {
+
+        if self.peek_keyword("query")
+            || self.peek_keyword("mutation")
+            || self.peek_keyword("subscription")
+            || self.peek_char('{')
+        {
             Ok(Definition::Operation(self.parse_operation_definition()?))
         } else if self.peek_keyword("fragment") {
             Ok(Definition::Fragment(self.parse_fragment_definition()?))
@@ -60,7 +64,7 @@ impl Parser {
 
     fn parse_operation_definition(&mut self) -> Result<OperationDefinition> {
         self.skip_whitespace();
-        
+
         let operation_type = if self.peek_char('{') {
             OperationType::Query // Shorthand query
         } else {
@@ -121,7 +125,7 @@ impl Parser {
         let variable = self.parse_variable()?;
         self.expect_char(':')?;
         let type_ = self.parse_type()?;
-        
+
         let default_value = if self.peek_char('=') {
             self.next_char();
             Some(self.parse_value()?)
@@ -180,7 +184,7 @@ impl Parser {
 
     fn parse_selection(&mut self) -> Result<Selection> {
         self.skip_whitespace();
-        
+
         if self.peek_keyword("...") {
             self.consume_keyword("...")?;
             if self.peek_keyword("on") {
@@ -253,7 +257,7 @@ impl Parser {
 
     fn parse_value(&mut self) -> Result<Value> {
         self.skip_whitespace();
-        
+
         if self.peek_char('$') {
             Ok(Value::Variable(self.parse_variable()?))
         } else if self.peek_char('"') {
@@ -283,7 +287,7 @@ impl Parser {
     fn parse_string(&mut self) -> Result<String> {
         self.expect_char('"')?;
         let mut value = String::new();
-        
+
         while !self.peek_char('"') {
             if self.peek_char('\\') {
                 self.next_char(); // consume '\'
@@ -324,7 +328,7 @@ impl Parser {
                 }
             }
         }
-        
+
         self.expect_char('"')?;
         Ok(value)
     }
@@ -354,7 +358,7 @@ impl Parser {
             self.expect_char(':')?;
             let value = self.parse_value()?;
             object.insert(name, value);
-            
+
             if self.peek_char(',') {
                 self.next_char();
             }
@@ -367,12 +371,12 @@ impl Parser {
 
     fn parse_numeric_value(&mut self) -> Result<Value> {
         let mut number = String::new();
-        
+
         // Handle negative sign
         if self.peek_char('-') {
             number.push(self.next_char().unwrap());
         }
-        
+
         // Parse integer part
         while let Some(&ch) = self.chars.peek() {
             if ch.is_ascii_digit() {
@@ -381,11 +385,11 @@ impl Parser {
                 break;
             }
         }
-        
+
         // Check for decimal point
         if self.peek_char('.') {
             number.push(self.next_char().unwrap());
-            
+
             while let Some(&ch) = self.chars.peek() {
                 if ch.is_ascii_digit() {
                     number.push(self.next_char().unwrap());
@@ -393,20 +397,21 @@ impl Parser {
                     break;
                 }
             }
-            
+
             // Parse as float
-            number.parse::<f64>()
+            number
+                .parse::<f64>()
                 .map(Value::FloatValue)
                 .map_err(|_| anyhow!("Invalid float: {}", number))
         } else {
             // Check for exponent
             if self.peek_char('e') || self.peek_char('E') {
                 number.push(self.next_char().unwrap());
-                
+
                 if self.peek_char('+') || self.peek_char('-') {
                     number.push(self.next_char().unwrap());
                 }
-                
+
                 while let Some(&ch) = self.chars.peek() {
                     if ch.is_ascii_digit() {
                         number.push(self.next_char().unwrap());
@@ -414,14 +419,16 @@ impl Parser {
                         break;
                     }
                 }
-                
+
                 // Parse as float
-                number.parse::<f64>()
+                number
+                    .parse::<f64>()
                     .map(Value::FloatValue)
                     .map_err(|_| anyhow!("Invalid float: {}", number))
             } else {
                 // Parse as integer
-                number.parse::<i64>()
+                number
+                    .parse::<i64>()
                     .map(Value::IntValue)
                     .map_err(|_| anyhow!("Invalid integer: {}", number))
             }
@@ -474,18 +481,18 @@ impl Parser {
 
     fn parse_directives(&mut self) -> Result<Vec<Directive>> {
         let mut directives = Vec::new();
-        
+
         while self.peek_char('@') {
             directives.push(self.parse_directive()?);
         }
-        
+
         Ok(directives)
     }
 
     fn parse_directive(&mut self) -> Result<Directive> {
         self.expect_char('@')?;
         let name = self.parse_name()?;
-        
+
         let arguments = if self.peek_char('(') {
             self.parse_arguments()?
         } else {
@@ -498,7 +505,7 @@ impl Parser {
     fn parse_name(&mut self) -> Result<String> {
         self.skip_whitespace();
         let mut name = String::new();
-        
+
         // First character must be letter or underscore
         match self.chars.peek() {
             Some(&ch) if ch.is_alphabetic() || ch == '_' => {
@@ -506,7 +513,7 @@ impl Parser {
             }
             _ => return Err(anyhow!("Expected name at line {}", self.line)),
         }
-        
+
         // Subsequent characters can be letters, digits, or underscores
         while let Some(&ch) = self.chars.peek() {
             if ch.is_alphanumeric() || ch == '_' {
@@ -515,7 +522,7 @@ impl Parser {
                 break;
             }
         }
-        
+
         Ok(name)
     }
 
@@ -553,10 +560,10 @@ impl Parser {
 
     fn peek_keyword(&mut self, keyword: &str) -> bool {
         self.skip_whitespace();
-        
+
         let chars: Vec<char> = self.chars.clone().take(keyword.len()).collect();
         let word: String = chars.into_iter().collect();
-        
+
         if word == keyword {
             // Check that it's not part of a larger identifier
             let next_chars: Vec<char> = self.chars.clone().skip(keyword.len()).take(1).collect();
@@ -572,7 +579,7 @@ impl Parser {
 
     fn consume_keyword(&mut self, keyword: &str) -> Result<()> {
         self.skip_whitespace();
-        
+
         for expected_ch in keyword.chars() {
             match self.next_char() {
                 Some(ch) if ch == expected_ch => continue,
@@ -580,7 +587,7 @@ impl Parser {
                 None => return Err(anyhow!("Unexpected end of input")),
             }
         }
-        
+
         Ok(())
     }
 
@@ -626,7 +633,7 @@ mod tests {
     fn test_simple_query() {
         let query = "{ hello }";
         let doc = parse_document(query).unwrap();
-        
+
         assert_eq!(doc.definitions.len(), 1);
         if let Definition::Operation(op) = &doc.definitions[0] {
             assert!(matches!(op.operation_type, OperationType::Query));
@@ -638,7 +645,7 @@ mod tests {
     fn test_named_query() {
         let query = "query GetUser { user { id name } }";
         let doc = parse_document(query).unwrap();
-        
+
         assert_eq!(doc.definitions.len(), 1);
         if let Definition::Operation(op) = &doc.definitions[0] {
             assert!(matches!(op.operation_type, OperationType::Query));
@@ -650,7 +657,7 @@ mod tests {
     fn test_query_with_arguments() {
         let query = r#"{ user(id: "123") { name } }"#;
         let doc = parse_document(query).unwrap();
-        
+
         assert_eq!(doc.definitions.len(), 1);
         if let Definition::Operation(op) = &doc.definitions[0] {
             if let Selection::Field(field) = &op.selection_set.selections[0] {
@@ -665,7 +672,7 @@ mod tests {
     fn test_query_with_variables() {
         let query = "query GetUser($id: ID!) { user(id: $id) { name } }";
         let doc = parse_document(query).unwrap();
-        
+
         assert_eq!(doc.definitions.len(), 1);
         if let Definition::Operation(op) = &doc.definitions[0] {
             assert_eq!(op.variable_definitions.len(), 1);
@@ -677,7 +684,7 @@ mod tests {
     fn test_fragment() {
         let query = "fragment UserFields on User { id name email }";
         let doc = parse_document(query).unwrap();
-        
+
         assert_eq!(doc.definitions.len(), 1);
         if let Definition::Fragment(frag) = &doc.definitions[0] {
             assert_eq!(frag.name, "UserFields");

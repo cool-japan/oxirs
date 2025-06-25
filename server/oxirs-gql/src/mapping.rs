@@ -1,8 +1,8 @@
 //! RDF to GraphQL mapping utilities
 
-use crate::ast::{Document, Selection, SelectionSet, Field, Value, OperationDefinition, Directive};
-use crate::schema::{RdfVocabulary, RdfClass, RdfProperty, PropertyType};
-use crate::optimizer::{QueryOptimizer, OptimizationConfig, QueryPlan};
+use crate::ast::{Directive, Document, Field, OperationDefinition, Selection, SelectionSet, Value};
+use crate::optimizer::{OptimizationConfig, QueryOptimizer, QueryPlan};
+use crate::schema::{PropertyType, RdfClass, RdfProperty, RdfVocabulary};
 use anyhow::{anyhow, Result};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
@@ -70,19 +70,43 @@ pub struct RdfGraphQLMapper {
 impl RdfGraphQLMapper {
     pub fn new() -> Self {
         let mut namespace_prefixes = HashMap::new();
-        
+
         // Add common namespace prefixes
-        namespace_prefixes.insert("rdf".to_string(), "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string());
-        namespace_prefixes.insert("rdfs".to_string(), "http://www.w3.org/2000/01/rdf-schema#".to_string());
-        namespace_prefixes.insert("owl".to_string(), "http://www.w3.org/2002/07/owl#".to_string());
-        namespace_prefixes.insert("xsd".to_string(), "http://www.w3.org/2001/XMLSchema#".to_string());
+        namespace_prefixes.insert(
+            "rdf".to_string(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string(),
+        );
+        namespace_prefixes.insert(
+            "rdfs".to_string(),
+            "http://www.w3.org/2000/01/rdf-schema#".to_string(),
+        );
+        namespace_prefixes.insert(
+            "owl".to_string(),
+            "http://www.w3.org/2002/07/owl#".to_string(),
+        );
+        namespace_prefixes.insert(
+            "xsd".to_string(),
+            "http://www.w3.org/2001/XMLSchema#".to_string(),
+        );
         namespace_prefixes.insert("foaf".to_string(), "http://xmlns.com/foaf/0.1/".to_string());
         namespace_prefixes.insert("schema".to_string(), "http://schema.org/".to_string());
-        namespace_prefixes.insert("dc".to_string(), "http://purl.org/dc/elements/1.1/".to_string());
-        namespace_prefixes.insert("dbo".to_string(), "http://dbpedia.org/ontology/".to_string());
-        namespace_prefixes.insert("geo".to_string(), "http://www.w3.org/2003/01/geo/wgs84_pos#".to_string());
-        namespace_prefixes.insert("skos".to_string(), "http://www.w3.org/2004/02/skos/core#".to_string());
-        
+        namespace_prefixes.insert(
+            "dc".to_string(),
+            "http://purl.org/dc/elements/1.1/".to_string(),
+        );
+        namespace_prefixes.insert(
+            "dbo".to_string(),
+            "http://dbpedia.org/ontology/".to_string(),
+        );
+        namespace_prefixes.insert(
+            "geo".to_string(),
+            "http://www.w3.org/2003/01/geo/wgs84_pos#".to_string(),
+        );
+        namespace_prefixes.insert(
+            "skos".to_string(),
+            "http://www.w3.org/2004/02/skos/core#".to_string(),
+        );
+
         Self {
             namespace_prefixes,
             vocabulary: None,
@@ -91,17 +115,17 @@ impl RdfGraphQLMapper {
             variable_counter: std::cell::RefCell::new(0),
         }
     }
-    
+
     pub fn with_vocabulary(mut self, vocabulary: RdfVocabulary) -> Self {
         self.vocabulary = Some(vocabulary);
         self
     }
-    
+
     pub fn with_config(mut self, config: TranslationConfig) -> Self {
         self.config = config;
         self
     }
-    
+
     pub fn with_optimizer(mut self, optimizer: Arc<QueryOptimizer>) -> Self {
         self.optimizer = Some(optimizer);
         self
@@ -112,7 +136,12 @@ impl RdfGraphQLMapper {
     }
 
     /// Convert a GraphQL query to SPARQL based on RDF vocabulary mapping
-    pub async fn graphql_to_sparql(&self, document: &Document, type_name: &str, context: &QueryContext) -> Result<String> {
+    pub async fn graphql_to_sparql(
+        &self,
+        document: &Document,
+        type_name: &str,
+        context: &QueryContext,
+    ) -> Result<String> {
         // Use optimizer if available
         if let Some(ref optimizer) = self.optimizer {
             let query_plan = optimizer.get_query_plan(document).await?;
@@ -120,60 +149,74 @@ impl RdfGraphQLMapper {
                 return Ok(query_plan.sparql_query);
             }
         }
-        
+
         // Reset variable counter for this query
         *self.variable_counter.borrow_mut() = 0;
-        
+
         let mut sparql_builder = SparqlQueryBuilder::new(&self.namespace_prefixes, &self.config);
-        
+
         // Extract the operation
         let operation = self.extract_operation(document, &context.operation_name)?;
-        
+
         // Validate query depth
         let query_depth = self.calculate_query_depth(&operation.selection_set);
         if query_depth > self.config.max_query_depth {
-            return Err(anyhow!("Query depth {} exceeds maximum allowed depth {}", query_depth, self.config.max_query_depth));
+            return Err(anyhow!(
+                "Query depth {} exceeds maximum allowed depth {}",
+                query_depth,
+                self.config.max_query_depth
+            ));
         }
-        
+
         // Handle different operation types
         match operation.operation_type {
             crate::ast::OperationType::Query => {
                 self.translate_query_operation(&operation, &mut sparql_builder, context, type_name)
             }
-            crate::ast::OperationType::Mutation => {
-                self.translate_mutation_operation(&operation, &mut sparql_builder, context, type_name)
-            }
+            crate::ast::OperationType::Mutation => self.translate_mutation_operation(
+                &operation,
+                &mut sparql_builder,
+                context,
+                type_name,
+            ),
             crate::ast::OperationType::Subscription => {
                 Err(anyhow!("Subscription operations not yet supported"))
             }
         }
     }
-    
-    fn extract_operation<'a>(&self, document: &'a Document, operation_name: &Option<String>) -> Result<&'a OperationDefinition> {
-        let operations: Vec<_> = document.definitions.iter()
+
+    fn extract_operation<'a>(
+        &self,
+        document: &'a Document,
+        operation_name: &Option<String>,
+    ) -> Result<&'a OperationDefinition> {
+        let operations: Vec<_> = document
+            .definitions
+            .iter()
             .filter_map(|def| match def {
                 crate::ast::Definition::Operation(op) => Some(op),
                 _ => None,
             })
             .collect();
-        
+
         match (operations.len(), operation_name) {
             (0, _) => Err(anyhow!("No operations found in document")),
             (1, _) => Ok(operations[0]),
-            (_, Some(name)) => {
-                operations.iter()
-                    .find(|op| op.name.as_ref() == Some(name))
-                    .copied()
-                    .ok_or_else(|| anyhow!("Operation '{}' not found", name))
-            }
-            (_, None) => Err(anyhow!("Multiple operations found but no operation name specified")),
+            (_, Some(name)) => operations
+                .iter()
+                .find(|op| op.name.as_ref() == Some(name))
+                .copied()
+                .ok_or_else(|| anyhow!("Operation '{}' not found", name)),
+            (_, None) => Err(anyhow!(
+                "Multiple operations found but no operation name specified"
+            )),
         }
     }
-    
+
     fn calculate_query_depth(&self, selection_set: &SelectionSet) -> usize {
         fn calculate_depth_recursive(selection_set: &SelectionSet, current_depth: usize) -> usize {
             let mut max_depth = current_depth;
-            
+
             for selection in &selection_set.selections {
                 let depth = match selection {
                     Selection::Field(field) => {
@@ -192,7 +235,7 @@ impl RdfGraphQLMapper {
             }
             max_depth
         }
-        
+
         calculate_depth_recursive(selection_set, 0)
     }
 
@@ -209,7 +252,7 @@ impl RdfGraphQLMapper {
         } else {
             return Err(anyhow!("Only Query type supported for now"));
         }
-        
+
         builder.build()
     }
 
@@ -229,10 +272,10 @@ impl RdfGraphQLMapper {
         } else {
             return Err(anyhow!("Only Mutation type supported for mutations"));
         }
-        
+
         builder.build()
     }
-    
+
     fn translate_root_selection_set(
         &self,
         selection_set: &SelectionSet,
@@ -250,15 +293,21 @@ impl RdfGraphQLMapper {
                 }
                 Selection::FragmentSpread(fragment_spread) => {
                     // Handle fragment spreads
-                    if let Some(fragment_def) = context.fragments.get(&fragment_spread.fragment_name) {
-                        self.translate_root_selection_set(&fragment_def.selection_set, builder, context)?;
+                    if let Some(fragment_def) =
+                        context.fragments.get(&fragment_spread.fragment_name)
+                    {
+                        self.translate_root_selection_set(
+                            &fragment_def.selection_set,
+                            builder,
+                            context,
+                        )?;
                     }
                 }
             }
         }
         Ok(())
     }
-    
+
     fn translate_root_field(
         &self,
         field: &Field,
@@ -273,19 +322,25 @@ impl RdfGraphQLMapper {
                 builder.add_count_query("?s ?p ?o");
             }
             "subjects" => {
-                let limit = self.extract_limit_from_field(field).unwrap_or(self.config.default_limit);
+                let limit = self
+                    .extract_limit_from_field(field)
+                    .unwrap_or(self.config.default_limit);
                 builder.add_distinct_select("?s");
                 builder.add_where_pattern("?s ?p ?o");
                 builder.set_limit(limit);
             }
             "predicates" => {
-                let limit = self.extract_limit_from_field(field).unwrap_or(self.config.default_limit);
+                let limit = self
+                    .extract_limit_from_field(field)
+                    .unwrap_or(self.config.default_limit);
                 builder.add_distinct_select("?p");
                 builder.add_where_pattern("?s ?p ?o");
                 builder.set_limit(limit);
             }
             "objects" => {
-                let limit = self.extract_limit_from_field(field).unwrap_or(self.config.default_limit);
+                let limit = self
+                    .extract_limit_from_field(field)
+                    .unwrap_or(self.config.default_limit);
                 builder.add_distinct_select("?o");
                 builder.add_where_pattern("?s ?p ?o");
                 builder.set_limit(limit);
@@ -301,13 +356,17 @@ impl RdfGraphQLMapper {
                     // Default pattern for unknown fields
                     let var_name = format!("?{}", field.name);
                     builder.add_select(&var_name);
-                    builder.add_where_pattern(&format!("?s {} {}", self.field_to_predicate(&field.name), var_name));
+                    builder.add_where_pattern(&format!(
+                        "?s {} {}",
+                        self.field_to_predicate(&field.name),
+                        var_name
+                    ));
                 }
             }
         }
         Ok(())
     }
-    
+
     fn translate_vocabulary_field(
         &self,
         field: &Field,
@@ -321,24 +380,26 @@ impl RdfGraphQLMapper {
             self.pluralize(&field.name),
             self.singularize(&field.name),
         ];
-        
+
         for class_uri in vocabulary.classes.keys() {
             let class_name = self.uri_to_graphql_name(class_uri);
             let class_name_lower = class_name.to_lowercase();
-            
+
             for variation in &field_name_variations {
-                if variation.to_lowercase() == class_name_lower || 
-                   variation.to_lowercase() == self.pluralize(&class_name_lower) {
+                if variation.to_lowercase() == class_name_lower
+                    || variation.to_lowercase() == self.pluralize(&class_name_lower)
+                {
                     // This field corresponds to a vocabulary class
-                    return self.translate_class_query(field, class_uri, builder, context, vocabulary);
+                    return self
+                        .translate_class_query(field, class_uri, builder, context, vocabulary);
                 }
             }
         }
-        
+
         // No matching class found, treat as property
         self.translate_property_field(field, builder, context, vocabulary)
     }
-    
+
     fn translate_class_query(
         &self,
         field: &Field,
@@ -348,34 +409,42 @@ impl RdfGraphQLMapper {
         vocabulary: &RdfVocabulary,
     ) -> Result<()> {
         let subject_var = "?subject";
-        
+
         // Add type constraint
         builder.add_where_pattern(&format!("{} a <{}>", subject_var, class_uri));
-        
+
         // Handle arguments
-        let limit = self.extract_limit_from_field(field).unwrap_or(self.config.default_limit);
+        let limit = self
+            .extract_limit_from_field(field)
+            .unwrap_or(self.config.default_limit);
         let offset = self.extract_offset_from_field(field).unwrap_or(0);
-        
+
         if let Some(where_filter) = self.extract_where_from_field(field) {
             builder.add_filter(&where_filter);
         }
-        
+
         // Handle nested selections
         if let Some(ref selection_set) = field.selection_set {
-            self.translate_object_selection_set(selection_set, subject_var, builder, context, vocabulary)?;
+            self.translate_object_selection_set(
+                selection_set,
+                subject_var,
+                builder,
+                context,
+                vocabulary,
+            )?;
         } else {
             // If no selection set, just return the URI
             builder.add_select(subject_var);
         }
-        
+
         builder.set_limit(limit);
         if offset > 0 {
             builder.set_offset(offset);
         }
-        
+
         Ok(())
     }
-    
+
     fn translate_object_selection_set(
         &self,
         selection_set: &SelectionSet,
@@ -390,18 +459,32 @@ impl RdfGraphQLMapper {
                     self.translate_object_field(field, subject_var, builder, context, vocabulary)?;
                 }
                 Selection::InlineFragment(fragment) => {
-                    self.translate_object_selection_set(&fragment.selection_set, subject_var, builder, context, vocabulary)?;
+                    self.translate_object_selection_set(
+                        &fragment.selection_set,
+                        subject_var,
+                        builder,
+                        context,
+                        vocabulary,
+                    )?;
                 }
                 Selection::FragmentSpread(fragment_spread) => {
-                    if let Some(fragment_def) = context.fragments.get(&fragment_spread.fragment_name) {
-                        self.translate_object_selection_set(&fragment_def.selection_set, subject_var, builder, context, vocabulary)?;
+                    if let Some(fragment_def) =
+                        context.fragments.get(&fragment_spread.fragment_name)
+                    {
+                        self.translate_object_selection_set(
+                            &fragment_def.selection_set,
+                            subject_var,
+                            builder,
+                            context,
+                            vocabulary,
+                        )?;
                     }
                 }
             }
         }
         Ok(())
     }
-    
+
     fn translate_object_field(
         &self,
         field: &Field,
@@ -420,37 +503,53 @@ impl RdfGraphQLMapper {
                 if let Some(prop_uri) = property_uri {
                     let field_var = format!("?{}", field.name);
                     builder.add_select(&field_var);
-                    
+
                     if let Some(property) = vocabulary.properties.get(&prop_uri) {
                         match property.property_type {
                             PropertyType::ObjectProperty => {
-                                builder.add_where_pattern(&format!("{} <{}> {}", subject_var, prop_uri, field_var));
-                                
+                                builder.add_where_pattern(&format!(
+                                    "{} <{}> {}",
+                                    subject_var, prop_uri, field_var
+                                ));
+
                                 // Handle nested object selections
                                 if let Some(ref selection_set) = field.selection_set {
-                                    self.translate_object_selection_set(selection_set, &field_var, builder, context, vocabulary)?;
+                                    self.translate_object_selection_set(
+                                        selection_set,
+                                        &field_var,
+                                        builder,
+                                        context,
+                                        vocabulary,
+                                    )?;
                                 }
                             }
                             PropertyType::DataProperty | PropertyType::AnnotationProperty => {
-                                builder.add_where_pattern(&format!("{} <{}> {}", subject_var, prop_uri, field_var));
+                                builder.add_where_pattern(&format!(
+                                    "{} <{}> {}",
+                                    subject_var, prop_uri, field_var
+                                ));
                             }
                         }
                     } else {
                         // Fallback
-                        builder.add_where_pattern(&format!("{} <{}> {}", subject_var, prop_uri, field_var));
+                        builder.add_where_pattern(&format!(
+                            "{} <{}> {}",
+                            subject_var, prop_uri, field_var
+                        ));
                     }
                 } else {
                     // Fallback to predicate mapping
                     let predicate = self.field_to_predicate(&field.name);
                     let field_var = format!("?{}", field.name);
                     builder.add_select(&field_var);
-                    builder.add_where_pattern(&format!("{} {} {}", subject_var, predicate, field_var));
+                    builder
+                        .add_where_pattern(&format!("{} {} {}", subject_var, predicate, field_var));
                 }
             }
         }
         Ok(())
     }
-    
+
     fn translate_property_field(
         &self,
         field: &Field,
@@ -461,13 +560,13 @@ impl RdfGraphQLMapper {
         // Default property field translation
         let var_name = format!("?{}", field.name);
         let predicate = self.field_to_predicate(&field.name);
-        
+
         builder.add_select(&var_name);
         builder.add_where_pattern(&format!("?s {} {}", predicate, var_name));
-        
+
         Ok(())
     }
-    
+
     fn find_property_uri(&self, field_name: &str, vocabulary: &RdfVocabulary) -> Option<String> {
         // Try to find a property that matches the field name
         for (prop_uri, property) in &vocabulary.properties {
@@ -476,7 +575,7 @@ impl RdfGraphQLMapper {
                     return Some(prop_uri.clone());
                 }
             }
-            
+
             // Also try matching the local name from the URI
             let local_name = prop_uri.split(['#', '/']).last().unwrap_or("");
             if local_name.to_lowercase() == field_name.to_lowercase() {
@@ -485,7 +584,7 @@ impl RdfGraphQLMapper {
         }
         None
     }
-    
+
     fn uri_to_graphql_name(&self, uri: &str) -> String {
         if let Some(fragment) = uri.split('#').last() {
             self.to_pascal_case(fragment)
@@ -495,11 +594,11 @@ impl RdfGraphQLMapper {
             "Resource".to_string()
         }
     }
-    
+
     fn to_pascal_case(&self, input: &str) -> String {
         let mut result = String::new();
         let mut capitalize_next = true;
-        
+
         for ch in input.chars() {
             if ch.is_alphanumeric() {
                 if capitalize_next {
@@ -512,33 +611,36 @@ impl RdfGraphQLMapper {
                 capitalize_next = true;
             }
         }
-        
+
         result
     }
-    
+
     fn pluralize(&self, word: &str) -> String {
         if word.ends_with('s') || word.ends_with("sh") || word.ends_with("ch") {
             format!("{}es", word)
         } else if word.ends_with('y') {
-            format!("{}ies", &word[..word.len()-1])
+            format!("{}ies", &word[..word.len() - 1])
         } else {
             format!("{}s", word)
         }
     }
-    
+
     fn singularize(&self, word: &str) -> String {
         if word.ends_with("ies") {
-            format!("{}y", &word[..word.len()-3])
+            format!("{}y", &word[..word.len() - 3])
         } else if word.ends_with("es") && (word.ends_with("shes") || word.ends_with("ches")) {
-            word[..word.len()-2].to_string()
+            word[..word.len() - 2].to_string()
         } else if word.ends_with('s') && word.len() > 1 {
-            word[..word.len()-1].to_string()
+            word[..word.len() - 1].to_string()
         } else {
             word.to_string()
         }
     }
 
-    fn build_sparql_from_selection_set(&self, selection_set: &SelectionSet) -> Result<(Vec<String>, Vec<String>)> {
+    fn build_sparql_from_selection_set(
+        &self,
+        selection_set: &SelectionSet,
+    ) -> Result<(Vec<String>, Vec<String>)> {
         let mut select_vars = Vec::new();
         let mut where_patterns = Vec::new();
 
@@ -557,7 +659,7 @@ impl RdfGraphQLMapper {
                         "subjects" => {
                             select_vars.push("DISTINCT ?s".to_string());
                             where_patterns.push("?s ?p ?o".to_string());
-                            
+
                             // Handle limit argument
                             if let Some(limit) = self.extract_limit_from_field(field) {
                                 // Limit will be added later
@@ -578,7 +680,11 @@ impl RdfGraphQLMapper {
                             // Default pattern for other fields
                             let var_name = format!("?{}", field.name);
                             select_vars.push(var_name.clone());
-                            where_patterns.push(format!("?s {} {}", self.field_to_predicate(&field.name), var_name));
+                            where_patterns.push(format!(
+                                "?s {} {}",
+                                self.field_to_predicate(&field.name),
+                                var_name
+                            ));
                         }
                     }
                 }
@@ -605,7 +711,7 @@ impl RdfGraphQLMapper {
         }
         None
     }
-    
+
     fn extract_offset_from_field(&self, field: &Field) -> Option<usize> {
         for arg in &field.arguments {
             if arg.name == "offset" {
@@ -617,7 +723,7 @@ impl RdfGraphQLMapper {
         }
         None
     }
-    
+
     fn extract_where_from_field(&self, field: &Field) -> Option<String> {
         for arg in &field.arguments {
             if arg.name == "where" {
@@ -645,7 +751,8 @@ impl RdfGraphQLMapper {
     /// Create a GraphQL schema from RDF vocabulary
     pub fn rdf_to_graphql_schema(&self, vocabulary_uri: &str) -> Result<String> {
         // Placeholder implementation
-        Ok(format!(r#"
+        Ok(format!(
+            r#"
 type Query {{
   hello: String
   version: String
@@ -657,7 +764,9 @@ type Query {{
 }}
 
 # Generated from vocabulary: {}
-"#, vocabulary_uri))
+"#,
+            vocabulary_uri
+        ))
     }
 }
 
@@ -690,65 +799,70 @@ impl SparqlQueryBuilder {
             config: config.clone(),
         }
     }
-    
+
     fn add_select(&mut self, var: &str) {
         if !self.select_vars.contains(&var.to_string()) {
             self.select_vars.push(var.to_string());
         }
     }
-    
+
     fn add_distinct_select(&mut self, var: &str) {
         self.distinct = true;
         self.add_select(var);
     }
-    
+
     fn add_count_query(&mut self, pattern: &str) {
         self.select_vars.push("(COUNT(*) as ?count)".to_string());
         self.add_where_pattern(pattern);
     }
-    
+
     fn add_where_pattern(&mut self, pattern: &str) {
         self.where_patterns.push(pattern.to_string());
     }
-    
+
     fn add_filter(&mut self, filter: &str) {
         self.filters.push(filter.to_string());
     }
-    
+
     fn set_limit(&mut self, limit: usize) {
         self.limit = Some(limit.min(self.config.max_limit));
     }
-    
+
     fn set_offset(&mut self, offset: usize) {
         self.offset = Some(offset);
     }
-    
+
     fn add_update_operation(&mut self, operation: &str) {
         // For UPDATE operations, we'll store them as special patterns
         // This is a simplified implementation for mutations
         self.where_patterns.push(format!("# UPDATE: {}", operation));
     }
-    
+
     fn build(&self) -> Result<String> {
         let mut query = String::new();
-        
+
         // Add prefixes
         for (prefix, uri) in &self.prefixes {
             writeln!(query, "PREFIX {}: <{}>", prefix, uri)?;
         }
-        
+
         if !query.is_empty() {
             writeln!(query)?;
         }
-        
+
         // Add SELECT clause
         if self.select_vars.is_empty() {
             write!(query, "SELECT *")?;
         } else {
             let distinct_clause = if self.distinct { "DISTINCT " } else { "" };
-            write!(query, "SELECT {}{}", distinct_clause, self.select_vars.join(" "))?;
+            write!(
+                query,
+                "SELECT {}{}",
+                distinct_clause,
+                self.select_vars.join(" ")
+            )?;
         }
-        
+
         // Add WHERE clause
         if !self.where_patterns.is_empty() {
             writeln!(query)?;
@@ -756,46 +870,46 @@ impl SparqlQueryBuilder {
             for pattern in &self.where_patterns {
                 writeln!(query, "  {}", pattern)?;
             }
-            
+
             // Add filters
             for filter in &self.filters {
                 writeln!(query, "  FILTER({})", filter)?;
             }
-            
+
             write!(query, "}}")?
         }
-        
+
         // Add GROUP BY
         if !self.group_by.is_empty() {
             writeln!(query)?;
             write!(query, "GROUP BY {}", self.group_by.join(" "))?;
         }
-        
+
         // Add ORDER BY
         if !self.order_by.is_empty() {
             writeln!(query)?;
             write!(query, "ORDER BY {}", self.order_by.join(" "))?;
         }
-        
+
         // Add LIMIT and OFFSET
         if let Some(limit) = self.limit {
             writeln!(query)?;
             write!(query, "LIMIT {}", limit)?;
         }
-        
+
         if let Some(offset) = self.offset {
             writeln!(query)?;
             write!(query, "OFFSET {}", offset)?;
         }
-        
+
         Ok(query)
     }
-    
+
     /// Add group by clause
     fn add_group_by(&mut self, group: &str) {
         self.group_by.push(group.to_string());
     }
-    
+
     /// Add order by clause
     fn add_order_by(&mut self, order: &str) {
         self.order_by.push(order.to_string());

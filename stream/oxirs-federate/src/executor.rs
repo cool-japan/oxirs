@@ -5,15 +5,20 @@
 
 use anyhow::{anyhow, Result};
 use futures::{stream, StreamExt, TryStreamExt};
-use reqwest::{Client, header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE, ACCEPT}};
+use reqwest::{
+    header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE},
+    Client,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::time::timeout;
-use tracing::{debug, error, info, warn, instrument};
+use tracing::{debug, error, info, instrument, warn};
 
-use crate::{ExecutionPlan, ExecutionStep, StepType, FederationError, FederatedService, ServiceRegistry};
+use crate::{
+    ExecutionPlan, ExecutionStep, FederatedService, FederationError, ServiceRegistry, StepType,
+};
 
 /// Federated query executor
 #[derive(Debug)]
@@ -52,15 +57,17 @@ impl FederatedExecutor {
     #[instrument(skip(self, plan))]
     pub async fn execute_plan(&self, plan: &ExecutionPlan) -> Result<Vec<StepResult>> {
         info!("Executing federated plan with {} steps", plan.steps.len());
-        
+
         let start_time = Instant::now();
         let mut results = Vec::new();
         let mut completed_steps = HashMap::new();
 
         // Execute steps according to dependencies and parallelization
         for parallel_group in &plan.parallelizable_steps {
-            let group_results = self.execute_parallel_group(parallel_group, plan, &completed_steps).await?;
-            
+            let group_results = self
+                .execute_parallel_group(parallel_group, plan, &completed_steps)
+                .await?;
+
             for result in group_results {
                 completed_steps.insert(result.step_id.clone(), result.clone());
                 results.push(result);
@@ -111,24 +118,35 @@ impl FederatedExecutor {
         match timeout(timeout_duration, futures::future::try_join_all(futures)).await {
             Ok(Ok(results)) => Ok(results),
             Ok(Err(e)) => Err(e),
-            Err(_) => Err(anyhow!("Parallel execution timed out after {:?}", timeout_duration)),
+            Err(_) => Err(anyhow!(
+                "Parallel execution timed out after {:?}",
+                timeout_duration
+            )),
         }
     }
 
     /// Execute a single step
     #[instrument(skip(self, step, completed_steps))]
-    async fn execute_step(&self, step: &ExecutionStep, completed_steps: &HashMap<String, StepResult>) -> Result<StepResult> {
+    async fn execute_step(
+        &self,
+        step: &ExecutionStep,
+        completed_steps: &HashMap<String, StepResult>,
+    ) -> Result<StepResult> {
         debug!("Executing step: {} ({})", step.step_id, step.step_type);
 
         // Check dependencies
         for dep_id in &step.dependencies {
             if !completed_steps.contains_key(dep_id) {
-                return Err(anyhow!("Dependency {} not completed for step {}", dep_id, step.step_id));
+                return Err(anyhow!(
+                    "Dependency {} not completed for step {}",
+                    dep_id,
+                    step.step_id
+                ));
             }
         }
 
         let start_time = Instant::now();
-        
+
         let result = match step.step_type {
             StepType::ServiceQuery => self.execute_service_query(step).await,
             StepType::GraphQLQuery => self.execute_graphql_query(step).await,
@@ -172,17 +190,26 @@ impl FederatedExecutor {
 
     /// Execute a SPARQL service query
     async fn execute_service_query(&self, step: &ExecutionStep) -> Result<QueryResultData> {
-        let service_id = step.service_id.as_ref()
+        let service_id = step
+            .service_id
+            .as_ref()
             .ok_or_else(|| anyhow!("Service ID required for service query"))?;
 
         // TODO: Get service details from registry
         let endpoint = format!("http://localhost:8080/sparql"); // Placeholder
 
         let mut headers = HeaderMap::new();
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/sparql-query"));
-        headers.insert(ACCEPT, HeaderValue::from_static("application/sparql-results+json"));
+        headers.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/sparql-query"),
+        );
+        headers.insert(
+            ACCEPT,
+            HeaderValue::from_static("application/sparql-results+json"),
+        );
 
-        let response = self.client
+        let response = self
+            .client
             .post(&endpoint)
             .headers(headers)
             .body(step.query_fragment.clone())
@@ -194,7 +221,9 @@ impl FederatedExecutor {
             return Err(anyhow!("Service returned error: {}", response.status()));
         }
 
-        let response_text = response.text().await
+        let response_text = response
+            .text()
+            .await
             .map_err(|e| anyhow!("Failed to read response: {}", e))?;
 
         // Parse SPARQL results JSON
@@ -206,7 +235,9 @@ impl FederatedExecutor {
 
     /// Execute a GraphQL query
     async fn execute_graphql_query(&self, step: &ExecutionStep) -> Result<QueryResultData> {
-        let service_id = step.service_id.as_ref()
+        let service_id = step
+            .service_id
+            .as_ref()
             .ok_or_else(|| anyhow!("Service ID required for GraphQL query"))?;
 
         // TODO: Get service details from registry
@@ -221,7 +252,8 @@ impl FederatedExecutor {
         let mut headers = HeaderMap::new();
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
 
-        let response = self.client
+        let response = self
+            .client
             .post(&endpoint)
             .headers(headers)
             .json(&graphql_request)
@@ -233,14 +265,20 @@ impl FederatedExecutor {
             return Err(anyhow!("Service returned error: {}", response.status()));
         }
 
-        let graphql_response: GraphQLResponse = response.json().await
+        let graphql_response: GraphQLResponse = response
+            .json()
+            .await
             .map_err(|e| anyhow!("Failed to parse GraphQL response: {}", e))?;
 
         Ok(QueryResultData::GraphQL(graphql_response))
     }
 
     /// Execute a join operation
-    async fn execute_join(&self, step: &ExecutionStep, completed_steps: &HashMap<String, StepResult>) -> Result<QueryResultData> {
+    async fn execute_join(
+        &self,
+        step: &ExecutionStep,
+        completed_steps: &HashMap<String, StepResult>,
+    ) -> Result<QueryResultData> {
         debug!("Executing join step: {}", step.step_id);
 
         // Get results from dependency steps
@@ -272,7 +310,11 @@ impl FederatedExecutor {
     }
 
     /// Execute a union operation
-    async fn execute_union(&self, step: &ExecutionStep, completed_steps: &HashMap<String, StepResult>) -> Result<QueryResultData> {
+    async fn execute_union(
+        &self,
+        step: &ExecutionStep,
+        completed_steps: &HashMap<String, StepResult>,
+    ) -> Result<QueryResultData> {
         debug!("Executing union step: {}", step.step_id);
 
         let mut all_bindings = Vec::new();
@@ -291,20 +333,30 @@ impl FederatedExecutor {
 
         let union_result = SparqlResults {
             head: SparqlHead { vars: variables },
-            results: SparqlResultSet { bindings: all_bindings },
+            results: SparqlResultSet {
+                bindings: all_bindings,
+            },
         };
 
         Ok(QueryResultData::Sparql(union_result))
     }
 
     /// Execute a filter operation
-    async fn execute_filter(&self, _step: &ExecutionStep, _completed_steps: &HashMap<String, StepResult>) -> Result<QueryResultData> {
+    async fn execute_filter(
+        &self,
+        _step: &ExecutionStep,
+        _completed_steps: &HashMap<String, StepResult>,
+    ) -> Result<QueryResultData> {
         // TODO: Implement filter execution
         Err(anyhow!("Filter execution not yet implemented"))
     }
 
     /// Execute schema stitching for GraphQL
-    async fn execute_schema_stitch(&self, step: &ExecutionStep, completed_steps: &HashMap<String, StepResult>) -> Result<QueryResultData> {
+    async fn execute_schema_stitch(
+        &self,
+        step: &ExecutionStep,
+        completed_steps: &HashMap<String, StepResult>,
+    ) -> Result<QueryResultData> {
         debug!("Executing schema stitch step: {}", step.step_id);
 
         // Combine GraphQL results from multiple services
@@ -332,21 +384,36 @@ impl FederatedExecutor {
     }
 
     /// Execute aggregation
-    async fn execute_aggregate(&self, _step: &ExecutionStep, _completed_steps: &HashMap<String, StepResult>) -> Result<QueryResultData> {
+    async fn execute_aggregate(
+        &self,
+        _step: &ExecutionStep,
+        _completed_steps: &HashMap<String, StepResult>,
+    ) -> Result<QueryResultData> {
         // TODO: Implement aggregation
         Err(anyhow!("Aggregation execution not yet implemented"))
     }
 
     /// Execute sorting
-    async fn execute_sort(&self, _step: &ExecutionStep, _completed_steps: &HashMap<String, StepResult>) -> Result<QueryResultData> {
+    async fn execute_sort(
+        &self,
+        _step: &ExecutionStep,
+        _completed_steps: &HashMap<String, StepResult>,
+    ) -> Result<QueryResultData> {
         // TODO: Implement sorting
         Err(anyhow!("Sort execution not yet implemented"))
     }
 
     /// Join two SPARQL result sets
-    fn join_sparql_results(&self, left: &SparqlResults, right: &SparqlResults) -> Result<SparqlResults> {
+    fn join_sparql_results(
+        &self,
+        left: &SparqlResults,
+        right: &SparqlResults,
+    ) -> Result<SparqlResults> {
         // Find common variables
-        let common_vars: Vec<_> = left.head.vars.iter()
+        let common_vars: Vec<_> = left
+            .head
+            .vars
+            .iter()
             .filter(|var| right.head.vars.contains(var))
             .cloned()
             .collect();
@@ -358,7 +425,7 @@ impl FederatedExecutor {
 
         // Perform hash join
         let mut joined_bindings = Vec::new();
-        
+
         // Build hash table for right side
         let mut right_index: HashMap<String, Vec<&SparqlBinding>> = HashMap::new();
         for binding in &right.results.bindings {
@@ -392,7 +459,9 @@ impl FederatedExecutor {
 
         Ok(SparqlResults {
             head: SparqlHead { vars: all_vars },
-            results: SparqlResultSet { bindings: joined_bindings },
+            results: SparqlResultSet {
+                bindings: joined_bindings,
+            },
         })
     }
 
@@ -401,14 +470,22 @@ impl FederatedExecutor {
         let mut key_parts = Vec::new();
         for var in common_vars {
             if let Some(value) = binding.get(var) {
-                key_parts.push(format!("{}:{}", var, serde_json::to_string(value).unwrap_or_default()));
+                key_parts.push(format!(
+                    "{}:{}",
+                    var,
+                    serde_json::to_string(value).unwrap_or_default()
+                ));
             }
         }
         key_parts.join("|")
     }
 
     /// Cartesian product of two SPARQL result sets
-    fn cartesian_product_sparql(&self, left: &SparqlResults, right: &SparqlResults) -> Result<SparqlResults> {
+    fn cartesian_product_sparql(
+        &self,
+        left: &SparqlResults,
+        right: &SparqlResults,
+    ) -> Result<SparqlResults> {
         let mut product_bindings = Vec::new();
 
         for left_binding in &left.results.bindings {
@@ -424,12 +501,18 @@ impl FederatedExecutor {
 
         Ok(SparqlResults {
             head: SparqlHead { vars: all_vars },
-            results: SparqlResultSet { bindings: product_bindings },
+            results: SparqlResultSet {
+                bindings: product_bindings,
+            },
         })
     }
 
     /// Join two GraphQL results
-    fn join_graphql_results(&self, left: &GraphQLResponse, right: &GraphQLResponse) -> Result<GraphQLResponse> {
+    fn join_graphql_results(
+        &self,
+        left: &GraphQLResponse,
+        right: &GraphQLResponse,
+    ) -> Result<GraphQLResponse> {
         // Simple merge of GraphQL objects
         let mut merged_data = serde_json::Map::new();
 
@@ -611,12 +694,16 @@ mod tests {
         let executor = FederatedExecutor::new();
 
         let left = SparqlResults {
-            head: SparqlHead { vars: vec!["s".to_string(), "p".to_string()] },
+            head: SparqlHead {
+                vars: vec!["s".to_string(), "p".to_string()],
+            },
             results: SparqlResultSet { bindings: vec![] },
         };
 
         let right = SparqlResults {
-            head: SparqlHead { vars: vec!["p".to_string(), "o".to_string()] },
+            head: SparqlHead {
+                vars: vec!["p".to_string(), "o".to_string()],
+            },
             results: SparqlResultSet { bindings: vec![] },
         };
 
@@ -631,12 +718,15 @@ mod tests {
     fn test_join_key_creation() {
         let executor = FederatedExecutor::new();
         let mut binding = HashMap::new();
-        binding.insert("x".to_string(), SparqlValue {
-            value_type: "uri".to_string(),
-            value: "http://example.org".to_string(),
-            datatype: None,
-            lang: None,
-        });
+        binding.insert(
+            "x".to_string(),
+            SparqlValue {
+                value_type: "uri".to_string(),
+                value: "http://example.org".to_string(),
+                datatype: None,
+                lang: None,
+            },
+        );
 
         let common_vars = vec!["x".to_string()];
         let key = executor.create_join_key(&binding, &common_vars);

@@ -7,15 +7,15 @@ use super::*;
 use crate::model::{Triple, TriplePattern};
 use crate::OxirsError;
 use dashmap::DashMap;
+use lru::LruCache;
+use parking_lot::Mutex;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
-use parking_lot::Mutex;
-use lru::LruCache;
-use serde::{Serialize, Deserialize};
 
 /// Access tracking information
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -145,7 +145,7 @@ impl TieredStorageEngine {
         // Initialize hot tier
         let hot_capacity = config.tiers.hot_tier.max_size_mb * 1024 * 1024 / 1000; // Approximate
         let hot_tier = Arc::new(Mutex::new(LruCache::new(hot_capacity)));
-        
+
         // Initialize warm tier
         let warm_path = PathBuf::from(&config.tiers.warm_tier.path);
         std::fs::create_dir_all(&warm_path)?;
@@ -156,7 +156,7 @@ impl TieredStorageEngine {
             storage: warm_storage,
             access_tracker: HashMap::new(),
         }));
-        
+
         // Initialize cold tier
         let cold_path = PathBuf::from(&config.tiers.cold_tier.path);
         std::fs::create_dir_all(&cold_path)?;
@@ -167,13 +167,13 @@ impl TieredStorageEngine {
             storage: cold_storage,
             compression: compression::Compressor::new(config.compression.clone()),
         }));
-        
+
         // Initialize archive tier
         let archive_tier = Arc::new(RwLock::new(ArchiveTier {
             backend: config.tiers.archive_tier.backend.clone(),
             index: HashMap::new(),
         }));
-        
+
         // Initialize index and statistics
         let index = Arc::new(DashMap::new());
         let stats = Arc::new(Statistics {
@@ -188,7 +188,7 @@ impl TieredStorageEngine {
             cold_hits: AtomicU64::new(0),
             total_queries: AtomicU64::new(0),
         });
-        
+
         let mut engine = TieredStorageEngine {
             config,
             hot_tier,
@@ -199,13 +199,13 @@ impl TieredStorageEngine {
             stats,
             background_handle: None,
         };
-        
+
         // Start background tier management
         engine.start_background_tasks();
-        
+
         Ok(Arc::new(engine))
     }
-    
+
     /// Start background tasks for tier management
     fn start_background_tasks(&mut self) {
         let hot_tier = self.hot_tier.clone();
@@ -214,13 +214,13 @@ impl TieredStorageEngine {
         let archive_tier = self.archive_tier.clone();
         let index = self.index.clone();
         let config = self.config.clone();
-        
+
         let handle = tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(60));
-            
+
             loop {
                 interval.tick().await;
-                
+
                 // Perform tier management
                 if let Err(e) = Self::manage_tiers(
                     &hot_tier,
@@ -229,15 +229,17 @@ impl TieredStorageEngine {
                     &archive_tier,
                     &index,
                     &config,
-                ).await {
+                )
+                .await
+                {
                     tracing::error!("Tier management error: {}", e);
                 }
             }
         });
-        
+
         self.background_handle = Some(handle);
     }
-    
+
     /// Manage data movement between tiers
     async fn manage_tiers(
         hot_tier: &Arc<Mutex<LruCache<u64, StoredTriple>>>,
@@ -248,27 +250,29 @@ impl TieredStorageEngine {
         config: &StorageConfig,
     ) -> Result<(), OxirsError> {
         let now = SystemTime::now();
-        
+
         // Check warm tier for promotion/demotion
         {
             let mut warm = warm_tier.write().await;
             let mut to_promote = Vec::new();
             let mut to_demote = Vec::new();
-            
+
             for (hash, access_count) in &warm.access_tracker {
                 if *access_count >= config.tiers.warm_tier.promotion_threshold as u64 {
                     to_promote.push(*hash);
                 } else if let Some(info) = index.get(hash) {
-                    let days_since_access = now.duration_since(info.last_access)
+                    let days_since_access = now
+                        .duration_since(info.last_access)
                         .unwrap_or(Duration::ZERO)
-                        .as_secs() / 86400;
-                    
+                        .as_secs()
+                        / 86400;
+
                     if days_since_access >= config.tiers.warm_tier.demotion_threshold_days as u64 {
                         to_demote.push(*hash);
                     }
                 }
             }
-            
+
             // Promote to hot tier
             for hash in to_promote {
                 if let Ok(Some(data)) = warm.storage.get(hash.to_be_bytes()) {
@@ -276,14 +280,14 @@ impl TieredStorageEngine {
                         hot_tier.lock().put(hash, triple);
                         warm.storage.delete(hash.to_be_bytes())?;
                         warm.access_tracker.remove(&hash);
-                        
+
                         if let Some(mut info) = index.get_mut(&hash) {
                             info.tier = StorageTier::Hot;
                         }
                     }
                 }
             }
-            
+
             // Demote to cold tier
             let mut cold = cold_tier.write().await;
             for hash in to_demote {
@@ -293,32 +297,34 @@ impl TieredStorageEngine {
                     cold.storage.put(hash.to_be_bytes(), compressed)?;
                     warm.storage.delete(hash.to_be_bytes())?;
                     warm.access_tracker.remove(&hash);
-                    
+
                     if let Some(mut info) = index.get_mut(&hash) {
                         info.tier = StorageTier::Cold;
                     }
                 }
             }
         }
-        
+
         // Check cold tier for archival
         {
             let cold = cold_tier.read().await;
             let mut to_archive = Vec::new();
-            
+
             for entry in index.iter() {
                 let (hash, info) = entry.pair();
                 if info.tier == StorageTier::Cold {
-                    let days_since_access = now.duration_since(info.last_access)
+                    let days_since_access = now
+                        .duration_since(info.last_access)
                         .unwrap_or(Duration::ZERO)
-                        .as_secs() / 86400;
-                    
+                        .as_secs()
+                        / 86400;
+
                     if days_since_access >= config.tiers.cold_tier.archive_threshold_days as u64 {
                         to_archive.push(*hash);
                     }
                 }
             }
-            
+
             // Move to archive
             if !to_archive.is_empty() {
                 let mut archive = archive_tier.write().await;
@@ -326,10 +332,10 @@ impl TieredStorageEngine {
                 // For now, we'll skip the actual archival process
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Calculate hash for a triple
     fn hash_triple(triple: &Triple) -> u64 {
         use std::hash::{Hash, Hasher};
@@ -337,7 +343,7 @@ impl TieredStorageEngine {
         triple.hash(&mut hasher);
         hasher.finish()
     }
-    
+
     /// Get the appropriate tier for a new triple based on hints
     fn determine_initial_tier(&self, triple: &Triple) -> StorageTier {
         // For now, all new data goes to warm tier
@@ -353,16 +359,16 @@ impl StorageEngine for TieredStorageEngine {
         self.config = config;
         Ok(())
     }
-    
+
     async fn store_triple(&self, triple: &Triple) -> Result<(), OxirsError> {
         let hash = Self::hash_triple(triple);
         let now = SystemTime::now();
-        
+
         // Check if triple already exists
         if self.index.contains_key(&hash) {
             return Ok(());
         }
-        
+
         // Create stored triple with metadata
         let stored = StoredTriple {
             triple: triple.clone(),
@@ -379,7 +385,7 @@ impl StorageEngine for TieredStorageEngine {
                 compression: None,
             },
         };
-        
+
         // Store in appropriate tier
         match stored.metadata.access_info.tier {
             StorageTier::Hot => {
@@ -388,37 +394,40 @@ impl StorageEngine for TieredStorageEngine {
             }
             StorageTier::Warm => {
                 let data = bincode::serialize(&stored)?;
-                self.warm_tier.write().await.storage.put(hash.to_be_bytes(), data)?;
+                self.warm_tier
+                    .write()
+                    .await
+                    .storage
+                    .put(hash.to_be_bytes(), data)?;
                 self.stats.warm_count.fetch_add(1, Ordering::Relaxed);
             }
             _ => unreachable!("New triples should not go directly to cold/archive"),
         }
-        
+
         // Update index
         self.index.insert(hash, stored.metadata.access_info.clone());
         self.stats.total_triples.fetch_add(1, Ordering::Relaxed);
-        self.stats.total_size.fetch_add(stored.metadata.access_info.size_bytes as u64, Ordering::Relaxed);
-        
+        self.stats.total_size.fetch_add(
+            stored.metadata.access_info.size_bytes as u64,
+            Ordering::Relaxed,
+        );
+
         Ok(())
     }
-    
+
     async fn store_triples(&self, triples: &[Triple]) -> Result<(), OxirsError> {
         // Use parallel processing for batch inserts
         use rayon::prelude::*;
-        
-        triples.par_iter()
-            .try_for_each(|triple| {
-                futures::executor::block_on(self.store_triple(triple))
-            })
+
+        triples
+            .par_iter()
+            .try_for_each(|triple| futures::executor::block_on(self.store_triple(triple)))
     }
-    
-    async fn query_triples(
-        &self,
-        pattern: &TriplePattern,
-    ) -> Result<Vec<Triple>, OxirsError> {
+
+    async fn query_triples(&self, pattern: &TriplePattern) -> Result<Vec<Triple>, OxirsError> {
         self.stats.total_queries.fetch_add(1, Ordering::Relaxed);
         let mut results = Vec::new();
-        
+
         // Search hot tier first
         {
             let hot = self.hot_tier.lock();
@@ -429,15 +438,17 @@ impl StorageEngine for TieredStorageEngine {
                 }
             }
         }
-        
+
         // If not enough results, search warm tier
         if results.is_empty() {
             let warm = self.warm_tier.read().await;
             // In a real implementation, we'd use indexes to avoid scanning all data
             // For now, this is a placeholder
-            self.stats.warm_hits.fetch_add(results.len() as u64, Ordering::Relaxed);
+            self.stats
+                .warm_hits
+                .fetch_add(results.len() as u64, Ordering::Relaxed);
         }
-        
+
         // Update access info for queried triples
         let now = SystemTime::now();
         for triple in &results {
@@ -445,7 +456,7 @@ impl StorageEngine for TieredStorageEngine {
             if let Some(mut info) = self.index.get_mut(&hash) {
                 info.last_access = now;
                 info.access_count += 1;
-                
+
                 // Track access in warm tier
                 if info.tier == StorageTier::Warm {
                     if let Ok(mut warm) = self.warm_tier.try_write() {
@@ -454,20 +465,17 @@ impl StorageEngine for TieredStorageEngine {
                 }
             }
         }
-        
+
         Ok(results)
     }
-    
-    async fn delete_triples(
-        &self,
-        pattern: &TriplePattern,
-    ) -> Result<usize, OxirsError> {
+
+    async fn delete_triples(&self, pattern: &TriplePattern) -> Result<usize, OxirsError> {
         let triples = self.query_triples(pattern).await?;
         let count = triples.len();
-        
+
         for triple in triples {
             let hash = Self::hash_triple(&triple);
-            
+
             // Remove from index
             if let Some((_, info)) = self.index.remove(&hash) {
                 // Remove from appropriate tier
@@ -477,11 +485,19 @@ impl StorageEngine for TieredStorageEngine {
                         self.stats.hot_count.fetch_sub(1, Ordering::Relaxed);
                     }
                     StorageTier::Warm => {
-                        self.warm_tier.write().await.storage.delete(hash.to_be_bytes())?;
+                        self.warm_tier
+                            .write()
+                            .await
+                            .storage
+                            .delete(hash.to_be_bytes())?;
                         self.stats.warm_count.fetch_sub(1, Ordering::Relaxed);
                     }
                     StorageTier::Cold => {
-                        self.cold_tier.write().await.storage.delete(hash.to_be_bytes())?;
+                        self.cold_tier
+                            .write()
+                            .await
+                            .storage
+                            .delete(hash.to_be_bytes())?;
                         self.stats.cold_count.fetch_sub(1, Ordering::Relaxed);
                     }
                     StorageTier::Archive => {
@@ -491,22 +507,24 @@ impl StorageEngine for TieredStorageEngine {
                         }
                     }
                 }
-                
+
                 self.stats.total_triples.fetch_sub(1, Ordering::Relaxed);
-                self.stats.total_size.fetch_sub(info.size_bytes as u64, Ordering::Relaxed);
+                self.stats
+                    .total_size
+                    .fetch_sub(info.size_bytes as u64, Ordering::Relaxed);
             }
         }
-        
+
         Ok(count)
     }
-    
+
     async fn stats(&self) -> Result<StorageStats, OxirsError> {
         let total_queries = self.stats.total_queries.load(Ordering::Relaxed);
         let hot_hits = self.stats.hot_hits.load(Ordering::Relaxed);
         let warm_hits = self.stats.warm_hits.load(Ordering::Relaxed);
         let cold_hits = self.stats.cold_hits.load(Ordering::Relaxed);
         let total_hits = hot_hits + warm_hits + cold_hits;
-        
+
         Ok(StorageStats {
             total_triples: self.stats.total_triples.load(Ordering::Relaxed),
             total_size_bytes: self.stats.total_size.load(Ordering::Relaxed),
@@ -514,51 +532,67 @@ impl StorageEngine for TieredStorageEngine {
                 hot: TierStat {
                     triple_count: self.stats.hot_count.load(Ordering::Relaxed),
                     size_bytes: 0, // Calculate from hot tier
-                    hit_rate: if total_queries > 0 { 
-                        (hot_hits as f64 / total_queries as f64) * 100.0 
-                    } else { 0.0 },
+                    hit_rate: if total_queries > 0 {
+                        (hot_hits as f64 / total_queries as f64) * 100.0
+                    } else {
+                        0.0
+                    },
                     avg_access_time_us: 1, // Sub-microsecond for memory
                 },
                 warm: TierStat {
                     triple_count: self.stats.warm_count.load(Ordering::Relaxed),
                     size_bytes: 0, // Calculate from warm tier
-                    hit_rate: if total_queries > 0 { 
-                        (warm_hits as f64 / total_queries as f64) * 100.0 
-                    } else { 0.0 },
+                    hit_rate: if total_queries > 0 {
+                        (warm_hits as f64 / total_queries as f64) * 100.0
+                    } else {
+                        0.0
+                    },
                     avg_access_time_us: 100, // ~100μs for SSD
                 },
                 cold: TierStat {
                     triple_count: self.stats.cold_count.load(Ordering::Relaxed),
                     size_bytes: 0, // Calculate from cold tier
-                    hit_rate: if total_queries > 0 { 
-                        (cold_hits as f64 / total_queries as f64) * 100.0 
-                    } else { 0.0 },
+                    hit_rate: if total_queries > 0 {
+                        (cold_hits as f64 / total_queries as f64) * 100.0
+                    } else {
+                        0.0
+                    },
                     avg_access_time_us: 10000, // ~10ms for HDD
                 },
                 archive: TierStat {
                     triple_count: self.stats.archive_count.load(Ordering::Relaxed),
-                    size_bytes: 0, // Calculate from archive
-                    hit_rate: 0.0, // Archive is rarely accessed
+                    size_bytes: 0,               // Calculate from archive
+                    hit_rate: 0.0,               // Archive is rarely accessed
                     avg_access_time_us: 1000000, // ~1s for archive retrieval
                 },
             },
             compression_ratio: 1.5, // Placeholder
             query_metrics: QueryMetrics {
-                avg_query_time_ms: 0.1, // Placeholder
-                p99_query_time_ms: 1.0, // Placeholder
+                avg_query_time_ms: 0.1,                            // Placeholder
+                p99_query_time_ms: 1.0,                            // Placeholder
                 qps: if total_queries > 0 { 1000.0 } else { 0.0 }, // Placeholder
-                cache_hit_rate: if total_queries > 0 { 
-                    (total_hits as f64 / total_queries as f64) * 100.0 
-                } else { 0.0 },
+                cache_hit_rate: if total_queries > 0 {
+                    (total_hits as f64 / total_queries as f64) * 100.0
+                } else {
+                    0.0
+                },
             },
         })
     }
-    
+
     async fn optimize(&self) -> Result<(), OxirsError> {
         // Trigger compaction on RocksDB instances
-        self.warm_tier.read().await.storage.compact_range(None::<&[u8]>, None::<&[u8]>);
-        self.cold_tier.read().await.storage.compact_range(None::<&[u8]>, None::<&[u8]>);
-        
+        self.warm_tier
+            .read()
+            .await
+            .storage
+            .compact_range(None::<&[u8]>, None::<&[u8]>);
+        self.cold_tier
+            .read()
+            .await
+            .storage
+            .compact_range(None::<&[u8]>, None::<&[u8]>);
+
         // Force tier rebalancing
         Self::manage_tiers(
             &self.hot_tier,
@@ -567,15 +601,16 @@ impl StorageEngine for TieredStorageEngine {
             &self.archive_tier,
             &self.index,
             &self.config,
-        ).await?;
-        
+        )
+        .await?;
+
         Ok(())
     }
-    
+
     async fn backup(&self, path: &Path) -> Result<(), OxirsError> {
         // Create backup directory
         std::fs::create_dir_all(path)?;
-        
+
         // Backup metadata
         let metadata = BackupMetadata {
             version: 1,
@@ -583,74 +618,87 @@ impl StorageEngine for TieredStorageEngine {
             total_triples: self.stats.total_triples.load(Ordering::Relaxed),
             config: self.config.clone(),
         };
-        
+
         let metadata_path = path.join("metadata.json");
         let metadata_json = serde_json::to_string_pretty(&metadata)?;
         std::fs::write(metadata_path, metadata_json)?;
-        
+
         // Backup each tier
         // Hot tier
         let hot_backup = path.join("hot.bin");
-        let hot_data: Vec<_> = self.hot_tier.lock().iter()
+        let hot_data: Vec<_> = self
+            .hot_tier
+            .lock()
+            .iter()
             .map(|(k, v)| (*k, v.clone()))
             .collect();
         let hot_bytes = bincode::serialize(&hot_data)?;
         std::fs::write(hot_backup, hot_bytes)?;
-        
+
         // Warm and cold tiers - use RocksDB backup
         let warm_backup = path.join("warm");
-        self.warm_tier.read().await.storage
+        self.warm_tier
+            .read()
+            .await
+            .storage
             .create_checkpoint(&warm_backup)?;
-        
+
         let cold_backup = path.join("cold");
-        self.cold_tier.read().await.storage
+        self.cold_tier
+            .read()
+            .await
+            .storage
             .create_checkpoint(&cold_backup)?;
-        
+
         // Index backup
         let index_backup = path.join("index.bin");
-        let index_data: HashMap<_, _> = self.index.iter()
+        let index_data: HashMap<_, _> = self
+            .index
+            .iter()
             .map(|entry| (*entry.key(), entry.value().clone()))
             .collect();
         let index_bytes = bincode::serialize(&index_data)?;
         std::fs::write(index_backup, index_bytes)?;
-        
+
         Ok(())
     }
-    
+
     async fn restore(&self, path: &Path) -> Result<(), OxirsError> {
         // Read metadata
         let metadata_path = path.join("metadata.json");
         let metadata_json = std::fs::read_to_string(metadata_path)?;
         let metadata: BackupMetadata = serde_json::from_str(&metadata_json)?;
-        
+
         // Restore hot tier
         let hot_backup = path.join("hot.bin");
         if hot_backup.exists() {
             let hot_bytes = std::fs::read(hot_backup)?;
             let hot_data: Vec<(u64, StoredTriple)> = bincode::deserialize(&hot_bytes)?;
-            
+
             let mut hot = self.hot_tier.lock();
             hot.clear();
             for (k, v) in hot_data {
                 hot.put(k, v);
             }
         }
-        
+
         // Restore index
         let index_backup = path.join("index.bin");
         if index_backup.exists() {
             let index_bytes = std::fs::read(index_backup)?;
             let index_data: HashMap<u64, AccessInfo> = bincode::deserialize(&index_bytes)?;
-            
+
             self.index.clear();
             for (k, v) in index_data {
                 self.index.insert(k, v);
             }
         }
-        
+
         // Update statistics
-        self.stats.total_triples.store(metadata.total_triples, Ordering::Relaxed);
-        
+        self.stats
+            .total_triples
+            .store(metadata.total_triples, Ordering::Relaxed);
+
         Ok(())
     }
 }
@@ -667,21 +715,21 @@ struct BackupMetadata {
 // Placeholder compression module
 mod compression {
     use super::*;
-    
+
     pub struct Compressor {
         compression_type: CompressionType,
     }
-    
+
     impl Compressor {
         pub fn new(compression_type: CompressionType) -> Self {
             Compressor { compression_type }
         }
-        
+
         pub fn compress(&self, data: &[u8]) -> Result<Vec<u8>, OxirsError> {
             // Placeholder - would use actual compression libraries
             Ok(data.to_vec())
         }
-        
+
         pub fn decompress(&self, data: &[u8]) -> Result<Vec<u8>, OxirsError> {
             // Placeholder - would use actual compression libraries
             Ok(data.to_vec())
@@ -692,28 +740,28 @@ mod compression {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{NamedNode, Literal};
-    
+    use crate::model::{Literal, NamedNode};
+
     #[tokio::test]
     async fn test_tiered_storage() {
         let config = StorageConfig::default();
         let engine = TieredStorageEngine::new(config).await.unwrap();
-        
+
         // Create test triple
         let subject = NamedNode::new("http://example.org/subject").unwrap();
         let predicate = NamedNode::new("http://example.org/predicate").unwrap();
         let object = crate::model::Object::Literal(Literal::new("test"));
         let triple = Triple::new(subject, predicate, object);
-        
+
         // Store triple
         engine.store_triple(&triple).await.unwrap();
-        
+
         // Query triple
         let pattern = TriplePattern::new(None, None, None);
         let results = engine.query_triples(&pattern).await.unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0], triple);
-        
+
         // Check stats
         let stats = engine.stats().await.unwrap();
         assert_eq!(stats.total_triples, 1);

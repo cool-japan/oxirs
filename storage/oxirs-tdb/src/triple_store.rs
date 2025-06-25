@@ -1,20 +1,20 @@
 //! # TDB Triple Store Implementation
 //!
-//! Integrates MVCC storage with TDB triple operations using B+ trees, 
+//! Integrates MVCC storage with TDB triple operations using B+ trees,
 //! page management, and node tables for high-performance RDF storage.
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock, Mutex};
 use std::fmt::{self, Display};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, RwLock};
 
 use crate::btree::{BTree, BTreeConfig};
 use crate::mvcc::{MvccStorage, TransactionId, Version};
-use crate::nodes::{NodeTable, NodeId, Term, NodeTableConfig};
+use crate::nodes::{NodeId, NodeTable, NodeTableConfig, Term};
 use crate::page::{BufferPool, BufferPoolConfig, PageType};
-use crate::transactions::{TransactionManager, IsolationLevel, TransactionState};
+use crate::transactions::{IsolationLevel, TransactionManager, TransactionState};
 
 /// Triple representation using node IDs
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -27,7 +27,11 @@ pub struct Triple {
 impl Triple {
     /// Create a new triple
     pub fn new(subject: NodeId, predicate: NodeId, object: NodeId) -> Self {
-        Self { subject, predicate, object }
+        Self {
+            subject,
+            predicate,
+            object,
+        }
     }
 
     /// Get the triple as a tuple
@@ -48,7 +52,12 @@ pub struct Quad {
 impl Quad {
     /// Create a new quad
     pub fn new(subject: NodeId, predicate: NodeId, object: NodeId, graph: Option<NodeId>) -> Self {
-        Self { subject, predicate, object, graph }
+        Self {
+            subject,
+            predicate,
+            object,
+            graph,
+        }
     }
 
     /// Get the quad as a tuple
@@ -83,7 +92,7 @@ impl IndexType {
     pub fn all() -> &'static [IndexType] {
         &[
             IndexType::SPO,
-            IndexType::POS, 
+            IndexType::POS,
             IndexType::OSP,
             IndexType::SOP,
             IndexType::PSO,
@@ -104,7 +113,11 @@ impl IndexType {
     }
 
     /// Get the best index for a triple pattern
-    pub fn best_for_pattern(subject: Option<NodeId>, predicate: Option<NodeId>, object: Option<NodeId>) -> IndexType {
+    pub fn best_for_pattern(
+        subject: Option<NodeId>,
+        predicate: Option<NodeId>,
+        object: Option<NodeId>,
+    ) -> IndexType {
         match (subject.is_some(), predicate.is_some(), object.is_some()) {
             (true, true, true) => IndexType::SPO, // All bound - any index works, prefer SPO
             (true, true, false) => IndexType::SPO, // S and P bound
@@ -129,7 +142,11 @@ pub struct TripleKey {
 impl TripleKey {
     /// Create a new triple key
     pub fn new(first: NodeId, second: NodeId, third: NodeId) -> Self {
-        Self { first, second, third }
+        Self {
+            first,
+            second,
+            third,
+        }
     }
 
     /// Convert to a compact byte representation
@@ -148,16 +165,13 @@ impl TripleKey {
         }
 
         let first = u64::from_be_bytes([
-            bytes[0], bytes[1], bytes[2], bytes[3],
-            bytes[4], bytes[5], bytes[6], bytes[7],
+            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
         ]);
         let second = u64::from_be_bytes([
-            bytes[8], bytes[9], bytes[10], bytes[11],
-            bytes[12], bytes[13], bytes[14], bytes[15],
+            bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15],
         ]);
         let third = u64::from_be_bytes([
-            bytes[16], bytes[17], bytes[18], bytes[19],
-            bytes[20], bytes[21], bytes[22], bytes[23],
+            bytes[16], bytes[17], bytes[18], bytes[19], bytes[20], bytes[21], bytes[22], bytes[23],
         ]);
 
         Ok(Self::new(first, second, third))
@@ -271,7 +285,10 @@ impl TripleStore {
 
         // Initialize buffer pool
         let buffer_file = config.storage_path.join("pages.db");
-        let buffer_pool = Arc::new(BufferPool::with_config(buffer_file, config.buffer_config.clone())?);
+        let buffer_pool = Arc::new(BufferPool::with_config(
+            buffer_file,
+            config.buffer_config.clone(),
+        )?);
 
         // Initialize indices
         let mut indices = HashMap::new();
@@ -282,10 +299,7 @@ impl TripleStore {
         };
 
         for &index_type in index_types {
-            indices.insert(
-                index_type,
-                BTree::with_config(config.btree_config.clone()),
-            );
+            indices.insert(index_type, BTree::with_config(config.btree_config.clone()));
         }
 
         // Store default graph term
@@ -307,7 +321,7 @@ impl TripleStore {
     /// Begin a new transaction
     pub fn begin_transaction(&self) -> Result<TransactionId> {
         let tx_id = self.mvcc_storage.begin_transaction(false)?;
-        
+
         // Update stats
         if let Ok(mut stats) = self.stats.lock() {
             stats.active_transactions += 1;
@@ -319,7 +333,7 @@ impl TripleStore {
     /// Begin a read-only transaction
     pub fn begin_read_transaction(&self) -> Result<TransactionId> {
         let tx_id = self.mvcc_storage.begin_transaction(true)?;
-        
+
         // Update stats
         if let Ok(mut stats) = self.stats.lock() {
             stats.active_transactions += 1;
@@ -331,7 +345,7 @@ impl TripleStore {
     /// Commit a transaction
     pub fn commit_transaction(&self, tx_id: TransactionId) -> Result<Version> {
         let version = self.mvcc_storage.commit_transaction(tx_id)?;
-        
+
         // Update stats
         if let Ok(mut stats) = self.stats.lock() {
             stats.active_transactions = stats.active_transactions.saturating_sub(1);
@@ -344,7 +358,7 @@ impl TripleStore {
     /// Abort a transaction
     pub fn abort_transaction(&self, tx_id: TransactionId) -> Result<()> {
         self.mvcc_storage.abort_transaction(tx_id)?;
-        
+
         // Update stats
         if let Ok(mut stats) = self.stats.lock() {
             stats.active_transactions = stats.active_transactions.saturating_sub(1);
@@ -356,15 +370,17 @@ impl TripleStore {
     /// Insert a triple within a transaction
     pub fn insert_triple_tx(&self, tx_id: TransactionId, triple: &Triple) -> Result<()> {
         // Insert into all indices
-        let indices = self.indices.read()
+        let indices = self
+            .indices
+            .read()
             .map_err(|_| anyhow!("Failed to acquire indices lock"))?;
 
         for (&index_type, btree) in indices.iter() {
             let key = index_type.triple_to_key(triple);
-            
+
             // Store in MVCC storage
             self.mvcc_storage.put_tx(tx_id, key.clone(), true)?;
-            
+
             // Note: In a full implementation, we would also update the B+ tree indices
             // For now, we're using MVCC storage as the primary storage
         }
@@ -399,12 +415,14 @@ impl TripleStore {
         let mut deleted = false;
 
         // Delete from all indices
-        let indices = self.indices.read()
+        let indices = self
+            .indices
+            .read()
             .map_err(|_| anyhow!("Failed to acquire indices lock"))?;
 
         for (&index_type, _btree) in indices.iter() {
             let key = index_type.triple_to_key(triple);
-            
+
             // Check if triple exists before deletion
             if let Some(exists) = self.mvcc_storage.get_tx(tx_id, &key)? {
                 if exists {
@@ -434,67 +452,87 @@ impl TripleStore {
         object: Option<NodeId>,
     ) -> Result<Vec<Triple>> {
         let start_time = std::time::Instant::now();
-        
+
         // Choose the best index for this query pattern
         let best_index = IndexType::best_for_pattern(subject, predicate, object);
-        
+
         let mut results = Vec::new();
-        
+
         // Create search patterns for each index type to find matching triples
         match (subject, predicate, object) {
             // All bound - exact lookup
             (Some(s), Some(p), Some(o)) => {
                 let triple = Triple::new(s, p, o);
                 let key = best_index.triple_to_key(&triple);
-                
+
                 if let Some(exists) = self.mvcc_storage.get_tx(tx_id, &key)? {
                     if exists {
                         results.push(triple);
                     }
                 }
             }
-            
+
             // Two bound - need to scan for matches
             (Some(s), Some(p), None) => {
                 // Subject and predicate bound, find all objects
-                results.extend(self.scan_for_pattern_tx(tx_id, best_index, Some(s), Some(p), None)?);
+                results.extend(self.scan_for_pattern_tx(
+                    tx_id,
+                    best_index,
+                    Some(s),
+                    Some(p),
+                    None,
+                )?);
             }
-            
+
             (Some(s), None, Some(o)) => {
                 // Subject and object bound, find all predicates
-                results.extend(self.scan_for_pattern_tx(tx_id, best_index, Some(s), None, Some(o))?);
+                results.extend(self.scan_for_pattern_tx(
+                    tx_id,
+                    best_index,
+                    Some(s),
+                    None,
+                    Some(o),
+                )?);
             }
-            
+
             (None, Some(p), Some(o)) => {
                 // Predicate and object bound, find all subjects
-                results.extend(self.scan_for_pattern_tx(tx_id, best_index, None, Some(p), Some(o))?);
+                results.extend(self.scan_for_pattern_tx(
+                    tx_id,
+                    best_index,
+                    None,
+                    Some(p),
+                    Some(o),
+                )?);
             }
-            
+
             // One bound - broader scan
             (Some(s), None, None) => {
                 results.extend(self.scan_for_pattern_tx(tx_id, best_index, Some(s), None, None)?);
             }
-            
+
             (None, Some(p), None) => {
                 results.extend(self.scan_for_pattern_tx(tx_id, best_index, None, Some(p), None)?);
             }
-            
+
             (None, None, Some(o)) => {
                 results.extend(self.scan_for_pattern_tx(tx_id, best_index, None, None, Some(o))?);
             }
-            
+
             // None bound - full scan (expensive!)
             (None, None, None) => {
                 results.extend(self.full_scan_tx(tx_id)?);
             }
         }
-        
+
         // Update query stats
         if let Ok(mut stats) = self.stats.lock() {
             stats.query_count += 1;
             let query_time = start_time.elapsed().as_millis() as f64;
-            stats.avg_query_time_ms = (stats.avg_query_time_ms * (stats.query_count - 1) as f64 + query_time) / stats.query_count as f64;
-            
+            stats.avg_query_time_ms = (stats.avg_query_time_ms * (stats.query_count - 1) as f64
+                + query_time)
+                / stats.query_count as f64;
+
             let index_name = format!("{:?}", best_index);
             *stats.index_hits.entry(index_name).or_insert(0) += 1;
         }
@@ -505,7 +543,7 @@ impl TripleStore {
     /// Insert a triple (creates and commits transaction automatically)
     pub fn insert_triple(&self, triple: &Triple) -> Result<()> {
         let tx_id = self.begin_transaction()?;
-        
+
         match self.insert_triple_tx(tx_id, triple) {
             Ok(()) => {
                 self.commit_transaction(tx_id)?;
@@ -521,7 +559,7 @@ impl TripleStore {
     /// Insert a quad (creates and commits transaction automatically)
     pub fn insert_quad(&self, quad: &Quad) -> Result<()> {
         let tx_id = self.begin_transaction()?;
-        
+
         match self.insert_quad_tx(tx_id, quad) {
             Ok(()) => {
                 self.commit_transaction(tx_id)?;
@@ -537,7 +575,7 @@ impl TripleStore {
     /// Delete a triple (creates and commits transaction automatically)
     pub fn delete_triple(&self, triple: &Triple) -> Result<bool> {
         let tx_id = self.begin_transaction()?;
-        
+
         match self.delete_triple_tx(tx_id, triple) {
             Ok(deleted) => {
                 self.commit_transaction(tx_id)?;
@@ -558,12 +596,12 @@ impl TripleStore {
         object: Option<NodeId>,
     ) -> Result<Vec<Triple>> {
         let tx_id = self.begin_read_transaction()?;
-        
+
         let result = self.query_triples_tx(tx_id, subject, predicate, object);
-        
+
         // Read transactions can always be committed
         self.commit_transaction(tx_id)?;
-        
+
         result
     }
 
@@ -589,7 +627,9 @@ impl TripleStore {
 
     /// Get triple store statistics
     pub fn get_stats(&self) -> Result<TripleStoreStats> {
-        let stats = self.stats.lock()
+        let stats = self
+            .stats
+            .lock()
             .map_err(|_| anyhow!("Failed to acquire stats lock"))?;
         Ok(stats.clone())
     }
@@ -598,13 +638,13 @@ impl TripleStore {
     pub fn compact(&self) -> Result<()> {
         // Compact node table
         self.node_table.compact()?;
-        
+
         // Compact MVCC storage
         self.mvcc_storage.cleanup_old_versions(100)?;
-        
+
         // Flush buffer pool
         self.buffer_pool.flush_all()?;
-        
+
         Ok(())
     }
 
@@ -623,26 +663,26 @@ impl TripleStore {
     pub fn clear(&self) -> Result<()> {
         self.node_table.clear()?;
         // Clear MVCC storage and indices would go here
-        
+
         // Reset stats
         if let Ok(mut stats) = self.stats.lock() {
             *stats = TripleStoreStats::default();
         }
-        
+
         Ok(())
     }
 
     /// Bulk load triples for efficient initialization
     pub fn bulk_load_triples(&self, triples: Vec<Triple>) -> Result<()> {
         let tx_id = self.begin_transaction()?;
-        
+
         for triple in &triples {
             if let Err(e) = self.insert_triple_tx(tx_id, triple) {
                 self.abort_transaction(tx_id)?;
                 return Err(e);
             }
         }
-        
+
         self.commit_transaction(tx_id)?;
         Ok(())
     }
@@ -650,21 +690,23 @@ impl TripleStore {
     /// Validate the integrity of the triple store
     pub fn validate(&self) -> Result<bool> {
         // Validate B+ tree indices
-        let indices = self.indices.read()
+        let indices = self
+            .indices
+            .read()
             .map_err(|_| anyhow!("Failed to acquire indices lock"))?;
-        
+
         for (index_type, btree) in indices.iter() {
             if !btree.validate()? {
                 return Ok(false);
             }
         }
-        
+
         // Additional validation logic would go here
         Ok(true)
     }
 
     // Private helper methods for query implementation
-    
+
     /// Scan for triples matching a pattern using the specified index
     fn scan_for_pattern_tx(
         &self,
@@ -675,14 +717,14 @@ impl TripleStore {
         o: Option<NodeId>,
     ) -> Result<Vec<Triple>> {
         let mut results = Vec::new();
-        
+
         // This is a simplified implementation that scans the MVCC storage
         // In a full implementation, this would use B+ tree range scans
-        
+
         // Generate all possible node combinations within reasonable limits
         // For now, we'll use a brute force approach for demonstration
         let max_node_id = 10000; // Reasonable upper bound for scanning
-        
+
         match index_type {
             IndexType::SPO => {
                 if let Some(subj) = s {
@@ -737,7 +779,7 @@ impl TripleStore {
                     }
                 }
             }
-            
+
             IndexType::POS => {
                 // Similar logic for POS index ordering
                 // Implementation would be optimized based on the index structure
@@ -755,7 +797,7 @@ impl TripleStore {
                     }
                 }
             }
-            
+
             IndexType::OSP => {
                 // Similar logic for OSP index ordering
                 if let Some(obj) = o {
@@ -772,24 +814,24 @@ impl TripleStore {
                     }
                 }
             }
-            
+
             _ => {
                 // For other index types, fall back to full scan
                 return self.full_scan_tx(tx_id);
             }
         }
-        
+
         Ok(results)
     }
-    
+
     /// Perform a full scan of all triples (expensive operation)
     fn full_scan_tx(&self, tx_id: TransactionId) -> Result<Vec<Triple>> {
         let mut results = Vec::new();
-        
+
         // This is a brute force implementation for demonstration
         // In a real system, we would iterate through stored keys
         let max_node_id = 1000; // Limit for performance
-        
+
         for s in 1..=max_node_id {
             for p in 1..=max_node_id {
                 for o in 1..=max_node_id {
@@ -800,7 +842,7 @@ impl TripleStore {
                             results.push(triple);
                         }
                     }
-                    
+
                     // Early termination if we have enough results
                     if results.len() > 10000 {
                         warn!("Full scan returning partial results to avoid memory exhaustion");
@@ -809,7 +851,7 @@ impl TripleStore {
                 }
             }
         }
-        
+
         Ok(results)
     }
 }
@@ -823,29 +865,29 @@ mod tests {
     fn test_triple_store_basic_operations() {
         let temp_dir = TempDir::new().unwrap();
         let store = TripleStore::new(temp_dir.path()).unwrap();
-        
+
         // Store some terms
         let subject_term = Term::iri("http://example.org/person/john");
         let predicate_term = Term::iri("http://example.org/name");
         let object_term = Term::literal("John Doe");
-        
+
         let subject_id = store.store_term(&subject_term).unwrap();
         let predicate_id = store.store_term(&predicate_term).unwrap();
         let object_id = store.store_term(&object_term).unwrap();
-        
+
         // Create and insert triple
         let triple = Triple::new(subject_id, predicate_id, object_id);
         store.insert_triple(&triple).unwrap();
-        
+
         // Verify triple was inserted
         let stats = store.get_stats().unwrap();
         assert_eq!(stats.total_triples, 1);
         assert_eq!(stats.insert_count, 1);
-        
+
         // Delete triple
         let deleted = store.delete_triple(&triple).unwrap();
         assert!(deleted);
-        
+
         let stats = store.get_stats().unwrap();
         assert_eq!(stats.total_triples, 0);
         assert_eq!(stats.delete_count, 1);
@@ -855,23 +897,27 @@ mod tests {
     fn test_triple_store_transactions() {
         let temp_dir = TempDir::new().unwrap();
         let store = TripleStore::new(temp_dir.path()).unwrap();
-        
+
         // Store terms
-        let subject_id = store.store_term(&Term::iri("http://example.org/s")).unwrap();
-        let predicate_id = store.store_term(&Term::iri("http://example.org/p")).unwrap();
+        let subject_id = store
+            .store_term(&Term::iri("http://example.org/s"))
+            .unwrap();
+        let predicate_id = store
+            .store_term(&Term::iri("http://example.org/p"))
+            .unwrap();
         let object_id = store.store_term(&Term::literal("value")).unwrap();
-        
+
         let triple = Triple::new(subject_id, predicate_id, object_id);
-        
+
         // Begin transaction
         let tx_id = store.begin_transaction().unwrap();
-        
+
         // Insert triple in transaction
         store.insert_triple_tx(tx_id, &triple).unwrap();
-        
+
         // Commit transaction
         store.commit_transaction(tx_id).unwrap();
-        
+
         // Verify triple exists
         let stats = store.get_stats().unwrap();
         assert_eq!(stats.total_triples, 1);
@@ -882,23 +928,27 @@ mod tests {
     fn test_triple_store_transaction_abort() {
         let temp_dir = TempDir::new().unwrap();
         let store = TripleStore::new(temp_dir.path()).unwrap();
-        
+
         // Store terms
-        let subject_id = store.store_term(&Term::iri("http://example.org/s")).unwrap();
-        let predicate_id = store.store_term(&Term::iri("http://example.org/p")).unwrap();
+        let subject_id = store
+            .store_term(&Term::iri("http://example.org/s"))
+            .unwrap();
+        let predicate_id = store
+            .store_term(&Term::iri("http://example.org/p"))
+            .unwrap();
         let object_id = store.store_term(&Term::literal("value")).unwrap();
-        
+
         let triple = Triple::new(subject_id, predicate_id, object_id);
-        
+
         // Begin transaction
         let tx_id = store.begin_transaction().unwrap();
-        
+
         // Insert triple in transaction
         store.insert_triple_tx(tx_id, &triple).unwrap();
-        
+
         // Abort transaction
         store.abort_transaction(tx_id).unwrap();
-        
+
         // Verify triple was not persisted
         let stats = store.get_stats().unwrap();
         assert_eq!(stats.total_triples, 0);
@@ -909,7 +959,7 @@ mod tests {
         let key = TripleKey::new(1, 2, 3);
         let bytes = key.to_bytes();
         let restored = TripleKey::from_bytes(&bytes).unwrap();
-        
+
         assert_eq!(key, restored);
     }
 
@@ -938,20 +988,26 @@ mod tests {
     fn test_bulk_load() {
         let temp_dir = TempDir::new().unwrap();
         let store = TripleStore::new(temp_dir.path()).unwrap();
-        
+
         // Create test triples
         let mut triples = Vec::new();
         for i in 0..100 {
-            let subject_id = store.store_term(&Term::iri(&format!("http://example.org/s{}", i))).unwrap();
-            let predicate_id = store.store_term(&Term::iri("http://example.org/predicate")).unwrap();
-            let object_id = store.store_term(&Term::literal(&format!("value{}", i))).unwrap();
-            
+            let subject_id = store
+                .store_term(&Term::iri(&format!("http://example.org/s{}", i)))
+                .unwrap();
+            let predicate_id = store
+                .store_term(&Term::iri("http://example.org/predicate"))
+                .unwrap();
+            let object_id = store
+                .store_term(&Term::literal(&format!("value{}", i)))
+                .unwrap();
+
             triples.push(Triple::new(subject_id, predicate_id, object_id));
         }
-        
+
         // Bulk load
         store.bulk_load_triples(triples).unwrap();
-        
+
         // Verify all triples were loaded
         let stats = store.get_stats().unwrap();
         assert_eq!(stats.total_triples, 100);

@@ -1,10 +1,13 @@
 //! OxiRS Chat Server Binary
 
 use clap::Parser;
-use oxirs_chat::{ChatManager, server::{ChatServer, ServerConfig}};
+use oxirs_chat::{
+    server::{ChatServer, ServerConfig},
+    ChatManager,
+};
 use oxirs_core::store::Store;
 use std::{path::PathBuf, sync::Arc};
-use tracing::{info, error};
+use tracing::{error, info};
 
 #[derive(Parser)]
 #[command(name = "oxirs-chat")]
@@ -46,7 +49,7 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
-    
+
     // Initialize logging
     let log_level = match args.log_level.as_str() {
         "trace" => tracing::Level::TRACE,
@@ -57,12 +60,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         _ => tracing::Level::INFO,
     };
 
-    tracing_subscriber::fmt()
-        .with_max_level(log_level)
-        .init();
-    
+    tracing_subscriber::fmt().with_max_level(log_level).init();
+
     info!("Starting OxiRS Chat server on {}:{}", args.host, args.port);
-    
+
     // Initialize the knowledge graph store
     let store = match initialize_store(args.dataset.as_ref()).await {
         Ok(store) => Arc::new(store),
@@ -76,7 +77,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize the chat manager
     let chat_manager = ChatManager::new(store.clone());
-    
+
     // Configure the server
     let server_config = ServerConfig {
         host: args.host,
@@ -96,14 +97,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create and start the server
     let server = ChatServer::new(chat_manager, server_config);
-    
+
     info!("🚀 OxiRS Chat server starting...");
-    info!("📡 HTTP API available at: http://{}:{}/api", args.host, args.port);
-    info!("🔄 WebSocket endpoint: ws://{}:{}/api/sessions/{{session_id}}/ws", args.host, args.port);
-    info!("❤️  Health check: http://{}:{}/health", args.host, args.port);
-    
+    info!(
+        "📡 HTTP API available at: http://{}:{}/api",
+        args.host, args.port
+    );
+    info!(
+        "🔄 WebSocket endpoint: ws://{}:{}/api/sessions/{{session_id}}/ws",
+        args.host, args.port
+    );
+    info!(
+        "❤️  Health check: http://{}:{}/health",
+        args.host, args.port
+    );
+
     if args.enable_metrics {
-        info!("📊 Metrics endpoint: http://{}:{}/metrics", args.host, args.port);
+        info!(
+            "📊 Metrics endpoint: http://{}:{}/metrics",
+            args.host, args.port
+        );
     }
 
     // Start the server
@@ -114,14 +127,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Err(e);
         }
     }
-    
+
     Ok(())
 }
 
 /// Initialize the knowledge graph store
-async fn initialize_store(dataset_path: Option<&PathBuf>) -> Result<Store, Box<dyn std::error::Error>> {
+async fn initialize_store(
+    dataset_path: Option<&PathBuf>,
+) -> Result<Store, Box<dyn std::error::Error>> {
     let store = Store::new()?;
-    
+
     if let Some(path) = dataset_path {
         info!("Loading dataset from: {:?}", path);
         // TODO: Implement dataset loading
@@ -130,6 +145,6 @@ async fn initialize_store(dataset_path: Option<&PathBuf>) -> Result<Store, Box<d
     } else {
         info!("No dataset specified, starting with empty store");
     }
-    
+
     Ok(store)
 }

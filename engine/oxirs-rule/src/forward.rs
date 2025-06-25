@@ -97,15 +97,22 @@ impl ForwardChainer {
         let mut iteration = 0;
         let mut new_facts_added = true;
 
-        info!("Starting forward chaining with {} initial facts and {} rules", 
-              initial_fact_count, self.rules.len());
+        info!(
+            "Starting forward chaining with {} initial facts and {} rules",
+            initial_fact_count,
+            self.rules.len()
+        );
 
         while new_facts_added && iteration < self.max_iterations {
             new_facts_added = false;
             iteration += 1;
 
             if self.debug_mode {
-                debug!("Forward chaining iteration {} with {} facts", iteration, self.facts.len());
+                debug!(
+                    "Forward chaining iteration {} with {} facts",
+                    iteration,
+                    self.facts.len()
+                );
             }
 
             // Apply all rules to current facts
@@ -124,13 +131,17 @@ impl ForwardChainer {
         }
 
         if iteration >= self.max_iterations {
-            warn!("Forward chaining reached maximum iterations ({}), may not have reached fixpoint", 
-                  self.max_iterations);
+            warn!(
+                "Forward chaining reached maximum iterations ({}), may not have reached fixpoint",
+                self.max_iterations
+            );
         }
 
         let final_fact_count = self.facts.len();
-        info!("Forward chaining completed after {} iterations: {} -> {} facts", 
-              iteration, initial_fact_count, final_fact_count);
+        info!(
+            "Forward chaining completed after {} iterations: {} -> {} facts",
+            iteration, initial_fact_count, final_fact_count
+        );
 
         Ok(self.get_facts())
     }
@@ -151,7 +162,11 @@ impl ForwardChainer {
         }
 
         if self.debug_mode && !new_facts.is_empty() {
-            debug!("Rule '{}' produced {} new facts", rule.name, new_facts.len());
+            debug!(
+                "Rule '{}' produced {} new facts",
+                rule.name,
+                new_facts.len()
+            );
         }
 
         Ok(new_facts)
@@ -184,18 +199,23 @@ impl ForwardChainer {
         let mut substitutions = Vec::new();
 
         match atom {
-            RuleAtom::Triple { subject, predicate, object } => {
+            RuleAtom::Triple {
+                subject,
+                predicate,
+                object,
+            } => {
                 // Match against all facts
                 for fact in &self.facts {
-                    if let RuleAtom::Triple { 
-                        subject: fact_subject, 
-                        predicate: fact_predicate, 
-                        object: fact_object 
-                    } = fact {
+                    if let RuleAtom::Triple {
+                        subject: fact_subject,
+                        predicate: fact_predicate,
+                        object: fact_object,
+                    } = fact
+                    {
                         if let Some(substitution) = self.unify_triple(
                             (subject, predicate, object),
                             (fact_subject, fact_predicate, fact_object),
-                            partial_sub.clone()
+                            partial_sub.clone(),
                         )? {
                             substitutions.push(substitution);
                         }
@@ -204,7 +224,9 @@ impl ForwardChainer {
             }
             RuleAtom::Builtin { name, args } => {
                 // Handle built-in predicates
-                if let Some(substitution) = self.evaluate_builtin(name, args, partial_sub.clone())? {
+                if let Some(substitution) =
+                    self.evaluate_builtin(name, args, partial_sub.clone())?
+                {
                     substitutions.push(substitution);
                 }
             }
@@ -291,15 +313,18 @@ impl ForwardChainer {
     /// Apply substitution to an atom
     fn apply_substitution(&self, atom: &RuleAtom, substitution: &Substitution) -> Result<RuleAtom> {
         match atom {
-            RuleAtom::Triple { subject, predicate, object } => {
-                Ok(RuleAtom::Triple {
-                    subject: self.substitute_term(subject, substitution),
-                    predicate: self.substitute_term(predicate, substitution),
-                    object: self.substitute_term(object, substitution),
-                })
-            }
+            RuleAtom::Triple {
+                subject,
+                predicate,
+                object,
+            } => Ok(RuleAtom::Triple {
+                subject: self.substitute_term(subject, substitution),
+                predicate: self.substitute_term(predicate, substitution),
+                object: self.substitute_term(object, substitution),
+            }),
             RuleAtom::Builtin { name, args } => {
-                let substituted_args = args.iter()
+                let substituted_args = args
+                    .iter()
                     .map(|arg| self.substitute_term(arg, substitution))
                     .collect();
                 Ok(RuleAtom::Builtin {
@@ -313,9 +338,10 @@ impl ForwardChainer {
     /// Substitute variables in a term
     fn substitute_term(&self, term: &Term, substitution: &Substitution) -> Term {
         match term {
-            Term::Variable(var) => {
-                substitution.get(var).cloned().unwrap_or_else(|| term.clone())
-            }
+            Term::Variable(var) => substitution
+                .get(var)
+                .cloned()
+                .unwrap_or_else(|| term.clone()),
             _ => term.clone(),
         }
     }
@@ -424,7 +450,11 @@ pub struct ForwardChainingStats {
 
 impl std::fmt::Display for ForwardChainingStats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Facts: {}, Rules: {}", self.total_facts, self.total_rules)
+        write!(
+            f,
+            "Facts: {}, Rules: {}",
+            self.total_facts, self.total_rules
+        )
     }
 }
 
@@ -439,14 +469,22 @@ pub struct ForwardChainingResult {
 impl PartialEq for RuleAtom {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (RuleAtom::Triple { subject: s1, predicate: p1, object: o1 },
-             RuleAtom::Triple { subject: s2, predicate: p2, object: o2 }) => {
-                s1 == s2 && p1 == p2 && o1 == o2
-            }
-            (RuleAtom::Builtin { name: n1, args: a1 },
-             RuleAtom::Builtin { name: n2, args: a2 }) => {
-                n1 == n2 && a1 == a2
-            }
+            (
+                RuleAtom::Triple {
+                    subject: s1,
+                    predicate: p1,
+                    object: o1,
+                },
+                RuleAtom::Triple {
+                    subject: s2,
+                    predicate: p2,
+                    object: o2,
+                },
+            ) => s1 == s2 && p1 == p2 && o1 == o2,
+            (
+                RuleAtom::Builtin { name: n1, args: a1 },
+                RuleAtom::Builtin { name: n2, args: a2 },
+            ) => n1 == n2 && a1 == a2,
             _ => false,
         }
     }
@@ -457,7 +495,11 @@ impl Eq for RuleAtom {}
 impl std::hash::Hash for RuleAtom {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         match self {
-            RuleAtom::Triple { subject, predicate, object } => {
+            RuleAtom::Triple {
+                subject,
+                predicate,
+                object,
+            } => {
                 0.hash(state);
                 subject.hash(state);
                 predicate.hash(state);

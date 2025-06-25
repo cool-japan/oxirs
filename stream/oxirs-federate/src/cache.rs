@@ -17,10 +17,10 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 use crate::{
-    executor::{SparqlResults, GraphQLResponse},
+    executor::{GraphQLResponse, SparqlResults},
     graphql::FederatedSchema,
-    service::{ServiceCapability, ServiceMetadata},
     planner::QueryInfo,
+    service::{ServiceCapability, ServiceMetadata},
 };
 
 /// Multi-level federation cache manager
@@ -65,7 +65,10 @@ impl FederationCache {
             .build();
 
         // Initialize bloom filter for cache existence checks
-        let bloom_filter = Arc::new(RwLock::new(BloomFilter::with_rate(0.01, config.bloom_capacity as u32)));
+        let bloom_filter = Arc::new(RwLock::new(BloomFilter::with_rate(
+            0.01,
+            config.bloom_capacity as u32,
+        )));
 
         // Initialize Redis cache if enabled
         let l3_cache = if config.enable_redis {
@@ -101,7 +104,7 @@ impl FederationCache {
     /// Get a cached query result
     pub async fn get_query_result(&self, query_hash: &str) -> Option<QueryResultCache> {
         let cache_key = format!("query:{}", query_hash);
-        
+
         // Check bloom filter first
         {
             let bloom = self.bloom_filter.read().await;
@@ -115,7 +118,8 @@ impl FederationCache {
         if let Some(entry) = self.get_from_l1(&cache_key).await {
             if !entry.is_expired() {
                 if let CacheValue::QueryResult(result) = entry.value {
-                    self.record_cache_hit(CacheType::Query, CacheLevel::L1).await;
+                    self.record_cache_hit(CacheType::Query, CacheLevel::L1)
+                        .await;
                     return Some(result);
                 }
             }
@@ -127,7 +131,8 @@ impl FederationCache {
                 if let CacheValue::QueryResult(result) = &entry.value {
                     // Promote to L1
                     self.put_in_l1(cache_key.clone(), entry.clone()).await;
-                    self.record_cache_hit(CacheType::Query, CacheLevel::L2).await;
+                    self.record_cache_hit(CacheType::Query, CacheLevel::L2)
+                        .await;
                     return Some(result.clone());
                 }
             }
@@ -141,7 +146,8 @@ impl FederationCache {
                         // Promote to L2 and L1
                         self.l2_cache.insert(cache_key.clone(), entry.clone()).await;
                         self.put_in_l1(cache_key, entry.clone()).await;
-                        self.record_cache_hit(CacheType::Query, CacheLevel::L3).await;
+                        self.record_cache_hit(CacheType::Query, CacheLevel::L3)
+                            .await;
                         return Some(result.clone());
                     }
                 }
@@ -153,10 +159,15 @@ impl FederationCache {
     }
 
     /// Cache a query result
-    pub async fn put_query_result(&self, query_hash: &str, result: QueryResultCache, ttl: Option<Duration>) {
+    pub async fn put_query_result(
+        &self,
+        query_hash: &str,
+        result: QueryResultCache,
+        ttl: Option<Duration>,
+    ) {
         let cache_key = format!("query:{}", query_hash);
         let expiry = SystemTime::now() + ttl.unwrap_or(self.config.default_ttl);
-        
+
         let entry = CacheEntry {
             value: CacheValue::QueryResult(result),
             created_at: SystemTime::now(),
@@ -168,7 +179,7 @@ impl FederationCache {
         // Add to all cache levels
         self.put_in_l1(cache_key.clone(), entry.clone()).await;
         self.l2_cache.insert(cache_key.clone(), entry.clone()).await;
-        
+
         if let Some(redis) = &self.l3_cache {
             let _ = redis.put(&cache_key, &entry, ttl).await;
         }
@@ -185,7 +196,8 @@ impl FederationCache {
     /// Get cached service metadata
     pub async fn get_service_metadata(&self, service_id: &str) -> Option<ServiceMetadata> {
         let cache_key = format!("service_meta:{}", service_id);
-        self.get_typed_value(&cache_key, CacheType::ServiceMetadata).await
+        self.get_typed_value(&cache_key, CacheType::ServiceMetadata)
+            .await
     }
 
     /// Cache service metadata
@@ -198,7 +210,7 @@ impl FederationCache {
             access_count: 1,
             last_accessed: SystemTime::now(),
         };
-        
+
         self.put_entry(&cache_key, entry).await;
     }
 
@@ -218,14 +230,15 @@ impl FederationCache {
             access_count: 1,
             last_accessed: SystemTime::now(),
         };
-        
+
         self.put_entry(&cache_key, entry).await;
     }
 
     /// Get cached capabilities
     pub async fn get_capabilities(&self, service_id: &str) -> Option<Vec<ServiceCapability>> {
         let cache_key = format!("capabilities:{}", service_id);
-        self.get_typed_value(&cache_key, CacheType::Capabilities).await
+        self.get_typed_value(&cache_key, CacheType::Capabilities)
+            .await
     }
 
     /// Cache capabilities
@@ -238,7 +251,7 @@ impl FederationCache {
             access_count: 1,
             last_accessed: SystemTime::now(),
         };
-        
+
         self.put_entry(&cache_key, entry).await;
     }
 
@@ -262,18 +275,19 @@ impl FederationCache {
         // Clear L1 cache query entries
         {
             let mut l1 = self.l1_cache.write().await;
-            let keys_to_remove: Vec<String> = l1.iter()
+            let keys_to_remove: Vec<String> = l1
+                .iter()
                 .filter(|(key, _)| key.starts_with("query:"))
                 .map(|(key, _)| key.clone())
                 .collect();
-            
+
             for key in keys_to_remove {
                 l1.pop(&key);
             }
         }
 
         // L2 cache doesn't support prefix-based invalidation, so it will expire naturally
-        
+
         // Clear Redis query entries if available
         if let Some(redis) = &self.l3_cache {
             let _ = redis.invalidate_prefix("query:").await;
@@ -290,10 +304,10 @@ impl FederationCache {
     /// Warm up cache with commonly used data
     pub async fn warmup(&self) -> Result<()> {
         info!("Starting cache warmup...");
-        
+
         // This would typically pre-load commonly used schemas, capabilities, etc.
         // For now, just log that warmup is starting
-        
+
         info!("Cache warmup completed");
         Ok(())
     }
@@ -305,11 +319,12 @@ impl FederationCache {
         // Clean L1 cache
         {
             let mut l1 = self.l1_cache.write().await;
-            let expired_keys: Vec<String> = l1.iter()
+            let expired_keys: Vec<String> = l1
+                .iter()
                 .filter(|(_, entry)| entry.is_expired())
                 .map(|(key, _)| key.clone())
                 .collect();
-            
+
             for key in expired_keys {
                 l1.pop(&key);
                 removed_count += 1;
@@ -317,7 +332,7 @@ impl FederationCache {
         }
 
         // L2 cache handles expiry automatically
-        
+
         // Clean Redis cache
         if let Some(redis) = &self.l3_cache {
             // Redis TTL handles expiry automatically
@@ -331,7 +346,7 @@ impl FederationCache {
     /// Generate cache key for query
     pub fn generate_query_key(&self, query_info: &QueryInfo) -> String {
         use std::collections::hash_map::DefaultHasher;
-        
+
         let mut hasher = DefaultHasher::new();
         query_info.original_query.hash(&mut hasher);
         query_info.query_type.hash(&mut hasher);
@@ -339,7 +354,7 @@ impl FederationCache {
         for pattern in &query_info.patterns {
             pattern.pattern_string.hash(&mut hasher);
         }
-        
+
         format!("{:x}", hasher.finish())
     }
 
@@ -393,7 +408,9 @@ impl FederationCache {
             if let Ok(Some(entry)) = redis.get(cache_key).await {
                 if !entry.is_expired() {
                     if let Ok(value) = entry.value.clone().try_into() {
-                        self.l2_cache.insert(cache_key.to_string(), entry.clone()).await;
+                        self.l2_cache
+                            .insert(cache_key.to_string(), entry.clone())
+                            .await;
                         self.put_in_l1(cache_key.to_string(), entry).await;
                         self.record_cache_hit(cache_type, CacheLevel::L3).await;
                         return Some(value);
@@ -409,7 +426,7 @@ impl FederationCache {
     async fn put_entry(&self, key: &str, entry: CacheEntry) {
         self.put_in_l1(key.to_string(), entry.clone()).await;
         self.l2_cache.insert(key.to_string(), entry.clone()).await;
-        
+
         if let Some(redis) = &self.l3_cache {
             let ttl = entry.expires_at.duration_since(SystemTime::now()).ok();
             let _ = redis.put(key, &entry, ttl).await;
@@ -426,9 +443,9 @@ impl FederationCache {
             let mut l1 = self.l1_cache.write().await;
             l1.pop(key);
         }
-        
+
         self.l2_cache.invalidate(key).await;
-        
+
         if let Some(redis) = &self.l3_cache {
             let _ = redis.remove(key).await;
         }
@@ -438,7 +455,7 @@ impl FederationCache {
         let mut stats = self.stats.write().await;
         stats.total_requests += 1;
         stats.hits += 1;
-        
+
         match cache_type {
             CacheType::Query => stats.query_hits += 1,
             CacheType::ServiceMetadata => stats.metadata_hits += 1,
@@ -459,7 +476,7 @@ impl FederationCache {
         let mut stats = self.stats.write().await;
         stats.total_requests += 1;
         stats.misses += 1;
-        
+
         match cache_type {
             CacheType::Query => stats.query_misses += 1,
             CacheType::ServiceMetadata => stats.metadata_misses += 1,
@@ -489,19 +506,24 @@ impl RedisCache {
     pub fn new(redis_url: &str) -> Result<Self> {
         let client = redis::Client::open(redis_url)
             .map_err(|e| anyhow!("Failed to create Redis client: {}", e))?;
-        
+
         Ok(Self { client })
     }
 
     pub async fn get(&self, key: &str) -> Result<Option<CacheEntry>> {
         use redis::AsyncCommands;
-        
-        let mut conn = self.client.get_async_connection().await
+
+        let mut conn = self
+            .client
+            .get_async_connection()
+            .await
             .map_err(|e| anyhow!("Redis connection failed: {}", e))?;
-        
-        let value: Option<String> = conn.get(key).await
+
+        let value: Option<String> = conn
+            .get(key)
+            .await
             .map_err(|e| anyhow!("Redis get failed: {}", e))?;
-        
+
         if let Some(serialized) = value {
             let entry: CacheEntry = serde_json::from_str(&serialized)
                 .map_err(|e| anyhow!("Failed to deserialize cache entry: {}", e))?;
@@ -513,49 +535,63 @@ impl RedisCache {
 
     pub async fn put(&self, key: &str, entry: &CacheEntry, ttl: Option<Duration>) -> Result<()> {
         use redis::AsyncCommands;
-        
-        let mut conn = self.client.get_async_connection().await
+
+        let mut conn = self
+            .client
+            .get_async_connection()
+            .await
             .map_err(|e| anyhow!("Redis connection failed: {}", e))?;
-        
+
         let serialized = serde_json::to_string(entry)
             .map_err(|e| anyhow!("Failed to serialize cache entry: {}", e))?;
-        
+
         if let Some(ttl) = ttl {
             conn.set_ex(key, serialized, ttl.as_secs()).await
         } else {
             conn.set(key, serialized).await
-        }.map_err(|e| anyhow!("Redis set failed: {}", e))?;
-        
+        }
+        .map_err(|e| anyhow!("Redis set failed: {}", e))?;
+
         Ok(())
     }
 
     pub async fn remove(&self, key: &str) -> Result<()> {
         use redis::AsyncCommands;
-        
-        let mut conn = self.client.get_async_connection().await
+
+        let mut conn = self
+            .client
+            .get_async_connection()
+            .await
             .map_err(|e| anyhow!("Redis connection failed: {}", e))?;
-        
-        conn.del(key).await
+
+        conn.del(key)
+            .await
             .map_err(|e| anyhow!("Redis delete failed: {}", e))?;
-        
+
         Ok(())
     }
 
     pub async fn invalidate_prefix(&self, prefix: &str) -> Result<()> {
         use redis::AsyncCommands;
-        
-        let mut conn = self.client.get_async_connection().await
+
+        let mut conn = self
+            .client
+            .get_async_connection()
+            .await
             .map_err(|e| anyhow!("Redis connection failed: {}", e))?;
-        
+
         let pattern = format!("{}*", prefix);
-        let keys: Vec<String> = conn.keys(pattern).await
+        let keys: Vec<String> = conn
+            .keys(pattern)
+            .await
             .map_err(|e| anyhow!("Redis keys scan failed: {}", e))?;
-        
+
         if !keys.is_empty() {
-            conn.del(&keys).await
+            conn.del(&keys)
+                .await
                 .map_err(|e| anyhow!("Redis bulk delete failed: {}", e))?;
         }
-        
+
         Ok(())
     }
 }
@@ -588,7 +624,7 @@ pub enum CacheValue {
 // Implement TryInto for type-safe extraction
 impl TryInto<ServiceMetadata> for CacheValue {
     type Error = ();
-    
+
     fn try_into(self) -> Result<ServiceMetadata, Self::Error> {
         match self {
             CacheValue::ServiceMetadata(metadata) => Ok(metadata),
@@ -599,7 +635,7 @@ impl TryInto<ServiceMetadata> for CacheValue {
 
 impl TryInto<FederatedSchema> for CacheValue {
     type Error = ();
-    
+
     fn try_into(self) -> Result<FederatedSchema, Self::Error> {
         match self {
             CacheValue::Schema(schema) => Ok(schema),
@@ -610,7 +646,7 @@ impl TryInto<FederatedSchema> for CacheValue {
 
 impl TryInto<Vec<ServiceCapability>> for CacheValue {
     type Error = ();
-    
+
     fn try_into(self) -> Result<Vec<ServiceCapability>, Self::Error> {
         match self {
             CacheValue::Capabilities(caps) => Ok(caps),
@@ -646,9 +682,9 @@ impl Default for CacheConfig {
             l1_capacity: 1000,
             l2_capacity: 10000,
             bloom_capacity: 100000,
-            default_ttl: Duration::from_secs(300),     // 5 minutes
-            metadata_ttl: Duration::from_secs(3600),   // 1 hour
-            schema_ttl: Duration::from_secs(7200),     // 2 hours
+            default_ttl: Duration::from_secs(300), // 5 minutes
+            metadata_ttl: Duration::from_secs(3600), // 1 hour
+            schema_ttl: Duration::from_secs(7200), // 2 hours
             capabilities_ttl: Duration::from_secs(1800), // 30 minutes
             enable_redis: false,
             redis_url: "redis://127.0.0.1:6379".to_string(),
@@ -724,7 +760,7 @@ mod tests {
     async fn test_cache_creation() {
         let cache = FederationCache::new();
         let stats = cache.get_stats().await;
-        
+
         assert_eq!(stats.total_requests, 0);
         assert_eq!(stats.hit_rate, 0.0);
     }
@@ -733,10 +769,12 @@ mod tests {
     async fn test_metadata_caching() {
         let cache = FederationCache::new();
         let metadata = ServiceMetadata::default();
-        
-        cache.put_service_metadata("test-service", metadata.clone()).await;
+
+        cache
+            .put_service_metadata("test-service", metadata.clone())
+            .await;
         let cached = cache.get_service_metadata("test-service").await;
-        
+
         assert!(cached.is_some());
     }
 
@@ -744,11 +782,11 @@ mod tests {
     async fn test_cache_invalidation() {
         let cache = FederationCache::new();
         let metadata = ServiceMetadata::default();
-        
+
         cache.put_service_metadata("test-service", metadata).await;
         cache.invalidate_service("test-service").await;
         let cached = cache.get_service_metadata("test-service").await;
-        
+
         assert!(cached.is_none());
     }
 
@@ -765,10 +803,10 @@ mod tests {
             complexity: crate::planner::QueryComplexity::Low,
             estimated_cost: 100,
         };
-        
+
         let key1 = cache.generate_query_key(&query_info);
         let key2 = cache.generate_query_key(&query_info);
-        
+
         assert_eq!(key1, key2); // Same query should generate same key
         assert!(!key1.is_empty());
     }
@@ -776,7 +814,7 @@ mod tests {
     #[tokio::test]
     async fn test_cache_expiry() {
         let cache = FederationCache::new();
-        
+
         let entry = CacheEntry {
             value: CacheValue::ServiceMetadata(ServiceMetadata::default()),
             created_at: SystemTime::now(),
@@ -784,7 +822,7 @@ mod tests {
             access_count: 1,
             last_accessed: SystemTime::now(),
         };
-        
+
         assert!(entry.is_expired());
     }
 }

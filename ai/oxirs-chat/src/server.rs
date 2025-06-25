@@ -148,7 +148,10 @@ pub enum WebSocketResponse {
     #[serde(rename = "error")]
     Error { code: String, message: String },
     #[serde(rename = "status")]
-    Status { status: String, data: serde_json::Value },
+    Status {
+        status: String,
+        data: serde_json::Value,
+    },
 }
 
 /// Main server implementation
@@ -159,7 +162,7 @@ pub struct ChatServer {
 impl ChatServer {
     pub fn new(chat_manager: ChatManager, config: ServerConfig) -> Self {
         let (broadcast_tx, _) = broadcast::channel(1000);
-        
+
         let state = AppState {
             chat_manager: Arc::new(RwLock::new(chat_manager)),
             websocket_sessions: Arc::new(RwLock::new(HashMap::new())),
@@ -207,14 +210,16 @@ async fn create_session(
     Json(request): Json<CreateSessionRequest>,
 ) -> Result<Json<CreateSessionResponse>, StatusCode> {
     let session_id = Uuid::new_v4().to_string();
-    
+
     {
         let mut chat_manager = state.chat_manager.write().await;
         chat_manager.create_session(session_id.clone());
     }
 
-    let websocket_url = format!("ws://{}:{}/api/sessions/{}/ws", 
-        state.config.host, state.config.port, session_id);
+    let websocket_url = format!(
+        "ws://{}:{}/api/sessions/{}/ws",
+        state.config.host, state.config.port, session_id
+    );
 
     Ok(Json(CreateSessionResponse {
         session_id,
@@ -227,7 +232,7 @@ async fn get_session(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let chat_manager = state.chat_manager.read().await;
-    
+
     if let Some(_session) = chat_manager.sessions.get(&session_id) {
         Ok(Json(serde_json::json!({
             "session_id": session_id,
@@ -244,7 +249,7 @@ async fn send_message(
     Json(request): Json<SendMessageRequest>,
 ) -> Result<Json<MessageResponse>, StatusCode> {
     let mut chat_manager = state.chat_manager.write().await;
-    
+
     if let Some(session) = chat_manager.get_session(&session_id) {
         match session.process_message(request.content).await {
             Ok(message) => {
@@ -259,7 +264,7 @@ async fn send_message(
                     timestamp: message.timestamp.to_rfc3339(),
                     metadata: None,
                 };
-                
+
                 Ok(Json(response))
             }
             Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
@@ -275,7 +280,7 @@ async fn get_messages(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<MessageResponse>>, StatusCode> {
     let chat_manager = state.chat_manager.read().await;
-    
+
     if let Some(session) = chat_manager.sessions.get(&session_id) {
         let messages: Vec<MessageResponse> = session
             .get_history()
@@ -294,7 +299,7 @@ async fn get_messages(
                 metadata: None,
             })
             .collect();
-            
+
         Ok(Json(messages))
     } else {
         Err(StatusCode::NOT_FOUND)
@@ -333,9 +338,13 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
                     status: "broadcast".to_string(),
                     data: msg.data,
                 };
-                
+
                 if let Ok(json) = serde_json::to_string(&response) {
-                    if sender.send(axum::extract::ws::Message::Text(json)).await.is_err() {
+                    if sender
+                        .send(axum::extract::ws::Message::Text(json))
+                        .await
+                        .is_err()
+                    {
                         break;
                     }
                 }
@@ -352,22 +361,30 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
                             match ws_msg {
                                 WebSocketMessage::SendMessage { content } => {
                                     let mut chat_manager = state.chat_manager.write().await;
-                                    if let Some(chat_session) = chat_manager.get_session(&session_id) {
-                                        if let Ok(response_msg) = chat_session.process_message(content).await {
+                                    if let Some(chat_session) =
+                                        chat_manager.get_session(&session_id)
+                                    {
+                                        if let Ok(response_msg) =
+                                            chat_session.process_message(content).await
+                                        {
                                             let response = WebSocketResponse::Message {
                                                 message_id: Uuid::new_v4().to_string(),
                                                 content: response_msg.content,
                                                 role: match response_msg.role {
                                                     MessageRole::User => "user".to_string(),
-                                                    MessageRole::Assistant => "assistant".to_string(),
+                                                    MessageRole::Assistant => {
+                                                        "assistant".to_string()
+                                                    }
                                                     MessageRole::System => "system".to_string(),
                                                 },
                                                 timestamp: response_msg.timestamp.to_rfc3339(),
                                                 metadata: None,
                                             };
-                                            
+
                                             if let Ok(json) = serde_json::to_string(&response) {
-                                                let _ = sender.send(axum::extract::ws::Message::Text(json)).await;
+                                                let _ = sender
+                                                    .send(axum::extract::ws::Message::Text(json))
+                                                    .await;
                                             }
                                         }
                                     }
@@ -375,7 +392,9 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
                                 WebSocketMessage::Ping => {
                                     let pong = WebSocketResponse::Pong;
                                     if let Ok(json) = serde_json::to_string(&pong) {
-                                        let _ = sender.send(axum::extract::ws::Message::Text(json)).await;
+                                        let _ = sender
+                                            .send(axum::extract::ws::Message::Text(json))
+                                            .await;
                                     }
                                 }
                                 WebSocketMessage::Subscribe { topics: _ } => {

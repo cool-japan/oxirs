@@ -8,10 +8,10 @@
 //! - Advanced compression (LZ4, ZSTD, custom RDF codecs)
 //! - Storage virtualization with transparent migration
 
-pub mod tiered;
 pub mod columnar;
 pub mod compression;
 pub mod temporal;
+pub mod tiered;
 // TODO: Implement additional storage modules
 // pub mod immutable;
 // pub mod virtualization;
@@ -196,34 +196,34 @@ pub enum EvictionPolicy {
 pub trait StorageEngine: Send + Sync {
     /// Initialize the storage engine
     async fn init(&mut self, config: StorageConfig) -> Result<(), OxirsError>;
-    
+
     /// Store a triple
     async fn store_triple(&self, triple: &crate::model::Triple) -> Result<(), OxirsError>;
-    
+
     /// Store multiple triples
     async fn store_triples(&self, triples: &[crate::model::Triple]) -> Result<(), OxirsError>;
-    
+
     /// Query triples by pattern
     async fn query_triples(
         &self,
         pattern: &crate::model::TriplePattern,
     ) -> Result<Vec<crate::model::Triple>, OxirsError>;
-    
+
     /// Delete triples by pattern
     async fn delete_triples(
         &self,
         pattern: &crate::model::TriplePattern,
     ) -> Result<usize, OxirsError>;
-    
+
     /// Get storage statistics
     async fn stats(&self) -> Result<StorageStats, OxirsError>;
-    
+
     /// Optimize storage
     async fn optimize(&self) -> Result<(), OxirsError>;
-    
+
     /// Backup storage
     async fn backup(&self, path: &Path) -> Result<(), OxirsError>;
-    
+
     /// Restore from backup
     async fn restore(&self, path: &Path) -> Result<(), OxirsError>;
 }
@@ -291,7 +291,7 @@ pub async fn create_engine(config: StorageConfig) -> Result<Arc<dyn StorageEngin
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_default_config() {
         let config = StorageConfig::default();

@@ -62,7 +62,7 @@ impl Binding {
     /// Merge with another binding (fails if conflicting bindings exist)
     pub fn merge(&self, other: &Binding) -> Option<Binding> {
         let mut merged = self.clone();
-        
+
         for (var, term) in &other.bindings {
             if let Some(existing_term) = merged.bindings.get(var) {
                 if existing_term != term {
@@ -72,7 +72,7 @@ impl Binding {
                 merged.bindings.insert(var.clone(), term.clone());
             }
         }
-        
+
         Some(merged)
     }
 }
@@ -137,7 +137,7 @@ impl TermPattern {
     /// Extract variables from this pattern
     pub fn extract_variables(&self, variables: &mut HashSet<String>) {
         match self {
-            TermPattern::Term(_) => {},
+            TermPattern::Term(_) => {}
             TermPattern::Variable(var) => {
                 variables.insert(var.clone());
             }
@@ -168,19 +168,19 @@ impl TriplePattern {
     /// Try to create a binding from this pattern and a matching triple
     pub fn try_bind(&self, triple: &StarTriple, existing_binding: &Binding) -> Option<Binding> {
         let mut new_binding = existing_binding.clone();
-        
+
         if !self.bind_term(&self.subject, &triple.subject, &mut new_binding) {
             return None;
         }
-        
+
         if !self.bind_term(&self.predicate, &triple.predicate, &mut new_binding) {
             return None;
         }
-        
+
         if !self.bind_term(&self.object, &triple.object, &mut new_binding) {
             return None;
         }
-        
+
         Some(new_binding)
     }
 
@@ -310,7 +310,7 @@ pub struct QueryExecutor {
 impl QueryExecutor {
     /// Create a new query executor with default settings
     pub fn new(store: StarStore) -> Self {
-        Self { 
+        Self {
             store,
             optimization: QueryOptimization::Heuristic,
             join_strategy: JoinStrategy::Index,
@@ -319,7 +319,11 @@ impl QueryExecutor {
     }
 
     /// Create a new query executor with custom optimization settings
-    pub fn with_optimization(store: StarStore, optimization: QueryOptimization, join_strategy: JoinStrategy) -> Self {
+    pub fn with_optimization(
+        store: StarStore,
+        optimization: QueryOptimization,
+        join_strategy: JoinStrategy,
+    ) -> Self {
         Self {
             store,
             optimization,
@@ -350,9 +354,10 @@ impl QueryExecutor {
 
         // Optimize pattern order based on strategy
         let optimized_patterns = self.optimize_pattern_order(bgp)?;
-        
+
         // Execute patterns using optimized join strategy
-        let mut current_bindings = self.execute_pattern_optimized(&optimized_patterns[0], &Binding::new())?;
+        let mut current_bindings =
+            self.execute_pattern_optimized(&optimized_patterns[0], &Binding::new())?;
         self.statistics.pattern_evaluations += 1;
 
         // Join with remaining patterns using selected strategy
@@ -364,9 +369,11 @@ impl QueryExecutor {
         }
 
         self.statistics.execution_time_us += start_time.elapsed().as_micros() as u64;
-        debug!("BGP execution produced {} bindings using {} strategy", 
-               current_bindings.len(), 
-               format!("{:?}", self.optimization));
+        debug!(
+            "BGP execution produced {} bindings using {} strategy",
+            current_bindings.len(),
+            format!("{:?}", self.optimization)
+        );
         Ok(current_bindings)
     }
 
@@ -382,35 +389,35 @@ impl QueryExecutor {
     /// Heuristic-based pattern optimization
     fn heuristic_optimization(&self, bgp: &BasicGraphPattern) -> StarResult<Vec<TriplePattern>> {
         let mut patterns = bgp.patterns().to_vec();
-        
+
         // Sort patterns by selectivity (quoted triple patterns first, then most specific)
         patterns.sort_by(|a, b| {
             let a_selectivity = self.estimate_pattern_selectivity(a);
             let b_selectivity = self.estimate_pattern_selectivity(b);
             a_selectivity.partial_cmp(&b_selectivity).unwrap()
         });
-        
+
         Ok(patterns)
     }
 
     /// Cost-based pattern optimization using statistics
     fn cost_based_optimization(&self, bgp: &BasicGraphPattern) -> StarResult<Vec<TriplePattern>> {
         let mut patterns = bgp.patterns().to_vec();
-        
+
         // Sort by estimated cost (lower cost first)
         patterns.sort_by(|a, b| {
             let a_cost = self.estimate_pattern_cost(a);
             let b_cost = self.estimate_pattern_cost(b);
             a_cost.partial_cmp(&b_cost).unwrap()
         });
-        
+
         Ok(patterns)
     }
 
     /// Estimate pattern selectivity (lower is more selective)
     fn estimate_pattern_selectivity(&self, pattern: &TriplePattern) -> f64 {
         let mut selectivity = 1.0;
-        
+
         // Quoted triple patterns are typically more selective
         if matches!(pattern.subject, TermPattern::QuotedTriplePattern(_)) {
             selectivity *= 0.1;
@@ -418,7 +425,7 @@ impl QueryExecutor {
         if matches!(pattern.object, TermPattern::QuotedTriplePattern(_)) {
             selectivity *= 0.1;
         }
-        
+
         // Concrete terms are more selective than variables
         if matches!(pattern.subject, TermPattern::Term(_)) {
             selectivity *= 0.3;
@@ -429,7 +436,7 @@ impl QueryExecutor {
         if matches!(pattern.object, TermPattern::Term(_)) {
             selectivity *= 0.3;
         }
-        
+
         selectivity
     }
 
@@ -437,7 +444,7 @@ impl QueryExecutor {
     fn estimate_pattern_cost(&self, pattern: &TriplePattern) -> f64 {
         // Base cost for pattern evaluation
         let mut cost = 100.0;
-        
+
         // Add cost for quoted triple pattern complexity
         if matches!(pattern.subject, TermPattern::QuotedTriplePattern(_)) {
             cost += 500.0;
@@ -445,7 +452,7 @@ impl QueryExecutor {
         if matches!(pattern.object, TermPattern::QuotedTriplePattern(_)) {
             cost += 500.0;
         }
-        
+
         // Reduce cost for concrete terms (can use indices)
         if matches!(pattern.subject, TermPattern::Term(_)) {
             cost *= 0.5;
@@ -456,12 +463,16 @@ impl QueryExecutor {
         if matches!(pattern.object, TermPattern::Term(_)) {
             cost *= 0.5;
         }
-        
+
         cost
     }
 
     /// Execute a single triple pattern with optimization
-    fn execute_pattern_optimized(&self, pattern: &TriplePattern, initial_binding: &Binding) -> StarResult<Vec<Binding>> {
+    fn execute_pattern_optimized(
+        &self,
+        pattern: &TriplePattern,
+        initial_binding: &Binding,
+    ) -> StarResult<Vec<Binding>> {
         // Try to use store's advanced indexing for quoted triple patterns
         if self.can_use_index_optimization(pattern) {
             self.execute_pattern_with_index(pattern, initial_binding)
@@ -473,14 +484,23 @@ impl QueryExecutor {
     /// Check if pattern can benefit from index optimization
     fn can_use_index_optimization(&self, pattern: &TriplePattern) -> bool {
         // Use index optimization for patterns with quoted triples or concrete terms
-        matches!(pattern.subject, TermPattern::QuotedTriplePattern(_) | TermPattern::Term(_)) ||
-        matches!(pattern.object, TermPattern::QuotedTriplePattern(_) | TermPattern::Term(_))
+        matches!(
+            pattern.subject,
+            TermPattern::QuotedTriplePattern(_) | TermPattern::Term(_)
+        ) || matches!(
+            pattern.object,
+            TermPattern::QuotedTriplePattern(_) | TermPattern::Term(_)
+        )
     }
 
     /// Execute pattern using store indices for better performance
-    fn execute_pattern_with_index(&self, pattern: &TriplePattern, initial_binding: &Binding) -> StarResult<Vec<Binding>> {
+    fn execute_pattern_with_index(
+        &self,
+        pattern: &TriplePattern,
+        initial_binding: &Binding,
+    ) -> StarResult<Vec<Binding>> {
         let mut bindings = Vec::new();
-        
+
         // Extract concrete terms for index lookup
         let subject_term = match &pattern.subject {
             TermPattern::Term(term) => Some(term),
@@ -496,8 +516,10 @@ impl QueryExecutor {
         };
 
         // Use store's query method for better performance
-        let matching_triples = self.store.query_triples(subject_term, predicate_term, object_term);
-        
+        let matching_triples = self
+            .store
+            .query_triples(subject_term, predicate_term, object_term);
+
         for triple in matching_triples {
             if pattern.matches(&triple, initial_binding) {
                 if let Some(new_binding) = pattern.try_bind(&triple, initial_binding) {
@@ -505,12 +527,16 @@ impl QueryExecutor {
                 }
             }
         }
-        
+
         Ok(bindings)
     }
 
     /// Join current bindings with a new pattern using the selected join strategy
-    fn join_with_pattern(&self, current_bindings: Vec<Binding>, pattern: &TriplePattern) -> StarResult<Vec<Binding>> {
+    fn join_with_pattern(
+        &self,
+        current_bindings: Vec<Binding>,
+        pattern: &TriplePattern,
+    ) -> StarResult<Vec<Binding>> {
         match self.join_strategy {
             JoinStrategy::NestedLoop => self.nested_loop_join(current_bindings, pattern),
             JoinStrategy::Hash => self.hash_join(current_bindings, pattern),
@@ -519,42 +545,54 @@ impl QueryExecutor {
     }
 
     /// Nested loop join implementation
-    fn nested_loop_join(&self, current_bindings: Vec<Binding>, pattern: &TriplePattern) -> StarResult<Vec<Binding>> {
+    fn nested_loop_join(
+        &self,
+        current_bindings: Vec<Binding>,
+        pattern: &TriplePattern,
+    ) -> StarResult<Vec<Binding>> {
         let mut new_bindings = Vec::new();
-        
+
         for binding in &current_bindings {
             let pattern_bindings = self.execute_pattern_optimized(pattern, binding)?;
             new_bindings.extend(pattern_bindings);
         }
-        
+
         Ok(new_bindings)
     }
 
     /// Hash join implementation (simplified version)
-    fn hash_join(&self, current_bindings: Vec<Binding>, pattern: &TriplePattern) -> StarResult<Vec<Binding>> {
+    fn hash_join(
+        &self,
+        current_bindings: Vec<Binding>,
+        pattern: &TriplePattern,
+    ) -> StarResult<Vec<Binding>> {
         // For simplicity, fall back to nested loop join
         // A full implementation would build hash tables on join variables
         self.nested_loop_join(current_bindings, pattern)
     }
 
     /// Index-aware join implementation
-    fn index_join(&self, current_bindings: Vec<Binding>, pattern: &TriplePattern) -> StarResult<Vec<Binding>> {
+    fn index_join(
+        &self,
+        current_bindings: Vec<Binding>,
+        pattern: &TriplePattern,
+    ) -> StarResult<Vec<Binding>> {
         let mut new_bindings = Vec::new();
-        
+
         // Group bindings by shared variables to optimize index lookups
         let shared_vars = self.find_shared_variables(&current_bindings, pattern);
-        
+
         if shared_vars.is_empty() {
             // No shared variables, fall back to nested loop
             return self.nested_loop_join(current_bindings, pattern);
         }
-        
+
         // Use index lookups when possible
         for binding in &current_bindings {
             let pattern_bindings = self.execute_pattern_with_binding_context(pattern, binding)?;
             new_bindings.extend(pattern_bindings);
         }
-        
+
         Ok(new_bindings)
     }
 
@@ -563,28 +601,33 @@ impl QueryExecutor {
         if bindings.is_empty() {
             return Vec::new();
         }
-        
+
         let mut pattern_vars = std::collections::HashSet::new();
         pattern.extract_variables(&mut pattern_vars);
-        
-        let binding_vars: std::collections::HashSet<String> = bindings[0]
-            .variables()
-            .into_iter()
-            .cloned()
-            .collect();
-            
+
+        let binding_vars: std::collections::HashSet<String> =
+            bindings[0].variables().into_iter().cloned().collect();
+
         pattern_vars.intersection(&binding_vars).cloned().collect()
     }
 
     /// Execute pattern with binding context for better optimization
-    fn execute_pattern_with_binding_context(&self, pattern: &TriplePattern, binding: &Binding) -> StarResult<Vec<Binding>> {
+    fn execute_pattern_with_binding_context(
+        &self,
+        pattern: &TriplePattern,
+        binding: &Binding,
+    ) -> StarResult<Vec<Binding>> {
         // Try to extract concrete terms from the binding to improve index usage
         let resolved_pattern = self.resolve_pattern_variables(pattern, binding);
         self.execute_pattern_optimized(&resolved_pattern, binding)
     }
 
     /// Resolve pattern variables that are bound to create more specific patterns
-    fn resolve_pattern_variables(&self, pattern: &TriplePattern, binding: &Binding) -> TriplePattern {
+    fn resolve_pattern_variables(
+        &self,
+        pattern: &TriplePattern,
+        binding: &Binding,
+    ) -> TriplePattern {
         let subject = match &pattern.subject {
             TermPattern::Variable(var) => {
                 if let Some(term) = binding.get(var) {
@@ -622,12 +665,16 @@ impl QueryExecutor {
     }
 
     /// Execute a single triple pattern (legacy method for compatibility)
-    fn execute_pattern(&self, pattern: &TriplePattern, initial_binding: &Binding) -> StarResult<Vec<Binding>> {
+    fn execute_pattern(
+        &self,
+        pattern: &TriplePattern,
+        initial_binding: &Binding,
+    ) -> StarResult<Vec<Binding>> {
         let mut bindings = Vec::new();
-        
+
         // Get all triples from the store
         let triples = self.store.triples();
-        
+
         for triple in triples {
             if pattern.matches(&triple, initial_binding) {
                 if let Some(new_binding) = pattern.try_bind(&triple, initial_binding) {
@@ -635,12 +682,16 @@ impl QueryExecutor {
                 }
             }
         }
-        
+
         Ok(bindings)
     }
 
     /// Execute a SELECT query with optimization
-    pub fn execute_select(&mut self, bgp: &BasicGraphPattern, select_vars: &[String]) -> StarResult<Vec<HashMap<String, StarTerm>>> {
+    pub fn execute_select(
+        &mut self,
+        bgp: &BasicGraphPattern,
+        select_vars: &[String],
+    ) -> StarResult<Vec<HashMap<String, StarTerm>>> {
         let span = span!(Level::INFO, "execute_select");
         let _enter = span.enter();
 
@@ -649,25 +700,32 @@ impl QueryExecutor {
 
         for binding in bindings {
             let mut result = HashMap::new();
-            
+
             for var in select_vars {
                 if let Some(term) = binding.get(var) {
                     result.insert(var.clone(), term.clone());
                 }
             }
-            
+
             if !result.is_empty() {
                 results.push(result);
             }
         }
 
-        debug!("SELECT query produced {} results with {} pattern evaluations", 
-               results.len(), self.statistics.pattern_evaluations);
+        debug!(
+            "SELECT query produced {} results with {} pattern evaluations",
+            results.len(),
+            self.statistics.pattern_evaluations
+        );
         Ok(results)
     }
 
     /// Execute a CONSTRUCT query with optimization
-    pub fn execute_construct(&mut self, bgp: &BasicGraphPattern, construct_patterns: &[TriplePattern]) -> StarResult<StarGraph> {
+    pub fn execute_construct(
+        &mut self,
+        bgp: &BasicGraphPattern,
+        construct_patterns: &[TriplePattern],
+    ) -> StarResult<StarGraph> {
         let span = span!(Level::INFO, "execute_construct");
         let _enter = span.enter();
 
@@ -682,8 +740,11 @@ impl QueryExecutor {
             }
         }
 
-        debug!("CONSTRUCT query produced {} triples with {} join operations", 
-               constructed_graph.len(), self.statistics.join_operations);
+        debug!(
+            "CONSTRUCT query produced {} triples with {} join operations",
+            constructed_graph.len(),
+            self.statistics.join_operations
+        );
         Ok(constructed_graph)
     }
 
@@ -694,14 +755,20 @@ impl QueryExecutor {
 
         let bindings = self.execute_bgp(bgp)?;
         let result = !bindings.is_empty();
-        
-        debug!("ASK query result: {} (execution time: {}µs)", 
-               result, self.statistics.execution_time_us);
+
+        debug!(
+            "ASK query result: {} (execution time: {}µs)",
+            result, self.statistics.execution_time_us
+        );
         Ok(result)
     }
 
     /// Instantiate a triple pattern with a binding
-    fn instantiate_pattern(&self, pattern: &TriplePattern, binding: &Binding) -> StarResult<Option<StarTriple>> {
+    fn instantiate_pattern(
+        &self,
+        pattern: &TriplePattern,
+        binding: &Binding,
+    ) -> StarResult<Option<StarTriple>> {
         let subject = self.instantiate_term_pattern(&pattern.subject, binding)?;
         let predicate = self.instantiate_term_pattern(&pattern.predicate, binding)?;
         let object = self.instantiate_term_pattern(&pattern.object, binding)?;
@@ -714,7 +781,11 @@ impl QueryExecutor {
     }
 
     /// Instantiate a term pattern with a binding
-    fn instantiate_term_pattern(&self, pattern: &TermPattern, binding: &Binding) -> StarResult<Option<StarTerm>> {
+    fn instantiate_term_pattern(
+        &self,
+        pattern: &TermPattern,
+        binding: &Binding,
+    ) -> StarResult<Option<StarTerm>> {
         match pattern {
             TermPattern::Term(term) => Ok(Some(term.clone())),
             TermPattern::Variable(var) => Ok(binding.get(var).cloned()),
@@ -737,18 +808,18 @@ impl QueryParser {
     pub fn parse_simple_select(query: &str) -> StarResult<(Vec<String>, BasicGraphPattern)> {
         // This is a very simplified parser for demonstration
         // A real implementation would use a proper SPARQL grammar parser
-        
+
         let lines: Vec<&str> = query.lines().map(|l| l.trim()).collect();
         let mut select_vars = Vec::new();
         let mut bgp = BasicGraphPattern::new();
-        
+
         let mut in_where = false;
-        
+
         for line in lines {
             if line.is_empty() || line.starts_with('#') {
                 continue;
             }
-            
+
             if line.to_uppercase().starts_with("SELECT") {
                 // Extract variables
                 let parts: Vec<&str> = line.split_whitespace().collect();
@@ -766,7 +837,7 @@ impl QueryParser {
                 }
             }
         }
-        
+
         Ok((select_vars, bgp))
     }
 
@@ -775,17 +846,18 @@ impl QueryParser {
         // Remove trailing dot and split
         let line = line.trim_end_matches('.').trim();
         let parts = Self::tokenize_pattern(line)?;
-        
+
         if parts.len() != 3 {
-            return Err(StarError::QueryError(
-                format!("Invalid triple pattern: {}", line)
-            ));
+            return Err(StarError::QueryError(format!(
+                "Invalid triple pattern: {}",
+                line
+            )));
         }
-        
+
         let subject = Self::parse_term_pattern(&parts[0])?;
         let predicate = Self::parse_term_pattern(&parts[1])?;
         let object = Self::parse_term_pattern(&parts[2])?;
-        
+
         Ok(TriplePattern::new(subject, predicate, object))
     }
 
@@ -875,7 +947,10 @@ impl QueryParser {
             return StarTerm::literal(value);
         }
 
-        Err(StarError::QueryError(format!("Cannot parse term: {}", term_str)))
+        Err(StarError::QueryError(format!(
+            "Cannot parse term: {}",
+            term_str
+        )))
     }
 }
 
@@ -890,7 +965,10 @@ mod tests {
 
         binding.bind("x", StarTerm::iri("http://example.org/alice").unwrap());
         assert!(binding.is_bound("x"));
-        assert_eq!(binding.get("x"), Some(&StarTerm::iri("http://example.org/alice").unwrap()));
+        assert_eq!(
+            binding.get("x"),
+            Some(&StarTerm::iri("http://example.org/alice").unwrap())
+        );
 
         let mut other = Binding::new();
         other.bind("y", StarTerm::literal("test").unwrap());
@@ -918,8 +996,14 @@ mod tests {
         assert!(pattern.matches(&triple, &binding));
 
         let new_binding = pattern.try_bind(&triple, &binding).unwrap();
-        assert_eq!(new_binding.get("x"), Some(&StarTerm::iri("http://example.org/alice").unwrap()));
-        assert_eq!(new_binding.get("y"), Some(&StarTerm::iri("http://example.org/bob").unwrap()));
+        assert_eq!(
+            new_binding.get("x"),
+            Some(&StarTerm::iri("http://example.org/alice").unwrap())
+        );
+        assert_eq!(
+            new_binding.get("y"),
+            Some(&StarTerm::iri("http://example.org/bob").unwrap())
+        );
     }
 
     #[test]
@@ -960,25 +1044,25 @@ mod tests {
     #[test]
     fn test_bgp_execution() {
         let store = StarStore::new();
-        
+
         // Add some test data
         let triple1 = StarTriple::new(
             StarTerm::iri("http://example.org/alice").unwrap(),
             StarTerm::iri("http://example.org/knows").unwrap(),
             StarTerm::iri("http://example.org/bob").unwrap(),
         );
-        
+
         let triple2 = StarTriple::new(
             StarTerm::iri("http://example.org/bob").unwrap(),
             StarTerm::iri("http://example.org/knows").unwrap(),
             StarTerm::iri("http://example.org/charlie").unwrap(),
         );
-        
+
         store.insert(&triple1).unwrap();
         store.insert(&triple2).unwrap();
 
         let mut executor = QueryExecutor::new(store);
-        
+
         // Create BGP: ?x knows ?y
         let mut bgp = BasicGraphPattern::new();
         bgp.add_pattern(TriplePattern::new(
@@ -994,7 +1078,7 @@ mod tests {
     #[test]
     fn test_query_optimization_strategies() {
         let store = StarStore::new();
-        
+
         // Add test data with quoted triples
         let inner_triple = StarTriple::new(
             StarTerm::iri("http://example.org/alice").unwrap(),
@@ -1011,10 +1095,19 @@ mod tests {
         store.insert(&quoted_triple).unwrap();
 
         // Test different optimization strategies
-        for optimization in [QueryOptimization::None, QueryOptimization::Heuristic, QueryOptimization::CostBased] {
-            for join_strategy in [JoinStrategy::NestedLoop, JoinStrategy::Index, JoinStrategy::Hash] {
-                let mut executor = QueryExecutor::with_optimization(store.clone(), optimization, join_strategy);
-                
+        for optimization in [
+            QueryOptimization::None,
+            QueryOptimization::Heuristic,
+            QueryOptimization::CostBased,
+        ] {
+            for join_strategy in [
+                JoinStrategy::NestedLoop,
+                JoinStrategy::Index,
+                JoinStrategy::Hash,
+            ] {
+                let mut executor =
+                    QueryExecutor::with_optimization(store.clone(), optimization, join_strategy);
+
                 let mut bgp = BasicGraphPattern::new();
                 bgp.add_pattern(TriplePattern::new(
                     TermPattern::QuotedTriplePattern(Box::new(TriplePattern::new(
@@ -1028,7 +1121,7 @@ mod tests {
 
                 let bindings = executor.execute_bgp(&bgp).unwrap();
                 assert_eq!(bindings.len(), 1);
-                
+
                 // Check that statistics are collected
                 let stats = executor.statistics();
                 assert!(stats.pattern_evaluations > 0);
@@ -1040,7 +1133,7 @@ mod tests {
     #[test]
     fn test_advanced_sparql_star_queries() {
         let store = StarStore::new();
-        
+
         // Create a complex RDF-star dataset
         let fact1 = StarTriple::new(
             StarTerm::iri("http://example.org/alice").unwrap(),
@@ -1072,9 +1165,9 @@ mod tests {
         store.insert(&meta2).unwrap();
 
         let mut executor = QueryExecutor::with_optimization(
-            store, 
-            QueryOptimization::CostBased, 
-            JoinStrategy::Index
+            store,
+            QueryOptimization::CostBased,
+            JoinStrategy::Index,
         );
 
         // Query: Find all facts from census source
@@ -1091,12 +1184,12 @@ mod tests {
 
         let bindings = executor.execute_bgp(&bgp).unwrap();
         assert_eq!(bindings.len(), 1);
-        
+
         // Verify the binding contains Alice's data
         let binding = &bindings[0];
         assert!(binding.is_bound("person"));
         assert!(binding.is_bound("age"));
-        
+
         if let Some(person_term) = binding.get("person") {
             if let Some(person_node) = person_term.as_named_node() {
                 assert!(person_node.iri.contains("alice"));
@@ -1107,7 +1200,7 @@ mod tests {
     #[test]
     fn test_query_statistics_tracking() {
         let store = StarStore::new();
-        
+
         // Add multiple triples
         for i in 0..10 {
             let triple = StarTriple::new(
@@ -1119,7 +1212,7 @@ mod tests {
         }
 
         let mut executor = QueryExecutor::new(store);
-        
+
         // Complex BGP with multiple patterns
         let mut bgp = BasicGraphPattern::new();
         bgp.add_pattern(TriplePattern::new(
@@ -1135,7 +1228,7 @@ mod tests {
 
         let bindings = executor.execute_bgp(&bgp).unwrap();
         assert_eq!(bindings.len(), 10);
-        
+
         // Check statistics
         let stats = executor.statistics();
         assert!(stats.pattern_evaluations >= 2); // At least 2 patterns evaluated
@@ -1172,6 +1265,9 @@ mod tests {
         assert_eq!(bgp.patterns().len(), 1);
 
         let pattern = &bgp.patterns()[0];
-        assert!(matches!(pattern.subject, TermPattern::QuotedTriplePattern(_)));
+        assert!(matches!(
+            pattern.subject,
+            TermPattern::QuotedTriplePattern(_)
+        ));
     }
 }

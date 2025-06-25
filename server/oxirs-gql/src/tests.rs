@@ -3,13 +3,7 @@
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        ast::*,
-        types::*,
-        rdf_scalars::*,
-        execution::*,
-        resolvers::*,
-    };
+    use crate::{ast::*, execution::*, rdf_scalars::*, resolvers::*, types::*};
     use std::collections::HashMap;
     use std::sync::Arc;
 
@@ -78,7 +72,7 @@ mod tests {
     #[test]
     fn test_schema_creation() {
         let mut schema = Schema::new();
-        
+
         // Test that built-in scalars are present
         assert!(schema.get_type("String").is_some());
         assert!(schema.get_type("Int").is_some());
@@ -91,10 +85,7 @@ mod tests {
             .with_description("A user object".to_string())
             .with_field(
                 "id".to_string(),
-                FieldType::new(
-                    "id".to_string(),
-                    GraphQLType::Scalar(BuiltinScalars::id()),
-                ),
+                FieldType::new("id".to_string(), GraphQLType::Scalar(BuiltinScalars::id())),
             )
             .with_field(
                 "name".to_string(),
@@ -159,16 +150,14 @@ mod tests {
         assert!(!literal.is_typed());
 
         // Test language-tagged literal
-        let lang_literal = Literal::new("Bonjour".to_string())
-            .with_language("fr".to_string());
+        let lang_literal = Literal::new("Bonjour".to_string()).with_language("fr".to_string());
         assert!(lang_literal.is_language_tagged());
         assert!(!lang_literal.is_typed());
         assert_eq!(lang_literal.language.unwrap(), "fr");
 
         // Test typed literal
         let iri = IRI::new("http://www.w3.org/2001/XMLSchema#integer".to_string()).unwrap();
-        let typed_literal = Literal::new("42".to_string())
-            .with_datatype(iri);
+        let typed_literal = Literal::new("42".to_string()).with_datatype(iri);
         assert!(!typed_literal.is_language_tagged());
         assert!(typed_literal.is_typed());
     }
@@ -216,8 +205,7 @@ mod tests {
 
     #[test]
     fn test_execution_context() {
-        let context = ExecutionContext::new()
-            .with_operation_name("TestQuery".to_string());
+        let context = ExecutionContext::new().with_operation_name("TestQuery".to_string());
 
         assert_eq!(context.operation_name, Some("TestQuery".to_string()));
         assert!(context.variables.is_empty());
@@ -226,8 +214,7 @@ mod tests {
         let mut variables = HashMap::new();
         variables.insert("userId".to_string(), Value::StringValue("123".to_string()));
 
-        let context_with_vars = ExecutionContext::new()
-            .with_variables(variables);
+        let context_with_vars = ExecutionContext::new().with_variables(variables);
 
         assert_eq!(context_with_vars.variables.len(), 1);
         assert!(context_with_vars.variables.contains_key("userId"));
@@ -280,10 +267,10 @@ mod tests {
     #[test]
     fn test_resolver_registry() {
         let mut registry = ResolverRegistry::new();
-        
+
         // Create an RDF store for testing
         let store = Arc::new(crate::RdfStore::new().unwrap());
-        
+
         // Set up default resolvers
         registry.setup_default_resolvers(store);
 
@@ -302,10 +289,13 @@ mod tests {
         let list_type = GraphQLType::List(Box::new(GraphQLType::Scalar(BuiltinScalars::int())));
         assert_eq!(format!("{}", list_type), "[Int]");
 
-        let non_null_type = GraphQLType::NonNull(Box::new(GraphQLType::Scalar(BuiltinScalars::string())));
+        let non_null_type =
+            GraphQLType::NonNull(Box::new(GraphQLType::Scalar(BuiltinScalars::string())));
         assert_eq!(format!("{}", non_null_type), "String!");
 
-        let non_null_list = GraphQLType::NonNull(Box::new(GraphQLType::List(Box::new(GraphQLType::Scalar(BuiltinScalars::string())))));
+        let non_null_list = GraphQLType::NonNull(Box::new(GraphQLType::List(Box::new(
+            GraphQLType::Scalar(BuiltinScalars::string()),
+        ))));
         assert_eq!(format!("{}", non_null_list), "[String]!");
     }
 

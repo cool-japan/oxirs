@@ -1,19 +1,17 @@
 //! Query execution planning
-//! 
+//!
 //! This module is responsible for converting SPARQL algebra into
 //! optimized execution plans.
 
-use crate::query::algebra::*;
 use crate::model::*;
+use crate::query::algebra::*;
 use crate::OxirsError;
 
 /// A query execution plan
 #[derive(Debug, Clone)]
 pub enum ExecutionPlan {
     /// Scan all triples matching a pattern
-    TripleScan {
-        pattern: TriplePattern,
-    },
+    TripleScan { pattern: TriplePattern },
     /// Join two sub-plans
     HashJoin {
         left: Box<ExecutionPlan>,
@@ -47,9 +45,7 @@ pub enum ExecutionPlan {
         right: Box<ExecutionPlan>,
     },
     /// Distinct results
-    Distinct {
-        input: Box<ExecutionPlan>,
-    },
+    Distinct { input: Box<ExecutionPlan> },
 }
 
 /// Query planner that converts algebra to execution plans
@@ -60,13 +56,21 @@ impl QueryPlanner {
     pub fn new() -> Self {
         QueryPlanner
     }
-    
+
     /// Plans a query for execution
     pub fn plan_query(&self, query: &Query) -> Result<ExecutionPlan, OxirsError> {
         match &query.form {
-            QueryForm::Select { where_clause, variables, distinct, order_by, limit, offset, .. } => {
+            QueryForm::Select {
+                where_clause,
+                variables,
+                distinct,
+                order_by,
+                limit,
+                offset,
+                ..
+            } => {
                 let mut plan = self.plan_graph_pattern(where_clause)?;
-                
+
                 // Add projection if needed
                 if let SelectVariables::Specific(vars) = variables {
                     plan = ExecutionPlan::Project {
@@ -74,14 +78,14 @@ impl QueryPlanner {
                         vars: vars.clone(),
                     };
                 }
-                
+
                 // Add distinct if needed
                 if *distinct {
                     plan = ExecutionPlan::Distinct {
                         input: Box::new(plan),
                     };
                 }
-                
+
                 // Add ordering if needed
                 if !order_by.is_empty() {
                     plan = ExecutionPlan::Sort {
@@ -89,7 +93,7 @@ impl QueryPlanner {
                         order_by: order_by.clone(),
                     };
                 }
-                
+
                 // Add limit/offset if needed
                 if let Some(limit_val) = limit {
                     plan = ExecutionPlan::Limit {
@@ -104,13 +108,15 @@ impl QueryPlanner {
                         offset: *offset,
                     };
                 }
-                
+
                 Ok(plan)
             }
-            _ => Err(OxirsError::Query("Only SELECT queries are currently supported".to_string())),
+            _ => Err(OxirsError::Query(
+                "Only SELECT queries are currently supported".to_string(),
+            )),
         }
     }
-    
+
     /// Plans a graph pattern
     fn plan_graph_pattern(&self, pattern: &GraphPattern) -> Result<ExecutionPlan, OxirsError> {
         match pattern {
@@ -118,28 +124,28 @@ impl QueryPlanner {
                 if patterns.is_empty() {
                     return Err(OxirsError::Query("Empty basic graph pattern".to_string()));
                 }
-                
+
                 // Start with the first pattern
                 let mut plan = ExecutionPlan::TripleScan {
                     pattern: patterns[0].clone(),
                 };
-                
+
                 // Join with remaining patterns
                 for pattern in &patterns[1..] {
                     let right_plan = ExecutionPlan::TripleScan {
                         pattern: pattern.clone(),
                     };
-                    
+
                     // Find join variables
                     let join_vars = self.find_join_variables(&plan, &right_plan);
-                    
+
                     plan = ExecutionPlan::HashJoin {
                         left: Box::new(plan),
                         right: Box::new(right_plan),
                         join_vars,
                     };
                 }
-                
+
                 Ok(plan)
             }
             GraphPattern::Filter { expr, inner } => {
@@ -157,10 +163,12 @@ impl QueryPlanner {
                     right: Box::new(right_plan),
                 })
             }
-            _ => Err(OxirsError::Query("Graph pattern not yet supported".to_string())),
+            _ => Err(OxirsError::Query(
+                "Graph pattern not yet supported".to_string(),
+            )),
         }
     }
-    
+
     /// Find variables that appear in both plans (for joins)
     fn find_join_variables(&self, _left: &ExecutionPlan, _right: &ExecutionPlan) -> Vec<Variable> {
         // Placeholder - would analyze both plans to find common variables

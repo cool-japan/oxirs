@@ -28,19 +28,17 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
-    
+
     let args = Args::parse();
-    
-    let mut builder = Server::builder()
-        .port(args.port)
-        .host(args.host);
-    
+
+    let mut builder = Server::builder().port(args.port).host(args.host);
+
     if let Some(dataset_path) = args.dataset {
         builder = builder.dataset_path(dataset_path.to_string_lossy());
     }
-    
+
     let server = builder.build().await?;
     server.run().await?;
-    
+
     Ok(())
 }

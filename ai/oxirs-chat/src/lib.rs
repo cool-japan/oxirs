@@ -7,12 +7,12 @@
 
 use anyhow::Result;
 use std::time::{Duration, SystemTime};
-use tokio::sync::{RwLock, Mutex};
+use tokio::sync::{Mutex, RwLock};
 
-pub mod rag;
+pub mod chat;
 pub mod llm;
 pub mod nl2sparql;
-pub mod chat;
+pub mod rag;
 pub mod server;
 
 /// Chat session configuration
@@ -94,15 +94,15 @@ impl ChatSession {
             store,
         }
     }
-    
+
     /// Process a user message and generate a response
     pub async fn process_message(&mut self, user_input: String) -> Result<Message> {
         use crate::{
-            llm::{LLMManager, LLMConfig, LLMRequest, ChatMessage, ChatRole, UseCase, Priority},
-            rag::{RAGSystem, RAGConfig, QueryContext, QueryIntent, AssembledContext},
-            nl2sparql::{NL2SPARQLSystem, NL2SPARQLConfig},
+            llm::{ChatMessage, ChatRole, LLMConfig, LLMManager, LLMRequest, Priority, UseCase},
+            nl2sparql::{NL2SPARQLConfig, NL2SPARQLSystem},
+            rag::{AssembledContext, QueryContext, QueryIntent, RAGConfig, RAGSystem},
         };
-        
+
         // Add user message to history
         let user_message = Message {
             role: MessageRole::User,
@@ -111,25 +111,27 @@ impl ChatSession {
             metadata: None,
         };
         self.messages.push(user_message);
-        
+
         // Enhanced RAG pipeline implementation
         let mut retrieved_triples: Option<Vec<String>> = None;
         let mut sparql_query: Option<String> = None;
         let mut confidence_score = 0.5f32;
-        
+
         // Create query context
         let query_context = QueryContext {
             query: user_input.clone(),
             intent: self.classify_intent(&user_input),
-            entities: Vec::new(), // TODO: Extract entities
+            entities: Vec::new(),      // TODO: Extract entities
             relationships: Vec::new(), // TODO: Extract relationships
-            constraints: Vec::new(), // TODO: Extract constraints
-            conversation_history: self.messages.iter()
+            constraints: Vec::new(),   // TODO: Extract constraints
+            conversation_history: self
+                .messages
+                .iter()
                 .take(5) // Last 5 messages for context
                 .map(|m| m.content.clone())
                 .collect(),
         };
-        
+
         // Initialize systems (in production, these would be initialized once and reused)
         let rag_config = RAGConfig::default();
         let rag_system = RAGSystem::new(
@@ -138,15 +140,17 @@ impl ChatSession {
             None, // Vector index not available yet
             None, // Embedding model not available yet
         );
-        
+
         // Step 1: Retrieve relevant knowledge
         let retrieved_knowledge = match rag_system.retrieve_knowledge(&query_context).await {
             Ok(knowledge) => {
                 confidence_score = knowledge.metadata.quality_score;
                 retrieved_triples = Some(
-                    knowledge.triples.iter()
+                    knowledge
+                        .triples
+                        .iter()
                         .map(|t| format!("{} {} {}", t.subject, t.predicate, t.object))
-                        .collect()
+                        .collect(),
                 );
                 Some(knowledge)
             }
@@ -155,7 +159,7 @@ impl ChatSession {
                 None
             }
         };
-        
+
         // Step 2: Generate SPARQL query if appropriate
         if self.should_generate_sparql(&query_context.intent) {
             let nl2sparql_config = NL2SPARQLConfig::default();
@@ -166,28 +170,32 @@ impl ChatSession {
                 }
             }
         }
-        
+
         // Step 3: Assemble context for LLM
         let context_text = if let Some(knowledge) = retrieved_knowledge {
-            match rag_system.assemble_context(&knowledge, &query_context).await {
+            match rag_system
+                .assemble_context(&knowledge, &query_context)
+                .await
+            {
                 Ok(context) => {
                     confidence_score = confidence_score.max(context.quality_score);
                     Some(context.context_text)
                 }
-                Err(_) => None
+                Err(_) => None,
             }
         } else {
             None
         };
-        
+
         // Step 4: Generate response using LLM or fallback
         let response_content = if let Some(context) = context_text {
-            self.generate_llm_response(&user_input, &context, sparql_query.as_ref()).await
+            self.generate_llm_response(&user_input, &context, sparql_query.as_ref())
+                .await
                 .unwrap_or_else(|_| self.generate_fallback_response(&user_input, &context))
         } else {
             self.generate_simple_response(&user_input)
         };
-        
+
         let response = Message {
             role: MessageRole::Assistant,
             content: response_content,
@@ -198,15 +206,15 @@ impl ChatSession {
                 confidence_score: Some(confidence_score),
             }),
         };
-        
+
         self.messages.push(response.clone());
         Ok(response)
     }
-    
+
     /// Classify the intent of a user query
     fn classify_intent(&self, query: &str) -> QueryIntent {
         let query_lower = query.to_lowercase();
-        
+
         if query_lower.contains("what is") || query_lower.contains("who is") {
             QueryIntent::FactualLookup
         } else if query_lower.contains("how are") || query_lower.contains("relationship") {
@@ -225,47 +233,62 @@ impl ChatSession {
             QueryIntent::Exploration
         }
     }
-    
+
     /// Determine if SPARQL generation is appropriate for this intent
     fn should_generate_sparql(&self, intent: &QueryIntent) -> bool {
-        matches!(intent, 
-            QueryIntent::FactualLookup | 
-            QueryIntent::ListQuery | 
-            QueryIntent::Aggregation | 
-            QueryIntent::Relationship
+        matches!(
+            intent,
+            QueryIntent::FactualLookup
+                | QueryIntent::ListQuery
+                | QueryIntent::Aggregation
+                | QueryIntent::Relationship
         )
     }
-    
+
     /// Generate response using LLM with context
-    async fn generate_llm_response(&self, query: &str, context: &str, sparql_query: Option<&String>) -> Result<String> {
+    async fn generate_llm_response(
+        &self,
+        query: &str,
+        context: &str,
+        sparql_query: Option<&String>,
+    ) -> Result<String> {
         // This would require LLM integration - for now return enhanced fallback
-        let mut response = format!("Based on the knowledge graph, here's what I found for your query: {}\n\n", query);
-        
+        let mut response = format!(
+            "Based on the knowledge graph, here's what I found for your query: {}\n\n",
+            query
+        );
+
         if let Some(sparql) = sparql_query {
-            response.push_str(&format!("Generated SPARQL query:\n```sparql\n{}\n```\n\n", sparql));
+            response.push_str(&format!(
+                "Generated SPARQL query:\n```sparql\n{}\n```\n\n",
+                sparql
+            ));
         }
-        
+
         response.push_str("Relevant information:\n");
         response.push_str(context);
-        
+
         Ok(response)
     }
-    
+
     /// Generate fallback response with context
     fn generate_fallback_response(&self, query: &str, context: &str) -> String {
-        format!("I found some information related to your query '{}' in the knowledge graph:\n\n{}", query, context)
+        format!(
+            "I found some information related to your query '{}' in the knowledge graph:\n\n{}",
+            query, context
+        )
     }
-    
+
     /// Generate simple response without context
     fn generate_simple_response(&self, query: &str) -> String {
         format!("I understand you're asking about: '{}'. Let me search the knowledge graph for relevant information.", query)
     }
-    
+
     /// Get chat history
     pub fn get_history(&self) -> &[Message] {
         &self.messages
     }
-    
+
     /// Clear chat history
     pub fn clear_history(&mut self) {
         self.messages.clear();
@@ -285,19 +308,19 @@ impl ChatManager {
             store,
         }
     }
-    
+
     /// Create a new chat session
     pub fn create_session(&mut self, session_id: String) -> &mut ChatSession {
         let session = ChatSession::new(session_id.clone(), self.store.clone());
         self.sessions.insert(session_id.clone(), session);
         self.sessions.get_mut(&session_id).unwrap()
     }
-    
+
     /// Get an existing session
     pub fn get_session(&mut self, session_id: &str) -> Option<&mut ChatSession> {
         self.sessions.get_mut(session_id)
     }
-    
+
     /// Remove a session
     pub fn remove_session(&mut self, session_id: &str) -> Option<ChatSession> {
         self.sessions.remove(session_id)

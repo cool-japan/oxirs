@@ -3,8 +3,8 @@
 use crate::{Vector, VectorIndex};
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, BinaryHeap};
 use std::cmp::Ordering;
+use std::collections::{BinaryHeap, HashMap};
 
 #[cfg(feature = "hnsw")]
 use hnsw_rs::prelude::*;
@@ -89,7 +89,9 @@ impl Eq for SearchResult {}
 
 impl Ord for SearchResult {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.distance.partial_cmp(&other.distance).unwrap_or(Ordering::Equal)
+        self.distance
+            .partial_cmp(&other.distance)
+            .unwrap_or(Ordering::Equal)
     }
 }
 
@@ -120,13 +122,13 @@ impl AdvancedVectorIndex {
             dimensions: None,
         }
     }
-    
+
     /// Build the index after adding all vectors
     pub fn build(&mut self) -> Result<()> {
         if self.vectors.is_empty() {
             return Ok(());
         }
-        
+
         match self.config.index_type {
             IndexType::Hnsw => {
                 #[cfg(feature = "hnsw")]
@@ -145,10 +147,10 @@ impl AdvancedVectorIndex {
                 return Err(anyhow!("IVF and PQ indices not yet implemented"));
             }
         }
-        
+
         Ok(())
     }
-    
+
     #[cfg(feature = "hnsw")]
     fn build_hnsw_index(&mut self) -> Result<()> {
         if let Some(dimensions) = self.dimensions {
@@ -159,24 +161,24 @@ impl AdvancedVectorIndex {
                 self.config.ef_construction,
                 DistCosine,
             );
-            
+
             for (id, (_, vector)) in self.vectors.iter().enumerate() {
                 hnsw.insert((&vector.values, id));
             }
-            
+
             self.hnsw_index = Some(hnsw);
         }
-        
+
         Ok(())
     }
-    
+
     /// Add metadata to a vector
     pub fn add_metadata(&mut self, uri: &str, metadata: HashMap<String, String>) -> Result<()> {
         // For now, we'll store metadata separately
         // In a full implementation, this would be integrated with the index
         Ok(())
     }
-    
+
     /// Search with advanced parameters
     pub fn search_advanced(
         &self,
@@ -199,13 +201,18 @@ impl AdvancedVectorIndex {
             _ => self.search_flat(query, k, filter),
         }
     }
-    
+
     #[cfg(feature = "hnsw")]
-    fn search_hnsw(&self, query: &Vector, k: usize, ef: Option<usize>) -> Result<Vec<SearchResult>> {
+    fn search_hnsw(
+        &self,
+        query: &Vector,
+        k: usize,
+        ef: Option<usize>,
+    ) -> Result<Vec<SearchResult>> {
         if let Some(ref hnsw) = self.hnsw_index {
             let search_ef = ef.unwrap_or(self.config.ef_search);
             let results = hnsw.search(&query.values, k, search_ef);
-            
+
             Ok(results
                 .into_iter()
                 .map(|result| SearchResult {
@@ -218,7 +225,7 @@ impl AdvancedVectorIndex {
             Err(anyhow!("HNSW index not built"))
         }
     }
-    
+
     fn search_flat(
         &self,
         query: &Vector,
@@ -226,16 +233,19 @@ impl AdvancedVectorIndex {
         filter: Option<Box<dyn Fn(&str) -> bool>>,
     ) -> Result<Vec<SearchResult>> {
         let mut heap = BinaryHeap::new();
-        
+
         for (uri, vector) in &self.vectors {
             if let Some(ref filter_fn) = filter {
                 if !filter_fn(uri) {
                     continue;
                 }
             }
-            
-            let distance = self.config.distance_metric.distance(&query.values, &vector.values);
-            
+
+            let distance = self
+                .config
+                .distance_metric
+                .distance(&query.values, &vector.values);
+
             if heap.len() < k {
                 heap.push(std::cmp::Reverse(SearchResult {
                     uri: uri.clone(),
@@ -253,13 +263,13 @@ impl AdvancedVectorIndex {
                 }
             }
         }
-        
+
         let mut results: Vec<SearchResult> = heap.into_iter().map(|r| r.0).collect();
         results.sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap());
-        
+
         Ok(results)
     }
-    
+
     /// Get index statistics
     pub fn stats(&self) -> IndexStats {
         IndexStats {
@@ -269,15 +279,15 @@ impl AdvancedVectorIndex {
             memory_usage: self.estimate_memory_usage(),
         }
     }
-    
+
     fn estimate_memory_usage(&self) -> usize {
-        let vector_memory = self.vectors.len() * 
-            (std::mem::size_of::<String>() + 
-             self.dimensions.unwrap_or(0) * std::mem::size_of::<f32>());
-        
-        let uri_map_memory = self.uri_to_id.len() * 
-            (std::mem::size_of::<String>() + std::mem::size_of::<usize>());
-        
+        let vector_memory = self.vectors.len()
+            * (std::mem::size_of::<String>()
+                + self.dimensions.unwrap_or(0) * std::mem::size_of::<f32>());
+
+        let uri_map_memory =
+            self.uri_to_id.len() * (std::mem::size_of::<String>() + std::mem::size_of::<usize>());
+
         vector_memory + uri_map_memory
     }
 }
@@ -295,29 +305,32 @@ impl VectorIndex for AdvancedVectorIndex {
         } else {
             self.dimensions = Some(vector.dimensions);
         }
-        
+
         let id = self.vectors.len();
         self.uri_to_id.insert(uri.clone(), id);
         self.vectors.push((uri, vector));
-        
+
         Ok(())
     }
-    
+
     fn search_knn(&self, query: &Vector, k: usize) -> Result<Vec<(String, f32)>> {
         let results = self.search_advanced(query, k, None, None)?;
         Ok(results.into_iter().map(|r| (r.uri, r.distance)).collect())
     }
-    
+
     fn search_threshold(&self, query: &Vector, threshold: f32) -> Result<Vec<(String, f32)>> {
         let mut results = Vec::new();
-        
+
         for (uri, vector) in &self.vectors {
-            let distance = self.config.distance_metric.distance(&query.values, &vector.values);
+            let distance = self
+                .config
+                .distance_metric
+                .distance(&query.values, &vector.values);
             if distance <= threshold {
                 results.push((uri.clone(), distance));
             }
         }
-        
+
         results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
         Ok(results)
     }
@@ -351,32 +364,32 @@ impl QuantizedVectorIndex {
             dimensions: None,
         }
     }
-    
+
     /// Train quantization centroids using k-means
     pub fn train_quantization(&mut self, training_vectors: &[Vector]) -> Result<()> {
         if training_vectors.is_empty() {
             return Err(anyhow!("No training vectors provided"));
         }
-        
+
         let dimensions = training_vectors[0].dimensions;
         self.dimensions = Some(dimensions);
-        
+
         // Simple k-means clustering for centroids
         self.centroids = kmeans_clustering(training_vectors, self.centroids.capacity())?;
-        
+
         Ok(())
     }
-    
+
     fn quantize_vector(&self, vector: &Vector) -> Vec<u8> {
         let mut quantized = Vec::new();
-        
+
         // Find nearest centroid for each dimension chunk
         let chunk_size = vector.dimensions / self.centroids.len().max(1);
-        
+
         for chunk in vector.values.chunks(chunk_size) {
             let mut best_centroid = 0u8;
             let mut best_distance = f32::INFINITY;
-            
+
             for (i, centroid) in self.centroids.iter().enumerate() {
                 let centroid_chunk = &centroid.values[0..chunk.len().min(centroid.dimensions)];
                 let distance = euclidean_distance(chunk, centroid_chunk);
@@ -385,10 +398,10 @@ impl QuantizedVectorIndex {
                     best_centroid = i as u8;
                 }
             }
-            
+
             quantized.push(best_centroid);
         }
-        
+
         quantized
     }
 }
@@ -396,44 +409,46 @@ impl QuantizedVectorIndex {
 impl VectorIndex for QuantizedVectorIndex {
     fn insert(&mut self, uri: String, vector: Vector) -> Result<()> {
         if self.centroids.is_empty() {
-            return Err(anyhow!("Quantization not trained. Call train_quantization first."));
+            return Err(anyhow!(
+                "Quantization not trained. Call train_quantization first."
+            ));
         }
-        
+
         let id = self.quantized_vectors.len();
         self.uri_to_id.insert(uri.clone(), id);
-        
+
         let quantized = self.quantize_vector(&vector);
         self.quantized_vectors.push(quantized);
-        
+
         Ok(())
     }
-    
+
     fn search_knn(&self, query: &Vector, k: usize) -> Result<Vec<(String, f32)>> {
         let query_quantized = self.quantize_vector(query);
         let mut results = Vec::new();
-        
+
         for (uri, quantized) in self.uri_to_id.keys().zip(&self.quantized_vectors) {
             let distance = hamming_distance(&query_quantized, quantized);
             results.push((uri.clone(), distance));
         }
-        
+
         results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
         results.truncate(k);
-        
+
         Ok(results)
     }
-    
+
     fn search_threshold(&self, query: &Vector, threshold: f32) -> Result<Vec<(String, f32)>> {
         let query_quantized = self.quantize_vector(query);
         let mut results = Vec::new();
-        
+
         for (uri, quantized) in self.uri_to_id.keys().zip(&self.quantized_vectors) {
             let distance = hamming_distance(&query_quantized, quantized);
             if distance <= threshold {
                 results.push((uri.clone(), distance));
             }
         }
-        
+
         results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
         Ok(results)
     }
@@ -445,7 +460,7 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     let dot: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
     let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
     let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-    
+
     if norm_a == 0.0 || norm_b == 0.0 {
         0.0
     } else {
@@ -478,25 +493,25 @@ fn kmeans_clustering(vectors: &[Vector], k: usize) -> Result<Vec<Vector>> {
     if vectors.is_empty() || k == 0 {
         return Ok(Vec::new());
     }
-    
+
     let dimensions = vectors[0].dimensions;
     let mut centroids = Vec::with_capacity(k);
-    
+
     // Initialize centroids randomly
     for i in 0..k {
         let idx = i % vectors.len();
         centroids.push(vectors[idx].clone());
     }
-    
+
     // Simple k-means iterations
     for _ in 0..10 {
         let mut clusters: Vec<Vec<&Vector>> = vec![Vec::new(); k];
-        
+
         // Assign vectors to nearest centroid
         for vector in vectors {
             let mut best_centroid = 0;
             let mut best_distance = f32::INFINITY;
-            
+
             for (i, centroid) in centroids.iter().enumerate() {
                 let distance = euclidean_distance(&vector.values, &centroid.values);
                 if distance < best_distance {
@@ -504,30 +519,30 @@ fn kmeans_clustering(vectors: &[Vector], k: usize) -> Result<Vec<Vector>> {
                     best_centroid = i;
                 }
             }
-            
+
             clusters[best_centroid].push(vector);
         }
-        
+
         // Update centroids
         for (i, cluster) in clusters.iter().enumerate() {
             if !cluster.is_empty() {
                 let mut new_centroid = vec![0.0; dimensions];
-                
+
                 for vector in cluster {
                     for (j, &value) in vector.values.iter().enumerate() {
                         new_centroid[j] += value;
                     }
                 }
-                
+
                 for value in &mut new_centroid {
                     *value /= cluster.len() as f32;
                 }
-                
+
                 centroids[i] = Vector::new(new_centroid);
             }
         }
     }
-    
+
     Ok(centroids)
 }
 
@@ -544,14 +559,14 @@ impl MultiIndex {
             default_index: String::new(),
         }
     }
-    
+
     pub fn add_index(&mut self, name: String, index: Box<dyn VectorIndex>) {
         if self.indices.is_empty() {
             self.default_index = name.clone();
         }
         self.indices.insert(name, index);
     }
-    
+
     pub fn set_default(&mut self, name: &str) -> Result<()> {
         if self.indices.contains_key(name) {
             self.default_index = name.to_string();
@@ -560,8 +575,13 @@ impl MultiIndex {
             Err(anyhow!("Index '{}' not found", name))
         }
     }
-    
-    pub fn search_index(&self, index_name: &str, query: &Vector, k: usize) -> Result<Vec<(String, f32)>> {
+
+    pub fn search_index(
+        &self,
+        index_name: &str,
+        query: &Vector,
+        k: usize,
+    ) -> Result<Vec<(String, f32)>> {
         if let Some(index) = self.indices.get(index_name) {
             index.search_knn(query, k)
         } else {
@@ -584,7 +604,7 @@ impl VectorIndex for MultiIndex {
             Err(anyhow!("No default index set"))
         }
     }
-    
+
     fn search_knn(&self, query: &Vector, k: usize) -> Result<Vec<(String, f32)>> {
         if let Some(index) = self.indices.get(&self.default_index) {
             index.search_knn(query, k)
@@ -592,7 +612,7 @@ impl VectorIndex for MultiIndex {
             Err(anyhow!("No default index set"))
         }
     }
-    
+
     fn search_threshold(&self, query: &Vector, threshold: f32) -> Result<Vec<(String, f32)>> {
         if let Some(index) = self.indices.get(&self.default_index) {
             index.search_threshold(query, threshold)

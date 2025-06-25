@@ -3,10 +3,10 @@
 //! Equivalent to Apache Jena's arq command. Advanced SPARQL query execution
 //! with optimization, explanation, and multiple data source support.
 
-use std::path::PathBuf;
+use super::{utils, ToolResult, ToolStats};
 use std::fs;
+use std::path::PathBuf;
 use std::time::Instant;
-use super::{ToolResult, ToolStats, utils};
 
 /// Run arq command - Advanced SPARQL query processor
 pub async fn run(
@@ -21,17 +21,18 @@ pub async fn run(
     time: bool,
 ) -> ToolResult {
     let mut stats = ToolStats::new();
-    
+
     println!("Advanced SPARQL Query Processor (arq)");
-    
+
     // Validate results format
     if !utils::is_supported_results_format(&results_format) {
         return Err(format!(
             "Unsupported results format '{}'. Supported: table, csv, tsv, json, xml",
             results_format
-        ).into());
+        )
+        .into());
     }
-    
+
     // Get query string
     let query_string = match (query, query_file) {
         (Some(q), None) => q,
@@ -46,72 +47,74 @@ pub async fn run(
             return Err("Must specify either --query or --query-file".into());
         }
     };
-    
+
     println!("Query:");
     println!("---");
     println!("{}", query_string);
     println!("---");
-    
+
     // Validate query syntax
     let query_info = parse_and_validate_query(&query_string)?;
     println!("Query type: {}", query_info.query_type);
     println!("Variables: {:?}", query_info.variables);
-    
+
     if explain {
         explain_query(&query_string, &query_info)?;
     }
-    
+
     if optimize {
         println!("Query optimization enabled");
         // TODO: Implement query optimization
     }
-    
+
     // Load data sources
     let mut data_sources = Vec::new();
-    
+
     // Add dataset if specified
     if let Some(dataset_path) = dataset {
         println!("Loading dataset: {}", dataset_path.display());
         data_sources.push(DataSource::Dataset(dataset_path));
     }
-    
+
     // Add data files
     for data_file in data {
         println!("Loading data file: {}", data_file.display());
         utils::check_file_readable(&data_file)?;
         data_sources.push(DataSource::File(data_file));
     }
-    
+
     // Add named graphs
     for graph_uri in namedgraph {
         println!("Named graph: {}", graph_uri);
-        utils::validate_iri(&graph_uri)
-            .map_err(|e| format!("Invalid named graph IRI: {}", e))?;
+        utils::validate_iri(&graph_uri).map_err(|e| format!("Invalid named graph IRI: {}", e))?;
         data_sources.push(DataSource::NamedGraph(graph_uri));
     }
-    
+
     if data_sources.is_empty() {
         return Err("No data sources specified. Use --data, --dataset, or --namedgraph".into());
     }
-    
+
     // Execute query
     println!("\nExecuting query...");
     let execution_start = if time { Some(Instant::now()) } else { None };
-    
+
     let results = execute_sparql_query(&query_string, &query_info, &data_sources)?;
-    
+
     if let Some(start_time) = execution_start {
         let execution_time = start_time.elapsed();
-        println!("Query execution time: {}", utils::format_duration(execution_time));
+        println!(
+            "Query execution time: {}",
+            utils::format_duration(execution_time)
+        );
     }
-    
+
     // Format and display results
     format_query_results(&results, &results_format, &query_info)?;
-    
+
     stats.items_processed = results.bindings.len();
     stats.finish();
     stats.print_summary("ARQ");
-    
+
     Ok(())
 }
 
@@ -160,7 +163,7 @@ struct QueryBinding {
 /// Parse and validate SPARQL query
 fn parse_and_validate_query(query: &str) -> ToolResult<QueryInfo> {
     let query = query.trim();
-    
+
     // Basic query type detection
     let query_type = if query.to_uppercase().contains("SELECT") {
         "SELECT".to_string()
@@ -173,7 +176,7 @@ fn parse_and_validate_query(query: &str) -> ToolResult<QueryInfo> {
     } else {
         return Err("Unknown query type. Must be SELECT, CONSTRUCT, ASK, or DESCRIBE".into());
     };
-    
+
     // Extract variables (simplified)
     let mut variables = Vec::new();
     for line in query.lines() {
@@ -189,7 +192,7 @@ fn parse_and_validate_query(query: &str) -> ToolResult<QueryInfo> {
             break;
         }
     }
-    
+
     // Extract prefixes (simplified)
     let mut prefixes = Vec::new();
     for line in query.lines() {
@@ -204,16 +207,16 @@ fn parse_and_validate_query(query: &str) -> ToolResult<QueryInfo> {
             }
         }
     }
-    
+
     // Count WHERE patterns and filters (very basic)
     let where_patterns = query.matches('{').count().max(1) - 1; // Rough estimate
     let filters = query.to_uppercase().matches("FILTER").count();
-    
+
     // Extract ORDER BY, LIMIT, OFFSET (simplified)
     let order_by = Vec::new(); // TODO: Parse ORDER BY
     let limit = extract_limit(query);
     let offset = extract_offset(query);
-    
+
     Ok(QueryInfo {
         query_type,
         variables,
@@ -258,24 +261,28 @@ fn extract_offset(query: &str) -> Option<usize> {
 fn explain_query(query: &str, query_info: &QueryInfo) -> ToolResult<()> {
     println!("\n=== Query Explanation ===");
     println!("Query type: {}", query_info.query_type);
-    println!("Variables: {} ({})", query_info.variables.len(), query_info.variables.join(", "));
+    println!(
+        "Variables: {} ({})",
+        query_info.variables.len(),
+        query_info.variables.join(", ")
+    );
     println!("Prefixes: {}", query_info.prefixes.len());
-    
+
     for (prefix, uri) in &query_info.prefixes {
         println!("  {}: <{}>", prefix, uri);
     }
-    
+
     println!("WHERE patterns: ~{}", query_info.where_patterns);
     println!("Filters: {}", query_info.filters);
-    
+
     if let Some(limit) = query_info.limit {
         println!("Limit: {}", limit);
     }
-    
+
     if let Some(offset) = query_info.offset {
         println!("Offset: {}", offset);
     }
-    
+
     // Basic execution plan
     println!("\nExecution Plan:");
     println!("1. Parse triple patterns");
@@ -293,7 +300,7 @@ fn explain_query(query: &str, query_info: &QueryInfo) -> ToolResult<()> {
         println!("6. Apply limit");
     }
     println!("7. Project variables");
-    
+
     println!("========================\n");
     Ok(())
 }
@@ -305,7 +312,7 @@ fn execute_sparql_query(
     data_sources: &[DataSource],
 ) -> ToolResult<QueryResults> {
     println!("Loading {} data source(s)...", data_sources.len());
-    
+
     // For now, simulate query execution
     // In a real implementation, this would:
     // 1. Load all data sources into a unified dataset
@@ -313,10 +320,10 @@ fn execute_sparql_query(
     // 3. Optimize the query plan
     // 4. Execute the query against the dataset
     // 5. Return results
-    
+
     let variables = query_info.variables.clone();
     let mut bindings = Vec::new();
-    
+
     // Simulate some results
     match query_info.query_type.as_str() {
         "SELECT" => {
@@ -325,7 +332,7 @@ fn execute_sparql_query(
                 for var in &variables {
                     values.insert(
                         var.clone(),
-                        format!("value_{}{}", var.trim_start_matches('?'), i)
+                        format!("value_{}{}", var.trim_start_matches('?'), i),
                     );
                 }
                 bindings.push(QueryBinding { values });
@@ -340,13 +347,16 @@ fn execute_sparql_query(
             });
         }
         _ => {
-            println!("Query type '{}' simulation not implemented", query_info.query_type);
+            println!(
+                "Query type '{}' simulation not implemented",
+                query_info.query_type
+            );
         }
     }
-    
+
     println!("Query executed successfully");
     println!("Result bindings: {}", bindings.len());
-    
+
     let result_type = match query_info.query_type.as_str() {
         "SELECT" => QueryResultType::Select,
         "CONSTRUCT" => QueryResultType::Construct,
@@ -354,7 +364,7 @@ fn execute_sparql_query(
         "DESCRIBE" => QueryResultType::Describe,
         _ => QueryResultType::Select,
     };
-    
+
     Ok(QueryResults {
         variables,
         bindings,
@@ -369,7 +379,7 @@ fn format_query_results(
     _query_info: &QueryInfo,
 ) -> ToolResult<()> {
     println!("\nResults ({}):", format.to_uppercase());
-    
+
     match &results.result_type {
         QueryResultType::Ask(answer) => {
             match format {
@@ -382,12 +392,12 @@ fn format_query_results(
         }
         _ => {}
     }
-    
+
     if results.bindings.is_empty() {
         println!("No results");
         return Ok(());
     }
-    
+
     match format {
         "table" => format_table_results(results),
         "csv" => format_csv_results(results, ","),
@@ -404,7 +414,7 @@ fn format_table_results(results: &QueryResults) -> ToolResult<()> {
         println!("No variables to display");
         return Ok(());
     }
-    
+
     // Calculate column widths
     let mut col_widths = Vec::new();
     for var in &results.variables {
@@ -416,14 +426,14 @@ fn format_table_results(results: &QueryResults) -> ToolResult<()> {
         }
         col_widths.push(max_width.max(8)); // Minimum width of 8
     }
-    
+
     // Print header
     print!("| ");
     for (i, var) in results.variables.iter().enumerate() {
         print!("{:width$} | ", var, width = col_widths[i]);
     }
     println!();
-    
+
     // Print separator
     print!("|");
     for &width in &col_widths {
@@ -431,7 +441,7 @@ fn format_table_results(results: &QueryResults) -> ToolResult<()> {
         print!("|");
     }
     println!();
-    
+
     // Print rows
     for binding in &results.bindings {
         print!("| ");
@@ -441,7 +451,7 @@ fn format_table_results(results: &QueryResults) -> ToolResult<()> {
         }
         println!();
     }
-    
+
     println!("\n{} row(s)", results.bindings.len());
     Ok(())
 }
@@ -450,16 +460,17 @@ fn format_table_results(results: &QueryResults) -> ToolResult<()> {
 fn format_csv_results(results: &QueryResults, separator: &str) -> ToolResult<()> {
     // Header
     println!("{}", results.variables.join(separator));
-    
+
     // Rows
     for binding in &results.bindings {
-        let row: Vec<String> = results.variables
+        let row: Vec<String> = results
+            .variables
             .iter()
             .map(|var| binding.values.get(var).cloned().unwrap_or_default())
             .collect();
         println!("{}", row.join(separator));
     }
-    
+
     Ok(())
 }
 
@@ -467,8 +478,11 @@ fn format_csv_results(results: &QueryResults, separator: &str) -> ToolResult<()>
 fn format_json_results(results: &QueryResults) -> ToolResult<()> {
     println!("{{");
     println!("  \"head\": {{");
-    println!("    \"vars\": [{}]", 
-        results.variables.iter()
+    println!(
+        "    \"vars\": [{}]",
+        results
+            .variables
+            .iter()
             .map(|v| format!("\"{}\"", v.trim_start_matches('?')))
             .collect::<Vec<_>>()
             .join(", ")
@@ -476,14 +490,17 @@ fn format_json_results(results: &QueryResults) -> ToolResult<()> {
     println!("  }},");
     println!("  \"results\": {{");
     println!("    \"bindings\": [");
-    
+
     for (i, binding) in results.bindings.iter().enumerate() {
         println!("      {{");
         for (j, var) in results.variables.iter().enumerate() {
             let var_name = var.trim_start_matches('?');
             let empty_string = String::new();
             let value = binding.values.get(var).unwrap_or(&empty_string);
-            print!("        \"{}\": {{ \"type\": \"literal\", \"value\": \"{}\" }}", var_name, value);
+            print!(
+                "        \"{}\": {{ \"type\": \"literal\", \"value\": \"{}\" }}",
+                var_name, value
+            );
             if j < results.variables.len() - 1 {
                 print!(",");
             }
@@ -495,11 +512,11 @@ fn format_json_results(results: &QueryResults) -> ToolResult<()> {
         }
         println!();
     }
-    
+
     println!("    ]");
     println!("  }}");
     println!("}}");
-    
+
     Ok(())
 }
 
@@ -513,7 +530,7 @@ fn format_xml_results(results: &QueryResults) -> ToolResult<()> {
     }
     println!("  </head>");
     println!("  <results>");
-    
+
     for binding in &results.bindings {
         println!("    <result>");
         for var in &results.variables {
@@ -526,9 +543,9 @@ fn format_xml_results(results: &QueryResults) -> ToolResult<()> {
         }
         println!("    </result>");
     }
-    
+
     println!("  </results>");
     println!("</sparql>");
-    
+
     Ok(())
 }

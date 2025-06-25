@@ -6,29 +6,31 @@
 //! enhanced fan-out, cross-region replication, and serverless processing capabilities.
 //! Optimized for massive scale and global distribution scenarios.
 
+use crate::{
+    AwsCredentials, EventMetadata, PatchOperation, RdfPatch, StreamBackend, StreamConfig,
+    StreamEvent,
+};
 use anyhow::{anyhow, Result};
-use crate::{StreamEvent, StreamConfig, StreamBackend, RdfPatch, PatchOperation, EventMetadata, AwsCredentials};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::time;
 use tracing::{debug, error, info, warn};
-use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 #[cfg(feature = "kinesis")]
 use aws_sdk_kinesis::{
-    Client as KinesisClient,
-    types::{Record, ShardIteratorType, StreamDescription, StreamStatus},
     config::{Credentials, Region},
-    Config as KinesisConfig,
     error::SdkError,
-    operation::put_record::PutRecordError,
     operation::get_records::GetRecordsError,
+    operation::put_record::PutRecordError,
+    types::{Record, ShardIteratorType, StreamDescription, StreamStatus},
+    Client as KinesisClient, Config as KinesisConfig,
 };
 
 #[cfg(feature = "kinesis")]
-use aws_config::{BehaviorVersion, default_provider::credentials::DefaultCredentialsChain};
+use aws_config::{default_provider::credentials::DefaultCredentialsChain, BehaviorVersion};
 
 #[cfg(feature = "kinesis")]
 use aws_smithy_types::Blob;
@@ -103,111 +105,233 @@ pub struct KinesisStreamEvent {
 impl From<StreamEvent> for KinesisStreamEvent {
     fn from(event: StreamEvent) -> Self {
         let (event_type, data, metadata, partition_key) = match event {
-            StreamEvent::TripleAdded { subject, predicate, object, graph, metadata } => {
-                let partition_key = format!("{}:{}", metadata.source, 
-                    subject.chars().take(20).collect::<String>());
-                ("triple_added".to_string(), serde_json::json!({
-                    "subject": subject,
-                    "predicate": predicate,
-                    "object": object,
-                    "graph": graph
-                }), metadata, partition_key)
+            StreamEvent::TripleAdded {
+                subject,
+                predicate,
+                object,
+                graph,
+                metadata,
+            } => {
+                let partition_key = format!(
+                    "{}:{}",
+                    metadata.source,
+                    subject.chars().take(20).collect::<String>()
+                );
+                (
+                    "triple_added".to_string(),
+                    serde_json::json!({
+                        "subject": subject,
+                        "predicate": predicate,
+                        "object": object,
+                        "graph": graph
+                    }),
+                    metadata,
+                    partition_key,
+                )
             }
-            StreamEvent::TripleRemoved { subject, predicate, object, graph, metadata } => {
-                let partition_key = format!("{}:{}", metadata.source,
-                    subject.chars().take(20).collect::<String>());
-                ("triple_removed".to_string(), serde_json::json!({
-                    "subject": subject,
-                    "predicate": predicate,
-                    "object": object,
-                    "graph": graph
-                }), metadata, partition_key)
+            StreamEvent::TripleRemoved {
+                subject,
+                predicate,
+                object,
+                graph,
+                metadata,
+            } => {
+                let partition_key = format!(
+                    "{}:{}",
+                    metadata.source,
+                    subject.chars().take(20).collect::<String>()
+                );
+                (
+                    "triple_removed".to_string(),
+                    serde_json::json!({
+                        "subject": subject,
+                        "predicate": predicate,
+                        "object": object,
+                        "graph": graph
+                    }),
+                    metadata,
+                    partition_key,
+                )
             }
-            StreamEvent::QuadAdded { subject, predicate, object, graph, metadata } => {
-                let partition_key = format!("{}:{}", metadata.source, graph.chars().take(20).collect::<String>());
-                ("quad_added".to_string(), serde_json::json!({
-                    "subject": subject,
-                    "predicate": predicate,
-                    "object": object,
-                    "graph": graph
-                }), metadata, partition_key)
+            StreamEvent::QuadAdded {
+                subject,
+                predicate,
+                object,
+                graph,
+                metadata,
+            } => {
+                let partition_key = format!(
+                    "{}:{}",
+                    metadata.source,
+                    graph.chars().take(20).collect::<String>()
+                );
+                (
+                    "quad_added".to_string(),
+                    serde_json::json!({
+                        "subject": subject,
+                        "predicate": predicate,
+                        "object": object,
+                        "graph": graph
+                    }),
+                    metadata,
+                    partition_key,
+                )
             }
-            StreamEvent::QuadRemoved { subject, predicate, object, graph, metadata } => {
-                let partition_key = format!("{}:{}", metadata.source, graph.chars().take(20).collect::<String>());
-                ("quad_removed".to_string(), serde_json::json!({
-                    "subject": subject,
-                    "predicate": predicate,
-                    "object": object,
-                    "graph": graph
-                }), metadata, partition_key)
+            StreamEvent::QuadRemoved {
+                subject,
+                predicate,
+                object,
+                graph,
+                metadata,
+            } => {
+                let partition_key = format!(
+                    "{}:{}",
+                    metadata.source,
+                    graph.chars().take(20).collect::<String>()
+                );
+                (
+                    "quad_removed".to_string(),
+                    serde_json::json!({
+                        "subject": subject,
+                        "predicate": predicate,
+                        "object": object,
+                        "graph": graph
+                    }),
+                    metadata,
+                    partition_key,
+                )
             }
             StreamEvent::GraphCreated { graph, metadata } => {
                 let partition_key = format!("{}:graph", metadata.source);
-                ("graph_created".to_string(), serde_json::json!({
-                    "graph": graph
-                }), metadata, partition_key)
+                (
+                    "graph_created".to_string(),
+                    serde_json::json!({
+                        "graph": graph
+                    }),
+                    metadata,
+                    partition_key,
+                )
             }
             StreamEvent::GraphCleared { graph, metadata } => {
                 let partition_key = format!("{}:graph", metadata.source);
-                ("graph_cleared".to_string(), serde_json::json!({
-                    "graph": graph
-                }), metadata, partition_key)
+                (
+                    "graph_cleared".to_string(),
+                    serde_json::json!({
+                        "graph": graph
+                    }),
+                    metadata,
+                    partition_key,
+                )
             }
             StreamEvent::GraphDeleted { graph, metadata } => {
                 let partition_key = format!("{}:graph", metadata.source);
-                ("graph_deleted".to_string(), serde_json::json!({
-                    "graph": graph
-                }), metadata, partition_key)
+                (
+                    "graph_deleted".to_string(),
+                    serde_json::json!({
+                        "graph": graph
+                    }),
+                    metadata,
+                    partition_key,
+                )
             }
-            StreamEvent::SparqlUpdate { query, operation_type, metadata } => {
+            StreamEvent::SparqlUpdate {
+                query,
+                operation_type,
+                metadata,
+            } => {
                 let partition_key = format!("{}:sparql", metadata.source);
-                ("sparql_update".to_string(), serde_json::json!({
-                    "query": query,
-                    "operation_type": operation_type
-                }), metadata, partition_key)
+                (
+                    "sparql_update".to_string(),
+                    serde_json::json!({
+                        "query": query,
+                        "operation_type": operation_type
+                    }),
+                    metadata,
+                    partition_key,
+                )
             }
-            StreamEvent::TransactionBegin { transaction_id, isolation_level, metadata } => {
+            StreamEvent::TransactionBegin {
+                transaction_id,
+                isolation_level,
+                metadata,
+            } => {
                 let partition_key = format!("{}:tx", metadata.source);
-                ("transaction_begin".to_string(), serde_json::json!({
-                    "transaction_id": transaction_id,
-                    "isolation_level": isolation_level
-                }), metadata, partition_key)
+                (
+                    "transaction_begin".to_string(),
+                    serde_json::json!({
+                        "transaction_id": transaction_id,
+                        "isolation_level": isolation_level
+                    }),
+                    metadata,
+                    partition_key,
+                )
             }
-            StreamEvent::TransactionCommit { transaction_id, metadata } => {
+            StreamEvent::TransactionCommit {
+                transaction_id,
+                metadata,
+            } => {
                 let partition_key = format!("{}:tx", metadata.source);
-                ("transaction_commit".to_string(), serde_json::json!({
-                    "transaction_id": transaction_id
-                }), metadata, partition_key)
+                (
+                    "transaction_commit".to_string(),
+                    serde_json::json!({
+                        "transaction_id": transaction_id
+                    }),
+                    metadata,
+                    partition_key,
+                )
             }
-            StreamEvent::TransactionAbort { transaction_id, metadata } => {
+            StreamEvent::TransactionAbort {
+                transaction_id,
+                metadata,
+            } => {
                 let partition_key = format!("{}:tx", metadata.source);
-                ("transaction_abort".to_string(), serde_json::json!({
-                    "transaction_id": transaction_id
-                }), metadata, partition_key)
+                (
+                    "transaction_abort".to_string(),
+                    serde_json::json!({
+                        "transaction_id": transaction_id
+                    }),
+                    metadata,
+                    partition_key,
+                )
             }
-            StreamEvent::SchemaChanged { schema_type, change_type, details, metadata } => {
+            StreamEvent::SchemaChanged {
+                schema_type,
+                change_type,
+                details,
+                metadata,
+            } => {
                 let partition_key = format!("{}:schema", metadata.source);
-                ("schema_changed".to_string(), serde_json::json!({
-                    "schema_type": schema_type,
-                    "change_type": change_type,
-                    "details": details
-                }), metadata, partition_key)
+                (
+                    "schema_changed".to_string(),
+                    serde_json::json!({
+                        "schema_type": schema_type,
+                        "change_type": change_type,
+                        "details": details
+                    }),
+                    metadata,
+                    partition_key,
+                )
             }
             StreamEvent::Heartbeat { timestamp, source } => {
                 let partition_key = format!("{}:heartbeat", source);
-                ("heartbeat".to_string(), serde_json::json!({
-                    "source": source
-                }), EventMetadata {
-                    event_id: Uuid::new_v4().to_string(),
-                    timestamp,
-                    source: source.clone(),
-                    user: None,
-                    context: None,
-                    caused_by: None,
-                    version: "1.0".to_string(),
-                    properties: HashMap::new(),
-                    checksum: None,
-                }, partition_key)
+                (
+                    "heartbeat".to_string(),
+                    serde_json::json!({
+                        "source": source
+                    }),
+                    EventMetadata {
+                        event_id: Uuid::new_v4().to_string(),
+                        timestamp,
+                        source: source.clone(),
+                        user: None,
+                        context: None,
+                        caused_by: None,
+                        version: "1.0".to_string(),
+                        properties: HashMap::new(),
+                        checksum: None,
+                    },
+                    partition_key,
+                )
             }
         };
 
@@ -256,7 +380,12 @@ struct ProducerStats {
 
 impl KinesisProducer {
     pub fn new(config: StreamConfig) -> Result<Self> {
-        let kinesis_config = if let StreamBackend::Kinesis { region, stream_name, .. } = &config.backend {
+        let kinesis_config = if let StreamBackend::Kinesis {
+            region,
+            stream_name,
+            ..
+        } = &config.backend
+        {
             KinesisStreamConfig {
                 region: region.clone(),
                 stream_name: stream_name.clone(),
@@ -288,12 +417,15 @@ impl KinesisProducer {
     #[cfg(feature = "kinesis")]
     pub async fn connect(&mut self) -> Result<()> {
         let region = Region::new(self.kinesis_config.region.clone());
-        
-        let config_builder = aws_config::defaults(BehaviorVersion::latest())
-            .region(region);
+
+        let config_builder = aws_config::defaults(BehaviorVersion::latest()).region(region);
 
         // Configure credentials if provided
-        let config = if let StreamBackend::Kinesis { credentials: Some(creds), .. } = &self.config.backend {
+        let config = if let StreamBackend::Kinesis {
+            credentials: Some(creds),
+            ..
+        } = &self.config.backend
+        {
             let aws_creds = Credentials::new(
                 &creds.access_key_id,
                 &creds.secret_access_key,
@@ -312,8 +444,10 @@ impl KinesisProducer {
         // Ensure stream exists
         self.ensure_stream().await?;
 
-        info!("Connected to Kinesis stream: {} in region: {}", 
-              self.kinesis_config.stream_name, self.kinesis_config.region);
+        info!(
+            "Connected to Kinesis stream: {} in region: {}",
+            self.kinesis_config.stream_name, self.kinesis_config.region
+        );
         Ok(())
     }
 
@@ -327,30 +461,44 @@ impl KinesisProducer {
     async fn ensure_stream(&mut self) -> Result<()> {
         if let Some(ref client) = self.client {
             // Check if stream exists
-            match client.describe_stream()
+            match client
+                .describe_stream()
                 .stream_name(&self.kinesis_config.stream_name)
-                .send().await 
+                .send()
+                .await
             {
                 Ok(response) => {
                     if let Some(description) = response.stream_description {
                         match description.stream_status {
                             Some(StreamStatus::Active) => {
-                                info!("Kinesis stream {} is active", self.kinesis_config.stream_name);
+                                info!(
+                                    "Kinesis stream {} is active",
+                                    self.kinesis_config.stream_name
+                                );
                                 self.stats.current_shard_count = description.shards.len() as u32;
                             }
                             Some(StreamStatus::Creating) => {
-                                info!("Kinesis stream {} is being created, waiting...", self.kinesis_config.stream_name);
+                                info!(
+                                    "Kinesis stream {} is being created, waiting...",
+                                    self.kinesis_config.stream_name
+                                );
                                 self.wait_for_stream_active().await?;
                             }
                             _ => {
-                                warn!("Kinesis stream {} is in unexpected state", self.kinesis_config.stream_name);
+                                warn!(
+                                    "Kinesis stream {} is in unexpected state",
+                                    self.kinesis_config.stream_name
+                                );
                             }
                         }
                     }
                 }
                 Err(_) => {
                     // Stream doesn't exist, create it
-                    info!("Creating Kinesis stream: {}", self.kinesis_config.stream_name);
+                    info!(
+                        "Creating Kinesis stream: {}",
+                        self.kinesis_config.stream_name
+                    );
                     self.create_stream().await?;
                 }
             }
@@ -361,7 +509,8 @@ impl KinesisProducer {
     #[cfg(feature = "kinesis")]
     async fn create_stream(&mut self) -> Result<()> {
         if let Some(ref client) = self.client {
-            let mut request = client.create_stream()
+            let mut request = client
+                .create_stream()
                 .stream_name(&self.kinesis_config.stream_name);
 
             if let Some(shard_count) = self.kinesis_config.shard_count {
@@ -370,7 +519,10 @@ impl KinesisProducer {
 
             match request.send().await {
                 Ok(_) => {
-                    info!("Created Kinesis stream: {}", self.kinesis_config.stream_name);
+                    info!(
+                        "Created Kinesis stream: {}",
+                        self.kinesis_config.stream_name
+                    );
                     self.wait_for_stream_active().await?;
                 }
                 Err(e) => {
@@ -388,17 +540,20 @@ impl KinesisProducer {
             let max_attempts = 60; // 5 minutes with 5-second intervals
 
             while attempts < max_attempts {
-                match client.describe_stream()
+                match client
+                    .describe_stream()
                     .stream_name(&self.kinesis_config.stream_name)
-                    .send().await 
+                    .send()
+                    .await
                 {
                     Ok(response) => {
                         if let Some(description) = response.stream_description {
                             if matches!(description.stream_status, Some(StreamStatus::Active)) {
                                 self.stats.current_shard_count = description.shards.len() as u32;
-                                info!("Kinesis stream {} is now active with {} shards", 
-                                      self.kinesis_config.stream_name, 
-                                      self.stats.current_shard_count);
+                                info!(
+                                    "Kinesis stream {} is now active with {} shards",
+                                    self.kinesis_config.stream_name, self.stats.current_shard_count
+                                );
                                 return Ok(());
                             }
                         }
@@ -436,16 +591,17 @@ impl KinesisProducer {
         self.batch_buffer.push(kinesis_event);
 
         // Check if we should flush batch
-        let should_flush = self.batch_buffer.len() >= self.kinesis_config.batch_size ||
-            self.last_flush.elapsed() >= self.kinesis_config.batch_timeout;
+        let should_flush = self.batch_buffer.len() >= self.kinesis_config.batch_size
+            || self.last_flush.elapsed() >= self.kinesis_config.batch_timeout;
 
         if should_flush {
             self.flush_batch().await?;
         }
 
         // Check for auto-scaling if enabled
-        if self.kinesis_config.auto_scaling_enabled &&
-           self.last_scaling_check.elapsed() >= self.kinesis_config.scaling_cooldown {
+        if self.kinesis_config.auto_scaling_enabled
+            && self.last_scaling_check.elapsed() >= self.kinesis_config.scaling_cooldown
+        {
             self.check_auto_scaling().await?;
         }
 
@@ -473,22 +629,26 @@ impl KinesisProducer {
                     .map_err(|e| anyhow!("Failed to serialize event: {}", e))?;
 
                 let data = Blob::new(serialized.as_bytes());
-                
+
                 let mut retry_count = 0;
                 while retry_count <= self.kinesis_config.retry_attempts {
-                    match client.put_record()
+                    match client
+                        .put_record()
                         .stream_name(&self.kinesis_config.stream_name)
                         .partition_key(&event.partition_key)
                         .data(data.clone())
-                        .send().await 
+                        .send()
+                        .await
                     {
                         Ok(response) => {
                             self.stats.events_published += 1;
                             self.stats.bytes_sent += serialized.len() as u64;
-                            
+
                             if let Some(sequence_number) = response.sequence_number {
-                                debug!("Published event {} with sequence: {}", 
-                                       event.event_id, sequence_number);
+                                debug!(
+                                    "Published event {} with sequence: {}",
+                                    event.event_id, sequence_number
+                                );
                             }
                             break;
                         }
@@ -497,9 +657,10 @@ impl KinesisProducer {
                                 PutRecordError::ProvisionedThroughputExceededException(_) => {
                                     self.stats.throttle_events += 1;
                                     warn!("Kinesis throughput exceeded, retrying...");
-                                    
+
                                     // Exponential backoff
-                                    let delay = self.kinesis_config.retry_backoff * 2_u32.pow(retry_count);
+                                    let delay =
+                                        self.kinesis_config.retry_backoff * 2_u32.pow(retry_count);
                                     time::sleep(delay).await;
                                 }
                                 _ => {
@@ -540,17 +701,19 @@ impl KinesisProducer {
     async fn check_auto_scaling(&mut self) -> Result<()> {
         if let Some(ref client) = self.client {
             // Get stream metrics (simplified - in practice would use CloudWatch)
-            match client.describe_stream()
+            match client
+                .describe_stream()
                 .stream_name(&self.kinesis_config.stream_name)
-                .send().await 
+                .send()
+                .await
             {
                 Ok(response) => {
                     if let Some(description) = response.stream_description {
                         let current_shards = description.shards.len() as u32;
-                        
+
                         // Simple scaling logic based on utilization
                         let target_shards = self.calculate_target_shards(current_shards).await?;
-                        
+
                         if target_shards != current_shards {
                             self.scale_stream(target_shards).await?;
                         }
@@ -569,9 +732,9 @@ impl KinesisProducer {
     async fn calculate_target_shards(&self, current_shards: u32) -> Result<u32> {
         // Simplified scaling calculation
         // In practice, this would use CloudWatch metrics for throughput
-        
+
         let utilization = self.estimate_utilization();
-        
+
         let target_shards = if utilization > self.kinesis_config.target_utilization {
             // Scale up
             (current_shards as f64 * 1.5).ceil() as u32
@@ -582,7 +745,10 @@ impl KinesisProducer {
             current_shards
         };
 
-        Ok(target_shards.clamp(self.kinesis_config.min_shards, self.kinesis_config.max_shards))
+        Ok(target_shards.clamp(
+            self.kinesis_config.min_shards,
+            self.kinesis_config.max_shards,
+        ))
     }
 
     fn estimate_utilization(&self) -> f64 {
@@ -595,7 +761,8 @@ impl KinesisProducer {
             .signed_duration_since(self.stats.last_publish.unwrap())
             .num_seconds() as f64;
 
-        if time_since_last > 300.0 { // 5 minutes
+        if time_since_last > 300.0 {
+            // 5 minutes
             return 10.0; // Low utilization
         }
 
@@ -610,14 +777,18 @@ impl KinesisProducer {
     #[cfg(feature = "kinesis")]
     async fn scale_stream(&mut self, target_shards: u32) -> Result<()> {
         if let Some(ref client) = self.client {
-            info!("Scaling Kinesis stream from {} to {} shards", 
-                  self.stats.current_shard_count, target_shards);
+            info!(
+                "Scaling Kinesis stream from {} to {} shards",
+                self.stats.current_shard_count, target_shards
+            );
 
-            match client.update_shard_count()
+            match client
+                .update_shard_count()
                 .stream_name(&self.kinesis_config.stream_name)
                 .target_shard_count(target_shards as i32)
                 .scaling_type(aws_sdk_kinesis::types::ScalingType::UniformScaling)
-                .send().await 
+                .send()
+                .await
             {
                 Ok(_) => {
                     self.stats.shard_scale_events += 1;
@@ -654,38 +825,38 @@ impl KinesisProducer {
             };
 
             let event = match operation {
-                PatchOperation::Add { subject, predicate, object } => {
-                    StreamEvent::TripleAdded {
-                        subject: subject.clone(),
-                        predicate: predicate.clone(),
-                        object: object.clone(),
-                        graph: None,
-                        metadata,
-                    }
-                }
-                PatchOperation::Delete { subject, predicate, object } => {
-                    StreamEvent::TripleRemoved {
-                        subject: subject.clone(),
-                        predicate: predicate.clone(),
-                        object: object.clone(),
-                        graph: None,
-                        metadata,
-                    }
-                }
-                PatchOperation::AddGraph { graph } => {
-                    StreamEvent::GraphCreated {
-                        graph: graph.clone(),
-                        metadata,
-                    }
-                }
-                PatchOperation::DeleteGraph { graph } => {
-                    StreamEvent::GraphDeleted {
-                        graph: graph.clone(),
-                        metadata,
-                    }
-                }
+                PatchOperation::Add {
+                    subject,
+                    predicate,
+                    object,
+                } => StreamEvent::TripleAdded {
+                    subject: subject.clone(),
+                    predicate: predicate.clone(),
+                    object: object.clone(),
+                    graph: None,
+                    metadata,
+                },
+                PatchOperation::Delete {
+                    subject,
+                    predicate,
+                    object,
+                } => StreamEvent::TripleRemoved {
+                    subject: subject.clone(),
+                    predicate: predicate.clone(),
+                    object: object.clone(),
+                    graph: None,
+                    metadata,
+                },
+                PatchOperation::AddGraph { graph } => StreamEvent::GraphCreated {
+                    graph: graph.clone(),
+                    metadata,
+                },
+                PatchOperation::DeleteGraph { graph } => StreamEvent::GraphDeleted {
+                    graph: graph.clone(),
+                    metadata,
+                },
             };
-            
+
             self.publish(event).await?;
         }
         self.flush().await
@@ -702,10 +873,14 @@ impl KinesisProducer {
     fn compress_event(&self, mut event: KinesisStreamEvent) -> Result<KinesisStreamEvent> {
         if self.kinesis_config.enable_compression {
             let data_str = event.data.to_string();
-            if data_str.len() > 1024 { // Only compress large events
+            if data_str.len() > 1024 {
+                // Only compress large events
                 event.compressed = true;
-                debug!("Compressed Kinesis event {} from {} bytes", 
-                       event.event_id, data_str.len());
+                debug!(
+                    "Compressed Kinesis event {} from {} bytes",
+                    event.event_id,
+                    data_str.len()
+                );
             }
         }
         Ok(event)
@@ -741,7 +916,12 @@ struct ConsumerStats {
 
 impl KinesisConsumer {
     pub fn new(config: StreamConfig) -> Result<Self> {
-        let kinesis_config = if let StreamBackend::Kinesis { region, stream_name, .. } = &config.backend {
+        let kinesis_config = if let StreamBackend::Kinesis {
+            region,
+            stream_name,
+            ..
+        } = &config.backend
+        {
             KinesisStreamConfig {
                 region: region.clone(),
                 stream_name: stream_name.clone(),
@@ -771,11 +951,14 @@ impl KinesisConsumer {
     #[cfg(feature = "kinesis")]
     pub async fn connect(&mut self) -> Result<()> {
         let region = Region::new(self.kinesis_config.region.clone());
-        
-        let config_builder = aws_config::defaults(BehaviorVersion::latest())
-            .region(region);
 
-        let config = if let StreamBackend::Kinesis { credentials: Some(creds), .. } = &self.config.backend {
+        let config_builder = aws_config::defaults(BehaviorVersion::latest()).region(region);
+
+        let config = if let StreamBackend::Kinesis {
+            credentials: Some(creds),
+            ..
+        } = &self.config.backend
+        {
             let aws_creds = Credentials::new(
                 &creds.access_key_id,
                 &creds.secret_access_key,
@@ -794,7 +977,10 @@ impl KinesisConsumer {
         // Initialize shard iterators
         self.initialize_shard_iterators().await?;
 
-        info!("Connected Kinesis consumer to stream: {}", self.kinesis_config.stream_name);
+        info!(
+            "Connected Kinesis consumer to stream: {}",
+            self.kinesis_config.stream_name
+        );
         Ok(())
     }
 
@@ -808,9 +994,11 @@ impl KinesisConsumer {
     async fn initialize_shard_iterators(&mut self) -> Result<()> {
         if let Some(ref client) = self.client {
             // Get all shards
-            match client.describe_stream()
+            match client
+                .describe_stream()
                 .stream_name(&self.kinesis_config.stream_name)
-                .send().await 
+                .send()
+                .await
             {
                 Ok(response) => {
                     if let Some(description) = response.stream_description {
@@ -819,11 +1007,13 @@ impl KinesisConsumer {
                         for shard in description.shards {
                             if let Some(shard_id) = shard.shard_id {
                                 // Get shard iterator starting from latest
-                                match client.get_shard_iterator()
+                                match client
+                                    .get_shard_iterator()
                                     .stream_name(&self.kinesis_config.stream_name)
                                     .shard_id(&shard_id)
                                     .shard_iterator_type(ShardIteratorType::Latest)
-                                    .send().await 
+                                    .send()
+                                    .await
                                 {
                                     Ok(iterator_response) => {
                                         if let Some(iterator) = iterator_response.shard_iterator {
@@ -832,7 +1022,10 @@ impl KinesisConsumer {
                                         }
                                     }
                                     Err(e) => {
-                                        warn!("Failed to get iterator for shard {}: {}", shard_id, e);
+                                        warn!(
+                                            "Failed to get iterator for shard {}: {}",
+                                            shard_id, e
+                                        );
                                     }
                                 }
                             }
@@ -857,10 +1050,12 @@ impl KinesisConsumer {
             if let Some(ref client) = self.client {
                 // Poll all shards (simplified - in practice would use enhanced fan-out)
                 for (shard_id, iterator) in self.shard_iterators.clone() {
-                    match client.get_records()
+                    match client
+                        .get_records()
                         .shard_iterator(&iterator)
                         .limit(1)
-                        .send().await 
+                        .send()
+                        .await
                     {
                         Ok(response) => {
                             // Update iterator
@@ -911,7 +1106,7 @@ impl KinesisConsumer {
                     self.stats.last_message = Some(Utc::now());
 
                     let stream_event = self.convert_kinesis_event(kinesis_event)?;
-                    
+
                     let processing_time = start_time.elapsed().as_millis() as u64;
                     self.stats.consumer_lag_ms = processing_time;
 
@@ -932,48 +1127,80 @@ impl KinesisConsumer {
 
     fn convert_kinesis_event(&self, kinesis_event: KinesisStreamEvent) -> Result<StreamEvent> {
         let metadata = kinesis_event.metadata;
-        
+
         match kinesis_event.event_type.as_str() {
             "triple_added" => {
-                let subject = kinesis_event.data["subject"].as_str()
-                    .ok_or_else(|| anyhow!("Missing subject"))?.to_string();
-                let predicate = kinesis_event.data["predicate"].as_str()
-                    .ok_or_else(|| anyhow!("Missing predicate"))?.to_string();
-                let object = kinesis_event.data["object"].as_str()
-                    .ok_or_else(|| anyhow!("Missing object"))?.to_string();
+                let subject = kinesis_event.data["subject"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing subject"))?
+                    .to_string();
+                let predicate = kinesis_event.data["predicate"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing predicate"))?
+                    .to_string();
+                let object = kinesis_event.data["object"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing object"))?
+                    .to_string();
                 let graph = kinesis_event.data["graph"].as_str().map(|s| s.to_string());
-                
-                Ok(StreamEvent::TripleAdded { subject, predicate, object, graph, metadata })
+
+                Ok(StreamEvent::TripleAdded {
+                    subject,
+                    predicate,
+                    object,
+                    graph,
+                    metadata,
+                })
             }
             "triple_removed" => {
-                let subject = kinesis_event.data["subject"].as_str()
-                    .ok_or_else(|| anyhow!("Missing subject"))?.to_string();
-                let predicate = kinesis_event.data["predicate"].as_str()
-                    .ok_or_else(|| anyhow!("Missing predicate"))?.to_string();
-                let object = kinesis_event.data["object"].as_str()
-                    .ok_or_else(|| anyhow!("Missing object"))?.to_string();
+                let subject = kinesis_event.data["subject"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing subject"))?
+                    .to_string();
+                let predicate = kinesis_event.data["predicate"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing predicate"))?
+                    .to_string();
+                let object = kinesis_event.data["object"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing object"))?
+                    .to_string();
                 let graph = kinesis_event.data["graph"].as_str().map(|s| s.to_string());
-                
-                Ok(StreamEvent::TripleRemoved { subject, predicate, object, graph, metadata })
+
+                Ok(StreamEvent::TripleRemoved {
+                    subject,
+                    predicate,
+                    object,
+                    graph,
+                    metadata,
+                })
             }
             "graph_created" => {
-                let graph = kinesis_event.data["graph"].as_str()
-                    .ok_or_else(|| anyhow!("Missing graph"))?.to_string();
+                let graph = kinesis_event.data["graph"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing graph"))?
+                    .to_string();
                 Ok(StreamEvent::GraphCreated { graph, metadata })
             }
             "heartbeat" => {
-                let source = kinesis_event.data["source"].as_str()
-                    .ok_or_else(|| anyhow!("Missing source"))?.to_string();
-                Ok(StreamEvent::Heartbeat { 
-                    timestamp: kinesis_event.timestamp, 
-                    source 
+                let source = kinesis_event.data["source"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing source"))?
+                    .to_string();
+                Ok(StreamEvent::Heartbeat {
+                    timestamp: kinesis_event.timestamp,
+                    source,
                 })
             }
-            _ => Err(anyhow!("Unknown event type: {}", kinesis_event.event_type))
+            _ => Err(anyhow!("Unknown event type: {}", kinesis_event.event_type)),
         }
     }
 
-    pub async fn consume_batch(&mut self, max_events: usize, timeout: Duration) -> Result<Vec<StreamEvent>> {
+    pub async fn consume_batch(
+        &mut self,
+        max_events: usize,
+        timeout: Duration,
+    ) -> Result<Vec<StreamEvent>> {
         let mut events = Vec::new();
         let start_time = time::Instant::now();
 
@@ -1009,7 +1236,8 @@ impl KinesisAdmin {
         let region = Region::new(config.region.clone());
         let aws_config = aws_config::defaults(BehaviorVersion::latest())
             .region(region)
-            .load().await;
+            .load()
+            .await;
 
         let kinesis_config = KinesisConfig::from(&aws_config);
         let client = Some(KinesisClient::from_conf(kinesis_config));
@@ -1019,7 +1247,7 @@ impl KinesisAdmin {
 
     #[cfg(not(feature = "kinesis"))]
     pub async fn new(config: KinesisStreamConfig) -> Result<Self> {
-        Ok(Self { 
+        Ok(Self {
             _phantom: std::marker::PhantomData,
             config,
         })
@@ -1029,10 +1257,8 @@ impl KinesisAdmin {
     pub async fn list_streams(&self) -> Result<Vec<String>> {
         if let Some(ref client) = self.client {
             match client.list_streams().send().await {
-                Ok(response) => {
-                    Ok(response.stream_names.unwrap_or_default())
-                }
-                Err(e) => Err(anyhow!("Failed to list Kinesis streams: {}", e))
+                Ok(response) => Ok(response.stream_names.unwrap_or_default()),
+                Err(e) => Err(anyhow!("Failed to list Kinesis streams: {}", e)),
             }
         } else {
             Err(anyhow!("No Kinesis client available"))
@@ -1047,31 +1273,38 @@ impl KinesisAdmin {
     #[cfg(feature = "kinesis")]
     pub async fn get_stream_info(&self, stream_name: &str) -> Result<HashMap<String, String>> {
         if let Some(ref client) = self.client {
-            match client.describe_stream()
+            match client
+                .describe_stream()
                 .stream_name(stream_name)
-                .send().await 
+                .send()
+                .await
             {
                 Ok(response) => {
                     let mut info = HashMap::new();
-                    
+
                     if let Some(description) = response.stream_description {
                         info.insert("name".to_string(), stream_name.to_string());
-                        info.insert("status".to_string(), 
-                                   format!("{:?}", description.stream_status));
-                        info.insert("shard_count".to_string(), 
-                                   description.shards.len().to_string());
-                        info.insert("retention_hours".to_string(), 
-                                   description.retention_period_hours.unwrap_or(24).to_string());
-                        
+                        info.insert(
+                            "status".to_string(),
+                            format!("{:?}", description.stream_status),
+                        );
+                        info.insert(
+                            "shard_count".to_string(),
+                            description.shards.len().to_string(),
+                        );
+                        info.insert(
+                            "retention_hours".to_string(),
+                            description.retention_period_hours.unwrap_or(24).to_string(),
+                        );
+
                         if let Some(creation_time) = description.stream_creation_timestamp {
-                            info.insert("created_at".to_string(), 
-                                       creation_time.to_string());
+                            info.insert("created_at".to_string(), creation_time.to_string());
                         }
                     }
-                    
+
                     Ok(info)
                 }
-                Err(e) => Err(anyhow!("Failed to describe stream: {}", e))
+                Err(e) => Err(anyhow!("Failed to describe stream: {}", e)),
             }
         } else {
             Err(anyhow!("No Kinesis client available"))

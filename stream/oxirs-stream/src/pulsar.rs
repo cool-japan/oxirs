@@ -6,16 +6,16 @@
 //! schema registry, message ordering, and real-time processing capabilities.
 //! Optimized for cloud-native deployments and massive scale scenarios.
 
+use crate::{EventMetadata, PatchOperation, RdfPatch, StreamBackend, StreamConfig, StreamEvent};
 use anyhow::{anyhow, Result};
-use crate::{StreamEvent, StreamConfig, StreamBackend, RdfPatch, PatchOperation, EventMetadata};
+use chrono::{DateTime, Utc};
+use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tokio::time;
 use tracing::{debug, error, info, warn};
-use chrono::{DateTime, Utc};
 use uuid::Uuid;
-use futures::StreamExt;
 
 /// Pulsar producer configuration with enterprise features
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -180,18 +180,10 @@ impl From<StreamEvent> for PulsarMessage {
             StreamEvent::QuadRemoved { subject, graph, .. } => {
                 (Some(subject.clone()), Some(graph.clone()))
             }
-            StreamEvent::GraphCreated { graph, .. } => {
-                (Some(graph.clone()), Some(graph.clone()))
-            }
-            StreamEvent::GraphCleared { graph, .. } => {
-                (graph.clone(), graph.clone())
-            }
-            StreamEvent::GraphDeleted { graph, .. } => {
-                (Some(graph.clone()), Some(graph.clone()))
-            }
-            StreamEvent::SparqlUpdate { .. } => {
-                (None, None)
-            }
+            StreamEvent::GraphCreated { graph, .. } => (Some(graph.clone()), Some(graph.clone())),
+            StreamEvent::GraphCleared { graph, .. } => (graph.clone(), graph.clone()),
+            StreamEvent::GraphDeleted { graph, .. } => (Some(graph.clone()), Some(graph.clone())),
+            StreamEvent::SparqlUpdate { .. } => (None, None),
             StreamEvent::TransactionBegin { transaction_id, .. } => {
                 (Some(transaction_id.clone()), Some(transaction_id.clone()))
             }
@@ -204,9 +196,7 @@ impl From<StreamEvent> for PulsarMessage {
             StreamEvent::SchemaChanged { .. } => {
                 (Some("schema".to_string()), Some("schema".to_string()))
             }
-            StreamEvent::Heartbeat { source, .. } => {
-                (Some(source.clone()), Some(source.clone()))
-            }
+            StreamEvent::Heartbeat { source, .. } => (Some(source.clone()), Some(source.clone())),
         };
 
         Self {
@@ -243,7 +233,9 @@ impl MessageRouter {
     fn get_partition(&self, message: &PulsarMessage) -> u32 {
         match self.routing_mode {
             PulsarRoutingMode::RoundRobinPartition => {
-                let current = self.round_robin_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let current = self
+                    .round_robin_counter
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 current % self.partition_count
             }
             PulsarRoutingMode::SinglePartition => 0,
@@ -303,24 +295,24 @@ impl PulsarProducer {
 
     pub async fn connect(&mut self) -> Result<()> {
         info!("Connecting to Pulsar at {}", self.pulsar_config.service_url);
-        
+
         // Initialize connection and validate configuration
         self.validate_configuration().await?;
-        
+
         // Set up schema if configured
         if let Some(schema_config) = &self.pulsar_config.schema_config {
             self.setup_schema(schema_config).await?;
         }
-        
+
         // Detect partition count for routing
         let partition_count = self.get_partition_count().await?;
-        self.message_router = MessageRouter::new(
-            self.pulsar_config.routing_mode.clone(),
-            partition_count,
+        self.message_router =
+            MessageRouter::new(self.pulsar_config.routing_mode.clone(), partition_count);
+
+        info!(
+            "Connected to Pulsar topic: {} with {} partitions",
+            self.pulsar_config.topic, partition_count
         );
-        
-        info!("Connected to Pulsar topic: {} with {} partitions", 
-              self.pulsar_config.topic, partition_count);
         Ok(())
     }
 
@@ -338,10 +330,14 @@ impl PulsarProducer {
         // Validate batch configuration
         if self.pulsar_config.batching_enabled {
             if self.pulsar_config.batch_size == 0 {
-                return Err(anyhow!("Batch size must be greater than 0 when batching is enabled"));
+                return Err(anyhow!(
+                    "Batch size must be greater than 0 when batching is enabled"
+                ));
             }
             if self.pulsar_config.batch_timeout.as_millis() == 0 {
-                return Err(anyhow!("Batch timeout must be greater than 0 when batching is enabled"));
+                return Err(anyhow!(
+                    "Batch timeout must be greater than 0 when batching is enabled"
+                ));
             }
         }
 
@@ -362,20 +358,27 @@ impl PulsarProducer {
 
     pub async fn publish(&mut self, event: StreamEvent) -> Result<()> {
         let start_time = Instant::now();
-        
+
         let mut message = PulsarMessage::from(event);
         message.sequence_id = self.sequence_number;
         self.sequence_number += 1;
 
         // Add producer properties
-        message.properties.insert("producer_id".to_string(), 
-            self.pulsar_config.producer_id.clone().unwrap_or_else(|| "oxirs-producer".to_string()));
-        message.properties.insert("producer_time".to_string(), Utc::now().to_rfc3339());
+        message.properties.insert(
+            "producer_id".to_string(),
+            self.pulsar_config
+                .producer_id
+                .clone()
+                .unwrap_or_else(|| "oxirs-producer".to_string()),
+        );
+        message
+            .properties
+            .insert("producer_time".to_string(), Utc::now().to_rfc3339());
 
         // Handle batching
         if self.pulsar_config.batching_enabled {
             self.batch_buffer.push(message);
-            
+
             if self.batch_buffer.len() >= self.pulsar_config.batch_size as usize {
                 self.flush_batch().await?;
             }
@@ -395,15 +398,18 @@ impl PulsarProducer {
     async fn send_message(&mut self, message: PulsarMessage) -> Result<()> {
         // In a real implementation, this would send to Pulsar
         let partition = self.message_router.get_partition(&message);
-        
-        debug!("Sending message {} to partition {}", message.message_id, partition);
-        
+
+        debug!(
+            "Sending message {} to partition {}",
+            message.message_id, partition
+        );
+
         // Simulate network latency for testing
         tokio::time::sleep(Duration::from_millis(1)).await;
-        
+
         self.stats.messages_sent += 1;
         self.stats.bytes_sent += self.estimate_message_size(&message);
-        
+
         Ok(())
     }
 
@@ -414,17 +420,17 @@ impl PulsarProducer {
 
         let batch = std::mem::take(&mut self.batch_buffer);
         let batch_size = batch.len();
-        
+
         debug!("Flushing batch of {} messages", batch_size);
-        
+
         // In a real implementation, this would send all messages in a batch
         for message in batch {
             self.send_message(message).await?;
         }
-        
+
         self.stats.batch_count += 1;
         debug!("Flushed batch of {} messages", batch_size);
-        
+
         Ok(())
     }
 
@@ -450,38 +456,38 @@ impl PulsarProducer {
             };
 
             let event = match operation {
-                PatchOperation::Add { subject, predicate, object } => {
-                    StreamEvent::TripleAdded {
-                        subject: subject.clone(),
-                        predicate: predicate.clone(),
-                        object: object.clone(),
-                        graph: None,
-                        metadata,
-                    }
-                }
-                PatchOperation::Delete { subject, predicate, object } => {
-                    StreamEvent::TripleRemoved {
-                        subject: subject.clone(),
-                        predicate: predicate.clone(),
-                        object: object.clone(),
-                        graph: None,
-                        metadata,
-                    }
-                }
-                PatchOperation::AddGraph { graph } => {
-                    StreamEvent::GraphCreated {
-                        graph: graph.clone(),
-                        metadata,
-                    }
-                }
-                PatchOperation::DeleteGraph { graph } => {
-                    StreamEvent::GraphDeleted {
-                        graph: graph.clone(),
-                        metadata,
-                    }
-                }
+                PatchOperation::Add {
+                    subject,
+                    predicate,
+                    object,
+                } => StreamEvent::TripleAdded {
+                    subject: subject.clone(),
+                    predicate: predicate.clone(),
+                    object: object.clone(),
+                    graph: None,
+                    metadata,
+                },
+                PatchOperation::Delete {
+                    subject,
+                    predicate,
+                    object,
+                } => StreamEvent::TripleRemoved {
+                    subject: subject.clone(),
+                    predicate: predicate.clone(),
+                    object: object.clone(),
+                    graph: None,
+                    metadata,
+                },
+                PatchOperation::AddGraph { graph } => StreamEvent::GraphCreated {
+                    graph: graph.clone(),
+                    metadata,
+                },
+                PatchOperation::DeleteGraph { graph } => StreamEvent::GraphDeleted {
+                    graph: graph.clone(),
+                    metadata,
+                },
             };
-            
+
             self.publish(event).await?;
         }
         self.flush().await
@@ -491,7 +497,7 @@ impl PulsarProducer {
         if self.pulsar_config.batching_enabled && !self.batch_buffer.is_empty() {
             self.flush_batch().await?;
         }
-        
+
         self.last_flush = Instant::now();
         debug!("Flushed Pulsar producer");
         Ok(())
@@ -622,12 +628,14 @@ impl PulsarConsumer {
     }
 
     pub async fn connect(&mut self) -> Result<()> {
-        info!("Connecting Pulsar consumer to {} with subscription {}", 
-              self.pulsar_config.topic, self.subscription_name);
-        
+        info!(
+            "Connecting Pulsar consumer to {} with subscription {}",
+            self.pulsar_config.topic, self.subscription_name
+        );
+
         // Validate configuration
         self.validate_consumer_configuration().await?;
-        
+
         info!("Connected Pulsar consumer: {}", self.consumer_name);
         Ok(())
     }
@@ -636,41 +644,41 @@ impl PulsarConsumer {
         if self.pulsar_config.service_url.is_empty() {
             return Err(anyhow!("Pulsar service URL cannot be empty"));
         }
-        
+
         if self.pulsar_config.topic.is_empty() {
             return Err(anyhow!("Pulsar topic cannot be empty"));
         }
-        
+
         if self.subscription_name.is_empty() {
             return Err(anyhow!("Subscription name cannot be empty"));
         }
-        
+
         Ok(())
     }
 
     pub async fn consume(&mut self) -> Result<Option<StreamEvent>> {
         let start_time = Instant::now();
-        
+
         // In a real implementation, this would receive from Pulsar
         // For now, simulate message consumption
         tokio::time::sleep(Duration::from_millis(10)).await;
-        
+
         // Check if we have buffered messages
         if let Some(message) = self.message_buffer.pop() {
             self.stats.messages_received += 1;
             self.stats.bytes_received += self.estimate_message_size(&message);
             self.stats.last_message = Some(Utc::now());
-            
+
             let processing_time = start_time.elapsed().as_millis() as f64;
-            self.stats.avg_processing_time_ms = 
+            self.stats.avg_processing_time_ms =
                 (self.stats.avg_processing_time_ms + processing_time) / 2.0;
-            
+
             // Acknowledge the message
             self.acknowledge_message(&message).await?;
-            
+
             return Ok(Some(message.event_data));
         }
-        
+
         Ok(None)
     }
 
@@ -689,7 +697,11 @@ impl PulsarConsumer {
         Ok(())
     }
 
-    pub async fn consume_batch(&mut self, max_messages: usize, timeout: Duration) -> Result<Vec<StreamEvent>> {
+    pub async fn consume_batch(
+        &mut self,
+        max_messages: usize,
+        timeout: Duration,
+    ) -> Result<Vec<StreamEvent>> {
         let mut events = Vec::new();
         let start_time = Instant::now();
 
@@ -743,8 +755,10 @@ pub enum PulsarAuthMethod {
 
 impl PulsarAdmin {
     pub fn new(service_url: String) -> Self {
-        let admin_url = service_url.replace("pulsar://", "http://").replace(":6650", ":8080");
-        
+        let admin_url = service_url
+            .replace("pulsar://", "http://")
+            .replace(":6650", ":8080");
+
         Self {
             service_url,
             admin_url,
@@ -758,7 +772,10 @@ impl PulsarAdmin {
     }
 
     pub async fn create_topic(&self, topic: &str, partitions: u32) -> Result<()> {
-        info!("Creating Pulsar topic: {} with {} partitions", topic, partitions);
+        info!(
+            "Creating Pulsar topic: {} with {} partitions",
+            topic, partitions
+        );
         // In a real implementation, this would call Pulsar admin API
         Ok(())
     }
@@ -791,7 +808,11 @@ impl PulsarAdmin {
         Ok(())
     }
 
-    pub async fn get_subscription_stats(&self, topic: &str, subscription: &str) -> Result<PulsarSubscriptionStats> {
+    pub async fn get_subscription_stats(
+        &self,
+        topic: &str,
+        subscription: &str,
+    ) -> Result<PulsarSubscriptionStats> {
         debug!("Getting subscription stats for {}/{}", topic, subscription);
         // In a real implementation, this would query Pulsar admin API
         Ok(PulsarSubscriptionStats {
@@ -837,7 +858,7 @@ pub struct PulsarSubscriptionStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{StreamConfig, StreamBackend};
+    use crate::{StreamBackend, StreamConfig};
 
     fn test_pulsar_config() -> StreamConfig {
         StreamConfig {
@@ -867,12 +888,12 @@ mod tests {
     #[tokio::test]
     async fn test_message_routing() {
         let router = MessageRouter::new(PulsarRoutingMode::RoundRobinPartition, 4);
-        
+
         let message = PulsarMessage {
             message_id: "test".to_string(),
-            event_data: StreamEvent::Heartbeat { 
-                timestamp: Utc::now(), 
-                source: "test".to_string() 
+            event_data: StreamEvent::Heartbeat {
+                timestamp: Utc::now(),
+                source: "test".to_string(),
             },
             ordering_key: None,
             partition_key: None,
@@ -885,7 +906,7 @@ mod tests {
 
         let partition1 = router.get_partition(&message);
         let partition2 = router.get_partition(&message);
-        
+
         assert!(partition1 < 4);
         assert!(partition2 < 4);
         assert_ne!(partition1, partition2);
@@ -912,20 +933,26 @@ mod tests {
         };
 
         let message = PulsarMessage::from(event);
-        assert_eq!(message.ordering_key, Some("http://example.org/subject".to_string()));
-        assert_eq!(message.partition_key, Some("http://example.org/graph".to_string()));
+        assert_eq!(
+            message.ordering_key,
+            Some("http://example.org/subject".to_string())
+        );
+        assert_eq!(
+            message.partition_key,
+            Some("http://example.org/graph".to_string())
+        );
     }
 
     #[tokio::test]
     async fn test_pulsar_admin_operations() {
         let admin = PulsarAdmin::new("pulsar://localhost:6650".to_string());
-        
+
         let result = admin.create_topic("test-topic", 8).await;
         assert!(result.is_ok());
-        
+
         let stats = admin.get_topic_stats("test-topic").await;
         assert!(stats.is_ok());
-        
+
         if let Ok(topic_stats) = stats {
             assert_eq!(topic_stats.topic, "test-topic");
             assert!(topic_stats.partitions > 0);

@@ -3,35 +3,35 @@
 //! This module implements SPARQL 1.1 property paths, allowing complex navigation
 //! through RDF graphs using path expressions.
 
-use crate::algebra::{Term, Variable, Iri, Binding, Solution};
-use anyhow::{Result, anyhow, bail};
-use std::collections::{HashMap, HashSet, VecDeque};
+use crate::algebra::{Binding, Iri, Solution, Term, Variable};
+use anyhow::{anyhow, bail, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Property path expression
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum PropertyPath {
     /// Direct property path (predicate)
     Direct(Term),
-    
+
     /// Inverse property path (^predicate)
     Inverse(Box<PropertyPath>),
-    
+
     /// Sequence path (path1/path2)
     Sequence(Box<PropertyPath>, Box<PropertyPath>),
-    
+
     /// Alternative path (path1|path2)
     Alternative(Box<PropertyPath>, Box<PropertyPath>),
-    
+
     /// Zero-or-more path (path*)
     ZeroOrMore(Box<PropertyPath>),
-    
+
     /// One-or-more path (path+)
     OneOrMore(Box<PropertyPath>),
-    
+
     /// Zero-or-one path (path?)
     ZeroOrOne(Box<PropertyPath>),
-    
+
     /// Negated property set (!(predicate1|predicate2|...))
     NegatedPropertySet(Vec<Term>),
 }
@@ -85,16 +85,16 @@ pub struct PathResult {
 pub trait PathDataset {
     /// Find all triples matching subject and predicate
     fn find_outgoing(&self, subject: &Term, predicate: &Term) -> Result<Vec<Term>>;
-    
+
     /// Find all triples matching predicate and object
     fn find_incoming(&self, predicate: &Term, object: &Term) -> Result<Vec<Term>>;
-    
+
     /// Find all predicates between subject and object
     fn find_predicates(&self, subject: &Term, object: &Term) -> Result<Vec<Term>>;
-    
+
     /// Get all distinct predicates in the dataset
     fn get_predicates(&self) -> Result<Vec<Term>>;
-    
+
     /// Check if a triple exists
     fn contains_triple(&self, subject: &Term, predicate: &Term, object: &Term) -> Result<bool>;
 }
@@ -105,11 +105,11 @@ impl PropertyPathEvaluator {
             context: PathContext::default(),
         }
     }
-    
+
     pub fn with_context(context: PathContext) -> Self {
         Self { context }
     }
-    
+
     /// Evaluate property path between two terms
     pub fn evaluate_path(
         &self,
@@ -121,7 +121,7 @@ impl PropertyPathEvaluator {
         let mut visited = HashSet::new();
         self.evaluate_path_recursive(start, path, end, dataset, &mut visited, 0)
     }
-    
+
     /// Find all reachable nodes from start via path
     pub fn find_reachable(
         &self,
@@ -132,21 +132,22 @@ impl PropertyPathEvaluator {
         let mut result = Vec::new();
         let mut visited = HashSet::new();
         let mut queue = VecDeque::new();
-        
+
         queue.push_back((start.clone(), 0));
         visited.insert(start.clone());
-        
+
         while let Some((current, depth)) = queue.pop_front() {
             if depth >= self.context.max_length {
                 continue;
             }
-            
+
             if result.len() >= self.context.max_nodes {
                 break;
             }
-            
-            let reachable = self.evaluate_path_step(&current, path, dataset, &mut visited, depth)?;
-            
+
+            let reachable =
+                self.evaluate_path_step(&current, path, dataset, &mut visited, depth)?;
+
             for node in reachable {
                 if !visited.contains(&node) {
                     visited.insert(node.clone());
@@ -155,10 +156,10 @@ impl PropertyPathEvaluator {
                 }
             }
         }
-        
+
         Ok(result)
     }
-    
+
     /// Evaluate property path with variable bindings
     pub fn evaluate_path_with_bindings(
         &self,
@@ -170,7 +171,7 @@ impl PropertyPathEvaluator {
         dataset: &dyn PathDataset,
     ) -> Result<Solution> {
         let mut solution = Vec::new();
-        
+
         match (start_term, end_term) {
             (Some(start), Some(end)) => {
                 // Both endpoints are bound
@@ -219,10 +220,10 @@ impl PropertyPathEvaluator {
                 solution = self.enumerate_all_paths(path, dataset)?;
             }
         }
-        
+
         Ok(solution)
     }
-    
+
     /// Recursive path evaluation
     fn evaluate_path_recursive(
         &self,
@@ -236,41 +237,47 @@ impl PropertyPathEvaluator {
         if depth >= self.context.max_length {
             return Ok(false);
         }
-        
+
         if self.context.cycle_detection && visited.contains(current) {
             return Ok(false);
         }
-        
+
         visited.insert(current.clone());
-        
+
         let result = match path {
-            PropertyPath::Direct(predicate) => {
-                dataset.contains_triple(current, predicate, target)
-            }
+            PropertyPath::Direct(predicate) => dataset.contains_triple(current, predicate, target),
             PropertyPath::Inverse(inner_path) => {
                 self.evaluate_path_recursive(target, inner_path, current, dataset, visited, depth)
             }
             PropertyPath::Sequence(first, second) => {
                 // Find intermediate nodes
-                let intermediate_nodes = self.evaluate_path_step(current, first, dataset, visited, depth)?;
-                
+                let intermediate_nodes =
+                    self.evaluate_path_step(current, first, dataset, visited, depth)?;
+
                 for intermediate in intermediate_nodes {
-                    if self.evaluate_path_recursive(&intermediate, second, target, dataset, visited, depth + 1)? {
+                    if self.evaluate_path_recursive(
+                        &intermediate,
+                        second,
+                        target,
+                        dataset,
+                        visited,
+                        depth + 1,
+                    )? {
                         return Ok(true);
                     }
                 }
                 Ok(false)
             }
-            PropertyPath::Alternative(left, right) => {
-                Ok(self.evaluate_path_recursive(current, left, target, dataset, visited, depth)? ||
-                   self.evaluate_path_recursive(current, right, target, dataset, visited, depth)?)
-            }
+            PropertyPath::Alternative(left, right) => Ok(self
+                .evaluate_path_recursive(current, left, target, dataset, visited, depth)?
+                || self
+                    .evaluate_path_recursive(current, right, target, dataset, visited, depth)?),
             PropertyPath::ZeroOrMore(inner_path) => {
                 // Zero case
                 if current == target {
                     return Ok(true);
                 }
-                
+
                 // One or more case
                 self.evaluate_one_or_more(current, inner_path, target, dataset, visited, depth)
             }
@@ -282,7 +289,7 @@ impl PropertyPathEvaluator {
                 if current == target {
                     return Ok(true);
                 }
-                
+
                 // One case
                 self.evaluate_path_recursive(current, inner_path, target, dataset, visited, depth)
             }
@@ -299,11 +306,11 @@ impl PropertyPathEvaluator {
                 Ok(false)
             }
         };
-        
+
         visited.remove(current);
         result
     }
-    
+
     /// Evaluate one step of a path
     fn evaluate_path_step(
         &self,
@@ -314,15 +321,11 @@ impl PropertyPathEvaluator {
         depth: usize,
     ) -> Result<Vec<Term>> {
         match path {
-            PropertyPath::Direct(predicate) => {
-                dataset.find_outgoing(current, predicate)
-            }
+            PropertyPath::Direct(predicate) => dataset.find_outgoing(current, predicate),
             PropertyPath::Inverse(inner_path) => {
                 // For inverse, we need to find incoming edges
                 match inner_path.as_ref() {
-                    PropertyPath::Direct(predicate) => {
-                        dataset.find_incoming(predicate, current)
-                    }
+                    PropertyPath::Direct(predicate) => dataset.find_incoming(predicate, current),
                     _ => {
                         // Complex inverse - not easily optimizable
                         Ok(Vec::new())
@@ -331,18 +334,26 @@ impl PropertyPathEvaluator {
             }
             PropertyPath::Sequence(first, second) => {
                 let mut result = Vec::new();
-                let intermediate_nodes = self.evaluate_path_step(current, first, dataset, visited, depth)?;
-                
+                let intermediate_nodes =
+                    self.evaluate_path_step(current, first, dataset, visited, depth)?;
+
                 for intermediate in intermediate_nodes {
-                    let final_nodes = self.evaluate_path_step(&intermediate, second, dataset, visited, depth + 1)?;
+                    let final_nodes = self.evaluate_path_step(
+                        &intermediate,
+                        second,
+                        dataset,
+                        visited,
+                        depth + 1,
+                    )?;
                     result.extend(final_nodes);
                 }
-                
+
                 Ok(result)
             }
             PropertyPath::Alternative(left, right) => {
                 let mut result = self.evaluate_path_step(current, left, dataset, visited, depth)?;
-                let right_result = self.evaluate_path_step(current, right, dataset, visited, depth)?;
+                let right_result =
+                    self.evaluate_path_step(current, right, dataset, visited, depth)?;
                 result.extend(right_result);
                 Ok(result)
             }
@@ -352,7 +363,7 @@ impl PropertyPathEvaluator {
             }
         }
     }
-    
+
     /// Evaluate one-or-more path
     fn evaluate_one_or_more(
         &self,
@@ -365,49 +376,50 @@ impl PropertyPathEvaluator {
     ) -> Result<bool> {
         let mut frontier = VecDeque::new();
         let mut local_visited = HashSet::new();
-        
+
         frontier.push_back((current.clone(), depth));
         local_visited.insert(current.clone());
-        
+
         while let Some((node, current_depth)) = frontier.pop_front() {
             if current_depth >= self.context.max_length {
                 continue;
             }
-            
-            let reachable = self.evaluate_path_step(&node, path, dataset, visited, current_depth)?;
-            
+
+            let reachable =
+                self.evaluate_path_step(&node, path, dataset, visited, current_depth)?;
+
             for next_node in reachable {
                 if next_node == *target {
                     return Ok(true);
                 }
-                
-                if !local_visited.contains(&next_node) && current_depth < self.context.max_length - 1 {
+
+                if !local_visited.contains(&next_node)
+                    && current_depth < self.context.max_length - 1
+                {
                     local_visited.insert(next_node.clone());
                     frontier.push_back((next_node, current_depth + 1));
                 }
             }
         }
-        
+
         Ok(false)
     }
-    
+
     /// Invert a property path
     fn invert_path(&self, path: &PropertyPath) -> PropertyPath {
         match path {
-            PropertyPath::Direct(term) => PropertyPath::Inverse(Box::new(PropertyPath::Direct(term.clone()))),
+            PropertyPath::Direct(term) => {
+                PropertyPath::Inverse(Box::new(PropertyPath::Direct(term.clone())))
+            }
             PropertyPath::Inverse(inner) => *inner.clone(),
-            PropertyPath::Sequence(first, second) => {
-                PropertyPath::Sequence(
-                    Box::new(self.invert_path(second)),
-                    Box::new(self.invert_path(first)),
-                )
-            }
-            PropertyPath::Alternative(left, right) => {
-                PropertyPath::Alternative(
-                    Box::new(self.invert_path(left)),
-                    Box::new(self.invert_path(right)),
-                )
-            }
+            PropertyPath::Sequence(first, second) => PropertyPath::Sequence(
+                Box::new(self.invert_path(second)),
+                Box::new(self.invert_path(first)),
+            ),
+            PropertyPath::Alternative(left, right) => PropertyPath::Alternative(
+                Box::new(self.invert_path(left)),
+                Box::new(self.invert_path(right)),
+            ),
             PropertyPath::ZeroOrMore(inner) => {
                 PropertyPath::ZeroOrMore(Box::new(self.invert_path(inner)))
             }
@@ -422,14 +434,18 @@ impl PropertyPathEvaluator {
             }
         }
     }
-    
+
     /// Enumerate all path instances (expensive operation)
-    fn enumerate_all_paths(&self, _path: &PropertyPath, _dataset: &dyn PathDataset) -> Result<Solution> {
+    fn enumerate_all_paths(
+        &self,
+        _path: &PropertyPath,
+        _dataset: &dyn PathDataset,
+    ) -> Result<Solution> {
         // This is computationally expensive and should be used with caution
         // For now, return empty solution
         Ok(Vec::new())
     }
-    
+
     /// Optimize property path for better execution
     pub fn optimize_path(&self, path: PropertyPath) -> PropertyPath {
         match self.context.optimization_level {
@@ -438,14 +454,14 @@ impl PropertyPathEvaluator {
             PathOptimization::Advanced => self.advanced_path_optimization(path),
         }
     }
-    
+
     /// Basic path optimizations
     fn basic_path_optimization(&self, path: PropertyPath) -> PropertyPath {
         match path {
             PropertyPath::Sequence(first, second) => {
                 let opt_first = self.basic_path_optimization(*first);
                 let opt_second = self.basic_path_optimization(*second);
-                
+
                 // Flatten nested sequences
                 match (&opt_first, &opt_second) {
                     (PropertyPath::Sequence(a, b), PropertyPath::Sequence(c, d)) => {
@@ -477,7 +493,7 @@ impl PropertyPathEvaluator {
             }
             PropertyPath::Inverse(inner) => {
                 let opt_inner = self.basic_path_optimization(*inner);
-                
+
                 // Double inverse elimination: ^^p -> p
                 if let PropertyPath::Inverse(inner_inner) = opt_inner {
                     *inner_inner
@@ -488,11 +504,11 @@ impl PropertyPathEvaluator {
             _ => path,
         }
     }
-    
+
     /// Advanced path optimizations
     fn advanced_path_optimization(&self, path: PropertyPath) -> PropertyPath {
         let basic_opt = self.basic_path_optimization(path);
-        
+
         match basic_opt {
             PropertyPath::Alternative(left, right) => {
                 // Detect common subexpressions
@@ -505,15 +521,23 @@ impl PropertyPathEvaluator {
             _ => basic_opt,
         }
     }
-    
+
     /// Optimize alternatives with common subexpressions
-    fn optimize_alternative_common_subexpressions(&self, left: PropertyPath, right: PropertyPath) -> PropertyPath {
+    fn optimize_alternative_common_subexpressions(
+        &self,
+        left: PropertyPath,
+        right: PropertyPath,
+    ) -> PropertyPath {
         // For now, just return the original alternative
         PropertyPath::Alternative(Box::new(left), Box::new(right))
     }
-    
+
     /// Optimize sequences of direct paths
-    fn optimize_sequence_direct_paths(&self, first: PropertyPath, second: PropertyPath) -> PropertyPath {
+    fn optimize_sequence_direct_paths(
+        &self,
+        first: PropertyPath,
+        second: PropertyPath,
+    ) -> PropertyPath {
         // For now, just return the original sequence
         PropertyPath::Sequence(Box::new(first), Box::new(second))
     }
@@ -585,11 +609,11 @@ mod tests {
     use super::*;
     use crate::algebra::{Iri, Literal};
     use std::collections::HashMap;
-    
+
     struct TestDataset {
         triples: Vec<(Term, Term, Term)>,
     }
-    
+
     impl TestDataset {
         fn new() -> Self {
             Self {
@@ -608,7 +632,7 @@ mod tests {
             }
         }
     }
-    
+
     impl PathDataset for TestDataset {
         fn find_outgoing(&self, subject: &Term, predicate: &Term) -> Result<Vec<Term>> {
             let mut result = Vec::new();
@@ -619,7 +643,7 @@ mod tests {
             }
             Ok(result)
         }
-        
+
         fn find_incoming(&self, predicate: &Term, object: &Term) -> Result<Vec<Term>> {
             let mut result = Vec::new();
             for (s, p, o) in &self.triples {
@@ -629,7 +653,7 @@ mod tests {
             }
             Ok(result)
         }
-        
+
         fn find_predicates(&self, subject: &Term, object: &Term) -> Result<Vec<Term>> {
             let mut result = Vec::new();
             for (s, p, o) in &self.triples {
@@ -639,65 +663,82 @@ mod tests {
             }
             Ok(result)
         }
-        
+
         fn get_predicates(&self) -> Result<Vec<Term>> {
             let mut predicates: Vec<_> = self.triples.iter().map(|(_, p, _)| p.clone()).collect();
             predicates.sort_by(|a, b| format!("{:?}", a).cmp(&format!("{:?}", b)));
             predicates.dedup();
             Ok(predicates)
         }
-        
+
         fn contains_triple(&self, subject: &Term, predicate: &Term, object: &Term) -> Result<bool> {
-            Ok(self.triples.iter().any(|(s, p, o)| s == subject && p == predicate && o == object))
+            Ok(self
+                .triples
+                .iter()
+                .any(|(s, p, o)| s == subject && p == predicate && o == object))
         }
     }
-    
+
     #[test]
     fn test_direct_path() {
         let evaluator = PropertyPathEvaluator::new();
         let dataset = TestDataset::new();
-        
-        let path = PropertyPath::Direct(Term::Iri(Iri("http://xmlns.com/foaf/0.1/knows".to_string())));
+
+        let path = PropertyPath::Direct(Term::Iri(Iri(
+            "http://xmlns.com/foaf/0.1/knows".to_string()
+        )));
         let start = Term::Iri(Iri("http://example.org/person1".to_string()));
         let end = Term::Iri(Iri("http://example.org/person2".to_string()));
-        
-        assert!(evaluator.evaluate_path(&start, &path, &end, &dataset).unwrap());
+
+        assert!(evaluator
+            .evaluate_path(&start, &path, &end, &dataset)
+            .unwrap());
     }
-    
+
     #[test]
     fn test_sequence_path() {
         let evaluator = PropertyPathEvaluator::new();
         let dataset = TestDataset::new();
-        
-        let knows = PropertyPath::Direct(Term::Iri(Iri("http://xmlns.com/foaf/0.1/knows".to_string())));
+
+        let knows = PropertyPath::Direct(Term::Iri(Iri(
+            "http://xmlns.com/foaf/0.1/knows".to_string()
+        )));
         let path = path_seq!(knows.clone(), knows);
-        
+
         let start = Term::Iri(Iri("http://example.org/person1".to_string()));
         let end = Term::Iri(Iri("http://example.org/person3".to_string()));
-        
-        assert!(evaluator.evaluate_path(&start, &path, &end, &dataset).unwrap());
+
+        assert!(evaluator
+            .evaluate_path(&start, &path, &end, &dataset)
+            .unwrap());
     }
-    
+
     #[test]
     fn test_find_reachable() {
         let evaluator = PropertyPathEvaluator::new();
         let dataset = TestDataset::new();
-        
-        let path = PropertyPath::Direct(Term::Iri(Iri("http://xmlns.com/foaf/0.1/knows".to_string())));
+
+        let path = PropertyPath::Direct(Term::Iri(Iri(
+            "http://xmlns.com/foaf/0.1/knows".to_string()
+        )));
         let start = Term::Iri(Iri("http://example.org/person1".to_string()));
-        
+
         let reachable = evaluator.find_reachable(&start, &path, &dataset).unwrap();
         assert_eq!(reachable.len(), 1);
-        assert_eq!(reachable[0], Term::Iri(Iri("http://example.org/person2".to_string())));
+        assert_eq!(
+            reachable[0],
+            Term::Iri(Iri("http://example.org/person2".to_string()))
+        );
     }
-    
+
     #[test]
     fn test_path_optimization() {
         let evaluator = PropertyPathEvaluator::new();
-        
+
         let direct = PropertyPath::Direct(Term::Iri(Iri("http://example.org/pred".to_string())));
-        let double_inverse = PropertyPath::Inverse(Box::new(PropertyPath::Inverse(Box::new(direct.clone()))));
-        
+        let double_inverse =
+            PropertyPath::Inverse(Box::new(PropertyPath::Inverse(Box::new(direct.clone()))));
+
         let optimized = evaluator.optimize_path(double_inverse);
         assert_eq!(optimized, direct);
     }

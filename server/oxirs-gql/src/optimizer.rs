@@ -50,8 +50,7 @@ pub struct QueryComplexity {
 
 impl QueryComplexity {
     pub fn is_valid(&self, config: &OptimizationConfig) -> bool {
-        self.depth <= config.max_query_depth && 
-        self.complexity_score <= config.max_query_complexity
+        self.depth <= config.max_query_depth && self.complexity_score <= config.max_query_complexity
     }
 }
 
@@ -113,7 +112,7 @@ impl QueryOptimizer {
         }
 
         let query_hash = self.calculate_query_hash(document);
-        
+
         // Check cache first
         if let Some(cached_plan) = self.get_cached_plan(query_hash) {
             return Ok(cached_plan);
@@ -121,10 +120,10 @@ impl QueryOptimizer {
 
         // Create new plan
         let plan = self.query_planner.create_optimized_plan(document).await?;
-        
+
         // Cache the plan
         self.cache_query_plan(query_hash, plan.clone()).await;
-        
+
         Ok(plan)
     }
 
@@ -150,24 +149,31 @@ impl QueryOptimizer {
         }
 
         let mut cache = self.result_cache.write().await;
-        
+
         // Evict expired entries and enforce size limit
         self.evict_expired_results(&mut cache);
-        
+
         if cache.len() >= self.config.max_cache_size {
             self.evict_lru_result(&mut cache);
         }
 
-        cache.insert(cache_key, CachedResult {
-            result,
-            created_at: Instant::now(),
-            access_count: 1,
-            ttl: self.config.cache_ttl,
-        });
+        cache.insert(
+            cache_key,
+            CachedResult {
+                result,
+                created_at: Instant::now(),
+                access_count: 1,
+                ttl: self.config.cache_ttl,
+            },
+        );
     }
 
     /// Generate cache key for a query with variables
-    pub fn generate_cache_key(&self, document: &Document, variables: &HashMap<String, Value>) -> String {
+    pub fn generate_cache_key(
+        &self,
+        document: &Document,
+        variables: &HashMap<String, Value>,
+    ) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 
@@ -276,10 +282,12 @@ impl QueryOptimizer {
 
     fn is_complex_field(&self, field: &Field) -> bool {
         // Determine if a field is complex based on arguments and nesting
-        field.arguments.len() > 2 || 
-        field.selection_set.as_ref()
-            .map(|ss| ss.selections.len() > 5)
-            .unwrap_or(false)
+        field.arguments.len() > 2
+            || field
+                .selection_set
+                .as_ref()
+                .map(|ss| ss.selections.len() > 5)
+                .unwrap_or(false)
     }
 }
 
@@ -300,9 +308,9 @@ impl ComplexityAnalyzer {
 
         for definition in &document.definitions {
             if let crate::ast::Definition::Operation(operation) = definition {
-                let (op_depth, op_fields, op_complexity) = 
+                let (op_depth, op_fields, op_complexity) =
                     self.analyze_selection_set(&operation.selection_set, 1)?;
-                
+
                 depth = depth.max(op_depth);
                 field_count += op_fields;
                 complexity_score += op_complexity;
@@ -319,7 +327,11 @@ impl ComplexityAnalyzer {
         })
     }
 
-    fn analyze_selection_set(&self, selection_set: &SelectionSet, current_depth: usize) -> Result<(usize, usize, usize)> {
+    fn analyze_selection_set(
+        &self,
+        selection_set: &SelectionSet,
+        current_depth: usize,
+    ) -> Result<(usize, usize, usize)> {
         let mut max_depth = current_depth;
         let mut total_fields = 0;
         let mut total_complexity = 0;
@@ -331,18 +343,18 @@ impl ComplexityAnalyzer {
                     total_complexity += self.calculate_field_complexity(field);
 
                     if let Some(nested_selection) = &field.selection_set {
-                        let (nested_depth, nested_fields, nested_complexity) = 
+                        let (nested_depth, nested_fields, nested_complexity) =
                             self.analyze_selection_set(nested_selection, current_depth + 1)?;
-                        
+
                         max_depth = max_depth.max(nested_depth);
                         total_fields += nested_fields;
                         total_complexity += nested_complexity;
                     }
                 }
                 Selection::InlineFragment(fragment) => {
-                    let (frag_depth, frag_fields, frag_complexity) = 
+                    let (frag_depth, frag_fields, frag_complexity) =
                         self.analyze_selection_set(&fragment.selection_set, current_depth)?;
-                    
+
                     max_depth = max_depth.max(frag_depth);
                     total_fields += frag_fields;
                     total_complexity += frag_complexity;
@@ -377,12 +389,17 @@ impl ComplexityAnalyzer {
         complexity
     }
 
-    fn calculate_estimated_cost(&self, depth: usize, field_count: usize, complexity_score: usize) -> f64 {
+    fn calculate_estimated_cost(
+        &self,
+        depth: usize,
+        field_count: usize,
+        complexity_score: usize,
+    ) -> f64 {
         // Simple cost estimation formula
         let depth_cost = depth as f64 * 1.5;
         let field_cost = field_count as f64 * 0.5;
         let complexity_cost = complexity_score as f64 * 0.1;
-        
+
         depth_cost + field_cost + complexity_cost
     }
 }
@@ -399,7 +416,7 @@ impl QueryPlanner {
 
     pub async fn create_basic_plan(&self, document: &Document) -> Result<QueryPlan> {
         let query_hash = self.calculate_document_hash(document);
-        
+
         Ok(QueryPlan {
             query_hash,
             sparql_query: "SELECT * WHERE { ?s ?p ?o } LIMIT 10".to_string(),
@@ -412,15 +429,16 @@ impl QueryPlanner {
 
     pub async fn create_optimized_plan(&self, document: &Document) -> Result<QueryPlan> {
         let query_hash = self.calculate_document_hash(document);
-        
+
         // Analyze the query structure
         let field_analysis = self.analyze_query_fields(document)?;
         let join_analysis = self.analyze_required_joins(&field_analysis);
         let optimization_hints = self.generate_optimization_hints(&field_analysis);
 
         // Build optimized SPARQL query
-        let sparql_query = self.build_optimized_sparql(&field_analysis, &join_analysis, &optimization_hints);
-        
+        let sparql_query =
+            self.build_optimized_sparql(&field_analysis, &join_analysis, &optimization_hints);
+
         // Calculate estimated cost
         let estimated_cost = self.estimate_query_cost(&field_analysis, &join_analysis);
 
@@ -451,7 +469,13 @@ impl QueryPlanner {
 
         for definition in &document.definitions {
             if let crate::ast::Definition::Operation(operation) = definition {
-                self.collect_field_info(&operation.selection_set, &mut field_names, &mut scalar_fields, &mut object_fields, &mut filter_conditions);
+                self.collect_field_info(
+                    &operation.selection_set,
+                    &mut field_names,
+                    &mut scalar_fields,
+                    &mut object_fields,
+                    &mut filter_conditions,
+                );
             }
         }
 
@@ -463,7 +487,14 @@ impl QueryPlanner {
         })
     }
 
-    fn collect_field_info(&self, selection_set: &SelectionSet, field_names: &mut Vec<String>, scalar_fields: &mut HashSet<String>, object_fields: &mut HashSet<String>, filter_conditions: &mut Vec<String>) {
+    fn collect_field_info(
+        &self,
+        selection_set: &SelectionSet,
+        field_names: &mut Vec<String>,
+        scalar_fields: &mut HashSet<String>,
+        object_fields: &mut HashSet<String>,
+        filter_conditions: &mut Vec<String>,
+    ) {
         for selection in &selection_set.selections {
             if let Selection::Field(field) = selection {
                 field_names.push(field.name.clone());
@@ -471,7 +502,13 @@ impl QueryPlanner {
                 if field.selection_set.is_some() {
                     object_fields.insert(field.name.clone());
                     if let Some(nested) = &field.selection_set {
-                        self.collect_field_info(nested, field_names, scalar_fields, object_fields, filter_conditions);
+                        self.collect_field_info(
+                            nested,
+                            field_names,
+                            scalar_fields,
+                            object_fields,
+                            filter_conditions,
+                        );
                     }
                 } else {
                     scalar_fields.insert(field.name.clone());
@@ -524,7 +561,12 @@ impl QueryPlanner {
         hints
     }
 
-    fn build_optimized_sparql(&self, field_analysis: &FieldAnalysis, joins: &[String], hints: &[String]) -> String {
+    fn build_optimized_sparql(
+        &self,
+        field_analysis: &FieldAnalysis,
+        joins: &[String],
+        hints: &[String],
+    ) -> String {
         let mut sparql_parts = Vec::new();
 
         // Add prefixes
@@ -533,10 +575,12 @@ impl QueryPlanner {
         sparql_parts.push("PREFIX foaf: <http://xmlns.com/foaf/0.1/>".to_string());
 
         // Build SELECT clause
-        let select_vars: Vec<String> = field_analysis.field_names.iter()
+        let select_vars: Vec<String> = field_analysis
+            .field_names
+            .iter()
             .map(|name| format!("?{}", name))
             .collect();
-        
+
         if select_vars.is_empty() {
             sparql_parts.push("SELECT ?s ?p ?o".to_string());
         } else {
@@ -545,7 +589,7 @@ impl QueryPlanner {
 
         // Build WHERE clause
         let mut where_patterns = Vec::new();
-        
+
         // Basic triple pattern
         where_patterns.push("?s ?p ?o".to_string());
 
@@ -563,7 +607,9 @@ impl QueryPlanner {
         for join in joins {
             match join.as_str() {
                 "PERSON_KNOWS_JOIN" => where_patterns.push("?s foaf:knows ?knows".to_string()),
-                "PERSON_ORG_JOIN" => where_patterns.push("?s foaf:workplaceHomepage ?org".to_string()),
+                "PERSON_ORG_JOIN" => {
+                    where_patterns.push("?s foaf:workplaceHomepage ?org".to_string())
+                }
                 _ => {}
             }
         }
@@ -618,10 +664,10 @@ mod tests {
     fn test_complexity_analyzer() {
         let query = "{ hello world }";
         let document = parse_document(query).unwrap();
-        
+
         let analyzer = ComplexityAnalyzer::new(OptimizationConfig::default());
         let complexity = analyzer.analyze(&document).unwrap();
-        
+
         assert!(complexity.depth >= 1);
         assert!(complexity.field_count >= 2);
     }
@@ -630,13 +676,13 @@ mod tests {
     async fn test_query_optimizer() {
         let config = OptimizationConfig::default();
         let optimizer = QueryOptimizer::new(config);
-        
+
         let query = "{ hello version }";
         let document = parse_document(query).unwrap();
-        
+
         let complexity = optimizer.analyze_complexity(&document).unwrap();
         assert!(complexity.is_valid(&optimizer.config));
-        
+
         let plan = optimizer.get_query_plan(&document).await.unwrap();
         assert!(!plan.sparql_query.is_empty());
     }
@@ -645,12 +691,14 @@ mod tests {
     async fn test_result_caching() {
         let config = OptimizationConfig::default();
         let optimizer = QueryOptimizer::new(config);
-        
+
         let cache_key = "test_key".to_string();
         let result = serde_json::json!({"hello": "world"});
-        
-        optimizer.cache_result(cache_key.clone(), result.clone()).await;
-        
+
+        optimizer
+            .cache_result(cache_key.clone(), result.clone())
+            .await;
+
         let cached = optimizer.get_cached_result(&cache_key).await;
         assert_eq!(cached, Some(result));
     }

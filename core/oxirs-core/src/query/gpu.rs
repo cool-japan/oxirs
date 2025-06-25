@@ -1,13 +1,13 @@
 //! GPU-accelerated query operations for massive parallel processing
-//! 
+//!
 //! This module provides GPU acceleration for RDF query operations using
 //! a generic interface that can work with CUDA, OpenCL, or WebGPU backends.
 
-use std::sync::Arc;
 use crate::model::*;
-use crate::query::plan::ExecutionPlan;
 use crate::query::algebra::TriplePattern;
+use crate::query::plan::ExecutionPlan;
 use crate::OxirsError;
+use std::sync::Arc;
 
 /// GPU backend types
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -96,41 +96,39 @@ impl GpuQueryExecutor {
     /// Create new GPU query executor
     pub fn new() -> Result<Self, OxirsError> {
         let devices = Self::detect_devices()?;
-        
+
         if devices.is_empty() {
-            return Err(OxirsError::Query(
-                "No GPU devices available".to_string()
-            ));
+            return Err(OxirsError::Query("No GPU devices available".to_string()));
         }
-        
+
         Ok(Self {
             devices: devices.clone(),
             selected_device: 0,
             memory_pool: Arc::new(GpuMemoryPool::new(
-                devices[0].memory_bytes / 2 // Use half of GPU memory
+                devices[0].memory_bytes / 2, // Use half of GPU memory
             )),
         })
     }
-    
+
     /// Detect available GPU devices
     fn detect_devices() -> Result<Vec<GpuDevice>, OxirsError> {
         let mut devices = Vec::new();
-        
+
         // Try CUDA first
         if let Some(cuda_devices) = Self::detect_cuda_devices() {
             devices.extend(cuda_devices);
         }
-        
+
         // Try OpenCL
         if let Some(opencl_devices) = Self::detect_opencl_devices() {
             devices.extend(opencl_devices);
         }
-        
+
         // Try WebGPU
         if let Some(webgpu_devices) = Self::detect_webgpu_devices() {
             devices.extend(webgpu_devices);
         }
-        
+
         // Always add CPU fallback
         devices.push(GpuDevice {
             name: "CPU Fallback".to_string(),
@@ -141,31 +139,34 @@ impl GpuQueryExecutor {
             max_work_group_size: 1024,
             backend: GpuBackend::CpuFallback,
         });
-        
+
         Ok(devices)
     }
-    
+
     /// Detect CUDA devices
     fn detect_cuda_devices() -> Option<Vec<GpuDevice>> {
         // Placeholder - would use CUDA API
         None
     }
-    
+
     /// Detect OpenCL devices
     fn detect_opencl_devices() -> Option<Vec<GpuDevice>> {
         // Placeholder - would use OpenCL API
         None
     }
-    
+
     /// Detect WebGPU devices
     fn detect_webgpu_devices() -> Option<Vec<GpuDevice>> {
         // Placeholder - would use WebGPU API
         None
     }
-    
+
     /// Execute query plan on GPU
-    pub fn execute_plan(&self, plan: &ExecutionPlan, data: &GpuData) 
-        -> Result<GpuResults, OxirsError> {
+    pub fn execute_plan(
+        &self,
+        plan: &ExecutionPlan,
+        data: &GpuData,
+    ) -> Result<GpuResults, OxirsError> {
         match self.devices[self.selected_device].backend {
             GpuBackend::Cuda => self.execute_cuda(plan, data),
             GpuBackend::OpenCL => self.execute_opencl(plan, data),
@@ -173,34 +174,47 @@ impl GpuQueryExecutor {
             GpuBackend::CpuFallback => self.execute_cpu_parallel(plan, data),
         }
     }
-    
+
     /// Execute on CUDA
-    fn execute_cuda(&self, _plan: &ExecutionPlan, _data: &GpuData) 
-        -> Result<GpuResults, OxirsError> {
+    fn execute_cuda(
+        &self,
+        _plan: &ExecutionPlan,
+        _data: &GpuData,
+    ) -> Result<GpuResults, OxirsError> {
         Err(OxirsError::Query("CUDA not implemented".to_string()))
     }
-    
+
     /// Execute on OpenCL
-    fn execute_opencl(&self, _plan: &ExecutionPlan, _data: &GpuData) 
-        -> Result<GpuResults, OxirsError> {
+    fn execute_opencl(
+        &self,
+        _plan: &ExecutionPlan,
+        _data: &GpuData,
+    ) -> Result<GpuResults, OxirsError> {
         Err(OxirsError::Query("OpenCL not implemented".to_string()))
     }
-    
+
     /// Execute on WebGPU
-    fn execute_webgpu(&self, _plan: &ExecutionPlan, _data: &GpuData) 
-        -> Result<GpuResults, OxirsError> {
+    fn execute_webgpu(
+        &self,
+        _plan: &ExecutionPlan,
+        _data: &GpuData,
+    ) -> Result<GpuResults, OxirsError> {
         Err(OxirsError::Query("WebGPU not implemented".to_string()))
     }
-    
+
     /// Execute with CPU parallel fallback
-    fn execute_cpu_parallel(&self, plan: &ExecutionPlan, data: &GpuData) 
-        -> Result<GpuResults, OxirsError> {
+    fn execute_cpu_parallel(
+        &self,
+        plan: &ExecutionPlan,
+        data: &GpuData,
+    ) -> Result<GpuResults, OxirsError> {
         use rayon::prelude::*;
-        
+
         match plan {
             ExecutionPlan::TripleScan { pattern } => {
                 // Parallel scan using rayon
-                let results: Vec<usize> = data.triples
+                let results: Vec<usize> = data
+                    .triples
                     .par_iter()
                     .enumerate()
                     .filter_map(|(idx, triple)| {
@@ -211,24 +225,24 @@ impl GpuQueryExecutor {
                         }
                     })
                     .collect();
-                
+
                 Ok(GpuResults {
                     indices: results,
                     execution_time_ms: 0.0, // Would measure
                 })
             }
             _ => Err(OxirsError::Query(
-                "GPU execution not supported for this plan type".to_string()
+                "GPU execution not supported for this plan type".to_string(),
             )),
         }
     }
-    
+
     /// Check if triple matches pattern
     fn triple_matches_pattern(&self, triple: &GpuTriple, pattern: &TriplePattern) -> bool {
         // Simplified matching - would use actual term resolution
         true
     }
-    
+
     /// Upload data to GPU
     pub fn upload_data(&self, triples: &[Triple]) -> Result<GpuData, OxirsError> {
         // Convert triples to GPU format
@@ -236,18 +250,18 @@ impl GpuQueryExecutor {
             .iter()
             .map(|t| self.triple_to_gpu(t))
             .collect::<Result<Vec<_>, _>>()?;
-        
+
         // Allocate GPU memory
         let size = gpu_triples.len() * std::mem::size_of::<GpuTriple>();
         let block = self.memory_pool.allocate(size)?;
-        
+
         // Would copy to actual GPU memory
         Ok(GpuData {
             triples: gpu_triples,
             memory_block: block,
         })
     }
-    
+
     /// Convert triple to GPU format
     fn triple_to_gpu(&self, _triple: &Triple) -> Result<GpuTriple, OxirsError> {
         // Would map terms to IDs
@@ -288,7 +302,7 @@ impl GpuMemoryPool {
             allocated_blocks: Vec::new(),
         }
     }
-    
+
     fn allocate(&self, size: usize) -> Result<MemoryBlock, OxirsError> {
         // Simple first-fit allocation
         for block in &self.free_blocks {
@@ -300,7 +314,7 @@ impl GpuMemoryPool {
                 });
             }
         }
-        
+
         Err(OxirsError::Store("GPU memory exhausted".to_string()))
     }
 }
@@ -344,7 +358,7 @@ pub mod kernels {
             }
         }
     "#;
-    
+
     /// Join kernel for combining results
     pub const JOIN_KERNEL: &str = r#"
         __kernel void hash_join(
@@ -375,7 +389,7 @@ pub mod kernels {
             }
         }
     "#;
-    
+
     /// Aggregation kernel
     pub const AGGREGATE_KERNEL: &str = r#"
         __kernel void count_aggregate(
@@ -397,10 +411,10 @@ pub mod kernels {
 pub trait GpuAccelerated {
     /// Check if operation can be GPU accelerated
     fn can_accelerate(&self) -> bool;
-    
+
     /// Estimate GPU speedup factor
     fn estimate_speedup(&self, data_size: usize) -> f32;
-    
+
     /// Convert to GPU-executable format
     fn to_gpu_operation(&self) -> Result<GpuOperation, OxirsError>;
 }
@@ -446,20 +460,20 @@ pub enum AggregateFunction {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_gpu_detection() {
         let devices = GpuQueryExecutor::detect_devices().unwrap();
-        
+
         // Should at least have CPU fallback
         assert!(!devices.is_empty());
         assert_eq!(devices.last().unwrap().backend, GpuBackend::CpuFallback);
     }
-    
+
     #[test]
     fn test_memory_pool() {
         let pool = GpuMemoryPool::new(1024 * 1024); // 1MB
-        
+
         let block = pool.allocate(1024).unwrap();
         assert_eq!(block.size, 1024);
         assert_eq!(block.allocated, true);

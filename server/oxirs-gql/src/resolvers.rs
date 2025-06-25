@@ -44,9 +44,7 @@ impl FieldResolver for RdfResolver {
                 // Simple test resolver
                 Ok(Value::StringValue("Hello from OxiRS GraphQL!".to_string()))
             }
-            "version" => {
-                Ok(Value::StringValue(env!("CARGO_PKG_VERSION").to_string()))
-            }
+            "version" => Ok(Value::StringValue(env!("CARGO_PKG_VERSION").to_string())),
             "triples" => {
                 // Return count of triples in the store
                 self.resolve_triples_count(args).await
@@ -88,11 +86,10 @@ impl RdfResolver {
 
     async fn resolve_subjects(&self, args: &HashMap<String, Value>) -> Result<Value> {
         // Extract limit argument if provided
-        let limit = args.get("limit")
-            .and_then(|v| match v {
-                Value::IntValue(i) => Some(*i as usize),
-                _ => None,
-            });
+        let limit = args.get("limit").and_then(|v| match v {
+            Value::IntValue(i) => Some(*i as usize),
+            _ => None,
+        });
 
         match self.store.get_subjects(limit) {
             Ok(subjects) => {
@@ -110,11 +107,10 @@ impl RdfResolver {
     }
 
     async fn resolve_predicates(&self, args: &HashMap<String, Value>) -> Result<Value> {
-        let limit = args.get("limit")
-            .and_then(|v| match v {
-                Value::IntValue(i) => Some(*i as usize),
-                _ => None,
-            });
+        let limit = args.get("limit").and_then(|v| match v {
+            Value::IntValue(i) => Some(*i as usize),
+            _ => None,
+        });
 
         match self.store.get_predicates(limit) {
             Ok(predicates) => {
@@ -132,11 +128,10 @@ impl RdfResolver {
     }
 
     async fn resolve_objects(&self, args: &HashMap<String, Value>) -> Result<Value> {
-        let limit = args.get("limit")
-            .and_then(|v| match v {
-                Value::IntValue(i) => Some(*i as usize),
-                _ => None,
-            });
+        let limit = args.get("limit").and_then(|v| match v {
+            Value::IntValue(i) => Some(*i as usize),
+            _ => None,
+        });
 
         match self.store.get_objects(limit) {
             Ok(objects) => {
@@ -160,7 +155,8 @@ impl RdfResolver {
 
     /// Execute a raw SPARQL query
     async fn resolve_sparql_query(&self, args: &HashMap<String, Value>) -> Result<Value> {
-        let query = args.get("query")
+        let query = args
+            .get("query")
             .and_then(|v| match v {
                 Value::StringValue(s) => Some(s.as_str()),
                 _ => None,
@@ -178,12 +174,12 @@ impl RdfResolver {
         match results {
             QueryResults::Solutions(solutions) => {
                 let mut result_rows = Vec::new();
-                
+
                 // Collect all solutions synchronously
                 for solution in solutions {
                     let solution = solution?;
                     let mut row = HashMap::new();
-                    
+
                     for (var, term) in solution.iter() {
                         let value = match term {
                             oxigraph::model::Term::NamedNode(node) => {
@@ -212,12 +208,10 @@ impl RdfResolver {
                     }
                     result_rows.push(Value::ObjectValue(row));
                 }
-                
+
                 Ok(Value::ListValue(result_rows))
             }
-            QueryResults::Boolean(b) => {
-                Ok(Value::BooleanValue(b))
-            }
+            QueryResults::Boolean(b) => Ok(Value::BooleanValue(b)),
             QueryResults::Graph(_) => {
                 // For CONSTRUCT/DESCRIBE queries, we could serialize to RDF
                 Ok(Value::StringValue("RDF graph result".to_string()))
@@ -247,22 +241,13 @@ impl FieldResolver for IntrospectionResolver {
             "__schema" => {
                 // Return basic schema information
                 let mut schema_obj = HashMap::new();
-                schema_obj.insert(
-                    "types".to_string(),
-                    Value::ListValue(vec![]),
-                );
+                schema_obj.insert("types".to_string(), Value::ListValue(vec![]));
                 schema_obj.insert(
                     "queryType".to_string(),
                     Value::StringValue("Query".to_string()),
                 );
-                schema_obj.insert(
-                    "mutationType".to_string(),
-                    Value::NullValue,
-                );
-                schema_obj.insert(
-                    "subscriptionType".to_string(),
-                    Value::NullValue,
-                );
+                schema_obj.insert("mutationType".to_string(), Value::NullValue);
+                schema_obj.insert("subscriptionType".to_string(), Value::NullValue);
                 Ok(Value::ObjectValue(schema_obj))
             }
             "__type" => {
@@ -293,7 +278,7 @@ impl QueryResolvers {
             introspection_resolver: Arc::new(IntrospectionResolver::new()),
         }
     }
-    
+
     pub fn new_with_mock(store: Arc<crate::MockStore>) -> Self {
         // For backward compatibility during transition
         let rdf_store = Arc::new(RdfStore::new().expect("Failed to create RDF store"));
@@ -339,15 +324,21 @@ impl ResolverRegistry {
 
     pub fn setup_default_resolvers(&mut self, store: Arc<RdfStore>) {
         let query_resolvers = QueryResolvers::new(store);
-        
+
         // Register the RDF resolver for Query type
         self.register_arc("Query".to_string(), query_resolvers.rdf_resolver());
-        
+
         // Register introspection resolver for meta fields
-        self.register_arc("__Schema".to_string(), query_resolvers.introspection_resolver());
-        self.register_arc("__Type".to_string(), query_resolvers.introspection_resolver());
+        self.register_arc(
+            "__Schema".to_string(),
+            query_resolvers.introspection_resolver(),
+        );
+        self.register_arc(
+            "__Type".to_string(),
+            query_resolvers.introspection_resolver(),
+        );
     }
-    
+
     pub fn setup_default_resolvers_with_mock(&mut self, store: Arc<crate::MockStore>) {
         // For backward compatibility during transition
         let rdf_store = Arc::new(RdfStore::new().expect("Failed to create RDF store"));

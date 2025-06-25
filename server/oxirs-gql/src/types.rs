@@ -402,7 +402,10 @@ impl BuiltinScalars {
 
     pub fn int() -> ScalarType {
         ScalarType::new("Int".to_string())
-            .with_description("The `Int` scalar type represents non-fractional signed whole numeric values.".to_string())
+            .with_description(
+                "The `Int` scalar type represents non-fractional signed whole numeric values."
+                    .to_string(),
+            )
             .with_serializer(|v| match v {
                 Value::IntValue(i) => Ok(Value::IntValue(*i)),
                 _ => Err(anyhow!("Cannot serialize {:?} as Int", v)),
@@ -419,7 +422,10 @@ impl BuiltinScalars {
 
     pub fn float() -> ScalarType {
         ScalarType::new("Float".to_string())
-            .with_description("The `Float` scalar type represents signed double-precision fractional values.".to_string())
+            .with_description(
+                "The `Float` scalar type represents signed double-precision fractional values."
+                    .to_string(),
+            )
             .with_serializer(|v| match v {
                 Value::FloatValue(f) => Ok(Value::FloatValue(*f)),
                 Value::IntValue(i) => Ok(Value::FloatValue(*i as f64)),

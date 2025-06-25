@@ -5,7 +5,7 @@
 use crate::ast::Value;
 use crate::types::ScalarType;
 use anyhow::{anyhow, Result};
-use chrono::{DateTime, Utc, TimeZone};
+use chrono::{DateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
@@ -22,12 +22,12 @@ impl IRI {
         if value.is_empty() {
             return Err(anyhow!("IRI cannot be empty"));
         }
-        
+
         // Check for valid IRI format (basic validation)
         if !value.contains(':') {
             return Err(anyhow!("IRI must contain a scheme"));
         }
-        
+
         Ok(Self { value })
     }
 
@@ -91,13 +91,13 @@ impl Literal {
 impl fmt::Display for Literal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "\"{}\"", self.value)?;
-        
+
         if let Some(ref lang) = self.language {
             write!(f, "@{}", lang)?;
         } else if let Some(ref datatype) = self.datatype {
             write!(f, "^^<{}>", datatype)?;
         }
-        
+
         Ok(())
     }
 }
@@ -111,11 +111,17 @@ pub struct Duration {
 
 impl Duration {
     pub fn new(seconds: i64, nanoseconds: u32) -> Self {
-        Self { seconds, nanoseconds }
+        Self {
+            seconds,
+            nanoseconds,
+        }
     }
 
     pub fn from_seconds(seconds: i64) -> Self {
-        Self { seconds, nanoseconds: 0 }
+        Self {
+            seconds,
+            nanoseconds: 0,
+        }
     }
 
     pub fn from_millis(millis: i64) -> Self {
@@ -149,11 +155,11 @@ impl GeoLocation {
         if latitude < -90.0 || latitude > 90.0 {
             return Err(anyhow!("Latitude must be between -90 and 90 degrees"));
         }
-        
+
         if longitude < -180.0 || longitude > 180.0 {
             return Err(anyhow!("Longitude must be between -180 and 180 degrees"));
         }
-        
+
         Ok(Self {
             latitude,
             longitude,
@@ -203,7 +209,10 @@ impl RdfScalars {
     /// IRI scalar type
     pub fn iri() -> ScalarType {
         ScalarType::new("IRI".to_string())
-            .with_description("The `IRI` scalar type represents an Internationalized Resource Identifier.".to_string())
+            .with_description(
+                "The `IRI` scalar type represents an Internationalized Resource Identifier."
+                    .to_string(),
+            )
             .with_serializer(|v| match v {
                 Value::StringValue(s) => {
                     IRI::new(s.clone())?;
@@ -251,7 +260,10 @@ impl RdfScalars {
     /// DateTime scalar type
     pub fn datetime() -> ScalarType {
         ScalarType::new("DateTime".to_string())
-            .with_description("The `DateTime` scalar type represents date and time with timezone support.".to_string())
+            .with_description(
+                "The `DateTime` scalar type represents date and time with timezone support."
+                    .to_string(),
+            )
             .with_serializer(|v| match v {
                 Value::StringValue(s) => {
                     // Validate datetime format
@@ -320,7 +332,9 @@ impl RdfScalars {
     /// GeoLocation scalar type
     pub fn geolocation() -> ScalarType {
         ScalarType::new("GeoLocation".to_string())
-            .with_description("The `GeoLocation` scalar type represents geographic coordinates.".to_string())
+            .with_description(
+                "The `GeoLocation` scalar type represents geographic coordinates.".to_string(),
+            )
             .with_serializer(|v| match v {
                 Value::ObjectValue(obj) => {
                     // Validate required fields
@@ -354,7 +368,9 @@ impl RdfScalars {
     /// Language-tagged string scalar type
     pub fn lang_string() -> ScalarType {
         ScalarType::new("LangString".to_string())
-            .with_description("The `LangString` scalar type represents a string with a language tag.".to_string())
+            .with_description(
+                "The `LangString` scalar type represents a string with a language tag.".to_string(),
+            )
             .with_serializer(|v| match v {
                 Value::ObjectValue(obj) => {
                     if !obj.contains_key("value") || !obj.contains_key("language") {

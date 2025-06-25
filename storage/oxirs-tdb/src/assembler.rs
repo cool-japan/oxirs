@@ -7,8 +7,8 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::triple_store::TripleKey;
 use crate::nodes::NodeId;
+use crate::triple_store::TripleKey;
 
 /// TDB assembler for low-level storage operations
 #[derive(Debug)]
@@ -46,7 +46,7 @@ impl Assembler {
             stats: AssemblerStats::default(),
         }
     }
-    
+
     /// Assemble TDB operations into bytecode
     pub fn assemble(&mut self, operations: &[Operation]) -> Result<AssemblyResult> {
         let mut bytecode = Vec::new();
@@ -79,7 +79,7 @@ impl Assembler {
 
         Ok(AssemblyResult { bytecode, metadata })
     }
-    
+
     /// Disassemble bytecode to operations
     pub fn disassemble(&mut self, bytecode: &[u8]) -> Result<Vec<Operation>> {
         if bytecode.len() < 16 {
@@ -91,9 +91,8 @@ impl Assembler {
             return Err(anyhow!("Invalid magic number"));
         }
 
-        let operation_count = u32::from_le_bytes([
-            bytecode[4], bytecode[5], bytecode[6], bytecode[7]
-        ]) as usize;
+        let operation_count =
+            u32::from_le_bytes([bytecode[4], bytecode[5], bytecode[6], bytecode[7]]) as usize;
 
         let mut operations = Vec::with_capacity(operation_count);
         let mut offset = 8;
@@ -106,8 +105,14 @@ impl Assembler {
 
         // Verify checksum
         let expected_checksum = u64::from_le_bytes([
-            bytecode[offset], bytecode[offset + 1], bytecode[offset + 2], bytecode[offset + 3],
-            bytecode[offset + 4], bytecode[offset + 5], bytecode[offset + 6], bytecode[offset + 7],
+            bytecode[offset],
+            bytecode[offset + 1],
+            bytecode[offset + 2],
+            bytecode[offset + 3],
+            bytecode[offset + 4],
+            bytecode[offset + 5],
+            bytecode[offset + 6],
+            bytecode[offset + 7],
         ]);
 
         let actual_checksum = self.calculate_checksum(&bytecode[0..offset]);
@@ -167,28 +172,44 @@ impl Assembler {
                 bytecode.extend_from_slice(pattern_bytes);
             }
 
-            Operation::TripleInsert { subject, predicate, object } => {
+            Operation::TripleInsert {
+                subject,
+                predicate,
+                object,
+            } => {
                 bytecode.push(*self.opcodes.get(&OperationType::TripleInsert).unwrap());
                 bytecode.extend_from_slice(&subject.to_le_bytes());
                 bytecode.extend_from_slice(&predicate.to_le_bytes());
                 bytecode.extend_from_slice(&object.to_le_bytes());
             }
 
-            Operation::TripleDelete { subject, predicate, object } => {
+            Operation::TripleDelete {
+                subject,
+                predicate,
+                object,
+            } => {
                 bytecode.push(*self.opcodes.get(&OperationType::TripleDelete).unwrap());
                 bytecode.extend_from_slice(&subject.to_le_bytes());
                 bytecode.extend_from_slice(&predicate.to_le_bytes());
                 bytecode.extend_from_slice(&object.to_le_bytes());
             }
 
-            Operation::TripleQuery { subject, predicate, object } => {
+            Operation::TripleQuery {
+                subject,
+                predicate,
+                object,
+            } => {
                 bytecode.push(*self.opcodes.get(&OperationType::TripleQuery).unwrap());
                 bytecode.extend_from_slice(&subject.unwrap_or(0).to_le_bytes());
                 bytecode.extend_from_slice(&predicate.unwrap_or(0).to_le_bytes());
                 bytecode.extend_from_slice(&object.unwrap_or(0).to_le_bytes());
             }
 
-            Operation::IndexScan { index_type, start_key, end_key } => {
+            Operation::IndexScan {
+                index_type,
+                start_key,
+                end_key,
+            } => {
                 bytecode.push(*self.opcodes.get(&OperationType::IndexScan).unwrap());
                 bytecode.push(*index_type as u8);
                 bytecode.extend_from_slice(&start_key.to_bytes());
@@ -211,7 +232,10 @@ impl Assembler {
                 bytecode.push(*self.opcodes.get(&OperationType::Checkpoint).unwrap());
             }
 
-            Operation::Transaction { transaction_id, operation_type } => {
+            Operation::Transaction {
+                transaction_id,
+                operation_type,
+            } => {
                 bytecode.push(*self.opcodes.get(&OperationType::Transaction).unwrap());
                 bytecode.extend_from_slice(&transaction_id.to_le_bytes());
                 bytecode.push(*operation_type as u8);
@@ -227,7 +251,9 @@ impl Assembler {
         }
 
         let opcode = bytecode[0];
-        let op_type = self.reverse_opcodes.get(&opcode)
+        let op_type = self
+            .reverse_opcodes
+            .get(&opcode)
             .ok_or_else(|| anyhow!("Unknown opcode: {}", opcode))?;
 
         let mut offset = 1;
@@ -235,12 +261,21 @@ impl Assembler {
         let operation = match op_type {
             OperationType::Load => {
                 let address = u64::from_le_bytes([
-                    bytecode[offset], bytecode[offset + 1], bytecode[offset + 2], bytecode[offset + 3],
-                    bytecode[offset + 4], bytecode[offset + 5], bytecode[offset + 6], bytecode[offset + 7],
+                    bytecode[offset],
+                    bytecode[offset + 1],
+                    bytecode[offset + 2],
+                    bytecode[offset + 3],
+                    bytecode[offset + 4],
+                    bytecode[offset + 5],
+                    bytecode[offset + 6],
+                    bytecode[offset + 7],
                 ]);
                 offset += 8;
                 let size = u32::from_le_bytes([
-                    bytecode[offset], bytecode[offset + 1], bytecode[offset + 2], bytecode[offset + 3],
+                    bytecode[offset],
+                    bytecode[offset + 1],
+                    bytecode[offset + 2],
+                    bytecode[offset + 3],
                 ]);
                 offset += 4;
                 Operation::Load { address, size }
@@ -248,12 +283,21 @@ impl Assembler {
 
             OperationType::Store => {
                 let address = u64::from_le_bytes([
-                    bytecode[offset], bytecode[offset + 1], bytecode[offset + 2], bytecode[offset + 3],
-                    bytecode[offset + 4], bytecode[offset + 5], bytecode[offset + 6], bytecode[offset + 7],
+                    bytecode[offset],
+                    bytecode[offset + 1],
+                    bytecode[offset + 2],
+                    bytecode[offset + 3],
+                    bytecode[offset + 4],
+                    bytecode[offset + 5],
+                    bytecode[offset + 6],
+                    bytecode[offset + 7],
                 ]);
                 offset += 8;
                 let data_len = u32::from_le_bytes([
-                    bytecode[offset], bytecode[offset + 1], bytecode[offset + 2], bytecode[offset + 3],
+                    bytecode[offset],
+                    bytecode[offset + 1],
+                    bytecode[offset + 2],
+                    bytecode[offset + 3],
                 ]) as usize;
                 offset += 4;
                 let data = bytecode[offset..offset + data_len].to_vec();
@@ -263,25 +307,50 @@ impl Assembler {
 
             OperationType::TripleInsert => {
                 let subject = u64::from_le_bytes([
-                    bytecode[offset], bytecode[offset + 1], bytecode[offset + 2], bytecode[offset + 3],
-                    bytecode[offset + 4], bytecode[offset + 5], bytecode[offset + 6], bytecode[offset + 7],
+                    bytecode[offset],
+                    bytecode[offset + 1],
+                    bytecode[offset + 2],
+                    bytecode[offset + 3],
+                    bytecode[offset + 4],
+                    bytecode[offset + 5],
+                    bytecode[offset + 6],
+                    bytecode[offset + 7],
                 ]);
                 offset += 8;
                 let predicate = u64::from_le_bytes([
-                    bytecode[offset], bytecode[offset + 1], bytecode[offset + 2], bytecode[offset + 3],
-                    bytecode[offset + 4], bytecode[offset + 5], bytecode[offset + 6], bytecode[offset + 7],
+                    bytecode[offset],
+                    bytecode[offset + 1],
+                    bytecode[offset + 2],
+                    bytecode[offset + 3],
+                    bytecode[offset + 4],
+                    bytecode[offset + 5],
+                    bytecode[offset + 6],
+                    bytecode[offset + 7],
                 ]);
                 offset += 8;
                 let object = u64::from_le_bytes([
-                    bytecode[offset], bytecode[offset + 1], bytecode[offset + 2], bytecode[offset + 3],
-                    bytecode[offset + 4], bytecode[offset + 5], bytecode[offset + 6], bytecode[offset + 7],
+                    bytecode[offset],
+                    bytecode[offset + 1],
+                    bytecode[offset + 2],
+                    bytecode[offset + 3],
+                    bytecode[offset + 4],
+                    bytecode[offset + 5],
+                    bytecode[offset + 6],
+                    bytecode[offset + 7],
                 ]);
                 offset += 8;
-                Operation::TripleInsert { subject, predicate, object }
+                Operation::TripleInsert {
+                    subject,
+                    predicate,
+                    object,
+                }
             }
 
             _ => {
-                return Err(anyhow!("Disassembly not implemented for opcode: {}", opcode));
+                return Err(anyhow!(
+                    "Disassembly not implemented for opcode: {}",
+                    opcode
+                ));
             }
         };
 
@@ -333,13 +402,29 @@ pub enum Operation {
     /// Query operation
     Query { pattern: String },
     /// Triple insert operation
-    TripleInsert { subject: NodeId, predicate: NodeId, object: NodeId },
+    TripleInsert {
+        subject: NodeId,
+        predicate: NodeId,
+        object: NodeId,
+    },
     /// Triple delete operation
-    TripleDelete { subject: NodeId, predicate: NodeId, object: NodeId },
+    TripleDelete {
+        subject: NodeId,
+        predicate: NodeId,
+        object: NodeId,
+    },
     /// Triple query operation
-    TripleQuery { subject: Option<NodeId>, predicate: Option<NodeId>, object: Option<NodeId> },
+    TripleQuery {
+        subject: Option<NodeId>,
+        predicate: Option<NodeId>,
+        object: Option<NodeId>,
+    },
     /// Index scan operation
-    IndexScan { index_type: IndexScanType, start_key: TripleKey, end_key: TripleKey },
+    IndexScan {
+        index_type: IndexScanType,
+        start_key: TripleKey,
+        end_key: TripleKey,
+    },
     /// Page read operation
     PageRead { page_id: u64 },
     /// Page write operation
@@ -347,7 +432,10 @@ pub enum Operation {
     /// Checkpoint operation
     Checkpoint,
     /// Transaction operation
-    Transaction { transaction_id: u64, operation_type: TransactionOperationType },
+    Transaction {
+        transaction_id: u64,
+        operation_type: TransactionOperationType,
+    },
 }
 
 /// Index scan types
@@ -402,17 +490,24 @@ mod tests {
     #[test]
     fn test_assembler_basic_operations() {
         let mut assembler = Assembler::new();
-        
+
         let operations = vec![
-            Operation::Load { address: 0x1000, size: 4096 },
-            Operation::TripleInsert { subject: 1, predicate: 2, object: 3 },
+            Operation::Load {
+                address: 0x1000,
+                size: 4096,
+            },
+            Operation::TripleInsert {
+                subject: 1,
+                predicate: 2,
+                object: 3,
+            },
             Operation::Checkpoint,
         ];
-        
+
         let result = assembler.assemble(&operations).unwrap();
         assert!(!result.bytecode.is_empty());
         assert_eq!(result.metadata.operations_count, 3);
-        
+
         let disassembled = assembler.disassemble(&result.bytecode).unwrap();
         assert_eq!(disassembled.len(), 3);
     }
@@ -420,14 +515,14 @@ mod tests {
     #[test]
     fn test_assembler_checksum() {
         let mut assembler = Assembler::new();
-        
+
         let operations = vec![Operation::Checkpoint];
         let result = assembler.assemble(&operations).unwrap();
-        
+
         // Corrupt the bytecode
         let mut corrupted = result.bytecode.clone();
         corrupted[8] = corrupted[8].wrapping_add(1);
-        
+
         // Should fail checksum validation
         assert!(assembler.disassemble(&corrupted).is_err());
     }

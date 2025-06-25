@@ -8,46 +8,44 @@
 //! 5. Integrate with other OxiRS components
 
 use anyhow::Result;
+use oxirs_core::{NamedNode, Triple};
 use oxirs_embed::{
-    ModelConfig, EmbeddingModel,
-    models::{TransE, DistMult, ComplEx, RotatE},
-    training::{AdvancedTrainer, TrainingConfig, OptimizerType},
-    evaluation::{EvaluationSuite, EvaluationConfig},
-    inference::{InferenceEngine, InferenceConfig},
+    evaluation::{EvaluationConfig, EvaluationSuite},
+    inference::{InferenceConfig, InferenceEngine},
     integration::{EmbeddingIntegrationService, IntegrationConfig},
-    utils::{data_loader, dataset_splitter, compute_dataset_statistics},
+    models::{ComplEx, DistMult, RotatE, TransE},
+    training::{AdvancedTrainer, OptimizerType, TrainingConfig},
+    utils::{compute_dataset_statistics, data_loader, dataset_splitter},
+    EmbeddingModel, ModelConfig,
 };
-use oxirs_core::{Triple, NamedNode};
 use std::time::Instant;
 use tracing::{info, Level};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize logging
-    tracing_subscriber::fmt()
-        .with_max_level(Level::INFO)
-        .init();
-    
+    tracing_subscriber::fmt().with_max_level(Level::INFO).init();
+
     info!("Starting OxiRS Embed basic usage example");
-    
+
     // Example 1: Basic TransE model training
     basic_transe_example().await?;
-    
+
     // Example 2: Model comparison
     model_comparison_example().await?;
-    
+
     // Example 3: Advanced training with optimization
     advanced_training_example().await?;
-    
+
     // Example 4: Inference and similarity search
     inference_example().await?;
-    
+
     // Example 5: Integration with OxiRS ecosystem
     integration_example().await?;
-    
+
     // Example 6: Data loading and evaluation
     evaluation_example().await?;
-    
+
     info!("All examples completed successfully!");
     Ok(())
 }
@@ -55,7 +53,7 @@ async fn main() -> Result<()> {
 /// Example 1: Basic TransE model training
 async fn basic_transe_example() -> Result<()> {
     info!("=== Example 1: Basic TransE Model ===");
-    
+
     // Create model configuration
     let config = ModelConfig::default()
         .with_dimensions(50)
@@ -63,71 +61,75 @@ async fn basic_transe_example() -> Result<()> {
         .with_max_epochs(100)
         .with_batch_size(32)
         .with_seed(42);
-    
+
     // Create TransE model
     let mut model = TransE::new(config);
-    
+
     // Add some sample triples
     let alice = NamedNode::new("http://example.org/alice")?;
     let bob = NamedNode::new("http://example.org/bob")?;
     let charlie = NamedNode::new("http://example.org/charlie")?;
     let knows = NamedNode::new("http://example.org/knows")?;
     let likes = NamedNode::new("http://example.org/likes")?;
-    
+
     model.add_triple(Triple::new(alice.clone(), knows.clone(), bob.clone()))?;
     model.add_triple(Triple::new(bob.clone(), knows.clone(), charlie.clone()))?;
     model.add_triple(Triple::new(alice.clone(), likes.clone(), charlie.clone()))?;
     model.add_triple(Triple::new(charlie.clone(), likes.clone(), alice.clone()))?;
-    
-    info!("Added {} triples to the model", model.get_stats().num_triples);
-    
+
+    info!(
+        "Added {} triples to the model",
+        model.get_stats().num_triples
+    );
+
     // Train the model
     let start_time = Instant::now();
     let training_stats = model.train(Some(50)).await?;
     let training_time = start_time.elapsed();
-    
+
     info!("Training completed in {:.2}s", training_time.as_secs_f64());
     info!("Final loss: {:.6}", training_stats.final_loss);
     info!("Epochs completed: {}", training_stats.epochs_completed);
-    
+
     // Get embeddings
     let alice_embedding = model.get_entity_embedding("http://example.org/alice")?;
     let knows_embedding = model.get_relation_embedding("http://example.org/knows")?;
-    
+
     info!("Alice embedding dimensions: {}", alice_embedding.dimensions);
     info!("Knows embedding dimensions: {}", knows_embedding.dimensions);
-    
+
     // Score some triples
     let score = model.score_triple(
         "http://example.org/alice",
-        "http://example.org/knows", 
-        "http://example.org/bob"
+        "http://example.org/knows",
+        "http://example.org/bob",
     )?;
     info!("Score for (alice, knows, bob): {:.6}", score);
-    
+
     // Make predictions
-    let predictions = model.predict_objects("http://example.org/alice", "http://example.org/knows", 5)?;
+    let predictions =
+        model.predict_objects("http://example.org/alice", "http://example.org/knows", 5)?;
     info!("Top predictions for (alice, knows, ?): {:?}", predictions);
-    
+
     Ok(())
 }
 
 /// Example 2: Comparing different embedding models
 async fn model_comparison_example() -> Result<()> {
     info!("=== Example 2: Model Comparison ===");
-    
+
     // Common configuration for all models
     let base_config = ModelConfig::default()
         .with_dimensions(32)
         .with_max_epochs(20)
         .with_seed(42);
-    
+
     // Create different models
     let mut transe = TransE::new(base_config.clone());
     let mut distmult = DistMult::new(base_config.clone());
     let mut complex = ComplEx::new(base_config.clone());
     let mut rotate = RotatE::new(base_config);
-    
+
     // Sample data
     let triples = vec![
         ("alice", "knows", "bob"),
@@ -136,20 +138,20 @@ async fn model_comparison_example() -> Result<()> {
         ("charlie", "likes", "alice"),
         ("bob", "friendOf", "alice"),
     ];
-    
+
     // Add triples to all models
     for (s, p, o) in &triples {
         let subject = NamedNode::new(&format!("http://example.org/{}", s))?;
         let predicate = NamedNode::new(&format!("http://example.org/{}", p))?;
         let object = NamedNode::new(&format!("http://example.org/{}", o))?;
         let triple = Triple::new(subject, predicate, object);
-        
+
         transe.add_triple(triple.clone())?;
         distmult.add_triple(triple.clone())?;
         complex.add_triple(triple.clone())?;
         rotate.add_triple(triple)?;
     }
-    
+
     // Train all models and compare
     let models: Vec<(&str, &mut dyn EmbeddingModel)> = vec![
         ("TransE", &mut transe),
@@ -157,46 +159,48 @@ async fn model_comparison_example() -> Result<()> {
         ("ComplEx", &mut complex),
         ("RotatE", &mut rotate),
     ];
-    
+
     for (name, model) in models {
         let start_time = Instant::now();
         let stats = model.train(Some(10)).await?;
         let training_time = start_time.elapsed();
-        
-        info!("{} - Training time: {:.2}s, Final loss: {:.6}", 
-              name, training_time.as_secs_f64(), stats.final_loss);
+
+        info!(
+            "{} - Training time: {:.2}s, Final loss: {:.6}",
+            name,
+            training_time.as_secs_f64(),
+            stats.final_loss
+        );
     }
-    
+
     Ok(())
 }
 
 /// Example 3: Advanced training with optimizers
 async fn advanced_training_example() -> Result<()> {
     info!("=== Example 3: Advanced Training ===");
-    
-    let config = ModelConfig::default()
-        .with_dimensions(64)
-        .with_seed(42);
-    
+
+    let config = ModelConfig::default().with_dimensions(64).with_seed(42);
+
     let mut model = TransE::new(config);
-    
+
     // Add more complex dataset
     let entities = ["alice", "bob", "charlie", "david", "eve"];
     let relations = ["knows", "likes", "friendOf", "worksWith", "livesIn"];
-    
+
     // Generate some synthetic data
     for i in 0..20 {
         let s = entities[i % entities.len()];
         let p = relations[i % relations.len()];
         let o = entities[(i + 1) % entities.len()];
-        
+
         let subject = NamedNode::new(&format!("http://example.org/{}", s))?;
         let predicate = NamedNode::new(&format!("http://example.org/{}", p))?;
         let object = NamedNode::new(&format!("http://example.org/{}", o))?;
-        
+
         model.add_triple(Triple::new(subject, predicate, object))?;
     }
-    
+
     // Configure advanced training
     let training_config = TrainingConfig {
         max_epochs: 100,
@@ -209,58 +213,55 @@ async fn advanced_training_example() -> Result<()> {
         min_delta: 1e-6,
         ..Default::default()
     };
-    
-    let mut trainer = AdvancedTrainer::new(training_config)
-        .with_optimizer(OptimizerType::Adam {
-            beta1: 0.9,
-            beta2: 0.999,
-            epsilon: 1e-8,
-        });
-    
+
+    let mut trainer = AdvancedTrainer::new(training_config).with_optimizer(OptimizerType::Adam {
+        beta1: 0.9,
+        beta2: 0.999,
+        epsilon: 1e-8,
+    });
+
     info!("Starting advanced training with Adam optimizer");
     let stats = trainer.train(&mut model).await?;
-    
+
     info!("Advanced training completed:");
     info!("  Epochs: {}", stats.epochs_completed);
     info!("  Final loss: {:.6}", stats.final_loss);
     info!("  Training time: {:.2}s", stats.training_time_seconds);
     info!("  Converged: {}", stats.convergence_achieved);
-    
+
     Ok(())
 }
 
 /// Example 4: High-performance inference
 async fn inference_example() -> Result<()> {
     info!("=== Example 4: Inference and Similarity ===");
-    
-    let config = ModelConfig::default()
-        .with_dimensions(32)
-        .with_seed(42);
-    
+
+    let config = ModelConfig::default().with_dimensions(32).with_seed(42);
+
     let mut model = TransE::new(config);
-    
+
     // Add training data
     let knowledge_base = vec![
         ("tokyo", "locatedIn", "japan"),
-        ("osaka", "locatedIn", "japan"), 
+        ("osaka", "locatedIn", "japan"),
         ("paris", "locatedIn", "france"),
         ("london", "locatedIn", "uk"),
         ("japan", "hasCapital", "tokyo"),
         ("france", "hasCapital", "paris"),
         ("uk", "hasCapital", "london"),
     ];
-    
+
     for (s, p, o) in knowledge_base {
         let subject = NamedNode::new(&format!("http://example.org/{}", s))?;
         let predicate = NamedNode::new(&format!("http://example.org/{}", p))?;
         let object = NamedNode::new(&format!("http://example.org/{}", o))?;
-        
+
         model.add_triple(Triple::new(subject, predicate, object))?;
     }
-    
+
     // Train the model
     model.train(Some(50)).await?;
-    
+
     // Create inference engine with caching
     let inference_config = InferenceConfig {
         cache_size: 1000,
@@ -268,46 +269,58 @@ async fn inference_example() -> Result<()> {
         batch_size: 10,
         ..Default::default()
     };
-    
+
     let engine = InferenceEngine::new(Box::new(model), inference_config);
-    
+
     // Warm up cache
     engine.warm_up_cache().await?;
-    
+
     // Perform cached inference
-    let tokyo_embedding = engine.get_entity_embedding("http://example.org/tokyo").await?;
-    let osaka_embedding = engine.get_entity_embedding("http://example.org/osaka").await?;
-    
-    info!("Tokyo embedding retrieved (dimensions: {})", tokyo_embedding.dimensions);
-    info!("Osaka embedding retrieved (dimensions: {})", osaka_embedding.dimensions);
-    
+    let tokyo_embedding = engine
+        .get_entity_embedding("http://example.org/tokyo")
+        .await?;
+    let osaka_embedding = engine
+        .get_entity_embedding("http://example.org/osaka")
+        .await?;
+
+    info!(
+        "Tokyo embedding retrieved (dimensions: {})",
+        tokyo_embedding.dimensions
+    );
+    info!(
+        "Osaka embedding retrieved (dimensions: {})",
+        osaka_embedding.dimensions
+    );
+
     // Score triples with caching
-    let score = engine.score_triple(
-        "http://example.org/tokyo",
-        "http://example.org/locatedIn",
-        "http://example.org/japan"
-    ).await?;
-    
+    let score = engine
+        .score_triple(
+            "http://example.org/tokyo",
+            "http://example.org/locatedIn",
+            "http://example.org/japan",
+        )
+        .await?;
+
     info!("Score for (tokyo, locatedIn, japan): {:.6}", score);
-    
+
     // Get cache statistics
     let cache_stats = engine.cache_stats()?;
-    info!("Cache stats: entity cache size: {}, relation cache size: {}", 
-          cache_stats.entity_cache_size, cache_stats.relation_cache_size);
-    
+    info!(
+        "Cache stats: entity cache size: {}, relation cache size: {}",
+        cache_stats.entity_cache_size, cache_stats.relation_cache_size
+    );
+
     Ok(())
 }
 
 /// Example 5: Integration with OxiRS ecosystem
 async fn integration_example() -> Result<()> {
     info!("=== Example 5: OxiRS Integration ===");
-    
-    let config = ModelConfig::default()
-        .with_dimensions(64)
-        .with_seed(42);
-    
+
+    let config = ModelConfig::default().with_dimensions(64).with_seed(42);
+
     let model = TransE::new(config);
-    
+
     // Create integration service
     let integration_config = IntegrationConfig {
         auto_embed_new_triples: true,
@@ -315,15 +328,12 @@ async fn integration_example() -> Result<()> {
         embedding_cache_size: 1000,
         ..Default::default()
     };
-    
-    let mut service = EmbeddingIntegrationService::new(
-        Box::new(model),
-        integration_config
-    );
-    
+
+    let mut service = EmbeddingIntegrationService::new(Box::new(model), integration_config);
+
     // Start the service
     service.start().await?;
-    
+
     // Process some triples
     let triples = vec![
         ("company_a", "hasEmployee", "person_1"),
@@ -331,46 +341,47 @@ async fn integration_example() -> Result<()> {
         ("department_ai", "partOf", "company_a"),
         ("person_1", "hasSkill", "machine_learning"),
     ];
-    
+
     let mut triple_objects = Vec::new();
     for (s, p, o) in triples {
         let subject = NamedNode::new(&format!("http://example.org/{}", s))?;
         let predicate = NamedNode::new(&format!("http://example.org/{}", p))?;
         let object = NamedNode::new(&format!("http://example.org/{}", o))?;
-        
+
         let triple = Triple::new(subject, predicate, object);
         triple_objects.push(triple);
     }
-    
+
     // Process triples in batch
     service.process_triple_batch(&triple_objects).await?;
-    
+
     // Train the integrated model
     service.train_model(Some(30)).await?;
-    
+
     // Find similar entities
-    let similar_entities = service.find_similar_entities(
-        "http://example.org/person_1", 
-        3
-    ).await?;
-    
+    let similar_entities = service
+        .find_similar_entities("http://example.org/person_1", 3)
+        .await?;
+
     info!("Entities similar to person_1: {:?}", similar_entities);
-    
+
     // Get model statistics
     let stats = service.get_model_stats().await?;
-    info!("Model stats: {} entities, {} relations, {} triples",
-          stats.num_entities, stats.num_relations, stats.num_triples);
-    
+    info!(
+        "Model stats: {} entities, {} relations, {} triples",
+        stats.num_entities, stats.num_relations, stats.num_triples
+    );
+
     // Stop the service
     service.stop().await;
-    
+
     Ok(())
 }
 
 /// Example 6: Data loading and evaluation
 async fn evaluation_example() -> Result<()> {
     info!("=== Example 6: Evaluation ===");
-    
+
     // Create synthetic dataset
     let train_triples = vec![
         ("person1", "knows", "person2"),
@@ -380,12 +391,12 @@ async fn evaluation_example() -> Result<()> {
         ("activity1", "typeOf", "sport"),
         ("activity2", "typeOf", "art"),
     ];
-    
+
     let test_triples = vec![
         ("person1", "knows", "person3"),
         ("person2", "likes", "activity1"),
     ];
-    
+
     // Compute dataset statistics
     let stats = compute_dataset_statistics(&train_triples);
     info!("Dataset statistics:");
@@ -394,63 +405,72 @@ async fn evaluation_example() -> Result<()> {
     info!("  Relations: {}", stats.num_relations);
     info!("  Average degree: {:.2}", stats.avg_degree);
     info!("  Density: {:.6}", stats.density);
-    
+
     // Create and train model
     let config = ModelConfig::default()
         .with_dimensions(32)
         .with_max_epochs(50)
         .with_seed(42);
-    
+
     let mut model = TransE::new(config);
-    
+
     // Add training data
     for (s, p, o) in train_triples {
         let subject = NamedNode::new(&format!("http://example.org/{}", s))?;
         let predicate = NamedNode::new(&format!("http://example.org/{}", p))?;
         let object = NamedNode::new(&format!("http://example.org/{}", o))?;
-        
+
         model.add_triple(Triple::new(subject, predicate, object))?;
     }
-    
+
     model.train(Some(30)).await?;
-    
+
     // Create evaluation suite
     let test_triples_formatted: Vec<(String, String, String)> = test_triples
         .into_iter()
-        .map(|(s, p, o)| (
-            format!("http://example.org/{}", s),
-            format!("http://example.org/{}", p),
-            format!("http://example.org/{}", o)
-        ))
+        .map(|(s, p, o)| {
+            (
+                format!("http://example.org/{}", s),
+                format!("http://example.org/{}", p),
+                format!("http://example.org/{}", o),
+            )
+        })
         .collect();
-    
+
     let eval_config = EvaluationConfig {
         k_values: vec![1, 3, 5],
         use_filtered_ranking: true,
         parallel_evaluation: true,
         ..Default::default()
     };
-    
+
     let mut eval_suite = EvaluationSuite::new(
         test_triples_formatted,
-        vec![] // No validation triples for this example
-    ).with_config(eval_config);
-    
+        vec![], // No validation triples for this example
+    )
+    .with_config(eval_config);
+
     // Generate negative samples
     eval_suite.generate_negative_samples(&model)?;
-    
+
     // Run evaluation
     let eval_results = eval_suite.evaluate(&model)?;
-    
+
     info!("Evaluation results:");
     info!("  Mean Rank: {:.2}", eval_results.mean_rank);
-    info!("  Mean Reciprocal Rank: {:.4}", eval_results.mean_reciprocal_rank);
-    
+    info!(
+        "  Mean Reciprocal Rank: {:.4}",
+        eval_results.mean_reciprocal_rank
+    );
+
     for (k, hits) in eval_results.hits_at_k {
         info!("  Hits@{}: {:.4}", k, hits);
     }
-    
-    info!("  Evaluation time: {:.2}s", eval_results.evaluation_time_seconds);
-    
+
+    info!(
+        "  Evaluation time: {:.2}s",
+        eval_results.evaluation_time_seconds
+    );
+
     Ok(())
 }

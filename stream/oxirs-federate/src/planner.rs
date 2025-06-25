@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::Duration;
 use tracing::{debug, info, warn};
 
-use crate::{FederatedService, ServiceRegistry, ServiceCapability};
+use crate::{FederatedService, ServiceCapability, ServiceRegistry};
 
 /// Query planner for federated queries
 #[derive(Debug)]
@@ -42,7 +42,7 @@ impl QueryPlanner {
         let complexity = self.calculate_complexity(&patterns, &filters, &service_clauses);
 
         let estimated_cost = self.estimate_query_cost(&patterns, &service_clauses);
-        
+
         Ok(QueryInfo {
             query_type,
             original_query: query.to_string(),
@@ -56,13 +56,17 @@ impl QueryPlanner {
     }
 
     /// Analyze a GraphQL query and extract planning information
-    pub async fn analyze_graphql(&self, query: &str, variables: Option<&serde_json::Value>) -> Result<QueryInfo> {
+    pub async fn analyze_graphql(
+        &self,
+        query: &str,
+        variables: Option<&serde_json::Value>,
+    ) -> Result<QueryInfo> {
         debug!("Analyzing GraphQL query: {}", query);
 
         let query_type = QueryType::GraphQLQuery;
         let selections = self.extract_graphql_selections(query)?;
         let _graphql_variables = variables.cloned().unwrap_or(serde_json::Value::Null);
-        
+
         let patterns = self.graphql_to_patterns(&selections)?;
         let complexity = self.calculate_graphql_complexity(&selections);
 
@@ -79,8 +83,15 @@ impl QueryPlanner {
     }
 
     /// Create an execution plan for a SPARQL query
-    pub async fn plan_sparql(&self, query_info: &QueryInfo, registry: &ServiceRegistry) -> Result<ExecutionPlan> {
-        info!("Planning SPARQL execution for {} patterns", query_info.patterns.len());
+    pub async fn plan_sparql(
+        &self,
+        query_info: &QueryInfo,
+        registry: &ServiceRegistry,
+    ) -> Result<ExecutionPlan> {
+        info!(
+            "Planning SPARQL execution for {} patterns",
+            query_info.patterns.len()
+        );
 
         let mut plan = ExecutionPlan {
             query_id: uuid::Uuid::new_v4().to_string(),
@@ -98,13 +109,18 @@ impl QueryPlanner {
         }
 
         // Group remaining patterns by compatible services
-        let remaining_patterns: Vec<_> = query_info.patterns.iter()
-            .filter(|pattern| !self.is_pattern_in_service_clause(pattern, &query_info.service_clauses))
+        let remaining_patterns: Vec<_> = query_info
+            .patterns
+            .iter()
+            .filter(|pattern| {
+                !self.is_pattern_in_service_clause(pattern, &query_info.service_clauses)
+            })
             .collect();
 
         if !remaining_patterns.is_empty() {
-            let service_assignments = self.assign_patterns_to_services(&remaining_patterns, registry)?;
-            
+            let service_assignments =
+                self.assign_patterns_to_services(&remaining_patterns, registry)?;
+
             for (service_id, patterns) in service_assignments {
                 let step = ExecutionStep {
                     step_id: uuid::Uuid::new_v4().to_string(),
@@ -140,7 +156,11 @@ impl QueryPlanner {
     }
 
     /// Create an execution plan for a GraphQL query
-    pub async fn plan_graphql(&self, query_info: &QueryInfo, registry: &ServiceRegistry) -> Result<ExecutionPlan> {
+    pub async fn plan_graphql(
+        &self,
+        query_info: &QueryInfo,
+        registry: &ServiceRegistry,
+    ) -> Result<ExecutionPlan> {
         info!("Planning GraphQL execution");
 
         let mut plan = ExecutionPlan {
@@ -152,8 +172,8 @@ impl QueryPlanner {
             dependencies: HashMap::new(),
         };
 
-        let graphql_services: Vec<_> = registry
-            .get_services_with_capability(&ServiceCapability::GraphQLQuery);
+        let graphql_services: Vec<_> =
+            registry.get_services_with_capability(&ServiceCapability::GraphQLQuery);
 
         if graphql_services.is_empty() {
             return Err(anyhow!("No GraphQL services available for federation"));
@@ -193,7 +213,7 @@ impl QueryPlanner {
 
     fn detect_query_type(&self, query: &str) -> QueryType {
         let query_upper = query.to_uppercase();
-        
+
         if query_upper.trim_start().starts_with("SELECT") {
             QueryType::SparqlSelect
         } else if query_upper.trim_start().starts_with("CONSTRUCT") {
@@ -202,7 +222,9 @@ impl QueryPlanner {
             QueryType::SparqlAsk
         } else if query_upper.trim_start().starts_with("DESCRIBE") {
             QueryType::SparqlDescribe
-        } else if query_upper.trim_start().starts_with("INSERT") || query_upper.trim_start().starts_with("DELETE") {
+        } else if query_upper.trim_start().starts_with("INSERT")
+            || query_upper.trim_start().starts_with("DELETE")
+        {
             QueryType::SparqlUpdate
         } else if query_upper.trim_start().starts_with("QUERY") || query_upper.contains("{") {
             QueryType::GraphQLQuery
@@ -213,20 +235,20 @@ impl QueryPlanner {
 
     fn extract_triple_patterns(&self, query: &str) -> Result<Vec<TriplePattern>> {
         let mut patterns = Vec::new();
-        
+
         if let Some(where_start) = query.to_uppercase().find("WHERE") {
             let where_clause = &query[where_start + 5..];
-            
+
             if let Some(open_brace) = where_clause.find('{') {
                 if let Some(close_brace) = where_clause.rfind('}') {
                     let pattern_content = &where_clause[open_brace + 1..close_brace];
-                    
+
                     for line in pattern_content.split('.') {
                         let line = line.trim();
                         if line.is_empty() || line.starts_with("#") {
                             continue;
                         }
-                        
+
                         let parts: Vec<&str> = line.split_whitespace().collect();
                         if parts.len() >= 3 {
                             patterns.push(TriplePattern {
@@ -240,26 +262,31 @@ impl QueryPlanner {
                 }
             }
         }
-        
+
         Ok(patterns)
     }
 
     fn extract_service_clauses(&self, query: &str) -> Result<Vec<ServiceClause>> {
         let mut services = Vec::new();
         let query_upper = query.to_uppercase();
-        
+
         let mut start_pos = 0;
         while let Some(service_pos) = query_upper[start_pos..].find("SERVICE") {
             let actual_pos = start_pos + service_pos;
-            
+
             if let Some(url_start) = query[actual_pos..].find('<') {
                 if let Some(url_end) = query[actual_pos + url_start..].find('>') {
-                    let service_url = query[actual_pos + url_start + 1..actual_pos + url_start + url_end].to_string();
-                    
+                    let service_url = query
+                        [actual_pos + url_start + 1..actual_pos + url_start + url_end]
+                        .to_string();
+
                     if let Some(brace_start) = query[actual_pos..].find('{') {
                         if let Some(brace_end) = query[actual_pos + brace_start..].find('}') {
-                            let subquery = query[actual_pos + brace_start + 1..actual_pos + brace_start + brace_end].trim().to_string();
-                            
+                            let subquery = query[actual_pos + brace_start + 1
+                                ..actual_pos + brace_start + brace_end]
+                                .trim()
+                                .to_string();
+
                             services.push(ServiceClause {
                                 service_url,
                                 subquery,
@@ -269,25 +296,25 @@ impl QueryPlanner {
                     }
                 }
             }
-            
+
             start_pos = actual_pos + 7;
         }
-        
+
         Ok(services)
     }
 
     fn extract_filters(&self, query: &str) -> Result<Vec<FilterExpression>> {
         let mut filters = Vec::new();
         let query_upper = query.to_uppercase();
-        
+
         let mut start_pos = 0;
         while let Some(filter_pos) = query_upper[start_pos..].find("FILTER") {
             let actual_pos = start_pos + filter_pos;
-            
+
             if let Some(paren_start) = query[actual_pos..].find('(') {
                 let mut paren_count = 0;
                 let mut end_pos = actual_pos + paren_start;
-                
+
                 for (i, char) in query[actual_pos + paren_start..].char_indices() {
                     if char == '(' {
                         paren_count += 1;
@@ -299,58 +326,60 @@ impl QueryPlanner {
                         }
                     }
                 }
-                
-                let expression = query[actual_pos + paren_start + 1..end_pos - 1].trim().to_string();
+
+                let expression = query[actual_pos + paren_start + 1..end_pos - 1]
+                    .trim()
+                    .to_string();
                 let variables = self.extract_variables_from_text(&expression);
-                
+
                 filters.push(FilterExpression {
                     expression,
                     variables,
                 });
             }
-            
+
             start_pos = actual_pos + 6;
         }
-        
+
         Ok(filters)
     }
 
     fn extract_variables(&self, query: &str) -> Result<HashSet<String>> {
         let mut variables = HashSet::new();
-        
+
         if let Some(select_start) = query.to_uppercase().find("SELECT") {
             if let Some(where_start) = query.to_uppercase().find("WHERE") {
                 let select_clause = &query[select_start + 6..where_start];
-                
+
                 for word in select_clause.split_whitespace() {
                     if word.starts_with('?') {
                         variables.insert(word.to_string());
                     }
                 }
-                
+
                 if select_clause.trim() == "*" {
                     variables.extend(self.extract_variables_from_text(&query[where_start..]));
                 }
             }
         }
-        
+
         if let Some(where_start) = query.to_uppercase().find("WHERE") {
             variables.extend(self.extract_variables_from_text(&query[where_start..]));
         }
-        
+
         Ok(variables)
     }
-    
+
     fn extract_variables_from_text(&self, text: &str) -> HashSet<String> {
         let mut variables = HashSet::new();
-        
+
         for word in text.split_whitespace() {
             if word.starts_with('?') {
                 let clean_var = word.trim_end_matches(&['.', ';', '}', ')', ','][..]);
                 variables.insert(clean_var.to_string());
             }
         }
-        
+
         variables
     }
 
@@ -366,9 +395,14 @@ impl QueryPlanner {
         Ok(Vec::new())
     }
 
-    fn calculate_complexity(&self, patterns: &[TriplePattern], filters: &[FilterExpression], services: &[ServiceClause]) -> QueryComplexity {
+    fn calculate_complexity(
+        &self,
+        patterns: &[TriplePattern],
+        filters: &[FilterExpression],
+        services: &[ServiceClause],
+    ) -> QueryComplexity {
         let base_complexity = patterns.len() + filters.len() * 2 + services.len() * 3;
-        
+
         if base_complexity < 5 {
             QueryComplexity::Low
         } else if base_complexity < 15 {
@@ -392,7 +426,11 @@ impl QueryPlanner {
         100
     }
 
-    fn create_service_step(&self, service_clause: &ServiceClause, registry: &ServiceRegistry) -> Result<ExecutionStep> {
+    fn create_service_step(
+        &self,
+        service_clause: &ServiceClause,
+        registry: &ServiceRegistry,
+    ) -> Result<ExecutionStep> {
         let service = registry
             .get_all_services()
             .find(|s| s.endpoint == service_clause.service_url)
@@ -410,11 +448,15 @@ impl QueryPlanner {
         })
     }
 
-    fn assign_patterns_to_services(&self, patterns: &[&TriplePattern], registry: &ServiceRegistry) -> Result<HashMap<String, Vec<TriplePattern>>> {
+    fn assign_patterns_to_services(
+        &self,
+        patterns: &[&TriplePattern],
+        registry: &ServiceRegistry,
+    ) -> Result<HashMap<String, Vec<TriplePattern>>> {
         let mut assignments = HashMap::new();
-        
-        let sparql_services: Vec<_> = registry
-            .get_services_with_capability(&ServiceCapability::SparqlQuery);
+
+        let sparql_services: Vec<_> =
+            registry.get_services_with_capability(&ServiceCapability::SparqlQuery);
 
         if sparql_services.is_empty() {
             return Err(anyhow!("No SPARQL services available"));
@@ -430,22 +472,27 @@ impl QueryPlanner {
         Ok(assignments)
     }
 
-    fn is_pattern_in_service_clause(&self, _pattern: &TriplePattern, _service_clauses: &[ServiceClause]) -> bool {
+    fn is_pattern_in_service_clause(
+        &self,
+        _pattern: &TriplePattern,
+        _service_clauses: &[ServiceClause],
+    ) -> bool {
         false
     }
 
     fn build_sparql_fragment(&self, patterns: &[TriplePattern]) -> String {
-        let pattern_strings: Vec<String> = patterns
-            .iter()
-            .map(|p| p.pattern_string.clone())
-            .collect();
-        
-        format!("SELECT * WHERE {{\n  {}\n}}", pattern_strings.join(" .\n  "))
+        let pattern_strings: Vec<String> =
+            patterns.iter().map(|p| p.pattern_string.clone()).collect();
+
+        format!(
+            "SELECT * WHERE {{\n  {}\n}}",
+            pattern_strings.join(" .\n  ")
+        )
     }
 
     fn extract_pattern_variables(&self, patterns: &[TriplePattern]) -> HashSet<String> {
         let mut variables = HashSet::new();
-        
+
         for pattern in patterns {
             if pattern.subject.starts_with('?') {
                 variables.insert(pattern.subject.clone());
@@ -468,7 +515,10 @@ impl QueryPlanner {
         for step in &mut plan.steps {
             if step.dependencies.is_empty() && step.service_id.is_some() {
                 step.parallel_group = Some(group_id);
-                parallel_groups.entry(group_id).or_insert_with(Vec::new).push(step.step_id.clone());
+                parallel_groups
+                    .entry(group_id)
+                    .or_insert_with(Vec::new)
+                    .push(step.step_id.clone());
             }
         }
 
@@ -649,7 +699,7 @@ impl std::fmt::Display for StepType {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ServiceRegistry, FederatedService};
+    use crate::{FederatedService, ServiceRegistry};
 
     #[tokio::test]
     async fn test_query_planner_creation() {
@@ -661,10 +711,10 @@ mod tests {
     async fn test_sparql_query_analysis() {
         let planner = QueryPlanner::new();
         let query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
-        
+
         let result = planner.analyze_sparql(query).await;
         assert!(result.is_ok());
-        
+
         let query_info = result.unwrap();
         assert_eq!(query_info.query_type, QueryType::SparqlSelect);
         assert!(!query_info.variables.is_empty());
@@ -673,18 +723,30 @@ mod tests {
     #[tokio::test]
     async fn test_query_type_detection() {
         let planner = QueryPlanner::new();
-        
-        assert_eq!(planner.detect_query_type("SELECT * WHERE { ?s ?p ?o }"), QueryType::SparqlSelect);
-        assert_eq!(planner.detect_query_type("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }"), QueryType::SparqlConstruct);
-        assert_eq!(planner.detect_query_type("ASK { ?s ?p ?o }"), QueryType::SparqlAsk);
-        assert_eq!(planner.detect_query_type("DESCRIBE <http://example.org>"), QueryType::SparqlDescribe);
+
+        assert_eq!(
+            planner.detect_query_type("SELECT * WHERE { ?s ?p ?o }"),
+            QueryType::SparqlSelect
+        );
+        assert_eq!(
+            planner.detect_query_type("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }"),
+            QueryType::SparqlConstruct
+        );
+        assert_eq!(
+            planner.detect_query_type("ASK { ?s ?p ?o }"),
+            QueryType::SparqlAsk
+        );
+        assert_eq!(
+            planner.detect_query_type("DESCRIBE <http://example.org>"),
+            QueryType::SparqlDescribe
+        );
     }
 
     #[tokio::test]
     async fn test_service_clause_extraction() {
         let planner = QueryPlanner::new();
         let query = "SELECT * WHERE { SERVICE <http://example.org/sparql> { ?s ?p ?o } }";
-        
+
         let services = planner.extract_service_clauses(query).unwrap();
         assert_eq!(services.len(), 1);
         assert_eq!(services[0].service_url, "http://example.org/sparql");
@@ -694,7 +756,7 @@ mod tests {
     async fn test_execution_plan_creation() {
         let planner = QueryPlanner::new();
         let mut registry = ServiceRegistry::new();
-        
+
         let service = FederatedService::new_sparql(
             "test-service".to_string(),
             "Test Service".to_string(),
@@ -713,7 +775,10 @@ mod tests {
             }],
             service_clauses: Vec::new(),
             filters: Vec::new(),
-            variables: ["?s", "?p", "?o"].into_iter().map(|s| s.to_string()).collect(),
+            variables: ["?s", "?p", "?o"]
+                .into_iter()
+                .map(|s| s.to_string())
+                .collect(),
             complexity: QueryComplexity::Low,
             estimated_cost: 10,
         };

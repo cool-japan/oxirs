@@ -3,9 +3,9 @@
 //! This module provides the core algebraic representation of SPARQL queries,
 //! including basic graph patterns, joins, unions, filters, and other operations.
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
-use serde::{Deserialize, Serialize};
 
 /// Variable identifier
 pub type Variable = String;
@@ -84,10 +84,7 @@ pub enum Expression {
     /// IRI reference
     Iri(Iri),
     /// Function call
-    Function {
-        name: String,
-        args: Vec<Expression>,
-    },
+    Function { name: String, args: Vec<Expression> },
     /// Binary operation
     Binary {
         op: BinaryOperator,
@@ -235,116 +232,109 @@ pub struct PropertyPathPattern {
 pub enum Algebra {
     /// Basic Graph Pattern
     Bgp(Vec<TriplePattern>),
-    
+
     /// Property Path Pattern
     PropertyPath {
         subject: Term,
         path: PropertyPath,
         object: Term,
     },
-    
+
     /// Join two patterns
     Join {
         left: Box<Algebra>,
         right: Box<Algebra>,
     },
-    
+
     /// Left join (OPTIONAL)
     LeftJoin {
         left: Box<Algebra>,
         right: Box<Algebra>,
         filter: Option<Expression>,
     },
-    
+
     /// Union of patterns
     Union {
         left: Box<Algebra>,
         right: Box<Algebra>,
     },
-    
+
     /// Filter pattern
     Filter {
         pattern: Box<Algebra>,
         condition: Expression,
     },
-    
+
     /// Extend pattern (BIND)
     Extend {
         pattern: Box<Algebra>,
         variable: Variable,
         expr: Expression,
     },
-    
+
     /// Minus pattern
     Minus {
         left: Box<Algebra>,
         right: Box<Algebra>,
     },
-    
+
     /// Service pattern (federation)
     Service {
         endpoint: Term,
         pattern: Box<Algebra>,
         silent: bool,
     },
-    
+
     /// Graph pattern
-    Graph {
-        graph: Term,
-        pattern: Box<Algebra>,
-    },
-    
+    Graph { graph: Term, pattern: Box<Algebra> },
+
     /// Projection
     Project {
         pattern: Box<Algebra>,
         variables: Vec<Variable>,
     },
-    
+
     /// Distinct
-    Distinct {
-        pattern: Box<Algebra>,
-    },
-    
+    Distinct { pattern: Box<Algebra> },
+
     /// Reduced
-    Reduced {
-        pattern: Box<Algebra>,
-    },
-    
+    Reduced { pattern: Box<Algebra> },
+
     /// Slice (LIMIT/OFFSET)
     Slice {
         pattern: Box<Algebra>,
         offset: Option<usize>,
         limit: Option<usize>,
     },
-    
+
     /// Order by
     OrderBy {
         pattern: Box<Algebra>,
         conditions: Vec<OrderCondition>,
     },
-    
+
     /// Group by
     Group {
         pattern: Box<Algebra>,
         variables: Vec<GroupCondition>,
         aggregates: Vec<(Variable, Aggregate)>,
     },
-    
+
     /// Having
     Having {
         pattern: Box<Algebra>,
         condition: Expression,
     },
-    
+
     /// Values clause
     Values {
         variables: Vec<Variable>,
         bindings: Vec<Binding>,
     },
-    
+
     /// Table (empty result)
     Table,
-    
+
     /// Zero matches
     Zero,
 }
@@ -362,9 +352,9 @@ pub enum JoinAlgorithm {
 /// Filter placement hints
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum FilterPlacement {
-    Early,     // Push down as much as possible
-    Late,      // Keep at current level
-    Optimal,   // Let optimizer decide
+    Early,   // Push down as much as possible
+    Late,    // Keep at current level
+    Optimal, // Let optimizer decide
 }
 
 /// Service capabilities
@@ -436,42 +426,42 @@ impl PropertyPath {
     pub fn iri(iri: Iri) -> Self {
         PropertyPath::Iri(iri)
     }
-    
+
     /// Create an inverse property path
     pub fn inverse(path: PropertyPath) -> Self {
         PropertyPath::Inverse(Box::new(path))
     }
-    
+
     /// Create a sequence property path
     pub fn sequence(left: PropertyPath, right: PropertyPath) -> Self {
         PropertyPath::Sequence(Box::new(left), Box::new(right))
     }
-    
+
     /// Create an alternative property path
     pub fn alternative(left: PropertyPath, right: PropertyPath) -> Self {
         PropertyPath::Alternative(Box::new(left), Box::new(right))
     }
-    
+
     /// Create a zero-or-more property path
     pub fn zero_or_more(path: PropertyPath) -> Self {
         PropertyPath::ZeroOrMore(Box::new(path))
     }
-    
+
     /// Create a one-or-more property path
     pub fn one_or_more(path: PropertyPath) -> Self {
         PropertyPath::OneOrMore(Box::new(path))
     }
-    
+
     /// Create a zero-or-one property path
     pub fn zero_or_one(path: PropertyPath) -> Self {
         PropertyPath::ZeroOrOne(Box::new(path))
     }
-    
+
     /// Check if path is simple (direct property)
     pub fn is_simple(&self) -> bool {
         matches!(self, PropertyPath::Iri(_) | PropertyPath::Variable(_))
     }
-    
+
     /// Get all variables mentioned in this property path
     pub fn variables(&self) -> Vec<Variable> {
         let mut vars = Vec::new();
@@ -480,19 +470,18 @@ impl PropertyPath {
         vars.dedup();
         vars
     }
-    
+
     fn collect_variables(&self, vars: &mut Vec<Variable>) {
         match self {
             PropertyPath::Variable(var) => vars.push(var.clone()),
             PropertyPath::Inverse(path) => path.collect_variables(vars),
-            PropertyPath::Sequence(left, right) |
-            PropertyPath::Alternative(left, right) => {
+            PropertyPath::Sequence(left, right) | PropertyPath::Alternative(left, right) => {
                 left.collect_variables(vars);
                 right.collect_variables(vars);
             }
-            PropertyPath::ZeroOrMore(path) |
-            PropertyPath::OneOrMore(path) |
-            PropertyPath::ZeroOrOne(path) => path.collect_variables(vars),
+            PropertyPath::ZeroOrMore(path)
+            | PropertyPath::OneOrMore(path)
+            | PropertyPath::ZeroOrOne(path) => path.collect_variables(vars),
             PropertyPath::NegatedPropertySet(paths) => {
                 for path in paths {
                     path.collect_variables(vars);
@@ -501,7 +490,7 @@ impl PropertyPath {
             PropertyPath::Iri(_) => {}
         }
     }
-    
+
     /// Estimate complexity of property path evaluation
     pub fn complexity(&self) -> usize {
         match self {
@@ -523,9 +512,13 @@ impl PropertyPath {
 impl PropertyPathPattern {
     /// Create a new property path pattern
     pub fn new(subject: Term, path: PropertyPath, object: Term) -> Self {
-        PropertyPathPattern { subject, path, object }
+        PropertyPathPattern {
+            subject,
+            path,
+            object,
+        }
     }
-    
+
     /// Get all variables mentioned in this pattern
     pub fn variables(&self) -> Vec<Variable> {
         let mut vars = Vec::new();
@@ -534,7 +527,7 @@ impl PropertyPathPattern {
         vars.dedup();
         vars
     }
-    
+
     fn collect_variables(&self, vars: &mut Vec<Variable>) {
         self.subject.collect_variables(vars);
         self.path.collect_variables(vars);
@@ -556,7 +549,9 @@ impl fmt::Display for PropertyPath {
             PropertyPath::NegatedPropertySet(paths) => {
                 write!(f, "!(")?;
                 for (i, path) in paths.iter().enumerate() {
-                    if i > 0 { write!(f, "|")? }
+                    if i > 0 {
+                        write!(f, "|")?
+                    }
                     write!(f, "{}", path)?;
                 }
                 write!(f, ")")
@@ -576,12 +571,16 @@ impl Algebra {
     pub fn bgp(patterns: Vec<TriplePattern>) -> Self {
         Algebra::Bgp(patterns)
     }
-    
+
     /// Create a property path algebra node
     pub fn property_path(subject: Term, path: PropertyPath, object: Term) -> Self {
-        Algebra::PropertyPath { subject, path, object }
+        Algebra::PropertyPath {
+            subject,
+            path,
+            object,
+        }
     }
-    
+
     /// Create a join of two patterns
     pub fn join(left: Algebra, right: Algebra) -> Self {
         Algebra::Join {
@@ -589,7 +588,7 @@ impl Algebra {
             right: Box::new(right),
         }
     }
-    
+
     /// Create a left join (optional)
     pub fn left_join(left: Algebra, right: Algebra, filter: Option<Expression>) -> Self {
         Algebra::LeftJoin {
@@ -598,7 +597,7 @@ impl Algebra {
             filter,
         }
     }
-    
+
     /// Create a union of two patterns
     pub fn union(left: Algebra, right: Algebra) -> Self {
         Algebra::Union {
@@ -606,7 +605,7 @@ impl Algebra {
             right: Box::new(right),
         }
     }
-    
+
     /// Create a filter pattern
     pub fn filter(pattern: Algebra, condition: Expression) -> Self {
         Algebra::Filter {
@@ -614,7 +613,7 @@ impl Algebra {
             condition,
         }
     }
-    
+
     /// Create an extend pattern (BIND)
     pub fn extend(pattern: Algebra, variable: Variable, expr: Expression) -> Self {
         Algebra::Extend {
@@ -623,7 +622,7 @@ impl Algebra {
             expr,
         }
     }
-    
+
     /// Create a projection
     pub fn project(pattern: Algebra, variables: Vec<Variable>) -> Self {
         Algebra::Project {
@@ -631,7 +630,7 @@ impl Algebra {
             variables,
         }
     }
-    
+
     /// Create a slice (LIMIT/OFFSET)
     pub fn slice(pattern: Algebra, offset: Option<usize>, limit: Option<usize>) -> Self {
         Algebra::Slice {
@@ -640,7 +639,7 @@ impl Algebra {
             limit,
         }
     }
-    
+
     /// Get all variables mentioned in this algebra expression
     pub fn variables(&self) -> Vec<Variable> {
         let mut vars = Vec::new();
@@ -649,7 +648,7 @@ impl Algebra {
         vars.dedup();
         vars
     }
-    
+
     fn collect_variables(&self, vars: &mut Vec<Variable>) {
         match self {
             Algebra::Bgp(patterns) => {
@@ -657,7 +656,11 @@ impl Algebra {
                     pattern.collect_variables(vars);
                 }
             }
-            Algebra::PropertyPath { subject, path, object } => {
+            Algebra::PropertyPath {
+                subject,
+                path,
+                object,
+            } => {
                 subject.collect_variables(vars);
                 path.collect_variables(vars);
                 object.collect_variables(vars);
@@ -668,7 +671,11 @@ impl Algebra {
                 left.collect_variables(vars);
                 right.collect_variables(vars);
             }
-            Algebra::LeftJoin { left, right, filter } => {
+            Algebra::LeftJoin {
+                left,
+                right,
+                filter,
+            } => {
                 left.collect_variables(vars);
                 right.collect_variables(vars);
                 if let Some(filter) = filter {
@@ -679,7 +686,11 @@ impl Algebra {
                 pattern.collect_variables(vars);
                 condition.collect_variables(vars);
             }
-            Algebra::Extend { pattern, variable, expr } => {
+            Algebra::Extend {
+                pattern,
+                variable,
+                expr,
+            } => {
                 pattern.collect_variables(vars);
                 vars.push(variable.clone());
                 expr.collect_variables(vars);
@@ -699,13 +710,20 @@ impl Algebra {
             | Algebra::Slice { pattern, .. } => {
                 pattern.collect_variables(vars);
             }
-            Algebra::OrderBy { pattern, conditions } => {
+            Algebra::OrderBy {
+                pattern,
+                conditions,
+            } => {
                 pattern.collect_variables(vars);
                 for condition in conditions {
                     condition.expr.collect_variables(vars);
                 }
             }
-            Algebra::Group { pattern, variables: group_vars, aggregates } => {
+            Algebra::Group {
+                pattern,
+                variables: group_vars,
+                aggregates,
+            } => {
                 pattern.collect_variables(vars);
                 for group_var in group_vars {
                     group_var.expr.collect_variables(vars);
@@ -733,9 +751,13 @@ impl Algebra {
 impl TriplePattern {
     /// Create a new triple pattern
     pub fn new(subject: Term, predicate: Term, object: Term) -> Self {
-        TriplePattern { subject, predicate, object }
+        TriplePattern {
+            subject,
+            predicate,
+            object,
+        }
     }
-    
+
     fn collect_variables(&self, vars: &mut Vec<Variable>) {
         self.subject.collect_variables(vars);
         self.predicate.collect_variables(vars);
@@ -767,7 +789,11 @@ impl Expression {
             Expression::Unary { expr, .. } => {
                 expr.collect_variables(vars);
             }
-            Expression::Conditional { condition, then_expr, else_expr } => {
+            Expression::Conditional {
+                condition,
+                then_expr,
+                else_expr,
+            } => {
                 condition.collect_variables(vars);
                 then_expr.collect_variables(vars);
                 else_expr.collect_variables(vars);
@@ -784,7 +810,9 @@ impl Expression {
 impl Aggregate {
     fn collect_variables(&self, vars: &mut Vec<Variable>) {
         match self {
-            Aggregate::Count { expr: Some(expr), .. }
+            Aggregate::Count {
+                expr: Some(expr), ..
+            }
             | Aggregate::Sum { expr, .. }
             | Aggregate::Min { expr, .. }
             | Aggregate::Max { expr, .. }
@@ -823,11 +851,7 @@ macro_rules! iri {
 #[macro_export]
 macro_rules! literal {
     ($value:expr) => {
-        Term::Literal(Literal::new(
-            $value.to_string(),
-            None,
-            None,
-        ))
+        Term::Literal(Literal::new($value.to_string(), None, None))
     };
     ($value:expr, lang: $lang:expr) => {
         Term::Literal(Literal::new(
@@ -902,7 +926,11 @@ impl Default for ParallelismType {
 impl Literal {
     /// Create a new literal with value only
     pub fn new(value: String, language: Option<String>, datatype: Option<Iri>) -> Self {
-        Literal { value, language, datatype }
+        Literal {
+            value,
+            language,
+            datatype,
+        }
     }
 
     /// Create a simple string literal
@@ -986,23 +1014,24 @@ impl Literal {
     /// Check if this is a numeric literal
     pub fn is_numeric(&self) -> bool {
         if let Some(ref dt) = self.datatype {
-            matches!(dt.0.as_str(),
-                "http://www.w3.org/2001/XMLSchema#integer" |
-                "http://www.w3.org/2001/XMLSchema#decimal" |
-                "http://www.w3.org/2001/XMLSchema#float" |
-                "http://www.w3.org/2001/XMLSchema#double" |
-                "http://www.w3.org/2001/XMLSchema#long" |
-                "http://www.w3.org/2001/XMLSchema#int" |
-                "http://www.w3.org/2001/XMLSchema#short" |
-                "http://www.w3.org/2001/XMLSchema#byte" |
-                "http://www.w3.org/2001/XMLSchema#unsignedLong" |
-                "http://www.w3.org/2001/XMLSchema#unsignedInt" |
-                "http://www.w3.org/2001/XMLSchema#unsignedShort" |
-                "http://www.w3.org/2001/XMLSchema#unsignedByte" |
-                "http://www.w3.org/2001/XMLSchema#positiveInteger" |
-                "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" |
-                "http://www.w3.org/2001/XMLSchema#negativeInteger" |
-                "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
+            matches!(
+                dt.0.as_str(),
+                "http://www.w3.org/2001/XMLSchema#integer"
+                    | "http://www.w3.org/2001/XMLSchema#decimal"
+                    | "http://www.w3.org/2001/XMLSchema#float"
+                    | "http://www.w3.org/2001/XMLSchema#double"
+                    | "http://www.w3.org/2001/XMLSchema#long"
+                    | "http://www.w3.org/2001/XMLSchema#int"
+                    | "http://www.w3.org/2001/XMLSchema#short"
+                    | "http://www.w3.org/2001/XMLSchema#byte"
+                    | "http://www.w3.org/2001/XMLSchema#unsignedLong"
+                    | "http://www.w3.org/2001/XMLSchema#unsignedInt"
+                    | "http://www.w3.org/2001/XMLSchema#unsignedShort"
+                    | "http://www.w3.org/2001/XMLSchema#unsignedByte"
+                    | "http://www.w3.org/2001/XMLSchema#positiveInteger"
+                    | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+                    | "http://www.w3.org/2001/XMLSchema#negativeInteger"
+                    | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
             )
         } else {
             false
@@ -1031,18 +1060,19 @@ impl Literal {
     /// Check if this is a date/time literal
     pub fn is_datetime(&self) -> bool {
         if let Some(ref dt) = self.datatype {
-            matches!(dt.0.as_str(),
-                "http://www.w3.org/2001/XMLSchema#date" |
-                "http://www.w3.org/2001/XMLSchema#dateTime" |
-                "http://www.w3.org/2001/XMLSchema#time" |
-                "http://www.w3.org/2001/XMLSchema#gYear" |
-                "http://www.w3.org/2001/XMLSchema#gYearMonth" |
-                "http://www.w3.org/2001/XMLSchema#gMonth" |
-                "http://www.w3.org/2001/XMLSchema#gMonthDay" |
-                "http://www.w3.org/2001/XMLSchema#gDay" |
-                "http://www.w3.org/2001/XMLSchema#duration" |
-                "http://www.w3.org/2001/XMLSchema#dayTimeDuration" |
-                "http://www.w3.org/2001/XMLSchema#yearMonthDuration"
+            matches!(
+                dt.0.as_str(),
+                "http://www.w3.org/2001/XMLSchema#date"
+                    | "http://www.w3.org/2001/XMLSchema#dateTime"
+                    | "http://www.w3.org/2001/XMLSchema#time"
+                    | "http://www.w3.org/2001/XMLSchema#gYear"
+                    | "http://www.w3.org/2001/XMLSchema#gYearMonth"
+                    | "http://www.w3.org/2001/XMLSchema#gMonth"
+                    | "http://www.w3.org/2001/XMLSchema#gMonthDay"
+                    | "http://www.w3.org/2001/XMLSchema#gDay"
+                    | "http://www.w3.org/2001/XMLSchema#duration"
+                    | "http://www.w3.org/2001/XMLSchema#dayTimeDuration"
+                    | "http://www.w3.org/2001/XMLSchema#yearMonthDuration"
             )
         } else {
             false

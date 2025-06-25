@@ -6,30 +6,30 @@
 //! exactly-once semantics, schema registry, consumer groups, and advanced performance
 //! optimizations for mission-critical RDF streaming applications.
 
+use crate::{EventMetadata, PatchOperation, RdfPatch, StreamBackend, StreamConfig, StreamEvent};
 use anyhow::{anyhow, Result};
-use crate::{StreamEvent, StreamConfig, StreamBackend, RdfPatch, PatchOperation, EventMetadata};
+use chrono::{DateTime, Utc};
+use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tokio::time;
 use tracing::{debug, error, info, warn};
-use chrono::{DateTime, Utc};
 use uuid::Uuid;
-use futures::StreamExt;
 
 #[cfg(feature = "kafka")]
 use rdkafka::{
-    admin::{AdminClient, AdminOptions, NewTopic, TopicReplication, ConfigResource, ConfigEntry},
+    admin::{AdminClient, AdminOptions, ConfigEntry, ConfigResource, NewTopic, TopicReplication},
     client::DefaultClientContext,
     config::{ClientConfig, RDKafkaLogLevel},
-    consumer::{Consumer, StreamConsumer, CommitMode, ConsumerContext, Rebalance},
-    producer::{Producer, FutureProducer, FutureRecord, DeliveryResult},
-    message::{Header, Headers, OwnedHeaders, Message, BorrowedMessage},
-    metadata::{MetadataPartition, MetadataTopic},
-    util::Timeout,
+    consumer::{CommitMode, Consumer, ConsumerContext, Rebalance, StreamConsumer},
     error::{KafkaError, KafkaResult},
+    message::{BorrowedMessage, Header, Headers, Message, OwnedHeaders},
+    metadata::{MetadataPartition, MetadataTopic},
+    producer::{DeliveryResult, FutureProducer, FutureRecord, Producer},
     statistics::Statistics,
-    TopicPartitionList, Offset,
+    util::Timeout,
+    Offset, TopicPartitionList,
 };
 
 /// Enhanced Kafka producer configuration with enterprise features
@@ -231,86 +231,167 @@ pub struct KafkaEvent {
 impl From<StreamEvent> for KafkaEvent {
     fn from(event: StreamEvent) -> Self {
         let (event_type, data, metadata, partition_key) = match event {
-            StreamEvent::TripleAdded { subject, predicate, object, graph, metadata } => {
-                ("triple_added".to_string(), serde_json::json!({
+            StreamEvent::TripleAdded {
+                subject,
+                predicate,
+                object,
+                graph,
+                metadata,
+            } => (
+                "triple_added".to_string(),
+                serde_json::json!({
                     "subject": subject,
                     "predicate": predicate,
                     "object": object,
                     "graph": graph
-                }), metadata, Some(subject))
-            }
-            StreamEvent::TripleRemoved { subject, predicate, object, graph, metadata } => {
-                ("triple_removed".to_string(), serde_json::json!({
+                }),
+                metadata,
+                Some(subject),
+            ),
+            StreamEvent::TripleRemoved {
+                subject,
+                predicate,
+                object,
+                graph,
+                metadata,
+            } => (
+                "triple_removed".to_string(),
+                serde_json::json!({
                     "subject": subject,
                     "predicate": predicate,
                     "object": object,
                     "graph": graph
-                }), metadata, Some(subject))
-            }
-            StreamEvent::QuadAdded { subject, predicate, object, graph, metadata } => {
-                ("quad_added".to_string(), serde_json::json!({
+                }),
+                metadata,
+                Some(subject),
+            ),
+            StreamEvent::QuadAdded {
+                subject,
+                predicate,
+                object,
+                graph,
+                metadata,
+            } => (
+                "quad_added".to_string(),
+                serde_json::json!({
                     "subject": subject,
                     "predicate": predicate,
                     "object": object,
                     "graph": graph
-                }), metadata, Some(subject))
-            }
-            StreamEvent::QuadRemoved { subject, predicate, object, graph, metadata } => {
-                ("quad_removed".to_string(), serde_json::json!({
+                }),
+                metadata,
+                Some(subject),
+            ),
+            StreamEvent::QuadRemoved {
+                subject,
+                predicate,
+                object,
+                graph,
+                metadata,
+            } => (
+                "quad_removed".to_string(),
+                serde_json::json!({
                     "subject": subject,
                     "predicate": predicate,
                     "object": object,
                     "graph": graph
-                }), metadata, Some(subject))
-            }
-            StreamEvent::GraphCreated { graph, metadata } => {
-                ("graph_created".to_string(), serde_json::json!({
+                }),
+                metadata,
+                Some(subject),
+            ),
+            StreamEvent::GraphCreated { graph, metadata } => (
+                "graph_created".to_string(),
+                serde_json::json!({
                     "graph": graph
-                }), metadata, Some(graph))
-            }
-            StreamEvent::GraphCleared { graph, metadata } => {
-                ("graph_cleared".to_string(), serde_json::json!({
+                }),
+                metadata,
+                Some(graph),
+            ),
+            StreamEvent::GraphCleared { graph, metadata } => (
+                "graph_cleared".to_string(),
+                serde_json::json!({
                     "graph": graph
-                }), metadata, graph)
-            }
-            StreamEvent::GraphDeleted { graph, metadata } => {
-                ("graph_deleted".to_string(), serde_json::json!({
+                }),
+                metadata,
+                graph,
+            ),
+            StreamEvent::GraphDeleted { graph, metadata } => (
+                "graph_deleted".to_string(),
+                serde_json::json!({
                     "graph": graph
-                }), metadata, Some(graph))
-            }
-            StreamEvent::SparqlUpdate { query, operation_type, metadata } => {
-                ("sparql_update".to_string(), serde_json::json!({
+                }),
+                metadata,
+                Some(graph),
+            ),
+            StreamEvent::SparqlUpdate {
+                query,
+                operation_type,
+                metadata,
+            } => (
+                "sparql_update".to_string(),
+                serde_json::json!({
                     "query": query,
                     "operation_type": operation_type
-                }), metadata, None)
-            }
-            StreamEvent::TransactionBegin { transaction_id, isolation_level, metadata } => {
-                ("transaction_begin".to_string(), serde_json::json!({
+                }),
+                metadata,
+                None,
+            ),
+            StreamEvent::TransactionBegin {
+                transaction_id,
+                isolation_level,
+                metadata,
+            } => (
+                "transaction_begin".to_string(),
+                serde_json::json!({
                     "transaction_id": transaction_id,
                     "isolation_level": isolation_level
-                }), metadata, Some(transaction_id))
-            }
-            StreamEvent::TransactionCommit { transaction_id, metadata } => {
-                ("transaction_commit".to_string(), serde_json::json!({
+                }),
+                metadata,
+                Some(transaction_id),
+            ),
+            StreamEvent::TransactionCommit {
+                transaction_id,
+                metadata,
+            } => (
+                "transaction_commit".to_string(),
+                serde_json::json!({
                     "transaction_id": transaction_id
-                }), metadata, Some(transaction_id))
-            }
-            StreamEvent::TransactionAbort { transaction_id, metadata } => {
-                ("transaction_abort".to_string(), serde_json::json!({
+                }),
+                metadata,
+                Some(transaction_id),
+            ),
+            StreamEvent::TransactionAbort {
+                transaction_id,
+                metadata,
+            } => (
+                "transaction_abort".to_string(),
+                serde_json::json!({
                     "transaction_id": transaction_id
-                }), metadata, Some(transaction_id))
-            }
-            StreamEvent::SchemaChanged { schema_type, change_type, details, metadata } => {
-                ("schema_changed".to_string(), serde_json::json!({
+                }),
+                metadata,
+                Some(transaction_id),
+            ),
+            StreamEvent::SchemaChanged {
+                schema_type,
+                change_type,
+                details,
+                metadata,
+            } => (
+                "schema_changed".to_string(),
+                serde_json::json!({
                     "schema_type": schema_type,
                     "change_type": change_type,
                     "details": details
-                }), metadata, Some("schema".to_string()))
-            }
-            StreamEvent::Heartbeat { timestamp, source } => {
-                ("heartbeat".to_string(), serde_json::json!({
+                }),
+                metadata,
+                Some("schema".to_string()),
+            ),
+            StreamEvent::Heartbeat { timestamp, source } => (
+                "heartbeat".to_string(),
+                serde_json::json!({
                     "source": source
-                }), EventMetadata {
+                }),
+                EventMetadata {
                     event_id: Uuid::new_v4().to_string(),
                     timestamp,
                     source: source.clone(),
@@ -320,8 +401,9 @@ impl From<StreamEvent> for KafkaEvent {
                     version: "1.0".to_string(),
                     properties: HashMap::new(),
                     checksum: None,
-                }, Some(source))
-            }
+                },
+                Some(source),
+            ),
         };
 
         Self {
@@ -346,57 +428,111 @@ impl TryFrom<KafkaEvent> for StreamEvent {
 
     fn try_from(kafka_event: KafkaEvent) -> Result<Self> {
         let metadata = kafka_event.metadata;
-        
+
         match kafka_event.event_type.as_str() {
             "triple_added" => {
-                let subject = kafka_event.data["subject"].as_str()
-                    .ok_or_else(|| anyhow!("Missing subject"))?.to_string();
-                let predicate = kafka_event.data["predicate"].as_str()
-                    .ok_or_else(|| anyhow!("Missing predicate"))?.to_string();
-                let object = kafka_event.data["object"].as_str()
-                    .ok_or_else(|| anyhow!("Missing object"))?.to_string();
+                let subject = kafka_event.data["subject"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing subject"))?
+                    .to_string();
+                let predicate = kafka_event.data["predicate"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing predicate"))?
+                    .to_string();
+                let object = kafka_event.data["object"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing object"))?
+                    .to_string();
                 let graph = kafka_event.data["graph"].as_str().map(|s| s.to_string());
-                
-                Ok(StreamEvent::TripleAdded { subject, predicate, object, graph, metadata })
+
+                Ok(StreamEvent::TripleAdded {
+                    subject,
+                    predicate,
+                    object,
+                    graph,
+                    metadata,
+                })
             }
             "triple_removed" => {
-                let subject = kafka_event.data["subject"].as_str()
-                    .ok_or_else(|| anyhow!("Missing subject"))?.to_string();
-                let predicate = kafka_event.data["predicate"].as_str()
-                    .ok_or_else(|| anyhow!("Missing predicate"))?.to_string();
-                let object = kafka_event.data["object"].as_str()
-                    .ok_or_else(|| anyhow!("Missing object"))?.to_string();
+                let subject = kafka_event.data["subject"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing subject"))?
+                    .to_string();
+                let predicate = kafka_event.data["predicate"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing predicate"))?
+                    .to_string();
+                let object = kafka_event.data["object"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing object"))?
+                    .to_string();
                 let graph = kafka_event.data["graph"].as_str().map(|s| s.to_string());
-                
-                Ok(StreamEvent::TripleRemoved { subject, predicate, object, graph, metadata })
+
+                Ok(StreamEvent::TripleRemoved {
+                    subject,
+                    predicate,
+                    object,
+                    graph,
+                    metadata,
+                })
             }
             "quad_added" => {
-                let subject = kafka_event.data["subject"].as_str()
-                    .ok_or_else(|| anyhow!("Missing subject"))?.to_string();
-                let predicate = kafka_event.data["predicate"].as_str()
-                    .ok_or_else(|| anyhow!("Missing predicate"))?.to_string();
-                let object = kafka_event.data["object"].as_str()
-                    .ok_or_else(|| anyhow!("Missing object"))?.to_string();
-                let graph = kafka_event.data["graph"].as_str()
-                    .ok_or_else(|| anyhow!("Missing graph"))?.to_string();
-                
-                Ok(StreamEvent::QuadAdded { subject, predicate, object, graph, metadata })
+                let subject = kafka_event.data["subject"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing subject"))?
+                    .to_string();
+                let predicate = kafka_event.data["predicate"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing predicate"))?
+                    .to_string();
+                let object = kafka_event.data["object"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing object"))?
+                    .to_string();
+                let graph = kafka_event.data["graph"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing graph"))?
+                    .to_string();
+
+                Ok(StreamEvent::QuadAdded {
+                    subject,
+                    predicate,
+                    object,
+                    graph,
+                    metadata,
+                })
             }
             "quad_removed" => {
-                let subject = kafka_event.data["subject"].as_str()
-                    .ok_or_else(|| anyhow!("Missing subject"))?.to_string();
-                let predicate = kafka_event.data["predicate"].as_str()
-                    .ok_or_else(|| anyhow!("Missing predicate"))?.to_string();
-                let object = kafka_event.data["object"].as_str()
-                    .ok_or_else(|| anyhow!("Missing object"))?.to_string();
-                let graph = kafka_event.data["graph"].as_str()
-                    .ok_or_else(|| anyhow!("Missing graph"))?.to_string();
-                
-                Ok(StreamEvent::QuadRemoved { subject, predicate, object, graph, metadata })
+                let subject = kafka_event.data["subject"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing subject"))?
+                    .to_string();
+                let predicate = kafka_event.data["predicate"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing predicate"))?
+                    .to_string();
+                let object = kafka_event.data["object"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing object"))?
+                    .to_string();
+                let graph = kafka_event.data["graph"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing graph"))?
+                    .to_string();
+
+                Ok(StreamEvent::QuadRemoved {
+                    subject,
+                    predicate,
+                    object,
+                    graph,
+                    metadata,
+                })
             }
             "graph_created" => {
-                let graph = kafka_event.data["graph"].as_str()
-                    .ok_or_else(|| anyhow!("Missing graph"))?.to_string();
+                let graph = kafka_event.data["graph"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing graph"))?
+                    .to_string();
                 Ok(StreamEvent::GraphCreated { graph, metadata })
             }
             "graph_cleared" => {
@@ -404,19 +540,23 @@ impl TryFrom<KafkaEvent> for StreamEvent {
                 Ok(StreamEvent::GraphCleared { graph, metadata })
             }
             "graph_deleted" => {
-                let graph = kafka_event.data["graph"].as_str()
-                    .ok_or_else(|| anyhow!("Missing graph"))?.to_string();
+                let graph = kafka_event.data["graph"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing graph"))?
+                    .to_string();
                 Ok(StreamEvent::GraphDeleted { graph, metadata })
             }
             "heartbeat" => {
-                let source = kafka_event.data["source"].as_str()
-                    .ok_or_else(|| anyhow!("Missing source"))?.to_string();
-                Ok(StreamEvent::Heartbeat { 
-                    timestamp: kafka_event.timestamp, 
-                    source 
+                let source = kafka_event.data["source"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing source"))?
+                    .to_string();
+                Ok(StreamEvent::Heartbeat {
+                    timestamp: kafka_event.timestamp,
+                    source,
                 })
             }
-            _ => Err(anyhow!("Unknown event type: {}", kafka_event.event_type))
+            _ => Err(anyhow!("Unknown event type: {}", kafka_event.event_type)),
         }
     }
 }
@@ -454,7 +594,12 @@ struct ProducerStats {
 
 impl KafkaProducer {
     pub fn new(config: StreamConfig) -> Result<Self> {
-        let kafka_config = if let StreamBackend::Kafka { brokers, security_protocol, sasl_config } = &config.backend {
+        let kafka_config = if let StreamBackend::Kafka {
+            brokers,
+            security_protocol,
+            sasl_config,
+        } = &config.backend
+        {
             KafkaProducerConfig {
                 brokers: brokers.clone(),
                 security_config: Self::build_security_config(security_protocol, sasl_config),
@@ -487,22 +632,40 @@ impl KafkaProducer {
     #[cfg(feature = "kafka")]
     pub async fn connect(&mut self) -> Result<()> {
         let mut client_config = ClientConfig::new();
-        
+
         // Basic configuration
         client_config
             .set("bootstrap.servers", self.kafka_config.brokers.join(","))
             .set("client.id", &self.kafka_config.client_id)
-            .set("enable.idempotence", self.kafka_config.enable_idempotence.to_string())
+            .set(
+                "enable.idempotence",
+                self.kafka_config.enable_idempotence.to_string(),
+            )
             .set("acks", self.kafka_config.acks.to_string())
             .set("retries", self.kafka_config.retries.to_string())
-            .set("retry.backoff.ms", self.kafka_config.retry_backoff_ms.to_string())
+            .set(
+                "retry.backoff.ms",
+                self.kafka_config.retry_backoff_ms.to_string(),
+            )
             .set("batch.size", self.kafka_config.batch_size.to_string())
             .set("linger.ms", self.kafka_config.linger_ms.to_string())
             .set("buffer.memory", self.kafka_config.buffer_memory.to_string())
-            .set("compression.type", self.kafka_config.compression_type.to_string())
-            .set("max.in.flight.requests.per.connection", self.kafka_config.max_in_flight_requests.to_string())
-            .set("request.timeout.ms", self.kafka_config.request_timeout_ms.to_string())
-            .set("delivery.timeout.ms", self.kafka_config.delivery_timeout_ms.to_string())
+            .set(
+                "compression.type",
+                self.kafka_config.compression_type.to_string(),
+            )
+            .set(
+                "max.in.flight.requests.per.connection",
+                self.kafka_config.max_in_flight_requests.to_string(),
+            )
+            .set(
+                "request.timeout.ms",
+                self.kafka_config.request_timeout_ms.to_string(),
+            )
+            .set(
+                "delivery.timeout.ms",
+                self.kafka_config.delivery_timeout_ms.to_string(),
+            )
             .set("log_level", "info");
 
         // Transaction support
@@ -523,18 +686,23 @@ impl KafkaProducer {
             .set("reconnect.backoff.ms", "100")
             .set("reconnect.backoff.max.ms", "10000");
 
-        let producer: FutureProducer = client_config.create()
+        let producer: FutureProducer = client_config
+            .create()
             .map_err(|e| anyhow!("Failed to create Kafka producer: {}", e))?;
 
         // Initialize transactions if configured
         if self.kafka_config.transaction_id.is_some() {
-            producer.init_transactions(Timeout::After(Duration::from_secs(30)))
+            producer
+                .init_transactions(Timeout::After(Duration::from_secs(30)))
                 .map_err(|e| anyhow!("Failed to initialize transactions: {}", e))?;
             info!("Initialized Kafka transactions");
         }
 
         self.producer = Some(producer);
-        info!("Connected to Kafka: {}", self.kafka_config.brokers.join(","));
+        info!(
+            "Connected to Kafka: {}",
+            self.kafka_config.brokers.join(",")
+        );
         Ok(())
     }
 
@@ -553,8 +721,15 @@ impl KafkaProducer {
     }
 
     #[cfg(feature = "kafka")]
-    fn apply_security_config(&self, client_config: &mut ClientConfig, security_config: &KafkaSecurityConfig) -> Result<()> {
-        client_config.set("security.protocol", security_config.security_protocol.to_string());
+    fn apply_security_config(
+        &self,
+        client_config: &mut ClientConfig,
+        security_config: &KafkaSecurityConfig,
+    ) -> Result<()> {
+        client_config.set(
+            "security.protocol",
+            security_config.security_protocol.to_string(),
+        );
 
         if let Some(sasl_config) = &security_config.sasl_config {
             client_config
@@ -583,7 +758,8 @@ impl KafkaProducer {
         {
             if let Some(ref producer) = self.producer {
                 if self.kafka_config.transaction_id.is_some() && !self.transaction_active {
-                    producer.begin_transaction()
+                    producer
+                        .begin_transaction()
                         .map_err(|e| anyhow!("Failed to begin transaction: {}", e))?;
                     self.transaction_active = true;
                     info!("Started Kafka transaction");
@@ -598,7 +774,8 @@ impl KafkaProducer {
         {
             if let Some(ref producer) = self.producer {
                 if self.transaction_active {
-                    producer.commit_transaction(Timeout::After(Duration::from_secs(30)))
+                    producer
+                        .commit_transaction(Timeout::After(Duration::from_secs(30)))
                         .map_err(|e| anyhow!("Failed to commit transaction: {}", e))?;
                     self.transaction_active = false;
                     self.stats.transactions_committed += 1;
@@ -614,7 +791,8 @@ impl KafkaProducer {
         {
             if let Some(ref producer) = self.producer {
                 if self.transaction_active {
-                    producer.abort_transaction(Timeout::After(Duration::from_secs(30)))
+                    producer
+                        .abort_transaction(Timeout::After(Duration::from_secs(30)))
                         .map_err(|e| anyhow!("Failed to abort transaction: {}", e))?;
                     self.transaction_active = false;
                     self.stats.transactions_aborted += 1;
@@ -668,18 +846,24 @@ impl KafkaProducer {
                     record = record.key(partition_key);
                 }
 
-                match producer.send(record, Timeout::After(Duration::from_secs(30))).await {
+                match producer
+                    .send(record, Timeout::After(Duration::from_secs(30)))
+                    .await
+                {
                     Ok((partition, offset)) => {
                         self.stats.events_published += 1;
                         self.stats.bytes_sent += payload.len() as u64;
-                        
+
                         let latency = start_time.elapsed().as_millis() as u64;
                         self.stats.max_latency_ms = self.stats.max_latency_ms.max(latency);
-                        self.stats.avg_latency_ms = (self.stats.avg_latency_ms + latency as f64) / 2.0;
+                        self.stats.avg_latency_ms =
+                            (self.stats.avg_latency_ms + latency as f64) / 2.0;
                         self.stats.last_publish = Some(Utc::now());
 
-                        debug!("Published event {} to partition {} offset {}", 
-                               kafka_event.event_id, partition, offset);
+                        debug!(
+                            "Published event {} to partition {} offset {}",
+                            kafka_event.event_id, partition, offset
+                        );
                     }
                     Err((e, _)) => {
                         self.stats.events_failed += 1;
@@ -707,12 +891,12 @@ impl KafkaProducer {
         }
 
         let start_time = Instant::now();
-        
+
         #[cfg(feature = "kafka")]
         {
             if let Some(ref producer) = self.producer {
                 let mut futures = Vec::new();
-                
+
                 for event in events {
                     let kafka_event = KafkaEvent::from(event);
                     let payload = serde_json::to_string(&kafka_event)
@@ -757,10 +941,13 @@ impl KafkaProducer {
                 self.stats.max_latency_ms = self.stats.max_latency_ms.max(batch_latency);
 
                 if failure_count > 0 {
-                    warn!("Batch publish completed with {} failures out of {} events", 
-                          failure_count, success_count + failure_count);
+                    warn!(
+                        "Batch publish completed with {} failures out of {} events",
+                        failure_count,
+                        success_count + failure_count
+                    );
                 }
-                
+
                 debug!("Published batch of {} events", success_count);
             }
         }
@@ -770,7 +957,10 @@ impl KafkaProducer {
             for event in events {
                 self.batch_buffer.push(KafkaEvent::from(event));
             }
-            debug!("Mock batch publish: stored {} events in memory", self.batch_buffer.len());
+            debug!(
+                "Mock batch publish: stored {} events in memory",
+                self.batch_buffer.len()
+            );
         }
 
         Ok(())
@@ -778,7 +968,7 @@ impl KafkaProducer {
 
     pub async fn publish_patch(&mut self, patch: &RdfPatch) -> Result<()> {
         let mut events = Vec::new();
-        
+
         for operation in &patch.operations {
             let metadata = EventMetadata {
                 event_id: Uuid::new_v4().to_string(),
@@ -793,40 +983,40 @@ impl KafkaProducer {
             };
 
             let event = match operation {
-                PatchOperation::Add { subject, predicate, object } => {
-                    StreamEvent::TripleAdded {
-                        subject: subject.clone(),
-                        predicate: predicate.clone(),
-                        object: object.clone(),
-                        graph: None,
-                        metadata,
-                    }
-                }
-                PatchOperation::Delete { subject, predicate, object } => {
-                    StreamEvent::TripleRemoved {
-                        subject: subject.clone(),
-                        predicate: predicate.clone(),
-                        object: object.clone(),
-                        graph: None,
-                        metadata,
-                    }
-                }
-                PatchOperation::AddGraph { graph } => {
-                    StreamEvent::GraphCreated {
-                        graph: graph.clone(),
-                        metadata,
-                    }
-                }
-                PatchOperation::DeleteGraph { graph } => {
-                    StreamEvent::GraphDeleted {
-                        graph: graph.clone(),
-                        metadata,
-                    }
-                }
+                PatchOperation::Add {
+                    subject,
+                    predicate,
+                    object,
+                } => StreamEvent::TripleAdded {
+                    subject: subject.clone(),
+                    predicate: predicate.clone(),
+                    object: object.clone(),
+                    graph: None,
+                    metadata,
+                },
+                PatchOperation::Delete {
+                    subject,
+                    predicate,
+                    object,
+                } => StreamEvent::TripleRemoved {
+                    subject: subject.clone(),
+                    predicate: predicate.clone(),
+                    object: object.clone(),
+                    graph: None,
+                    metadata,
+                },
+                PatchOperation::AddGraph { graph } => StreamEvent::GraphCreated {
+                    graph: graph.clone(),
+                    metadata,
+                },
+                PatchOperation::DeleteGraph { graph } => StreamEvent::GraphDeleted {
+                    graph: graph.clone(),
+                    metadata,
+                },
             };
             events.push(event);
         }
-        
+
         self.publish_batch(events).await
     }
 
@@ -834,7 +1024,8 @@ impl KafkaProducer {
         #[cfg(feature = "kafka")]
         {
             if let Some(ref producer) = self.producer {
-                producer.flush(Timeout::After(Duration::from_secs(30)))
+                producer
+                    .flush(Timeout::After(Duration::from_secs(30)))
                     .map_err(|e| anyhow!("Failed to flush Kafka producer: {}", e))?;
                 debug!("Flushed Kafka producer");
             }
@@ -1026,21 +1217,51 @@ impl KafkaConsumer {
     pub async fn connect(&mut self) -> Result<()> {
         let context = KafkaConsumerContext::default();
         let mut client_config = ClientConfig::new();
-        
+
         client_config
             .set("bootstrap.servers", self.kafka_config.brokers.join(","))
             .set("group.id", &self.kafka_config.group_id)
             .set("client.id", &self.kafka_config.client_id)
-            .set("auto.offset.reset", self.kafka_config.auto_offset_reset.to_string())
-            .set("enable.auto.commit", self.kafka_config.enable_auto_commit.to_string())
-            .set("auto.commit.interval.ms", self.kafka_config.auto_commit_interval_ms.to_string())
-            .set("session.timeout.ms", self.kafka_config.session_timeout_ms.to_string())
-            .set("heartbeat.interval.ms", self.kafka_config.heartbeat_interval_ms.to_string())
-            .set("max.poll.interval.ms", self.kafka_config.max_poll_interval_ms.to_string())
-            .set("max.poll.records", self.kafka_config.max_poll_records.to_string())
-            .set("fetch.min.bytes", self.kafka_config.fetch_min_bytes.to_string())
-            .set("fetch.max.wait.ms", self.kafka_config.fetch_max_wait_ms.to_string())
-            .set("isolation.level", self.kafka_config.isolation_level.to_string())
+            .set(
+                "auto.offset.reset",
+                self.kafka_config.auto_offset_reset.to_string(),
+            )
+            .set(
+                "enable.auto.commit",
+                self.kafka_config.enable_auto_commit.to_string(),
+            )
+            .set(
+                "auto.commit.interval.ms",
+                self.kafka_config.auto_commit_interval_ms.to_string(),
+            )
+            .set(
+                "session.timeout.ms",
+                self.kafka_config.session_timeout_ms.to_string(),
+            )
+            .set(
+                "heartbeat.interval.ms",
+                self.kafka_config.heartbeat_interval_ms.to_string(),
+            )
+            .set(
+                "max.poll.interval.ms",
+                self.kafka_config.max_poll_interval_ms.to_string(),
+            )
+            .set(
+                "max.poll.records",
+                self.kafka_config.max_poll_records.to_string(),
+            )
+            .set(
+                "fetch.min.bytes",
+                self.kafka_config.fetch_min_bytes.to_string(),
+            )
+            .set(
+                "fetch.max.wait.ms",
+                self.kafka_config.fetch_max_wait_ms.to_string(),
+            )
+            .set(
+                "isolation.level",
+                self.kafka_config.isolation_level.to_string(),
+            )
             .set("enable.partition.eof", "false")
             .set("log_level", "info");
 
@@ -1054,7 +1275,8 @@ impl KafkaConsumer {
             .map_err(|e| anyhow!("Failed to create Kafka consumer: {}", e))?;
 
         // Subscribe to topic
-        consumer.subscribe(&[&self.config.topic])
+        consumer
+            .subscribe(&[&self.config.topic])
             .map_err(|e| anyhow!("Failed to subscribe to topic: {}", e))?;
 
         self.consumer = Some(consumer);
@@ -1069,8 +1291,15 @@ impl KafkaConsumer {
     }
 
     #[cfg(feature = "kafka")]
-    fn apply_consumer_security_config(&self, client_config: &mut ClientConfig, security_config: &KafkaSecurityConfig) -> Result<()> {
-        client_config.set("security.protocol", security_config.security_protocol.to_string());
+    fn apply_consumer_security_config(
+        &self,
+        client_config: &mut ClientConfig,
+        security_config: &KafkaSecurityConfig,
+    ) -> Result<()> {
+        client_config.set(
+            "security.protocol",
+            security_config.security_protocol.to_string(),
+        );
 
         if let Some(sasl_config) = &security_config.sasl_config {
             client_config
@@ -1095,7 +1324,7 @@ impl KafkaConsumer {
                 match consumer.recv().await {
                     Ok(message) => {
                         let start_time = Instant::now();
-                        
+
                         if let Some(payload) = message.payload_view::<str>() {
                             match payload {
                                 Ok(payload_str) => {
@@ -1104,10 +1333,13 @@ impl KafkaConsumer {
                                             self.stats.events_consumed += 1;
                                             self.stats.bytes_received += payload_str.len() as u64;
                                             self.stats.last_message = Some(Utc::now());
-                                            
-                                            let processing_time = start_time.elapsed().as_millis() as f64;
-                                            self.stats.avg_processing_time_ms = 
-                                                (self.stats.avg_processing_time_ms + processing_time) / 2.0;
+
+                                            let processing_time =
+                                                start_time.elapsed().as_millis() as f64;
+                                            self.stats.avg_processing_time_ms =
+                                                (self.stats.avg_processing_time_ms
+                                                    + processing_time)
+                                                    / 2.0;
 
                                             match kafka_event.try_into() {
                                                 Ok(stream_event) => {
@@ -1158,7 +1390,11 @@ impl KafkaConsumer {
         }
     }
 
-    pub async fn consume_batch(&mut self, max_events: usize, timeout: Duration) -> Result<Vec<StreamEvent>> {
+    pub async fn consume_batch(
+        &mut self,
+        max_events: usize,
+        timeout: Duration,
+    ) -> Result<Vec<StreamEvent>> {
         let mut events = Vec::new();
         let start_time = Instant::now();
 
@@ -1178,7 +1414,8 @@ impl KafkaConsumer {
         #[cfg(feature = "kafka")]
         {
             if let Some(ref consumer) = self.consumer {
-                consumer.commit_consumer_state(CommitMode::Async)
+                consumer
+                    .commit_consumer_state(CommitMode::Async)
                     .map_err(|e| anyhow!("Failed to commit offsets: {}", e))?;
                 debug!("Committed consumer offsets");
             }
@@ -1205,10 +1442,11 @@ impl KafkaAdmin {
     pub fn new(brokers: Vec<String>) -> Result<Self> {
         let mut config = ClientConfig::new();
         config.set("bootstrap.servers", brokers.join(","));
-        
-        let admin_client: AdminClient<DefaultClientContext> = config.create()
+
+        let admin_client: AdminClient<DefaultClientContext> = config
+            .create()
             .map_err(|e| anyhow!("Failed to create admin client: {}", e))?;
-        
+
         Ok(Self {
             admin_client: Some(admin_client),
             brokers,
@@ -1224,17 +1462,26 @@ impl KafkaAdmin {
     }
 
     #[cfg(feature = "kafka")]
-    pub async fn create_topic(&self, topic: &str, partitions: i32, replication_factor: i32) -> Result<()> {
+    pub async fn create_topic(
+        &self,
+        topic: &str,
+        partitions: i32,
+        replication_factor: i32,
+    ) -> Result<()> {
         if let Some(ref admin_client) = self.admin_client {
-            let new_topic = NewTopic::new(topic, partitions, TopicReplication::Fixed(replication_factor))
-                .set("cleanup.policy", "compact")
-                .set("compression.type", "snappy")
-                .set("min.insync.replicas", "2");
-            
+            let new_topic = NewTopic::new(
+                topic,
+                partitions,
+                TopicReplication::Fixed(replication_factor),
+            )
+            .set("cleanup.policy", "compact")
+            .set("compression.type", "snappy")
+            .set("min.insync.replicas", "2");
+
             let results = admin_client
                 .create_topics(vec![&new_topic], &AdminOptions::new())
                 .await;
-            
+
             match results {
                 Ok(_) => {
                     info!("Created topic '{}' with {} partitions", topic, partitions);
@@ -1255,22 +1502,34 @@ impl KafkaAdmin {
     }
 
     #[cfg(not(feature = "kafka"))]
-    pub async fn create_topic(&self, topic: &str, partitions: i32, _replication_factor: i32) -> Result<()> {
-        info!("Mock: created topic '{}' with {} partitions", topic, partitions);
+    pub async fn create_topic(
+        &self,
+        topic: &str,
+        partitions: i32,
+        _replication_factor: i32,
+    ) -> Result<()> {
+        info!(
+            "Mock: created topic '{}' with {} partitions",
+            topic, partitions
+        );
         Ok(())
     }
 
     #[cfg(feature = "kafka")]
     pub async fn get_topic_metadata(&self, topic: &str) -> Result<KafkaTopicMetadata> {
         if let Some(ref admin_client) = self.admin_client {
-            let metadata = admin_client.inner().fetch_metadata(Some(topic), Timeout::After(Duration::from_secs(10)))
+            let metadata = admin_client
+                .inner()
+                .fetch_metadata(Some(topic), Timeout::After(Duration::from_secs(10)))
                 .map_err(|e| anyhow!("Failed to fetch metadata: {}", e))?;
-            
+
             if let Some(topic_metadata) = metadata.topics().iter().find(|t| t.name() == topic) {
                 Ok(KafkaTopicMetadata {
                     name: topic.to_string(),
                     partition_count: topic_metadata.partitions().len() as u32,
-                    replication_factor: topic_metadata.partitions().first()
+                    replication_factor: topic_metadata
+                        .partitions()
+                        .first()
                         .map(|p| p.replicas().len() as u32)
                         .unwrap_or(0),
                     config: HashMap::new(), // Would need additional call to get config
@@ -1306,11 +1565,11 @@ pub struct KafkaTopicMetadata {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{StreamConfig, StreamBackend};
+    use crate::{StreamBackend, StreamConfig};
 
     fn test_kafka_config() -> StreamConfig {
         StreamConfig {
-            backend: StreamBackend::Kafka { 
+            backend: StreamBackend::Kafka {
                 brokers: vec!["localhost:9092".to_string()],
                 security_protocol: None,
                 sasl_config: None,
@@ -1356,11 +1615,19 @@ mod tests {
 
         let kafka_event = KafkaEvent::from(event.clone());
         assert_eq!(kafka_event.event_type, "triple_added");
-        assert_eq!(kafka_event.partition_key, Some("http://example.org/subject".to_string()));
+        assert_eq!(
+            kafka_event.partition_key,
+            Some("http://example.org/subject".to_string())
+        );
 
         let converted_back: StreamEvent = kafka_event.try_into().unwrap();
         match converted_back {
-            StreamEvent::TripleAdded { subject, predicate, object, .. } => {
+            StreamEvent::TripleAdded {
+                subject,
+                predicate,
+                object,
+                ..
+            } => {
                 assert_eq!(subject, "http://example.org/subject");
                 assert_eq!(predicate, "http://example.org/predicate");
                 assert_eq!(object, "http://example.org/object");
@@ -1373,7 +1640,7 @@ mod tests {
     async fn test_kafka_admin_operations() {
         let admin = KafkaAdmin::new(vec!["localhost:9092".to_string()]);
         assert!(admin.is_ok());
-        
+
         let admin = admin.unwrap();
         let result = admin.create_topic("test-admin-topic", 3, 2).await;
         // This will fail in test environment without Kafka, but tests the API

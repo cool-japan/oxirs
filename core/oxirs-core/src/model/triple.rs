@@ -1,16 +1,16 @@
 //! RDF Triple implementation
 
+use crate::model::RdfTerm;
+use crate::model::{BlankNode, Literal, NamedNode, Object, Predicate, Subject, Variable};
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use serde::{Deserialize, Serialize};
-use crate::model::{NamedNode, BlankNode, Literal, Variable, Subject, Predicate, Object};
-use crate::model::RdfTerm;
 
 /// An RDF Triple
-/// 
+///
 /// Represents an RDF statement with subject, predicate, and object.
 /// This is the fundamental unit of RDF data.
-/// 
+///
 /// Implements ordering for use in BTree indexes for efficient storage and retrieval.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Triple {
@@ -32,41 +32,41 @@ impl Triple {
             object: object.into(),
         }
     }
-    
+
     /// Returns the subject of this triple
     pub fn subject(&self) -> &Subject {
         &self.subject
     }
-    
+
     /// Returns the predicate of this triple
     pub fn predicate(&self) -> &Predicate {
         &self.predicate
     }
-    
+
     /// Returns the object of this triple
     pub fn object(&self) -> &Object {
         &self.object
     }
-    
+
     /// Decomposes the triple into its components
     pub fn into_parts(self) -> (Subject, Predicate, Object) {
         (self.subject, self.predicate, self.object)
     }
-    
+
     /// Returns true if this triple contains any variables
     pub fn has_variables(&self) -> bool {
-        matches!(self.subject, Subject::Variable(_)) ||
-        matches!(self.predicate, Predicate::Variable(_)) ||
-        matches!(self.object, Object::Variable(_))
+        matches!(self.subject, Subject::Variable(_))
+            || matches!(self.predicate, Predicate::Variable(_))
+            || matches!(self.object, Object::Variable(_))
     }
-    
+
     /// Returns true if this triple is ground (contains no variables)
     pub fn is_ground(&self) -> bool {
         !self.has_variables()
     }
-    
+
     /// Returns true if this triple matches the given pattern
-    /// 
+    ///
     /// None values in the pattern act as wildcards matching any term.
     pub fn matches_pattern(
         &self,
@@ -79,24 +79,24 @@ impl Triple {
                 return false;
             }
         }
-        
+
         if let Some(p) = predicate {
             if &self.predicate != p {
                 return false;
             }
         }
-        
+
         if let Some(o) = object {
             if &self.object != o {
                 return false;
             }
         }
-        
+
         true
     }
-    
+
     /// Returns the canonical order of this triple for sorting
-    /// 
+    ///
     /// This enables efficient storage in BTree-based indexes.
     /// Order: Subject -> Predicate -> Object
     fn canonical_ordering(&self) -> (u8, &str, u8, &str, u8, &str) {
@@ -106,12 +106,12 @@ impl Triple {
             Subject::Variable(_) => 2,
             Subject::QuotedTriple(_) => 3,
         };
-        
+
         let predicate_ord = match &self.predicate {
             Predicate::NamedNode(_) => 0,
             Predicate::Variable(_) => 1,
         };
-        
+
         let object_ord = match &self.object {
             Object::NamedNode(_) => 0,
             Object::BlankNode(_) => 1,
@@ -119,7 +119,7 @@ impl Triple {
             Object::Variable(_) => 3,
             Object::QuotedTriple(_) => 4,
         };
-        
+
         (
             subject_ord,
             self.subject_str(),
@@ -129,7 +129,7 @@ impl Triple {
             self.object_str(),
         )
     }
-    
+
     /// Returns the subject as a string for ordering
     fn subject_str(&self) -> &str {
         match &self.subject {
@@ -139,7 +139,7 @@ impl Triple {
             Subject::QuotedTriple(_) => "<<quoted-triple>>",
         }
     }
-    
+
     /// Returns the predicate as a string for ordering
     fn predicate_str(&self) -> &str {
         match &self.predicate {
@@ -147,7 +147,7 @@ impl Triple {
             Predicate::Variable(v) => v.as_str(),
         }
     }
-    
+
     /// Returns the object as a string for ordering
     fn object_str(&self) -> &str {
         match &self.object {
@@ -165,7 +165,6 @@ impl fmt::Display for Triple {
         write!(f, "{} {} {} .", self.subject, self.predicate, self.object)
     }
 }
-
 
 // Display implementations for term unions
 impl fmt::Display for Subject {
@@ -221,22 +220,22 @@ impl<'a> TripleRef<'a> {
             object,
         }
     }
-    
+
     /// Returns the subject
     pub fn subject(&self) -> SubjectRef<'a> {
         self.subject
     }
-    
+
     /// Returns the predicate
     pub fn predicate(&self) -> PredicateRef<'a> {
         self.predicate
     }
-    
+
     /// Returns the object
     pub fn object(&self) -> ObjectRef<'a> {
         self.object
     }
-    
+
     /// Converts to an owned triple
     pub fn to_owned(&self) -> Triple {
         Triple {
@@ -392,117 +391,113 @@ impl<'a> From<TripleRef<'a>> for Triple {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{NamedNode, BlankNode, Literal};
-    
+    use crate::model::{BlankNode, Literal, NamedNode};
+
     #[test]
     fn test_triple_creation() {
         let subject = NamedNode::new("http://example.org/subject").unwrap();
         let predicate = NamedNode::new("http://example.org/predicate").unwrap();
         let object = Literal::new("object");
-        
+
         let triple = Triple::new(subject.clone(), predicate.clone(), object.clone());
-        
+
         assert!(triple.is_ground());
         assert!(!triple.has_variables());
     }
-    
+
     #[test]
     fn test_triple_with_variable() {
         let subject = Variable::new("x").unwrap();
         let predicate = NamedNode::new("http://example.org/predicate").unwrap();
         let object = Literal::new("object");
-        
+
         let triple = Triple::new(subject, predicate, object);
-        
+
         assert!(!triple.is_ground());
         assert!(triple.has_variables());
     }
-    
+
     #[test]
     fn test_triple_display() {
         let subject = NamedNode::new("http://example.org/s").unwrap();
         let predicate = NamedNode::new("http://example.org/p").unwrap();
         let object = Literal::new("o");
-        
+
         let triple = Triple::new(subject, predicate, object);
         let display_str = format!("{}", triple);
-        
+
         assert!(display_str.contains("http://example.org/s"));
         assert!(display_str.contains("http://example.org/p"));
         assert!(display_str.contains("\"o\""));
         assert!(display_str.ends_with(" ."));
     }
-    
+
     #[test]
     fn test_triple_ref() {
         let subject = NamedNode::new("http://example.org/s").unwrap();
         let predicate = NamedNode::new("http://example.org/p").unwrap();
         let object = Literal::new("o");
-        
+
         let triple = Triple::new(subject, predicate, object);
         let triple_ref = TripleRef::from(&triple);
         let triple_owned = triple_ref.to_owned();
-        
+
         assert_eq!(triple, triple_owned);
     }
-    
+
     #[test]
     fn test_pattern_matching() {
         let subject = NamedNode::new("http://example.org/s").unwrap();
         let predicate = NamedNode::new("http://example.org/p").unwrap();
         let object = Literal::new("o");
-        
+
         let triple = Triple::new(subject.clone(), predicate.clone(), object.clone());
-        
+
         // Test exact match
         assert!(triple.matches_pattern(
             Some(&Subject::NamedNode(subject.clone())),
             Some(&Predicate::NamedNode(predicate.clone())),
             Some(&Object::Literal(object.clone()))
         ));
-        
+
         // Test wildcard matches
         assert!(triple.matches_pattern(None, None, None));
         assert!(triple.matches_pattern(Some(&Subject::NamedNode(subject.clone())), None, None));
         assert!(triple.matches_pattern(None, Some(&Predicate::NamedNode(predicate.clone())), None));
         assert!(triple.matches_pattern(None, None, Some(&Object::Literal(object.clone()))));
-        
+
         // Test non-matches
         let different_subject = NamedNode::new("http://example.org/different").unwrap();
-        assert!(!triple.matches_pattern(
-            Some(&Subject::NamedNode(different_subject)),
-            None,
-            None
-        ));
+        assert!(!triple.matches_pattern(Some(&Subject::NamedNode(different_subject)), None, None));
     }
-    
+
     #[test]
     fn test_triple_ordering() {
         let subject1 = NamedNode::new("http://example.org/a").unwrap();
         let subject2 = NamedNode::new("http://example.org/b").unwrap();
         let predicate = NamedNode::new("http://example.org/p").unwrap();
         let object = Literal::new("o");
-        
+
         let triple1 = Triple::new(subject1, predicate.clone(), object.clone());
         let triple2 = Triple::new(subject2, predicate, object);
-        
+
         assert!(triple1 < triple2);
-        
+
         let mut triples = vec![triple2.clone(), triple1.clone()];
         triples.sort();
         assert_eq!(triples, vec![triple1, triple2]);
     }
-    
+
     #[test]
     fn test_triple_serialization() {
         let subject = NamedNode::new("http://example.org/s").unwrap();
         let predicate = NamedNode::new("http://example.org/p").unwrap();
         let object = Literal::new("o");
-        
+
         let triple = Triple::new(subject, predicate, object);
         let json = serde_json::to_string(&triple).unwrap();
         let deserialized: Triple = serde_json::from_str(&json).unwrap();
-        
+
         assert_eq!(triple, deserialized);
     }
 }

@@ -6,8 +6,8 @@
 //! strings are stored only once and can be compared by pointer equality.
 
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock, Weak};
 use std::hash::{Hash, Hasher};
+use std::sync::{Arc, RwLock, Weak};
 
 /// A thread-safe string interner that deduplicates strings with ID mapping
 #[derive(Debug)]
@@ -79,7 +79,7 @@ impl StringInterner {
 
         // Slow path: need to create new string with write lock
         let mut strings = self.strings.write().unwrap();
-        
+
         // Double-check in case another thread added it while we were waiting
         if let Some(weak_ref) = strings.get(s) {
             if let Some(arc_str) = weak_ref.upgrade() {
@@ -134,7 +134,9 @@ impl StringInterner {
 
         // Slow path: need to create new entry
         let arc_str = self.intern(s); // This will handle the string interning
-        let id = self.next_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let id = self
+            .next_id
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
         // Update the ID mappings
         {
@@ -164,7 +166,10 @@ impl StringInterner {
     /// Get all ID mappings (useful for serialization/debugging)
     pub fn get_all_mappings(&self) -> Vec<(u32, Arc<str>)> {
         let id_to_string = self.id_to_string.read().unwrap();
-        id_to_string.iter().map(|(&id, s)| (id, s.clone())).collect()
+        id_to_string
+            .iter()
+            .map(|(&id, s)| (id, s.clone()))
+            .collect()
     }
 
     /// Clean up expired weak references to save memory
@@ -207,10 +212,10 @@ impl Default for StringInterner {
 lazy_static::lazy_static! {
     /// Global interner for IRI strings
     pub static ref IRI_INTERNER: StringInterner = StringInterner::new();
-    
+
     /// Global interner for datatype IRIs
     pub static ref DATATYPE_INTERNER: StringInterner = StringInterner::new();
-    
+
     /// Global interner for language tags
     pub static ref LANGUAGE_INTERNER: StringInterner = StringInterner::new();
 }
@@ -388,7 +393,7 @@ mod tests {
     #[test]
     fn test_string_interner_basic() {
         let interner = StringInterner::new();
-        
+
         let s1 = interner.intern("http://example.org/test");
         let s2 = interner.intern("http://example.org/test");
         let s3 = interner.intern("http://example.org/different");
@@ -396,7 +401,7 @@ mod tests {
         // Same string should return same Arc (pointer equality)
         assert!(Arc::ptr_eq(&s1, &s2));
         assert!(!Arc::ptr_eq(&s1, &s3));
-        
+
         // Content should be equal
         assert_eq!(s1.as_ref(), "http://example.org/test");
         assert_eq!(s2.as_ref(), "http://example.org/test");
@@ -406,14 +411,14 @@ mod tests {
     #[test]
     fn test_string_interner_stats() {
         let interner = StringInterner::new();
-        
+
         // First request - cache miss
         let _s1 = interner.intern("test");
         let stats = interner.stats();
         assert_eq!(stats.total_requests, 1);
         assert_eq!(stats.cache_misses, 1);
         assert_eq!(stats.cache_hits, 0);
-        
+
         // Second request for same string - cache hit
         let _s2 = interner.intern("test");
         let stats = interner.stats();
@@ -426,12 +431,12 @@ mod tests {
     #[test]
     fn test_string_interner_cleanup() {
         let interner = StringInterner::new();
-        
+
         {
             let _s1 = interner.intern("temporary");
             assert_eq!(interner.len(), 1);
         } // s1 goes out of scope
-        
+
         interner.cleanup();
         assert_eq!(interner.len(), 0);
     }
@@ -485,10 +490,10 @@ mod tests {
     fn test_global_interners() {
         let iri1 = InternedString::new("http://example.org/test");
         let iri2 = InternedString::new("http://example.org/test");
-        
+
         let datatype1 = InternedString::new_datatype("http://www.w3.org/2001/XMLSchema#string");
         let datatype2 = InternedString::new_datatype("http://www.w3.org/2001/XMLSchema#string");
-        
+
         let lang1 = InternedString::new_language("en");
         let lang2 = InternedString::new_language("en");
 
@@ -504,9 +509,18 @@ mod tests {
         let integer_type = InternedString::xsd_integer();
         let rdf_type = InternedString::rdf_type();
 
-        assert_eq!(string_type.as_str(), "http://www.w3.org/2001/XMLSchema#string");
-        assert_eq!(integer_type.as_str(), "http://www.w3.org/2001/XMLSchema#integer");
-        assert_eq!(rdf_type.as_str(), "http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
+        assert_eq!(
+            string_type.as_str(),
+            "http://www.w3.org/2001/XMLSchema#string"
+        );
+        assert_eq!(
+            integer_type.as_str(),
+            "http://www.w3.org/2001/XMLSchema#integer"
+        );
+        assert_eq!(
+            rdf_type.as_str(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+        );
 
         // Test that repeated calls return interned strings
         let string_type2 = InternedString::xsd_string();
@@ -531,7 +545,7 @@ mod tests {
     fn test_interned_string_conversions() {
         let s1 = InternedString::from("test");
         let s2 = InternedString::from("test".to_string());
-        
+
         assert_eq!(s1, s2);
         assert_eq!(s1.as_str(), "test");
     }
@@ -572,43 +586,46 @@ mod tests {
     #[test]
     fn test_term_id_mapping() {
         let interner = StringInterner::new();
-        
+
         // Test interning with ID
         let (arc1, id1) = interner.intern_with_id("test_string");
         let (arc2, id2) = interner.intern_with_id("test_string");
-        
+
         // Same string should get same ID
         assert_eq!(id1, id2);
         assert!(Arc::ptr_eq(&arc1, &arc2));
-        
+
         // Different strings should get different IDs
         let (arc3, id3) = interner.intern_with_id("different_string");
         assert_ne!(id1, id3);
         assert!(!Arc::ptr_eq(&arc1, &arc3));
-        
+
         // Test ID lookup
         assert_eq!(interner.get_id("test_string"), Some(id1));
         assert_eq!(interner.get_id("different_string"), Some(id3));
         assert_eq!(interner.get_id("nonexistent"), None);
-        
+
         // Test string lookup
         assert_eq!(interner.get_string(id1).unwrap().as_ref(), "test_string");
-        assert_eq!(interner.get_string(id3).unwrap().as_ref(), "different_string");
+        assert_eq!(
+            interner.get_string(id3).unwrap().as_ref(),
+            "different_string"
+        );
         assert_eq!(interner.get_string(999), None);
     }
 
     #[test]
     fn test_id_mapping_stats() {
         let interner = StringInterner::new();
-        
+
         assert_eq!(interner.id_mapping_count(), 0);
-        
+
         interner.intern_with_id("string1");
         assert_eq!(interner.id_mapping_count(), 1);
-        
+
         interner.intern_with_id("string2");
         assert_eq!(interner.id_mapping_count(), 2);
-        
+
         // Interning same string again shouldn't increase count
         interner.intern_with_id("string1");
         assert_eq!(interner.id_mapping_count(), 2);
@@ -617,14 +634,14 @@ mod tests {
     #[test]
     fn test_get_all_mappings() {
         let interner = StringInterner::new();
-        
+
         let (_, id1) = interner.intern_with_id("first");
         let (_, id2) = interner.intern_with_id("second");
         let (_, id3) = interner.intern_with_id("third");
-        
+
         let mappings = interner.get_all_mappings();
         assert_eq!(mappings.len(), 3);
-        
+
         // Verify all mappings are present
         let mut found_ids = vec![false; 3];
         for (id, string) in mappings {
@@ -650,18 +667,18 @@ mod tests {
     #[test]
     fn test_mixed_interning_modes() {
         let interner = StringInterner::new();
-        
+
         // Mix regular interning and ID interning
         let arc1 = interner.intern("regular");
         let (arc2, id2) = interner.intern_with_id("with_id");
         let arc3 = interner.intern("regular"); // Same as first
-        
+
         // Regular interning should still work
         assert!(Arc::ptr_eq(&arc1, &arc3));
-        
+
         // ID interning should work independently
         assert_eq!(interner.get_string(id2).unwrap().as_ref(), "with_id");
-        
+
         // Mixed mode length reporting should work
         assert!(interner.len() >= 2);
     }

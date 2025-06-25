@@ -4,21 +4,30 @@
 //! metrics collection, circuit breaker integration, and intelligent load balancing
 //! for high-throughput streaming scenarios.
 
-use crate::{StreamConfig, circuit_breaker::{CircuitBreaker, CircuitBreakerConfig, FailureType, SharedCircuitBreaker, new_shared_circuit_breaker}};
+use crate::{
+    circuit_breaker::{
+        new_shared_circuit_breaker, CircuitBreaker, CircuitBreakerConfig, FailureType,
+        SharedCircuitBreaker,
+    },
+    StreamConfig,
+};
 use anyhow::{anyhow, Result};
-use serde::{Deserialize, Serialize};
-use std::collections::{VecDeque, HashMap};
-use std::sync::{Arc, atomic::{AtomicU64, AtomicUsize, Ordering}};
-use std::hash::{Hash, Hasher};
 use fastrand;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, VecDeque};
+use std::hash::{Hash, Hasher};
+use std::sync::{
+    atomic::{AtomicU64, AtomicUsize, Ordering},
+    Arc,
+};
 
+use chrono::{DateTime, Utc};
 #[cfg(test)]
 use futures_util;
 use std::time::{Duration, Instant};
-use tokio::sync::{Mutex, RwLock, Semaphore, broadcast};
+use tokio::sync::{broadcast, Mutex, RwLock, Semaphore};
 use tokio::time::{interval, sleep};
 use tracing::{debug, error, info, warn};
-use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 /// Connection pool configuration with advanced features
@@ -111,16 +120,16 @@ pub struct PoolStatus {
 pub trait PooledConnection: Send + Sync + 'static {
     /// Check if connection is healthy
     async fn is_healthy(&self) -> bool;
-    
+
     /// Close the connection
     async fn close(&mut self) -> Result<()>;
-    
+
     /// Get connection creation time
     fn created_at(&self) -> Instant;
-    
+
     /// Get last activity time
     fn last_activity(&self) -> Instant;
-    
+
     /// Update last activity time
     fn update_activity(&mut self);
 }
@@ -164,20 +173,20 @@ impl<T: PooledConnection> PooledConnectionWrapper<T> {
             weight: 1.0, // Default weight
         }
     }
-    
+
     /// Update connection usage statistics
     fn record_usage(&mut self, execution_time: Duration, success: bool) {
         self.usage_count += 1;
         self.last_activity = Instant::now();
         self.total_execution_time += execution_time;
-        
+
         // Update average response time with exponential moving average
         let alpha = 0.1; // Smoothing factor
         let new_time_ms = execution_time.as_millis() as f64;
         let current_avg_ms = self.avg_response_time.as_millis() as f64;
         let updated_avg_ms = alpha * new_time_ms + (1.0 - alpha) * current_avg_ms;
         self.avg_response_time = Duration::from_millis(updated_avg_ms as u64);
-        
+
         if !success {
             self.failure_count += 1;
             // Reduce weight for failing connections
@@ -187,25 +196,25 @@ impl<T: PooledConnection> PooledConnectionWrapper<T> {
             self.weight = (self.weight * 1.01).min(1.0);
         }
     }
-    
+
     /// Get connection efficiency score for load balancing
     fn efficiency_score(&self) -> f64 {
         if self.usage_count == 0 {
             return 1.0;
         }
-        
+
         let failure_rate = self.failure_count as f64 / self.usage_count as f64;
         let response_time_penalty = (self.avg_response_time.as_millis() as f64).ln() / 10.0;
-        
+
         (1.0 - failure_rate) * self.weight / (1.0 + response_time_penalty)
     }
-    
+
     fn is_expired(&self, max_lifetime: Duration, idle_timeout: Duration) -> bool {
         let now = Instant::now();
-        now.duration_since(self.created_at) > max_lifetime ||
-        (!self.is_in_use && now.duration_since(self.last_activity) > idle_timeout)
+        now.duration_since(self.created_at) > max_lifetime
+            || (!self.is_in_use && now.duration_since(self.last_activity) > idle_timeout)
     }
-    
+
     async fn is_healthy(&self) -> bool {
         self.connection.is_healthy().await
     }
@@ -304,28 +313,41 @@ impl Default for AdaptiveController {
 }
 
 impl AdaptiveController {
-    fn should_scale_up(&self, current_size: usize, avg_response_time: Duration, utilization: f64) -> bool {
+    fn should_scale_up(
+        &self,
+        current_size: usize,
+        avg_response_time: Duration,
+        utilization: f64,
+    ) -> bool {
         if !self.enabled || self.last_adjustment.elapsed() < self.adjustment_cooldown {
             return false;
         }
-        
+
         avg_response_time > self.target_response_time && utilization > 0.8
     }
-    
-    fn should_scale_down(&self, current_size: usize, avg_response_time: Duration, utilization: f64) -> bool {
-        if !self.enabled || self.last_adjustment.elapsed() < self.adjustment_cooldown || current_size <= 1 {
+
+    fn should_scale_down(
+        &self,
+        current_size: usize,
+        avg_response_time: Duration,
+        utilization: f64,
+    ) -> bool {
+        if !self.enabled
+            || self.last_adjustment.elapsed() < self.adjustment_cooldown
+            || current_size <= 1
+        {
             return false;
         }
-        
+
         avg_response_time < self.target_response_time / 2 && utilization < 0.3
     }
-    
+
     fn record_metrics(&mut self, response_time: Duration, utilization: f64) {
         self.response_time_samples.push_back(response_time);
         if self.response_time_samples.len() > 100 {
             self.response_time_samples.pop_front();
         }
-        
+
         self.utilization_samples.push_back(utilization);
         if self.utilization_samples.len() > 100 {
             self.utilization_samples.pop_front();
@@ -335,25 +357,23 @@ impl AdaptiveController {
 
 impl<T: PooledConnection> ConnectionPool<T> {
     /// Create a new advanced connection pool with monitoring and circuit breaker
-    pub async fn new(
-        config: PoolConfig,
-        factory: Arc<dyn ConnectionFactory<T>>,
-    ) -> Result<Self> {
+    pub async fn new(config: PoolConfig, factory: Arc<dyn ConnectionFactory<T>>) -> Result<Self> {
         // Initialize circuit breaker if enabled
         let circuit_breaker = if config.enable_circuit_breaker {
             Some(new_shared_circuit_breaker(
-                config.circuit_breaker_config.clone().unwrap_or_default()
+                config.circuit_breaker_config.clone().unwrap_or_default(),
             ))
         } else {
             None
         };
-        
+
         // Initialize adaptive controller
         let mut adaptive_controller = AdaptiveController::default();
         adaptive_controller.enabled = config.adaptive_sizing;
-        adaptive_controller.target_response_time = Duration::from_millis(config.target_response_time_ms);
+        adaptive_controller.target_response_time =
+            Duration::from_millis(config.target_response_time_ms);
         adaptive_controller.current_target_size = config.min_connections;
-        
+
         let pool = Self {
             semaphore: Arc::new(Semaphore::new(config.max_connections)),
             connections: Arc::new(Mutex::new(VecDeque::new())),
@@ -368,45 +388,51 @@ impl<T: PooledConnection> ConnectionPool<T> {
             adaptive_controller: Arc::new(RwLock::new(adaptive_controller)),
             config,
         };
-        
+
         // Initialize minimum connections
         pool.ensure_min_connections().await?;
-        
+
         // Start background maintenance task
         pool.start_maintenance_task().await;
-        
+
         // Start adaptive sizing task if enabled
         if pool.config.adaptive_sizing {
             pool.start_adaptive_sizing_task().await;
         }
-        
-        info!("Created advanced connection pool with {} features", 
-              if pool.circuit_breaker.is_some() { "circuit breaker, " } else { "" });
-        
+
+        info!(
+            "Created advanced connection pool with {} features",
+            if pool.circuit_breaker.is_some() {
+                "circuit breaker, "
+            } else {
+                ""
+            }
+        );
+
         Ok(pool)
     }
-    
+
     /// Get a connection from the pool with advanced load balancing and monitoring
     pub async fn get_connection(&self) -> Result<PooledConnectionHandle<T>> {
         let start_time = Instant::now();
         self.pending_requests.fetch_add(1, Ordering::Relaxed);
-        
+
         // Check circuit breaker if enabled
         if let Some(cb) = &self.circuit_breaker {
             if !cb.can_execute().await {
                 self.pending_requests.fetch_sub(1, Ordering::Relaxed);
-                return Err(anyhow!("Circuit breaker is open - connection pool unavailable"));
+                return Err(anyhow!(
+                    "Circuit breaker is open - connection pool unavailable"
+                ));
             }
         }
-        
+
         // Acquire permit with timeout
-        let permit = tokio::time::timeout(
-            self.config.acquire_timeout,
-            self.semaphore.acquire()
-        ).await
-        .map_err(|_| anyhow!("Timeout acquiring connection from pool"))?
-        .map_err(|_| anyhow!("Failed to acquire semaphore permit"))?;
-        
+        let permit = tokio::time::timeout(self.config.acquire_timeout, self.semaphore.acquire())
+            .await
+            .map_err(|_| anyhow!("Timeout acquiring connection from pool"))?
+            .map_err(|_| anyhow!("Failed to acquire semaphore permit"))?;
+
         let connection = match self.try_get_existing_connection_with_lb().await {
             Some(conn) => {
                 // Record successful circuit breaker operation
@@ -415,37 +441,35 @@ impl<T: PooledConnection> ConnectionPool<T> {
                 }
                 conn
             }
-            None => {
-                match self.create_new_connection().await {
-                    Ok(conn) => {
-                        if let Some(cb) = &self.circuit_breaker {
-                            cb.record_success().await;
-                        }
-                        conn
+            None => match self.create_new_connection().await {
+                Ok(conn) => {
+                    if let Some(cb) = &self.circuit_breaker {
+                        cb.record_success().await;
                     }
-                    Err(e) => {
-                        if let Some(cb) = &self.circuit_breaker {
-                            cb.record_failure_with_type(FailureType::NetworkError).await;
-                        }
-                        self.pending_requests.fetch_sub(1, Ordering::Relaxed);
-                        return Err(e);
-                    }
+                    conn
                 }
-            }
+                Err(e) => {
+                    if let Some(cb) = &self.circuit_breaker {
+                        cb.record_failure_with_type(FailureType::NetworkError).await;
+                    }
+                    self.pending_requests.fetch_sub(1, Ordering::Relaxed);
+                    return Err(e);
+                }
+            },
         };
-        
+
         *self.active_count.lock().await += 1;
         let mut stats = self.stats.write().await;
         stats.total_borrowed += 1;
         stats.load_balancing_decisions += 1;
         drop(stats);
-        
+
         // Update metrics
         let wait_time = start_time.elapsed();
         self.update_metrics(wait_time).await;
-        
+
         self.pending_requests.fetch_sub(1, Ordering::Relaxed);
-        
+
         Ok(PooledConnectionHandle::new(
             connection,
             self.connections.clone(),
@@ -455,26 +479,25 @@ impl<T: PooledConnection> ConnectionPool<T> {
             self.adaptive_controller.clone(),
         ))
     }
-    
+
     /// Try to get an existing healthy connection with load balancing
     async fn try_get_existing_connection_with_lb(&self) -> Option<T> {
         let mut connections = self.connections.lock().await;
-        
+
         if connections.is_empty() {
             return None;
         }
-        
+
         // Apply load balancing strategy
         let selected_index = match self.config.load_balancing {
             LoadBalancingStrategy::RoundRobin => {
                 self.round_robin_counter.fetch_add(1, Ordering::Relaxed) % connections.len()
             }
-            LoadBalancingStrategy::Random => {
-                fastrand::usize(..connections.len())
-            }
+            LoadBalancingStrategy::Random => fastrand::usize(..connections.len()),
             LoadBalancingStrategy::LeastRecentlyUsed => {
                 // Find connection with oldest last_activity
-                connections.iter()
+                connections
+                    .iter()
                     .enumerate()
                     .min_by_key(|(_, wrapper)| wrapper.last_activity)
                     .map(|(idx, _)| idx)
@@ -482,7 +505,8 @@ impl<T: PooledConnection> ConnectionPool<T> {
             }
             LoadBalancingStrategy::LeastConnections => {
                 // Find connection with lowest usage_count
-                connections.iter()
+                connections
+                    .iter()
                     .enumerate()
                     .min_by_key(|(_, wrapper)| wrapper.usage_count)
                     .map(|(idx, _)| idx)
@@ -490,18 +514,23 @@ impl<T: PooledConnection> ConnectionPool<T> {
             }
             LoadBalancingStrategy::WeightedRoundRobin => {
                 // Select based on efficiency score
-                connections.iter()
+                connections
+                    .iter()
                     .enumerate()
-                    .max_by(|(_, a), (_, b)| a.efficiency_score().partial_cmp(&b.efficiency_score()).unwrap_or(std::cmp::Ordering::Equal))
+                    .max_by(|(_, a), (_, b)| {
+                        a.efficiency_score()
+                            .partial_cmp(&b.efficiency_score())
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    })
                     .map(|(idx, _)| idx)
                     .unwrap_or(0)
             }
         };
-        
+
         // Try to get the selected connection, falling back to linear search
         for attempt in 0..connections.len() {
             let index = (selected_index + attempt) % connections.len();
-            
+
             if let Some(mut wrapper) = connections.remove(index) {
                 if wrapper.is_expired(self.config.max_lifetime, self.config.idle_timeout) {
                     // Connection expired, destroy it
@@ -511,20 +540,21 @@ impl<T: PooledConnection> ConnectionPool<T> {
                     self.stats.write().await.total_destroyed += 1;
                     continue;
                 }
-                
+
                 // Validate connection health with timeout
-                let health_check = tokio::time::timeout(
-                    self.config.validation_timeout,
-                    wrapper.is_healthy()
-                ).await;
-                
+                let health_check =
+                    tokio::time::timeout(self.config.validation_timeout, wrapper.is_healthy())
+                        .await;
+
                 match health_check {
                     Ok(true) => {
                         wrapper.is_in_use = true;
                         wrapper.last_activity = Instant::now();
                         wrapper.last_health_check = Some((Instant::now(), true));
-                        debug!("Selected connection {} using {:?} strategy", 
-                               wrapper.connection_id, self.config.load_balancing);
+                        debug!(
+                            "Selected connection {} using {:?} strategy",
+                            wrapper.connection_id, self.config.load_balancing
+                        );
                         return Some(wrapper.connection);
                     }
                     Ok(false) | Err(_) => {
@@ -540,10 +570,10 @@ impl<T: PooledConnection> ConnectionPool<T> {
                 }
             }
         }
-        
+
         None
     }
-    
+
     /// Create a new connection
     async fn create_new_connection(&self) -> Result<T> {
         match self.connection_factory.create_connection().await {
@@ -559,47 +589,55 @@ impl<T: PooledConnection> ConnectionPool<T> {
             }
         }
     }
-    
+
     /// Return a connection to the pool with usage tracking
-    async fn return_connection_with_metrics(&self, mut connection: T, execution_time: Duration, success: bool) {
+    async fn return_connection_with_metrics(
+        &self,
+        mut connection: T,
+        execution_time: Duration,
+        success: bool,
+    ) {
         connection.update_activity();
-        
+
         let mut wrapper = PooledConnectionWrapper::new(connection);
         wrapper.record_usage(execution_time, success);
         wrapper.is_in_use = false;
-        
+
         self.connections.lock().await.push_back(wrapper);
-        
+
         let mut active_count = self.active_count.lock().await;
         if *active_count > 0 {
             *active_count -= 1;
         }
-        
+
         self.stats.write().await.total_returned += 1;
-        
+
         // Record metrics for adaptive sizing
         let mut controller = self.adaptive_controller.write().await;
         let utilization = (*active_count as f64) / (self.config.max_connections as f64);
         controller.record_metrics(execution_time, utilization);
-        
-        debug!("Returned connection to pool with metrics: exec_time={:?}, success={}", 
-               execution_time, success);
+
+        debug!(
+            "Returned connection to pool with metrics: exec_time={:?}, success={}",
+            execution_time, success
+        );
     }
-    
+
     /// Legacy method for backward compatibility
     async fn return_connection(&self, connection: T) {
-        self.return_connection_with_metrics(connection, Duration::from_millis(100), true).await;
+        self.return_connection_with_metrics(connection, Duration::from_millis(100), true)
+            .await;
     }
-    
+
     /// Ensure minimum connections are available
     async fn ensure_min_connections(&self) -> Result<()> {
         let current_count = self.connections.lock().await.len();
         let active_count = *self.active_count.lock().await;
         let total_count = current_count + active_count;
-        
+
         if total_count < self.config.min_connections {
             let needed = self.config.min_connections - total_count;
-            
+
             for _ in 0..needed {
                 match self.create_new_connection().await {
                     Ok(connection) => {
@@ -613,25 +651,25 @@ impl<T: PooledConnection> ConnectionPool<T> {
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Start background maintenance task
     async fn start_maintenance_task(&self) {
         let connections = self.connections.clone();
         let stats = self.stats.clone();
         let config = self.config.clone();
-        
+
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(config.health_check_interval);
-            
+
             loop {
                 interval.tick().await;
-                
+
                 let mut connections_guard = connections.lock().await;
                 let mut to_remove = Vec::new();
-                
+
                 for (index, wrapper) in connections_guard.iter().enumerate() {
                     if wrapper.is_expired(config.max_lifetime, config.idle_timeout) {
                         to_remove.push(index);
@@ -640,7 +678,7 @@ impl<T: PooledConnection> ConnectionPool<T> {
                         stats.write().await.health_check_failures += 1;
                     }
                 }
-                
+
                 // Remove expired/unhealthy connections in reverse order
                 for &index in to_remove.iter().rev() {
                     if let Some(mut wrapper) = connections_guard.remove(index) {
@@ -650,36 +688,38 @@ impl<T: PooledConnection> ConnectionPool<T> {
                         stats.write().await.total_destroyed += 1;
                     }
                 }
-                
-                debug!("Pool maintenance completed, removed {} connections", to_remove.len());
+
+                debug!(
+                    "Pool maintenance completed, removed {} connections",
+                    to_remove.len()
+                );
             }
         });
     }
-    
+
     /// Get comprehensive pool status with advanced metrics
     pub async fn status(&self) -> PoolStatus {
         let connections = self.connections.lock().await;
         let active_count = *self.active_count.lock().await;
         let metrics = self.metrics.read().await;
         let pending = self.pending_requests.load(Ordering::Relaxed);
-        
+
         let total_connections = connections.len() + active_count;
         let utilization = if self.config.max_connections > 0 {
             (total_connections as f64 / self.config.max_connections as f64) * 100.0
         } else {
             0.0
         };
-        
+
         let circuit_breaker_open = if let Some(cb) = &self.circuit_breaker {
             !cb.is_healthy().await
         } else {
             false
         };
-        
-        let is_healthy = !circuit_breaker_open && 
-                        utilization < 95.0 && 
-                        metrics.avg_wait_time_ms < 1000.0;
-        
+
+        let is_healthy =
+            !circuit_breaker_open && utilization < 95.0 && metrics.avg_wait_time_ms < 1000.0;
+
         PoolStatus {
             total_connections,
             active_connections: active_count,
@@ -694,106 +734,116 @@ impl<T: PooledConnection> ConnectionPool<T> {
             config_hash: self.calculate_config_hash(),
         }
     }
-    
+
     /// Calculate hash of current configuration for validation
     fn calculate_config_hash(&self) -> u64 {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
         self.config.min_connections.hash(&mut hasher);
         self.config.max_connections.hash(&mut hasher);
         self.config.adaptive_sizing.hash(&mut hasher);
         hasher.finish()
     }
-    
+
     /// Get pool statistics
     pub async fn stats(&self) -> PoolStats {
         self.stats.read().await.clone()
     }
-    
+
     /// Update pool metrics for monitoring
     async fn update_metrics(&self, wait_time: Duration) {
         let mut metrics = self.metrics.write().await;
-        
+
         metrics.total_requests += 1;
         let wait_time_ms = wait_time.as_millis() as f64;
-        
+
         // Update average wait time with exponential moving average
         let alpha = 0.1;
         metrics.avg_wait_time_ms = alpha * wait_time_ms + (1.0 - alpha) * metrics.avg_wait_time_ms;
-        
+
         // Update utilization history
         let connections = self.connections.lock().await;
         let active_count = *self.active_count.lock().await;
         let utilization = (active_count as f64) / (self.config.max_connections as f64);
-        
-        metrics.utilization_history.push_back((Instant::now(), utilization));
+
+        metrics
+            .utilization_history
+            .push_back((Instant::now(), utilization));
         if metrics.utilization_history.len() > 1000 {
             metrics.utilization_history.pop_front();
         }
-        
+
         metrics.current_size = connections.len() + active_count;
         metrics.peak_size = metrics.peak_size.max(metrics.current_size);
         metrics.last_updated = Instant::now();
     }
-    
+
     /// Start adaptive sizing background task
     async fn start_adaptive_sizing_task(&self) {
         let pool_metrics = self.metrics.clone();
         let adaptive_controller = self.adaptive_controller.clone();
         let pool_config = self.config.clone();
         let stats = self.stats.clone();
-        
+
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(30));
-            
+
             loop {
                 interval.tick().await;
-                
+
                 let metrics = pool_metrics.read().await;
                 let mut controller = adaptive_controller.write().await;
-                
+
                 if !controller.enabled {
                     continue;
                 }
-                
+
                 let avg_response_time = Duration::from_millis(metrics.avg_wait_time_ms as u64);
-                let current_utilization = if let Some((_, util)) = metrics.utilization_history.back() {
-                    *util
-                } else {
-                    0.0
-                };
-                
+                let current_utilization =
+                    if let Some((_, util)) = metrics.utilization_history.back() {
+                        *util
+                    } else {
+                        0.0
+                    };
+
                 let should_scale_up = controller.should_scale_up(
                     metrics.current_size,
                     avg_response_time,
-                    current_utilization
+                    current_utilization,
                 );
-                
+
                 let should_scale_down = controller.should_scale_down(
                     metrics.current_size,
                     avg_response_time,
-                    current_utilization
+                    current_utilization,
                 );
-                
+
                 if should_scale_up && metrics.current_size < pool_config.max_connections {
-                    controller.current_target_size = (controller.current_target_size + 1)
-                        .min(pool_config.max_connections);
+                    controller.current_target_size =
+                        (controller.current_target_size + 1).min(pool_config.max_connections);
                     controller.last_adjustment = Instant::now();
                     stats.write().await.adaptive_scaling_events += 1;
-                    info!("Adaptive scaling: scaling UP to {}", controller.current_target_size);
+                    info!(
+                        "Adaptive scaling: scaling UP to {}",
+                        controller.current_target_size
+                    );
                 } else if should_scale_down && metrics.current_size > pool_config.min_connections {
-                    controller.current_target_size = (controller.current_target_size.saturating_sub(1))
-                        .max(pool_config.min_connections);
+                    controller.current_target_size =
+                        (controller.current_target_size.saturating_sub(1))
+                            .max(pool_config.min_connections);
                     controller.last_adjustment = Instant::now();
                     stats.write().await.adaptive_scaling_events += 1;
-                    info!("Adaptive scaling: scaling DOWN to {}", controller.current_target_size);
+                    info!(
+                        "Adaptive scaling: scaling DOWN to {}",
+                        controller.current_target_size
+                    );
                 }
             }
         });
     }
-    
+
     /// Health check for the entire pool
     pub async fn health_check(&self) -> PoolStatus {
         self.status().await
@@ -836,7 +886,7 @@ impl<T: PooledConnection> PooledConnectionHandle<T> {
             success_count: 0,
         }
     }
-    
+
     /// Record an operation execution time for metrics
     pub fn record_operation(&mut self, execution_time: Duration, success: bool) {
         self.execution_times.push(execution_time);
@@ -844,11 +894,13 @@ impl<T: PooledConnection> PooledConnectionHandle<T> {
         if success {
             self.success_count += 1;
         }
-        
-        debug!("Recorded operation: time={:?}, success={}, total_ops={}", 
-               execution_time, success, self.operation_count);
+
+        debug!(
+            "Recorded operation: time={:?}, success={}, total_ops={}",
+            execution_time, success, self.operation_count
+        );
     }
-    
+
     /// Get operation statistics for this handle
     pub fn get_operation_stats(&self) -> (u32, u32, Duration) {
         let avg_time = if !self.execution_times.is_empty() {
@@ -856,25 +908,25 @@ impl<T: PooledConnection> PooledConnectionHandle<T> {
         } else {
             Duration::ZERO
         };
-        
+
         (self.operation_count, self.success_count, avg_time)
     }
-    
+
     /// Get the total time this connection has been held
     pub fn held_duration(&self) -> Duration {
         self.acquired_at.elapsed()
     }
-    
+
     /// Get reference to the connection
     pub fn as_ref(&self) -> Option<&T> {
         self.connection.as_ref()
     }
-    
+
     /// Get mutable reference to the connection
     pub fn as_mut(&mut self) -> Option<&mut T> {
         self.connection.as_mut()
     }
-    
+
     /// Take the connection out of the handle (won't be returned to pool)
     pub fn take(mut self) -> Option<T> {
         self.connection.take()
@@ -889,7 +941,7 @@ impl<T: PooledConnection> Drop for PooledConnectionHandle<T> {
             let stats = self.stats.clone();
             let metrics = self.metrics.clone();
             let adaptive_controller = self.adaptive_controller.clone();
-            
+
             // Calculate metrics for this connection usage
             let total_held_time = self.acquired_at.elapsed();
             let avg_execution_time = if !self.execution_times.is_empty() {
@@ -897,36 +949,41 @@ impl<T: PooledConnection> Drop for PooledConnectionHandle<T> {
             } else {
                 Duration::from_millis(50) // Default assumption
             };
-            
+
             let success_rate = if self.operation_count > 0 {
                 self.success_count as f64 / self.operation_count as f64
             } else {
                 1.0 // Assume success if no operations recorded
             };
-            
+
             let overall_success = success_rate > 0.8; // Consider successful if >80% operations succeeded
-            
+
             tokio::spawn(async move {
                 let mut wrapper = PooledConnectionWrapper::new(connection);
                 wrapper.record_usage(avg_execution_time, overall_success);
                 wrapper.is_in_use = false;
-                
+
                 pool_connections.lock().await.push_back(wrapper);
-                
+
                 let mut active = active_count.lock().await;
                 if *active > 0 {
                     *active -= 1;
                 }
-                
+
                 // Update pool statistics
                 stats.write().await.total_returned += 1;
-                
+
                 // Update adaptive controller metrics
                 let utilization = (*active as f64) / 10.0; // Simplified calculation
-                adaptive_controller.write().await.record_metrics(avg_execution_time, utilization);
-                
-                debug!("Returned connection to pool: held_time={:?}, ops={}, success_rate={:.2}", 
-                       total_held_time, wrapper.usage_count, success_rate);
+                adaptive_controller
+                    .write()
+                    .await
+                    .record_metrics(avg_execution_time, utilization);
+
+                debug!(
+                    "Returned connection to pool: held_time={:?}, ops={}, success_rate={:.2}",
+                    total_held_time, wrapper.usage_count, success_rate
+                );
             });
         }
     }
@@ -945,26 +1002,26 @@ impl ConnectionPool<()> {
             enable_metrics: true,
             ..Default::default()
         };
-        
+
         // This is a placeholder - in reality you'd create appropriate factory
         // based on the backend type
         let factory = Arc::new(DummyConnectionFactory);
-        
+
         Self::new(pool_config, factory).await
     }
-    
+
     /// Health check with enhanced status
     pub async fn health_check(&self) -> PoolStatus {
         self.status().await
     }
-    
+
     /// Get detailed pool metrics for monitoring
     pub async fn get_detailed_metrics(&self) -> DetailedPoolMetrics {
         let status = self.status().await;
         let metrics = self.metrics.read().await;
         let stats = self.stats.read().await;
         let controller = self.adaptive_controller.read().await;
-        
+
         DetailedPoolMetrics {
             status,
             total_requests: metrics.total_requests,
@@ -980,25 +1037,29 @@ impl ConnectionPool<()> {
             pool_uptime: self.created_at.elapsed(),
         }
     }
-    
+
     /// Reset pool statistics
     pub async fn reset_statistics(&self) {
         *self.stats.write().await = PoolStats::default();
         *self.metrics.write().await = PoolMetrics::default();
         info!("Pool statistics reset");
     }
-    
+
     /// Force resize the pool
     pub async fn resize(&self, new_size: usize) -> Result<()> {
         if new_size < self.config.min_connections || new_size > self.config.max_connections {
-            return Err(anyhow!("New size {} outside allowed range [{}, {}]", 
-                              new_size, self.config.min_connections, self.config.max_connections));
+            return Err(anyhow!(
+                "New size {} outside allowed range [{}, {}]",
+                new_size,
+                self.config.min_connections,
+                self.config.max_connections
+            ));
         }
-        
+
         let mut controller = self.adaptive_controller.write().await;
         controller.current_target_size = new_size;
         controller.last_adjustment = Instant::now();
-        
+
         info!("Pool manually resized to {}", new_size);
         Ok(())
     }
@@ -1018,19 +1079,19 @@ impl PooledConnection for () {
     async fn is_healthy(&self) -> bool {
         true
     }
-    
+
     async fn close(&mut self) -> Result<()> {
         Ok(())
     }
-    
+
     fn created_at(&self) -> Instant {
         Instant::now()
     }
-    
+
     fn last_activity(&self) -> Instant {
         Instant::now()
     }
-    
+
     fn update_activity(&mut self) {
         // No-op for unit type
     }
@@ -1057,7 +1118,7 @@ pub struct DetailedPoolMetrics {
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicBool, Ordering};
-    
+
     #[derive(Debug)]
     struct TestConnection {
         id: u32,
@@ -1066,7 +1127,7 @@ mod tests {
         is_healthy: Arc<AtomicBool>,
         is_closed: bool,
     }
-    
+
     impl TestConnection {
         fn new(id: u32) -> Self {
             let now = Instant::now();
@@ -1079,34 +1140,34 @@ mod tests {
             }
         }
     }
-    
+
     impl PooledConnection for TestConnection {
         async fn is_healthy(&self) -> bool {
             !self.is_closed && self.is_healthy.load(Ordering::Relaxed)
         }
-        
+
         async fn close(&mut self) -> Result<()> {
             self.is_closed = true;
             Ok(())
         }
-        
+
         fn created_at(&self) -> Instant {
             self.created_at
         }
-        
+
         fn last_activity(&self) -> Instant {
             self.last_activity
         }
-        
+
         fn update_activity(&mut self) {
             self.last_activity = Instant::now();
         }
     }
-    
+
     struct TestConnectionFactory {
         counter: Arc<Mutex<u32>>,
     }
-    
+
     impl TestConnectionFactory {
         fn new() -> Self {
             Self {
@@ -1114,7 +1175,7 @@ mod tests {
             }
         }
     }
-    
+
     #[async_trait::async_trait]
     impl ConnectionFactory<TestConnection> for TestConnectionFactory {
         async fn create_connection(&self) -> Result<TestConnection> {
@@ -1123,7 +1184,7 @@ mod tests {
             Ok(TestConnection::new(*counter))
         }
     }
-    
+
     #[tokio::test]
     async fn test_pool_creation() {
         let config = PoolConfig {
@@ -1131,15 +1192,15 @@ mod tests {
             max_connections: 5,
             ..Default::default()
         };
-        
+
         let factory = Arc::new(TestConnectionFactory::new());
         let pool = ConnectionPool::new(config, factory).await.unwrap();
-        
+
         let status = pool.status().await;
         assert_eq!(status.idle_connections, 2);
         assert_eq!(status.active_connections, 0);
     }
-    
+
     #[tokio::test]
     async fn test_connection_borrowing() {
         let config = PoolConfig {
@@ -1147,36 +1208,36 @@ mod tests {
             max_connections: 3,
             ..Default::default()
         };
-        
+
         let factory = Arc::new(TestConnectionFactory::new());
         let pool = ConnectionPool::new(config, factory).await.unwrap();
-        
+
         let mut handle = pool.get_connection().await.unwrap();
-        
+
         let status = pool.status().await;
         assert_eq!(status.active_connections, 1);
         assert_eq!(status.idle_connections, 0);
         assert!(status.is_healthy);
-        
+
         // Record some operations
         handle.record_operation(Duration::from_millis(50), true);
         handle.record_operation(Duration::from_millis(75), true);
-        
+
         let (ops, successes, avg_time) = handle.get_operation_stats();
         assert_eq!(ops, 2);
         assert_eq!(successes, 2);
         assert!(avg_time > Duration::ZERO);
-        
+
         drop(handle);
-        
+
         // Wait for the connection to be returned
         tokio::time::sleep(Duration::from_millis(10)).await;
-        
+
         let status = pool.status().await;
         assert_eq!(status.active_connections, 0);
         assert_eq!(status.idle_connections, 1);
     }
-    
+
     #[tokio::test]
     async fn test_load_balancing_strategies() {
         for strategy in [
@@ -1192,24 +1253,27 @@ mod tests {
                 load_balancing: strategy.clone(),
                 ..Default::default()
             };
-            
+
             let factory = Arc::new(TestConnectionFactory::new());
             let pool = ConnectionPool::new(config, factory).await.unwrap();
-            
+
             // Get multiple connections to test load balancing
-            let handles: Vec<_> = futures_util::future::join_all(
-                (0..3).map(|_| pool.get_connection())
-            ).await.into_iter().collect::<Result<Vec<_>, _>>().unwrap();
-            
+            let handles: Vec<_> =
+                futures_util::future::join_all((0..3).map(|_| pool.get_connection()))
+                    .await
+                    .into_iter()
+                    .collect::<Result<Vec<_>, _>>()
+                    .unwrap();
+
             let status = pool.status().await;
             assert_eq!(status.active_connections, 3);
             assert_eq!(status.load_balancing_strategy, strategy);
-            
+
             drop(handles);
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     }
-    
+
     #[tokio::test]
     async fn test_circuit_breaker_integration() {
         let config = PoolConfig {
@@ -1223,20 +1287,20 @@ mod tests {
             }),
             ..Default::default()
         };
-        
+
         let factory = Arc::new(TestConnectionFactory::new());
         let pool = ConnectionPool::new(config, factory).await.unwrap();
-        
+
         // Should work normally initially
         let handle = pool.get_connection().await;
         assert!(handle.is_ok());
         drop(handle);
-        
+
         // Test that circuit breaker status is included in pool status
         let status = pool.status().await;
         assert!(!status.circuit_breaker_open);
     }
-    
+
     #[tokio::test]
     async fn test_adaptive_sizing() {
         let config = PoolConfig {
@@ -1246,20 +1310,20 @@ mod tests {
             target_response_time_ms: 50,
             ..Default::default()
         };
-        
+
         let factory = Arc::new(TestConnectionFactory::new());
         let pool = ConnectionPool::new(config, factory).await.unwrap();
-        
+
         let metrics = pool.get_detailed_metrics().await;
         assert_eq!(metrics.current_target_size, 1); // Should start at min_connections
         assert!(metrics.adaptive_scaling_events == 0);
-        
+
         // Test pool resizing
         pool.resize(3).await.unwrap();
         let metrics = pool.get_detailed_metrics().await;
         assert_eq!(metrics.current_target_size, 3);
     }
-    
+
     #[tokio::test]
     async fn test_detailed_metrics() {
         let config = PoolConfig {
@@ -1268,23 +1332,25 @@ mod tests {
             enable_metrics: true,
             ..Default::default()
         };
-        
+
         let factory = Arc::new(TestConnectionFactory::new());
         let pool = ConnectionPool::new(config, factory).await.unwrap();
-        
+
         // Generate some activity
-        let handles: Vec<_> = futures_util::future::join_all(
-            (0..3).map(|_| pool.get_connection())
-        ).await.into_iter().collect::<Result<Vec<_>, _>>().unwrap();
-        
+        let handles: Vec<_> = futures_util::future::join_all((0..3).map(|_| pool.get_connection()))
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
         let metrics = pool.get_detailed_metrics().await;
         assert!(metrics.total_requests >= 3);
         assert!(metrics.status.utilization_percent > 0.0);
         assert!(metrics.pool_uptime > Duration::ZERO);
         assert_eq!(metrics.status.active_connections, 3);
-        
+
         drop(handles);
-        
+
         // Test statistics reset
         pool.reset_statistics().await;
         let metrics = pool.get_detailed_metrics().await;

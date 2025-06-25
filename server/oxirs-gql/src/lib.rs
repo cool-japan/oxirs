@@ -5,14 +5,14 @@
 //! This crate provides a GraphQL interface that automatically maps RDF data to GraphQL
 //! schemas, enabling modern GraphQL clients to query knowledge graphs.
 
-use std::sync::Arc;
 use anyhow::Result;
+use std::sync::Arc;
 // use oxigraph::store::Store;
 // use oxigraph::model::{NamedNode, Literal as OxiLiteral, BlankNode, Subject, Term, Triple};
 // use oxigraph::sparql::QueryResults;
-use oxirs_core::store::Store;
-use oxirs_core::model::{NamedNode, Literal as OxiLiteral, BlankNode, Subject, Term, Triple};
+use oxirs_core::model::{BlankNode, Literal as OxiLiteral, NamedNode, Subject, Term, Triple};
 use oxirs_core::sparql::QueryResults;
+use oxirs_core::store::Store;
 
 // Module declarations are below after the main code
 
@@ -72,10 +72,10 @@ impl RdfStore {
             Some(l) => format!(" LIMIT {}", l),
             None => String::new(),
         };
-        
+
         let query = format!("SELECT DISTINCT ?s WHERE {{ ?s ?p ?o }}{}", limit_clause);
         let mut subjects = Vec::new();
-        
+
         match self.query(&query)? {
             QueryResults::Solutions(solutions) => {
                 for solution in solutions {
@@ -87,7 +87,7 @@ impl RdfStore {
             }
             _ => {}
         }
-        
+
         Ok(subjects)
     }
 
@@ -97,10 +97,10 @@ impl RdfStore {
             Some(l) => format!(" LIMIT {}", l),
             None => String::new(),
         };
-        
+
         let query = format!("SELECT DISTINCT ?p WHERE {{ ?s ?p ?o }}{}", limit_clause);
         let mut predicates = Vec::new();
-        
+
         match self.query(&query)? {
             QueryResults::Solutions(solutions) => {
                 for solution in solutions {
@@ -112,7 +112,7 @@ impl RdfStore {
             }
             _ => {}
         }
-        
+
         Ok(predicates)
     }
 
@@ -122,10 +122,10 @@ impl RdfStore {
             Some(l) => format!(" LIMIT {}", l),
             None => String::new(),
         };
-        
+
         let query = format!("SELECT DISTINCT ?o WHERE {{ ?s ?p ?o }}{}", limit_clause);
         let mut objects = Vec::new();
-        
+
         match self.query(&query)? {
             QueryResults::Solutions(solutions) => {
                 for solution in solutions {
@@ -143,7 +143,7 @@ impl RdfStore {
             }
             _ => {}
         }
-        
+
         Ok(objects)
     }
 
@@ -155,12 +155,12 @@ impl RdfStore {
         } else {
             Subject::NamedNode(NamedNode::new(subject)?)
         };
-        
+
         let predicate = NamedNode::new(predicate)?;
-        
+
         let object = if object.starts_with("\"") && object.ends_with("\"") {
             // It's a literal
-            let literal_value = &object[1..object.len()-1];
+            let literal_value = &object[1..object.len() - 1];
             Term::Literal(OxiLiteral::new_simple_literal(literal_value))
         } else if object.starts_with("_:") {
             // It's a blank node
@@ -169,8 +169,13 @@ impl RdfStore {
             // It's a named node
             Term::NamedNode(NamedNode::new(object)?)
         };
-        
-        let quad = oxigraph::model::Quad::new(subject, predicate, object, oxigraph::model::GraphName::DefaultGraph);
+
+        let quad = oxigraph::model::Quad::new(
+            subject,
+            predicate,
+            object,
+            oxigraph::model::GraphName::DefaultGraph,
+        );
         self.store.insert(&quad)?;
         Ok(())
     }
@@ -180,21 +185,23 @@ impl RdfStore {
         use oxigraph::io::{RdfFormat, RdfParser};
         use std::fs::File;
         use std::io::BufReader;
-        
+
         let format = match format.to_lowercase().as_str() {
             "turtle" | "ttl" => RdfFormat::Turtle,
             "ntriples" | "nt" => RdfFormat::NTriples,
             "rdfxml" | "rdf" => RdfFormat::RdfXml,
-            "jsonld" | "json" => RdfFormat::JsonLd { profile: oxigraph::io::JsonLdProfile::Expanded.into() },
+            "jsonld" | "json" => RdfFormat::JsonLd {
+                profile: oxigraph::io::JsonLdProfile::Expanded.into(),
+            },
             _ => return Err(anyhow::anyhow!("Unsupported format: {}", format)),
         };
-        
+
         let file = File::open(path)?;
         let reader = BufReader::new(file);
-        
+
         // Load data into store using oxigraph's load functionality
         self.store.load_from_reader(format, reader)?;
-        
+
         Ok(())
     }
 }
@@ -215,25 +222,25 @@ impl MockStore {
 
 // Individual modules
 pub mod ast;
-pub mod types;
-pub mod rdf_scalars;
 pub mod execution;
-pub mod schema;
-pub mod resolvers;
-pub mod mapping;
-pub mod server;
-pub mod parser;
-pub mod optimizer;
-pub mod subscriptions;
 pub mod introspection;
+pub mod mapping;
+pub mod optimizer;
+pub mod parser;
+pub mod rdf_scalars;
+pub mod resolvers;
+pub mod schema;
+pub mod server;
+pub mod subscriptions;
+pub mod types;
 pub mod validation;
 
 // Organized module groups
 pub mod core;
+pub mod docs;
+pub mod features;
 pub mod networking;
 pub mod rdf;
-pub mod features;
-pub mod docs;
 
 // New Juniper-based implementation (temporarily disabled due to compilation issues)
 // pub mod juniper_schema;
@@ -279,7 +286,7 @@ impl GraphQLServer {
             store,
         }
     }
-    
+
     pub fn new_with_mock(store: Arc<MockStore>) -> Self {
         // For backward compatibility during transition
         let rdf_store = Arc::new(RdfStore::new().expect("Failed to create RDF store"));
@@ -296,10 +303,10 @@ impl GraphQLServer {
 
     pub async fn start(&self, addr: &str) -> Result<()> {
         tracing::info!("Starting GraphQL server on {}", addr);
-        
+
         // Create a basic schema with Query type
         let mut schema = types::Schema::new();
-        
+
         // Add a Query type with more fields
         let mut query_type = types::ObjectType::new("Query".to_string())
             .with_description("The root query type for RDF data access".to_string())
@@ -308,36 +315,41 @@ impl GraphQLServer {
                 types::FieldType::new(
                     "hello".to_string(),
                     types::GraphQLType::Scalar(types::BuiltinScalars::string()),
-                ).with_description("A simple greeting message".to_string()),
+                )
+                .with_description("A simple greeting message".to_string()),
             )
             .with_field(
                 "version".to_string(),
                 types::FieldType::new(
                     "version".to_string(),
                     types::GraphQLType::Scalar(types::BuiltinScalars::string()),
-                ).with_description("OxiRS GraphQL version".to_string()),
+                )
+                .with_description("OxiRS GraphQL version".to_string()),
             )
             .with_field(
                 "triples".to_string(),
                 types::FieldType::new(
                     "triples".to_string(),
                     types::GraphQLType::Scalar(types::BuiltinScalars::int()),
-                ).with_description("Count of triples in the store".to_string()),
+                )
+                .with_description("Count of triples in the store".to_string()),
             )
             .with_field(
                 "subjects".to_string(),
                 types::FieldType::new(
                     "subjects".to_string(),
-                    types::GraphQLType::List(Box::new(
-                        types::GraphQLType::Scalar(types::BuiltinScalars::string())
-                    )),
-                ).with_description("List of subject IRIs".to_string())
+                    types::GraphQLType::List(Box::new(types::GraphQLType::Scalar(
+                        types::BuiltinScalars::string(),
+                    ))),
+                )
+                .with_description("List of subject IRIs".to_string())
                 .with_argument(
                     "limit".to_string(),
                     types::ArgumentType::new(
                         "limit".to_string(),
                         types::GraphQLType::Scalar(types::BuiltinScalars::int()),
-                    ).with_default_value(ast::Value::IntValue(10))
+                    )
+                    .with_default_value(ast::Value::IntValue(10))
                     .with_description("Maximum number of subjects to return".to_string()),
                 ),
             )
@@ -345,16 +357,18 @@ impl GraphQLServer {
                 "predicates".to_string(),
                 types::FieldType::new(
                     "predicates".to_string(),
-                    types::GraphQLType::List(Box::new(
-                        types::GraphQLType::Scalar(types::BuiltinScalars::string())
-                    )),
-                ).with_description("List of predicate IRIs".to_string())
+                    types::GraphQLType::List(Box::new(types::GraphQLType::Scalar(
+                        types::BuiltinScalars::string(),
+                    ))),
+                )
+                .with_description("List of predicate IRIs".to_string())
                 .with_argument(
                     "limit".to_string(),
                     types::ArgumentType::new(
                         "limit".to_string(),
                         types::GraphQLType::Scalar(types::BuiltinScalars::int()),
-                    ).with_default_value(ast::Value::IntValue(10))
+                    )
+                    .with_default_value(ast::Value::IntValue(10))
                     .with_description("Maximum number of predicates to return".to_string()),
                 ),
             )
@@ -362,16 +376,18 @@ impl GraphQLServer {
                 "objects".to_string(),
                 types::FieldType::new(
                     "objects".to_string(),
-                    types::GraphQLType::List(Box::new(
-                        types::GraphQLType::Scalar(types::BuiltinScalars::string())
-                    )),
-                ).with_description("List of objects".to_string())
+                    types::GraphQLType::List(Box::new(types::GraphQLType::Scalar(
+                        types::BuiltinScalars::string(),
+                    ))),
+                )
+                .with_description("List of objects".to_string())
                 .with_argument(
                     "limit".to_string(),
                     types::ArgumentType::new(
                         "limit".to_string(),
                         types::GraphQLType::Scalar(types::BuiltinScalars::int()),
-                    ).with_default_value(ast::Value::IntValue(10))
+                    )
+                    .with_default_value(ast::Value::IntValue(10))
                     .with_description("Maximum number of objects to return".to_string()),
                 ),
             )
@@ -380,16 +396,20 @@ impl GraphQLServer {
                 types::FieldType::new(
                     "sparql".to_string(),
                     types::GraphQLType::Scalar(types::BuiltinScalars::string()),
-                ).with_description("Execute a raw SPARQL query".to_string())
+                )
+                .with_description("Execute a raw SPARQL query".to_string())
                 .with_argument(
                     "query".to_string(),
                     types::ArgumentType::new(
                         "query".to_string(),
-                        types::GraphQLType::NonNull(Box::new(types::GraphQLType::Scalar(types::BuiltinScalars::string()))),
-                    ).with_description("The SPARQL query to execute".to_string()),
+                        types::GraphQLType::NonNull(Box::new(types::GraphQLType::Scalar(
+                            types::BuiltinScalars::string(),
+                        ))),
+                    )
+                    .with_description("The SPARQL query to execute".to_string()),
                 ),
             );
-        
+
         // Add introspection fields if enabled
         if self.config.enable_introspection {
             query_type = query_type
@@ -397,14 +417,20 @@ impl GraphQLServer {
                     "__schema".to_string(),
                     types::FieldType::new(
                         "__schema".to_string(),
-                        types::GraphQLType::NonNull(Box::new(types::GraphQLType::Scalar(types::ScalarType {
-                            name: "__Schema".to_string(),
-                            description: Some("A GraphQL Schema defines the capabilities of a GraphQL server".to_string()),
-                            serialize: |_| Ok(ast::Value::NullValue),
-                            parse_value: |_| Err(anyhow::anyhow!("Cannot parse __Schema")),
-                            parse_literal: |_| Err(anyhow::anyhow!("Cannot parse __Schema")),
-                        }))),
-                    ).with_description("Access the current type schema of this server".to_string()),
+                        types::GraphQLType::NonNull(Box::new(types::GraphQLType::Scalar(
+                            types::ScalarType {
+                                name: "__Schema".to_string(),
+                                description: Some(
+                                    "A GraphQL Schema defines the capabilities of a GraphQL server"
+                                        .to_string(),
+                                ),
+                                serialize: |_| Ok(ast::Value::NullValue),
+                                parse_value: |_| Err(anyhow::anyhow!("Cannot parse __Schema")),
+                                parse_literal: |_| Err(anyhow::anyhow!("Cannot parse __Schema")),
+                            },
+                        ))),
+                    )
+                    .with_description("Access the current type schema of this server".to_string()),
                 )
                 .with_field(
                     "__type".to_string(),
@@ -412,55 +438,64 @@ impl GraphQLServer {
                         "__type".to_string(),
                         types::GraphQLType::Scalar(types::ScalarType {
                             name: "__Type".to_string(),
-                            description: Some("A GraphQL Schema defines the capabilities of a GraphQL server".to_string()),
+                            description: Some(
+                                "A GraphQL Schema defines the capabilities of a GraphQL server"
+                                    .to_string(),
+                            ),
                             serialize: |_| Ok(ast::Value::NullValue),
                             parse_value: |_| Err(anyhow::anyhow!("Cannot parse __Type")),
                             parse_literal: |_| Err(anyhow::anyhow!("Cannot parse __Type")),
                         }),
-                    ).with_description("Request the type information of a single type".to_string())
+                    )
+                    .with_description("Request the type information of a single type".to_string())
                     .with_argument(
                         "name".to_string(),
                         types::ArgumentType::new(
                             "name".to_string(),
-                            types::GraphQLType::NonNull(Box::new(types::GraphQLType::Scalar(types::BuiltinScalars::string()))),
-                        ).with_description("The name of the type to introspect".to_string()),
+                            types::GraphQLType::NonNull(Box::new(types::GraphQLType::Scalar(
+                                types::BuiltinScalars::string(),
+                            ))),
+                        )
+                        .with_description("The name of the type to introspect".to_string()),
                     ),
                 );
         }
-        
+
         schema.add_type(types::GraphQLType::Object(query_type));
         schema.set_query_type("Query".to_string());
-        
+
         // Create the server with resolvers
         let schema_clone = schema.clone();
         let mut server = server::Server::new(schema.clone())
             .with_playground(self.config.enable_playground)
             .with_introspection(self.config.enable_introspection);
-        
+
         // Configure validation if enabled
         if self.config.enable_query_validation {
-            server = server.with_validation(self.config.validation_config.clone(), schema_clone.clone());
+            server =
+                server.with_validation(self.config.validation_config.clone(), schema_clone.clone());
         }
-        
+
         // Set up resolvers
         let query_resolvers = resolvers::QueryResolvers::new(Arc::clone(&self.store));
         server.add_resolver("Query".to_string(), query_resolvers.rdf_resolver());
-        
+
         // Add introspection resolver
-        let introspection_resolver = Arc::new(introspection::IntrospectionResolver::new(
-            Arc::new(schema_clone)
-        ));
+        let introspection_resolver = Arc::new(introspection::IntrospectionResolver::new(Arc::new(
+            schema_clone,
+        )));
         server.add_resolver("__Schema".to_string(), introspection_resolver.clone());
         server.add_resolver("__Type".to_string(), introspection_resolver.clone());
         server.add_resolver("__Field".to_string(), introspection_resolver.clone());
         server.add_resolver("__InputValue".to_string(), introspection_resolver.clone());
         server.add_resolver("__EnumValue".to_string(), introspection_resolver.clone());
         server.add_resolver("__Directive".to_string(), introspection_resolver);
-        
+
         // Parse the address
-        let socket_addr: std::net::SocketAddr = addr.parse()
+        let socket_addr: std::net::SocketAddr = addr
+            .parse()
             .map_err(|e| anyhow::anyhow!("Invalid address '{}': {}", addr, e))?;
-        
+
         server.start(socket_addr).await
     }
 }

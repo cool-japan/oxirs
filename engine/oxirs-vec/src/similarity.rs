@@ -128,7 +128,10 @@ impl SemanticSimilarity {
 
     /// Calculate similarity using primary metric
     pub fn similarity(&self, a: &Vector, b: &Vector) -> Result<f32> {
-        let mut similarity = self.config.primary_metric.similarity(&a.values, &b.values)?;
+        let mut similarity = self
+            .config
+            .primary_metric
+            .similarity(&a.values, &b.values)?;
 
         // Apply feature weighting if available
         if let Some(ref weights) = self.feature_weights {
@@ -152,7 +155,12 @@ impl SemanticSimilarity {
         let mut weighted_sum = 0.0;
         let mut total_weight = 0.0;
 
-        for (metric, weight) in self.config.ensemble_metrics.iter().zip(&self.config.ensemble_weights) {
+        for (metric, weight) in self
+            .config
+            .ensemble_metrics
+            .iter()
+            .zip(&self.config.ensemble_weights)
+        {
             let similarity = metric.similarity(&a.values, &b.values)?;
             weighted_sum += similarity * weight;
             total_weight += weight;
@@ -292,7 +300,13 @@ impl AdaptiveSimilarity {
     }
 
     /// Calculate similarity with learned adjustments
-    pub fn adaptive_similarity(&self, a: &Vector, b: &Vector, uri_a: &str, uri_b: &str) -> Result<f32> {
+    pub fn adaptive_similarity(
+        &self,
+        a: &Vector,
+        b: &Vector,
+        uri_a: &str,
+        uri_b: &str,
+    ) -> Result<f32> {
         let base_sim = self.base_similarity.similarity(a, b)?;
 
         let weight_a = self.feedback_weights.get(uri_a).unwrap_or(&0.0);
@@ -330,7 +344,13 @@ impl TemporalSimilarity {
     }
 
     /// Calculate similarity with temporal decay
-    pub fn temporal_similarity(&self, a: &Vector, b: &Vector, uri_a: &str, uri_b: &str) -> Result<f32> {
+    pub fn temporal_similarity(
+        &self,
+        a: &Vector,
+        b: &Vector,
+        uri_a: &str,
+        uri_b: &str,
+    ) -> Result<f32> {
         let base_sim = self.base_similarity.similarity(a, b)?;
 
         let time_a = self.time_weights.get(uri_a).unwrap_or(&1.0);
@@ -358,7 +378,12 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 }
 
 fn euclidean_similarity(a: &[f32], b: &[f32]) -> f32 {
-    let distance: f32 = a.iter().zip(b).map(|(x, y)| (x - y).powi(2)).sum::<f32>().sqrt();
+    let distance: f32 = a
+        .iter()
+        .zip(b)
+        .map(|(x, y)| (x - y).powi(2))
+        .sum::<f32>()
+        .sqrt();
     1.0 / (1.0 + distance)
 }
 
@@ -376,7 +401,11 @@ fn pearson_correlation(a: &[f32], b: &[f32]) -> Result<f32> {
     let mean_a = a.iter().sum::<f32>() / n;
     let mean_b = b.iter().sum::<f32>() / n;
 
-    let numerator: f32 = a.iter().zip(b).map(|(x, y)| (x - mean_a) * (y - mean_b)).sum();
+    let numerator: f32 = a
+        .iter()
+        .zip(b)
+        .map(|(x, y)| (x - mean_a) * (y - mean_b))
+        .sum();
     let sum_sq_a: f32 = a.iter().map(|x| (x - mean_a).powi(2)).sum();
     let sum_sq_b: f32 = b.iter().map(|x| (x - mean_b).powi(2)).sum();
 
@@ -412,8 +441,16 @@ fn jaccard_similarity(a: &[f32], b: &[f32]) -> f32 {
     let set_a: Vec<bool> = a.iter().map(|&x| x > threshold).collect();
     let set_b: Vec<bool> = b.iter().map(|&x| x > threshold).collect();
 
-    let intersection: usize = set_a.iter().zip(&set_b).map(|(x, y)| (*x && *y) as usize).sum();
-    let union: usize = set_a.iter().zip(&set_b).map(|(x, y)| (*x || *y) as usize).sum();
+    let intersection: usize = set_a
+        .iter()
+        .zip(&set_b)
+        .map(|(x, y)| (*x && *y) as usize)
+        .sum();
+    let union: usize = set_a
+        .iter()
+        .zip(&set_b)
+        .map(|(x, y)| (*x || *y) as usize)
+        .sum();
 
     if union == 0 {
         1.0 // Both empty sets
@@ -427,7 +464,11 @@ fn dice_coefficient(a: &[f32], b: &[f32]) -> f32 {
     let set_a: Vec<bool> = a.iter().map(|&x| x > threshold).collect();
     let set_b: Vec<bool> = b.iter().map(|&x| x > threshold).collect();
 
-    let intersection: usize = set_a.iter().zip(&set_b).map(|(x, y)| (*x && *y) as usize).sum();
+    let intersection: usize = set_a
+        .iter()
+        .zip(&set_b)
+        .map(|(x, y)| (*x && *y) as usize)
+        .sum();
     let size_a: usize = set_a.iter().map(|&x| x as usize).sum();
     let size_b: usize = set_b.iter().map(|&x| x as usize).sum();
 
@@ -575,7 +616,7 @@ impl BatchSimilarityProcessor {
                     cached_sim
                 } else {
                     let sim = self.similarity.similarity(query_vec, candidate_vec)?;
-                    
+
                     // Cache management
                     if self.cache.len() >= self.max_cache_size {
                         // Simple eviction: remove first entry
@@ -583,7 +624,7 @@ impl BatchSimilarityProcessor {
                             self.cache.remove(&key);
                         }
                     }
-                    
+
                     self.cache.insert(cache_key, sim);
                     sim
                 };

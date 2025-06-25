@@ -9,7 +9,9 @@ use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 use std::sync::Arc;
 
-use oxirs_core::model::{NamedNode as CoreNamedNode, Literal as CoreLiteral, BlankNode as CoreBlankNode};
+use oxirs_core::model::{
+    BlankNode as CoreBlankNode, Literal as CoreLiteral, NamedNode as CoreNamedNode,
+};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -77,7 +79,9 @@ impl StarTerm {
     /// Create a new IRI term
     pub fn iri(iri: &str) -> StarResult<Self> {
         if iri.is_empty() {
-            return Err(StarError::InvalidTermType("IRI cannot be empty".to_string()));
+            return Err(StarError::InvalidTermType(
+                "IRI cannot be empty".to_string(),
+            ));
         }
         Ok(StarTerm::NamedNode(NamedNode {
             iri: iri.to_string(),
@@ -87,11 +91,11 @@ impl StarTerm {
     /// Create a new blank node term
     pub fn blank_node(id: &str) -> StarResult<Self> {
         if id.is_empty() {
-            return Err(StarError::InvalidTermType("Blank node ID cannot be empty".to_string()));
+            return Err(StarError::InvalidTermType(
+                "Blank node ID cannot be empty".to_string(),
+            ));
         }
-        Ok(StarTerm::BlankNode(BlankNode {
-            id: id.to_string(),
-        }))
+        Ok(StarTerm::BlankNode(BlankNode { id: id.to_string() }))
     }
 
     /// Create a new literal term
@@ -131,7 +135,9 @@ impl StarTerm {
     /// Create a new variable term
     pub fn variable(name: &str) -> StarResult<Self> {
         if name.is_empty() {
-            return Err(StarError::InvalidTermType("Variable name cannot be empty".to_string()));
+            return Err(StarError::InvalidTermType(
+                "Variable name cannot be empty".to_string(),
+            ));
         }
         Ok(StarTerm::Variable(Variable {
             name: name.to_string(),
@@ -205,7 +211,10 @@ impl StarTerm {
 
     /// Check if this term can be used as a subject
     pub fn can_be_subject(&self) -> bool {
-        matches!(self, StarTerm::NamedNode(_) | StarTerm::BlankNode(_) | StarTerm::QuotedTriple(_))
+        matches!(
+            self,
+            StarTerm::NamedNode(_) | StarTerm::BlankNode(_) | StarTerm::QuotedTriple(_)
+        )
     }
 
     /// Check if this term can be used as a predicate
@@ -222,7 +231,9 @@ impl StarTerm {
     pub fn nesting_depth(&self) -> usize {
         match self {
             StarTerm::QuotedTriple(triple) => {
-                1 + triple.subject.nesting_depth()
+                1 + triple
+                    .subject
+                    .nesting_depth()
                     .max(triple.predicate.nesting_depth())
                     .max(triple.object.nesting_depth())
             }
@@ -244,21 +255,24 @@ impl StarTriple {
     /// Validate that the triple is well-formed according to RDF-star rules
     pub fn validate(&self) -> StarResult<()> {
         if !self.subject.can_be_subject() {
-            return Err(StarError::InvalidQuotedTriple(
-                format!("Invalid subject term: {:?}", self.subject)
-            ));
+            return Err(StarError::InvalidQuotedTriple(format!(
+                "Invalid subject term: {:?}",
+                self.subject
+            )));
         }
 
         if !self.predicate.can_be_predicate() {
-            return Err(StarError::InvalidQuotedTriple(
-                format!("Invalid predicate term: {:?}", self.predicate)
-            ));
+            return Err(StarError::InvalidQuotedTriple(format!(
+                "Invalid predicate term: {:?}",
+                self.predicate
+            )));
         }
 
         if !self.object.can_be_object() {
-            return Err(StarError::InvalidQuotedTriple(
-                format!("Invalid object term: {:?}", self.object)
-            ));
+            return Err(StarError::InvalidQuotedTriple(format!(
+                "Invalid object term: {:?}",
+                self.object
+            )));
         }
 
         Ok(())
@@ -292,7 +306,12 @@ impl StarTriple {
 
 impl StarQuad {
     /// Create a new RDF-star quad
-    pub fn new(subject: StarTerm, predicate: StarTerm, object: StarTerm, graph: Option<StarTerm>) -> Self {
+    pub fn new(
+        subject: StarTerm,
+        predicate: StarTerm,
+        object: StarTerm,
+        graph: Option<StarTerm>,
+    ) -> Self {
         Self {
             subject,
             predicate,
@@ -324,7 +343,7 @@ impl StarQuad {
         if let Some(ref graph) = self.graph {
             if !matches!(graph, StarTerm::NamedNode(_) | StarTerm::BlankNode(_)) {
                 return Err(StarError::InvalidQuotedTriple(
-                    "Graph name must be a named node or blank node".to_string()
+                    "Graph name must be a named node or blank node".to_string(),
                 ));
             }
         }
@@ -348,7 +367,11 @@ impl fmt::Display for StarTerm {
                 }
                 Ok(())
             }
-            StarTerm::QuotedTriple(triple) => write!(f, "<<{} {} {}>>", triple.subject, triple.predicate, triple.object),
+            StarTerm::QuotedTriple(triple) => write!(
+                f,
+                "<<{} {} {}>>",
+                triple.subject, triple.predicate, triple.object
+            ),
             StarTerm::Variable(var) => write!(f, "?{}", var.name),
         }
     }
@@ -382,7 +405,7 @@ impl StarTriple {
         visitor.visit_term(&self.subject);
         visitor.visit_term(&self.predicate);
         visitor.visit_term(&self.object);
-        
+
         // Recursively visit quoted triples
         if let StarTerm::QuotedTriple(triple) = &self.subject {
             triple.visit_terms(visitor);
@@ -424,11 +447,11 @@ impl StarGraph {
     pub fn insert(&mut self, triple: StarTriple) -> StarResult<()> {
         triple.validate()?;
         self.triples.push(triple.clone());
-        
+
         // Also add as a quad with no graph
         let quad = StarQuad::new(triple.subject, triple.predicate, triple.object, None);
         self.quads.push(quad);
-        
+
         *self.statistics.entry("triples".to_string()).or_insert(0) += 1;
         Ok(())
     }
@@ -436,27 +459,39 @@ impl StarGraph {
     /// Add a quad to the graph (with optional named graph)
     pub fn insert_quad(&mut self, quad: StarQuad) -> StarResult<()> {
         quad.validate()?;
-        
-        let triple = StarTriple::new(quad.subject.clone(), quad.predicate.clone(), quad.object.clone());
-        
+
+        let triple = StarTriple::new(
+            quad.subject.clone(),
+            quad.predicate.clone(),
+            quad.object.clone(),
+        );
+
         if let Some(ref graph_term) = quad.graph {
             // Named graph
             let graph_key = match graph_term {
                 StarTerm::NamedNode(node) => node.iri.clone(),
                 StarTerm::BlankNode(node) => format!("_:{}", node.id),
-                _ => return Err(StarError::InvalidQuotedTriple(
-                    "Graph name must be a named node or blank node".to_string()
-                )),
+                _ => {
+                    return Err(StarError::InvalidQuotedTriple(
+                        "Graph name must be a named node or blank node".to_string(),
+                    ))
+                }
             };
-            
-            self.named_graphs.entry(graph_key.clone()).or_insert_with(Vec::new).push(triple);
-            *self.statistics.entry(format!("graph_{}", graph_key)).or_insert(0) += 1;
+
+            self.named_graphs
+                .entry(graph_key.clone())
+                .or_insert_with(Vec::new)
+                .push(triple);
+            *self
+                .statistics
+                .entry(format!("graph_{}", graph_key))
+                .or_insert(0) += 1;
         } else {
             // Default graph
             self.triples.push(triple);
             *self.statistics.entry("triples".to_string()).or_insert(0) += 1;
         }
-        
+
         self.quads.push(quad);
         *self.statistics.entry("quads".to_string()).or_insert(0) += 1;
         Ok(())
@@ -493,8 +528,11 @@ impl StarGraph {
 
     /// Check if the graph contains a specific triple in any graph
     pub fn contains(&self, triple: &StarTriple) -> bool {
-        self.triples.contains(triple) || 
-        self.named_graphs.values().any(|triples| triples.contains(triple))
+        self.triples.contains(triple)
+            || self
+                .named_graphs
+                .values()
+                .any(|triples| triples.contains(triple))
     }
 
     /// Check if a specific named graph exists
@@ -506,13 +544,14 @@ impl StarGraph {
     pub fn remove(&mut self, triple: &StarTriple) -> bool {
         if let Some(pos) = self.triples.iter().position(|t| t == triple) {
             self.triples.remove(pos);
-            
+
             // Also remove from quads
             self.quads.retain(|q| {
-                let q_triple = StarTriple::new(q.subject.clone(), q.predicate.clone(), q.object.clone());
+                let q_triple =
+                    StarTriple::new(q.subject.clone(), q.predicate.clone(), q.object.clone());
                 q_triple != *triple || q.graph.is_some()
             });
-            
+
             if let Some(count) = self.statistics.get_mut("triples") {
                 *count = count.saturating_sub(1);
             }
@@ -526,7 +565,7 @@ impl StarGraph {
     pub fn remove_quad(&mut self, quad: &StarQuad) -> bool {
         if let Some(pos) = self.quads.iter().position(|q| q == quad) {
             let removed_quad = self.quads.remove(pos);
-            
+
             // Remove from appropriate graph
             if let Some(ref graph_term) = removed_quad.graph {
                 let graph_key = match graph_term {
@@ -534,15 +573,15 @@ impl StarGraph {
                     StarTerm::BlankNode(node) => format!("_:{}", node.id),
                     _ => return false,
                 };
-                
+
                 if let Some(triples) = self.named_graphs.get_mut(&graph_key) {
                     let triple = StarTriple::new(
-                        removed_quad.subject, 
-                        removed_quad.predicate, 
-                        removed_quad.object
+                        removed_quad.subject,
+                        removed_quad.predicate,
+                        removed_quad.object,
                     );
                     triples.retain(|t| t != &triple);
-                    
+
                     if triples.is_empty() {
                         self.named_graphs.remove(&graph_key);
                     }
@@ -550,13 +589,13 @@ impl StarGraph {
             } else {
                 // Remove from default graph
                 let triple = StarTriple::new(
-                    removed_quad.subject, 
-                    removed_quad.predicate, 
-                    removed_quad.object
+                    removed_quad.subject,
+                    removed_quad.predicate,
+                    removed_quad.object,
                 );
                 self.triples.retain(|t| t != &triple);
             }
-            
+
             if let Some(count) = self.statistics.get_mut("quads") {
                 *count = count.saturating_sub(1);
             }
@@ -631,14 +670,14 @@ impl StarGraph {
     /// Count quoted triples across all graphs
     pub fn count_quoted_triples(&self) -> usize {
         let mut count = 0;
-        
+
         // Count in default graph
         for triple in &self.triples {
             if triple.contains_quoted_triples() {
                 count += 1;
             }
         }
-        
+
         // Count in named graphs
         for triples in self.named_graphs.values() {
             for triple in triples {
@@ -647,25 +686,27 @@ impl StarGraph {
                 }
             }
         }
-        
+
         count
     }
 
     /// Get maximum nesting depth across all graphs
     pub fn max_nesting_depth(&self) -> usize {
-        let default_max = self.triples
+        let default_max = self
+            .triples
             .iter()
             .map(|t| t.nesting_depth())
             .max()
             .unwrap_or(0);
-            
-        let named_max = self.named_graphs
+
+        let named_max = self
+            .named_graphs
             .values()
             .flat_map(|triples| triples.iter())
             .map(|t| t.nesting_depth())
             .max()
             .unwrap_or(0);
-            
+
         default_max.max(named_max)
     }
 }

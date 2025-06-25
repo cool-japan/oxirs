@@ -4,15 +4,18 @@
 //! including endpoint discovery, schema introspection, and capability analysis.
 
 use anyhow::{anyhow, Result};
-use reqwest::{Client, header::{HeaderMap, HeaderValue, CONTENT_TYPE, ACCEPT}};
+use reqwest::{
+    header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE},
+    Client,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 use tracing::{debug, error, info, warn};
 
 use crate::{
-    ServiceRegistry, FederatedService, ServiceType, ServiceCapability, ServiceMetadata,
-    ServicePerformance, AuthConfig, AuthType, AuthCredentials, graphql::FederatedSchema,
+    graphql::FederatedSchema, AuthConfig, AuthCredentials, AuthType, FederatedService,
+    ServiceCapability, ServiceMetadata, ServicePerformance, ServiceRegistry, ServiceType,
 };
 
 /// Service discovery manager
@@ -51,9 +54,9 @@ impl ServiceDiscovery {
     /// Discover services from a list of potential endpoints
     pub async fn discover_services(&self, endpoints: &[String]) -> Result<Vec<FederatedService>> {
         info!("Discovering services from {} endpoints", endpoints.len());
-        
+
         let mut discovered_services = Vec::new();
-        
+
         for endpoint in endpoints {
             match self.discover_service_at_endpoint(endpoint).await {
                 Ok(Some(service)) => {
@@ -73,7 +76,10 @@ impl ServiceDiscovery {
     }
 
     /// Discover a service at a specific endpoint
-    pub async fn discover_service_at_endpoint(&self, endpoint: &str) -> Result<Option<FederatedService>> {
+    pub async fn discover_service_at_endpoint(
+        &self,
+        endpoint: &str,
+    ) -> Result<Option<FederatedService>> {
         debug!("Discovering service at: {}", endpoint);
 
         // Try to detect SPARQL endpoint
@@ -98,7 +104,7 @@ impl ServiceDiscovery {
     async fn discover_sparql_service(&self, endpoint: &str) -> Result<Option<FederatedService>> {
         // Try common SPARQL endpoint paths
         let sparql_paths = vec!["/sparql", "/query", "/sparql/query", ""];
-        
+
         for path in sparql_paths {
             let full_endpoint = if path.is_empty() {
                 endpoint.to_string()
@@ -140,9 +146,13 @@ impl ServiceDiscovery {
                 format!("{}{}", endpoint.trim_end_matches('/'), path)
             };
 
-            if let Ok((capabilities, schema)) = self.detect_graphql_capabilities(&full_endpoint).await {
+            if let Ok((capabilities, schema)) =
+                self.detect_graphql_capabilities(&full_endpoint).await
+            {
                 let service_id = self.generate_service_id(&full_endpoint);
-                let metadata = self.extract_graphql_metadata(&full_endpoint, &schema).await?;
+                let metadata = self
+                    .extract_graphql_metadata(&full_endpoint, &schema)
+                    .await?;
                 let performance = self.analyze_graphql_performance(&full_endpoint).await?;
 
                 return Ok(Some(FederatedService {
@@ -196,7 +206,10 @@ impl ServiceDiscovery {
     }
 
     /// Detect SPARQL capabilities at an endpoint
-    async fn detect_sparql_capabilities(&self, endpoint: &str) -> Result<HashSet<ServiceCapability>> {
+    async fn detect_sparql_capabilities(
+        &self,
+        endpoint: &str,
+    ) -> Result<HashSet<ServiceCapability>> {
         let mut capabilities = HashSet::new();
 
         // Test basic SPARQL query support
@@ -206,14 +219,19 @@ impl ServiceDiscovery {
         }
 
         // Test SPARQL update support
-        let test_update = "INSERT DATA { <http://example.org/s> <http://example.org/p> <http://example.org/o> }";
+        let test_update =
+            "INSERT DATA { <http://example.org/s> <http://example.org/p> <http://example.org/o> }";
         if self.test_sparql_update(endpoint, test_update).await.is_ok() {
             capabilities.insert(ServiceCapability::SparqlUpdate);
         }
 
         // Test SERVICE clause support (basic check)
         let service_query = "SELECT * WHERE { SERVICE <http://example.org/sparql> { ?s ?p ?o } }";
-        if self.test_sparql_query(endpoint, service_query).await.is_ok() {
+        if self
+            .test_sparql_query(endpoint, service_query)
+            .await
+            .is_ok()
+        {
             capabilities.insert(ServiceCapability::SparqlService);
         }
 
@@ -225,7 +243,10 @@ impl ServiceDiscovery {
     }
 
     /// Detect GraphQL capabilities at an endpoint
-    async fn detect_graphql_capabilities(&self, endpoint: &str) -> Result<(HashSet<ServiceCapability>, Option<GraphQLIntrospection>)> {
+    async fn detect_graphql_capabilities(
+        &self,
+        endpoint: &str,
+    ) -> Result<(HashSet<ServiceCapability>, Option<GraphQLIntrospection>)> {
         let mut capabilities = HashSet::new();
 
         // Test basic GraphQL query support with introspection
@@ -268,10 +289,17 @@ impl ServiceDiscovery {
     /// Test SPARQL query execution
     async fn test_sparql_query(&self, endpoint: &str, query: &str) -> Result<()> {
         let mut headers = HeaderMap::new();
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/sparql-query"));
-        headers.insert(ACCEPT, HeaderValue::from_static("application/sparql-results+json"));
+        headers.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/sparql-query"),
+        );
+        headers.insert(
+            ACCEPT,
+            HeaderValue::from_static("application/sparql-results+json"),
+        );
 
-        let response = self.client
+        let response = self
+            .client
             .post(endpoint)
             .headers(headers)
             .body(query.to_string())
@@ -282,16 +310,23 @@ impl ServiceDiscovery {
         if response.status().is_success() {
             Ok(())
         } else {
-            Err(anyhow!("SPARQL endpoint returned error: {}", response.status()))
+            Err(anyhow!(
+                "SPARQL endpoint returned error: {}",
+                response.status()
+            ))
         }
     }
 
     /// Test SPARQL update execution
     async fn test_sparql_update(&self, endpoint: &str, update: &str) -> Result<()> {
         let mut headers = HeaderMap::new();
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/sparql-update"));
+        headers.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/sparql-update"),
+        );
 
-        let response = self.client
+        let response = self
+            .client
             .post(endpoint)
             .headers(headers)
             .body(update.to_string())
@@ -302,12 +337,19 @@ impl ServiceDiscovery {
         if response.status().is_success() {
             Ok(())
         } else {
-            Err(anyhow!("SPARQL update endpoint returned error: {}", response.status()))
+            Err(anyhow!(
+                "SPARQL update endpoint returned error: {}",
+                response.status()
+            ))
         }
     }
 
     /// Test GraphQL query execution
-    async fn test_graphql_query(&self, endpoint: &str, query: &str) -> Result<GraphQLIntrospection> {
+    async fn test_graphql_query(
+        &self,
+        endpoint: &str,
+        query: &str,
+    ) -> Result<GraphQLIntrospection> {
         let graphql_request = serde_json::json!({
             "query": query
         });
@@ -315,7 +357,8 @@ impl ServiceDiscovery {
         let mut headers = HeaderMap::new();
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
 
-        let response = self.client
+        let response = self
+            .client
             .post(endpoint)
             .headers(headers)
             .json(&graphql_request)
@@ -324,7 +367,9 @@ impl ServiceDiscovery {
             .map_err(|e| anyhow!("GraphQL query test failed: {}", e))?;
 
         if response.status().is_success() {
-            let introspection: GraphQLIntrospectionResponse = response.json().await
+            let introspection: GraphQLIntrospectionResponse = response
+                .json()
+                .await
                 .map_err(|e| anyhow!("Failed to parse GraphQL introspection: {}", e))?;
 
             if let Some(data) = introspection.data {
@@ -333,7 +378,10 @@ impl ServiceDiscovery {
                 Err(anyhow!("GraphQL introspection returned no data"))
             }
         } else {
-            Err(anyhow!("GraphQL endpoint returned error: {}", response.status()))
+            Err(anyhow!(
+                "GraphQL endpoint returned error: {}",
+                response.status()
+            ))
         }
     }
 
@@ -341,7 +389,7 @@ impl ServiceDiscovery {
     async fn extract_sparql_metadata(&self, endpoint: &str) -> Result<ServiceMetadata> {
         // Try to get service description from common locations
         let mut metadata = ServiceMetadata::default();
-        
+
         // Try .well-known/void descriptor
         if let Ok(void_desc) = self.fetch_void_description(endpoint).await {
             metadata.description = void_desc.description;
@@ -352,7 +400,11 @@ impl ServiceDiscovery {
     }
 
     /// Extract GraphQL service metadata from introspection
-    async fn extract_graphql_metadata(&self, endpoint: &str, introspection: &Option<GraphQLIntrospection>) -> Result<ServiceMetadata> {
+    async fn extract_graphql_metadata(
+        &self,
+        endpoint: &str,
+        introspection: &Option<GraphQLIntrospection>,
+    ) -> Result<ServiceMetadata> {
         let mut metadata = ServiceMetadata::default();
 
         if let Some(intro) = introspection {
@@ -370,7 +422,7 @@ impl ServiceDiscovery {
         // Measure response time with a simple query
         let test_query = "SELECT (COUNT(*) as ?count) WHERE { ?s ?p ?o }";
         let start_time = Instant::now();
-        
+
         if self.test_sparql_query(endpoint, test_query).await.is_ok() {
             performance.average_response_time = Some(start_time.elapsed());
         }
@@ -391,14 +443,16 @@ impl ServiceDiscovery {
         // Measure response time with introspection query
         let introspection_query = "{ __schema { queryType { name } } }";
         let start_time = Instant::now();
-        
-        if self.test_graphql_query(endpoint, introspection_query).await.is_ok() {
+
+        if self
+            .test_graphql_query(endpoint, introspection_query)
+            .await
+            .is_ok()
+        {
             performance.average_response_time = Some(start_time.elapsed());
         }
 
-        performance.supported_result_formats = vec![
-            "application/json".to_string(),
-        ];
+        performance.supported_result_formats = vec!["application/json".to_string()];
 
         Ok(performance)
     }
@@ -406,15 +460,18 @@ impl ServiceDiscovery {
     /// Fetch VoID (Vocabulary of Interlinked Datasets) description
     async fn fetch_void_description(&self, endpoint: &str) -> Result<VoidDescription> {
         let void_url = format!("{}/.well-known/void", endpoint.trim_end_matches('/'));
-        
-        let response = self.client
+
+        let response = self
+            .client
             .get(&void_url)
             .send()
             .await
             .map_err(|e| anyhow!("Failed to fetch VoID description: {}", e))?;
 
         if response.status().is_success() {
-            let void_desc: VoidDescription = response.json().await
+            let void_desc: VoidDescription = response
+                .json()
+                .await
                 .map_err(|e| anyhow!("Failed to parse VoID description: {}", e))?;
             Ok(void_desc)
         } else {
@@ -555,10 +612,10 @@ mod tests {
     fn test_service_id_generation() {
         let discovery = ServiceDiscovery::new();
         let endpoint = "http://example.com/sparql";
-        
+
         let id1 = discovery.generate_service_id(endpoint);
         let id2 = discovery.generate_service_id(endpoint);
-        
+
         assert_eq!(id1, id2); // Same endpoint should generate same ID
         assert!(id1.starts_with("service_"));
     }
@@ -566,7 +623,7 @@ mod tests {
     #[tokio::test]
     async fn test_void_description_parsing() {
         let discovery = ServiceDiscovery::new();
-        
+
         // This test would require a mock server in a real implementation
         // For now, just test the structure
         let void_desc = VoidDescription {

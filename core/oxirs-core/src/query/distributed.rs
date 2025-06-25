@@ -1,20 +1,20 @@
 //! Distributed query engine for federated SPARQL execution
-//! 
+//!
 //! This module provides federated query capabilities, cross-datacenter optimization,
 //! edge computing distribution, and real-time collaborative filtering.
 
-use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant};
-use async_trait::async_trait;
-#[cfg(feature = "async")]
-use tokio::sync::mpsc;
-#[cfg(not(feature = "async"))]
-use std::sync::mpsc;
+use crate::model::*;
 use crate::query::algebra::*;
 use crate::query::plan::ExecutionPlan;
-use crate::model::*;
 use crate::OxirsError;
+use async_trait::async_trait;
+use std::collections::{HashMap, HashSet};
+#[cfg(not(feature = "async"))]
+use std::sync::mpsc;
+use std::sync::{Arc, RwLock};
+use std::time::{Duration, Instant};
+#[cfg(feature = "async")]
+use tokio::sync::mpsc;
 
 /// Distributed query coordinator
 pub struct DistributedQueryEngine {
@@ -398,50 +398,54 @@ impl DistributedQueryEngine {
             config,
         }
     }
-    
+
     /// Register a federated endpoint
     pub fn register_endpoint(&self, endpoint: FederatedEndpoint) -> Result<(), OxirsError> {
-        let mut endpoints = self.endpoints.write()
+        let mut endpoints = self
+            .endpoints
+            .write()
             .map_err(|_| OxirsError::Query("Failed to acquire endpoints lock".to_string()))?;
-        
+
         endpoints.insert(endpoint.url.clone(), endpoint);
         Ok(())
     }
-    
+
     /// Execute distributed query
     pub async fn execute(&self, query: Query) -> Result<QueryResult, OxirsError> {
         // Plan query distribution
         let plan = self.plan_query(&query)?;
-        
+
         // Execute fragments in parallel
         let fragment_results = self.execute_fragments(&plan).await?;
-        
+
         // Join results according to plan
         let joined = self.join_results(fragment_results, &plan)?;
-        
+
         // Apply final aggregation
         let aggregated = self.aggregate_results(joined, &plan)?;
-        
+
         Ok(aggregated)
     }
-    
+
     /// Plan distributed query execution
     fn plan_query(&self, query: &Query) -> Result<DistributedPlan, OxirsError> {
-        let endpoints = self.endpoints.read()
+        let endpoints = self
+            .endpoints
+            .read()
             .map_err(|_| OxirsError::Query("Failed to read endpoints".to_string()))?;
-        
+
         // Route query fragments
         let routes = self.router.route_query(query, &endpoints)?;
-        
+
         // Optimize join order
         let join_order = self.optimize_join_order(&routes)?;
-        
+
         // Select aggregation strategy
         let aggregation = self.select_aggregation_strategy(query)?;
-        
+
         // Calculate total cost
         let total_cost = routes.iter().map(|r| r.estimated_cost).sum();
-        
+
         Ok(DistributedPlan {
             routes,
             join_order,
@@ -449,30 +453,32 @@ impl DistributedQueryEngine {
             total_cost,
         })
     }
-    
+
     /// Execute query fragments in parallel
-    async fn execute_fragments(&self, plan: &DistributedPlan) 
-        -> Result<Vec<QueryResult>, OxirsError> {
+    async fn execute_fragments(
+        &self,
+        plan: &DistributedPlan,
+    ) -> Result<Vec<QueryResult>, OxirsError> {
         use futures::future::join_all;
-        
+
         let mut futures = Vec::new();
-        
+
         for route in &plan.routes {
             let future = self.execute_fragment(route);
             futures.push(future);
         }
-        
+
         let results = join_all(futures).await;
-        
+
         // Collect successful results
         let mut fragment_results = Vec::new();
         for result in results {
             fragment_results.push(result?);
         }
-        
+
         Ok(fragment_results)
     }
-    
+
     /// Execute single query fragment
     async fn execute_fragment(&self, route: &QueryRoute) -> Result<QueryResult, OxirsError> {
         // This would actually send the query to the remote endpoint
@@ -489,30 +495,39 @@ impl DistributedQueryEngine {
             source: route.endpoint.clone(),
         })
     }
-    
+
     /// Join distributed results
-    fn join_results(&self, results: Vec<QueryResult>, plan: &DistributedPlan) 
-        -> Result<Vec<QueryResult>, OxirsError> {
+    fn join_results(
+        &self,
+        results: Vec<QueryResult>,
+        plan: &DistributedPlan,
+    ) -> Result<Vec<QueryResult>, OxirsError> {
         // Apply joins according to plan
         let mut joined = results;
-        
+
         for join_op in &plan.join_order {
             joined = self.apply_join(joined, join_op)?;
         }
-        
+
         Ok(joined)
     }
-    
+
     /// Apply single join operation
-    fn apply_join(&self, results: Vec<QueryResult>, join_op: &JoinOperation) 
-        -> Result<Vec<QueryResult>, OxirsError> {
+    fn apply_join(
+        &self,
+        results: Vec<QueryResult>,
+        join_op: &JoinOperation,
+    ) -> Result<Vec<QueryResult>, OxirsError> {
         // Placeholder implementation
         Ok(results)
     }
-    
+
     /// Aggregate final results
-    fn aggregate_results(&self, results: Vec<QueryResult>, plan: &DistributedPlan) 
-        -> Result<QueryResult, OxirsError> {
+    fn aggregate_results(
+        &self,
+        results: Vec<QueryResult>,
+        plan: &DistributedPlan,
+    ) -> Result<QueryResult, OxirsError> {
         match &plan.aggregation {
             AggregationStrategy::Union => self.union_results(results),
             AggregationStrategy::MergeDistinct => self.merge_distinct(results),
@@ -520,19 +535,19 @@ impl DistributedQueryEngine {
             AggregationStrategy::Custom(f) => Ok(f(results)),
         }
     }
-    
+
     /// Simple union of results
     fn union_results(&self, results: Vec<QueryResult>) -> Result<QueryResult, OxirsError> {
         let mut all_bindings = Vec::new();
         let mut total_time = Duration::ZERO;
         let mut total_bytes = 0;
-        
+
         for result in results {
             all_bindings.extend(result.bindings);
             total_time += result.metadata.execution_time;
             total_bytes += result.metadata.bytes_transferred;
         }
-        
+
         let result_count = all_bindings.len();
         Ok(QueryResult {
             bindings: all_bindings,
@@ -546,14 +561,14 @@ impl DistributedQueryEngine {
             source: "distributed".to_string(),
         })
     }
-    
+
     /// Merge with deduplication
     fn merge_distinct(&self, results: Vec<QueryResult>) -> Result<QueryResult, OxirsError> {
         use std::collections::HashSet;
-        
+
         let mut seen = HashSet::new();
         let mut unique_bindings = Vec::new();
-        
+
         for result in results {
             for binding in result.bindings {
                 let key = self.binding_key(&binding);
@@ -562,7 +577,7 @@ impl DistributedQueryEngine {
                 }
             }
         }
-        
+
         let result_count = unique_bindings.len();
         Ok(QueryResult {
             bindings: unique_bindings,
@@ -576,41 +591,44 @@ impl DistributedQueryEngine {
             source: "distributed".to_string(),
         })
     }
-    
+
     /// Create key for binding deduplication
     fn binding_key(&self, binding: &HashMap<Variable, Term>) -> String {
         let mut key = String::new();
         let mut vars: Vec<_> = binding.keys().collect();
         vars.sort();
-        
+
         for var in vars {
             key.push_str(&format!("{}={},", var, binding[var]));
         }
-        
+
         key
     }
-    
+
     /// Streaming aggregation
     fn streaming_aggregate(&self, results: Vec<QueryResult>) -> Result<QueryResult, OxirsError> {
         // Would implement streaming aggregation
         self.union_results(results)
     }
-    
+
     /// Optimize join order for distributed execution
     fn optimize_join_order(&self, routes: &[QueryRoute]) -> Result<Vec<JoinOperation>, OxirsError> {
         // Placeholder - would use cost-based optimization
         Ok(Vec::new())
     }
-    
+
     /// Select aggregation strategy based on query
-    fn select_aggregation_strategy(&self, query: &Query) -> Result<AggregationStrategy, OxirsError> {
+    fn select_aggregation_strategy(
+        &self,
+        query: &Query,
+    ) -> Result<AggregationStrategy, OxirsError> {
         // Check if query requires distinct results
         if let QueryForm::Select { distinct, .. } = &query.form {
             if *distinct {
                 return Ok(AggregationStrategy::MergeDistinct);
             }
         }
-        
+
         Ok(AggregationStrategy::Union)
     }
 }
@@ -624,10 +642,13 @@ impl QueryRouter {
             pattern_cache: Arc::new(RwLock::new(PatternCache::new())),
         }
     }
-    
+
     /// Route query to endpoints
-    pub fn route_query(&self, query: &Query, endpoints: &HashMap<String, FederatedEndpoint>) 
-        -> Result<Vec<QueryRoute>, OxirsError> {
+    pub fn route_query(
+        &self,
+        query: &Query,
+        endpoints: &HashMap<String, FederatedEndpoint>,
+    ) -> Result<Vec<QueryRoute>, OxirsError> {
         match &self.policy {
             RoutingPolicy::NearestEndpoint => self.route_nearest(query, endpoints),
             RoutingPolicy::LoadBalanced => self.route_load_balanced(query, endpoints),
@@ -639,16 +660,20 @@ impl QueryRouter {
             }
         }
     }
-    
+
     /// Route to nearest endpoint
-    fn route_nearest(&self, query: &Query, endpoints: &HashMap<String, FederatedEndpoint>) 
-        -> Result<Vec<QueryRoute>, OxirsError> {
+    fn route_nearest(
+        &self,
+        query: &Query,
+        endpoints: &HashMap<String, FederatedEndpoint>,
+    ) -> Result<Vec<QueryRoute>, OxirsError> {
         // Find endpoint with lowest latency
-        let best_endpoint = endpoints.values()
+        let best_endpoint = endpoints
+            .values()
             .filter(|e| e.status == EndpointStatus::Healthy)
             .min_by(|a, b| a.latency_ms.partial_cmp(&b.latency_ms).unwrap())
             .ok_or_else(|| OxirsError::Query("No healthy endpoints available".to_string()))?;
-        
+
         Ok(vec![QueryRoute {
             endpoint: best_endpoint.url.clone(),
             fragment: QueryFragment {
@@ -661,26 +686,32 @@ impl QueryRouter {
             priority: 1,
         }])
     }
-    
+
     /// Load balanced routing
-    fn route_load_balanced(&self, query: &Query, endpoints: &HashMap<String, FederatedEndpoint>) 
-        -> Result<Vec<QueryRoute>, OxirsError> {
+    fn route_load_balanced(
+        &self,
+        query: &Query,
+        endpoints: &HashMap<String, FederatedEndpoint>,
+    ) -> Result<Vec<QueryRoute>, OxirsError> {
         // Distribute patterns across healthy endpoints
-        let healthy_endpoints: Vec<_> = endpoints.values()
+        let healthy_endpoints: Vec<_> = endpoints
+            .values()
             .filter(|e| e.status == EndpointStatus::Healthy)
             .collect();
-        
+
         if healthy_endpoints.is_empty() {
-            return Err(OxirsError::Query("No healthy endpoints available".to_string()));
+            return Err(OxirsError::Query(
+                "No healthy endpoints available".to_string(),
+            ));
         }
-        
+
         let patterns = self.extract_patterns(query)?;
         let mut routes = Vec::new();
-        
+
         // Round-robin distribution
         for (i, pattern) in patterns.into_iter().enumerate() {
             let endpoint = &healthy_endpoints[i % healthy_endpoints.len()];
-            
+
             routes.push(QueryRoute {
                 endpoint: endpoint.url.clone(),
                 fragment: QueryFragment {
@@ -693,24 +724,30 @@ impl QueryRouter {
                 priority: 1,
             });
         }
-        
+
         Ok(routes)
     }
-    
+
     /// Route based on data locality
-    fn route_data_locality(&self, query: &Query, endpoints: &HashMap<String, FederatedEndpoint>) 
-        -> Result<Vec<QueryRoute>, OxirsError> {
+    fn route_data_locality(
+        &self,
+        query: &Query,
+        endpoints: &HashMap<String, FederatedEndpoint>,
+    ) -> Result<Vec<QueryRoute>, OxirsError> {
         // Would analyze data distribution and route accordingly
         self.route_load_balanced(query, endpoints)
     }
-    
+
     /// Route to minimize network transfers
-    fn route_minimize_transfers(&self, query: &Query, endpoints: &HashMap<String, FederatedEndpoint>) 
-        -> Result<Vec<QueryRoute>, OxirsError> {
+    fn route_minimize_transfers(
+        &self,
+        query: &Query,
+        endpoints: &HashMap<String, FederatedEndpoint>,
+    ) -> Result<Vec<QueryRoute>, OxirsError> {
         // Would analyze join patterns and minimize data movement
         self.route_load_balanced(query, endpoints)
     }
-    
+
     /// Extract triple patterns from query
     fn extract_patterns(&self, query: &Query) -> Result<Vec<TriplePattern>, OxirsError> {
         match &query.form {
@@ -720,33 +757,38 @@ impl QueryRouter {
             _ => Ok(Vec::new()),
         }
     }
-    
+
     /// Extract patterns from graph pattern
-    fn extract_patterns_from_graph_pattern(&self, pattern: &GraphPattern) 
-        -> Result<Vec<TriplePattern>, OxirsError> {
+    fn extract_patterns_from_graph_pattern(
+        &self,
+        pattern: &GraphPattern,
+    ) -> Result<Vec<TriplePattern>, OxirsError> {
         match pattern {
             GraphPattern::Bgp(patterns) => Ok(patterns.clone()),
             _ => Ok(Vec::new()),
         }
     }
-    
+
     /// Extract variables from query
     fn extract_variables(&self, query: &Query) -> Result<HashSet<Variable>, OxirsError> {
         let mut vars = HashSet::new();
-        
+
         match &query.form {
             QueryForm::Select { where_clause, .. } => {
                 self.collect_variables_from_pattern(where_clause, &mut vars)?;
             }
             _ => {}
         }
-        
+
         Ok(vars)
     }
-    
+
     /// Collect variables from pattern
-    fn collect_variables_from_pattern(&self, pattern: &GraphPattern, vars: &mut HashSet<Variable>) 
-        -> Result<(), OxirsError> {
+    fn collect_variables_from_pattern(
+        &self,
+        pattern: &GraphPattern,
+        vars: &mut HashSet<Variable>,
+    ) -> Result<(), OxirsError> {
         match pattern {
             GraphPattern::Bgp(patterns) => {
                 for tp in patterns {
@@ -763,19 +805,17 @@ impl QueryRouter {
             }
             _ => {}
         }
-        
+
         Ok(())
     }
-    
+
     /// Extract output variables
     fn extract_output_vars(&self, query: &Query) -> Result<HashSet<Variable>, OxirsError> {
         match &query.form {
-            QueryForm::Select { variables, .. } => {
-                match variables {
-                    SelectVariables::All => self.extract_variables(query),
-                    SelectVariables::Specific(vars) => Ok(vars.iter().cloned().collect()),
-                }
-            }
+            QueryForm::Select { variables, .. } => match variables {
+                SelectVariables::All => self.extract_variables(query),
+                SelectVariables::Specific(vars) => Ok(vars.iter().cloned().collect()),
+            },
             _ => Ok(HashSet::new()),
         }
     }
@@ -791,15 +831,16 @@ impl NetworkStatistics {
             last_update: Instant::now(),
         }
     }
-    
+
     /// Update endpoint latency
     pub fn update_latency(&mut self, endpoint: String, latency: Duration) {
-        self.latencies.entry(endpoint)
+        self.latencies
+            .entry(endpoint)
             .or_insert_with(Vec::new)
             .push(latency);
         self.last_update = Instant::now();
     }
-    
+
     /// Get average latency for endpoint
     pub fn avg_latency(&self, endpoint: &str) -> Option<Duration> {
         self.latencies.get(endpoint).map(|samples| {
@@ -818,12 +859,12 @@ impl DataLocalityMap {
             affinity_scores: HashMap::new(),
         }
     }
-    
+
     /// Update dataset location
     pub fn update_dataset_location(&mut self, dataset: String, endpoints: Vec<String>) {
         self.dataset_locations.insert(dataset, endpoints);
     }
-    
+
     /// Get endpoints for dataset
     pub fn get_dataset_endpoints(&self, dataset: &str) -> Option<&Vec<String>> {
         self.dataset_locations.get(dataset)
@@ -839,7 +880,7 @@ impl PatternCache {
             max_size: 1000,
         }
     }
-    
+
     /// Get cached plan
     pub fn get_plan(&mut self, hash: QueryHash) -> Option<&mut CachedPlan> {
         self.plans.get_mut(&hash).map(|plan| {
@@ -847,7 +888,7 @@ impl PatternCache {
             plan
         })
     }
-    
+
     /// Cache execution plan
     pub fn cache_plan(&mut self, hash: QueryHash, plan: DistributedPlan) {
         // Evict if at capacity
@@ -857,13 +898,16 @@ impl PatternCache {
                 self.plans.remove(&oldest);
             }
         }
-        
-        self.plans.insert(hash, CachedPlan {
-            plan,
-            created: Instant::now(),
-            hits: 0,
-            avg_exec_time: Duration::ZERO,
-        });
+
+        self.plans.insert(
+            hash,
+            CachedPlan {
+                plan,
+                created: Instant::now(),
+                hits: 0,
+                avg_exec_time: Duration::ZERO,
+            },
+        );
     }
 }
 
@@ -901,12 +945,15 @@ pub trait FederatedQueryExecutor: Send + Sync {
         endpoint: &FederatedEndpoint,
         query: &Query,
     ) -> Result<QueryResult, OxirsError>;
-    
+
     /// Check endpoint health
     async fn check_health(&self, endpoint: &FederatedEndpoint) -> EndpointStatus;
-    
+
     /// Get endpoint capabilities
-    async fn get_capabilities(&self, endpoint: &FederatedEndpoint) -> Result<EndpointFeatures, OxirsError>;
+    async fn get_capabilities(
+        &self,
+        endpoint: &FederatedEndpoint,
+    ) -> Result<EndpointFeatures, OxirsError>;
 }
 
 /// Real-time collaborative filtering for distributed queries
@@ -949,66 +996,93 @@ impl CollaborativeFilter {
     #[cfg(feature = "async")]
     pub fn new(similarity_threshold: f64) -> (Self, tokio::sync::mpsc::Receiver<SharedResult>) {
         let (tx, rx) = tokio::sync::mpsc::channel(1000);
-        
-        (Self {
-            active_queries: Arc::new(RwLock::new(HashMap::new())),
-            similarity_threshold,
-            result_channel: tx,
-        }, rx)
+
+        (
+            Self {
+                active_queries: Arc::new(RwLock::new(HashMap::new())),
+                similarity_threshold,
+                result_channel: tx,
+            },
+            rx,
+        )
     }
-    
+
     #[cfg(not(feature = "async"))]
     pub fn new(similarity_threshold: f64) -> (Self, std::sync::mpsc::Receiver<SharedResult>) {
         let (tx, rx) = std::sync::mpsc::channel();
-        
-        (Self {
-            active_queries: Arc::new(RwLock::new(HashMap::new())),
-            similarity_threshold,
-            result_channel: tx,
-        }, rx)
+
+        (
+            Self {
+                active_queries: Arc::new(RwLock::new(HashMap::new())),
+                similarity_threshold,
+                result_channel: tx,
+            },
+            rx,
+        )
     }
-    
+
     /// Register query for collaboration
-    pub async fn register_query(&self, query: &Query, client_id: String) -> Result<QueryHash, OxirsError> {
+    pub async fn register_query(
+        &self,
+        query: &Query,
+        client_id: String,
+    ) -> Result<QueryHash, OxirsError> {
         let pattern = self.extract_query_pattern(query)?;
         let hash = self.hash_pattern(&pattern);
-        
-        let mut active = self.active_queries.write()
+
+        let mut active = self
+            .active_queries
+            .write()
             .map_err(|_| OxirsError::Query("Failed to acquire lock".to_string()))?;
-        
-        active.entry(hash)
+
+        active
+            .entry(hash)
             .or_insert_with(|| ActiveQuery {
                 pattern: pattern.clone(),
                 clients: HashSet::new(),
                 partial_results: Vec::new(),
                 start_time: Instant::now(),
             })
-            .clients.insert(client_id);
-        
+            .clients
+            .insert(client_id);
+
         Ok(hash)
     }
-    
+
     /// Share query results
     #[cfg(feature = "async")]
-    pub async fn share_results(&self, hash: QueryHash, result: QueryResult, client_id: String) 
-        -> Result<(), OxirsError> {
-        self.result_channel.send(SharedResult {
-            query_hash: hash,
-            result,
-            client_id,
-        }).await.map_err(|_| OxirsError::Query("Failed to share results".to_string()))
+    pub async fn share_results(
+        &self,
+        hash: QueryHash,
+        result: QueryResult,
+        client_id: String,
+    ) -> Result<(), OxirsError> {
+        self.result_channel
+            .send(SharedResult {
+                query_hash: hash,
+                result,
+                client_id,
+            })
+            .await
+            .map_err(|_| OxirsError::Query("Failed to share results".to_string()))
     }
-    
+
     #[cfg(not(feature = "async"))]
-    pub fn share_results(&self, hash: QueryHash, result: QueryResult, client_id: String) 
-        -> Result<(), OxirsError> {
-        self.result_channel.send(SharedResult {
-            query_hash: hash,
-            result,
-            client_id,
-        }).map_err(|_| OxirsError::Query("Failed to share results".to_string()))
+    pub fn share_results(
+        &self,
+        hash: QueryHash,
+        result: QueryResult,
+        client_id: String,
+    ) -> Result<(), OxirsError> {
+        self.result_channel
+            .send(SharedResult {
+                query_hash: hash,
+                result,
+                client_id,
+            })
+            .map_err(|_| OxirsError::Query("Failed to share results".to_string()))
     }
-    
+
     /// Extract pattern from query
     fn extract_query_pattern(&self, query: &Query) -> Result<QueryPattern, OxirsError> {
         // Extract patterns, joins, and filters
@@ -1018,12 +1092,12 @@ impl CollaborativeFilter {
             filters: Vec::new(),
         })
     }
-    
+
     /// Hash query pattern
     fn hash_pattern(&self, pattern: &QueryPattern) -> QueryHash {
-        use std::hash::{Hash, Hasher};
         use std::collections::hash_map::DefaultHasher;
-        
+        use std::hash::{Hash, Hasher};
+
         let mut hasher = DefaultHasher::new();
         pattern.hash(&mut hasher);
         hasher.finish()
@@ -1033,20 +1107,20 @@ impl CollaborativeFilter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_distributed_engine_creation() {
         let config = DistributedConfig::default();
         let engine = DistributedQueryEngine::new(config);
-        
+
         assert!(engine.endpoints.read().unwrap().is_empty());
     }
-    
+
     #[test]
     fn test_endpoint_registration() {
         let config = DistributedConfig::default();
         let engine = DistributedQueryEngine::new(config);
-        
+
         let endpoint = FederatedEndpoint {
             url: "http://example.org/sparql".to_string(),
             features: EndpointFeatures {
@@ -1063,36 +1137,39 @@ mod tests {
             last_health_check: Instant::now(),
             status: EndpointStatus::Healthy,
         };
-        
+
         engine.register_endpoint(endpoint).unwrap();
-        
+
         let endpoints = engine.endpoints.read().unwrap();
         assert_eq!(endpoints.len(), 1);
         assert!(endpoints.contains_key("http://example.org/sparql"));
     }
-    
+
     #[test]
     fn test_query_router() {
         let router = QueryRouter::new(RoutingPolicy::NearestEndpoint);
         let mut endpoints = HashMap::new();
-        
-        endpoints.insert("endpoint1".to_string(), FederatedEndpoint {
-            url: "http://endpoint1.org/sparql".to_string(),
-            features: EndpointFeatures {
-                sparql_version: "1.1".to_string(),
-                update_support: false,
-                federation_support: true,
-                text_search: false,
-                geospatial: false,
-                extensions: HashSet::new(),
+
+        endpoints.insert(
+            "endpoint1".to_string(),
+            FederatedEndpoint {
+                url: "http://endpoint1.org/sparql".to_string(),
+                features: EndpointFeatures {
+                    sparql_version: "1.1".to_string(),
+                    update_support: false,
+                    federation_support: true,
+                    text_search: false,
+                    geospatial: false,
+                    extensions: HashSet::new(),
+                },
+                latency_ms: 20.0,
+                throughput: 5000.0,
+                datasets: vec![],
+                last_health_check: Instant::now(),
+                status: EndpointStatus::Healthy,
             },
-            latency_ms: 20.0,
-            throughput: 5000.0,
-            datasets: vec![],
-            last_health_check: Instant::now(),
-            status: EndpointStatus::Healthy,
-        });
-        
+        );
+
         let query = Query {
             base: None,
             prefixes: HashMap::new(),
@@ -1107,7 +1184,7 @@ mod tests {
             },
             dataset: crate::query::algebra::Dataset::default(),
         };
-        
+
         let routes = router.route_query(&query, &endpoints).unwrap();
         assert_eq!(routes.len(), 1);
         assert_eq!(routes[0].endpoint, "http://endpoint1.org/sparql");

@@ -1,6 +1,9 @@
 //! SPARQL integration for vector search and hybrid symbolic-vector queries
 
-use crate::{Vector, VectorStore, embeddings::{EmbeddableContent, EmbeddingManager, EmbeddingStrategy}};
+use crate::{
+    embeddings::{EmbeddableContent, EmbeddingManager, EmbeddingStrategy},
+    Vector, VectorStore,
+};
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -71,13 +74,10 @@ pub struct SparqlVectorService {
 }
 
 impl SparqlVectorService {
-    pub fn new(
-        config: VectorServiceConfig,
-        embedding_strategy: EmbeddingStrategy,
-    ) -> Result<Self> {
+    pub fn new(config: VectorServiceConfig, embedding_strategy: EmbeddingStrategy) -> Result<Self> {
         let vector_store = VectorStore::new();
         let embedding_manager = EmbeddingManager::new(embedding_strategy, 1000)?;
-        
+
         let mut service = Self {
             config,
             vector_store,
@@ -85,11 +85,11 @@ impl SparqlVectorService {
             function_registry: HashMap::new(),
             query_cache: HashMap::new(),
         };
-        
+
         service.register_builtin_functions();
         Ok(service)
     }
-    
+
     /// Register built-in vector service functions
     fn register_builtin_functions(&mut self) {
         // vec:similar(resource, limit, threshold) -> results
@@ -118,7 +118,7 @@ impl SparqlVectorService {
                 },
             ],
         });
-        
+
         // vec:similarity(resource1, resource2) -> similarity_score
         self.register_function(VectorServiceFunction {
             name: "similarity".to_string(),
@@ -139,22 +139,20 @@ impl SparqlVectorService {
                 },
             ],
         });
-        
+
         // vec:embed_text(text) -> vector
         self.register_function(VectorServiceFunction {
             name: "embed_text".to_string(),
             arity: 1,
             description: "Generate embedding vector for text content".to_string(),
-            parameters: vec![
-                VectorServiceParameter {
-                    name: "text".to_string(),
-                    param_type: VectorParameterType::String,
-                    required: true,
-                    description: "Text content to embed".to_string(),
-                },
-            ],
+            parameters: vec![VectorServiceParameter {
+                name: "text".to_string(),
+                param_type: VectorParameterType::String,
+                required: true,
+                description: "Text content to embed".to_string(),
+            }],
         });
-        
+
         // vec:search_text(query_text, limit, threshold) -> results
         self.register_function(VectorServiceFunction {
             name: "search_text".to_string(),
@@ -181,7 +179,7 @@ impl SparqlVectorService {
                 },
             ],
         });
-        
+
         // vec:cluster(resources, threshold) -> clusters
         self.register_function(VectorServiceFunction {
             name: "cluster".to_string(),
@@ -203,12 +201,13 @@ impl SparqlVectorService {
             ],
         });
     }
-    
+
     /// Register a custom vector service function
     pub fn register_function(&mut self, function: VectorServiceFunction) {
-        self.function_registry.insert(function.name.clone(), function);
+        self.function_registry
+            .insert(function.name.clone(), function);
     }
-    
+
     /// Execute a vector service function call
     pub fn execute_function(
         &mut self,
@@ -221,25 +220,29 @@ impl SparqlVectorService {
             "embed_text" => self.execute_embed_text(args),
             "search_text" => self.execute_search_text(args),
             "cluster" => self.execute_cluster(args),
-            _ => Err(anyhow!("Unknown vector service function: {}", function_name)),
+            _ => Err(anyhow!(
+                "Unknown vector service function: {}",
+                function_name
+            )),
         }
     }
-    
+
     /// Add resource embedding to the vector store
-    pub fn add_resource_embedding(
-        &mut self,
-        uri: &str,
-        content: &EmbeddableContent,
-    ) -> Result<()> {
+    pub fn add_resource_embedding(&mut self, uri: &str, content: &EmbeddableContent) -> Result<()> {
         let vector = self.embedding_manager.get_embedding(content)?;
-        self.vector_store.index_resource(uri.to_string(), &content.to_text())?;
+        self.vector_store
+            .index_resource(uri.to_string(), &content.to_text())?;
         Ok(())
     }
-    
+
     /// Generate SPARQL SERVICE query for vector operations
     pub fn generate_service_query(&self, operation: &VectorOperation) -> String {
         match operation {
-            VectorOperation::FindSimilar { resource, limit, threshold } => {
+            VectorOperation::FindSimilar {
+                resource,
+                limit,
+                threshold,
+            } => {
                 format!(
                     r#"
                     SERVICE <{}> {{
@@ -256,7 +259,10 @@ impl SparqlVectorService {
                     limit.unwrap_or(self.config.default_limit)
                 )
             }
-            VectorOperation::CalculateSimilarity { resource1, resource2 } => {
+            VectorOperation::CalculateSimilarity {
+                resource1,
+                resource2,
+            } => {
                 format!(
                     r#"
                     SERVICE <{}> {{
@@ -266,7 +272,11 @@ impl SparqlVectorService {
                     self.config.service_uri, resource1, resource2
                 )
             }
-            VectorOperation::SearchText { query_text, limit, threshold } => {
+            VectorOperation::SearchText {
+                query_text,
+                limit,
+                threshold,
+            } => {
                 format!(
                     r#"
                     SERVICE <{}> {{
@@ -285,48 +295,46 @@ impl SparqlVectorService {
             }
         }
     }
-    
+
     /// Execute hybrid query that combines symbolic and vector operations
     pub fn execute_hybrid_query(&mut self, query: &HybridQuery) -> Result<Vec<HybridQueryResult>> {
         let mut results = Vec::new();
-        
+
         // First, execute the symbolic part of the query
         let symbolic_results = self.execute_symbolic_query(&query.symbolic_part)?;
-        
+
         // Then, for each symbolic result, apply vector operations
         for symbolic_result in symbolic_results {
-            let vector_results = self.execute_vector_operations(
-                &query.vector_operations,
-                &symbolic_result,
-            )?;
-            
+            let vector_results =
+                self.execute_vector_operations(&query.vector_operations, &symbolic_result)?;
+
             results.push(HybridQueryResult {
                 symbolic_bindings: symbolic_result,
                 vector_results,
                 combined_score: self.calculate_combined_score(&query.scoring),
             });
         }
-        
+
         // Sort by combined score if requested
         if query.sort_by_score {
             results.sort_by(|a, b| b.combined_score.partial_cmp(&a.combined_score).unwrap());
         }
-        
+
         Ok(results)
     }
-    
+
     // Implementation of individual service functions
-    
+
     fn execute_similar(&mut self, args: &[VectorServiceArg]) -> Result<VectorServiceResult> {
         if args.is_empty() {
             return Err(anyhow!("similar function requires at least one argument"));
         }
-        
+
         let resource_uri = match &args[0] {
             VectorServiceArg::IRI(uri) => uri,
             _ => return Err(anyhow!("First argument must be a resource URI")),
         };
-        
+
         let limit = if args.len() > 1 {
             match &args[1] {
                 VectorServiceArg::Number(n) => *n as usize,
@@ -335,7 +343,7 @@ impl SparqlVectorService {
         } else {
             self.config.default_limit
         };
-        
+
         let threshold = if args.len() > 2 {
             match &args[2] {
                 VectorServiceArg::Number(t) => *t,
@@ -344,7 +352,7 @@ impl SparqlVectorService {
         } else {
             self.config.default_threshold
         };
-        
+
         // Check cache first
         let cache_key = format!("similar:{}:{}:{}", resource_uri, limit, threshold);
         if self.config.enable_caching {
@@ -352,70 +360,74 @@ impl SparqlVectorService {
                 return Ok(VectorServiceResult::SimilarityList(cached_results.clone()));
             }
         }
-        
+
         // Execute similarity search
         let results = self.vector_store.similarity_search(resource_uri, limit)?;
         let filtered_results: Vec<(String, f32)> = results
             .into_iter()
             .filter(|(_, score)| *score >= threshold)
             .collect();
-        
+
         // Cache results
         if self.config.enable_caching {
             self.query_cache.insert(cache_key, filtered_results.clone());
         }
-        
+
         Ok(VectorServiceResult::SimilarityList(filtered_results))
     }
-    
+
     fn execute_similarity(&mut self, args: &[VectorServiceArg]) -> Result<VectorServiceResult> {
         if args.len() != 2 {
-            return Err(anyhow!("similarity function requires exactly two arguments"));
+            return Err(anyhow!(
+                "similarity function requires exactly two arguments"
+            ));
         }
-        
+
         let uri1 = match &args[0] {
             VectorServiceArg::IRI(uri) => uri,
             _ => return Err(anyhow!("First argument must be a resource URI")),
         };
-        
+
         let uri2 = match &args[1] {
             VectorServiceArg::IRI(uri) => uri,
             _ => return Err(anyhow!("Second argument must be a resource URI")),
         };
-        
+
         // For now, return a dummy similarity score
         // In a real implementation, this would look up vectors and calculate similarity
         let similarity = 0.8; // Placeholder
-        
+
         Ok(VectorServiceResult::Number(similarity))
     }
-    
+
     fn execute_embed_text(&mut self, args: &[VectorServiceArg]) -> Result<VectorServiceResult> {
         if args.len() != 1 {
             return Err(anyhow!("embed_text function requires exactly one argument"));
         }
-        
+
         let text = match &args[0] {
             VectorServiceArg::String(text) => text,
             _ => return Err(anyhow!("Argument must be a string")),
         };
-        
+
         let content = EmbeddableContent::Text(text.clone());
         let vector = self.embedding_manager.get_embedding(&content)?;
-        
+
         Ok(VectorServiceResult::Vector(vector))
     }
-    
+
     fn execute_search_text(&mut self, args: &[VectorServiceArg]) -> Result<VectorServiceResult> {
         if args.is_empty() {
-            return Err(anyhow!("search_text function requires at least one argument"));
+            return Err(anyhow!(
+                "search_text function requires at least one argument"
+            ));
         }
-        
+
         let query_text = match &args[0] {
             VectorServiceArg::String(text) => text,
             _ => return Err(anyhow!("First argument must be a string")),
         };
-        
+
         let limit = if args.len() > 1 {
             match &args[1] {
                 VectorServiceArg::Number(n) => *n as usize,
@@ -424,11 +436,11 @@ impl SparqlVectorService {
         } else {
             self.config.default_limit
         };
-        
+
         let results = self.vector_store.similarity_search(query_text, limit)?;
         Ok(VectorServiceResult::SimilarityList(results))
     }
-    
+
     fn execute_cluster(&mut self, _args: &[VectorServiceArg]) -> Result<VectorServiceResult> {
         // Placeholder implementation for clustering
         let clusters = vec![
@@ -437,29 +449,32 @@ impl SparqlVectorService {
         ];
         Ok(VectorServiceResult::Clusters(clusters))
     }
-    
+
     // Helper methods for hybrid queries
-    
+
     fn execute_symbolic_query(&self, _query: &str) -> Result<Vec<HashMap<String, String>>> {
         // Placeholder for SPARQL execution
         // In a real implementation, this would execute the SPARQL query
         Ok(vec![HashMap::new()])
     }
-    
+
     fn execute_vector_operations(
         &mut self,
         operations: &[VectorOperation],
         _context: &HashMap<String, String>,
     ) -> Result<Vec<(String, f32)>> {
         let mut results = Vec::new();
-        
+
         for operation in operations {
             match operation {
-                VectorOperation::FindSimilar { resource, limit, threshold: _ } => {
-                    let search_results = self.vector_store.similarity_search(
-                        resource,
-                        limit.unwrap_or(self.config.default_limit),
-                    )?;
+                VectorOperation::FindSimilar {
+                    resource,
+                    limit,
+                    threshold: _,
+                } => {
+                    let search_results = self
+                        .vector_store
+                        .similarity_search(resource, limit.unwrap_or(self.config.default_limit))?;
                     results.extend(search_results);
                 }
                 _ => {
@@ -467,25 +482,25 @@ impl SparqlVectorService {
                 }
             }
         }
-        
+
         Ok(results)
     }
-    
+
     fn calculate_combined_score(&self, _scoring: &ScoringStrategy) -> f32 {
         // Placeholder for combined scoring
         0.8
     }
-    
+
     /// Get available service functions
     pub fn get_available_functions(&self) -> Vec<&VectorServiceFunction> {
         self.function_registry.values().collect()
     }
-    
+
     /// Clear query cache
     pub fn clear_cache(&mut self) {
         self.query_cache.clear();
     }
-    
+
     /// Get cache statistics
     pub fn cache_stats(&self) -> (usize, usize) {
         (self.query_cache.len(), self.config.cache_size)
@@ -545,7 +560,10 @@ pub struct HybridQuery {
 pub enum ScoringStrategy {
     VectorOnly,
     SymbolicOnly,
-    Weighted { vector_weight: f32, symbolic_weight: f32 },
+    Weighted {
+        vector_weight: f32,
+        symbolic_weight: f32,
+    },
     Multiplicative,
     Maximum,
     Minimum,
@@ -568,35 +586,35 @@ impl HybridQueryOptimizer {
     pub fn new(config: VectorServiceConfig) -> Self {
         Self { config }
     }
-    
+
     /// Optimize a hybrid query for better performance
     pub fn optimize_query(&self, query: &HybridQuery) -> Result<HybridQuery> {
         let mut optimized = query.clone();
-        
+
         if self.config.enable_optimization {
             // Move vector operations that can be executed early
             optimized = self.reorder_operations(optimized)?;
-            
+
             // Combine similar vector operations
             optimized = self.combine_operations(optimized)?;
-            
+
             // Add caching hints
             optimized = self.add_caching_hints(optimized)?;
         }
-        
+
         Ok(optimized)
     }
-    
+
     fn reorder_operations(&self, query: HybridQuery) -> Result<HybridQuery> {
         // Placeholder for operation reordering logic
         Ok(query)
     }
-    
+
     fn combine_operations(&self, query: HybridQuery) -> Result<HybridQuery> {
         // Placeholder for operation combination logic
         Ok(query)
     }
-    
+
     fn add_caching_hints(&self, query: HybridQuery) -> Result<HybridQuery> {
         // Placeholder for caching hint logic
         Ok(query)
@@ -618,8 +636,13 @@ impl VectorQueryBuilder {
             sort_by_score: true,
         }
     }
-    
-    pub fn find_similar(mut self, resource: String, limit: Option<usize>, threshold: Option<f32>) -> Self {
+
+    pub fn find_similar(
+        mut self,
+        resource: String,
+        limit: Option<usize>,
+        threshold: Option<f32>,
+    ) -> Self {
         self.operations.push(VectorOperation::FindSimilar {
             resource,
             limit,
@@ -627,7 +650,7 @@ impl VectorQueryBuilder {
         });
         self
     }
-    
+
     pub fn calculate_similarity(mut self, resource1: String, resource2: String) -> Self {
         self.operations.push(VectorOperation::CalculateSimilarity {
             resource1,
@@ -635,8 +658,13 @@ impl VectorQueryBuilder {
         });
         self
     }
-    
-    pub fn search_text(mut self, query_text: String, limit: Option<usize>, threshold: Option<f32>) -> Self {
+
+    pub fn search_text(
+        mut self,
+        query_text: String,
+        limit: Option<usize>,
+        threshold: Option<f32>,
+    ) -> Self {
         self.operations.push(VectorOperation::SearchText {
             query_text,
             limit,
@@ -644,17 +672,17 @@ impl VectorQueryBuilder {
         });
         self
     }
-    
+
     pub fn with_scoring(mut self, scoring: ScoringStrategy) -> Self {
         self.scoring = scoring;
         self
     }
-    
+
     pub fn sort_by_score(mut self, sort: bool) -> Self {
         self.sort_by_score = sort;
         self
     }
-    
+
     pub fn build_hybrid_query(self, symbolic_part: String) -> HybridQuery {
         HybridQuery {
             symbolic_part,
@@ -684,18 +712,18 @@ impl VectorServiceRegistry {
             default_service: None,
         }
     }
-    
+
     pub fn register_service(&mut self, name: String, service: SparqlVectorService) {
         if self.default_service.is_none() {
             self.default_service = Some(name.clone());
         }
         self.services.insert(name, service);
     }
-    
+
     pub fn get_service(&mut self, name: &str) -> Option<&mut SparqlVectorService> {
         self.services.get_mut(name)
     }
-    
+
     pub fn get_default_service(&mut self) -> Option<&mut SparqlVectorService> {
         if let Some(ref default_name) = self.default_service.clone() {
             self.services.get_mut(default_name)
@@ -703,7 +731,7 @@ impl VectorServiceRegistry {
             None
         }
     }
-    
+
     pub fn execute_service_function(
         &mut self,
         service_name: Option<&str>,
@@ -717,7 +745,7 @@ impl VectorServiceRegistry {
             self.get_default_service()
                 .ok_or_else(|| anyhow!("No default service available"))?
         };
-        
+
         service.execute_function(function_name, args)
     }
 }

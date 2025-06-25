@@ -15,7 +15,7 @@
 //!
 //! ```rust
 //! use oxirs_core::store::Store;
-//! 
+//!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let store = Store::new()?;
 //! // Use the store for RDF operations
@@ -23,18 +23,16 @@
 //! # }
 //! ```
 
-
-
-pub mod model;
-pub mod store;
-pub mod query;
 pub mod graph;
-pub mod parser;
-pub mod serializer;
-pub mod interning;
 pub mod indexing;
+pub mod interning;
+pub mod model;
 pub mod optimization;
+pub mod parser;
+pub mod query;
+pub mod serializer;
 pub mod storage;
+pub mod store;
 pub mod vocab;
 // pub mod config;
 // pub mod jsonld;

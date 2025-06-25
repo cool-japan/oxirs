@@ -1,13 +1,13 @@
 //! LLM Integration Module for OxiRS Chat
-//! 
+//!
 //! Provides unified interface for multiple LLM providers including OpenAI, Anthropic Claude,
 //! and local models with intelligent routing and fallback strategies.
 
 use anyhow::{anyhow, Result};
 use async_openai::{
     types::{
-        ChatCompletionRequestMessage, CreateChatCompletionRequest,
-        CreateChatCompletionRequestArgs, Role,
+        ChatCompletionRequestMessage, CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
+        Role,
     },
     Client as OpenAIClient,
 };
@@ -33,7 +33,7 @@ impl Default for LLMConfig {
         let mut providers = HashMap::new();
         providers.insert("openai".to_string(), ProviderConfig::openai_default());
         providers.insert("anthropic".to_string(), ProviderConfig::anthropic_default());
-        
+
         Self {
             providers,
             routing: RoutingConfig::default(),
@@ -80,7 +80,7 @@ impl ProviderConfig {
             max_retries: 3,
         }
     }
-    
+
     pub fn anthropic_default() -> Self {
         Self {
             enabled: true,
@@ -277,11 +277,11 @@ impl LLMManager {
             usage_tracker: UsageTracker::new(),
             config,
         };
-        
+
         manager.initialize_providers()?;
         Ok(manager)
     }
-    
+
     fn create_openai_client(config: &LLMConfig) -> Result<Option<OpenAIClient>> {
         if let Some(openai_config) = config.providers.get("openai") {
             if openai_config.enabled && openai_config.api_key.is_some() {
@@ -291,7 +291,7 @@ impl LLMManager {
         }
         Ok(None)
     }
-    
+
     fn initialize_providers(&mut self) -> Result<()> {
         // Initialize OpenAI provider
         if let Some(config) = self.config.providers.get("openai") {
@@ -300,7 +300,7 @@ impl LLMManager {
                 self.providers.insert("openai".to_string(), provider);
             }
         }
-        
+
         // Initialize Anthropic provider
         if let Some(config) = self.config.providers.get("anthropic") {
             if config.enabled {
@@ -308,27 +308,33 @@ impl LLMManager {
                 self.providers.insert("anthropic".to_string(), provider);
             }
         }
-        
+
         // TODO: Initialize local model providers
-        
+
         Ok(())
     }
-    
+
     /// Generate response using intelligent routing
     pub async fn generate_response(&mut self, request: LLMRequest) -> Result<LLMResponse> {
         let start_time = Instant::now();
-        
+
         // Select the best provider and model
         let (provider_name, model_name) = self.select_provider_and_model(&request)?;
-        
-        debug!("Selected provider: {}, model: {}", provider_name, model_name);
-        
+
+        debug!(
+            "Selected provider: {}, model: {}",
+            provider_name, model_name
+        );
+
         // Attempt generation with fallback
         let mut attempts = 0;
         let max_attempts = self.config.fallback.max_attempts;
-        
+
         while attempts < max_attempts {
-            match self.try_generate(&provider_name, &model_name, &request).await {
+            match self
+                .try_generate(&provider_name, &model_name, &request)
+                .await
+            {
                 Ok(mut response) => {
                     response.latency = start_time.elapsed();
                     self.usage_tracker.record_usage(&response);
@@ -337,15 +343,16 @@ impl LLMManager {
                 Err(e) => {
                     attempts += 1;
                     warn!("Attempt {} failed: {}", attempts, e);
-                    
+
                     if attempts < max_attempts {
                         // Try fallback provider/model
-                        if let Ok((fallback_provider, fallback_model)) = 
-                            self.select_fallback_provider(&provider_name, &model_name) {
+                        if let Ok((fallback_provider, fallback_model)) =
+                            self.select_fallback_provider(&provider_name, &model_name)
+                        {
                             continue;
                         }
                     }
-                    
+
                     if attempts == max_attempts {
                         error!("All attempts failed, returning error");
                         return Err(e);
@@ -353,10 +360,13 @@ impl LLMManager {
                 }
             }
         }
-        
-        Err(anyhow!("Failed to generate response after {} attempts", max_attempts))
+
+        Err(anyhow!(
+            "Failed to generate response after {} attempts",
+            max_attempts
+        ))
     }
-    
+
     async fn try_generate(
         &self,
         provider_name: &str,
@@ -364,9 +374,8 @@ impl LLMManager {
         request: &LLMRequest,
     ) -> Result<LLMResponse> {
         if let Some(provider) = self.providers.get(provider_name) {
-            let timeout_duration = request.timeout
-                .unwrap_or(Duration::from_secs(30));
-                
+            let timeout_duration = request.timeout.unwrap_or(Duration::from_secs(30));
+
             timeout(timeout_duration, provider.generate(model_name, request))
                 .await
                 .map_err(|_| anyhow!("Request timed out"))?
@@ -374,7 +383,7 @@ impl LLMManager {
             Err(anyhow!("Provider {} not found", provider_name))
         }
     }
-    
+
     fn select_provider_and_model(&self, request: &LLMRequest) -> Result<(String, String)> {
         // Implement intelligent routing based on use case and configuration
         match request.use_case {
@@ -416,8 +425,12 @@ impl LLMManager {
             }
         }
     }
-    
-    fn select_fallback_provider(&self, failed_provider: &str, _failed_model: &str) -> Result<(String, String)> {
+
+    fn select_fallback_provider(
+        &self,
+        failed_provider: &str,
+        _failed_model: &str,
+    ) -> Result<(String, String)> {
         // Simple fallback logic - use different provider
         for (provider_name, _) in &self.providers {
             if provider_name != failed_provider {
@@ -431,7 +444,7 @@ impl LLMManager {
         }
         Err(anyhow!("No fallback provider available"))
     }
-    
+
     /// Get usage statistics
     pub fn get_usage_stats(&self) -> UsageStats {
         self.usage_tracker.get_stats()
@@ -462,20 +475,22 @@ impl OpenAIProvider {
 #[async_trait::async_trait]
 impl LLMProvider for OpenAIProvider {
     async fn generate(&self, model: &str, request: &LLMRequest) -> Result<LLMResponse> {
-        use async_openai::types::{ChatCompletionRequestSystemMessage, ChatCompletionRequestUserMessage};
-        
+        use async_openai::types::{
+            ChatCompletionRequestSystemMessage, ChatCompletionRequestUserMessage,
+        };
+
         let mut messages: Vec<ChatCompletionRequestMessage> = Vec::new();
-        
+
         // Add system message if provided
         if let Some(system_prompt) = &request.system_prompt {
             messages.push(ChatCompletionRequestMessage::System(
                 ChatCompletionRequestSystemMessage {
                     content: system_prompt.clone(),
                     name: None,
-                }
+                },
             ));
         }
-        
+
         // Add user messages
         for msg in &request.messages {
             match msg.role {
@@ -484,7 +499,7 @@ impl LLMProvider for OpenAIProvider {
                         ChatCompletionRequestSystemMessage {
                             content: msg.content.clone(),
                             name: None,
-                        }
+                        },
                     ));
                 }
                 ChatRole::User => {
@@ -492,7 +507,7 @@ impl LLMProvider for OpenAIProvider {
                         ChatCompletionRequestUserMessage {
                             content: msg.content.clone().into(),
                             name: None,
-                        }
+                        },
                     ));
                 }
                 ChatRole::Assistant => {
@@ -501,34 +516,47 @@ impl LLMProvider for OpenAIProvider {
                 }
             }
         }
-        
+
         let openai_request = CreateChatCompletionRequestArgs::default()
             .model(model)
             .messages(messages)
             .temperature(request.temperature)
             .max_tokens(request.max_tokens.unwrap_or(1000) as u16)
             .build()?;
-            
-        let response = self.client.chat().completions().create(openai_request).await?;
-        
-        let choice = response.choices.first()
+
+        let response = self
+            .client
+            .chat()
+            .completions()
+            .create(openai_request)
+            .await?;
+
+        let choice = response
+            .choices
+            .first()
             .ok_or_else(|| anyhow!("No response choices received"))?;
-        
-        let content = choice.message.content.clone()
+
+        let content = choice
+            .message
+            .content
+            .clone()
             .unwrap_or_else(|| "No content received".to_string());
-        
-        let usage = response.usage.map(|u| Usage {
-            prompt_tokens: u.prompt_tokens as usize,
-            completion_tokens: u.completion_tokens as usize,
-            total_tokens: u.total_tokens as usize,
-            cost: (u.total_tokens as f64) * 0.000002, // Approximate cost
-        }).unwrap_or(Usage {
-            prompt_tokens: 0,
-            completion_tokens: 0,
-            total_tokens: 0,
-            cost: 0.0,
-        });
-        
+
+        let usage = response
+            .usage
+            .map(|u| Usage {
+                prompt_tokens: u.prompt_tokens as usize,
+                completion_tokens: u.completion_tokens as usize,
+                total_tokens: u.total_tokens as usize,
+                cost: (u.total_tokens as f64) * 0.000002, // Approximate cost
+            })
+            .unwrap_or(Usage {
+                prompt_tokens: 0,
+                completion_tokens: 0,
+                total_tokens: 0,
+                cost: 0.0,
+            });
+
         Ok(LLMResponse {
             content,
             model_used: model.to_string(),
@@ -539,11 +567,11 @@ impl LLMProvider for OpenAIProvider {
             metadata: HashMap::new(),
         })
     }
-    
+
     fn get_available_models(&self) -> Vec<String> {
         self.config.models.iter().map(|m| m.name.clone()).collect()
     }
-    
+
     fn supports_streaming(&self) -> bool {
         true
     }
@@ -560,17 +588,18 @@ impl UsageTracker {
             stats: UsageStats::default(),
         }
     }
-    
+
     pub fn record_usage(&mut self, response: &LLMResponse) {
         self.stats.total_requests += 1;
         self.stats.total_tokens += response.usage.total_tokens;
         self.stats.total_cost += response.usage.cost;
         self.stats.average_latency = Duration::from_millis(
-            ((self.stats.average_latency.as_millis() * (self.stats.total_requests - 1) as u128 +
-              response.latency.as_millis()) / self.stats.total_requests as u128) as u64
+            ((self.stats.average_latency.as_millis() * (self.stats.total_requests - 1) as u128
+                + response.latency.as_millis())
+                / self.stats.total_requests as u128) as u64,
         );
     }
-    
+
     pub fn get_stats(&self) -> UsageStats {
         self.stats.clone()
     }
@@ -593,14 +622,16 @@ pub struct AnthropicProvider {
 
 impl AnthropicProvider {
     pub fn new(config: ProviderConfig) -> Result<Self> {
-        let client = reqwest::Client::builder()
-            .timeout(config.timeout)
-            .build()?;
+        let client = reqwest::Client::builder().timeout(config.timeout).build()?;
         Ok(Self { client, config })
     }
 
     /// Build Anthropic API request
-    fn build_anthropic_request(&self, model: &str, request: &LLMRequest) -> Result<serde_json::Value> {
+    fn build_anthropic_request(
+        &self,
+        model: &str,
+        request: &LLMRequest,
+    ) -> Result<serde_json::Value> {
         let mut messages = Vec::new();
 
         // Add system message if provided
@@ -638,16 +669,23 @@ impl AnthropicProvider {
 #[async_trait::async_trait]
 impl LLMProvider for AnthropicProvider {
     async fn generate(&self, model: &str, request: &LLMRequest) -> Result<LLMResponse> {
-        let api_key = self.config.api_key.as_ref()
+        let api_key = self
+            .config
+            .api_key
+            .as_ref()
             .ok_or_else(|| anyhow!("Anthropic API key not configured"))?;
 
         let request_body = self.build_anthropic_request(model, request)?;
-        
-        let base_url = self.config.base_url.as_ref()
+
+        let base_url = self
+            .config
+            .base_url
+            .as_ref()
             .map(|url| url.as_str())
             .unwrap_or("https://api.anthropic.com");
 
-        let response = self.client
+        let response = self
+            .client
             .post(&format!("{}/v1/messages", base_url))
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
@@ -657,12 +695,15 @@ impl LLMProvider for AnthropicProvider {
             .await?;
 
         if !response.status().is_success() {
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
             return Err(anyhow!("Anthropic API error: {}", error_text));
         }
 
         let response_data: serde_json::Value = response.json().await?;
-        
+
         // Extract content from Anthropic response format
         let content = response_data["content"]
             .as_array()
@@ -676,8 +717,9 @@ impl LLMProvider for AnthropicProvider {
             Usage {
                 prompt_tokens: usage_data["input_tokens"].as_u64().unwrap_or(0) as usize,
                 completion_tokens: usage_data["output_tokens"].as_u64().unwrap_or(0) as usize,
-                total_tokens: (usage_data["input_tokens"].as_u64().unwrap_or(0) +
-                              usage_data["output_tokens"].as_u64().unwrap_or(0)) as usize,
+                total_tokens: (usage_data["input_tokens"].as_u64().unwrap_or(0)
+                    + usage_data["output_tokens"].as_u64().unwrap_or(0))
+                    as usize,
                 cost: 0.0, // TODO: Calculate actual cost based on model
             }
         } else {
@@ -718,7 +760,7 @@ impl RateLimiter {
     pub fn new(_config: &RateLimitConfig) -> Self {
         Self {}
     }
-    
+
     pub async fn check_rate_limit(&self, _provider: &str) -> Result<()> {
         // TODO: Implement actual rate limiting
         Ok(())
@@ -736,17 +778,20 @@ impl EnhancedLLMManager {
     pub fn new(config: LLMConfig) -> Result<Self> {
         let rate_limiter = RateLimiter::new(&config.rate_limits);
         let inner = LLMManager::new(config)?;
-        
+
         Ok(Self {
             inner,
             rate_limiter,
         })
     }
-    
-    pub async fn generate_response_with_limits(&mut self, request: LLMRequest) -> Result<LLMResponse> {
+
+    pub async fn generate_response_with_limits(
+        &mut self,
+        request: LLMRequest,
+    ) -> Result<LLMResponse> {
         // Check rate limits before processing
         self.rate_limiter.check_rate_limit("default").await?;
-        
+
         // Generate response using the inner manager
         self.inner.generate_response(request).await
     }

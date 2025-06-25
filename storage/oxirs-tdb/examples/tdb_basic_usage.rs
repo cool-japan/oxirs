@@ -4,7 +4,7 @@
 //! including RDF triple storage, MVCC transactions, and querying.
 
 use anyhow::Result;
-use oxirs_tdb::{TdbStore, TdbConfig, Term, TripleStoreStats};
+use oxirs_tdb::{TdbConfig, TdbStore, Term, TripleStoreStats};
 
 fn main() -> Result<()> {
     // Create TDB store configuration
@@ -25,7 +25,7 @@ fn main() -> Result<()> {
     let age_predicate = Term::iri("http://example.org/age");
     let type_predicate = Term::iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
     let person_class = Term::iri("http://xmlns.com/foaf/0.1/Person");
-    
+
     let john_name = Term::literal("John Doe");
     let john_age = Term::typed_literal("30", "http://www.w3.org/2001/XMLSchema#integer");
 
@@ -35,7 +35,7 @@ fn main() -> Result<()> {
     store.insert_triple(&person, &name_predicate, &john_name)?;
     store.insert_triple(&person, &age_predicate, &john_age)?;
     store.insert_triple(&person, &type_predicate, &person_class)?;
-    
+
     println!("✅ Inserted triples");
 
     // Get statistics
@@ -43,7 +43,10 @@ fn main() -> Result<()> {
     println!("📊 Store statistics:");
     println!("   - Total triples: {}", stats.total_triples);
     println!("   - Insert operations: {}", stats.insert_count);
-    println!("   - Completed transactions: {}", stats.completed_transactions);
+    println!(
+        "   - Completed transactions: {}",
+        stats.completed_transactions
+    );
 
     // Query all triples for John
     println!("\n🔍 Querying all triples for John:");
@@ -61,7 +64,7 @@ fn main() -> Result<()> {
 
     // Demonstrate transaction usage
     println!("\n💼 Demonstrating transactions:");
-    
+
     // Begin a transaction
     let tx = store.begin_transaction()?;
     println!("   Started transaction: {}", tx.id());
@@ -69,21 +72,21 @@ fn main() -> Result<()> {
     // Insert additional data in transaction
     let hobby_predicate = Term::iri("http://example.org/hobby");
     let hobby_value = Term::literal("Programming");
-    
+
     // Note: For now, transaction-level operations aren't fully integrated
     // This would be store.insert_triple_tx(&tx, &person, &hobby_predicate, &hobby_value)?;
     // For demonstration, we'll commit the empty transaction
-    
+
     let version = store.commit_transaction(tx)?;
     println!("   Committed transaction at version: {}", version);
 
     // Add more people to demonstrate bulk operations
     println!("\n👥 Adding more people:");
-    
+
     let alice = Term::iri("http://example.org/person/alice");
     let alice_name = Term::literal("Alice Smith");
     let alice_age = Term::typed_literal("28", "http://www.w3.org/2001/XMLSchema#integer");
-    
+
     store.insert_triple(&alice, &name_predicate, &alice_name)?;
     store.insert_triple(&alice, &age_predicate, &alice_age)?;
     store.insert_triple(&alice, &type_predicate, &person_class)?;
@@ -91,7 +94,7 @@ fn main() -> Result<()> {
     let bob = Term::iri("http://example.org/person/bob");
     let bob_name = Term::literal("Bob Johnson");
     let bob_age = Term::typed_literal("35", "http://www.w3.org/2001/XMLSchema#integer");
-    
+
     store.insert_triple(&bob, &name_predicate, &bob_name)?;
     store.insert_triple(&bob, &age_predicate, &bob_age)?;
     store.insert_triple(&bob, &type_predicate, &person_class)?;
@@ -114,7 +117,10 @@ fn main() -> Result<()> {
     println!("   - Total triples: {}", final_stats.total_triples);
     println!("   - Insert operations: {}", final_stats.insert_count);
     println!("   - Query operations: {}", final_stats.query_count);
-    println!("   - Completed transactions: {}", final_stats.completed_transactions);
+    println!(
+        "   - Completed transactions: {}",
+        final_stats.completed_transactions
+    );
 
     // Demonstrate store maintenance
     println!("\n🔧 Performing store maintenance:");
@@ -129,10 +135,13 @@ fn main() -> Result<()> {
     }
 
     let after_delete_stats = store.get_stats()?;
-    println!("   Triples after deletion: {}", after_delete_stats.total_triples);
+    println!(
+        "   Triples after deletion: {}",
+        after_delete_stats.total_triples
+    );
 
     println!("\n🎉 Example completed successfully!");
-    
+
     Ok(())
 }
 
@@ -144,7 +153,7 @@ mod tests {
     #[test]
     fn test_basic_example() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         let config = TdbConfig {
             location: temp_dir.path().to_string_lossy().to_string(),
             cache_size: 1024 * 1024, // 1MB for test
@@ -153,23 +162,23 @@ mod tests {
         };
 
         let store = TdbStore::new(config).unwrap();
-        
+
         // Basic operations
         let subject = Term::iri("http://example.org/test");
         let predicate = Term::iri("http://example.org/predicate");
         let object = Term::literal("test value");
-        
+
         store.insert_triple(&subject, &predicate, &object).unwrap();
-        
+
         let stats = store.get_stats().unwrap();
         assert_eq!(stats.total_triples, 1);
-        
+
         let results = store.query_triples(Some(&subject), None, None).unwrap();
         assert_eq!(results.len(), 1);
-        
+
         let deleted = store.delete_triple(&subject, &predicate, &object).unwrap();
         assert!(deleted);
-        
+
         let final_stats = store.get_stats().unwrap();
         assert_eq!(final_stats.total_triples, 0);
     }

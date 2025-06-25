@@ -14,22 +14,29 @@ use oxirs_core::{
 //     index::VectorIndex,
 //     similarity::SimilaritySearch,
 // };
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
 use tracing::{debug, error, info, warn};
-use regex::Regex;
 
 // Placeholder types for vector search integration
 pub trait EmbeddingModel {
-    fn encode(&self, texts: &[String]) -> impl std::future::Future<Output = Result<Vec<Vec<f32>>, anyhow::Error>> + Send;
+    fn encode(
+        &self,
+        texts: &[String],
+    ) -> impl std::future::Future<Output = Result<Vec<Vec<f32>>, anyhow::Error>> + Send;
 }
 
 pub struct VectorIndex;
 impl VectorIndex {
-    pub fn search(&self, _query: &[f32], _limit: usize) -> Result<Vec<SearchDocument>, anyhow::Error> {
+    pub fn search(
+        &self,
+        _query: &[f32],
+        _limit: usize,
+    ) -> Result<Vec<SearchDocument>, anyhow::Error> {
         Ok(Vec::new())
     }
 }
@@ -335,19 +342,29 @@ impl RAGSystem {
     }
 
     /// Retrieve relevant knowledge for a query
-    pub async fn retrieve_knowledge(&self, query_context: &QueryContext) -> Result<RetrievedKnowledge> {
+    pub async fn retrieve_knowledge(
+        &self,
+        query_context: &QueryContext,
+    ) -> Result<RetrievedKnowledge> {
         let start_time = std::time::Instant::now();
 
-        info!("Starting knowledge retrieval for query: {}", query_context.query);
+        info!(
+            "Starting knowledge retrieval for query: {}",
+            query_context.query
+        );
 
         // Stage 1: Entity and relationship extraction
         let extracted_info = self.extract_query_components(query_context).await?;
-        debug!("Extracted {} entities and {} relationships", 
-               extracted_info.entities.len(), extracted_info.relationships.len());
+        debug!(
+            "Extracted {} entities and {} relationships",
+            extracted_info.entities.len(),
+            extracted_info.relationships.len()
+        );
 
         // Stage 2: Semantic search
         let semantic_results = if let Some(ref vector_index) = self.vector_index {
-            self.semantic_search(&query_context.query, vector_index).await?
+            self.semantic_search(&query_context.query, vector_index)
+                .await?
         } else {
             Vec::new()
         };
@@ -356,11 +373,8 @@ impl RAGSystem {
         let graph_results = self.graph_traversal(&extracted_info.entities).await?;
 
         // Stage 4: Hybrid ranking and combination
-        let combined_results = self.combine_and_rank_results(
-            semantic_results,
-            graph_results,
-            &query_context.intent,
-        )?;
+        let combined_results =
+            self.combine_and_rank_results(semantic_results, graph_results, &query_context.intent)?;
 
         // Stage 5: Context filtering and assembly
         let filtered_results = self.filter_results(combined_results)?;
@@ -385,24 +399,41 @@ impl RAGSystem {
     }
 
     /// Assemble context for LLM
-    pub async fn assemble_context(&self, knowledge: &RetrievedKnowledge, query_context: &QueryContext) -> Result<AssembledContext> {
-        self.context_assembler.assemble(knowledge, query_context).await
+    pub async fn assemble_context(
+        &self,
+        knowledge: &RetrievedKnowledge,
+        query_context: &QueryContext,
+    ) -> Result<AssembledContext> {
+        self.context_assembler
+            .assemble(knowledge, query_context)
+            .await
     }
 
-    async fn extract_query_components(&self, query_context: &QueryContext) -> Result<ExtractedQueryInfo> {
+    async fn extract_query_components(
+        &self,
+        query_context: &QueryContext,
+    ) -> Result<ExtractedQueryInfo> {
         self.entity_extractor.extract(&query_context.query).await
     }
 
-    async fn semantic_search(&self, query: &str, vector_index: &VectorIndex) -> Result<Vec<SearchResult>> {
+    async fn semantic_search(
+        &self,
+        query: &str,
+        vector_index: &VectorIndex,
+    ) -> Result<Vec<SearchResult>> {
         if let Some(ref embedding_model) = self.embedding_model {
             let query_embedding = embedding_model.encode(&[query.to_string()]).await?;
-            let results = vector_index.search(&query_embedding[0], self.config.retrieval.max_results)?;
-            
-            Ok(results.into_iter().map(|r| SearchResult {
-                triple: r.document, // Assuming document is a triple
-                score: r.score,
-                search_type: SearchType::Semantic,
-            }).collect())
+            let results =
+                vector_index.search(&query_embedding[0], self.config.retrieval.max_results)?;
+
+            Ok(results
+                .into_iter()
+                .map(|r| SearchResult {
+                    triple: r.document, // Assuming document is a triple
+                    score: r.score,
+                    search_type: SearchType::Semantic,
+                })
+                .collect())
         } else {
             Ok(Vec::new())
         }
@@ -410,10 +441,12 @@ impl RAGSystem {
 
     async fn graph_traversal(&self, entities: &[ExtractedEntity]) -> Result<Vec<SearchResult>> {
         let mut results = Vec::new();
-        
+
         for entity in entities {
             if let Some(ref iri) = entity.iri {
-                let entity_triples = self.find_entity_triples(iri, self.config.retrieval.graph_traversal_depth).await?;
+                let entity_triples = self
+                    .find_entity_triples(iri, self.config.retrieval.graph_traversal_depth)
+                    .await?;
                 for triple in entity_triples {
                     results.push(SearchResult {
                         triple,
@@ -423,7 +456,7 @@ impl RAGSystem {
                 }
             }
         }
-        
+
         Ok(results)
     }
 
@@ -431,19 +464,19 @@ impl RAGSystem {
         let mut visited = HashSet::new();
         let mut result_triples = Vec::new();
         let mut queue = vec![(entity_iri.to_string(), 0)];
-        
+
         while let Some((current_entity, current_depth)) = queue.pop() {
             if current_depth >= depth || visited.contains(&current_entity) {
                 continue;
             }
-            
+
             visited.insert(current_entity.clone());
-            
+
             // Find all triples where current entity is subject
             if let Ok(subject_triples) = self.find_triples_with_subject(&current_entity).await {
                 for triple in subject_triples {
                     result_triples.push(triple.clone());
-                    
+
                     // Add object to queue for further traversal
                     if current_depth + 1 < depth {
                         let object_str = format!("{}", triple.object);
@@ -453,12 +486,12 @@ impl RAGSystem {
                     }
                 }
             }
-            
+
             // Find all triples where current entity is object
             if let Ok(object_triples) = self.find_triples_with_object(&current_entity).await {
                 for triple in object_triples {
                     result_triples.push(triple.clone());
-                    
+
                     // Add subject to queue for further traversal
                     if current_depth + 1 < depth {
                         let subject_str = format!("{}", triple.subject);
@@ -469,28 +502,28 @@ impl RAGSystem {
                 }
             }
         }
-        
+
         // Remove duplicates
         result_triples.sort_by(|a, b| {
             format!("{} {} {}", a.subject, a.predicate, a.object)
                 .cmp(&format!("{} {} {}", b.subject, b.predicate, b.object))
         });
         result_triples.dedup_by(|a, b| {
-            format!("{} {} {}", a.subject, a.predicate, a.object) ==
-            format!("{} {} {}", b.subject, b.predicate, b.object)
+            format!("{} {} {}", a.subject, a.predicate, a.object)
+                == format!("{} {} {}", b.subject, b.predicate, b.object)
         });
-        
+
         Ok(result_triples)
     }
-    
+
     async fn find_triples_with_subject(&self, subject: &str) -> Result<Vec<Triple>> {
         // TODO: Implement using oxirs-core store functionality
         // This is a placeholder implementation
         Ok(Vec::new())
     }
-    
+
     async fn find_triples_with_object(&self, object: &str) -> Result<Vec<Triple>> {
-        // TODO: Implement using oxirs-core store functionality  
+        // TODO: Implement using oxirs-core store functionality
         // This is a placeholder implementation
         Ok(Vec::new())
     }
@@ -507,36 +540,51 @@ impl RAGSystem {
 
         // Remove duplicates and compute hybrid scores
         let mut unique_results: HashMap<String, SearchResult> = HashMap::new();
-        
+
         for result in all_results {
             let key = format!("{:?}", result.triple); // Simple serialization as key
             if let Some(existing) = unique_results.get_mut(&key) {
                 // Combine scores based on search type
-                existing.score = self.combine_scores(existing.score, result.score, &existing.search_type, &result.search_type);
+                existing.score = self.combine_scores(
+                    existing.score,
+                    result.score,
+                    &existing.search_type,
+                    &result.search_type,
+                );
             } else {
                 unique_results.insert(key, result);
             }
         }
 
         let mut final_results: Vec<SearchResult> = unique_results.into_values().collect();
-        
+
         // Sort by relevance score
-        final_results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
-        
+        final_results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
         // Take top results
         final_results.truncate(self.config.retrieval.max_results);
-        
+
         Ok(final_results)
     }
 
-    fn combine_scores(&self, score1: f32, score2: f32, type1: &SearchType, type2: &SearchType) -> f32 {
+    fn combine_scores(
+        &self,
+        score1: f32,
+        score2: f32,
+        type1: &SearchType,
+        type2: &SearchType,
+    ) -> f32 {
         match (type1, type2) {
-            (SearchType::Semantic, SearchType::GraphTraversal) | 
-            (SearchType::GraphTraversal, SearchType::Semantic) => {
-                self.config.retrieval.semantic_weight * score1.max(score2) +
-                self.config.retrieval.bm25_weight * score1.min(score2)
+            (SearchType::Semantic, SearchType::GraphTraversal)
+            | (SearchType::GraphTraversal, SearchType::Semantic) => {
+                self.config.retrieval.semantic_weight * score1.max(score2)
+                    + self.config.retrieval.bm25_weight * score1.min(score2)
             }
-            _ => score1.max(score2)
+            _ => score1.max(score2),
         }
     }
 
@@ -607,36 +655,50 @@ pub struct EntityExtractor {
 impl EntityExtractor {
     pub fn new() -> Self {
         let mut patterns = HashMap::new();
-        
+
         // Common entity patterns
         patterns.insert(
             "person".to_string(),
-            regex::Regex::new(r"\b[A-Z][a-z]+ [A-Z][a-z]+\b").unwrap()
+            regex::Regex::new(r"\b[A-Z][a-z]+ [A-Z][a-z]+\b").unwrap(),
         );
         patterns.insert(
             "location".to_string(),
-            regex::Regex::new(r"\bin\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b").unwrap()
+            regex::Regex::new(r"\bin\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b").unwrap(),
         );
         patterns.insert(
             "organization".to_string(),
-            regex::Regex::new(r"\b[A-Z][A-Za-z]*\s+(?:Inc|Corp|Ltd|Company|University)\b").unwrap()
+            regex::Regex::new(r"\b[A-Z][A-Za-z]*\s+(?:Inc|Corp|Ltd|Company|University)\b").unwrap(),
         );
         patterns.insert(
             "date".to_string(),
             regex::Regex::new(r"\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b|\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b").unwrap()
         );
-        
+
         // Build entity dictionary for known entities
         let mut entity_dict = HashMap::new();
-        entity_dict.insert("cities".to_string(), vec![
-            "New York".to_string(), "London".to_string(), "Tokyo".to_string(),
-            "Paris".to_string(), "Berlin".to_string(), "Sydney".to_string()
-        ]);
-        entity_dict.insert("countries".to_string(), vec![
-            "United States".to_string(), "United Kingdom".to_string(), "Japan".to_string(),
-            "France".to_string(), "Germany".to_string(), "Australia".to_string()
-        ]);
-        
+        entity_dict.insert(
+            "cities".to_string(),
+            vec![
+                "New York".to_string(),
+                "London".to_string(),
+                "Tokyo".to_string(),
+                "Paris".to_string(),
+                "Berlin".to_string(),
+                "Sydney".to_string(),
+            ],
+        );
+        entity_dict.insert(
+            "countries".to_string(),
+            vec![
+                "United States".to_string(),
+                "United Kingdom".to_string(),
+                "Japan".to_string(),
+                "France".to_string(),
+                "Germany".to_string(),
+                "Australia".to_string(),
+            ],
+        );
+
         Self {
             patterns,
             entity_dict,
@@ -646,7 +708,7 @@ impl EntityExtractor {
     pub async fn extract(&self, query: &str) -> Result<ExtractedQueryInfo> {
         let mut entities = Vec::new();
         let mut relationships = Vec::new();
-        
+
         // Extract entities using patterns
         for (entity_type, pattern) in &self.patterns {
             for cap in pattern.captures_iter(query) {
@@ -661,7 +723,7 @@ impl EntityExtractor {
                 }
             }
         }
-        
+
         // Extract entities from dictionary
         for (category, entity_list) in &self.entity_dict {
             for entity in entity_list {
@@ -676,7 +738,7 @@ impl EntityExtractor {
                 }
             }
         }
-        
+
         // Extract relationships using pattern matching
         let relationship_patterns = vec![
             (r"(.+?)\s+(?:is|was)\s+(?:a|an|the)?\s*(.+)", "is_a"),
@@ -685,7 +747,7 @@ impl EntityExtractor {
             (r"(.+?)\s+(?:works|worked)\s+(?:at|for)\s+(.+)", "works_at"),
             (r"(.+?)\s+(?:born|was born)\s+in\s+(.+)", "born_in"),
         ];
-        
+
         for (pattern_str, relation_type) in relationship_patterns {
             if let Ok(pattern) = regex::Regex::new(pattern_str) {
                 for cap in pattern.captures_iter(query) {
@@ -700,29 +762,43 @@ impl EntityExtractor {
                 }
             }
         }
-        
+
         // Classify intent based on query patterns
         let intent = self.classify_intent(query);
-        
+
         Ok(ExtractedQueryInfo {
             entities,
             relationships,
             intent,
         })
     }
-    
+
     fn classify_intent(&self, query: &str) -> QueryIntent {
         let query_lower = query.to_lowercase();
-        
-        if query_lower.contains("what is") || query_lower.contains("who is") || query_lower.contains("define") {
+
+        if query_lower.contains("what is")
+            || query_lower.contains("who is")
+            || query_lower.contains("define")
+        {
             QueryIntent::FactualLookup
-        } else if query_lower.contains("how") && (query_lower.contains("related") || query_lower.contains("connected")) {
+        } else if query_lower.contains("how")
+            && (query_lower.contains("related") || query_lower.contains("connected"))
+        {
             QueryIntent::Relationship
-        } else if query_lower.contains("list") || query_lower.contains("show me all") || query_lower.contains("what are") {
+        } else if query_lower.contains("list")
+            || query_lower.contains("show me all")
+            || query_lower.contains("what are")
+        {
             QueryIntent::ListQuery
-        } else if query_lower.contains("compare") || query_lower.contains("difference") || query_lower.contains("vs") {
+        } else if query_lower.contains("compare")
+            || query_lower.contains("difference")
+            || query_lower.contains("vs")
+        {
             QueryIntent::Comparison
-        } else if query_lower.contains("count") || query_lower.contains("how many") || query_lower.contains("number of") {
+        } else if query_lower.contains("count")
+            || query_lower.contains("how many")
+            || query_lower.contains("number of")
+        {
             QueryIntent::Aggregation
         } else if query_lower.contains("mean") || query_lower.contains("definition") {
             QueryIntent::Definition
@@ -744,13 +820,17 @@ impl ContextAssembler {
         Self { config }
     }
 
-    pub async fn assemble(&self, knowledge: &RetrievedKnowledge, query_context: &QueryContext) -> Result<AssembledContext> {
+    pub async fn assemble(
+        &self,
+        knowledge: &RetrievedKnowledge,
+        query_context: &QueryContext,
+    ) -> Result<AssembledContext> {
         // Build structured context
         let structured_context = self.build_structured_context(knowledge)?;
-        
+
         // Generate context text
         let context_text = self.generate_context_text(&structured_context, query_context)?;
-        
+
         // Calculate metrics
         let token_count = self.estimate_token_count(&context_text);
         let quality_score = self.calculate_quality_score(&structured_context);
@@ -765,26 +845,35 @@ impl ContextAssembler {
         })
     }
 
-    fn build_structured_context(&self, knowledge: &RetrievedKnowledge) -> Result<StructuredContext> {
+    fn build_structured_context(
+        &self,
+        knowledge: &RetrievedKnowledge,
+    ) -> Result<StructuredContext> {
         let entities = knowledge.entities.clone();
-        
-        let relationships: Vec<String> = knowledge.triples.iter()
+
+        let relationships: Vec<String> = knowledge
+            .triples
+            .iter()
             .map(|t| format!("{} {} {}", t.subject, t.predicate, t.object))
             .collect();
-        
-        let facts: Vec<String> = knowledge.triples.iter()
+
+        let facts: Vec<String> = knowledge
+            .triples
+            .iter()
             .take(self.config.max_triples)
             .map(|t| format!("{} {} {}", t.subject, t.predicate, t.object))
             .collect();
-        
+
         let schema: Vec<String> = if self.config.include_schema {
-            knowledge.schema_info.iter()
+            knowledge
+                .schema_info
+                .iter()
                 .flat_map(|s| s.class_hierarchy.clone())
                 .collect()
         } else {
             Vec::new()
         };
-        
+
         let examples: Vec<String> = if self.config.include_examples {
             // TODO: Generate examples from the knowledge
             Vec::new()
@@ -801,7 +890,11 @@ impl ContextAssembler {
         })
     }
 
-    fn generate_context_text(&self, structured_context: &StructuredContext, query_context: &QueryContext) -> Result<String> {
+    fn generate_context_text(
+        &self,
+        structured_context: &StructuredContext,
+        query_context: &QueryContext,
+    ) -> Result<String> {
         let mut context_parts = Vec::new();
 
         // Add query context
@@ -822,7 +915,8 @@ impl ContextAssembler {
         // Add facts
         if !structured_context.facts.is_empty() {
             context_parts.push("Relevant Facts:".to_string());
-            for fact in structured_context.facts.iter().take(20) { // Limit facts
+            for fact in structured_context.facts.iter().take(20) {
+                // Limit facts
                 context_parts.push(format!("- {}", fact));
             }
         }
@@ -836,7 +930,7 @@ impl ContextAssembler {
         }
 
         let full_context = context_parts.join("\n");
-        
+
         // Truncate if too long
         if full_context.len() > self.config.max_context_length {
             Ok(full_context[..self.config.max_context_length].to_string())
@@ -855,7 +949,11 @@ impl ContextAssembler {
         0.8
     }
 
-    fn calculate_coverage_score(&self, _structured_context: &StructuredContext, _query_context: &QueryContext) -> f32 {
+    fn calculate_coverage_score(
+        &self,
+        _structured_context: &StructuredContext,
+        _query_context: &QueryContext,
+    ) -> f32 {
         // TODO: Implement coverage scoring based on how well the context covers the query
         0.7
     }

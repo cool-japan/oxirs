@@ -1,53 +1,66 @@
 //! Benchmark command
 
-use std::path::PathBuf;
-use std::time::{Instant, Duration};
-use std::fs;
 use super::CommandResult;
 use oxirs_core::store::Store;
+use std::fs;
+use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 /// Run performance benchmarks on a dataset
-pub async fn run(dataset: String, suite: String, iterations: usize, output: Option<PathBuf>) -> CommandResult {
-    println!("Running '{}' benchmark suite on dataset '{}' ({} iterations)", suite, dataset, iterations);
-    
+pub async fn run(
+    dataset: String,
+    suite: String,
+    iterations: usize,
+    output: Option<PathBuf>,
+) -> CommandResult {
+    println!(
+        "Running '{}' benchmark suite on dataset '{}' ({} iterations)",
+        suite, dataset, iterations
+    );
+
     // Validate benchmark suite
     if !is_supported_benchmark_suite(&suite) {
         return Err(format!(
             "Unsupported benchmark suite '{}'. Supported suites: sp2bench, watdiv, ldbc, custom",
             suite
-        ).into());
+        )
+        .into());
     }
-    
+
     // Load dataset
     let dataset_path = if PathBuf::from(&dataset).join("oxirs.toml").exists() {
         load_dataset_from_config(&dataset)?
     } else {
         PathBuf::from(&dataset)
     };
-    
+
     let store = if dataset_path.is_dir() {
         Store::open(&dataset_path)?
     } else {
-        return Err(format!("Dataset '{}' not found. Use 'oxide init' to create a dataset.", dataset).into());
+        return Err(format!(
+            "Dataset '{}' not found. Use 'oxide init' to create a dataset.",
+            dataset
+        )
+        .into());
     };
-    
+
     println!("Dataset loaded successfully");
     println!("Benchmark suite: {}", suite);
     println!("Iterations: {}", iterations);
     println!();
-    
+
     // Run benchmark
     let benchmark_results = run_benchmark_suite(&store, &suite, iterations)?;
-    
+
     // Display results
     display_benchmark_results(&benchmark_results);
-    
+
     // Save results to file if specified
     if let Some(output_path) = output {
         save_benchmark_results(&benchmark_results, &output_path)?;
         println!("Results saved to: {}", output_path.display());
     }
-    
+
     Ok(())
 }
 
@@ -59,11 +72,11 @@ fn is_supported_benchmark_suite(suite: &str) -> bool {
 /// Load dataset configuration
 fn load_dataset_from_config(dataset: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let config_path = PathBuf::from(dataset).join("oxirs.toml");
-    
+
     if !config_path.exists() {
         return Err(format!("Configuration file '{}' not found", config_path.display()).into());
     }
-    
+
     Ok(PathBuf::from(dataset))
 }
 
@@ -103,49 +116,50 @@ fn run_benchmark_suite(
     iterations: usize,
 ) -> Result<BenchmarkResults, Box<dyn std::error::Error>> {
     println!("Executing benchmark suite: {}", suite);
-    
+
     let queries = get_benchmark_queries(suite)?;
     let mut query_results = Vec::new();
     let mut total_duration = Duration::new(0, 0);
     let mut total_queries_executed = 0;
     let mut successful_queries = 0;
-    
+
     for (i, (query_name, _query)) in queries.iter().enumerate() {
         println!("Running query {}/{}: {}", i + 1, queries.len(), query_name);
-        
+
         let mut execution_times = Vec::new();
         let mut successes = 0;
-        
+
         for iteration in 1..=iterations {
             if iteration % 10 == 0 || iteration == 1 {
                 print!("  Iteration {}/{}\r", iteration, iterations);
             }
-            
+
             let start = Instant::now();
-            
+
             // Simulate query execution
             let success = simulate_query_execution();
-            
+
             let duration = start.elapsed();
             execution_times.push(duration);
             total_duration += duration;
             total_queries_executed += 1;
-            
+
             if success {
                 successes += 1;
                 successful_queries += 1;
             }
         }
-        
+
         println!("  Completed {} iterations", iterations);
-        
+
         let avg_time = Duration::from_nanos(
-            (execution_times.iter().map(|d| d.as_nanos()).sum::<u128>() / iterations as u128) as u64
+            (execution_times.iter().map(|d| d.as_nanos()).sum::<u128>() / iterations as u128)
+                as u64,
         );
         let min_time = *execution_times.iter().min().unwrap();
         let max_time = *execution_times.iter().max().unwrap();
         let success_rate = successes as f64 / iterations as f64;
-        
+
         query_results.push(QueryBenchmarkResult {
             query_name: query_name.clone(),
             execution_times,
@@ -155,18 +169,19 @@ fn run_benchmark_suite(
             success_rate,
         });
     }
-    
-    let avg_query_time = Duration::from_nanos((total_duration.as_nanos() / total_queries_executed as u128) as u64);
+
+    let avg_query_time =
+        Duration::from_nanos((total_duration.as_nanos() / total_queries_executed as u128) as u64);
     let queries_per_second = total_queries_executed as f64 / total_duration.as_secs_f64();
     let success_rate = successful_queries as f64 / total_queries_executed as f64;
-    
+
     let statistics = BenchmarkStatistics {
         total_queries_executed,
         avg_query_time,
         queries_per_second,
         success_rate,
     };
-    
+
     Ok(BenchmarkResults {
         suite: suite.to_string(),
         total_queries: queries.len(),
@@ -203,7 +218,7 @@ fn get_benchmark_queries(suite: &str) -> Result<Vec<(String, String)>, Box<dyn s
 fn simulate_query_execution() -> bool {
     // Simulate some work
     std::thread::sleep(Duration::from_millis(1 + rand::random::<u64>() % 10));
-    
+
     // Simulate 95% success rate
     rand::random::<f64>() < 0.95
 }
@@ -214,23 +229,50 @@ fn display_benchmark_results(results: &BenchmarkResults) {
     println!("Suite: {}", results.suite);
     println!("Total queries: {}", results.total_queries);
     println!("Iterations per query: {}", results.iterations);
-    println!("Total duration: {:.2}s", results.total_duration.as_secs_f64());
+    println!(
+        "Total duration: {:.2}s",
+        results.total_duration.as_secs_f64()
+    );
     println!();
-    
+
     println!("Overall Statistics:");
-    println!("  Total queries executed: {}", results.statistics.total_queries_executed);
-    println!("  Average query time: {:.3}ms", results.statistics.avg_query_time.as_secs_f64() * 1000.0);
-    println!("  Queries per second: {:.2}", results.statistics.queries_per_second);
-    println!("  Success rate: {:.1}%", results.statistics.success_rate * 100.0);
+    println!(
+        "  Total queries executed: {}",
+        results.statistics.total_queries_executed
+    );
+    println!(
+        "  Average query time: {:.3}ms",
+        results.statistics.avg_query_time.as_secs_f64() * 1000.0
+    );
+    println!(
+        "  Queries per second: {:.2}",
+        results.statistics.queries_per_second
+    );
+    println!(
+        "  Success rate: {:.1}%",
+        results.statistics.success_rate * 100.0
+    );
     println!();
-    
+
     println!("Query Details:");
     for query_result in &results.query_results {
         println!("  {}:", query_result.query_name);
-        println!("    Average: {:.3}ms", query_result.avg_time.as_secs_f64() * 1000.0);
-        println!("    Min: {:.3}ms", query_result.min_time.as_secs_f64() * 1000.0);
-        println!("    Max: {:.3}ms", query_result.max_time.as_secs_f64() * 1000.0);
-        println!("    Success rate: {:.1}%", query_result.success_rate * 100.0);
+        println!(
+            "    Average: {:.3}ms",
+            query_result.avg_time.as_secs_f64() * 1000.0
+        );
+        println!(
+            "    Min: {:.3}ms",
+            query_result.min_time.as_secs_f64() * 1000.0
+        );
+        println!(
+            "    Max: {:.3}ms",
+            query_result.max_time.as_secs_f64() * 1000.0
+        );
+        println!(
+            "    Success rate: {:.1}%",
+            query_result.success_rate * 100.0
+        );
     }
     println!("==========================================================");
 }
@@ -261,7 +303,7 @@ fn save_benchmark_results(
             })
         }).collect::<Vec<_>>()
     });
-    
+
     fs::write(output_path, serde_json::to_string_pretty(&json_results)?)?;
     Ok(())
 }

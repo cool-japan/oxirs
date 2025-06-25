@@ -1,17 +1,17 @@
 //! RDF Literal implementation
-//! 
+//!
 //! This implementation is extracted and adapted from Oxigraph's oxrdf literal handling
 //! to provide zero-dependency RDF literal support with full XSD datatype validation.
 
+use crate::model::{NamedNode, NamedNodeRef, ObjectTerm, RdfTerm};
+use crate::vocab::{rdf, xsd};
+use crate::OxirsError;
+use lazy_static::lazy_static;
+use regex::Regex;
 use std::borrow::Cow;
 use std::fmt::{self, Write};
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
-use regex::Regex;
-use lazy_static::lazy_static;
-use crate::model::{RdfTerm, ObjectTerm, NamedNode, NamedNodeRef};
-use crate::vocab::{rdf, xsd};
-use crate::OxirsError;
 
 /// Language tag validation error type
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,38 +39,38 @@ lazy_static! {
     static ref LANGUAGE_TAG_REGEX: Regex = Regex::new(
         r"^([a-zA-Z]{2,3}(-[a-zA-Z]{3}){0,3}(-[a-zA-Z]{4})?(-[a-zA-Z]{2}|\d{3})?(-[0-9a-zA-Z]{5,8}|-\d[0-9a-zA-Z]{3})*(-[0-9a-wyzA-WYZ](-[0-9a-zA-Z]{2,8})+)*(-x(-[0-9a-zA-Z]{1,8})+)?|x(-[0-9a-zA-Z]{1,8})+|[a-zA-Z]{4}|[a-zA-Z]{5,8})$"
     ).expect("Language tag regex compilation failed");
-    
+
     /// Simple language subtag validation (2-3 letter language codes)
     static ref SIMPLE_LANGUAGE_REGEX: Regex = Regex::new(
         r"^[a-zA-Z]{2,3}$"
     ).expect("Simple language regex compilation failed");
-    
+
     /// XSD numeric type validation regexes
     static ref INTEGER_REGEX: Regex = Regex::new(
         r"^[+-]?\d+$"
     ).expect("Integer regex compilation failed");
-    
+
     static ref DECIMAL_REGEX: Regex = Regex::new(
         r"^[+-]?(\d+(\.\d*)?|\.\d+)$"
     ).expect("Decimal regex compilation failed");
-    
+
     static ref DOUBLE_REGEX: Regex = Regex::new(
         r"^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$|^[+-]?INF$|^NaN$"
     ).expect("Double regex compilation failed");
-    
+
     static ref BOOLEAN_REGEX: Regex = Regex::new(
         r"^(true|false|1|0)$"
     ).expect("Boolean regex compilation failed");
-    
+
     /// DateTime validation (simplified ISO 8601)
     static ref DATETIME_REGEX: Regex = Regex::new(
         r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?$"
     ).expect("DateTime regex compilation failed");
-    
+
     static ref DATE_REGEX: Regex = Regex::new(
         r"^\d{4}-\d{2}-\d{2}(Z|[+-]\d{2}:\d{2})?$"
     ).expect("Date regex compilation failed");
-    
+
     static ref TIME_REGEX: Regex = Regex::new(
         r"^\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?$"
     ).expect("Time regex compilation failed");
@@ -80,29 +80,29 @@ lazy_static! {
 fn validate_language_tag(tag: &str) -> Result<(), LanguageTagParseError> {
     if tag.is_empty() {
         return Err(LanguageTagParseError {
-            message: "Language tag cannot be empty".to_string()
+            message: "Language tag cannot be empty".to_string(),
         });
     }
-    
+
     // Check overall structure with regex
     if !LANGUAGE_TAG_REGEX.is_match(tag) {
         return Err(LanguageTagParseError {
             message: format!(
                 "Invalid language tag format: '{}'. Must follow BCP 47 specification",
                 tag
-            )
+            ),
         });
     }
-    
+
     // Additional validations for common cases
     let parts: Vec<&str> = tag.split('-').collect();
-    
+
     if parts.is_empty() {
         return Err(LanguageTagParseError {
-            message: "Language tag cannot be empty".to_string()
+            message: "Language tag cannot be empty".to_string(),
         });
     }
-    
+
     // First part should be a valid language subtag
     let language_subtag = parts[0];
     if language_subtag.len() < 2 || language_subtag.len() > 8 {
@@ -110,20 +110,17 @@ fn validate_language_tag(tag: &str) -> Result<(), LanguageTagParseError> {
             message: format!(
                 "Invalid language subtag length: '{}'. Must be 2-8 characters",
                 language_subtag
-            )
+            ),
         });
     }
-    
+
     // Check for common invalid patterns
     if tag.starts_with('-') || tag.ends_with('-') || tag.contains("--") {
         return Err(LanguageTagParseError {
-            message: format!(
-                "Invalid language tag structure: '{}'",
-                tag
-            )
+            message: format!("Invalid language tag structure: '{}'", tag),
         });
     }
-    
+
     Ok(())
 }
 
@@ -131,13 +128,13 @@ fn validate_language_tag(tag: &str) -> Result<(), LanguageTagParseError> {
 pub fn validate_xsd_value(value: &str, datatype_iri: &str) -> Result<(), OxirsError> {
     match datatype_iri {
         // String types
-        "http://www.w3.org/2001/XMLSchema#string" |
-        "http://www.w3.org/2001/XMLSchema#normalizedString" |
-        "http://www.w3.org/2001/XMLSchema#token" => {
+        "http://www.w3.org/2001/XMLSchema#string"
+        | "http://www.w3.org/2001/XMLSchema#normalizedString"
+        | "http://www.w3.org/2001/XMLSchema#token" => {
             // All strings are valid for string types
             Ok(())
         }
-        
+
         // Boolean type
         "http://www.w3.org/2001/XMLSchema#boolean" => {
             if BOOLEAN_REGEX.is_match(value) {
@@ -149,21 +146,21 @@ pub fn validate_xsd_value(value: &str, datatype_iri: &str) -> Result<(), OxirsEr
                 )))
             }
         }
-        
+
         // Integer types
-        "http://www.w3.org/2001/XMLSchema#integer" |
-        "http://www.w3.org/2001/XMLSchema#long" |
-        "http://www.w3.org/2001/XMLSchema#int" |
-        "http://www.w3.org/2001/XMLSchema#short" |
-        "http://www.w3.org/2001/XMLSchema#byte" |
-        "http://www.w3.org/2001/XMLSchema#unsignedLong" |
-        "http://www.w3.org/2001/XMLSchema#unsignedInt" |
-        "http://www.w3.org/2001/XMLSchema#unsignedShort" |
-        "http://www.w3.org/2001/XMLSchema#unsignedByte" |
-        "http://www.w3.org/2001/XMLSchema#positiveInteger" |
-        "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" |
-        "http://www.w3.org/2001/XMLSchema#negativeInteger" |
-        "http://www.w3.org/2001/XMLSchema#nonPositiveInteger" => {
+        "http://www.w3.org/2001/XMLSchema#integer"
+        | "http://www.w3.org/2001/XMLSchema#long"
+        | "http://www.w3.org/2001/XMLSchema#int"
+        | "http://www.w3.org/2001/XMLSchema#short"
+        | "http://www.w3.org/2001/XMLSchema#byte"
+        | "http://www.w3.org/2001/XMLSchema#unsignedLong"
+        | "http://www.w3.org/2001/XMLSchema#unsignedInt"
+        | "http://www.w3.org/2001/XMLSchema#unsignedShort"
+        | "http://www.w3.org/2001/XMLSchema#unsignedByte"
+        | "http://www.w3.org/2001/XMLSchema#positiveInteger"
+        | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+        | "http://www.w3.org/2001/XMLSchema#negativeInteger"
+        | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger" => {
             if INTEGER_REGEX.is_match(value) {
                 // Additional validation for specific integer types
                 validate_integer_range(value, datatype_iri)
@@ -174,7 +171,7 @@ pub fn validate_xsd_value(value: &str, datatype_iri: &str) -> Result<(), OxirsEr
                 )))
             }
         }
-        
+
         // Decimal types
         "http://www.w3.org/2001/XMLSchema#decimal" => {
             if DECIMAL_REGEX.is_match(value) {
@@ -186,10 +183,9 @@ pub fn validate_xsd_value(value: &str, datatype_iri: &str) -> Result<(), OxirsEr
                 )))
             }
         }
-        
+
         // Floating point types
-        "http://www.w3.org/2001/XMLSchema#double" |
-        "http://www.w3.org/2001/XMLSchema#float" => {
+        "http://www.w3.org/2001/XMLSchema#double" | "http://www.w3.org/2001/XMLSchema#float" => {
             if DOUBLE_REGEX.is_match(value) {
                 Ok(())
             } else {
@@ -199,7 +195,7 @@ pub fn validate_xsd_value(value: &str, datatype_iri: &str) -> Result<(), OxirsEr
                 )))
             }
         }
-        
+
         // Date/time types
         "http://www.w3.org/2001/XMLSchema#dateTime" => {
             if DATETIME_REGEX.is_match(value) {
@@ -211,7 +207,7 @@ pub fn validate_xsd_value(value: &str, datatype_iri: &str) -> Result<(), OxirsEr
                 )))
             }
         }
-        
+
         "http://www.w3.org/2001/XMLSchema#date" => {
             if DATE_REGEX.is_match(value) {
                 // Additional validation for valid date values
@@ -222,7 +218,7 @@ pub fn validate_xsd_value(value: &str, datatype_iri: &str) -> Result<(), OxirsEr
                 } else {
                     value
                 };
-                
+
                 let parts: Vec<&str> = date_part.split('-').collect();
                 if parts.len() == 3 {
                     let year: i32 = parts[0].parse().map_err(|_| {
@@ -234,7 +230,7 @@ pub fn validate_xsd_value(value: &str, datatype_iri: &str) -> Result<(), OxirsEr
                     let day: u32 = parts[2].parse().map_err(|_| {
                         OxirsError::Parse(format!("Invalid day in date: {}", value))
                     })?;
-                    
+
                     // Validate month
                     if month < 1 || month > 12 {
                         return Err(OxirsError::Parse(format!(
@@ -242,7 +238,7 @@ pub fn validate_xsd_value(value: &str, datatype_iri: &str) -> Result<(), OxirsEr
                             value
                         )));
                     }
-                    
+
                     // Validate day based on month
                     let max_day = match month {
                         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
@@ -257,7 +253,7 @@ pub fn validate_xsd_value(value: &str, datatype_iri: &str) -> Result<(), OxirsEr
                         }
                         _ => unreachable!(),
                     };
-                    
+
                     if day < 1 || day > max_day {
                         return Err(OxirsError::Parse(format!(
                             "Invalid day in date: {}. Day must be between 01 and {} for month {}",
@@ -273,7 +269,7 @@ pub fn validate_xsd_value(value: &str, datatype_iri: &str) -> Result<(), OxirsEr
                 )))
             }
         }
-        
+
         "http://www.w3.org/2001/XMLSchema#time" => {
             if TIME_REGEX.is_match(value) {
                 Ok(())
@@ -284,18 +280,18 @@ pub fn validate_xsd_value(value: &str, datatype_iri: &str) -> Result<(), OxirsEr
                 )))
             }
         }
-        
+
         // For unknown datatypes, don't validate
-        _ => Ok(())
+        _ => Ok(()),
     }
 }
 
 /// Validates integer values against their specific type ranges
 fn validate_integer_range(value: &str, datatype_iri: &str) -> Result<(), OxirsError> {
-    let parsed_value: i64 = value.parse().map_err(|_| {
-        OxirsError::Parse(format!("Cannot parse integer: '{}'", value))
-    })?;
-    
+    let parsed_value: i64 = value
+        .parse()
+        .map_err(|_| OxirsError::Parse(format!("Cannot parse integer: '{}'", value)))?;
+
     match datatype_iri {
         "http://www.w3.org/2001/XMLSchema#byte" => {
             if parsed_value < -128 || parsed_value > 127 {
@@ -379,7 +375,7 @@ fn validate_integer_range(value: &str, datatype_iri: &str) -> Result<(), OxirsEr
         }
         _ => {} // Other integer types don't have additional range restrictions in this simplified implementation
     }
-    
+
     Ok(())
 }
 
@@ -435,7 +431,7 @@ impl Literal {
     pub fn new_simple_literal(value: impl Into<String>) -> Self {
         Self(LiteralContent::String(value.into()))
     }
-    
+
     /// Creates a new string literal without language or datatype (alias for compatibility)
     #[inline]
     pub fn new(value: impl Into<String>) -> Self {
@@ -453,7 +449,7 @@ impl Literal {
             LiteralContent::TypedLiteral { value, datatype }
         })
     }
-    
+
     /// Creates a new literal with a datatype (alias for compatibility)
     #[inline]
     pub fn new_typed(value: impl Into<String>, datatype: NamedNode) -> Self {
@@ -461,7 +457,10 @@ impl Literal {
     }
 
     /// Creates a new literal with a datatype and validates the value
-    pub fn new_typed_validated(value: impl Into<String>, datatype: NamedNode) -> Result<Self, OxirsError> {
+    pub fn new_typed_validated(
+        value: impl Into<String>,
+        datatype: NamedNode,
+    ) -> Result<Self, OxirsError> {
         let value = value.into();
         validate_xsd_value(&value, datatype.as_str())?;
         Ok(Literal::new_typed_literal(value, datatype))
@@ -476,10 +475,7 @@ impl Literal {
         let language = language.into();
         // Validate without modifying case to preserve RFC 5646 conventions
         validate_language_tag(&language)?;
-        Ok(Self::new_language_tagged_literal_unchecked(
-            value,
-            language,
-        ))
+        Ok(Self::new_language_tagged_literal_unchecked(value, language))
     }
 
     /// Builds an RDF [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string).
@@ -499,9 +495,12 @@ impl Literal {
             language: language.into(),
         })
     }
-    
+
     /// Creates a new literal with a language tag (alias for compatibility)
-    pub fn new_lang(value: impl Into<String>, language: impl Into<String>) -> Result<Self, OxirsError> {
+    pub fn new_lang(
+        value: impl Into<String>,
+        language: impl Into<String>,
+    ) -> Result<Self, OxirsError> {
         let result = Self::new_language_tagged_literal(value, language)?;
         Ok(result)
     }
@@ -518,9 +517,7 @@ impl Literal {
         language.make_ascii_lowercase();
         validate_language_tag(&language)?;
         Ok(Self::new_directional_language_tagged_literal_unchecked(
-            value,
-            language,
-            direction,
+            value, language, direction,
         ))
     }
 
@@ -642,7 +639,7 @@ impl Literal {
     }
 
     /// Attempts to extract the value as a boolean
-    /// 
+    ///
     /// Works for XSD boolean literals and other representations like "true"/"false"
     pub fn as_bool(&self) -> Option<bool> {
         match self.value().to_lowercase().as_str() {
@@ -651,53 +648,54 @@ impl Literal {
             _ => None,
         }
     }
-    
+
     /// Attempts to extract the value as an integer
-    /// 
+    ///
     /// Works for XSD integer literals and other numeric representations
     pub fn as_i64(&self) -> Option<i64> {
         self.value().parse().ok()
     }
-    
+
     /// Attempts to extract the value as a 32-bit integer
     pub fn as_i32(&self) -> Option<i32> {
         self.value().parse().ok()
     }
-    
+
     /// Attempts to extract the value as a floating point number
-    /// 
+    ///
     /// Works for XSD decimal, double, float literals
     pub fn as_f64(&self) -> Option<f64> {
         self.value().parse().ok()
     }
-    
+
     /// Attempts to extract the value as a 32-bit floating point number
     pub fn as_f32(&self) -> Option<f32> {
         self.value().parse().ok()
     }
-    
+
     /// Returns true if this literal represents a numeric value
     pub fn is_numeric(&self) -> bool {
         match &self.0 {
             LiteralContent::TypedLiteral { datatype, .. } => {
                 let dt_iri = datatype.as_str();
-                matches!(dt_iri,
-                    "http://www.w3.org/2001/XMLSchema#integer" |
-                    "http://www.w3.org/2001/XMLSchema#decimal" |
-                    "http://www.w3.org/2001/XMLSchema#double" |
-                    "http://www.w3.org/2001/XMLSchema#float" |
-                    "http://www.w3.org/2001/XMLSchema#long" |
-                    "http://www.w3.org/2001/XMLSchema#int" |
-                    "http://www.w3.org/2001/XMLSchema#short" |
-                    "http://www.w3.org/2001/XMLSchema#byte" |
-                    "http://www.w3.org/2001/XMLSchema#unsignedLong" |
-                    "http://www.w3.org/2001/XMLSchema#unsignedInt" |
-                    "http://www.w3.org/2001/XMLSchema#unsignedShort" |
-                    "http://www.w3.org/2001/XMLSchema#unsignedByte" |
-                    "http://www.w3.org/2001/XMLSchema#positiveInteger" |
-                    "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" |
-                    "http://www.w3.org/2001/XMLSchema#negativeInteger" |
-                    "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
+                matches!(
+                    dt_iri,
+                    "http://www.w3.org/2001/XMLSchema#integer"
+                        | "http://www.w3.org/2001/XMLSchema#decimal"
+                        | "http://www.w3.org/2001/XMLSchema#double"
+                        | "http://www.w3.org/2001/XMLSchema#float"
+                        | "http://www.w3.org/2001/XMLSchema#long"
+                        | "http://www.w3.org/2001/XMLSchema#int"
+                        | "http://www.w3.org/2001/XMLSchema#short"
+                        | "http://www.w3.org/2001/XMLSchema#byte"
+                        | "http://www.w3.org/2001/XMLSchema#unsignedLong"
+                        | "http://www.w3.org/2001/XMLSchema#unsignedInt"
+                        | "http://www.w3.org/2001/XMLSchema#unsignedShort"
+                        | "http://www.w3.org/2001/XMLSchema#unsignedByte"
+                        | "http://www.w3.org/2001/XMLSchema#positiveInteger"
+                        | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+                        | "http://www.w3.org/2001/XMLSchema#negativeInteger"
+                        | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
                 )
             }
             _ => {
@@ -706,21 +704,19 @@ impl Literal {
             }
         }
     }
-    
+
     /// Returns true if this literal represents a boolean value
     pub fn is_boolean(&self) -> bool {
         match &self.0 {
             LiteralContent::TypedLiteral { datatype, .. } => {
                 datatype.as_str() == "http://www.w3.org/2001/XMLSchema#boolean"
             }
-            _ => {
-                self.as_bool().is_some()
-            }
+            _ => self.as_bool().is_some(),
         }
     }
-    
+
     /// Returns the canonical form of this literal
-    /// 
+    ///
     /// This normalizes the literal according to XSD rules and recommendations
     pub fn canonical_form(&self) -> Literal {
         match &self.0 {
@@ -733,29 +729,29 @@ impl Literal {
                             return Literal::new_typed(canonical_value, datatype.clone());
                         }
                     }
-                    "http://www.w3.org/2001/XMLSchema#integer" |
-                    "http://www.w3.org/2001/XMLSchema#long" |
-                    "http://www.w3.org/2001/XMLSchema#int" |
-                    "http://www.w3.org/2001/XMLSchema#short" |
-                    "http://www.w3.org/2001/XMLSchema#byte" => {
+                    "http://www.w3.org/2001/XMLSchema#integer"
+                    | "http://www.w3.org/2001/XMLSchema#long"
+                    | "http://www.w3.org/2001/XMLSchema#int"
+                    | "http://www.w3.org/2001/XMLSchema#short"
+                    | "http://www.w3.org/2001/XMLSchema#byte" => {
                         if let Some(int_val) = self.as_i64() {
                             return Literal::new_typed(int_val.to_string(), datatype.clone());
                         }
                     }
-                    "http://www.w3.org/2001/XMLSchema#unsignedLong" |
-                    "http://www.w3.org/2001/XMLSchema#unsignedInt" |
-                    "http://www.w3.org/2001/XMLSchema#unsignedShort" |
-                    "http://www.w3.org/2001/XMLSchema#unsignedByte" |
-                    "http://www.w3.org/2001/XMLSchema#positiveInteger" |
-                    "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" => {
+                    "http://www.w3.org/2001/XMLSchema#unsignedLong"
+                    | "http://www.w3.org/2001/XMLSchema#unsignedInt"
+                    | "http://www.w3.org/2001/XMLSchema#unsignedShort"
+                    | "http://www.w3.org/2001/XMLSchema#unsignedByte"
+                    | "http://www.w3.org/2001/XMLSchema#positiveInteger"
+                    | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" => {
                         if let Some(int_val) = self.as_i64() {
                             if int_val >= 0 {
                                 return Literal::new_typed(int_val.to_string(), datatype.clone());
                             }
                         }
                     }
-                    "http://www.w3.org/2001/XMLSchema#negativeInteger" |
-                    "http://www.w3.org/2001/XMLSchema#nonPositiveInteger" => {
+                    "http://www.w3.org/2001/XMLSchema#negativeInteger"
+                    | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger" => {
                         if let Some(int_val) = self.as_i64() {
                             if int_val <= 0 {
                                 return Literal::new_typed(int_val.to_string(), datatype.clone());
@@ -769,28 +765,41 @@ impl Literal {
                             if formatted.contains('.') {
                                 let trimmed = formatted.trim_end_matches('0').trim_end_matches('.');
                                 return Literal::new_typed(
-                                    if trimmed.is_empty() || trimmed == "-" { "0" } else { trimmed },
-                                    datatype.clone()
+                                    if trimmed.is_empty() || trimmed == "-" {
+                                        "0"
+                                    } else {
+                                        trimmed
+                                    },
+                                    datatype.clone(),
                                 );
                             } else {
-                                return Literal::new_typed(format!("{}.0", formatted), datatype.clone());
+                                return Literal::new_typed(
+                                    format!("{}.0", formatted),
+                                    datatype.clone(),
+                                );
                             }
                         }
                     }
-                    "http://www.w3.org/2001/XMLSchema#double" |
-                    "http://www.w3.org/2001/XMLSchema#float" => {
+                    "http://www.w3.org/2001/XMLSchema#double"
+                    | "http://www.w3.org/2001/XMLSchema#float" => {
                         if let Some(float_val) = self.as_f64() {
                             // Handle special values
                             if float_val.is_infinite() {
                                 return Literal::new_typed(
-                                    if float_val.is_sign_positive() { "INF" } else { "-INF" },
-                                    datatype.clone()
+                                    if float_val.is_sign_positive() {
+                                        "INF"
+                                    } else {
+                                        "-INF"
+                                    },
+                                    datatype.clone(),
                                 );
                             } else if float_val.is_nan() {
                                 return Literal::new_typed("NaN", datatype.clone());
                             } else {
                                 // Use scientific notation for very large or very small numbers
-                                let formatted = if float_val.abs() >= 1e6 || (float_val.abs() < 1e-3 && float_val != 0.0) {
+                                let formatted = if float_val.abs() >= 1e6
+                                    || (float_val.abs() < 1e-3 && float_val != 0.0)
+                                {
                                     format!("{:E}", float_val)
                                 } else {
                                     format!("{}", float_val)
@@ -799,11 +808,12 @@ impl Literal {
                             }
                         }
                     }
-                    "http://www.w3.org/2001/XMLSchema#string" |
-                    "http://www.w3.org/2001/XMLSchema#normalizedString" => {
+                    "http://www.w3.org/2001/XMLSchema#string"
+                    | "http://www.w3.org/2001/XMLSchema#normalizedString" => {
                         // Normalize whitespace for normalizedString
                         if dt_iri == "http://www.w3.org/2001/XMLSchema#normalizedString" {
-                            let normalized = value.replace('\t', " ")
+                            let normalized = value
+                                .replace('\t', " ")
                                 .replace('\n', " ")
                                 .replace('\r', " ");
                             return Literal::new_typed(normalized, datatype.clone());
@@ -828,7 +838,7 @@ impl Literal {
         }
         self.clone()
     }
-    
+
     /// Validates this literal against its datatype (if any)
     pub fn validate(&self) -> Result<(), OxirsError> {
         match &self.0 {
@@ -858,7 +868,7 @@ impl RdfTerm for Literal {
     fn as_str(&self) -> &str {
         self.value()
     }
-    
+
     fn is_literal(&self) -> bool {
         true
     }
@@ -911,7 +921,7 @@ impl<'a> LiteralRef<'a> {
     pub const fn new_simple_literal(value: &'a str) -> Self {
         LiteralRef(LiteralRefContent::String(value))
     }
-    
+
     /// Creates a new literal reference (alias for compatibility)
     #[inline]
     pub const fn new(value: &'a str) -> Self {
@@ -928,7 +938,7 @@ impl<'a> LiteralRef<'a> {
             LiteralRefContent::TypedLiteral { value, datatype }
         })
     }
-    
+
     /// Creates a new typed literal reference (alias for compatibility)
     #[inline]
     pub fn new_typed(value: &'a str, datatype: NamedNodeRef<'a>) -> Self {
@@ -946,7 +956,7 @@ impl<'a> LiteralRef<'a> {
     pub const fn new_language_tagged_literal_unchecked(value: &'a str, language: &'a str) -> Self {
         LiteralRef(LiteralRefContent::LanguageTaggedString { value, language })
     }
-    
+
     /// Creates a new language-tagged literal reference (alias for compatibility)
     #[inline]
     pub const fn new_lang(value: &'a str, language: &'a str) -> Self {
@@ -1022,7 +1032,9 @@ impl<'a> LiteralRef<'a> {
             LiteralRefContent::String(_) => xsd::STRING.as_ref(),
             LiteralRefContent::LanguageTaggedString { .. } => rdf::LANG_STRING.as_ref(),
             #[cfg(feature = "rdf-12")]
-            LiteralRefContent::DirectionalLanguageTaggedString { .. } => rdf::DIR_LANG_STRING.as_ref(),
+            LiteralRefContent::DirectionalLanguageTaggedString { .. } => {
+                rdf::DIR_LANG_STRING.as_ref()
+            }
             LiteralRefContent::TypedLiteral { datatype, .. } => datatype,
         }
     }
@@ -1066,7 +1078,7 @@ impl<'a> LiteralRef<'a> {
             },
         })
     }
-    
+
     /// Converts to an owned Literal (alias for compatibility)
     #[inline]
     pub fn to_owned(&self) -> Literal {
@@ -1104,7 +1116,7 @@ impl<'a> RdfTerm for LiteralRef<'a> {
     fn as_str(&self) -> &str {
         self.value()
     }
-    
+
     fn is_literal(&self) -> bool {
         true
     }
@@ -1323,29 +1335,29 @@ impl From<f64> for Literal {
 pub mod xsd_literals {
     use super::*;
     use crate::vocab::xsd;
-    
+
     // Convenience functions for creating typed literals
-    
+
     /// Creates a boolean literal
     pub fn boolean_literal(value: bool) -> Literal {
         Literal::new_typed(value.to_string(), xsd::BOOLEAN.clone())
     }
-    
+
     /// Creates an integer literal
     pub fn integer_literal(value: i64) -> Literal {
         Literal::new_typed(value.to_string(), xsd::INTEGER.clone())
     }
-    
+
     /// Creates a decimal literal
     pub fn decimal_literal(value: f64) -> Literal {
         Literal::new_typed(value.to_string(), xsd::DECIMAL.clone())
     }
-    
+
     /// Creates a double literal
     pub fn double_literal(value: f64) -> Literal {
         Literal::new_typed(value.to_string(), xsd::DOUBLE.clone())
     }
-    
+
     /// Creates a string literal
     pub fn string_literal(value: &str) -> Literal {
         Literal::new_typed(value, xsd::STRING.clone())
@@ -1355,7 +1367,7 @@ pub mod xsd_literals {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_simple_literal_equality() {
         assert_eq!(
@@ -1385,7 +1397,7 @@ mod tests {
         assert_eq!("NaN", Literal::from(f32::NAN).value());
         assert_eq!("NaN", Literal::from(f64::NAN).value());
     }
-    
+
     #[test]
     fn test_plain_literal() {
         let literal = Literal::new("Hello");
@@ -1398,7 +1410,7 @@ mod tests {
         assert!(!literal.is_typed());
         assert_eq!(format!("{}", literal), "\"Hello\"");
     }
-    
+
     #[test]
     fn test_lang_literal() {
         let literal = Literal::new_lang("Hello", "en").unwrap();
@@ -1412,47 +1424,53 @@ mod tests {
         assert!(!literal.is_typed());
         assert_eq!(format!("{}", literal), "\"Hello\"@en");
     }
-    
+
     #[test]
     fn test_typed_literal() {
         let literal = Literal::new_typed("42", xsd::INTEGER.clone());
         assert_eq!(literal.value(), "42");
-        assert_eq!(literal.datatype().as_str(), "http://www.w3.org/2001/XMLSchema#integer");
+        assert_eq!(
+            literal.datatype().as_str(),
+            "http://www.w3.org/2001/XMLSchema#integer"
+        );
         #[allow(deprecated)]
         {
             assert!(!literal.is_plain());
         }
         assert!(!literal.is_lang_string());
         assert!(literal.is_typed());
-        assert_eq!(format!("{}", literal), "\"42\"^^<http://www.w3.org/2001/XMLSchema#integer>");
+        assert_eq!(
+            format!("{}", literal),
+            "\"42\"^^<http://www.w3.org/2001/XMLSchema#integer>"
+        );
     }
-    
+
     #[test]
     fn test_literal_ref() {
         let literal_ref = LiteralRef::new("test");
         assert_eq!(literal_ref.value(), "test");
-        
+
         let owned = literal_ref.to_owned();
         assert_eq!(owned.value(), "test");
     }
-    
+
     #[test]
     fn test_boolean_extraction() {
         let bool_literal = xsd_literals::boolean_literal(true);
         assert!(bool_literal.is_boolean());
         assert_eq!(bool_literal.as_bool(), Some(true));
-        
+
         let false_literal = Literal::new_typed("false", xsd::BOOLEAN.clone());
         assert_eq!(false_literal.as_bool(), Some(false));
-        
+
         // Test string representations
         let true_str = Literal::new("true");
         assert_eq!(true_str.as_bool(), Some(true));
-        
+
         let false_str = Literal::new("0");
         assert_eq!(false_str.as_bool(), Some(false));
     }
-    
+
     #[test]
     fn test_numeric_extraction() {
         let int_literal = xsd_literals::integer_literal(42);
@@ -1460,38 +1478,41 @@ mod tests {
         assert_eq!(int_literal.as_i64(), Some(42));
         assert_eq!(int_literal.as_i32(), Some(42));
         assert_eq!(int_literal.as_f64(), Some(42.0));
-        
+
         let decimal_literal = xsd_literals::decimal_literal(3.25);
         assert!(decimal_literal.is_numeric());
         assert_eq!(decimal_literal.as_f64(), Some(3.25));
         assert_eq!(decimal_literal.as_f32(), Some(3.25_f32));
-        
+
         // Test untyped numeric strings
         let untyped_num = Literal::new("123");
         assert!(untyped_num.is_numeric());
         assert_eq!(untyped_num.as_i64(), Some(123));
     }
-    
+
     #[test]
     fn test_canonical_form() {
         // Boolean canonicalization
         let bool_literal = Literal::new_typed("True", xsd::BOOLEAN.clone());
         let canonical = bool_literal.canonical_form();
         assert_eq!(canonical.value(), "true");
-        
+
         // Integer canonicalization
         let int_literal = Literal::new_typed("  42  ", xsd::INTEGER.clone());
         // Note: This would need actual whitespace trimming in canonical form
         // For now, just test that it returns a valid canonical form
         let canonical = int_literal.canonical_form();
-        assert_eq!(canonical.datatype().as_str(), "http://www.w3.org/2001/XMLSchema#integer");
-        
+        assert_eq!(
+            canonical.datatype().as_str(),
+            "http://www.w3.org/2001/XMLSchema#integer"
+        );
+
         // Decimal canonicalization
         let dec_literal = Literal::new_typed("3.140", xsd::DECIMAL.clone());
         let canonical = dec_literal.canonical_form();
         assert_eq!(canonical.value(), "3.14"); // Should remove trailing zeros
     }
-    
+
     #[test]
     fn test_xsd_convenience_functions() {
         // Test all the convenience functions work
@@ -1500,30 +1521,34 @@ mod tests {
         assert_eq!(xsd_literals::decimal_literal(3.25).value(), "3.25");
         assert_eq!(xsd_literals::double_literal(2.71).value(), "2.71");
         assert_eq!(xsd_literals::string_literal("hello").value(), "hello");
-        
+
         // Test datatype assignments
-        assert_eq!(xsd_literals::boolean_literal(true).datatype().as_str(), 
-                   "http://www.w3.org/2001/XMLSchema#boolean");
-        assert_eq!(xsd_literals::integer_literal(123).datatype().as_str(), 
-                   "http://www.w3.org/2001/XMLSchema#integer");
+        assert_eq!(
+            xsd_literals::boolean_literal(true).datatype().as_str(),
+            "http://www.w3.org/2001/XMLSchema#boolean"
+        );
+        assert_eq!(
+            xsd_literals::integer_literal(123).datatype().as_str(),
+            "http://www.w3.org/2001/XMLSchema#integer"
+        );
     }
-    
+
     #[test]
     fn test_numeric_type_detection() {
         // Test various numeric types
         let int_lit = Literal::new_typed("42", xsd::INTEGER.clone());
         assert!(int_lit.is_numeric());
-        
+
         let float_lit = Literal::new_typed("3.14", xsd::FLOAT.clone());
         assert!(float_lit.is_numeric());
-        
+
         let double_lit = Literal::new_typed("2.71", xsd::DOUBLE.clone());
         assert!(double_lit.is_numeric());
-        
+
         // Non-numeric types
         let string_lit = Literal::new_typed("hello", xsd::STRING.clone());
         assert!(!string_lit.is_numeric());
-        
+
         let bool_lit = Literal::new_typed("true", xsd::BOOLEAN.clone());
         assert!(!bool_lit.is_numeric());
     }

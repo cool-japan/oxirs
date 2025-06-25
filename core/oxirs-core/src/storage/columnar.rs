@@ -3,18 +3,15 @@
 //! This module provides columnar storage optimized for analytical queries,
 //! supporting efficient aggregations, range scans, and OLAP operations.
 
-use crate::model::{Triple, TriplePattern, Term, NamedNode, Literal, BlankNode};
+use crate::model::{BlankNode, Literal, NamedNode, Term, Triple, TriplePattern};
 use crate::OxirsError;
 use arrow::{
-    array::{StringArray, UInt64Array, ArrayBuilder, StringBuilder, UInt64Builder},
+    array::{ArrayBuilder, StringArray, StringBuilder, UInt64Array, UInt64Builder},
     datatypes::{DataType, Field, Schema},
     record_batch::RecordBatch,
 };
 use datafusion::prelude::*;
-use parquet::{
-    arrow::ArrowWriter,
-    file::properties::WriterProperties,
-};
+use parquet::{arrow::ArrowWriter, file::properties::WriterProperties};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -134,7 +131,7 @@ impl ColumnarStorage {
     pub async fn new(config: ColumnarConfig) -> Result<Self, OxirsError> {
         // Ensure directory exists
         std::fs::create_dir_all(&config.path)?;
-        
+
         // Create schema for triple storage
         let schema = Arc::new(Schema::new(vec![
             Field::new("subject_id", DataType::UInt64, false),
@@ -146,26 +143,28 @@ impl ColumnarStorage {
             Field::new("graph_id", DataType::UInt64, true),
             Field::new("timestamp", DataType::UInt64, false),
         ]));
-        
+
         // Create DataFusion context
         let ctx = SessionContext::new();
-        
+
         // Register existing parquet files
         let pattern = config.path.join("*.parquet");
         if let Ok(paths) = glob::glob(pattern.to_str().unwrap()) {
             for path in paths.flatten() {
-                let table_name = path.file_stem()
+                let table_name = path
+                    .file_stem()
                     .and_then(|s| s.to_str())
                     .unwrap_or("triples");
-                
+
                 ctx.register_parquet(
                     table_name,
                     path.to_str().unwrap(),
                     ParquetReadOptions::default(),
-                ).await?;
+                )
+                .await?;
             }
         }
-        
+
         Ok(ColumnarStorage {
             config,
             ctx: Arc::new(RwLock::new(ctx)),
@@ -175,27 +174,27 @@ impl ColumnarStorage {
             stats: Arc::new(RwLock::new(ColumnarStats::default())),
         })
     }
-    
+
     /// Store a triple in columnar format
     pub async fn store_triple(&self, triple: &Triple) -> Result<(), OxirsError> {
         let mut writer_guard = self.writer.write().await;
-        
+
         // Initialize writer if needed
         if writer_guard.is_none() {
             *writer_guard = Some(BatchWriter::new());
         }
-        
+
         let writer = writer_guard.as_mut().unwrap();
-        
+
         // Get IDs from dictionary
         let mut dict = self.uri_dictionary.write().await;
         let subject_id = self.get_or_create_term_id(&mut dict, triple.subject());
         let predicate_id = self.get_or_create_term_id(&mut dict, triple.predicate());
-        
+
         // Build columns
         writer.subject_builder.append_value(subject_id);
         writer.predicate_builder.append_value(predicate_id);
-        
+
         // Handle object based on type
         match triple.object() {
             crate::model::Object::NamedNode(nn) => {
@@ -213,14 +212,14 @@ impl ColumnarStorage {
             crate::model::Object::Literal(lit) => {
                 writer.object_type_builder.append_value("literal");
                 writer.object_value_builder.append_value(lit.value());
-                
+
                 if let Some(dt) = lit.datatype() {
                     let dt_id = dict.get_or_create_uri(dt.as_str());
                     writer.object_datatype_builder.append_value(dt_id);
                 } else {
                     writer.object_datatype_builder.append_null();
                 }
-                
+
                 if let Some(lang) = lit.language() {
                     writer.object_lang_builder.append_value(lang);
                 } else {
@@ -235,95 +234,101 @@ impl ColumnarStorage {
                 writer.object_lang_builder.append_null();
             }
         }
-        
+
         // Add graph and timestamp
         writer.graph_builder.append_value(0); // Default graph
         writer.timestamp_builder.append_value(
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
-                .as_secs()
+                .as_secs(),
         );
-        
+
         writer.current_size += 1;
-        
+
         // Flush if batch is full
         if writer.current_size >= self.config.batch_size {
             self.flush_batch(&mut writer_guard).await?;
         }
-        
+
         // Update stats
         let mut stats = self.stats.write().await;
         stats.total_triples += 1;
-        
+
         Ok(())
     }
-    
+
     /// Query triples using SQL
     pub async fn query_sql(&self, sql: &str) -> Result<Vec<Triple>, OxirsError> {
         let start = std::time::Instant::now();
-        
+
         let ctx = self.ctx.read().await;
         let df = ctx.sql(sql).await?;
         let batches = df.collect().await?;
-        
+
         let mut results = Vec::new();
         let dict = self.uri_dictionary.read().await;
-        
+
         for batch in batches {
-            let subject_ids = batch.column(0).as_any()
+            let subject_ids = batch
+                .column(0)
+                .as_any()
                 .downcast_ref::<UInt64Array>()
                 .ok_or_else(|| OxirsError::Query("Invalid subject column".to_string()))?;
-                
-            let predicate_ids = batch.column(1).as_any()
+
+            let predicate_ids = batch
+                .column(1)
+                .as_any()
                 .downcast_ref::<UInt64Array>()
                 .ok_or_else(|| OxirsError::Query("Invalid predicate column".to_string()))?;
-                
-            let object_types = batch.column(2).as_any()
+
+            let object_types = batch
+                .column(2)
+                .as_any()
                 .downcast_ref::<StringArray>()
                 .ok_or_else(|| OxirsError::Query("Invalid object type column".to_string()))?;
-                
-            let object_values = batch.column(3).as_any()
+
+            let object_values = batch
+                .column(3)
+                .as_any()
                 .downcast_ref::<StringArray>()
                 .ok_or_else(|| OxirsError::Query("Invalid object value column".to_string()))?;
-            
+
             for i in 0..batch.num_rows() {
                 let subject_id = subject_ids.value(i);
                 let predicate_id = predicate_ids.value(i);
                 let object_type = object_types.value(i);
                 let object_value = object_values.value(i);
-                
+
                 // Reconstruct triple
-                let subject = dict.get_term(subject_id)
-                    .ok_or_else(|| OxirsError::Query(format!("Unknown subject ID: {}", subject_id)))?;
-                let predicate = dict.get_term(predicate_id)
-                    .ok_or_else(|| OxirsError::Query(format!("Unknown predicate ID: {}", predicate_id)))?;
-                
+                let subject = dict.get_term(subject_id).ok_or_else(|| {
+                    OxirsError::Query(format!("Unknown subject ID: {}", subject_id))
+                })?;
+                let predicate = dict.get_term(predicate_id).ok_or_else(|| {
+                    OxirsError::Query(format!("Unknown predicate ID: {}", predicate_id))
+                })?;
+
                 let object = match object_type {
-                    "uri" => crate::model::Object::NamedNode(
-                        NamedNode::new(object_value)?
-                    ),
-                    "literal" => crate::model::Object::Literal(
-                        Literal::new(object_value)
-                    ),
+                    "uri" => crate::model::Object::NamedNode(NamedNode::new(object_value)?),
+                    "literal" => crate::model::Object::Literal(Literal::new(object_value)),
                     _ => continue, // Skip unknown types
                 };
-                
+
                 results.push(Triple::new(subject, predicate, object));
             }
         }
-        
+
         // Update stats
         let elapsed = start.elapsed();
         let mut stats = self.stats.write().await;
         stats.query_count += 1;
-        stats.avg_query_time_ms = 
-            (stats.avg_query_time_ms * (stats.query_count - 1) as f64 + elapsed.as_millis() as f64) 
+        stats.avg_query_time_ms = (stats.avg_query_time_ms * (stats.query_count - 1) as f64
+            + elapsed.as_millis() as f64)
             / stats.query_count as f64;
-        
+
         Ok(results)
     }
-    
+
     /// Execute analytical query
     pub async fn analyze(&self, query: AnalyticalQuery) -> Result<AnalysisResult, OxirsError> {
         match query {
@@ -332,33 +337,39 @@ impl ColumnarStorage {
                           FROM triples 
                           GROUP BY predicate_id 
                           ORDER BY count DESC";
-                          
+
                 let ctx = self.ctx.read().await;
                 let df = ctx.sql(sql).await?;
                 let batches = df.collect().await?;
-                
+
                 let mut counts = HashMap::new();
                 let dict = self.uri_dictionary.read().await;
-                
+
                 for batch in batches {
-                    let predicate_ids = batch.column(0).as_any()
-                        .downcast_ref::<UInt64Array>().unwrap();
-                    let count_values = batch.column(1).as_any()
-                        .downcast_ref::<UInt64Array>().unwrap();
-                    
+                    let predicate_ids = batch
+                        .column(0)
+                        .as_any()
+                        .downcast_ref::<UInt64Array>()
+                        .unwrap();
+                    let count_values = batch
+                        .column(1)
+                        .as_any()
+                        .downcast_ref::<UInt64Array>()
+                        .unwrap();
+
                     for i in 0..batch.num_rows() {
                         let pred_id = predicate_ids.value(i);
                         let count = count_values.value(i);
-                        
+
                         if let Some(pred_uri) = dict.get_uri(pred_id) {
                             counts.insert(pred_uri.to_string(), count);
                         }
                     }
                 }
-                
+
                 Ok(AnalysisResult::PredicateCounts(counts))
             }
-            
+
             AnalyticalQuery::TopSubjects { limit } => {
                 let sql = format!(
                     "SELECT subject_id, COUNT(*) as count 
@@ -368,45 +379,51 @@ impl ColumnarStorage {
                      LIMIT {}",
                     limit
                 );
-                
+
                 let ctx = self.ctx.read().await;
                 let df = ctx.sql(&sql).await?;
                 let batches = df.collect().await?;
-                
+
                 let mut subjects = Vec::new();
                 let dict = self.uri_dictionary.read().await;
-                
+
                 for batch in batches {
-                    let subject_ids = batch.column(0).as_any()
-                        .downcast_ref::<UInt64Array>().unwrap();
-                    let count_values = batch.column(1).as_any()
-                        .downcast_ref::<UInt64Array>().unwrap();
-                    
+                    let subject_ids = batch
+                        .column(0)
+                        .as_any()
+                        .downcast_ref::<UInt64Array>()
+                        .unwrap();
+                    let count_values = batch
+                        .column(1)
+                        .as_any()
+                        .downcast_ref::<UInt64Array>()
+                        .unwrap();
+
                     for i in 0..batch.num_rows() {
                         let subj_id = subject_ids.value(i);
                         let count = count_values.value(i);
-                        
+
                         if let Some(subj_uri) = dict.get_uri(subj_id) {
                             subjects.push((subj_uri.to_string(), count));
                         }
                     }
                 }
-                
+
                 Ok(AnalysisResult::TopSubjects(subjects))
             }
-            
-            AnalyticalQuery::TimeSeriesAnalysis { predicate, interval } => {
+
+            AnalyticalQuery::TimeSeriesAnalysis {
+                predicate,
+                interval,
+            } => {
                 // Implement time series analysis
                 Ok(AnalysisResult::TimeSeries(Vec::new()))
             }
         }
     }
-    
+
     /// Flush current batch to disk
-    async fn flush_batch(
-        &self,
-        writer_guard: &mut Option<BatchWriter>,
-    ) -> Result<(), OxirsError> {
+    async fn flush_batch(&self, writer_guard: &mut Option<BatchWriter>) -> Result<(), OxirsError> {
         if let Some(writer) = writer_guard.take() {
             // Create record batch
             let batch = RecordBatch::try_new(
@@ -422,37 +439,38 @@ impl ColumnarStorage {
                     Arc::new(writer.timestamp_builder.finish()),
                 ],
             )?;
-            
+
             // Write to parquet file
             let partition = self.get_partition_name();
             let path = self.config.path.join(format!("{}.parquet", partition));
-            
+
             let file = std::fs::File::create(&path)?;
             let props = WriterProperties::builder()
                 .set_compression(self.get_parquet_compression())
                 .build();
-                
+
             let mut writer = ArrowWriter::try_new(file, self.schema.clone(), Some(props))?;
             writer.write(&batch)?;
             writer.close()?;
-            
+
             // Register new file with DataFusion
             let ctx = self.ctx.write().await;
             ctx.register_parquet(
                 &partition,
                 path.to_str().unwrap(),
                 ParquetReadOptions::default(),
-            ).await?;
-            
+            )
+            .await?;
+
             // Update stats
             let mut stats = self.stats.write().await;
             stats.total_partitions += 1;
             stats.total_bytes += std::fs::metadata(&path)?.len();
         }
-        
+
         Ok(())
     }
-    
+
     /// Get partition name based on strategy
     fn get_partition_name(&self) -> String {
         match &self.config.partition_strategy {
@@ -472,7 +490,7 @@ impl ColumnarStorage {
             PartitionStrategy::Custom(name) => name.clone(),
         }
     }
-    
+
     /// Get Parquet compression type
     fn get_parquet_compression(&self) -> parquet::basic::Compression {
         match self.config.compression {
@@ -483,7 +501,7 @@ impl ColumnarStorage {
             CompressionType::Zstd => parquet::basic::Compression::ZSTD,
         }
     }
-    
+
     /// Get or create term ID
     fn get_or_create_term_id(
         &self,
@@ -502,29 +520,33 @@ impl UriDictionary {
             next_id: 1,
         }
     }
-    
+
     fn get_or_create_uri(&mut self, uri: &str) -> u64 {
         if let Some(&id) = self.uri_to_id.get(uri) {
             return id;
         }
-        
+
         let id = self.next_id;
         self.uri_to_id.insert(uri.to_string(), id);
         self.id_to_uri.insert(id, uri.to_string());
         self.next_id += 1;
         id
     }
-    
+
     fn get_uri(&self, id: u64) -> Option<&str> {
         self.id_to_uri.get(&id).map(|s| s.as_str())
     }
-    
+
     fn get_term(&self, id: u64) -> Option<crate::model::Subject> {
         self.get_uri(id).and_then(|uri| {
             if uri.starts_with("_:") {
-                BlankNode::new(uri).ok().map(crate::model::Subject::BlankNode)
+                BlankNode::new(uri)
+                    .ok()
+                    .map(crate::model::Subject::BlankNode)
             } else {
-                NamedNode::new(uri).ok().map(crate::model::Subject::NamedNode)
+                NamedNode::new(uri)
+                    .ok()
+                    .map(crate::model::Subject::NamedNode)
             }
         })
     }
@@ -580,37 +602,41 @@ pub enum AnalysisResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_columnar_storage() {
         let config = ColumnarConfig {
             path: PathBuf::from("/tmp/oxirs_columnar_test"),
             ..Default::default()
         };
-        
+
         let storage = ColumnarStorage::new(config).await.unwrap();
-        
+
         // Create test triple
         let triple = Triple::new(
             NamedNode::new("http://example.org/s").unwrap(),
             NamedNode::new("http://example.org/p").unwrap(),
             crate::model::Object::Literal(Literal::new("test")),
         );
-        
+
         // Store triple
         storage.store_triple(&triple).await.unwrap();
-        
+
         // Flush to ensure it's written
-        storage.flush_batch(&mut storage.writer.write().await).await.unwrap();
-        
+        storage
+            .flush_batch(&mut storage.writer.write().await)
+            .await
+            .unwrap();
+
         // Query using SQL
-        let results = storage.query_sql(
-            "SELECT * FROM triples WHERE object_value = 'test'"
-        ).await.unwrap();
-        
+        let results = storage
+            .query_sql("SELECT * FROM triples WHERE object_value = 'test'")
+            .await
+            .unwrap();
+
         assert_eq!(results.len(), 1);
     }
-    
+
     #[tokio::test]
     async fn test_analytical_queries() {
         let config = ColumnarConfig {
@@ -618,9 +644,9 @@ mod tests {
             batch_size: 2,
             ..Default::default()
         };
-        
+
         let storage = ColumnarStorage::new(config).await.unwrap();
-        
+
         // Store multiple triples
         let predicates = ["p1", "p1", "p2", "p1", "p3"];
         for (i, pred) in predicates.iter().enumerate() {
@@ -631,13 +657,19 @@ mod tests {
             );
             storage.store_triple(&triple).await.unwrap();
         }
-        
+
         // Flush remaining
-        storage.flush_batch(&mut storage.writer.write().await).await.unwrap();
-        
+        storage
+            .flush_batch(&mut storage.writer.write().await)
+            .await
+            .unwrap();
+
         // Count by predicate
-        let result = storage.analyze(AnalyticalQuery::CountByPredicate).await.unwrap();
-        
+        let result = storage
+            .analyze(AnalyticalQuery::CountByPredicate)
+            .await
+            .unwrap();
+
         if let AnalysisResult::PredicateCounts(counts) = result {
             assert_eq!(counts.get("http://example.org/p1"), Some(&3));
             assert_eq!(counts.get("http://example.org/p2"), Some(&1));

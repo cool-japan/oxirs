@@ -4,8 +4,8 @@
 //! enabling clients to receive live updates when RDF data changes.
 
 use crate::ast::{Document, Value};
-use crate::execution::{ExecutionContext, ExecutionResult, QueryExecutor};
 use crate::execution::FieldResolver;
+use crate::execution::{ExecutionContext, ExecutionResult, QueryExecutor};
 use crate::types::Schema;
 use anyhow::{anyhow, Result};
 use futures_util::{SinkExt, StreamExt};
@@ -25,15 +25,11 @@ use uuid::Uuid;
 #[serde(tag = "type")]
 pub enum SubscriptionMessage {
     #[serde(rename = "connection_init")]
-    ConnectionInit {
-        payload: Option<serde_json::Value>,
-    },
+    ConnectionInit { payload: Option<serde_json::Value> },
     #[serde(rename = "connection_ack")]
     ConnectionAck,
     #[serde(rename = "connection_error")]
-    ConnectionError {
-        payload: Option<serde_json::Value>,
-    },
+    ConnectionError { payload: Option<serde_json::Value> },
     #[serde(rename = "connection_terminate")]
     ConnectionTerminate,
     #[serde(rename = "start")]
@@ -52,13 +48,9 @@ pub enum SubscriptionMessage {
         payload: serde_json::Value,
     },
     #[serde(rename = "complete")]
-    Complete {
-        id: String,
-    },
+    Complete { id: String },
     #[serde(rename = "stop")]
-    Stop {
-        id: String,
-    },
+    Stop { id: String },
     #[serde(rename = "ka")]
     KeepAlive,
 }
@@ -151,13 +143,9 @@ pub struct SubscriptionManager {
 }
 
 impl SubscriptionManager {
-    pub fn new(
-        config: SubscriptionConfig,
-        schema: Schema,
-        executor: QueryExecutor,
-    ) -> Self {
+    pub fn new(config: SubscriptionConfig, schema: Schema, executor: QueryExecutor) -> Self {
         let (event_sender, _) = broadcast::channel(1000);
-        
+
         Self {
             config,
             connections: Arc::new(RwLock::new(HashMap::new())),
@@ -181,7 +169,7 @@ impl SubscriptionManager {
         // Accept incoming connections
         while let Ok((stream, addr)) = listener.accept().await {
             info!("New WebSocket connection from {}", addr);
-            
+
             let manager = self.clone();
             tokio::spawn(async move {
                 if let Err(e) = manager.handle_connection(stream).await {
@@ -197,7 +185,7 @@ impl SubscriptionManager {
     async fn handle_connection(&self, stream: TcpStream) -> Result<()> {
         let ws_stream = accept_async(stream).await?;
         let connection_id = Uuid::new_v4().to_string();
-        
+
         let connection = Arc::new(WebSocketConnection {
             id: connection_id.clone(),
             socket: Arc::new(AsyncRwLock::new(ws_stream)),
@@ -214,17 +202,17 @@ impl SubscriptionManager {
 
         // Handle messages
         let result = self.handle_connection_messages(connection.clone()).await;
-        
+
         // Cleanup on disconnect
         self.cleanup_connection(&connection_id).await;
-        
+
         result
     }
 
     /// Handle WebSocket messages for a connection
     async fn handle_connection_messages(&self, connection: Arc<WebSocketConnection>) -> Result<()> {
         let mut event_receiver = self.event_sender.subscribe();
-        
+
         loop {
             tokio::select! {
                 // Handle incoming WebSocket messages
@@ -249,7 +237,7 @@ impl SubscriptionManager {
                         }
                     }
                 }
-                
+
                 // Handle subscription events
                 event_result = event_receiver.recv() => {
                     match event_result {
@@ -313,10 +301,10 @@ impl SubscriptionManager {
                 // TODO: Handle authentication if enabled
                 let ack = SubscriptionMessage::ConnectionAck;
                 self.send_message(connection, &ack).await?;
-                
+
                 *connection.authenticated.write().unwrap() = true;
             }
-            
+
             SubscriptionMessage::Start { id, payload } => {
                 if !*connection.authenticated.read().unwrap() {
                     let error = SubscriptionMessage::ConnectionError {
@@ -325,19 +313,19 @@ impl SubscriptionManager {
                     self.send_message(connection, &error).await?;
                     return Ok(());
                 }
-                
+
                 self.start_subscription(connection, &id, payload).await?;
             }
-            
+
             SubscriptionMessage::Stop { id } => {
                 self.stop_subscription(connection, &id).await?;
             }
-            
+
             SubscriptionMessage::ConnectionTerminate => {
                 info!("Connection terminated by client");
                 return Err(anyhow!("Connection terminated"));
             }
-            
+
             _ => {
                 warn!("Unexpected message type received");
             }
@@ -358,7 +346,7 @@ impl SubscriptionManager {
             let connection_subscriptions = connection.subscriptions.read().unwrap();
             connection_subscriptions.len()
         };
-        
+
         if connection_sub_count >= self.config.max_subscriptions_per_connection {
             let error = SubscriptionMessage::Error {
                 id: subscription_id.to_string(),
@@ -367,12 +355,12 @@ impl SubscriptionManager {
             self.send_message(connection, &error).await?;
             return Ok(());
         }
-        
+
         let total_sub_count = {
             let active_subscriptions = self.active_subscriptions.read().unwrap();
             active_subscriptions.len()
         };
-        
+
         if total_sub_count >= self.config.max_total_subscriptions {
             let error = SubscriptionMessage::Error {
                 id: subscription_id.to_string(),
@@ -420,7 +408,7 @@ impl SubscriptionManager {
             let mut connection_subscriptions = connection.subscriptions.write().unwrap();
             connection_subscriptions.insert(subscription_id.to_string(), subscription.clone());
         }
-        
+
         {
             let mut active_subscriptions = self.active_subscriptions.write().unwrap();
             active_subscriptions.insert(subscription_id.to_string(), subscription.clone());
@@ -429,7 +417,10 @@ impl SubscriptionManager {
         // Execute initial subscription
         self.execute_subscription(&subscription).await?;
 
-        info!("Started subscription {} for connection {}", subscription_id, connection.id);
+        info!(
+            "Started subscription {} for connection {}",
+            subscription_id, connection.id
+        );
         Ok(())
     }
 
@@ -444,7 +435,7 @@ impl SubscriptionManager {
             let mut connection_subscriptions = connection.subscriptions.write().unwrap();
             connection_subscriptions.remove(subscription_id);
         }
-        
+
         // Remove from active subscriptions
         {
             let mut active_subscriptions = self.active_subscriptions.write().unwrap();
@@ -457,7 +448,10 @@ impl SubscriptionManager {
         };
         self.send_message(connection, &complete).await?;
 
-        info!("Stopped subscription {} for connection {}", subscription_id, connection.id);
+        info!(
+            "Stopped subscription {} for connection {}",
+            subscription_id, connection.id
+        );
         Ok(())
     }
 
@@ -471,8 +465,11 @@ impl SubscriptionManager {
             }
         }
 
-        let result = self.executor.execute(&subscription.document, &subscription.context).await?;
-        
+        let result = self
+            .executor
+            .execute(&subscription.document, &subscription.context)
+            .await?;
+
         // Find the connection
         let connection = {
             let connections = self.connections.read().unwrap();
@@ -531,14 +528,26 @@ impl SubscriptionManager {
     }
 
     /// Determine if a subscription should be re-executed for a given event
-    fn should_execute_for_event(&self, subscription: &ActiveSubscription, event: &SubscriptionEvent) -> bool {
+    fn should_execute_for_event(
+        &self,
+        subscription: &ActiveSubscription,
+        event: &SubscriptionEvent,
+    ) -> bool {
         match event {
             SubscriptionEvent::BulkChange => true, // Always re-execute for bulk changes
-            SubscriptionEvent::TripleAdded { subject, predicate, object: _ } |
-            SubscriptionEvent::TripleRemoved { subject, predicate, object: _ } => {
+            SubscriptionEvent::TripleAdded {
+                subject,
+                predicate,
+                object: _,
+            }
+            | SubscriptionEvent::TripleRemoved {
+                subject,
+                predicate,
+                object: _,
+            } => {
                 // Check if the subscription query involves this subject or predicate
-                self.subscription_involves_resource(subscription, subject) ||
-                self.subscription_involves_resource(subscription, predicate)
+                self.subscription_involves_resource(subscription, subject)
+                    || self.subscription_involves_resource(subscription, predicate)
             }
             SubscriptionEvent::SubjectChanged { subject } => {
                 self.subscription_involves_resource(subscription, subject)
@@ -550,10 +559,14 @@ impl SubscriptionManager {
     }
 
     /// Check if a subscription query involves a specific resource
-    fn subscription_involves_resource(&self, subscription: &ActiveSubscription, resource: &str) -> bool {
+    fn subscription_involves_resource(
+        &self,
+        subscription: &ActiveSubscription,
+        resource: &str,
+    ) -> bool {
         // This is a simplified implementation - in practice, you'd want to analyze
         // the GraphQL query to determine which resources it depends on
-        
+
         // For now, we'll re-execute all subscriptions for any change
         // A more sophisticated implementation would parse the query and track dependencies
         true
@@ -582,18 +595,18 @@ impl SubscriptionManager {
     async fn start_keepalive_task(&self) {
         let connections = Arc::clone(&self.connections);
         let keepalive_interval = self.config.keepalive_interval;
-        
+
         tokio::spawn(async move {
             let mut interval = interval(keepalive_interval);
-            
+
             loop {
                 interval.tick().await;
-                
+
                 let connections_to_ping: Vec<Arc<WebSocketConnection>> = {
                     let connections = connections.read().unwrap();
                     connections.values().cloned().collect()
                 };
-                
+
                 for connection in connections_to_ping {
                     let keepalive = SubscriptionMessage::KeepAlive;
                     if let Ok(text) = serde_json::to_string(&keepalive) {
@@ -612,16 +625,16 @@ impl SubscriptionManager {
         let active_subscriptions = Arc::clone(&self.active_subscriptions);
         let connections = Arc::clone(&self.connections);
         let timeout = self.config.subscription_timeout;
-        
+
         tokio::spawn(async move {
             let mut interval = interval(Duration::from_secs(60)); // Check every minute
-            
+
             loop {
                 interval.tick().await;
-                
+
                 let now = Instant::now();
                 let mut expired_subscriptions = Vec::new();
-                
+
                 {
                     let subscriptions = active_subscriptions.read().unwrap();
                     for (id, subscription) in subscriptions.iter() {
@@ -630,34 +643,36 @@ impl SubscriptionManager {
                         }
                     }
                 }
-                
+
                 for subscription_id in expired_subscriptions {
                     info!("Cleaning up expired subscription: {}", subscription_id);
-                    
+
                     // Remove from active subscriptions
                     let connection_id = {
                         let mut subscriptions = active_subscriptions.write().unwrap();
-                        subscriptions.remove(&subscription_id)
+                        subscriptions
+                            .remove(&subscription_id)
                             .map(|sub| sub.connection_id)
                     };
-                    
+
                     // Remove from connection and send completion message
                     if let Some(connection_id) = connection_id {
                         let connection_opt = {
                             let connections = connections.read().unwrap();
                             connections.get(&connection_id).cloned()
                         };
-                        
+
                         if let Some(connection) = connection_opt {
                             {
-                                let mut connection_subscriptions = connection.subscriptions.write().unwrap();
+                                let mut connection_subscriptions =
+                                    connection.subscriptions.write().unwrap();
                                 connection_subscriptions.remove(&subscription_id);
                             }
-                            
+
                             let complete = SubscriptionMessage::Complete {
                                 id: subscription_id.clone(),
                             };
-                            
+
                             if let Ok(text) = serde_json::to_string(&complete) {
                                 let mut socket = connection.socket.write().await;
                                 let _ = socket.send(Message::Text(text)).await;
@@ -672,27 +687,31 @@ impl SubscriptionManager {
     /// Cleanup connection and its subscriptions
     async fn cleanup_connection(&self, connection_id: &str) {
         info!("Cleaning up connection: {}", connection_id);
-        
+
         // Remove connection
         {
             let mut connections = self.connections.write().unwrap();
             connections.remove(connection_id);
         }
-        
+
         // Remove all subscriptions for this connection
         let subscription_ids: Vec<String> = {
             let active_subscriptions = self.active_subscriptions.read().unwrap();
-            active_subscriptions.iter()
+            active_subscriptions
+                .iter()
                 .filter(|(_, sub)| sub.connection_id == connection_id)
                 .map(|(id, _)| id.clone())
                 .collect()
         };
-        
+
         {
             let mut active_subscriptions = self.active_subscriptions.write().unwrap();
             for subscription_id in subscription_ids {
                 active_subscriptions.remove(&subscription_id);
-                info!("Removed subscription {} for connection {}", subscription_id, connection_id);
+                info!(
+                    "Removed subscription {} for connection {}",
+                    subscription_id, connection_id
+                );
             }
         }
     }
@@ -701,7 +720,7 @@ impl SubscriptionManager {
     pub fn get_stats(&self) -> SubscriptionStats {
         let connections = self.connections.read().unwrap();
         let active_subscriptions = self.active_subscriptions.read().unwrap();
-        
+
         SubscriptionStats {
             total_connections: connections.len(),
             total_subscriptions: active_subscriptions.len(),
@@ -739,23 +758,22 @@ impl Clone for SubscriptionManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{Schema, BuiltinScalars, ObjectType, FieldType};
+    use crate::types::{BuiltinScalars, FieldType, ObjectType, Schema};
 
     fn create_test_schema() -> Schema {
         let mut schema = Schema::new();
-        
-        let query_type = ObjectType::new("Query".to_string())
-            .with_field(
+
+        let query_type = ObjectType::new("Query".to_string()).with_field(
+            "hello".to_string(),
+            FieldType::new(
                 "hello".to_string(),
-                FieldType::new(
-                    "hello".to_string(),
-                    crate::types::GraphQLType::Scalar(BuiltinScalars::string()),
-                ),
-            );
-        
+                crate::types::GraphQLType::Scalar(BuiltinScalars::string()),
+            ),
+        );
+
         schema.add_type(crate::types::GraphQLType::Object(query_type));
         schema.set_query_type("Query".to_string());
-        
+
         schema
     }
 
@@ -772,10 +790,10 @@ mod tests {
         let msg = SubscriptionMessage::ConnectionInit {
             payload: Some(serde_json::json!({"auth": "token"})),
         };
-        
+
         let serialized = serde_json::to_string(&msg).unwrap();
         let deserialized: SubscriptionMessage = serde_json::from_str(&serialized).unwrap();
-        
+
         matches!(deserialized, SubscriptionMessage::ConnectionInit { .. });
     }
 
@@ -786,7 +804,7 @@ mod tests {
             variables: Some(HashMap::new()),
             operation_name: None,
         };
-        
+
         assert_eq!(payload.query, "subscription { hello }");
         assert!(payload.variables.is_some());
         assert!(payload.operation_name.is_none());
@@ -797,10 +815,10 @@ mod tests {
         let config = SubscriptionConfig::default();
         let schema = create_test_schema();
         let executor = QueryExecutor::new(schema.clone());
-        
+
         let manager = SubscriptionManager::new(config, schema, executor);
         let stats = manager.get_stats();
-        
+
         assert_eq!(stats.total_connections, 0);
         assert_eq!(stats.total_subscriptions, 0);
         assert_eq!(stats.avg_subscriptions_per_connection, 0.0);
@@ -813,7 +831,7 @@ mod tests {
             predicate: "http://xmlns.com/foaf/0.1/name".to_string(),
             object: "John Doe".to_string(),
         };
-        
+
         matches!(event, SubscriptionEvent::TripleAdded { .. });
     }
 
@@ -830,7 +848,7 @@ mod tests {
             last_execution: None,
             execution_count: 0,
         };
-        
+
         assert_eq!(subscription.id, "sub1");
         assert_eq!(subscription.connection_id, "conn1");
         assert_eq!(subscription.execution_count, 0);

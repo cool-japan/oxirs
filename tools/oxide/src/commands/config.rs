@@ -1,46 +1,52 @@
 //! Configuration management command
 
-use std::fs;
-use crate::ConfigAction;
 use super::CommandResult;
+use crate::ConfigAction;
+use std::fs;
 
 /// Run configuration management command
 pub async fn run(action: ConfigAction) -> CommandResult {
     match action {
         ConfigAction::Init { output } => {
             println!("Generating default configuration at {}", output.display());
-            
+
             if output.exists() {
-                return Err(format!("Configuration file '{}' already exists", output.display()).into());
+                return Err(
+                    format!("Configuration file '{}' already exists", output.display()).into(),
+                );
             }
-            
+
             let default_config = create_default_server_config()?;
             fs::write(&output, default_config)?;
-            
+
             println!("Default configuration generated successfully");
             println!("Edit the file to customize your OxiRS deployment");
         }
         ConfigAction::Validate { config } => {
             println!("Validating configuration at {}", config.display());
-            
+
             if !config.exists() {
                 return Err(format!("Configuration file '{}' not found", config.display()).into());
             }
-            
+
             // Read and parse TOML
             let content = fs::read_to_string(&config)?;
             let _parsed: toml::Value = toml::from_str(&content)?;
-            
+
             println!("Configuration is valid ✓");
         }
         ConfigAction::Show { config } => {
             if let Some(config_path) = config {
                 println!("Showing configuration from: {}", config_path.display());
-                
+
                 if !config_path.exists() {
-                    return Err(format!("Configuration file '{}' not found", config_path.display()).into());
+                    return Err(format!(
+                        "Configuration file '{}' not found",
+                        config_path.display()
+                    )
+                    .into());
                 }
-                
+
                 let content = fs::read_to_string(config_path)?;
                 println!("---");
                 println!("{}", content);
@@ -130,6 +136,6 @@ metrics_enabled = true
 metrics_endpoint = "/metrics"
 health_check_endpoint = "/health"
 "#;
-    
+
     Ok(config.to_string())
 }

@@ -3,17 +3,24 @@
 //! This module manages federated services, their capabilities, and health status.
 
 use anyhow::{anyhow, Result};
-use reqwest::{Client, header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE, ACCEPT}};
+use base64::encode;
+use governor::{
+    clock::DefaultClock,
+    state::{InMemoryState, NotKeyed},
+    Quota, RateLimiter,
+};
+use reqwest::{
+    header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE},
+    Client,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
-use governor::{Quota, RateLimiter, state::{InMemoryState, NotKeyed}, clock::DefaultClock};
-use base64::encode;
 
-use crate::{ServiceStatus, HealthStatus};
+use crate::{HealthStatus, ServiceStatus};
 
 /// Registry for managing federated services
 #[derive(Debug)]
@@ -66,40 +73,47 @@ impl ServiceRegistry {
     /// Register a new federated service
     pub async fn register(&mut self, service: FederatedService) -> Result<()> {
         info!("Registering federated service: {}", service.id);
-        
+
         // Validate service configuration
         service.validate()?;
-        
+
         // Initialize connection pool for this service
         self.initialize_connection_pool(&service).await?;
-        
+
         // Initialize rate limiter if specified
         if let Some(rate_limit) = &service.performance.rate_limit {
-            let quota = Quota::per_minute(std::num::NonZeroU32::new(rate_limit.requests_per_minute as u32).unwrap());
+            let quota = Quota::per_minute(
+                std::num::NonZeroU32::new(rate_limit.requests_per_minute as u32).unwrap(),
+            );
             let limiter = RateLimiter::direct(quota);
-            self.rate_limiters.insert(service.id.clone(), Arc::new(limiter));
+            self.rate_limiters
+                .insert(service.id.clone(), Arc::new(limiter));
         }
-        
+
         // Perform initial health check
         let health_status = self.check_service_health(&service).await?;
-        
+
         if health_status != ServiceStatus::Healthy && self.config.require_healthy_on_register {
-            return Err(anyhow!("Service {} is not healthy on registration", service.id));
+            return Err(anyhow!(
+                "Service {} is not healthy on registration",
+                service.id
+            ));
         }
-        
+
         // Detect and store service capabilities
         let detected_capabilities = self.detect_service_capabilities(&service).await?;
         let mut enhanced_service = service;
         enhanced_service.capabilities.extend(detected_capabilities);
-        
-        self.services.insert(enhanced_service.id.clone(), enhanced_service);
+
+        self.services
+            .insert(enhanced_service.id.clone(), enhanced_service);
         Ok(())
     }
 
     /// Unregister a federated service
     pub async fn unregister(&mut self, service_id: &str) -> Result<()> {
         info!("Unregistering federated service: {}", service_id);
-        
+
         match self.services.remove(service_id) {
             Some(_) => Ok(()),
             None => Err(anyhow!("Service {} not found", service_id)),
@@ -117,7 +131,10 @@ impl ServiceRegistry {
     }
 
     /// Get services that support a specific capability
-    pub fn get_services_with_capability(&self, capability: &ServiceCapability) -> Vec<&FederatedService> {
+    pub fn get_services_with_capability(
+        &self,
+        capability: &ServiceCapability,
+    ) -> Vec<&FederatedService> {
         self.services
             .values()
             .filter(|service| service.capabilities.contains(capability))
@@ -130,9 +147,10 @@ impl ServiceRegistry {
             .values()
             .filter(|service| {
                 patterns.iter().any(|pattern| {
-                    service.data_patterns.iter().any(|service_pattern| {
-                        pattern_matches(pattern, service_pattern)
-                    })
+                    service
+                        .data_patterns
+                        .iter()
+                        .any(|service_pattern| pattern_matches(pattern, service_pattern))
                 })
             })
             .collect()
@@ -145,7 +163,10 @@ impl ServiceRegistry {
         let total_services = self.services.len();
 
         for service in self.services.values() {
-            let status = self.check_service_health(service).await.unwrap_or(ServiceStatus::Unknown);
+            let status = self
+                .check_service_health(service)
+                .await
+                .unwrap_or(ServiceStatus::Unknown);
             if status == ServiceStatus::Healthy {
                 healthy_count += 1;
             }
@@ -197,7 +218,7 @@ impl ServiceRegistry {
     /// Check health of a specific service
     async fn check_service_health(&self, service: &FederatedService) -> Result<ServiceStatus> {
         let start_time = Instant::now();
-        
+
         // Try different health check approaches based on service type
         let health_result = match service.service_type {
             ServiceType::Sparql => self.check_sparql_health(service).await,
@@ -206,7 +227,7 @@ impl ServiceRegistry {
                 // For hybrid services, check both protocols
                 let sparql_ok = self.check_sparql_health(service).await.is_ok();
                 let graphql_ok = self.check_graphql_health(service).await.is_ok();
-                
+
                 if sparql_ok || graphql_ok {
                     Ok(ServiceStatus::Healthy)
                 } else {
@@ -214,33 +235,43 @@ impl ServiceRegistry {
                 }
             }
         };
-        
+
         let response_time = start_time.elapsed();
-        debug!("Health check for {} completed in {:?}: {:?}", service.id, response_time, health_result);
-        
+        debug!(
+            "Health check for {} completed in {:?}: {:?}",
+            service.id, response_time, health_result
+        );
+
         health_result
     }
-    
+
     /// Check SPARQL service health
     async fn check_sparql_health(&self, service: &FederatedService) -> Result<ServiceStatus> {
         let health_query = "ASK { ?s ?p ?o }";
-        
+
         let mut headers = HeaderMap::new();
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/sparql-query"));
-        headers.insert(ACCEPT, HeaderValue::from_static("application/sparql-results+json"));
-        
+        headers.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/sparql-query"),
+        );
+        headers.insert(
+            ACCEPT,
+            HeaderValue::from_static("application/sparql-results+json"),
+        );
+
         // Add authentication if configured
         if let Some(auth) = &service.auth {
             self.add_auth_header(&mut headers, auth)?;
         }
-        
-        let response = self.http_client
+
+        let response = self
+            .http_client
             .post(&service.endpoint)
             .headers(headers)
             .body(health_query)
             .send()
             .await;
-            
+
         match response {
             Ok(resp) if resp.status().is_success() => Ok(ServiceStatus::Healthy),
             Ok(resp) if resp.status().is_server_error() => Ok(ServiceStatus::Unavailable),
@@ -248,28 +279,29 @@ impl ServiceRegistry {
             Err(_) => Ok(ServiceStatus::Unavailable),
         }
     }
-    
+
     /// Check GraphQL service health
     async fn check_graphql_health(&self, service: &FederatedService) -> Result<ServiceStatus> {
         let health_query = serde_json::json!({
             "query": "{ __schema { queryType { name } } }"
         });
-        
+
         let mut headers = HeaderMap::new();
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-        
+
         // Add authentication if configured
         if let Some(auth) = &service.auth {
             self.add_auth_header(&mut headers, auth)?;
         }
-        
-        let response = self.http_client
+
+        let response = self
+            .http_client
             .post(&service.endpoint)
             .headers(headers)
             .json(&health_query)
             .send()
             .await;
-            
+
         match response {
             Ok(resp) if resp.status().is_success() => {
                 // Try to parse the response to ensure it's valid GraphQL
@@ -292,33 +324,51 @@ impl ServiceRegistry {
             endpoint: service.endpoint.clone(),
             max_connections: 10, // TODO: Make configurable
             active_connections: 0,
-            created_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
-            last_used: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+            created_at: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+            last_used: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
         };
-        
+
         let mut pools = self.connection_pools.write().await;
         pools.insert(service.id.clone(), pool);
-        
+
         debug!("Initialized connection pool for service: {}", service.id);
         Ok(())
     }
-    
+
     /// Detect service capabilities through introspection
-    async fn detect_service_capabilities(&self, service: &FederatedService) -> Result<HashSet<ServiceCapability>> {
+    async fn detect_service_capabilities(
+        &self,
+        service: &FederatedService,
+    ) -> Result<HashSet<ServiceCapability>> {
         let mut detected_capabilities = HashSet::new();
-        
+
         match service.service_type {
             ServiceType::Sparql => {
                 // Test various SPARQL features
-                if self.test_sparql_feature(service, "SELECT ?s WHERE { ?s ?p ?o } LIMIT 1").await {
+                if self
+                    .test_sparql_feature(service, "SELECT ?s WHERE { ?s ?p ?o } LIMIT 1")
+                    .await
+                {
                     detected_capabilities.insert(ServiceCapability::SparqlQuery);
                 }
-                
+
                 if self.test_sparql_feature(service, "INSERT DATA { <http://example.org/test> <http://example.org/test> \"test\" }").await {
                     detected_capabilities.insert(ServiceCapability::SparqlUpdate);
                 }
-                
-                if self.test_sparql_feature(service, "SELECT * WHERE { SERVICE <http://example.org/> { ?s ?p ?o } }").await {
+
+                if self
+                    .test_sparql_feature(
+                        service,
+                        "SELECT * WHERE { SERVICE <http://example.org/> { ?s ?p ?o } }",
+                    )
+                    .await
+                {
                     detected_capabilities.insert(ServiceCapability::SparqlService);
                 }
             }
@@ -338,62 +388,72 @@ impl ServiceRegistry {
                 }
             }
         }
-        
+
         Ok(detected_capabilities)
     }
-    
+
     /// Test a specific SPARQL feature
     async fn test_sparql_feature(&self, service: &FederatedService, query: &str) -> bool {
         let mut headers = HeaderMap::new();
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/sparql-query"));
-        headers.insert(ACCEPT, HeaderValue::from_static("application/sparql-results+json"));
-        
+        headers.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/sparql-query"),
+        );
+        headers.insert(
+            ACCEPT,
+            HeaderValue::from_static("application/sparql-results+json"),
+        );
+
         if let Some(auth) = &service.auth {
             if self.add_auth_header(&mut headers, auth).is_err() {
                 return false;
             }
         }
-        
-        let response = self.http_client
+
+        let response = self
+            .http_client
             .post(&service.endpoint)
             .headers(headers)
             .body(query.to_string())
             .send()
             .await;
-            
+
         matches!(response, Ok(resp) if resp.status().is_success())
     }
-    
+
     /// Test GraphQL introspection capability
     async fn test_graphql_introspection(&self, service: &FederatedService) -> bool {
         let introspection_query = serde_json::json!({
             "query": "{ __schema { types { name } } }"
         });
-        
+
         let mut headers = HeaderMap::new();
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-        
+
         if let Some(auth) = &service.auth {
             if self.add_auth_header(&mut headers, auth).is_err() {
                 return false;
             }
         }
-        
-        let response = self.http_client
+
+        let response = self
+            .http_client
             .post(&service.endpoint)
             .headers(headers)
             .json(&introspection_query)
             .send()
             .await;
-            
+
         matches!(response, Ok(resp) if resp.status().is_success())
     }
-    
+
     /// Add authentication header based on auth configuration
     fn add_auth_header(&self, headers: &mut HeaderMap, auth: &AuthConfig) -> Result<()> {
         match &auth.auth_type {
             AuthType::Basic => {
-                if let (Some(username), Some(password)) = (&auth.credentials.username, &auth.credentials.password) {
+                if let (Some(username), Some(password)) =
+                    (&auth.credentials.username, &auth.credentials.password)
+                {
                     let credentials = format!("{}:{}", username, password);
                     let encoded = encode(credentials.as_bytes());
                     let auth_value = format!("Basic {}", encoded);
@@ -419,24 +479,27 @@ impl ServiceRegistry {
         }
         Ok(())
     }
-    
+
     /// Get connection pool statistics
     pub async fn get_connection_pool_stats(&self) -> HashMap<String, ConnectionPoolStats> {
         let pools = self.connection_pools.read().await;
         let mut stats = HashMap::new();
-        
+
         for (service_id, pool) in pools.iter() {
-            stats.insert(service_id.clone(), ConnectionPoolStats {
-                max_connections: pool.max_connections,
-                active_connections: pool.active_connections,
-                created_at: pool.created_at,
-                last_used: pool.last_used,
-            });
+            stats.insert(
+                service_id.clone(),
+                ConnectionPoolStats {
+                    max_connections: pool.max_connections,
+                    active_connections: pool.active_connections,
+                    created_at: pool.created_at,
+                    last_used: pool.last_used,
+                },
+            );
         }
-        
+
         stats
     }
-    
+
     /// Check rate limits for a service
     pub fn check_rate_limit(&self, service_id: &str) -> bool {
         if let Some(limiter) = self.rate_limiters.get(service_id) {
@@ -513,7 +576,9 @@ impl FederatedService {
             capabilities: [
                 ServiceCapability::SparqlQuery,
                 ServiceCapability::SparqlUpdate,
-            ].into_iter().collect(),
+            ]
+            .into_iter()
+            .collect(),
             data_patterns: vec!["*".to_string()], // Accept all patterns by default
             auth: None,
             metadata: ServiceMetadata::default(),
@@ -532,7 +597,9 @@ impl FederatedService {
                 ServiceCapability::GraphQLQuery,
                 ServiceCapability::GraphQLMutation,
                 ServiceCapability::GraphQLSubscription,
-            ].into_iter().collect(),
+            ]
+            .into_iter()
+            .collect(),
             data_patterns: vec!["*".to_string()],
             auth: None,
             metadata: ServiceMetadata::default(),
@@ -545,19 +612,18 @@ impl FederatedService {
         if self.id.is_empty() {
             return Err(anyhow!("Service ID cannot be empty"));
         }
-        
+
         if self.endpoint.is_empty() {
             return Err(anyhow!("Service endpoint cannot be empty"));
         }
-        
+
         // Validate URL format
-        url::Url::parse(&self.endpoint)
-            .map_err(|e| anyhow!("Invalid endpoint URL: {}", e))?;
-        
+        url::Url::parse(&self.endpoint).map_err(|e| anyhow!("Invalid endpoint URL: {}", e))?;
+
         if self.capabilities.is_empty() {
             return Err(anyhow!("Service must have at least one capability"));
         }
-        
+
         Ok(())
     }
 
@@ -568,9 +634,9 @@ impl FederatedService {
 
     /// Check if service can handle a specific data pattern
     pub fn handles_pattern(&self, pattern: &str) -> bool {
-        self.data_patterns.iter().any(|service_pattern| {
-            pattern_matches(pattern, service_pattern)
-        })
+        self.data_patterns
+            .iter()
+            .any(|service_pattern| pattern_matches(pattern, service_pattern))
     }
 }
 
@@ -727,7 +793,7 @@ fn pattern_matches(query_pattern: &str, service_pattern: &str) -> bool {
     if service_pattern == "*" {
         return true;
     }
-    
+
     if service_pattern.contains('*') {
         // Simple wildcard matching
         let parts: Vec<&str> = service_pattern.split('*').collect();
@@ -737,7 +803,7 @@ fn pattern_matches(query_pattern: &str, service_pattern: &str) -> bool {
             return query_pattern.starts_with(prefix) && query_pattern.ends_with(suffix);
         }
     }
-    
+
     query_pattern == service_pattern
 }
 
@@ -790,13 +856,13 @@ mod tests {
     #[tokio::test]
     async fn test_capability_filtering() {
         let mut registry = ServiceRegistry::new();
-        
+
         let sparql_service = FederatedService::new_sparql(
             "sparql-service".to_string(),
             "SPARQL Service".to_string(),
             "http://example.com/sparql".to_string(),
         );
-        
+
         let graphql_service = FederatedService::new_graphql(
             "graphql-service".to_string(),
             "GraphQL Service".to_string(),
@@ -807,15 +873,17 @@ mod tests {
         let _ = registry.register(sparql_service).await;
         let _ = registry.register(graphql_service).await;
 
-        let sparql_services = registry.get_services_with_capability(&ServiceCapability::SparqlQuery);
-        let graphql_services = registry.get_services_with_capability(&ServiceCapability::GraphQLQuery);
-        
+        let sparql_services =
+            registry.get_services_with_capability(&ServiceCapability::SparqlQuery);
+        let graphql_services =
+            registry.get_services_with_capability(&ServiceCapability::GraphQLQuery);
+
         // Services may not register due to health check failures in test environment
         // Focus on testing the filtering logic itself
         assert!(sparql_services.len() <= 1);
         assert!(graphql_services.len() <= 1);
     }
-    
+
     #[tokio::test]
     async fn test_connection_pool_initialization() {
         let registry = ServiceRegistry::new();
@@ -824,27 +892,27 @@ mod tests {
             "Test Service".to_string(),
             "http://example.com/sparql".to_string(),
         );
-        
+
         let result = registry.initialize_connection_pool(&service).await;
         assert!(result.is_ok());
-        
+
         let pools = registry.connection_pools.read().await;
         assert!(pools.contains_key("test-service"));
     }
-    
+
     #[test]
     fn test_rate_limit_check() {
         let registry = ServiceRegistry::new();
-        
+
         // Service without rate limit should always pass
         assert!(registry.check_rate_limit("non-existent-service"));
     }
-    
+
     #[test]
     fn test_auth_header_creation() {
         let registry = ServiceRegistry::new();
         let mut headers = HeaderMap::new();
-        
+
         let auth_config = AuthConfig {
             auth_type: AuthType::Basic,
             credentials: AuthCredentials {
@@ -855,7 +923,7 @@ mod tests {
                 oauth_config: None,
             },
         };
-        
+
         let result = registry.add_auth_header(&mut headers, &auth_config);
         assert!(result.is_ok());
         assert!(headers.contains_key(AUTHORIZATION));

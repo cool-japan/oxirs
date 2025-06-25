@@ -3,11 +3,13 @@
 //! This module provides seamless integration between the oxirs-rule engine
 //! and oxirs-core RDF model, allowing rules to operate directly on core RDF types.
 
-use crate::{Rule, RuleAtom, Term, RuleEngine};
+use crate::{Rule, RuleAtom, RuleEngine, Term};
 use anyhow::Result;
-use oxirs_core::{OxirsError, Triple, Quad, NamedNode, Literal, Subject, Predicate, Object, GraphName, Variable};
-use oxirs_core::store::Store;
 use oxirs_core::model::RdfTerm;
+use oxirs_core::store::Store;
+use oxirs_core::{
+    GraphName, Literal, NamedNode, Object, OxirsError, Predicate, Quad, Subject, Triple, Variable,
+};
 use std::collections::HashMap;
 use tracing::{debug, info, trace, warn};
 
@@ -56,13 +58,14 @@ impl RuleIntegration {
     /// Load facts from the core store into the rule engine
     pub fn load_facts_from_store(&mut self) -> Result<usize> {
         let quads = self.store.iter_quads()?;
-        let rule_atoms: Vec<RuleAtom> = quads.into_iter()
+        let rule_atoms: Vec<RuleAtom> = quads
+            .into_iter()
             .map(|quad| self.quad_to_rule_atom(&quad))
             .collect();
-        
+
         let fact_count = rule_atoms.len();
         self.rule_engine.add_facts(rule_atoms);
-        
+
         info!("Loaded {} facts from store into rule engine", fact_count);
         Ok(fact_count)
     }
@@ -71,10 +74,10 @@ impl RuleIntegration {
     pub fn apply_rules(&mut self) -> Result<usize> {
         // Load current facts from store
         self.load_facts_from_store()?;
-        
+
         // Apply forward chaining
         let derived_facts = self.rule_engine.forward_chain(&[])?;
-        
+
         // Convert derived facts back to core model and store them
         let mut new_fact_count = 0;
         for rule_atom in derived_facts {
@@ -84,7 +87,7 @@ impl RuleIntegration {
                 }
             }
         }
-        
+
         info!("Applied rules and derived {} new facts", new_fact_count);
         Ok(new_fact_count)
     }
@@ -93,28 +96,30 @@ impl RuleIntegration {
     pub fn prove_goal(&mut self, goal_triple: &Triple) -> Result<bool> {
         // Convert triple to rule atom
         let goal_atom = self.triple_to_rule_atom(goal_triple);
-        
+
         // Load current facts
         self.load_facts_from_store()?;
-        
+
         // Attempt to prove the goal
         self.rule_engine.backward_chain(&goal_atom)
     }
 
     /// Find all solutions for a query pattern
-    pub fn query_with_rules(&mut self, 
-                           subject: Option<&Subject>,
-                           predicate: Option<&Predicate>, 
-                           object: Option<&Object>) -> Result<Vec<Triple>> {
+    pub fn query_with_rules(
+        &mut self,
+        subject: Option<&Subject>,
+        predicate: Option<&Predicate>,
+        object: Option<&Object>,
+    ) -> Result<Vec<Triple>> {
         // First get direct matches from store
         let direct_matches = self.store.query_triples(subject, predicate, object)?;
-        
+
         // Apply rules to potentially derive more facts
         self.apply_rules()?;
-        
+
         // Query again after applying rules
         let rule_enhanced_matches = self.store.query_triples(subject, predicate, object)?;
-        
+
         Ok(rule_enhanced_matches)
     }
 
@@ -123,7 +128,7 @@ impl RuleIntegration {
         let store_quad_count = self.store.len()?;
         let rule_fact_count = self.rule_engine.get_facts().len();
         let rule_count = self.rule_engine.rules.len();
-        
+
         Ok(IntegrationStats {
             store_quad_count,
             rule_fact_count,
@@ -152,16 +157,20 @@ impl RuleIntegration {
     /// Convert a RuleAtom to a core Triple (if possible)
     fn rule_atom_to_triple(&self, atom: &RuleAtom) -> Result<Triple> {
         match atom {
-            RuleAtom::Triple { subject, predicate, object } => {
+            RuleAtom::Triple {
+                subject,
+                predicate,
+                object,
+            } => {
                 let core_subject = self.term_to_subject(subject)?;
                 let core_predicate = self.term_to_predicate(predicate)?;
                 let core_object = self.term_to_object(object)?;
-                
+
                 Ok(Triple::new(core_subject, core_predicate, core_object))
             }
-            RuleAtom::Builtin { .. } => {
-                Err(anyhow::anyhow!("Cannot convert builtin rule atom to triple"))
-            }
+            RuleAtom::Builtin { .. } => Err(anyhow::anyhow!(
+                "Cannot convert builtin rule atom to triple"
+            )),
         }
     }
 
@@ -204,27 +213,21 @@ impl RuleIntegration {
                     Ok(Subject::NamedNode(NamedNode::new(value)?))
                 }
             }
-            Term::Variable(_) => {
-                Err(anyhow::anyhow!("Cannot convert unbound variable to subject"))
-            }
-            Term::Literal(_) => {
-                Err(anyhow::anyhow!("Literals cannot be subjects in RDF"))
-            }
+            Term::Variable(_) => Err(anyhow::anyhow!(
+                "Cannot convert unbound variable to subject"
+            )),
+            Term::Literal(_) => Err(anyhow::anyhow!("Literals cannot be subjects in RDF")),
         }
     }
 
     /// Convert rule Term to core Predicate
     fn term_to_predicate(&self, term: &Term) -> Result<Predicate> {
         match term {
-            Term::Constant(value) => {
-                Ok(Predicate::NamedNode(NamedNode::new(value)?))
-            }
-            Term::Variable(_) => {
-                Err(anyhow::anyhow!("Cannot convert unbound variable to predicate"))
-            }
-            Term::Literal(_) => {
-                Err(anyhow::anyhow!("Literals cannot be predicates in RDF"))
-            }
+            Term::Constant(value) => Ok(Predicate::NamedNode(NamedNode::new(value)?)),
+            Term::Variable(_) => Err(anyhow::anyhow!(
+                "Cannot convert unbound variable to predicate"
+            )),
+            Term::Literal(_) => Err(anyhow::anyhow!("Literals cannot be predicates in RDF")),
         }
     }
 
@@ -240,27 +243,26 @@ impl RuleIntegration {
                     Ok(Object::NamedNode(NamedNode::new(value)?))
                 }
             }
-            Term::Literal(value) => {
-                Ok(Object::Literal(Literal::new(value)))
-            }
-            Term::Variable(_) => {
-                Err(anyhow::anyhow!("Cannot convert unbound variable to object"))
-            }
+            Term::Literal(value) => Ok(Object::Literal(Literal::new(value))),
+            Term::Variable(_) => Err(anyhow::anyhow!("Cannot convert unbound variable to object")),
         }
     }
 
     /// Enhanced streaming data processing
-    pub fn process_stream(&mut self, data_stream: impl Iterator<Item = Result<Triple, OxirsError>>) -> Result<StreamingStats> {
+    pub fn process_stream(
+        &mut self,
+        data_stream: impl Iterator<Item = Result<Triple, OxirsError>>,
+    ) -> Result<StreamingStats> {
         let mut processed = 0;
         let mut derived = 0;
         let mut errors = 0;
-        
+
         for triple_result in data_stream {
             match triple_result {
                 Ok(triple) => {
                     if self.store.insert_triple(triple)? {
                         processed += 1;
-                        
+
                         // Apply rules incrementally
                         if processed % 1000 == 0 {
                             let new_facts = self.apply_rules()?;
@@ -274,35 +276,38 @@ impl RuleIntegration {
                 }
             }
         }
-        
+
         // Final rule application
         let final_derived = self.apply_rules()?;
         derived += final_derived;
-        
+
         Ok(StreamingStats {
             processed_triples: processed,
             derived_facts: derived,
             errors,
         })
     }
-    
+
     /// Enhanced namespace management for better IRI handling
     pub fn add_namespace_prefix(&mut self, prefix: &str, namespace_iri: &str) -> Result<()> {
         // Store namespace mappings for efficient rule processing
         // This enhances the integration with better IRI handling as mentioned in TODO
-        info!("Adding namespace prefix '{}' -> '{}'", prefix, namespace_iri);
-        
+        info!(
+            "Adding namespace prefix '{}' -> '{}'",
+            prefix, namespace_iri
+        );
+
         // TODO: In full implementation, this would be stored and used for
         // efficient IRI expansion/compression during rule processing
         Ok(())
     }
-    
+
     /// Expand prefixed IRI to full IRI using namespace mappings
     pub fn expand_prefixed_iri(&self, prefixed_iri: &str) -> Result<String> {
         if let Some(colon_pos) = prefixed_iri.find(':') {
             let prefix = &prefixed_iri[..colon_pos];
             let local_name = &prefixed_iri[colon_pos + 1..];
-            
+
             // In a full implementation, this would look up the prefix in stored mappings
             // For now, return common namespace expansions
             let expanded = match prefix {
@@ -312,41 +317,41 @@ impl RuleIntegration {
                 "xsd" => format!("http://www.w3.org/2001/XMLSchema#{}", local_name),
                 _ => prefixed_iri.to_string(), // Return as-is if prefix not recognized
             };
-            
+
             Ok(expanded)
         } else {
             Ok(prefixed_iri.to_string())
         }
     }
-    
+
     /// Validate RDF data before rule processing
     pub fn validate_rdf_data(&self) -> Result<ValidationReport> {
         let quad_count = self.store.len()?;
         let mut warnings = Vec::new();
         let mut errors = Vec::new();
-        
+
         // Basic validation checks
         if quad_count == 0 {
             warnings.push("Store is empty - no data to validate".to_string());
         }
-        
+
         // TODO: Add more comprehensive validation
         // - Check for malformed IRIs
         // - Validate literal datatypes
         // - Check for circular references
-        
+
         Ok(ValidationReport {
             total_triples: quad_count,
             warnings,
             errors,
         })
     }
-    
+
     /// Batch process multiple triples with optimized rule application
     pub fn batch_process(&mut self, triples: Vec<Triple>) -> Result<BatchProcessingStats> {
         let start_time = std::time::Instant::now();
         let initial_fact_count = self.store.len()?;
-        
+
         // Insert all triples first
         let mut inserted = 0;
         for triple in triples {
@@ -354,12 +359,12 @@ impl RuleIntegration {
                 inserted += 1;
             }
         }
-        
+
         // Apply rules once after all insertions
         let derived = self.apply_rules()?;
         let final_fact_count = self.store.len()?;
         let duration = start_time.elapsed();
-        
+
         Ok(BatchProcessingStats {
             input_triples: inserted,
             derived_facts: derived,
@@ -368,7 +373,7 @@ impl RuleIntegration {
             processing_time: duration,
         })
     }
-    
+
     /// Export reasoning results in different formats
     pub fn export_reasoning_results(&self, format: ExportFormat) -> Result<String> {
         match format {
@@ -392,19 +397,19 @@ impl RuleIntegration {
             }
         }
     }
-    
+
     /// Advanced reasoning analysis
     pub fn analyze_reasoning_coverage(&mut self) -> Result<ReasoningAnalysis> {
         let initial_facts = self.store.len()?;
         let derived = self.apply_rules()?;
         let final_facts = self.store.len()?;
-        
+
         let coverage_ratio = if initial_facts > 0 {
             derived as f64 / initial_facts as f64
         } else {
             0.0
         };
-        
+
         Ok(ReasoningAnalysis {
             initial_fact_count: initial_facts,
             derived_fact_count: derived,
@@ -413,23 +418,23 @@ impl RuleIntegration {
             active_rules: self.rule_engine.rules.len(),
         })
     }
-    
+
     /// Find reasoning bottlenecks and optimization opportunities
     pub fn performance_analysis(&mut self) -> Result<PerformanceAnalysis> {
         let start_time = std::time::Instant::now();
-        
+
         // Measure rule loading time
         let rule_load_start = std::time::Instant::now();
         self.load_facts_from_store()?;
         let rule_load_time = rule_load_start.elapsed();
-        
+
         // Measure reasoning time
         let reasoning_start = std::time::Instant::now();
         let derived = self.apply_rules()?;
         let reasoning_time = reasoning_start.elapsed();
-        
+
         let total_time = start_time.elapsed();
-        
+
         Ok(PerformanceAnalysis {
             rule_loading_time: rule_load_time,
             reasoning_time,
@@ -441,7 +446,7 @@ impl RuleIntegration {
             },
         })
     }
-    
+
     /// Helper method to format objects for N-Triples export
     fn format_object_for_ntriples(&self, object: &Object) -> String {
         match object {
@@ -450,12 +455,20 @@ impl RuleIntegration {
             Object::Literal(literal) => {
                 if let Some(datatype) = literal.datatype() {
                     if datatype.as_str() == "http://www.w3.org/2001/XMLSchema#string" {
-                        format!("\"{}\"@{}", literal.value(), literal.language().unwrap_or("en"))
+                        format!(
+                            "\"{}\"@{}",
+                            literal.value(),
+                            literal.language().unwrap_or("en")
+                        )
                     } else {
                         format!("\"{}\"^^<{}>", literal.value(), datatype.as_str())
                     }
                 } else {
-                    format!("\"{}\"@{}", literal.value(), literal.language().unwrap_or("en"))
+                    format!(
+                        "\"{}\"@{}",
+                        literal.value(),
+                        literal.language().unwrap_or("en")
+                    )
                 }
             }
             Object::Variable(var) => format!("?{}", var.as_str()),
@@ -528,46 +541,70 @@ pub struct ValidationReport {
 
 impl std::fmt::Display for IntegrationStats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Store: {} quads, Rules: {} facts/{} rules", 
-               self.store_quad_count, self.rule_fact_count, self.rule_count)
+        write!(
+            f,
+            "Store: {} quads, Rules: {} facts/{} rules",
+            self.store_quad_count, self.rule_fact_count, self.rule_count
+        )
     }
 }
 
 impl std::fmt::Display for StreamingStats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Processed: {} triples, Derived: {} facts, Errors: {}", 
-               self.processed_triples, self.derived_facts, self.errors)
+        write!(
+            f,
+            "Processed: {} triples, Derived: {} facts, Errors: {}",
+            self.processed_triples, self.derived_facts, self.errors
+        )
     }
 }
 
 impl std::fmt::Display for BatchProcessingStats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Batch: {} input -> {} derived in {:?} ({} -> {} total facts)", 
-               self.input_triples, self.derived_facts, self.processing_time,
-               self.initial_fact_count, self.final_fact_count)
+        write!(
+            f,
+            "Batch: {} input -> {} derived in {:?} ({} -> {} total facts)",
+            self.input_triples,
+            self.derived_facts,
+            self.processing_time,
+            self.initial_fact_count,
+            self.final_fact_count
+        )
     }
 }
 
 impl std::fmt::Display for ReasoningAnalysis {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Coverage: {:.2}% ({}/{} facts, {} rules)", 
-               self.reasoning_coverage_ratio * 100.0,
-               self.derived_fact_count, self.initial_fact_count, self.active_rules)
+        write!(
+            f,
+            "Coverage: {:.2}% ({}/{} facts, {} rules)",
+            self.reasoning_coverage_ratio * 100.0,
+            self.derived_fact_count,
+            self.initial_fact_count,
+            self.active_rules
+        )
     }
 }
 
 impl std::fmt::Display for PerformanceAnalysis {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Performance: {:.2} facts/sec (load: {:?}, reason: {:?}, total: {:?})", 
-               self.facts_per_second, self.rule_loading_time, 
-               self.reasoning_time, self.total_time)
+        write!(
+            f,
+            "Performance: {:.2} facts/sec (load: {:?}, reason: {:?}, total: {:?})",
+            self.facts_per_second, self.rule_loading_time, self.reasoning_time, self.total_time
+        )
     }
 }
 
 impl std::fmt::Display for ValidationReport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Validation: {} triples, {} warnings, {} errors", 
-               self.total_triples, self.warnings.len(), self.errors.len())
+        write!(
+            f,
+            "Validation: {} triples, {} warnings, {} errors",
+            self.total_triples,
+            self.warnings.len(),
+            self.errors.len()
+        )
     }
 }
 
@@ -582,22 +619,26 @@ pub mod rule_builders {
             body: vec![
                 RuleAtom::Triple {
                     subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("http://www.w3.org/2000/01/rdf-schema#subClassOf".to_string()),
+                    predicate: Term::Constant(
+                        "http://www.w3.org/2000/01/rdf-schema#subClassOf".to_string(),
+                    ),
                     object: Term::Variable("Y".to_string()),
                 },
                 RuleAtom::Triple {
                     subject: Term::Variable("Y".to_string()),
-                    predicate: Term::Constant("http://www.w3.org/2000/01/rdf-schema#subClassOf".to_string()),
+                    predicate: Term::Constant(
+                        "http://www.w3.org/2000/01/rdf-schema#subClassOf".to_string(),
+                    ),
                     object: Term::Variable("Z".to_string()),
                 },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("http://www.w3.org/2000/01/rdf-schema#subClassOf".to_string()),
-                    object: Term::Variable("Z".to_string()),
-                },
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant(
+                    "http://www.w3.org/2000/01/rdf-schema#subClassOf".to_string(),
+                ),
+                object: Term::Variable("Z".to_string()),
+            }],
         }
     }
 
@@ -608,22 +649,26 @@ pub mod rule_builders {
             body: vec![
                 RuleAtom::Triple {
                     subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string()),
+                    predicate: Term::Constant(
+                        "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
+                    ),
                     object: Term::Variable("C1".to_string()),
                 },
                 RuleAtom::Triple {
                     subject: Term::Variable("C1".to_string()),
-                    predicate: Term::Constant("http://www.w3.org/2000/01/rdf-schema#subClassOf".to_string()),
+                    predicate: Term::Constant(
+                        "http://www.w3.org/2000/01/rdf-schema#subClassOf".to_string(),
+                    ),
                     object: Term::Variable("C2".to_string()),
                 },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string()),
-                    object: Term::Variable("C2".to_string()),
-                },
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant(
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
+                ),
+                object: Term::Variable("C2".to_string()),
+            }],
         }
     }
 
@@ -634,7 +679,9 @@ pub mod rule_builders {
             body: vec![
                 RuleAtom::Triple {
                     subject: Term::Variable("P".to_string()),
-                    predicate: Term::Constant("http://www.w3.org/2000/01/rdf-schema#domain".to_string()),
+                    predicate: Term::Constant(
+                        "http://www.w3.org/2000/01/rdf-schema#domain".to_string(),
+                    ),
                     object: Term::Variable("C".to_string()),
                 },
                 RuleAtom::Triple {
@@ -643,13 +690,13 @@ pub mod rule_builders {
                     object: Term::Variable("Y".to_string()),
                 },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string()),
-                    object: Term::Variable("C".to_string()),
-                },
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant(
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
+                ),
+                object: Term::Variable("C".to_string()),
+            }],
         }
     }
 
@@ -660,7 +707,9 @@ pub mod rule_builders {
             body: vec![
                 RuleAtom::Triple {
                     subject: Term::Variable("P".to_string()),
-                    predicate: Term::Constant("http://www.w3.org/2000/01/rdf-schema#range".to_string()),
+                    predicate: Term::Constant(
+                        "http://www.w3.org/2000/01/rdf-schema#range".to_string(),
+                    ),
                     object: Term::Variable("C".to_string()),
                 },
                 RuleAtom::Triple {
@@ -669,13 +718,13 @@ pub mod rule_builders {
                     object: Term::Variable("Y".to_string()),
                 },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("Y".to_string()),
-                    predicate: Term::Constant("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string()),
-                    object: Term::Variable("C".to_string()),
-                },
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("Y".to_string()),
+                predicate: Term::Constant(
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
+                ),
+                object: Term::Variable("C".to_string()),
+            }],
         }
     }
 
@@ -693,82 +742,89 @@ pub mod rule_builders {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oxirs_core::{NamedNode, Literal, Triple};
+    use oxirs_core::{Literal, NamedNode, Triple};
 
     #[test]
     fn test_integration_basic_workflow() {
         let mut integration = RuleIntegration::new();
-        
+
         // Add some test data to the store
         let subject = NamedNode::new("http://example.org/person").unwrap();
         let predicate = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
         let object = NamedNode::new("http://example.org/Human").unwrap();
-        
+
         let triple = Triple::new(
             subject.clone(),
             predicate.clone(),
-            Object::NamedNode(object)
+            Object::NamedNode(object),
         );
-        
+
         integration.store.insert_triple(triple.clone()).unwrap();
-        
+
         // Add a rule: Human -> Mortal
         let rule = Rule {
             name: "human_mortal".to_string(),
-            body: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string()),
-                    object: Term::Constant("http://example.org/Human".to_string()),
-                },
-            ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string()),
-                    object: Term::Constant("http://example.org/Mortal".to_string()),
-                },
-            ],
+            body: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant(
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
+                ),
+                object: Term::Constant("http://example.org/Human".to_string()),
+            }],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant(
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
+                ),
+                object: Term::Constant("http://example.org/Mortal".to_string()),
+            }],
         };
-        
+
         integration.add_rule(rule);
-        
+
         // Apply rules
         let derived_count = integration.apply_rules().unwrap();
         assert!(derived_count > 0);
-        
+
         // Check that the mortal type was derived
         let mortal_type = NamedNode::new("http://example.org/Mortal").unwrap();
-        let results = integration.store.query_triples(
-            Some(&Subject::NamedNode(subject)),
-            Some(&Predicate::NamedNode(predicate)),
-            Some(&Object::NamedNode(mortal_type))
-        ).unwrap();
-        
+        let results = integration
+            .store
+            .query_triples(
+                Some(&Subject::NamedNode(subject)),
+                Some(&Predicate::NamedNode(predicate)),
+                Some(&Object::NamedNode(mortal_type)),
+            )
+            .unwrap();
+
         assert!(!results.is_empty());
     }
 
     #[test]
     fn test_conversion_functions() {
         let integration = RuleIntegration::new();
-        
+
         // Test triple to rule atom conversion
         let subject = NamedNode::new("http://example.org/subject").unwrap();
         let predicate = NamedNode::new("http://example.org/predicate").unwrap();
         let object = Literal::new("test");
-        
+
         let triple = Triple::new(subject, predicate, object);
         let rule_atom = integration.triple_to_rule_atom(&triple);
-        
+
         match &rule_atom {
-            RuleAtom::Triple { subject: s, predicate: p, object: o } => {
+            RuleAtom::Triple {
+                subject: s,
+                predicate: p,
+                object: o,
+            } => {
                 assert!(matches!(s, Term::Constant(_)));
                 assert!(matches!(p, Term::Constant(_)));
                 assert!(matches!(o, Term::Literal(_)));
             }
             _ => panic!("Expected triple rule atom"),
         }
-        
+
         // Test rule atom to triple conversion
         let converted_triple = integration.rule_atom_to_triple(&rule_atom).unwrap();
         // Check subject and predicate types
@@ -786,7 +842,7 @@ mod tests {
     fn test_rule_builders() {
         let rules = rule_builders::all_rdfs_rules();
         assert_eq!(rules.len(), 4);
-        
+
         // Check that all rules have proper names
         let rule_names: Vec<String> = rules.iter().map(|r| r.name.clone()).collect();
         assert!(rule_names.contains(&"rdfs_subclass_transitivity".to_string()));
@@ -798,44 +854,47 @@ mod tests {
     #[test]
     fn test_query_with_rules() {
         let mut integration = RuleIntegration::new();
-        
+
         // Add RDFS rules
         integration.add_rules(rule_builders::all_rdfs_rules());
-        
+
         // Add some test ontology data
         let person = NamedNode::new("http://example.org/Person").unwrap();
         let student = NamedNode::new("http://example.org/Student").unwrap();
-        let subclass_pred = NamedNode::new("http://www.w3.org/2000/01/rdf-schema#subClassOf").unwrap();
+        let subclass_pred =
+            NamedNode::new("http://www.w3.org/2000/01/rdf-schema#subClassOf").unwrap();
         let type_pred = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
         let alice = NamedNode::new("http://example.org/alice").unwrap();
-        
+
         // Student subClassOf Person
         let subclass_triple = Triple::new(
             Subject::NamedNode(student.clone()),
             Predicate::NamedNode(subclass_pred),
-            Object::NamedNode(person.clone())
+            Object::NamedNode(person.clone()),
         );
-        
+
         // alice type Student
         let alice_type_triple = Triple::new(
             Subject::NamedNode(alice.clone()),
             Predicate::NamedNode(type_pred.clone()),
-            Object::NamedNode(student)
+            Object::NamedNode(student),
         );
-        
+
         integration.store.insert_triple(subclass_triple).unwrap();
         integration.store.insert_triple(alice_type_triple).unwrap();
-        
+
         // Query for all types of alice (should include both Student and Person via inference)
-        let results = integration.query_with_rules(
-            Some(&Subject::NamedNode(alice)),
-            Some(&Predicate::NamedNode(type_pred)),
-            None
-        ).unwrap();
-        
+        let results = integration
+            .query_with_rules(
+                Some(&Subject::NamedNode(alice)),
+                Some(&Predicate::NamedNode(type_pred)),
+                None,
+            )
+            .unwrap();
+
         // Should find at least 2 results (Student and Person)
         assert!(results.len() >= 2);
-        
+
         let has_person_type = results.iter().any(|triple| {
             if let Object::NamedNode(node) = triple.object() {
                 node.as_str() == "http://example.org/Person"
@@ -843,25 +902,25 @@ mod tests {
                 false
             }
         });
-        
+
         assert!(has_person_type, "Should infer that alice is a Person");
     }
 
     #[test]
     fn test_statistics() {
         let mut integration = RuleIntegration::new();
-        
+
         // Add some data
         let triple = Triple::new(
             NamedNode::new("http://example.org/s").unwrap(),
             NamedNode::new("http://example.org/p").unwrap(),
-            Literal::new("o")
+            Literal::new("o"),
         );
         integration.store.insert_triple(triple).unwrap();
-        
+
         // Add a rule
         integration.add_rule(rule_builders::rdfs_type_inheritance());
-        
+
         let stats = integration.get_integration_stats().unwrap();
         assert_eq!(stats.store_quad_count, 1);
         assert_eq!(stats.rule_count, 1);
@@ -870,35 +929,39 @@ mod tests {
     #[test]
     fn test_namespace_management() {
         let mut integration = RuleIntegration::new();
-        
+
         // Test namespace prefix addition
-        integration.add_namespace_prefix("ex", "http://example.org/").unwrap();
-        
+        integration
+            .add_namespace_prefix("ex", "http://example.org/")
+            .unwrap();
+
         // Test IRI expansion
         let expanded = integration.expand_prefixed_iri("rdf:type").unwrap();
         assert_eq!(expanded, "http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
-        
+
         let expanded = integration.expand_prefixed_iri("rdfs:Class").unwrap();
         assert_eq!(expanded, "http://www.w3.org/2000/01/rdf-schema#Class");
-        
+
         let expanded = integration.expand_prefixed_iri("owl:Class").unwrap();
         assert_eq!(expanded, "http://www.w3.org/2002/07/owl#Class");
-        
+
         // Test non-prefixed IRI
-        let unchanged = integration.expand_prefixed_iri("http://example.org/full").unwrap();
+        let unchanged = integration
+            .expand_prefixed_iri("http://example.org/full")
+            .unwrap();
         assert_eq!(unchanged, "http://example.org/full");
     }
 
     #[test]
     fn test_data_validation() {
         let integration = RuleIntegration::new();
-        
+
         // Test validation on empty store
         let report = integration.validate_rdf_data().unwrap();
         assert_eq!(report.total_triples, 0);
         assert!(!report.warnings.is_empty()); // Should warn about empty store
         assert!(report.errors.is_empty());
-        
+
         println!("Validation report: {}", report);
     }
 }

@@ -3,31 +3,32 @@
 //! This module contains comprehensive benchmarks for measuring the performance
 //! of AI-powered SHACL validation and shape generation components.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
-use oxirs_shacl_ai::*;
-use oxirs_core::model::{NamedNode, Term, Triple, Literal};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use oxirs_core::model::{Literal, NamedNode, Term, Triple};
 use oxirs_core::store::Store;
+use oxirs_shacl_ai::*;
 use std::time::Duration;
 
 /// Generate test RDF data for benchmarking
 fn generate_benchmark_data(size: usize) -> Vec<Triple> {
     let mut triples = Vec::new();
-    
+
     for i in 0..size {
         let subject = NamedNode::new(format!("http://example.org/person/{}", i)).unwrap();
         let name_predicate = NamedNode::new("http://example.org/name").unwrap();
         let age_predicate = NamedNode::new("http://example.org/age").unwrap();
         let email_predicate = NamedNode::new("http://example.org/email").unwrap();
-        let type_predicate = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
+        let type_predicate =
+            NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
         let person_class = NamedNode::new("http://example.org/Person").unwrap();
-        
+
         // Add type triple
         triples.push(Triple::new(
             subject.clone().into(),
             type_predicate.into(),
             person_class.into(),
         ));
-        
+
         // Add name triple
         let name_literal = Literal::new_simple_literal(format!("Person {}", i));
         triples.push(Triple::new(
@@ -35,7 +36,7 @@ fn generate_benchmark_data(size: usize) -> Vec<Triple> {
             name_predicate.into(),
             name_literal.into(),
         ));
-        
+
         // Add age triple
         let age_literal = Literal::new_typed_literal(
             format!("{}", 20 + (i % 50)),
@@ -46,7 +47,7 @@ fn generate_benchmark_data(size: usize) -> Vec<Triple> {
             age_predicate.into(),
             age_literal.into(),
         ));
-        
+
         // Add email triple (for variety)
         let email_literal = Literal::new_simple_literal(format!("person{}@example.org", i));
         triples.push(Triple::new(
@@ -55,7 +56,7 @@ fn generate_benchmark_data(size: usize) -> Vec<Triple> {
             email_literal.into(),
         ));
     }
-    
+
     triples
 }
 
@@ -63,11 +64,13 @@ fn generate_benchmark_data(size: usize) -> Vec<Triple> {
 fn create_benchmark_store(size: usize) -> Store {
     let mut store = Store::new();
     let data = generate_benchmark_data(size);
-    
+
     for triple in data {
-        store.insert(&triple).expect("Failed to insert benchmark data");
+        store
+            .insert(&triple)
+            .expect("Failed to insert benchmark data");
     }
-    
+
     store
 }
 
@@ -75,22 +78,18 @@ fn create_benchmark_store(size: usize) -> Store {
 fn bench_shape_learning(c: &mut Criterion) {
     let mut group = c.benchmark_group("shape_learning");
     group.measurement_time(Duration::from_secs(30));
-    
+
     for size in [100, 500, 1000, 2000].iter() {
         let store = create_benchmark_store(*size);
         let mut learner = learning::ShapeLearner::new();
-        
+
         group.bench_with_input(
             BenchmarkId::new("learn_shapes_from_store", size),
             size,
-            |b, _| {
-                b.iter(|| {
-                    black_box(learner.learn_shapes_from_store(&store, None))
-                })
-            },
+            |b, _| b.iter(|| black_box(learner.learn_shapes_from_store(&store, None))),
         );
     }
-    
+
     group.finish();
 }
 
@@ -98,22 +97,16 @@ fn bench_shape_learning(c: &mut Criterion) {
 fn bench_pattern_discovery(c: &mut Criterion) {
     let mut group = c.benchmark_group("pattern_discovery");
     group.measurement_time(Duration::from_secs(30));
-    
+
     for size in [100, 500, 1000, 2000].iter() {
         let store = create_benchmark_store(*size);
         let analyzer = patterns::PatternAnalyzer::new();
-        
-        group.bench_with_input(
-            BenchmarkId::new("discover_patterns", size),
-            size,
-            |b, _| {
-                b.iter(|| {
-                    black_box(analyzer.discover_patterns(&store, None))
-                })
-            },
-        );
+
+        group.bench_with_input(BenchmarkId::new("discover_patterns", size), size, |b, _| {
+            b.iter(|| black_box(analyzer.discover_patterns(&store, None)))
+        });
     }
-    
+
     group.finish();
 }
 
@@ -121,25 +114,19 @@ fn bench_pattern_discovery(c: &mut Criterion) {
 fn bench_quality_assessment(c: &mut Criterion) {
     let mut group = c.benchmark_group("quality_assessment");
     group.measurement_time(Duration::from_secs(30));
-    
+
     for size in [100, 500, 1000, 2000].iter() {
         let store = create_benchmark_store(*size);
         let assessor = quality::QualityAssessor::new();
-        
+
         // Create some dummy shapes for assessment
-        let shapes = vec![];  // In practice, would have learned shapes
-        
-        group.bench_with_input(
-            BenchmarkId::new("assess_quality", size),
-            size,
-            |b, _| {
-                b.iter(|| {
-                    black_box(assessor.assess_quality(&store, &shapes, None))
-                })
-            },
-        );
+        let shapes = vec![]; // In practice, would have learned shapes
+
+        group.bench_with_input(BenchmarkId::new("assess_quality", size), size, |b, _| {
+            b.iter(|| black_box(assessor.assess_quality(&store, &shapes, None)))
+        });
     }
-    
+
     group.finish();
 }
 
@@ -147,25 +134,19 @@ fn bench_quality_assessment(c: &mut Criterion) {
 fn bench_validation_prediction(c: &mut Criterion) {
     let mut group = c.benchmark_group("validation_prediction");
     group.measurement_time(Duration::from_secs(20));
-    
+
     for size in [100, 500, 1000, 2000].iter() {
         let store = create_benchmark_store(*size);
         let predictor = prediction::ValidationPredictor::new();
-        
+
         // Create some dummy shapes for prediction
-        let shapes = vec![];  // In practice, would have learned shapes
-        
-        group.bench_with_input(
-            BenchmarkId::new("predict_outcomes", size),
-            size,
-            |b, _| {
-                b.iter(|| {
-                    black_box(predictor.predict_validation_outcomes(&store, &shapes, None))
-                })
-            },
-        );
+        let shapes = vec![]; // In practice, would have learned shapes
+
+        group.bench_with_input(BenchmarkId::new("predict_outcomes", size), size, |b, _| {
+            b.iter(|| black_box(predictor.predict_validation_outcomes(&store, &shapes, None)))
+        });
     }
-    
+
     group.finish();
 }
 
@@ -173,25 +154,23 @@ fn bench_validation_prediction(c: &mut Criterion) {
 fn bench_optimization(c: &mut Criterion) {
     let mut group = c.benchmark_group("optimization");
     group.measurement_time(Duration::from_secs(20));
-    
+
     for size in [100, 500, 1000].iter() {
         let store = create_benchmark_store(*size);
         let optimizer = optimization::ValidationOptimizer::new();
-        
+
         // Create some dummy shapes for optimization
-        let shapes = vec![];  // In practice, would have learned shapes
-        
+        let shapes = vec![]; // In practice, would have learned shapes
+
         group.bench_with_input(
             BenchmarkId::new("optimize_validation", size),
             size,
             |b, _| {
-                b.iter(|| {
-                    black_box(optimizer.optimize_validation_strategy(&store, &shapes, None))
-                })
+                b.iter(|| black_box(optimizer.optimize_validation_strategy(&store, &shapes, None)))
             },
         );
     }
-    
+
     group.finish();
 }
 
@@ -199,14 +178,14 @@ fn bench_optimization(c: &mut Criterion) {
 fn bench_analytics(c: &mut Criterion) {
     let mut group = c.benchmark_group("analytics");
     group.measurement_time(Duration::from_secs(20));
-    
+
     for size in [100, 500, 1000].iter() {
         let store = create_benchmark_store(*size);
         let analyzer = analytics::AnalyticsEngine::new();
-        
+
         // Create some dummy validation reports
-        let reports = vec![];  // In practice, would have validation reports
-        
+        let reports = vec![]; // In practice, would have validation reports
+
         group.bench_with_input(
             BenchmarkId::new("generate_analytics", size),
             size,
@@ -217,7 +196,7 @@ fn bench_analytics(c: &mut Criterion) {
             },
         );
     }
-    
+
     group.finish();
 }
 
@@ -225,30 +204,26 @@ fn bench_analytics(c: &mut Criterion) {
 fn bench_insights(c: &mut Criterion) {
     let mut group = c.benchmark_group("insights");
     group.measurement_time(Duration::from_secs(15));
-    
+
     for size in [100, 500, 1000].iter() {
         // Create dummy analytics data
         let analytics_data = analytics::AnalyticsData::default();
         let quality_report = quality::QualityReport::new();
-        let patterns = vec![];  // Would have discovered patterns
-        
+        let patterns = vec![]; // Would have discovered patterns
+
         let insight_engine = insights::InsightEngine::new();
-        
-        group.bench_with_input(
-            BenchmarkId::new("generate_insights", size),
-            size,
-            |b, _| {
-                b.iter(|| {
-                    black_box(insight_engine.generate_comprehensive_insights(
-                        &analytics_data,
-                        &quality_report,
-                        &patterns,
-                    ))
-                })
-            },
-        );
+
+        group.bench_with_input(BenchmarkId::new("generate_insights", size), size, |b, _| {
+            b.iter(|| {
+                black_box(insight_engine.generate_comprehensive_insights(
+                    &analytics_data,
+                    &quality_report,
+                    &patterns,
+                ))
+            })
+        });
     }
-    
+
     group.finish();
 }
 
@@ -256,12 +231,12 @@ fn bench_insights(c: &mut Criterion) {
 fn bench_memory_usage(c: &mut Criterion) {
     let mut group = c.benchmark_group("memory_usage");
     group.measurement_time(Duration::from_secs(10));
-    
+
     group.bench_function("large_dataset_memory", |b| {
         b.iter(|| {
             let store = black_box(create_benchmark_store(5000));
             let assistant = ShaclAiAssistant::new(ShaclAiConfig::default());
-            
+
             // This simulates memory allocation patterns for large datasets
             let _result = std::thread::scope(|_| {
                 // Simulate concurrent operations that might stress memory
@@ -269,7 +244,7 @@ fn bench_memory_usage(c: &mut Criterion) {
             });
         })
     });
-    
+
     group.finish();
 }
 
@@ -277,36 +252,38 @@ fn bench_memory_usage(c: &mut Criterion) {
 fn bench_concurrent_operations(c: &mut Criterion) {
     let mut group = c.benchmark_group("concurrent_operations");
     group.measurement_time(Duration::from_secs(15));
-    
+
     group.bench_function("concurrent_pattern_discovery", |b| {
         let store = std::sync::Arc::new(create_benchmark_store(1000));
-        
+
         b.iter(|| {
             let store_clone = store.clone();
-            
+
             std::thread::scope(|s| {
-                let handles: Vec<_> = (0..4).map(|_| {
-                    let store_ref = store_clone.clone();
-                    s.spawn(move || {
-                        let analyzer = patterns::PatternAnalyzer::new();
-                        black_box(analyzer.discover_patterns(&*store_ref, None))
+                let handles: Vec<_> = (0..4)
+                    .map(|_| {
+                        let store_ref = store_clone.clone();
+                        s.spawn(move || {
+                            let analyzer = patterns::PatternAnalyzer::new();
+                            black_box(analyzer.discover_patterns(&*store_ref, None))
+                        })
                     })
-                }).collect();
-                
+                    .collect();
+
                 for handle in handles {
                     let _ = handle.join();
                 }
             });
         })
     });
-    
+
     group.finish();
 }
 
 /// Benchmark data structure operations
 fn bench_data_structures(c: &mut Criterion) {
     let mut group = c.benchmark_group("data_structures");
-    
+
     group.bench_function("pattern_creation", |b| {
         b.iter(|| {
             let class = NamedNode::new("http://example.org/Person").unwrap();
@@ -319,10 +296,10 @@ fn bench_data_structures(c: &mut Criterion) {
             })
         })
     });
-    
+
     group.bench_function("insight_creation", |b| {
         use std::collections::HashMap;
-        
+
         b.iter(|| {
             black_box(insights::ValidationInsight {
                 insight_type: insights::ValidationInsightType::LowSuccessRate,
@@ -336,36 +313,32 @@ fn bench_data_structures(c: &mut Criterion) {
             })
         })
     });
-    
+
     group.finish();
 }
 
 /// Benchmark configuration and setup operations
 fn bench_configuration(c: &mut Criterion) {
     let mut group = c.benchmark_group("configuration");
-    
+
     group.bench_function("assistant_creation", |b| {
         b.iter(|| {
             let config = ShaclAiConfig::default();
             black_box(ShaclAiAssistant::new(config))
         })
     });
-    
+
     group.bench_function("config_serialization", |b| {
         let config = ShaclAiConfig::default();
-        b.iter(|| {
-            black_box(serde_json::to_string(&config))
-        })
+        b.iter(|| black_box(serde_json::to_string(&config)))
     });
-    
+
     group.bench_function("config_deserialization", |b| {
         let config = ShaclAiConfig::default();
         let json = serde_json::to_string(&config).unwrap();
-        b.iter(|| {
-            black_box(serde_json::from_str::<ShaclAiConfig>(&json))
-        })
+        b.iter(|| black_box(serde_json::from_str::<ShaclAiConfig>(&json)))
     });
-    
+
     group.finish();
 }
 

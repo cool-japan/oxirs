@@ -3,7 +3,7 @@
 //! Implementation of RDFS (RDF Schema) reasoning based on the W3C RDFS specification.
 //! Supports class hierarchy inference, property hierarchy inference, and domain/range inference.
 
-use crate::{Rule, RuleAtom, Term, RuleEngine};
+use crate::{Rule, RuleAtom, RuleEngine, Term};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -50,7 +50,7 @@ impl Default for RdfsContext {
             classes: HashSet::new(),
             properties: HashSet::new(),
         };
-        
+
         // Add RDFS built-in classes and properties
         context.initialize_builtin_vocabulary();
         context
@@ -61,24 +61,24 @@ impl RdfsContext {
     /// Initialize built-in RDFS vocabulary
     fn initialize_builtin_vocabulary(&mut self) {
         use vocabulary::*;
-        
+
         // Built-in classes
         self.classes.insert(RDFS_CLASS.to_string());
         self.classes.insert(RDFS_RESOURCE.to_string());
         self.classes.insert(RDFS_LITERAL.to_string());
         self.classes.insert(RDFS_DATATYPE.to_string());
-        
+
         // Built-in properties
         self.properties.insert(RDF_TYPE.to_string());
         self.properties.insert(RDFS_SUBCLASS_OF.to_string());
         self.properties.insert(RDFS_SUBPROPERTY_OF.to_string());
         self.properties.insert(RDFS_DOMAIN.to_string());
         self.properties.insert(RDFS_RANGE.to_string());
-        
+
         // RDFS Class hierarchy
         self.add_subclass_relation(RDFS_CLASS, RDFS_RESOURCE);
         self.add_subclass_relation(RDFS_DATATYPE, RDFS_CLASS);
-        
+
         // Property domains and ranges
         self.add_property_domain(RDFS_SUBCLASS_OF, RDFS_CLASS);
         self.add_property_range(RDFS_SUBCLASS_OF, RDFS_CLASS);
@@ -89,7 +89,7 @@ impl RdfsContext {
         self.add_property_domain(RDFS_RANGE, RDF_PROPERTY);
         self.add_property_range(RDFS_RANGE, RDFS_CLASS);
     }
-    
+
     /// Add a subclass relation
     pub fn add_subclass_relation(&mut self, subclass: &str, superclass: &str) {
         self.class_hierarchy
@@ -97,7 +97,7 @@ impl RdfsContext {
             .or_default()
             .insert(superclass.to_string());
     }
-    
+
     /// Add a subproperty relation
     pub fn add_subproperty_relation(&mut self, subproperty: &str, superproperty: &str) {
         self.property_hierarchy
@@ -105,7 +105,7 @@ impl RdfsContext {
             .or_default()
             .insert(superproperty.to_string());
     }
-    
+
     /// Add a property domain
     pub fn add_property_domain(&mut self, property: &str, domain: &str) {
         self.property_domains
@@ -113,7 +113,7 @@ impl RdfsContext {
             .or_default()
             .insert(domain.to_string());
     }
-    
+
     /// Add a property range
     pub fn add_property_range(&mut self, property: &str, range: &str) {
         self.property_ranges
@@ -121,19 +121,19 @@ impl RdfsContext {
             .or_default()
             .insert(range.to_string());
     }
-    
+
     /// Get all superclasses of a class (transitive closure)
     pub fn get_superclasses(&self, class: &str) -> HashSet<String> {
         let mut superclasses = HashSet::new();
         let mut to_visit = vec![class.to_string()];
         let mut visited = HashSet::new();
-        
+
         while let Some(current) = to_visit.pop() {
             if visited.contains(&current) {
                 continue;
             }
             visited.insert(current.clone());
-            
+
             if let Some(direct_superclasses) = self.class_hierarchy.get(&current) {
                 for superclass in direct_superclasses {
                     superclasses.insert(superclass.clone());
@@ -141,22 +141,22 @@ impl RdfsContext {
                 }
             }
         }
-        
+
         superclasses
     }
-    
+
     /// Get all superproperties of a property (transitive closure)
     pub fn get_superproperties(&self, property: &str) -> HashSet<String> {
         let mut superproperties = HashSet::new();
         let mut to_visit = vec![property.to_string()];
         let mut visited = HashSet::new();
-        
+
         while let Some(current) = to_visit.pop() {
             if visited.contains(&current) {
                 continue;
             }
             visited.insert(current.clone());
-            
+
             if let Some(direct_superproperties) = self.property_hierarchy.get(&current) {
                 for superproperty in direct_superproperties {
                     superproperties.insert(superproperty.clone());
@@ -164,10 +164,10 @@ impl RdfsContext {
                 }
             }
         }
-        
+
         superproperties
     }
-    
+
     /// Check if class A is a subclass of class B
     pub fn is_subclass_of(&self, subclass: &str, superclass: &str) -> bool {
         if subclass == superclass {
@@ -175,13 +175,14 @@ impl RdfsContext {
         }
         self.get_superclasses(subclass).contains(superclass)
     }
-    
+
     /// Check if property A is a subproperty of property B
     pub fn is_subproperty_of(&self, subproperty: &str, superproperty: &str) -> bool {
         if subproperty == superproperty {
             return true;
         }
-        self.get_superproperties(subproperty).contains(superproperty)
+        self.get_superproperties(subproperty)
+            .contains(superproperty)
     }
 }
 
@@ -207,15 +208,15 @@ impl RdfsReasoner {
             context: RdfsContext::default(),
             rule_engine: RuleEngine::new(),
         };
-        
+
         reasoner.initialize_rdfs_rules();
         reasoner
     }
-    
+
     /// Initialize RDFS entailment rules
     fn initialize_rdfs_rules(&mut self) {
         use vocabulary::*;
-        
+
         // RDFS Rule 2: Triple (?p rdfs:domain ?c) + (?x ?p ?y) => (?x rdf:type ?c)
         self.rule_engine.add_rule(Rule {
             name: "rdfs2".to_string(),
@@ -231,15 +232,13 @@ impl RdfsReasoner {
                     object: Term::Variable("y".to_string()),
                 },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("x".to_string()),
-                    predicate: Term::Constant(RDF_TYPE.to_string()),
-                    object: Term::Variable("c".to_string()),
-                },
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("x".to_string()),
+                predicate: Term::Constant(RDF_TYPE.to_string()),
+                object: Term::Variable("c".to_string()),
+            }],
         });
-        
+
         // RDFS Rule 3: Triple (?p rdfs:range ?c) + (?x ?p ?y) => (?y rdf:type ?c)
         self.rule_engine.add_rule(Rule {
             name: "rdfs3".to_string(),
@@ -255,15 +254,13 @@ impl RdfsReasoner {
                     object: Term::Variable("y".to_string()),
                 },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("y".to_string()),
-                    predicate: Term::Constant(RDF_TYPE.to_string()),
-                    object: Term::Variable("c".to_string()),
-                },
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("y".to_string()),
+                predicate: Term::Constant(RDF_TYPE.to_string()),
+                object: Term::Variable("c".to_string()),
+            }],
         });
-        
+
         // RDFS Rule 5: Triple (?p rdfs:subPropertyOf ?q) + (?q rdfs:subPropertyOf ?r) => (?p rdfs:subPropertyOf ?r)
         self.rule_engine.add_rule(Rule {
             name: "rdfs5".to_string(),
@@ -279,15 +276,13 @@ impl RdfsReasoner {
                     object: Term::Variable("r".to_string()),
                 },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("p".to_string()),
-                    predicate: Term::Constant(RDFS_SUBPROPERTY_OF.to_string()),
-                    object: Term::Variable("r".to_string()),
-                },
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("p".to_string()),
+                predicate: Term::Constant(RDFS_SUBPROPERTY_OF.to_string()),
+                object: Term::Variable("r".to_string()),
+            }],
         });
-        
+
         // RDFS Rule 7: Triple (?x ?p ?y) + (?p rdfs:subPropertyOf ?q) => (?x ?q ?y)
         self.rule_engine.add_rule(Rule {
             name: "rdfs7".to_string(),
@@ -303,15 +298,13 @@ impl RdfsReasoner {
                     object: Term::Variable("q".to_string()),
                 },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("x".to_string()),
-                    predicate: Term::Variable("q".to_string()),
-                    object: Term::Variable("y".to_string()),
-                },
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("x".to_string()),
+                predicate: Term::Variable("q".to_string()),
+                object: Term::Variable("y".to_string()),
+            }],
         });
-        
+
         // RDFS Rule 9: Triple (?x rdf:type ?c) + (?c rdfs:subClassOf ?d) => (?x rdf:type ?d)
         self.rule_engine.add_rule(Rule {
             name: "rdfs9".to_string(),
@@ -327,15 +320,13 @@ impl RdfsReasoner {
                     object: Term::Variable("d".to_string()),
                 },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("x".to_string()),
-                    predicate: Term::Constant(RDF_TYPE.to_string()),
-                    object: Term::Variable("d".to_string()),
-                },
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("x".to_string()),
+                predicate: Term::Constant(RDF_TYPE.to_string()),
+                object: Term::Variable("d".to_string()),
+            }],
         });
-        
+
         // RDFS Rule 11: Triple (?c rdfs:subClassOf ?d) + (?d rdfs:subClassOf ?e) => (?c rdfs:subClassOf ?e)
         self.rule_engine.add_rule(Rule {
             name: "rdfs11".to_string(),
@@ -351,24 +342,30 @@ impl RdfsReasoner {
                     object: Term::Variable("e".to_string()),
                 },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("c".to_string()),
-                    predicate: Term::Constant(RDFS_SUBCLASS_OF.to_string()),
-                    object: Term::Variable("e".to_string()),
-                },
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("c".to_string()),
+                predicate: Term::Constant(RDFS_SUBCLASS_OF.to_string()),
+                object: Term::Variable("e".to_string()),
+            }],
         });
-        
-        info!("Initialized {} RDFS entailment rules", self.rule_engine.rules.len());
+
+        info!(
+            "Initialized {} RDFS entailment rules",
+            self.rule_engine.rules.len()
+        );
     }
-    
+
     /// Process a triple and update the RDFS context
-    pub fn process_triple(&mut self, subject: &str, predicate: &str, object: &str) -> Result<Vec<RuleAtom>> {
+    pub fn process_triple(
+        &mut self,
+        subject: &str,
+        predicate: &str,
+        object: &str,
+    ) -> Result<Vec<RuleAtom>> {
         use vocabulary::*;
-        
+
         let mut new_facts = Vec::new();
-        
+
         match predicate {
             RDFS_SUBCLASS_OF => {
                 debug!("Processing subClassOf: {} -> {}", subject, object);
@@ -403,19 +400,24 @@ impl RdfsReasoner {
                 }
             }
             _ => {
-                trace!("Processing regular triple: {} {} {}", subject, predicate, object);
+                trace!(
+                    "Processing regular triple: {} {} {}",
+                    subject,
+                    predicate,
+                    object
+                );
             }
         }
-        
+
         // Apply RDFS inference rules
         let input_fact = RuleAtom::Triple {
             subject: Term::Constant(subject.to_string()),
             predicate: Term::Constant(predicate.to_string()),
             object: Term::Constant(object.to_string()),
         };
-        
+
         new_facts.push(input_fact);
-        
+
         // Apply domain/range inference
         if let Some(domains) = self.context.property_domains.get(predicate) {
             for domain in domains {
@@ -426,7 +428,7 @@ impl RdfsReasoner {
                 });
             }
         }
-        
+
         if let Some(ranges) = self.context.property_ranges.get(predicate) {
             for range in ranges {
                 new_facts.push(RuleAtom::Triple {
@@ -436,7 +438,7 @@ impl RdfsReasoner {
                 });
             }
         }
-        
+
         // Apply subproperty inference
         let superproperties = self.context.get_superproperties(predicate);
         for superproperty in superproperties {
@@ -446,7 +448,7 @@ impl RdfsReasoner {
                 object: Term::Constant(object.to_string()),
             });
         }
-        
+
         // Apply subclass inference for rdf:type triples
         if predicate == RDF_TYPE {
             let superclasses = self.context.get_superclasses(object);
@@ -458,25 +460,32 @@ impl RdfsReasoner {
                 });
             }
         }
-        
+
         Ok(new_facts)
     }
-    
+
     /// Perform complete RDFS inference on a set of facts
     pub fn infer(&mut self, facts: &[RuleAtom]) -> Result<Vec<RuleAtom>> {
         let mut all_facts = facts.to_vec();
         let mut new_facts_added = true;
         let mut iteration = 0;
-        
+
         while new_facts_added {
             new_facts_added = false;
             iteration += 1;
             debug!("RDFS inference iteration {}", iteration);
-            
+
             let current_facts = all_facts.clone();
             for fact in &current_facts {
-                if let RuleAtom::Triple { subject, predicate, object } = fact {
-                    if let (Term::Constant(s), Term::Constant(p), Term::Constant(o)) = (subject, predicate, object) {
+                if let RuleAtom::Triple {
+                    subject,
+                    predicate,
+                    object,
+                } = fact
+                {
+                    if let (Term::Constant(s), Term::Constant(p), Term::Constant(o)) =
+                        (subject, predicate, object)
+                    {
                         let inferred = self.process_triple(s, p, o)?;
                         for new_fact in inferred {
                             if !all_facts.contains(&new_fact) {
@@ -487,21 +496,27 @@ impl RdfsReasoner {
                     }
                 }
             }
-            
+
             // Prevent infinite loops
             if iteration > 100 {
-                return Err(anyhow::anyhow!("RDFS inference did not converge after 100 iterations"));
+                return Err(anyhow::anyhow!(
+                    "RDFS inference did not converge after 100 iterations"
+                ));
             }
         }
-        
-        info!("RDFS inference completed after {} iterations, {} facts total", iteration, all_facts.len());
+
+        info!(
+            "RDFS inference completed after {} iterations, {} facts total",
+            iteration,
+            all_facts.len()
+        );
         Ok(all_facts)
     }
-    
+
     /// Check if a triple is entailed by RDFS semantics
     pub fn entails(&self, subject: &str, predicate: &str, object: &str) -> bool {
         use vocabulary::*;
-        
+
         match predicate {
             RDF_TYPE => {
                 // Check if subject is of type object through class hierarchy
@@ -510,12 +525,8 @@ impl RdfsReasoner {
                 }
                 false
             }
-            RDFS_SUBCLASS_OF => {
-                self.context.is_subclass_of(subject, object)
-            }
-            RDFS_SUBPROPERTY_OF => {
-                self.context.is_subproperty_of(subject, object)
-            }
+            RDFS_SUBCLASS_OF => self.context.is_subclass_of(subject, object),
+            RDFS_SUBPROPERTY_OF => self.context.is_subproperty_of(subject, object),
             _ => {
                 // Check if triple follows from subproperty relations
                 let superproperties = self.context.get_superproperties(predicate);
@@ -523,7 +534,7 @@ impl RdfsReasoner {
             }
         }
     }
-    
+
     /// Get materialized RDFS schema information
     pub fn get_schema_info(&self) -> RdfsSchemaInfo {
         RdfsSchemaInfo {
@@ -551,52 +562,62 @@ pub struct RdfsSchemaInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_rdfs_context_initialization() {
         let context = RdfsContext::default();
-        assert!(context.classes.contains("http://www.w3.org/2000/01/rdf-schema#Class"));
-        assert!(context.properties.contains("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"));
+        assert!(context
+            .classes
+            .contains("http://www.w3.org/2000/01/rdf-schema#Class"));
+        assert!(context
+            .properties
+            .contains("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"));
     }
-    
+
     #[test]
     fn test_subclass_inference() {
         let mut context = RdfsContext::default();
         context.add_subclass_relation("A", "B");
         context.add_subclass_relation("B", "C");
-        
+
         assert!(context.is_subclass_of("A", "B"));
         assert!(context.is_subclass_of("A", "C"));
         assert!(context.is_subclass_of("B", "C"));
         assert!(!context.is_subclass_of("C", "A"));
     }
-    
+
     #[test]
     fn test_rdfs_reasoner() {
         let mut reasoner = RdfsReasoner::new();
-        
+
         let facts = vec![
             RuleAtom::Triple {
                 subject: Term::Constant("Person".to_string()),
-                predicate: Term::Constant("http://www.w3.org/2000/01/rdf-schema#subClassOf".to_string()),
+                predicate: Term::Constant(
+                    "http://www.w3.org/2000/01/rdf-schema#subClassOf".to_string(),
+                ),
                 object: Term::Constant("Agent".to_string()),
             },
             RuleAtom::Triple {
                 subject: Term::Constant("john".to_string()),
-                predicate: Term::Constant("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string()),
+                predicate: Term::Constant(
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
+                ),
                 object: Term::Constant("Person".to_string()),
             },
         ];
-        
+
         let inferred = reasoner.infer(&facts).unwrap();
-        
+
         // Should infer that john is of type Agent
         let expected = RuleAtom::Triple {
             subject: Term::Constant("john".to_string()),
-            predicate: Term::Constant("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string()),
+            predicate: Term::Constant(
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
+            ),
             object: Term::Constant("Agent".to_string()),
         };
-        
+
         assert!(inferred.contains(&expected));
     }
 }

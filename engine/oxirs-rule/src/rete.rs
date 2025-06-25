@@ -3,8 +3,8 @@
 //! Implementation of the RETE algorithm for efficient pattern matching in rule-based systems.
 //! The RETE network precompiles rules into a network that allows for incremental updates.
 
-use crate::{Rule, RuleAtom, Term};
 use crate::forward::Substitution;
+use crate::{Rule, RuleAtom, Term};
 use anyhow::Result;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
@@ -25,9 +25,15 @@ pub struct ReteStats {
 
 impl fmt::Display for ReteStats {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Nodes: {} (α:{}, β:{}, P:{}), Tokens: {}", 
-               self.total_nodes, self.alpha_nodes, self.beta_nodes, 
-               self.production_nodes, self.total_tokens)
+        write!(
+            f,
+            "Nodes: {} (α:{}, β:{}, P:{}), Tokens: {}",
+            self.total_nodes,
+            self.alpha_nodes,
+            self.beta_nodes,
+            self.production_nodes,
+            self.total_tokens
+        )
     }
 }
 
@@ -152,8 +158,10 @@ impl ReteNetwork {
 
         // Create root node
         network.root_id = network.create_node(ReteNode::Root);
-        network.token_memory.insert(network.root_id, vec![Token::new()]);
-        
+        network
+            .token_memory
+            .insert(network.root_id, vec![Token::new()]);
+
         network
     }
 
@@ -168,18 +176,18 @@ impl ReteNetwork {
         self.next_node_id += 1;
         self.nodes.insert(id, node);
         self.token_memory.insert(id, Vec::new());
-        
+
         if self.debug_mode {
             debug!("Created node {}: {:?}", id, self.nodes.get(&id));
         }
-        
+
         id
     }
 
     /// Add a rule to the RETE network
     pub fn add_rule(&mut self, rule: &Rule) -> Result<()> {
         info!("Adding rule '{}' to RETE network", rule.name);
-        
+
         if rule.body.is_empty() {
             warn!("Rule '{}' has empty body, skipping", rule.name);
             return Ok(());
@@ -187,11 +195,11 @@ impl ReteNetwork {
 
         // Build the network for this rule
         let mut current_nodes = vec![self.root_id];
-        
+
         // Process each condition in the rule body
         for (i, condition) in rule.body.iter().enumerate() {
             let mut next_nodes = Vec::new();
-            
+
             for &current_node in &current_nodes {
                 let node_id = if i == 0 {
                     // First condition - create alpha node
@@ -202,19 +210,19 @@ impl ReteNetwork {
                 };
                 next_nodes.push(node_id);
             }
-            
+
             current_nodes = next_nodes;
         }
-        
+
         // Create production nodes for rule head
         for &parent_id in &current_nodes {
             self.create_production_node(&rule.name, &rule.head, parent_id)?;
         }
-        
+
         if self.debug_mode {
             debug!("Rule '{}' compiled into RETE network", rule.name);
         }
-        
+
         Ok(())
     }
 
@@ -253,10 +261,10 @@ impl ReteNetwork {
     fn create_beta_join(&mut self, left_parent: NodeId, right_pattern: RuleAtom) -> Result<NodeId> {
         // Create alpha node for right side
         let right_parent = self.create_alpha_node(right_pattern, self.root_id)?;
-        
+
         // Determine join conditions
         let join_condition = self.analyze_join_conditions(left_parent, right_parent)?;
-        
+
         let node_id = self.create_node(ReteNode::Beta {
             left_parent,
             right_parent,
@@ -272,14 +280,22 @@ impl ReteNetwork {
         self.beta_memory.insert(node_id, (Vec::new(), Vec::new()));
 
         if self.debug_mode {
-            debug!("Created beta join node {} (left: {}, right: {})", node_id, left_parent, right_parent);
+            debug!(
+                "Created beta join node {} (left: {}, right: {})",
+                node_id, left_parent, right_parent
+            );
         }
 
         Ok(node_id)
     }
 
     /// Create a production node
-    fn create_production_node(&mut self, rule_name: &str, rule_head: &[RuleAtom], parent: NodeId) -> Result<NodeId> {
+    fn create_production_node(
+        &mut self,
+        rule_name: &str,
+        rule_head: &[RuleAtom],
+        parent: NodeId,
+    ) -> Result<NodeId> {
         let node_id = self.create_node(ReteNode::Production {
             rule_name: rule_name.to_string(),
             rule_head: rule_head.to_vec(),
@@ -289,7 +305,10 @@ impl ReteNetwork {
         self.add_child(parent, node_id)?;
 
         if self.debug_mode {
-            debug!("Created production node {} for rule '{}'", node_id, rule_name);
+            debug!(
+                "Created production node {} for rule '{}'",
+                node_id, rule_name
+            );
         }
 
         Ok(node_id)
@@ -314,11 +333,17 @@ impl ReteNetwork {
     /// Generate a unique key for a pattern
     fn pattern_key(&self, pattern: &RuleAtom) -> String {
         match pattern {
-            RuleAtom::Triple { subject, predicate, object } => {
-                format!("triple:{}:{}:{}", 
+            RuleAtom::Triple {
+                subject,
+                predicate,
+                object,
+            } => {
+                format!(
+                    "triple:{}:{}:{}",
                     self.term_key(subject),
                     self.term_key(predicate),
-                    self.term_key(object))
+                    self.term_key(object)
+                )
             }
             RuleAtom::Builtin { name, args } => {
                 let arg_keys: Vec<String> = args.iter().map(|arg| self.term_key(arg)).collect();
@@ -350,7 +375,7 @@ impl ReteNetwork {
         }
 
         let mut derived_facts = Vec::new();
-        
+
         // Find matching alpha nodes by checking all alpha nodes, not just exact pattern matches
         for (&node_id, node) in &self.nodes.clone() {
             if let ReteNode::Alpha { pattern, .. } = node {
@@ -359,7 +384,7 @@ impl ReteNetwork {
                     if let Some(memory) = self.alpha_memory.get_mut(&node_id) {
                         memory.insert(fact.clone());
                     }
-                    
+
                     // Propagate through network
                     let token = Token::with_fact(fact.clone());
                     let new_facts = self.propagate_token(node_id, token)?;
@@ -383,7 +408,7 @@ impl ReteNetwork {
     /// Propagate a token through the network
     fn propagate_token(&mut self, node_id: NodeId, token: Token) -> Result<Vec<RuleAtom>> {
         let mut derived_facts = Vec::new();
-        
+
         match self.nodes.get(&node_id).cloned() {
             Some(ReteNode::Alpha { children, .. }) => {
                 // Propagate to all children
@@ -392,7 +417,12 @@ impl ReteNetwork {
                     derived_facts.extend(new_facts);
                 }
             }
-            Some(ReteNode::Beta { left_parent, right_parent, ref join_condition, children }) => {
+            Some(ReteNode::Beta {
+                left_parent,
+                right_parent,
+                ref join_condition,
+                children,
+            }) => {
                 // Handle beta join
                 let joined_tokens = self.perform_beta_join(node_id, token, &join_condition)?;
                 for joined_token in joined_tokens {
@@ -402,7 +432,11 @@ impl ReteNetwork {
                     }
                 }
             }
-            Some(ReteNode::Production { ref rule_name, ref rule_head, .. }) => {
+            Some(ReteNode::Production {
+                ref rule_name,
+                ref rule_head,
+                ..
+            }) => {
                 // Execute production
                 let new_facts = self.execute_production(rule_name, rule_head, &token)?;
                 derived_facts.extend(new_facts);
@@ -414,35 +448,58 @@ impl ReteNetwork {
     }
 
     /// Perform beta join operation
-    fn perform_beta_join(&mut self, _beta_id: NodeId, token: Token, _join_condition: &JoinCondition) -> Result<Vec<Token>> {
+    fn perform_beta_join(
+        &mut self,
+        _beta_id: NodeId,
+        token: Token,
+        _join_condition: &JoinCondition,
+    ) -> Result<Vec<Token>> {
         // Simplified beta join - in a full implementation this would:
         // 1. Check which side the token came from
         // 2. Join with tokens from the other side
         // 3. Apply join conditions
         // 4. Update beta memory
-        
+
         // For now, just pass through the token
         Ok(vec![token])
     }
 
     /// Execute a production node
-    fn execute_production(&self, rule_name: &str, rule_head: &[RuleAtom], token: &Token) -> Result<Vec<RuleAtom>> {
+    fn execute_production(
+        &self,
+        rule_name: &str,
+        rule_head: &[RuleAtom],
+        token: &Token,
+    ) -> Result<Vec<RuleAtom>> {
         if self.debug_mode {
-            debug!("Executing production '{}' with token: {:?}", rule_name, token);
+            debug!(
+                "Executing production '{}' with token: {:?}",
+                rule_name, token
+            );
         }
 
         let mut derived_facts = Vec::new();
-        
+
         // For each fact in the token, try to create variable bindings and apply to head
         if let Some(fact) = token.facts.first() {
             // Create a simple substitution from the fact
             // This is a simplified approach - a full RETE would maintain proper variable bindings
             for head_atom in rule_head {
                 let instantiated = match (head_atom, fact) {
-                    (RuleAtom::Triple { subject: h_s, predicate: h_p, object: h_o },
-                     RuleAtom::Triple { subject: f_s, predicate: f_p, object: f_o }) => {
+                    (
+                        RuleAtom::Triple {
+                            subject: h_s,
+                            predicate: h_p,
+                            object: h_o,
+                        },
+                        RuleAtom::Triple {
+                            subject: f_s,
+                            predicate: f_p,
+                            object: f_o,
+                        },
+                    ) => {
                         let mut substitution = HashMap::new();
-                        
+
                         // Simple variable mapping based on structure
                         if let Term::Variable(var) = h_s {
                             substitution.insert(var.clone(), f_s.clone());
@@ -453,17 +510,21 @@ impl ReteNetwork {
                         if let Term::Variable(var) = h_o {
                             substitution.insert(var.clone(), f_o.clone());
                         }
-                        
+
                         self.apply_substitution(head_atom, &substitution)?
                     }
-                    _ => head_atom.clone()
+                    _ => head_atom.clone(),
                 };
                 derived_facts.push(instantiated);
             }
         }
 
         if self.debug_mode && !derived_facts.is_empty() {
-            debug!("Production '{}' derived {} facts", rule_name, derived_facts.len());
+            debug!(
+                "Production '{}' derived {} facts",
+                rule_name,
+                derived_facts.len()
+            );
         }
 
         Ok(derived_facts)
@@ -476,7 +537,7 @@ impl ReteNetwork {
         }
 
         let mut retracted_facts = Vec::new();
-        
+
         // Find and remove from alpha memories
         let pattern_key = self.pattern_key(fact);
         if let Some(alpha_nodes) = self.pattern_index.get(&pattern_key).cloned() {
@@ -495,14 +556,30 @@ impl ReteNetwork {
     }
 
     /// Unify two atoms with given substitution
-    fn unify_atoms(&self, atom1: &RuleAtom, atom2: &RuleAtom, substitution: &Substitution) -> Result<Option<Substitution>> {
+    fn unify_atoms(
+        &self,
+        atom1: &RuleAtom,
+        atom2: &RuleAtom,
+        substitution: &Substitution,
+    ) -> Result<Option<Substitution>> {
         match (atom1, atom2) {
-            (RuleAtom::Triple { subject: s1, predicate: p1, object: o1 },
-             RuleAtom::Triple { subject: s2, predicate: p2, object: o2 }) => {
+            (
+                RuleAtom::Triple {
+                    subject: s1,
+                    predicate: p1,
+                    object: o1,
+                },
+                RuleAtom::Triple {
+                    subject: s2,
+                    predicate: p2,
+                    object: o2,
+                },
+            ) => {
                 let mut sub = substitution.clone();
-                if self.unify_terms(s1, s2, &mut sub)? && 
-                   self.unify_terms(p1, p2, &mut sub)? && 
-                   self.unify_terms(o1, o2, &mut sub)? {
+                if self.unify_terms(s1, s2, &mut sub)?
+                    && self.unify_terms(p1, p2, &mut sub)?
+                    && self.unify_terms(o1, o2, &mut sub)?
+                {
                     Ok(Some(sub))
                 } else {
                     Ok(None)
@@ -513,7 +590,12 @@ impl ReteNetwork {
     }
 
     /// Unify two terms
-    fn unify_terms(&self, term1: &Term, term2: &Term, substitution: &mut Substitution) -> Result<bool> {
+    fn unify_terms(
+        &self,
+        term1: &Term,
+        term2: &Term,
+        substitution: &mut Substitution,
+    ) -> Result<bool> {
         match (term1, term2) {
             (Term::Variable(var), term) | (term, Term::Variable(var)) => {
                 if let Some(existing) = substitution.get(var) {
@@ -546,15 +628,18 @@ impl ReteNetwork {
     /// Apply substitution to an atom
     fn apply_substitution(&self, atom: &RuleAtom, substitution: &Substitution) -> Result<RuleAtom> {
         match atom {
-            RuleAtom::Triple { subject, predicate, object } => {
-                Ok(RuleAtom::Triple {
-                    subject: self.substitute_term(subject, substitution),
-                    predicate: self.substitute_term(predicate, substitution),
-                    object: self.substitute_term(object, substitution),
-                })
-            }
+            RuleAtom::Triple {
+                subject,
+                predicate,
+                object,
+            } => Ok(RuleAtom::Triple {
+                subject: self.substitute_term(subject, substitution),
+                predicate: self.substitute_term(predicate, substitution),
+                object: self.substitute_term(object, substitution),
+            }),
             RuleAtom::Builtin { name, args } => {
-                let substituted_args = args.iter()
+                let substituted_args = args
+                    .iter()
                     .map(|arg| self.substitute_term(arg, substitution))
                     .collect();
                 Ok(RuleAtom::Builtin {
@@ -568,9 +653,10 @@ impl ReteNetwork {
     /// Substitute variables in a term
     fn substitute_term(&self, term: &Term, substitution: &Substitution) -> Term {
         match term {
-            Term::Variable(var) => {
-                substitution.get(var).cloned().unwrap_or_else(|| term.clone())
-            }
+            Term::Variable(var) => substitution
+                .get(var)
+                .cloned()
+                .unwrap_or_else(|| term.clone()),
             _ => term.clone(),
         }
     }
@@ -611,7 +697,7 @@ impl ReteNetwork {
         for tokens in self.token_memory.values_mut() {
             tokens.clear();
         }
-        
+
         // Reset root token
         self.token_memory.insert(self.root_id, vec![Token::new()]);
     }
@@ -627,24 +713,31 @@ impl ReteNetwork {
 
     /// Perform forward chaining until fixpoint
     pub fn forward_chain(&mut self, initial_facts: Vec<RuleAtom>) -> Result<Vec<RuleAtom>> {
-        info!("Starting RETE forward chaining with {} initial facts", initial_facts.len());
-        
+        info!(
+            "Starting RETE forward chaining with {} initial facts",
+            initial_facts.len()
+        );
+
         let mut all_facts = HashSet::new();
         let mut facts_to_process = VecDeque::from(initial_facts);
         let mut iteration = 0;
-        
+
         while let Some(fact) = facts_to_process.pop_front() {
             if all_facts.contains(&fact) {
                 continue;
             }
-            
+
             all_facts.insert(fact.clone());
             iteration += 1;
-            
+
             if self.debug_mode && iteration % 100 == 0 {
-                debug!("RETE iteration {}, {} facts processed", iteration, all_facts.len());
+                debug!(
+                    "RETE iteration {}, {} facts processed",
+                    iteration,
+                    all_facts.len()
+                );
             }
-            
+
             let derived = self.add_fact(fact)?;
             for derived_fact in derived {
                 if !all_facts.contains(&derived_fact) {
@@ -652,10 +745,13 @@ impl ReteNetwork {
                 }
             }
         }
-        
-        info!("RETE forward chaining completed after {} iterations, {} facts total", 
-              iteration, all_facts.len());
-        
+
+        info!(
+            "RETE forward chaining completed after {} iterations, {} facts total",
+            iteration,
+            all_facts.len()
+        );
+
         Ok(all_facts.into_iter().collect())
     }
 }
@@ -677,27 +773,23 @@ mod tests {
     #[test]
     fn test_simple_rule_compilation() {
         let mut network = ReteNetwork::new();
-        
+
         let rule = Rule {
             name: "test_rule".to_string(),
-            body: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("type".to_string()),
-                    object: Term::Constant("human".to_string()),
-                }
-            ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("type".to_string()),
-                    object: Term::Constant("mortal".to_string()),
-                }
-            ],
+            body: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("type".to_string()),
+                object: Term::Constant("human".to_string()),
+            }],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("type".to_string()),
+                object: Term::Constant("mortal".to_string()),
+            }],
         };
 
         network.add_rule(&rule).unwrap();
-        
+
         let stats = network.get_stats();
         assert!(stats.alpha_nodes > 0);
         assert!(stats.production_nodes > 0);
@@ -706,27 +798,23 @@ mod tests {
     #[test]
     fn test_fact_processing() {
         let mut network = ReteNetwork::new();
-        
+
         let rule = Rule {
             name: "test_rule".to_string(),
-            body: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("type".to_string()),
-                    object: Term::Constant("human".to_string()),
-                }
-            ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("type".to_string()),
-                    object: Term::Constant("mortal".to_string()),
-                }
-            ],
+            body: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("type".to_string()),
+                object: Term::Constant("human".to_string()),
+            }],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("type".to_string()),
+                object: Term::Constant("mortal".to_string()),
+            }],
         };
 
         network.add_rule(&rule).unwrap();
-        
+
         let fact = RuleAtom::Triple {
             subject: Term::Constant("socrates".to_string()),
             predicate: Term::Constant("type".to_string()),
@@ -735,42 +823,38 @@ mod tests {
 
         let derived = network.add_fact(fact).unwrap();
         assert!(!derived.is_empty());
-        
+
         let expected = RuleAtom::Triple {
             subject: Term::Constant("socrates".to_string()),
             predicate: Term::Constant("type".to_string()),
             object: Term::Constant("mortal".to_string()),
         };
-        
+
         assert!(derived.contains(&expected));
     }
 
     #[test]
     fn test_forward_chaining() {
         let mut network = ReteNetwork::new();
-        
+
         // Use a simpler single-condition rule for this test
         // The current RETE implementation is simplified and doesn't support full beta joins
         let rule = Rule {
             name: "simple_rule".to_string(),
-            body: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("parent".to_string()),
-                    object: Term::Variable("Y".to_string()),
-                },
-            ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("ancestor".to_string()),
-                    object: Term::Variable("Y".to_string()),
-                },
-            ],
+            body: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("parent".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("ancestor".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
         };
 
         network.add_rule(&rule).unwrap();
-        
+
         let initial_facts = vec![
             RuleAtom::Triple {
                 subject: Term::Constant("john".to_string()),
@@ -785,20 +869,20 @@ mod tests {
         ];
 
         let all_facts = network.forward_chain(initial_facts).unwrap();
-        
+
         // Should derive ancestor relationships from parent facts
         let expected1 = RuleAtom::Triple {
             subject: Term::Constant("john".to_string()),
             predicate: Term::Constant("ancestor".to_string()),
             object: Term::Constant("mary".to_string()),
         };
-        
+
         let expected2 = RuleAtom::Triple {
             subject: Term::Constant("mary".to_string()),
             predicate: Term::Constant("ancestor".to_string()),
             object: Term::Constant("bob".to_string()),
         };
-        
+
         assert!(all_facts.contains(&expected1));
         assert!(all_facts.contains(&expected2));
     }

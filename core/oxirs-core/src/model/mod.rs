@@ -3,24 +3,24 @@
 //! This module provides the fundamental RDF concepts following the RDF 1.2 specification,
 //! ported from Oxigraph's oxrdf with OxiRS-specific enhancements.
 
+pub mod dataset;
+pub mod graph;
+pub mod iri;
+pub mod literal;
+pub mod quad;
+pub mod star;
 pub mod term;
 pub mod triple;
-pub mod quad;
-pub mod graph;
-pub mod dataset;
-pub mod literal;
-pub mod iri;
-pub mod star;
 
 // Re-export core types
+pub use dataset::*;
+pub use graph::*;
+pub use iri::*;
+pub use literal::*;
+pub use quad::*;
+pub use star::*;
 pub use term::*;
 pub use triple::*;
-pub use quad::*;
-pub use graph::*;
-pub use dataset::*;
-pub use literal::*;
-pub use iri::*;
-pub use star::*;
 
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -30,21 +30,31 @@ use std::str::FromStr;
 pub trait RdfTerm {
     /// Returns the string representation of this term
     fn as_str(&self) -> &str;
-    
+
     /// Returns true if this is a named node (IRI)
-    fn is_named_node(&self) -> bool { false }
-    
+    fn is_named_node(&self) -> bool {
+        false
+    }
+
     /// Returns true if this is a blank node
-    fn is_blank_node(&self) -> bool { false }
-    
+    fn is_blank_node(&self) -> bool {
+        false
+    }
+
     /// Returns true if this is a literal
-    fn is_literal(&self) -> bool { false }
-    
+    fn is_literal(&self) -> bool {
+        false
+    }
+
     /// Returns true if this is a variable
-    fn is_variable(&self) -> bool { false }
-    
+    fn is_variable(&self) -> bool {
+        false
+    }
+
     /// Returns true if this is a quoted triple (RDF-star)
-    fn is_quoted_triple(&self) -> bool { false }
+    fn is_quoted_triple(&self) -> bool {
+        false
+    }
 }
 
 /// A trait for terms that can be used as subjects in RDF triples

@@ -1,10 +1,10 @@
 //! OxiRS GraphQL Server Binary
 
 use clap::Parser;
-use oxirs_gql::{GraphQLServer, GraphQLConfig, RdfStore};
+use oxirs_gql::{GraphQLConfig, GraphQLServer, RdfStore};
 // use oxirs_gql::juniper_server::{JuniperGraphQLServer, GraphQLServerBuilder, GraphQLServerConfig};
-use std::sync::Arc;
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 #[derive(Parser)]
 #[command(name = "oxirs-gql")]
@@ -50,24 +50,27 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
-    
+
     let args = Args::parse();
-    
+
     let store = if let Some(dataset_path) = args.dataset {
         RdfStore::open(dataset_path)?
     } else {
         RdfStore::new()?
     };
-    
+
     // Load RDF data file if provided
     if let Some(file_path) = args.file {
-        println!("Loading RDF data from {} (format: {})", file_path, args.format);
+        println!(
+            "Loading RDF data from {} (format: {})",
+            file_path, args.format
+        );
         store.load_file(&file_path, &args.format)?;
-        
+
         // Print some basic stats
         let count = store.triple_count()?;
         println!("Loaded {} triples", count);
-        
+
         // Show a few sample subjects
         let subjects = store.get_subjects(Some(5))?;
         if !subjects.is_empty() {
@@ -77,34 +80,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-    
+
     let addr: SocketAddr = if args.host == "localhost" {
         format!("127.0.0.1:{}", args.port).parse()?
     } else {
         format!("{}:{}", args.host, args.port).parse()?
     };
     let store_arc = Arc::new(store);
-    
+
     println!("🚀 Starting OxiRS GraphQL server on http://{}", addr);
-    
+
     // Use the core GraphQL implementation
     println!("🔧 Using core GraphQL implementation with optimization features");
-    
+
     let config = GraphQLConfig {
         enable_playground: args.playground,
         enable_introspection: args.introspection,
         ..Default::default()
     };
-    
-    let server = GraphQLServer::new(store_arc)
-        .with_config(config);
-    
+
+    let server = GraphQLServer::new(store_arc).with_config(config);
+
     if args.playground {
         println!("📊 GraphQL Playground available at http://{}/", addr);
     }
     println!("🔍 GraphQL endpoint: http://{}/graphql", addr);
-    
+
     server.start(&addr.to_string()).await?;
-    
+
     Ok(())
 }

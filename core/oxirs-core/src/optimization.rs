@@ -4,24 +4,24 @@
 //! operations, memory-efficient data structures, and SIMD-accelerated processing
 //! for RDF data manipulation.
 
-use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
-use std::sync::atomic::Ordering;
-use std::marker::PhantomData;
-use std::ptr::NonNull;
-use parking_lot::{RwLock, Mutex};
+use crate::interning::{InternedString, StringInterner};
+use crate::model::*;
+use bumpalo::Bump;
 use crossbeam::epoch::{self, Atomic, Owned, Shared};
 use crossbeam::queue::SegQueue;
 use dashmap::DashMap;
-use bumpalo::Bump;
+use parking_lot::{Mutex, RwLock};
 use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::ParallelIterator;
-use crate::model::*;
-use crate::interning::{InternedString, StringInterner};
+use std::borrow::Cow;
+use std::collections::{BTreeMap, BTreeSet};
+use std::marker::PhantomData;
+use std::ptr::NonNull;
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 /// Arena-based memory allocator for RDF terms
-/// 
+///
 /// Provides fast allocation and automatic cleanup for temporary RDF operations
 #[derive(Debug)]
 pub struct RdfArena {
@@ -59,8 +59,10 @@ impl RdfArena {
     pub fn alloc_str(&self, s: &str) -> String {
         // Since we can't return a reference with Mutex, return an owned String
         // For ultra-performance mode, the caller should use string interning instead
-        self.allocated_bytes.fetch_add(s.len(), std::sync::atomic::Ordering::Relaxed);
-        self.allocation_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.allocated_bytes
+            .fetch_add(s.len(), std::sync::atomic::Ordering::Relaxed);
+        self.allocation_count
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         s.to_string()
     }
 
@@ -73,19 +75,23 @@ impl RdfArena {
     pub fn reset(&self) {
         if let Ok(mut arena) = self.arena.lock() {
             arena.reset();
-            self.allocated_bytes.store(0, std::sync::atomic::Ordering::Relaxed);
-            self.allocation_count.store(0, std::sync::atomic::Ordering::Relaxed);
+            self.allocated_bytes
+                .store(0, std::sync::atomic::Ordering::Relaxed);
+            self.allocation_count
+                .store(0, std::sync::atomic::Ordering::Relaxed);
         }
     }
 
     /// Get total bytes allocated
     pub fn allocated_bytes(&self) -> usize {
-        self.allocated_bytes.load(std::sync::atomic::Ordering::Relaxed)
+        self.allocated_bytes
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Get total allocation count
     pub fn allocation_count(&self) -> usize {
-        self.allocation_count.load(std::sync::atomic::Ordering::Relaxed)
+        self.allocation_count
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 }
 
@@ -96,7 +102,7 @@ impl Default for RdfArena {
 }
 
 /// Zero-copy RDF term reference that avoids allocations
-/// 
+///
 /// This provides efficient operations on RDF terms without copying data
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TermRef<'a> {
@@ -150,7 +156,7 @@ impl<'a> TermRef<'a> {
                     Literal::new(*value)
                 };
                 Ok(Term::Literal(literal))
-            },
+            }
             TermRef::Variable(name) => Ok(Term::Variable(Variable::new(*name)?)),
         }
     }
@@ -189,7 +195,7 @@ impl<'a> std::fmt::Display for TermRef<'a> {
                     write!(f, "^^<{}>", dt)?;
                 }
                 Ok(())
-            },
+            }
             TermRef::Variable(name) => write!(f, "?{}", name),
         }
     }
@@ -206,7 +212,11 @@ pub struct TripleRef<'a> {
 impl<'a> TripleRef<'a> {
     /// Create a new triple reference
     pub fn new(subject: TermRef<'a>, predicate: TermRef<'a>, object: TermRef<'a>) -> Self {
-        TripleRef { subject, predicate, object }
+        TripleRef {
+            subject,
+            predicate,
+            object,
+        }
     }
 
     /// Create from an owned triple
@@ -242,7 +252,11 @@ impl<'a> TripleRef<'a> {
 
         let predicate = match self.predicate.to_owned()? {
             Term::NamedNode(n) => Predicate::NamedNode(n),
-            _ => return Err(crate::OxirsError::Parse("Invalid predicate term".to_string())),
+            _ => {
+                return Err(crate::OxirsError::Parse(
+                    "Invalid predicate term".to_string(),
+                ))
+            }
         };
 
         let object = match self.object.to_owned()? {
@@ -287,7 +301,7 @@ impl LockFreeGraph {
             triples: BTreeSet::new(),
             version: 0,
         };
-        
+
         LockFreeGraph {
             data: Atomic::new(initial_data),
             epoch: epoch::pin(),
@@ -299,7 +313,7 @@ impl LockFreeGraph {
         loop {
             let current = self.data.load(Ordering::Acquire, &self.epoch);
             let current_ref = unsafe { current.deref() };
-            
+
             // Check if triple already exists
             if current_ref.triples.contains(&triple) {
                 return false;
@@ -308,7 +322,7 @@ impl LockFreeGraph {
             // Create new data with the inserted triple
             let mut new_triples = current_ref.triples.clone();
             new_triples.insert(triple.clone());
-            
+
             let new_data = GraphData {
                 triples: new_triples,
                 version: current_ref.version + 1,
@@ -407,18 +421,27 @@ impl OptimizedGraph {
 
         // Insert into SPO index
         let spo_entry = self.spo.entry(subject.clone()).or_insert_with(DashMap::new);
-        let mut po_entry = spo_entry.entry(predicate.clone()).or_insert_with(BTreeSet::new);
+        let mut po_entry = spo_entry
+            .entry(predicate.clone())
+            .or_insert_with(BTreeSet::new);
         let was_new = po_entry.insert(object.clone());
 
         if was_new {
             // Insert into POS index
-            let pos_entry = self.pos.entry(predicate.clone()).or_insert_with(DashMap::new);
-            let mut os_entry = pos_entry.entry(object.clone()).or_insert_with(BTreeSet::new);
+            let pos_entry = self
+                .pos
+                .entry(predicate.clone())
+                .or_insert_with(DashMap::new);
+            let mut os_entry = pos_entry
+                .entry(object.clone())
+                .or_insert_with(BTreeSet::new);
             os_entry.insert(subject.clone());
 
             // Insert into OSP index
             let osp_entry = self.osp.entry(object.clone()).or_insert_with(DashMap::new);
-            let mut sp_entry = osp_entry.entry(subject.clone()).or_insert_with(BTreeSet::new);
+            let mut sp_entry = osp_entry
+                .entry(subject.clone())
+                .or_insert_with(BTreeSet::new);
             sp_entry.insert(predicate);
 
             // Update statistics
@@ -449,7 +472,7 @@ impl OptimizedGraph {
                     let s_intern = self.intern_subject(s);
                     let p_intern = self.intern_predicate(p);
                     let o_intern = self.intern_object(o);
-                    
+
                     if let Some(po_map) = self.spo.get(&s_intern) {
                         if let Some(o_set) = po_map.get(&p_intern) {
                             if o_set.contains(&o_intern) {
@@ -465,7 +488,7 @@ impl OptimizedGraph {
                 if let (Some(s), Some(p)) = (subject, predicate) {
                     let s_intern = self.intern_subject(s);
                     let p_intern = self.intern_predicate(p);
-                    
+
                     if let Some(po_map) = self.spo.get(&s_intern) {
                         if let Some(o_set) = po_map.get(&p_intern) {
                             for o_intern in o_set.iter() {
@@ -483,7 +506,7 @@ impl OptimizedGraph {
                 if let (Some(p), Some(o)) = (predicate, object) {
                     let p_intern = self.intern_predicate(p);
                     let o_intern = self.intern_object(o);
-                    
+
                     if let Some(os_map) = self.pos.get(&p_intern) {
                         if let Some(s_set) = os_map.get(&o_intern) {
                             for s_intern in s_set.iter() {
@@ -504,20 +527,20 @@ impl OptimizedGraph {
                         if subject.is_some() && subject.unwrap() != &s {
                             continue;
                         }
-                        
+
                         for po_entry in s_entry.value().iter() {
                             let p_intern = po_entry.key();
                             if let Ok(p) = self.unintern_predicate(p_intern) {
                                 if predicate.is_some() && predicate.unwrap() != &p {
                                     continue;
                                 }
-                                
+
                                 for o_intern in po_entry.value().iter() {
                                     if let Ok(o) = self.unintern_object(o_intern) {
                                         if object.is_some() && object.unwrap() != &o {
                                             continue;
                                         }
-                                        
+
                                         let triple = Triple::new(s.clone(), p.clone(), o);
                                         results.push(triple);
                                     }
@@ -543,14 +566,18 @@ impl OptimizedGraph {
             Subject::NamedNode(n) => InternedString::new_with_interner(n.as_str(), &self.interner),
             Subject::BlankNode(b) => InternedString::new_with_interner(b.as_str(), &self.interner),
             Subject::Variable(v) => InternedString::new_with_interner(v.as_str(), &self.interner),
-            Subject::QuotedTriple(_) => InternedString::new_with_interner("<<quoted-triple>>", &self.interner),
+            Subject::QuotedTriple(_) => {
+                InternedString::new_with_interner("<<quoted-triple>>", &self.interner)
+            }
         }
     }
 
     /// Intern a predicate term
     fn intern_predicate(&self, predicate: &Predicate) -> InternedString {
         match predicate {
-            Predicate::NamedNode(n) => InternedString::new_with_interner(n.as_str(), &self.interner),
+            Predicate::NamedNode(n) => {
+                InternedString::new_with_interner(n.as_str(), &self.interner)
+            }
             Predicate::Variable(v) => InternedString::new_with_interner(v.as_str(), &self.interner),
         }
     }
@@ -566,7 +593,9 @@ impl OptimizedGraph {
                 InternedString::new_with_interner(&serialized, &self.interner)
             }
             Object::Variable(v) => InternedString::new_with_interner(v.as_str(), &self.interner),
-            Object::QuotedTriple(_) => InternedString::new_with_interner("<<quoted-triple>>", &self.interner),
+            Object::QuotedTriple(_) => {
+                InternedString::new_with_interner("<<quoted-triple>>", &self.interner)
+            }
         }
     }
 
@@ -583,7 +612,10 @@ impl OptimizedGraph {
     }
 
     /// Convert interned predicate back to Predicate
-    fn unintern_predicate(&self, interned: &InternedString) -> Result<Predicate, crate::OxirsError> {
+    fn unintern_predicate(
+        &self,
+        interned: &InternedString,
+    ) -> Result<Predicate, crate::OxirsError> {
         let s = interned.as_str();
         if s.starts_with("?") || s.starts_with("$") {
             Ok(Predicate::Variable(Variable::new(&s[1..])?))
@@ -606,7 +638,7 @@ impl OptimizedGraph {
             // If no end quote found, treat as a simple literal
             return Ok(Object::Literal(Literal::new(s)));
         }
-        
+
         if s.starts_with("_:") {
             Ok(Object::BlankNode(BlankNode::new(s)?))
         } else {
@@ -657,7 +689,7 @@ impl BatchProcessor {
             .num_threads(num_threads)
             .build()
             .unwrap();
-        
+
         BatchProcessor {
             operation_queue: SegQueue::new(),
             processing_pool: pool,
@@ -674,7 +706,7 @@ impl BatchProcessor {
     pub fn process_batch(&self, batch_size: usize) -> Result<usize, crate::OxirsError> {
         let start_time = std::time::Instant::now();
         let mut operations = Vec::with_capacity(batch_size);
-        
+
         // Collect operations from queue
         for _ in 0..batch_size {
             if let Some(op) = self.operation_queue.pop() {
@@ -700,7 +732,10 @@ impl BatchProcessor {
                     BatchOperation::Delete(_quad) => {
                         // Parallel delete logic would go here
                     }
-                    BatchOperation::Update { old: _old, new: _new } => {
+                    BatchOperation::Update {
+                        old: _old,
+                        new: _new,
+                    } => {
                         // Parallel update logic would go here
                     }
                     BatchOperation::Compact => {
@@ -718,7 +753,8 @@ impl BatchProcessor {
             stats.batch_size = batch_size;
             stats.processing_time_ms = processing_time.as_millis() as u64;
             if processing_time.as_secs_f64() > 0.0 {
-                stats.throughput_ops_per_sec = operations_count as f64 / processing_time.as_secs_f64();
+                stats.throughput_ops_per_sec =
+                    operations_count as f64 / processing_time.as_secs_f64();
             }
         }
 
@@ -754,26 +790,27 @@ pub mod simd {
 
         let bytes = iri.as_bytes();
         let len = bytes.len();
-        
+
         // Process 32 bytes at a time using SIMD
         let chunks = len / 32;
         let remainder = len % 32;
-        
+
         for i in 0..chunks {
             let start = i * 32;
             let chunk = &bytes[start..start + 32];
-            
+
             // Load 32 bytes
             let data = u8x32::from([
                 chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5], chunk[6], chunk[7],
-                chunk[8], chunk[9], chunk[10], chunk[11], chunk[12], chunk[13], chunk[14], chunk[15],
-                chunk[16], chunk[17], chunk[18], chunk[19], chunk[20], chunk[21], chunk[22], chunk[23],
-                chunk[24], chunk[25], chunk[26], chunk[27], chunk[28], chunk[29], chunk[30], chunk[31],
+                chunk[8], chunk[9], chunk[10], chunk[11], chunk[12], chunk[13], chunk[14],
+                chunk[15], chunk[16], chunk[17], chunk[18], chunk[19], chunk[20], chunk[21],
+                chunk[22], chunk[23], chunk[24], chunk[25], chunk[26], chunk[27], chunk[28],
+                chunk[29], chunk[30], chunk[31],
             ]);
-            
+
             // Check for forbidden characters (< > " { } | \ ^ ` space)
             let forbidden_chars = [b'<', b'>', b'"', b'{', b'}', b'|', b'\\', b'^', b'`', b' '];
-            
+
             for &forbidden in &forbidden_chars {
                 let forbidden_vec = u8x32::splat(forbidden);
                 let matches = data.cmp_eq(forbidden_vec);
@@ -781,7 +818,7 @@ pub mod simd {
                     return false;
                 }
             }
-            
+
             // Check for control characters (0-31, 127-159)
             for &byte in chunk {
                 if matches!(byte, 0..=31 | 127..=159) {
@@ -789,17 +826,17 @@ pub mod simd {
                 }
             }
         }
-        
+
         // Process remaining bytes
         for &byte in &bytes[chunks * 32..] {
-            if matches!(byte, 
+            if matches!(byte,
                 0..=31 | 127..=159 | // Control characters
                 b'<' | b'>' | b'"' | b'{' | b'}' | b'|' | b'\\' | b'^' | b'`' | b' ' // Forbidden
             ) {
                 return false;
             }
         }
-        
+
         true
     }
 
@@ -808,19 +845,19 @@ pub mod simd {
         if a.len() != b.len() {
             return a.len().cmp(&b.len());
         }
-        
+
         let a_bytes = a.as_bytes();
         let b_bytes = b.as_bytes();
         let len = a_bytes.len();
-        
+
         // Process 32 bytes at a time
         let chunks = len / 32;
-        
+
         for i in 0..chunks {
             let start = i * 32;
             let a_chunk = &a_bytes[start..start + 32];
             let b_chunk = &b_bytes[start..start + 32];
-            
+
             // Compare chunks bytewise
             for j in 0..32 {
                 match a_chunk[j].cmp(&b_chunk[j]) {
@@ -829,7 +866,7 @@ pub mod simd {
                 }
             }
         }
-        
+
         // Process remaining bytes
         for i in chunks * 32..len {
             match a_bytes[i].cmp(&b_bytes[i]) {
@@ -837,7 +874,7 @@ pub mod simd {
                 other => return other,
             }
         }
-        
+
         std::cmp::Ordering::Equal
     }
 }
@@ -849,10 +886,10 @@ mod tests {
     #[test]
     fn test_rdf_arena() {
         let arena = RdfArena::new();
-        
+
         let s1 = arena.alloc_str("test string 1");
         let s2 = arena.alloc_str("test string 2");
-        
+
         assert_eq!(s1, "test string 1");
         assert_eq!(s2, "test string 2");
         assert!(arena.allocated_bytes() > 0);
@@ -863,10 +900,10 @@ mod tests {
     fn test_term_ref() {
         let node = NamedNode::new("http://example.org/test").unwrap();
         let term_ref = TermRef::from_named_node(&node);
-        
+
         assert!(term_ref.is_named_node());
         assert_eq!(term_ref.as_str(), "http://example.org/test");
-        
+
         let owned = term_ref.to_owned().unwrap();
         assert!(owned.is_named_node());
     }
@@ -877,12 +914,12 @@ mod tests {
         let predicate = NamedNode::new("http://example.org/p").unwrap();
         let object = Literal::new("test object");
         let triple = Triple::new(subject, predicate, object);
-        
+
         let triple_ref = TripleRef::from_triple(&triple);
         assert!(triple_ref.subject.is_named_node());
         assert!(triple_ref.predicate.is_named_node());
         assert!(triple_ref.object.is_literal());
-        
+
         let owned = triple_ref.to_owned().unwrap();
         assert_eq!(owned, triple);
     }
@@ -891,12 +928,12 @@ mod tests {
     fn test_lock_free_graph() {
         let graph = LockFreeGraph::new();
         assert!(graph.is_empty());
-        
+
         let subject = NamedNode::new("http://example.org/s").unwrap();
         let predicate = NamedNode::new("http://example.org/p").unwrap();
         let object = Literal::new("test object");
         let triple = Triple::new(subject, predicate, object);
-        
+
         assert!(graph.insert(triple.clone()));
         assert!(!graph.insert(triple.clone())); // Duplicate
         assert_eq!(graph.len(), 1);
@@ -906,32 +943,28 @@ mod tests {
     #[test]
     fn test_optimized_graph() {
         let graph = OptimizedGraph::new();
-        
+
         let subject = NamedNode::new("http://example.org/s").unwrap();
         let predicate = NamedNode::new("http://example.org/p").unwrap();
         let object = Literal::new("test object");
         let triple = Triple::new(subject.clone(), predicate.clone(), object.clone());
-        
+
         assert!(graph.insert(&triple));
         assert!(!graph.insert(&triple)); // Duplicate
-        
+
         // Query by exact match
         let results = graph.query(
             Some(&Subject::NamedNode(subject.clone())),
             Some(&Predicate::NamedNode(predicate.clone())),
-            Some(&Object::Literal(object.clone()))
+            Some(&Object::Literal(object.clone())),
         );
         assert_eq!(results.len(), 1);
         assert_eq!(results[0], triple);
-        
+
         // Query by subject only
-        let results = graph.query(
-            Some(&Subject::NamedNode(subject)),
-            None,
-            None
-        );
+        let results = graph.query(Some(&Subject::NamedNode(subject)), None, None);
         assert_eq!(results.len(), 1);
-        
+
         let stats = graph.stats();
         assert_eq!(stats.triple_count, 1);
     }
@@ -941,24 +974,38 @@ mod tests {
         assert!(simd::validate_iri_fast("http://example.org/test"));
         assert!(!simd::validate_iri_fast("http://example.org/<invalid>"));
         assert!(!simd::validate_iri_fast(""));
-        assert!(!simd::validate_iri_fast("http://example.org/test with spaces"));
+        assert!(!simd::validate_iri_fast(
+            "http://example.org/test with spaces"
+        ));
     }
 
     #[test]
     fn test_simd_string_comparison() {
-        assert_eq!(simd::compare_strings_fast("abc", "abc"), std::cmp::Ordering::Equal);
-        assert_eq!(simd::compare_strings_fast("abc", "def"), std::cmp::Ordering::Less);
-        assert_eq!(simd::compare_strings_fast("def", "abc"), std::cmp::Ordering::Greater);
-        assert_eq!(simd::compare_strings_fast("short", "longer"), std::cmp::Ordering::Less);
+        assert_eq!(
+            simd::compare_strings_fast("abc", "abc"),
+            std::cmp::Ordering::Equal
+        );
+        assert_eq!(
+            simd::compare_strings_fast("abc", "def"),
+            std::cmp::Ordering::Less
+        );
+        assert_eq!(
+            simd::compare_strings_fast("def", "abc"),
+            std::cmp::Ordering::Greater
+        );
+        assert_eq!(
+            simd::compare_strings_fast("short", "longer"),
+            std::cmp::Ordering::Less
+        );
     }
 
     #[test]
     fn test_arena_reset() {
         let arena = RdfArena::new();
-        
+
         arena.alloc_str("test");
         assert!(arena.allocated_bytes() > 0);
-        
+
         arena.reset();
         assert_eq!(arena.allocated_bytes(), 0);
         assert_eq!(arena.allocation_count(), 0);
@@ -968,7 +1015,7 @@ mod tests {
     fn test_concurrent_optimized_graph() {
         use std::sync::Arc;
         use std::thread;
-        
+
         let graph = Arc::new(OptimizedGraph::new());
         let handles: Vec<_> = (0..10)
             .map(|i| {
@@ -978,15 +1025,15 @@ mod tests {
                     let predicate = NamedNode::new("http://example.org/p").unwrap();
                     let object = Literal::new(&format!("object{}", i));
                     let triple = Triple::new(subject, predicate, object);
-                    
+
                     graph.insert(&triple)
                 })
             })
             .collect();
-        
+
         let results: Vec<bool> = handles.into_iter().map(|h| h.join().unwrap()).collect();
         assert!(results.iter().all(|&inserted| inserted));
-        
+
         let stats = graph.stats();
         assert_eq!(stats.triple_count, 10);
     }

@@ -1,36 +1,36 @@
 //! SHACL target selection implementation
-//! 
+//!
 //! This module handles target node selection according to SHACL specification.
 
-use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 
 use oxirs_core::{
-    model::{NamedNode, Term, Triple, BlankNode, RdfTerm},
+    model::{BlankNode, NamedNode, RdfTerm, Term, Triple},
     store::Store,
     OxirsError,
 };
 
-use crate::{ShaclError, Result, SHACL_VOCAB};
+use crate::{Result, ShaclError, SHACL_VOCAB};
 
 /// SHACL target types for selecting nodes to validate
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Target {
     /// sh:targetClass - selects all instances of a class
     Class(NamedNode),
-    
+
     /// sh:targetNode - selects specific nodes
     Node(Term),
-    
+
     /// sh:targetObjectsOf - selects objects of a property
     ObjectsOf(NamedNode),
-    
+
     /// sh:targetSubjectsOf - selects subjects of a property  
     SubjectsOf(NamedNode),
-    
+
     /// sh:target with SPARQL SELECT query
     Sparql(SparqlTarget),
-    
+
     /// Implicit target (shape IRI used as class)
     Implicit(NamedNode),
 }
@@ -40,7 +40,7 @@ pub enum Target {
 pub struct SparqlTarget {
     /// SPARQL SELECT query that returns target nodes
     pub query: String,
-    
+
     /// Optional prefixes for the query
     pub prefixes: Option<String>,
 }
@@ -50,27 +50,27 @@ impl Target {
     pub fn class(class_iri: NamedNode) -> Self {
         Target::Class(class_iri)
     }
-    
+
     /// Create a node target
     pub fn node(node: Term) -> Self {
         Target::Node(node)
     }
-    
+
     /// Create an objects-of target
     pub fn objects_of(property: NamedNode) -> Self {
         Target::ObjectsOf(property)
     }
-    
+
     /// Create a subjects-of target
     pub fn subjects_of(property: NamedNode) -> Self {
         Target::SubjectsOf(property)
     }
-    
+
     /// Create a SPARQL target
     pub fn sparql(query: String, prefixes: Option<String>) -> Self {
         Target::Sparql(SparqlTarget { query, prefixes })
     }
-    
+
     /// Create an implicit target
     pub fn implicit(class_iri: NamedNode) -> Self {
         Target::Implicit(class_iri)
@@ -91,45 +91,56 @@ impl TargetSelector {
             cache: std::collections::HashMap::new(),
         }
     }
-    
+
     /// Select all target nodes for a given target definition
-    pub fn select_targets(&mut self, store: &Store, target: &Target, graph_name: Option<&str>) -> Result<Vec<Term>> {
+    pub fn select_targets(
+        &mut self,
+        store: &Store,
+        target: &Target,
+        graph_name: Option<&str>,
+    ) -> Result<Vec<Term>> {
         let cache_key = self.create_cache_key(target, graph_name);
-        
+
         // Check cache first
         if let Some(cached_result) = self.cache.get(&cache_key) {
             return Ok(cached_result.clone());
         }
-        
+
         let result = self.select_targets_impl(store, target, graph_name)?;
-        
+
         // Cache the result
         self.cache.insert(cache_key, result.clone());
-        
+
         Ok(result)
     }
-    
+
     /// Select target nodes for multiple targets
-    pub fn select_multiple_targets(&mut self, store: &Store, targets: &[Target], graph_name: Option<&str>) -> Result<Vec<Term>> {
+    pub fn select_multiple_targets(
+        &mut self,
+        store: &Store,
+        targets: &[Target],
+        graph_name: Option<&str>,
+    ) -> Result<Vec<Term>> {
         let mut all_targets = HashSet::new();
-        
+
         for target in targets {
             let target_nodes = self.select_targets(store, target, graph_name)?;
             all_targets.extend(target_nodes);
         }
-        
+
         Ok(all_targets.into_iter().collect())
     }
-    
+
     /// Implementation of target selection without caching
-    fn select_targets_impl(&self, store: &Store, target: &Target, graph_name: Option<&str>) -> Result<Vec<Term>> {
+    fn select_targets_impl(
+        &self,
+        store: &Store,
+        target: &Target,
+        graph_name: Option<&str>,
+    ) -> Result<Vec<Term>> {
         match target {
-            Target::Class(class_iri) => {
-                self.select_class_instances(store, class_iri, graph_name)
-            }
-            Target::Node(node) => {
-                Ok(vec![node.clone()])
-            }
+            Target::Class(class_iri) => self.select_class_instances(store, class_iri, graph_name),
+            Target::Node(node) => Ok(vec![node.clone()]),
             Target::ObjectsOf(property) => {
                 self.select_objects_of_property(store, property, graph_name)
             }
@@ -144,35 +155,53 @@ impl TargetSelector {
             }
         }
     }
-    
+
     /// Select all instances of a class using rdf:type relationships
-    fn select_class_instances(&self, store: &Store, class_iri: &NamedNode, graph_name: Option<&str>) -> Result<Vec<Term>> {
+    fn select_class_instances(
+        &self,
+        store: &Store,
+        class_iri: &NamedNode,
+        graph_name: Option<&str>,
+    ) -> Result<Vec<Term>> {
         let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
             .map_err(|e| ShaclError::Core(OxirsError::Parse(e.to_string())))?;
-        
+
         let mut instances = Vec::new();
-        
+
         // Create a SPARQL query to find all instances of the class
         let query = if let Some(graph) = graph_name {
-            format!(r#"
+            format!(
+                r#"
                 SELECT DISTINCT ?instance WHERE {{
                     GRAPH <{}> {{
                         ?instance <{}> <{}> .
                     }}
                 }}
-            "#, graph, rdf_type.as_str(), class_iri.as_str())
+            "#,
+                graph,
+                rdf_type.as_str(),
+                class_iri.as_str()
+            )
         } else {
-            format!(r#"
+            format!(
+                r#"
                 SELECT DISTINCT ?instance WHERE {{
                     ?instance <{}> <{}> .
                 }}
-            "#, rdf_type.as_str(), class_iri.as_str())
+            "#,
+                rdf_type.as_str(),
+                class_iri.as_str()
+            )
         };
-        
+
         // Execute the query using oxirs-core query engine
         match self.execute_target_query(store, &query) {
             Ok(results) => {
-                if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = results {
+                if let oxirs_core::query::QueryResult::Select {
+                    variables: _,
+                    bindings,
+                } = results
+                {
                     for binding in bindings {
                         if let Some(instance) = binding.get("instance") {
                             instances.push(instance.clone());
@@ -186,36 +215,56 @@ impl TargetSelector {
                 instances = self.select_class_instances_direct(store, class_iri, graph_name)?;
             }
         }
-        
-        tracing::debug!("Found {} instances of class {}", instances.len(), class_iri.as_str());
+
+        tracing::debug!(
+            "Found {} instances of class {}",
+            instances.len(),
+            class_iri.as_str()
+        );
         Ok(instances)
     }
-    
+
     /// Select objects of a specific property
-    fn select_objects_of_property(&self, store: &Store, property: &NamedNode, graph_name: Option<&str>) -> Result<Vec<Term>> {
+    fn select_objects_of_property(
+        &self,
+        store: &Store,
+        property: &NamedNode,
+        graph_name: Option<&str>,
+    ) -> Result<Vec<Term>> {
         let mut objects = Vec::new();
-        
+
         // Create a SPARQL query to find all objects of the property
         let query = if let Some(graph) = graph_name {
-            format!(r#"
+            format!(
+                r#"
                 SELECT DISTINCT ?object WHERE {{
                     GRAPH <{}> {{
                         ?subject <{}> ?object .
                     }}
                 }}
-            "#, graph, property.as_str())
+            "#,
+                graph,
+                property.as_str()
+            )
         } else {
-            format!(r#"
+            format!(
+                r#"
                 SELECT DISTINCT ?object WHERE {{
                     ?subject <{}> ?object .
                 }}
-            "#, property.as_str())
+            "#,
+                property.as_str()
+            )
         };
-        
+
         // Execute the query using oxirs-core query engine
         match self.execute_target_query(store, &query) {
             Ok(results) => {
-                if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = results {
+                if let oxirs_core::query::QueryResult::Select {
+                    variables: _,
+                    bindings,
+                } = results
+                {
                     for binding in bindings {
                         if let Some(object) = binding.get("object") {
                             objects.push(object.clone());
@@ -229,36 +278,56 @@ impl TargetSelector {
                 objects = self.select_objects_direct(store, property, graph_name)?;
             }
         }
-        
-        tracing::debug!("Found {} objects of property {}", objects.len(), property.as_str());
+
+        tracing::debug!(
+            "Found {} objects of property {}",
+            objects.len(),
+            property.as_str()
+        );
         Ok(objects)
     }
-    
+
     /// Select subjects of a specific property
-    fn select_subjects_of_property(&self, store: &Store, property: &NamedNode, graph_name: Option<&str>) -> Result<Vec<Term>> {
+    fn select_subjects_of_property(
+        &self,
+        store: &Store,
+        property: &NamedNode,
+        graph_name: Option<&str>,
+    ) -> Result<Vec<Term>> {
         let mut subjects = Vec::new();
-        
+
         // Create a SPARQL query to find all subjects of the property
         let query = if let Some(graph) = graph_name {
-            format!(r#"
+            format!(
+                r#"
                 SELECT DISTINCT ?subject WHERE {{
                     GRAPH <{}> {{
                         ?subject <{}> ?object .
                     }}
                 }}
-            "#, graph, property.as_str())
+            "#,
+                graph,
+                property.as_str()
+            )
         } else {
-            format!(r#"
+            format!(
+                r#"
                 SELECT DISTINCT ?subject WHERE {{
                     ?subject <{}> ?object .
                 }}
-            "#, property.as_str())
+            "#,
+                property.as_str()
+            )
         };
-        
+
         // Execute the query using oxirs-core query engine
         match self.execute_target_query(store, &query) {
             Ok(results) => {
-                if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = results {
+                if let oxirs_core::query::QueryResult::Select {
+                    variables: _,
+                    bindings,
+                } = results
+                {
                     for binding in bindings {
                         if let Some(subject) = binding.get("subject") {
                             subjects.push(subject.clone());
@@ -272,37 +341,53 @@ impl TargetSelector {
                 subjects = self.select_subjects_direct(store, property, graph_name)?;
             }
         }
-        
-        tracing::debug!("Found {} subjects of property {}", subjects.len(), property.as_str());
+
+        tracing::debug!(
+            "Found {} subjects of property {}",
+            subjects.len(),
+            property.as_str()
+        );
         Ok(subjects)
     }
-    
+
     /// Select targets using SPARQL query
-    fn select_sparql_targets(&self, store: &Store, sparql_target: &SparqlTarget, graph_name: Option<&str>) -> Result<Vec<Term>> {
+    fn select_sparql_targets(
+        &self,
+        store: &Store,
+        sparql_target: &SparqlTarget,
+        graph_name: Option<&str>,
+    ) -> Result<Vec<Term>> {
         let mut complete_query = String::new();
-        
+
         // Add prefixes if provided
         if let Some(ref prefixes) = sparql_target.prefixes {
             complete_query.push_str(prefixes);
             complete_query.push('\n');
         }
-        
+
         // Add the main query
         let query = if let Some(graph) = graph_name {
             // Wrap the query in a GRAPH clause if graph is specified
-            format!("SELECT ?this WHERE {{ GRAPH <{}> {{ {} }} }}", graph, sparql_target.query)
+            format!(
+                "SELECT ?this WHERE {{ GRAPH <{}> {{ {} }} }}",
+                graph, sparql_target.query
+            )
         } else {
             sparql_target.query.clone()
         };
-        
+
         complete_query.push_str(&query);
-        
+
         let mut targets = Vec::new();
-        
+
         // Execute the SPARQL query using oxirs-core query engine
         match self.execute_target_query(store, &complete_query) {
             Ok(results) => {
-                if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = results {
+                if let oxirs_core::query::QueryResult::Select {
+                    variables: _,
+                    bindings,
+                } = results
+                {
                     for binding in bindings {
                         // Look for the standard ?this variable
                         if let Some(this_value) = binding.get("this") {
@@ -321,147 +406,183 @@ impl TargetSelector {
             }
             Err(e) => {
                 tracing::error!("Failed to execute SPARQL target query: {}", e);
-                return Err(ShaclError::TargetSelection(
-                    format!("SPARQL target query execution failed: {}", e)
-                ));
+                return Err(ShaclError::TargetSelection(format!(
+                    "SPARQL target query execution failed: {}",
+                    e
+                )));
             }
         }
-        
+
         tracing::debug!("Found {} targets from SPARQL query", targets.len());
         Ok(targets)
     }
-    
+
     /// Execute a target selection query using oxirs-core query engine
-    fn execute_target_query(&self, store: &Store, query: &str) -> Result<oxirs_core::query::QueryResult> {
+    fn execute_target_query(
+        &self,
+        store: &Store,
+        query: &str,
+    ) -> Result<oxirs_core::query::QueryResult> {
         use oxirs_core::query::QueryEngine;
-        
+
         let query_engine = QueryEngine::new();
-        
+
         tracing::debug!("Executing target query: {}", query);
-        
-        let result = query_engine.query(query, store)
-            .map_err(|e| ShaclError::TargetSelection(format!("Target query execution failed: {}", e)))?;
-        
+
+        let result = query_engine.query(query, store).map_err(|e| {
+            ShaclError::TargetSelection(format!("Target query execution failed: {}", e))
+        })?;
+
         Ok(result)
     }
-    
+
     /// Fallback method to select class instances using direct store queries
-    fn select_class_instances_direct(&self, store: &Store, class_iri: &NamedNode, graph_name: Option<&str>) -> Result<Vec<Term>> {
-        use oxirs_core::model::{Subject, Predicate, Object, GraphName};
-        
+    fn select_class_instances_direct(
+        &self,
+        store: &Store,
+        class_iri: &NamedNode,
+        graph_name: Option<&str>,
+    ) -> Result<Vec<Term>> {
+        use oxirs_core::model::{GraphName, Object, Predicate, Subject};
+
         let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
             .map_err(|e| ShaclError::Core(OxirsError::Parse(e.to_string())))?;
-        
+
         let predicate = Predicate::NamedNode(rdf_type);
         let object = Object::NamedNode(class_iri.clone());
-        
+
         let graph_filter = if let Some(g) = graph_name {
-            Some(GraphName::NamedNode(
-                NamedNode::new(g).map_err(|e| ShaclError::Core(OxirsError::Parse(e.to_string())))?
-            ))
+            Some(GraphName::NamedNode(NamedNode::new(g).map_err(|e| {
+                ShaclError::Core(OxirsError::Parse(e.to_string()))
+            })?))
         } else {
             None
         };
-        
-        let quads = store.query_quads(
-            None, // Any subject
-            Some(&predicate),
-            Some(&object),
-            graph_filter.as_ref()
-        ).map_err(|e| ShaclError::Core(e))?;
-        
-        let instances: Vec<Term> = quads.into_iter()
+
+        let quads = store
+            .query_quads(
+                None, // Any subject
+                Some(&predicate),
+                Some(&object),
+                graph_filter.as_ref(),
+            )
+            .map_err(|e| ShaclError::Core(e))?;
+
+        let instances: Vec<Term> = quads
+            .into_iter()
             .map(|quad| Term::from(quad.subject().clone()))
             .collect();
-        
+
         Ok(instances)
     }
-    
+
     /// Fallback method to select objects using direct store queries
-    fn select_objects_direct(&self, store: &Store, property: &NamedNode, graph_name: Option<&str>) -> Result<Vec<Term>> {
-        use oxirs_core::model::{Predicate, GraphName};
-        
+    fn select_objects_direct(
+        &self,
+        store: &Store,
+        property: &NamedNode,
+        graph_name: Option<&str>,
+    ) -> Result<Vec<Term>> {
+        use oxirs_core::model::{GraphName, Predicate};
+
         let predicate = Predicate::NamedNode(property.clone());
-        
+
         let graph_filter = if let Some(g) = graph_name {
-            Some(GraphName::NamedNode(
-                NamedNode::new(g).map_err(|e| ShaclError::Core(OxirsError::Parse(e.to_string())))?
-            ))
+            Some(GraphName::NamedNode(NamedNode::new(g).map_err(|e| {
+                ShaclError::Core(OxirsError::Parse(e.to_string()))
+            })?))
         } else {
             None
         };
-        
-        let quads = store.query_quads(
-            None, // Any subject
-            Some(&predicate),
-            None, // Any object
-            graph_filter.as_ref()
-        ).map_err(|e| ShaclError::Core(e))?;
-        
-        let objects: Vec<Term> = quads.into_iter()
+
+        let quads = store
+            .query_quads(
+                None, // Any subject
+                Some(&predicate),
+                None, // Any object
+                graph_filter.as_ref(),
+            )
+            .map_err(|e| ShaclError::Core(e))?;
+
+        let objects: Vec<Term> = quads
+            .into_iter()
             .map(|quad| Term::from(quad.object().clone()))
             .collect();
-        
+
         Ok(objects)
     }
-    
+
     /// Fallback method to select subjects using direct store queries
-    fn select_subjects_direct(&self, store: &Store, property: &NamedNode, graph_name: Option<&str>) -> Result<Vec<Term>> {
-        use oxirs_core::model::{Predicate, GraphName};
-        
+    fn select_subjects_direct(
+        &self,
+        store: &Store,
+        property: &NamedNode,
+        graph_name: Option<&str>,
+    ) -> Result<Vec<Term>> {
+        use oxirs_core::model::{GraphName, Predicate};
+
         let predicate = Predicate::NamedNode(property.clone());
-        
+
         let graph_filter = if let Some(g) = graph_name {
-            Some(GraphName::NamedNode(
-                NamedNode::new(g).map_err(|e| ShaclError::Core(OxirsError::Parse(e.to_string())))?
-            ))
+            Some(GraphName::NamedNode(NamedNode::new(g).map_err(|e| {
+                ShaclError::Core(OxirsError::Parse(e.to_string()))
+            })?))
         } else {
             None
         };
-        
-        let quads = store.query_quads(
-            None, // Any subject
-            Some(&predicate),
-            None, // Any object
-            graph_filter.as_ref()
-        ).map_err(|e| ShaclError::Core(e))?;
-        
-        let subjects: Vec<Term> = quads.into_iter()
+
+        let quads = store
+            .query_quads(
+                None, // Any subject
+                Some(&predicate),
+                None, // Any object
+                graph_filter.as_ref(),
+            )
+            .map_err(|e| ShaclError::Core(e))?;
+
+        let subjects: Vec<Term> = quads
+            .into_iter()
             .map(|quad| Term::from(quad.subject().clone()))
             .collect();
-        
+
         Ok(subjects)
     }
-    
+
     /// Create a cache key for target results
     fn create_cache_key(&self, target: &Target, graph_name: Option<&str>) -> String {
         let graph_suffix = graph_name.unwrap_or("default");
-        
+
         match target {
             Target::Class(class_iri) => format!("class:{}:{}", class_iri.as_str(), graph_suffix),
             Target::Node(node) => format!("node:{}:{}", node.as_str(), graph_suffix),
-            Target::ObjectsOf(property) => format!("objects_of:{}:{}", property.as_str(), graph_suffix),
-            Target::SubjectsOf(property) => format!("subjects_of:{}:{}", property.as_str(), graph_suffix),
+            Target::ObjectsOf(property) => {
+                format!("objects_of:{}:{}", property.as_str(), graph_suffix)
+            }
+            Target::SubjectsOf(property) => {
+                format!("subjects_of:{}:{}", property.as_str(), graph_suffix)
+            }
             Target::Sparql(sparql_target) => {
                 // Use a hash of the query for caching
                 use std::collections::hash_map::DefaultHasher;
                 use std::hash::{Hash, Hasher};
-                
+
                 let mut hasher = DefaultHasher::new();
                 sparql_target.query.hash(&mut hasher);
                 let query_hash = hasher.finish();
-                
+
                 format!("sparql:{}:{}", query_hash, graph_suffix)
             }
-            Target::Implicit(class_iri) => format!("implicit:{}:{}", class_iri.as_str(), graph_suffix),
+            Target::Implicit(class_iri) => {
+                format!("implicit:{}:{}", class_iri.as_str(), graph_suffix)
+            }
         }
     }
-    
+
     /// Clear the target cache
     pub fn clear_cache(&mut self) {
         self.cache.clear();
     }
-    
+
     /// Get cache statistics
     pub fn get_cache_stats(&self) -> TargetCacheStats {
         TargetCacheStats {
@@ -489,7 +610,7 @@ pub struct TargetCacheStats {
 pub struct TargetContext {
     /// Previously computed target sets for reuse
     pub target_sets: std::collections::HashMap<String, Vec<Term>>,
-    
+
     /// Performance statistics
     pub stats: TargetStats,
 }
@@ -523,16 +644,17 @@ impl TargetStats {
     pub fn record_selection(&mut self, targets_found: usize, cache_hit: bool) {
         self.total_selections += 1;
         self.total_targets_found += targets_found;
-        
+
         if cache_hit {
             self.cache_hits += 1;
         } else {
             self.cache_misses += 1;
         }
-        
-        self.avg_targets_per_selection = self.total_targets_found as f64 / self.total_selections as f64;
+
+        self.avg_targets_per_selection =
+            self.total_targets_found as f64 / self.total_selections as f64;
     }
-    
+
     pub fn cache_hit_rate(&self) -> f64 {
         if self.total_selections == 0 {
             0.0
@@ -547,13 +669,13 @@ impl TargetStats {
 pub struct TargetOptimizationHints {
     /// Prefer index-based lookups for class targets
     pub use_class_index: bool,
-    
+
     /// Cache property-based target results
     pub cache_property_targets: bool,
-    
+
     /// Maximum cache size for target results
     pub max_cache_size: usize,
-    
+
     /// Parallel target selection threshold
     pub parallel_threshold: usize,
 }
@@ -572,35 +694,35 @@ impl Default for TargetOptimizationHints {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_target_creation() {
         let class_iri = NamedNode::new("http://example.org/Person").unwrap();
         let target = Target::class(class_iri.clone());
-        
+
         match target {
             Target::Class(iri) => assert_eq!(iri, class_iri),
             _ => panic!("Expected class target"),
         }
     }
-    
+
     #[test]
     fn test_node_target() {
         let node = Term::NamedNode(NamedNode::new("http://example.org/john").unwrap());
         let target = Target::node(node.clone());
-        
+
         match target {
             Target::Node(n) => assert_eq!(n, node),
             _ => panic!("Expected node target"),
         }
     }
-    
+
     #[test]
     fn test_sparql_target() {
         let query = "SELECT ?this WHERE { ?this a ex:Person }".to_string();
         let prefixes = Some("PREFIX ex: <http://example.org/>".to_string());
         let target = Target::sparql(query.clone(), prefixes.clone());
-        
+
         match target {
             Target::Sparql(sparql_target) => {
                 assert_eq!(sparql_target.query, query);
@@ -609,29 +731,29 @@ mod tests {
             _ => panic!("Expected SPARQL target"),
         }
     }
-    
+
     #[test]
     fn test_cache_key_generation() {
         let selector = TargetSelector::new();
         let class_iri = NamedNode::new("http://example.org/Person").unwrap();
         let target = Target::class(class_iri);
-        
+
         let key1 = selector.create_cache_key(&target, None);
         let key2 = selector.create_cache_key(&target, None);
         let key3 = selector.create_cache_key(&target, Some("graph1"));
-        
+
         assert_eq!(key1, key2);
         assert_ne!(key1, key3);
     }
-    
+
     #[test]
     fn test_target_stats() {
         let mut stats = TargetStats::default();
-        
-        stats.record_selection(5, false);  // cache miss
-        stats.record_selection(3, true);   // cache hit
-        stats.record_selection(7, false);  // cache miss
-        
+
+        stats.record_selection(5, false); // cache miss
+        stats.record_selection(3, true); // cache hit
+        stats.record_selection(7, false); // cache miss
+
         assert_eq!(stats.total_selections, 3);
         assert_eq!(stats.cache_hits, 1);
         assert_eq!(stats.cache_misses, 2);

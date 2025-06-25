@@ -8,13 +8,13 @@
 //!
 //! Reference: https://afs.github.io/rdf-patch/
 
-use anyhow::{anyhow, Result};
 use crate::{PatchOperation, RdfPatch};
+use anyhow::{anyhow, Result};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use tracing::{debug, warn};
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 
 /// RDF Patch parser with comprehensive support for the specification
 pub struct PatchParser {
@@ -31,32 +31,41 @@ impl PatchParser {
             prefixes: HashMap::new(),
         }
     }
-    
+
     pub fn with_strict_mode(mut self, strict: bool) -> Self {
         self.strict_mode = strict;
         self
     }
-    
+
     /// Parse RDF Patch from string
     pub fn parse(&mut self, input: &str) -> Result<RdfPatch> {
         let mut patch = RdfPatch::new();
         self.current_line = 0;
         self.prefixes.clear();
-        
+
         // Add common prefixes
-        self.prefixes.insert("rdf".to_string(), "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string());
-        self.prefixes.insert("rdfs".to_string(), "http://www.w3.org/2000/01/rdf-schema#".to_string());
-        self.prefixes.insert("xsd".to_string(), "http://www.w3.org/2001/XMLSchema#".to_string());
-        
+        self.prefixes.insert(
+            "rdf".to_string(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string(),
+        );
+        self.prefixes.insert(
+            "rdfs".to_string(),
+            "http://www.w3.org/2000/01/rdf-schema#".to_string(),
+        );
+        self.prefixes.insert(
+            "xsd".to_string(),
+            "http://www.w3.org/2001/XMLSchema#".to_string(),
+        );
+
         for line in input.lines() {
             self.current_line += 1;
             let line = line.trim();
-            
+
             // Skip empty lines and comments
             if line.is_empty() || line.starts_with('#') {
                 continue;
             }
-            
+
             // Parse the line
             match self.parse_line(line) {
                 Ok(Some(operation)) => {
@@ -70,43 +79,49 @@ impl PatchParser {
                     if self.strict_mode {
                         return Err(anyhow!("Parse error at line {}: {}", self.current_line, e));
                     } else {
-                        warn!("Ignoring invalid line {}: {} ({})", self.current_line, line, e);
+                        warn!(
+                            "Ignoring invalid line {}: {} ({})",
+                            self.current_line, line, e
+                        );
                     }
                 }
             }
         }
-        
-        debug!("Parsed RDF Patch with {} operations", patch.operations.len());
+
+        debug!(
+            "Parsed RDF Patch with {} operations",
+            patch.operations.len()
+        );
         Ok(patch)
     }
-    
+
     fn parse_line(&mut self, line: &str) -> Result<Option<PatchOperation>> {
         // Handle prefix declarations
         if line.starts_with("@prefix") {
             self.parse_prefix(line)?;
             return Ok(None);
         }
-        
+
         // Handle transaction operations
         if line.starts_with("TX") {
             // Transaction markers - not implemented yet
             debug!("Transaction marker: {}", line);
             return Ok(None);
         }
-        
+
         // Handle header information
         if line.starts_with("H") {
             // Header information - not implemented yet
             debug!("Header: {}", line);
             return Ok(None);
         }
-        
+
         // Parse operation lines
         let parts: Vec<&str> = line.split_whitespace().collect();
         if parts.is_empty() {
             return Err(anyhow!("Empty operation line"));
         }
-        
+
         let operation = parts[0];
         match operation {
             "A" => self.parse_add_operation(&parts[1..]),
@@ -115,90 +130,94 @@ impl PatchParser {
             "PD" => self.parse_prefix_delete(&parts[1..]),
             "GA" => self.parse_graph_add(&parts[1..]),
             "GD" => self.parse_graph_delete(&parts[1..]),
-            _ => Err(anyhow!("Unknown operation: {}", operation))
+            _ => Err(anyhow!("Unknown operation: {}", operation)),
         }
     }
-    
+
     fn parse_prefix(&mut self, line: &str) -> Result<()> {
         // Format: @prefix prefix: <uri>
         let parts: Vec<&str> = line.split_whitespace().collect();
         if parts.len() < 3 {
             return Err(anyhow!("Invalid prefix declaration"));
         }
-        
+
         let prefix_with_colon = parts[1];
         let prefix = prefix_with_colon.trim_end_matches(':');
         let uri = parts[2].trim_matches('<').trim_matches('>');
-        
+
         self.prefixes.insert(prefix.to_string(), uri.to_string());
         debug!("Added prefix: {} -> {}", prefix, uri);
         Ok(())
     }
-    
+
     fn parse_add_operation(&self, parts: &[&str]) -> Result<Option<PatchOperation>> {
         if parts.len() < 3 {
-            return Err(anyhow!("Add operation requires subject, predicate, and object"));
+            return Err(anyhow!(
+                "Add operation requires subject, predicate, and object"
+            ));
         }
-        
+
         let subject = self.expand_term(parts[0])?;
         let predicate = self.expand_term(parts[1])?;
         let object = self.expand_term(parts[2])?;
-        
+
         Ok(Some(PatchOperation::Add {
             subject,
             predicate,
             object,
         }))
     }
-    
+
     fn parse_delete_operation(&self, parts: &[&str]) -> Result<Option<PatchOperation>> {
         if parts.len() < 3 {
-            return Err(anyhow!("Delete operation requires subject, predicate, and object"));
+            return Err(anyhow!(
+                "Delete operation requires subject, predicate, and object"
+            ));
         }
-        
+
         let subject = self.expand_term(parts[0])?;
         let predicate = self.expand_term(parts[1])?;
         let object = self.expand_term(parts[2])?;
-        
+
         Ok(Some(PatchOperation::Delete {
             subject,
             predicate,
             object,
         }))
     }
-    
+
     fn parse_prefix_add(&self, _parts: &[&str]) -> Result<Option<PatchOperation>> {
         // Prefix add operation - not implemented yet
         Ok(None)
     }
-    
+
     fn parse_prefix_delete(&self, _parts: &[&str]) -> Result<Option<PatchOperation>> {
         // Prefix delete operation - not implemented yet
         Ok(None)
     }
-    
+
     fn parse_graph_add(&self, parts: &[&str]) -> Result<Option<PatchOperation>> {
         if parts.is_empty() {
             return Err(anyhow!("Graph add operation requires graph URI"));
         }
-        
+
         let graph = self.expand_term(parts[0])?;
         Ok(Some(PatchOperation::AddGraph { graph }))
     }
-    
+
     fn parse_graph_delete(&self, parts: &[&str]) -> Result<Option<PatchOperation>> {
         if parts.is_empty() {
             return Err(anyhow!("Graph delete operation requires graph URI"));
         }
-        
+
         let graph = self.expand_term(parts[0])?;
         Ok(Some(PatchOperation::DeleteGraph { graph }))
     }
-    
+
     fn expand_term(&self, term: &str) -> Result<String> {
         if term.starts_with('<') && term.ends_with('>') {
             // Full URI
-            Ok(term[1..term.len()-1].to_string())
+            Ok(term[1..term.len() - 1].to_string())
         } else if term.starts_with('"') {
             // Literal
             Ok(term.to_string())
@@ -211,7 +230,7 @@ impl PatchParser {
             if parts.len() == 2 {
                 let prefix = parts[0];
                 let local = parts[1];
-                
+
                 if let Some(namespace) = self.prefixes.get(prefix) {
                     Ok(format!("{}{}", namespace, local))
                 } else {
@@ -248,44 +267,56 @@ pub struct PatchSerializer {
 impl PatchSerializer {
     pub fn new() -> Self {
         let mut prefixes = HashMap::new();
-        prefixes.insert("rdf".to_string(), "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string());
-        prefixes.insert("rdfs".to_string(), "http://www.w3.org/2000/01/rdf-schema#".to_string());
-        prefixes.insert("xsd".to_string(), "http://www.w3.org/2001/XMLSchema#".to_string());
-        
+        prefixes.insert(
+            "rdf".to_string(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string(),
+        );
+        prefixes.insert(
+            "rdfs".to_string(),
+            "http://www.w3.org/2000/01/rdf-schema#".to_string(),
+        );
+        prefixes.insert(
+            "xsd".to_string(),
+            "http://www.w3.org/2001/XMLSchema#".to_string(),
+        );
+
         Self {
             pretty_print: true,
             include_metadata: true,
             prefixes,
         }
     }
-    
+
     pub fn with_pretty_print(mut self, pretty: bool) -> Self {
         self.pretty_print = pretty;
         self
     }
-    
+
     pub fn with_metadata(mut self, include: bool) -> Self {
         self.include_metadata = include;
         self
     }
-    
+
     pub fn add_prefix(&mut self, prefix: String, namespace: String) {
         self.prefixes.insert(prefix, namespace);
     }
-    
+
     /// Serialize RDF Patch to string
     pub fn serialize(&self, patch: &RdfPatch) -> Result<String> {
         let mut output = String::new();
-        
+
         // Write header
         if self.include_metadata {
             output.push_str("# RDF Patch\n");
-            output.push_str(&format!("# Generated: {}\n", patch.timestamp.format("%Y-%m-%d %H:%M:%S UTC")));
+            output.push_str(&format!(
+                "# Generated: {}\n",
+                patch.timestamp.format("%Y-%m-%d %H:%M:%S UTC")
+            ));
             output.push_str(&format!("# Patch ID: {}\n", patch.id));
             output.push_str(&format!("# Operations: {}\n", patch.operations.len()));
             output.push('\n');
         }
-        
+
         // Write prefixes
         if self.pretty_print {
             for (prefix, namespace) in &self.prefixes {
@@ -295,31 +326,39 @@ impl PatchSerializer {
                 output.push('\n');
             }
         }
-        
+
         // Write operations
         for (i, operation) in patch.operations.iter().enumerate() {
             let op_str = self.serialize_operation(operation)?;
             output.push_str(&op_str);
             output.push('\n');
-            
+
             // Add spacing for readability in pretty print mode
             if self.pretty_print && i > 0 && i % 10 == 0 {
                 output.push('\n');
             }
         }
-        
+
         Ok(output)
     }
-    
+
     fn serialize_operation(&self, operation: &PatchOperation) -> Result<String> {
         match operation {
-            PatchOperation::Add { subject, predicate, object } => {
+            PatchOperation::Add {
+                subject,
+                predicate,
+                object,
+            } => {
                 let s = self.compact_term(subject);
                 let p = self.compact_term(predicate);
                 let o = self.compact_term(object);
                 Ok(format!("A {} {} {} .", s, p, o))
             }
-            PatchOperation::Delete { subject, predicate, object } => {
+            PatchOperation::Delete {
+                subject,
+                predicate,
+                object,
+            } => {
                 let s = self.compact_term(subject);
                 let p = self.compact_term(predicate);
                 let o = self.compact_term(object);
@@ -335,7 +374,7 @@ impl PatchSerializer {
             }
         }
     }
-    
+
     fn compact_term(&self, term: &str) -> String {
         // Try to find a prefix that matches
         for (prefix, namespace) in &self.prefixes {
@@ -344,7 +383,7 @@ impl PatchSerializer {
                 return format!("{}:{}", prefix, local);
             }
         }
-        
+
         // If no prefix matches, use full URI notation
         if term.starts_with('"') || term.starts_with('_') {
             // Literal or blank node - return as-is
@@ -382,16 +421,16 @@ impl Default for PatchContext {
 /// Apply RDF Patch operations to a dataset
 pub fn apply_patch_with_context(patch: &RdfPatch, context: &PatchContext) -> Result<PatchResult> {
     let mut result = PatchResult::new();
-    
+
     if context.dry_run {
         debug!("Performing dry run of patch {}", patch.id);
     }
-    
+
     for (i, operation) in patch.operations.iter().enumerate() {
         if context.validate_operations {
             validate_operation(operation)?;
         }
-        
+
         if !context.dry_run {
             match apply_operation(operation) {
                 Ok(_) => {
@@ -409,10 +448,10 @@ pub fn apply_patch_with_context(patch: &RdfPatch, context: &PatchContext) -> Res
             result.operations_applied += 1; // Count for dry run
         }
     }
-    
+
     result.patch_id = patch.id.clone();
     result.total_operations = patch.operations.len();
-    
+
     Ok(result)
 }
 
@@ -423,14 +462,21 @@ pub fn apply_patch(patch: &RdfPatch) -> Result<PatchResult> {
 
 fn validate_operation(operation: &PatchOperation) -> Result<()> {
     match operation {
-        PatchOperation::Add { subject, predicate, object } |
-        PatchOperation::Delete { subject, predicate, object } => {
+        PatchOperation::Add {
+            subject,
+            predicate,
+            object,
+        }
+        | PatchOperation::Delete {
+            subject,
+            predicate,
+            object,
+        } => {
             if subject.is_empty() || predicate.is_empty() || object.is_empty() {
                 return Err(anyhow!("Triple operation has empty components"));
             }
         }
-        PatchOperation::AddGraph { graph } |
-        PatchOperation::DeleteGraph { graph } => {
+        PatchOperation::AddGraph { graph } | PatchOperation::DeleteGraph { graph } => {
             if graph.is_empty() {
                 return Err(anyhow!("Graph operation has empty graph URI"));
             }
@@ -465,11 +511,11 @@ impl PatchResult {
             applied_at: Utc::now(),
         }
     }
-    
+
     pub fn is_success(&self) -> bool {
         self.errors.is_empty() && self.operations_applied == self.total_operations
     }
-    
+
     pub fn success_rate(&self) -> f64 {
         if self.total_operations == 0 {
             1.0
@@ -496,40 +542,43 @@ impl fmt::Display for PatchResult {
 pub fn create_reverse_patch(patch: &RdfPatch) -> Result<RdfPatch> {
     let mut reverse_patch = RdfPatch::new();
     reverse_patch.id = format!("{}-reverse", patch.id);
-    
+
     // Reverse the operations and their order
     for operation in patch.operations.iter().rev() {
         let reverse_operation = match operation {
-            PatchOperation::Add { subject, predicate, object } => {
-                PatchOperation::Delete {
-                    subject: subject.clone(),
-                    predicate: predicate.clone(),
-                    object: object.clone(),
-                }
-            }
-            PatchOperation::Delete { subject, predicate, object } => {
-                PatchOperation::Add {
-                    subject: subject.clone(),
-                    predicate: predicate.clone(),
-                    object: object.clone(),
-                }
-            }
-            PatchOperation::AddGraph { graph } => {
-                PatchOperation::DeleteGraph {
-                    graph: graph.clone(),
-                }
-            }
-            PatchOperation::DeleteGraph { graph } => {
-                PatchOperation::AddGraph {
-                    graph: graph.clone(),
-                }
-            }
+            PatchOperation::Add {
+                subject,
+                predicate,
+                object,
+            } => PatchOperation::Delete {
+                subject: subject.clone(),
+                predicate: predicate.clone(),
+                object: object.clone(),
+            },
+            PatchOperation::Delete {
+                subject,
+                predicate,
+                object,
+            } => PatchOperation::Add {
+                subject: subject.clone(),
+                predicate: predicate.clone(),
+                object: object.clone(),
+            },
+            PatchOperation::AddGraph { graph } => PatchOperation::DeleteGraph {
+                graph: graph.clone(),
+            },
+            PatchOperation::DeleteGraph { graph } => PatchOperation::AddGraph {
+                graph: graph.clone(),
+            },
         };
-        
+
         reverse_patch.add_operation(reverse_operation);
     }
-    
-    debug!("Created reverse patch with {} operations", reverse_patch.operations.len());
+
+    debug!(
+        "Created reverse patch with {} operations",
+        reverse_patch.operations.len()
+    );
     Ok(reverse_patch)
 }
 
@@ -537,14 +586,18 @@ pub fn create_reverse_patch(patch: &RdfPatch) -> Result<RdfPatch> {
 pub fn merge_patches(patches: &[RdfPatch]) -> Result<RdfPatch> {
     let mut merged = RdfPatch::new();
     merged.id = format!("merged-{}", uuid::Uuid::new_v4());
-    
+
     for patch in patches {
         for operation in &patch.operations {
             merged.add_operation(operation.clone());
         }
     }
-    
-    debug!("Merged {} patches into {} operations", patches.len(), merged.operations.len());
+
+    debug!(
+        "Merged {} patches into {} operations",
+        patches.len(),
+        merged.operations.len()
+    );
     Ok(merged)
 }
 
@@ -552,51 +605,56 @@ pub fn merge_patches(patches: &[RdfPatch]) -> Result<RdfPatch> {
 pub fn optimize_patch(patch: &RdfPatch) -> Result<RdfPatch> {
     let mut optimized = RdfPatch::new();
     optimized.id = format!("{}-optimized", patch.id);
-    
+
     let mut seen_operations = std::collections::HashSet::new();
-    
+
     for operation in &patch.operations {
         let operation_key = format!("{:?}", operation);
-        
+
         // Skip duplicate operations
         if seen_operations.contains(&operation_key) {
             continue;
         }
-        
+
         seen_operations.insert(operation_key);
         optimized.add_operation(operation.clone());
     }
-    
+
     debug!(
         "Optimized patch from {} to {} operations",
         patch.operations.len(),
         optimized.operations.len()
     );
-    
+
     Ok(optimized)
 }
 
 /// Validate patch consistency
 pub fn validate_patch(patch: &RdfPatch) -> Result<Vec<String>> {
     let mut warnings = Vec::new();
-    
+
     // Check for conflicting operations
     let mut adds = std::collections::HashSet::new();
     let mut deletes = std::collections::HashSet::new();
-    
+
     for operation in &patch.operations {
         match operation {
-            PatchOperation::Add { subject, predicate, object } => {
+            PatchOperation::Add {
+                subject,
+                predicate,
+                object,
+            } => {
                 let triple = (subject.clone(), predicate.clone(), object.clone());
                 if deletes.contains(&triple) {
-                    warnings.push(format!(
-                        "Triple added after being deleted: {:?}",
-                        triple
-                    ));
+                    warnings.push(format!("Triple added after being deleted: {:?}", triple));
                 }
                 adds.insert(triple);
             }
-            PatchOperation::Delete { subject, predicate, object } => {
+            PatchOperation::Delete {
+                subject,
+                predicate,
+                object,
+            } => {
                 let triple = (subject.clone(), predicate.clone(), object.clone());
                 if !adds.contains(&triple) {
                     warnings.push(format!(
@@ -609,6 +667,6 @@ pub fn validate_patch(patch: &RdfPatch) -> Result<Vec<String>> {
             _ => {} // Graph operations don't conflict in the same way
         }
     }
-    
+
     Ok(warnings)
 }

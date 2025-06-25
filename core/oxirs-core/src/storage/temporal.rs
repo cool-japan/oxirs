@@ -3,15 +3,15 @@
 //! This module provides specialized storage for temporal RDF data,
 //! optimizing for time-based queries and temporal reasoning.
 
-use crate::model::{Triple, TriplePattern, NamedNode, Literal, Term};
+use crate::model::{Literal, NamedNode, Term, Triple, TriplePattern};
 use crate::OxirsError;
+use chrono::{DateTime, Duration, NaiveDateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::ops::Bound;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use chrono::{DateTime, Utc, Duration, NaiveDateTime};
-use serde::{Serialize, Deserialize};
 
 /// Temporal storage configuration
 #[derive(Debug, Clone)]
@@ -245,7 +245,7 @@ impl TemporalStorage {
     /// Create new temporal storage
     pub async fn new(config: TemporalConfig) -> Result<Self, OxirsError> {
         std::fs::create_dir_all(&config.path)?;
-        
+
         Ok(TemporalStorage {
             config,
             buckets: Arc::new(RwLock::new(BTreeMap::new())),
@@ -262,7 +262,7 @@ impl TemporalStorage {
             stats: Arc::new(RwLock::new(TemporalStats::default())),
         })
     }
-    
+
     /// Store a temporal triple
     pub async fn store_temporal(
         &self,
@@ -283,10 +283,10 @@ impl TemporalStorage {
                 granularity: TemporalGranularity::Second,
             }),
         };
-        
+
         // Determine bucket
         let bucket_time = self.get_bucket_time(valid_from);
-        
+
         // Store in bucket
         {
             let mut buckets = self.buckets.write().await;
@@ -295,21 +295,21 @@ impl TemporalStorage {
                 triples: Vec::new(),
                 stats: BucketStats::default(),
             });
-            
+
             bucket.triples.push(temporal_triple.clone());
             bucket.stats.triple_count += 1;
             bucket.stats.last_access = Utc::now();
         }
-        
+
         // Update indexes
         if self.config.indexing.entity_index {
             self.update_entity_index(&temporal_triple).await?;
         }
-        
+
         if self.config.indexing.change_index {
             self.update_change_index(&temporal_triple).await?;
         }
-        
+
         // Update stats
         let mut stats = self.stats.write().await;
         stats.total_triples += 1;
@@ -318,10 +318,10 @@ impl TemporalStorage {
         } else {
             stats.historical_triples += 1;
         }
-        
+
         Ok(())
     }
-    
+
     /// Query triples at a specific time point
     pub async fn query_at_time(
         &self,
@@ -329,7 +329,7 @@ impl TemporalStorage {
         time: DateTime<Utc>,
     ) -> Result<Vec<Triple>, OxirsError> {
         let mut results = Vec::new();
-        
+
         // Search relevant buckets
         let buckets = self.buckets.read().await;
         for (_, bucket) in buckets.iter() {
@@ -341,7 +341,7 @@ impl TemporalStorage {
                             continue;
                         }
                     }
-                    
+
                     // Check if pattern matches
                     if pattern.matches(&temporal.triple) {
                         results.push(temporal.triple.clone());
@@ -349,10 +349,10 @@ impl TemporalStorage {
                 }
             }
         }
-        
+
         Ok(results)
     }
-    
+
     /// Query triples within a time range
     pub async fn query_time_range(
         &self,
@@ -361,14 +361,14 @@ impl TemporalStorage {
         end: DateTime<Utc>,
     ) -> Result<Vec<TemporalTriple>, OxirsError> {
         let mut results = Vec::new();
-        
+
         // Get relevant buckets
         let start_bucket = self.get_bucket_time(start);
         let end_bucket = self.get_bucket_time(end);
-        
+
         let buckets = self.buckets.read().await;
         let range = buckets.range((Bound::Included(start_bucket), Bound::Included(end_bucket)));
-        
+
         for (_, bucket) in range {
             for temporal in &bucket.triples {
                 // Check temporal overlap
@@ -378,7 +378,7 @@ impl TemporalStorage {
                             continue;
                         }
                     }
-                    
+
                     // Check pattern match
                     if pattern.matches(&temporal.triple) {
                         results.push(temporal.clone());
@@ -386,10 +386,10 @@ impl TemporalStorage {
                 }
             }
         }
-        
+
         Ok(results)
     }
-    
+
     /// Get entity history
     pub async fn get_entity_history(
         &self,
@@ -398,52 +398,68 @@ impl TemporalStorage {
         let entity_index = self.entity_index.read().await;
         Ok(entity_index.entity_history.get(entity_uri).cloned())
     }
-    
+
     /// Get recent changes
-    pub async fn get_recent_changes(
-        &self,
-        limit: usize,
-    ) -> Result<Vec<ChangeEvent>, OxirsError> {
+    pub async fn get_recent_changes(&self, limit: usize) -> Result<Vec<ChangeEvent>, OxirsError> {
         let change_index = self.change_index.read().await;
-        Ok(change_index.recent_changes.iter()
+        Ok(change_index
+            .recent_changes
+            .iter()
             .take(limit)
             .cloned()
             .collect())
     }
-    
+
     /// Perform temporal reasoning
     pub async fn temporal_reason(
         &self,
         query: TemporalQuery,
     ) -> Result<TemporalResult, OxirsError> {
         match query {
-            TemporalQuery::AllenRelation { triple1, triple2, relation } => {
+            TemporalQuery::AllenRelation {
+                triple1,
+                triple2,
+                relation,
+            } => {
                 // Implement Allen's interval algebra
                 Ok(TemporalResult::Boolean(false)) // Placeholder
             }
-            TemporalQuery::TemporalPath { start, end, predicate, max_hops } => {
+            TemporalQuery::TemporalPath {
+                start,
+                end,
+                predicate,
+                max_hops,
+            } => {
                 // Find temporal paths between entities
                 Ok(TemporalResult::Paths(Vec::new())) // Placeholder
             }
-            TemporalQuery::ChangeDetection { entity, property, threshold } => {
+            TemporalQuery::ChangeDetection {
+                entity,
+                property,
+                threshold,
+            } => {
                 // Detect significant changes
                 Ok(TemporalResult::Changes(Vec::new())) // Placeholder
             }
-            TemporalQuery::TrendAnalysis { entity, property, window } => {
+            TemporalQuery::TrendAnalysis {
+                entity,
+                property,
+                window,
+            } => {
                 // Analyze trends over time
                 Ok(TemporalResult::Trend(TrendData::default())) // Placeholder
             }
         }
     }
-    
+
     /// Apply retention policy
     pub async fn apply_retention(&self) -> Result<usize, OxirsError> {
         let mut removed = 0;
         let now = Utc::now();
-        
+
         let mut buckets = self.buckets.write().await;
         let mut to_remove = Vec::new();
-        
+
         for (bucket_time, bucket) in buckets.iter_mut() {
             match &self.config.retention {
                 RetentionPolicy::Days(days) => {
@@ -463,18 +479,18 @@ impl TemporalStorage {
                 _ => {} // Other policies not implemented in this example
             }
         }
-        
+
         for bucket_time in to_remove {
             buckets.remove(&bucket_time);
         }
-        
+
         // Update stats
         let mut stats = self.stats.write().await;
         stats.total_triples = stats.total_triples.saturating_sub(removed as u64);
-        
+
         Ok(removed)
     }
-    
+
     /// Get bucket time for a given timestamp
     fn get_bucket_time(&self, time: DateTime<Utc>) -> DateTime<Utc> {
         let bucket_seconds = self.config.bucket_duration.num_seconds();
@@ -482,63 +498,61 @@ impl TemporalStorage {
         let bucket_timestamp = (timestamp / bucket_seconds) * bucket_seconds;
         DateTime::from_timestamp(bucket_timestamp, 0).unwrap()
     }
-    
+
     /// Update entity index
-    async fn update_entity_index(
-        &self,
-        temporal: &TemporalTriple,
-    ) -> Result<(), OxirsError> {
+    async fn update_entity_index(&self, temporal: &TemporalTriple) -> Result<(), OxirsError> {
         let mut entity_index = self.entity_index.write().await;
-        
+
         // Extract entity URI from subject
         let entity_uri = match temporal.triple.subject() {
             crate::model::Subject::NamedNode(nn) => nn.as_str().to_string(),
             _ => return Ok(()), // Skip non-URI subjects
         };
-        
-        let history = entity_index.entity_history
+
+        let history = entity_index
+            .entity_history
             .entry(entity_uri)
             .or_insert_with(|| EntityHistory {
                 states: BTreeMap::new(),
                 changes: Vec::new(),
             });
-        
+
         // Update entity state
-        let state = history.states
+        let state = history
+            .states
             .entry(temporal.valid_from)
             .or_insert_with(|| EntityState {
                 properties: HashMap::new(),
                 relationships: HashMap::new(),
             });
-        
+
         // Add property or relationship
         let predicate_uri = temporal.triple.predicate().as_str();
         match temporal.triple.object() {
             crate::model::Object::Literal(lit) => {
-                state.properties
+                state
+                    .properties
                     .entry(predicate_uri.to_string())
                     .or_insert_with(Vec::new)
                     .push(lit.clone());
             }
             crate::model::Object::NamedNode(nn) => {
-                state.relationships
+                state
+                    .relationships
                     .entry(predicate_uri.to_string())
                     .or_insert_with(Vec::new)
                     .push(nn.as_str().to_string());
             }
             _ => {}
         }
-        
+
         Ok(())
     }
-    
+
     /// Update change index
-    async fn update_change_index(
-        &self,
-        temporal: &TemporalTriple,
-    ) -> Result<(), OxirsError> {
+    async fn update_change_index(&self, temporal: &TemporalTriple) -> Result<(), OxirsError> {
         let mut change_index = self.change_index.write().await;
-        
+
         let change = ChangeEvent {
             timestamp: temporal.valid_from,
             change_type: ChangeType::Insert,
@@ -546,19 +560,20 @@ impl TemporalStorage {
             old_value: None,
             new_value: Some(Term::from_object(temporal.triple.object())),
         };
-        
+
         // Add to recent changes
         change_index.recent_changes.push_front(change.clone());
         if change_index.recent_changes.len() > 10000 {
             change_index.recent_changes.pop_back();
         }
-        
+
         // Index by property
-        change_index.property_changes
+        change_index
+            .property_changes
             .entry(change.property.clone())
             .or_insert_with(Vec::new)
             .push(change);
-        
+
         Ok(())
     }
 }
@@ -632,61 +647,62 @@ pub struct TrendData {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_temporal_storage() {
         let config = TemporalConfig {
             path: PathBuf::from("/tmp/oxirs_temporal_test"),
             ..Default::default()
         };
-        
+
         let storage = TemporalStorage::new(config).await.unwrap();
-        
+
         // Create temporal triple
         let triple = Triple::new(
             NamedNode::new("http://example.org/person1").unwrap(),
             NamedNode::new("http://example.org/age").unwrap(),
             crate::model::Object::Literal(Literal::new("25")),
         );
-        
+
         let valid_from = Utc::now() - Duration::days(365);
         let valid_to = Some(Utc::now() - Duration::days(180));
-        
+
         // Store temporal triple
-        storage.store_temporal(triple.clone(), valid_from, valid_to, None)
+        storage
+            .store_temporal(triple.clone(), valid_from, valid_to, None)
             .await
             .unwrap();
-        
+
         // Query at a time when triple was valid
         let query_time = Utc::now() - Duration::days(270);
         let pattern = TriplePattern::new(
             Some(crate::model::SubjectPattern::NamedNode(
-                NamedNode::new("http://example.org/person1").unwrap()
+                NamedNode::new("http://example.org/person1").unwrap(),
             )),
             None,
             None,
         );
-        
+
         let results = storage.query_at_time(&pattern, query_time).await.unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0], triple);
-        
+
         // Query at current time (should be empty as triple is no longer valid)
         let current_results = storage.query_at_time(&pattern, Utc::now()).await.unwrap();
         assert_eq!(current_results.len(), 0);
     }
-    
+
     #[tokio::test]
     async fn test_entity_history() {
         let config = TemporalConfig {
             path: PathBuf::from("/tmp/oxirs_temporal_history"),
             ..Default::default()
         };
-        
+
         let storage = TemporalStorage::new(config).await.unwrap();
-        
+
         let entity = "http://example.org/person1";
-        
+
         // Store multiple versions of age
         for age in 20..=25 {
             let triple = Triple::new(
@@ -694,17 +710,18 @@ mod tests {
                 NamedNode::new("http://example.org/age").unwrap(),
                 crate::model::Object::Literal(Literal::new(&age.to_string())),
             );
-            
+
             let valid_from = Utc::now() - Duration::days((26 - age) as i64 * 365);
-            storage.store_temporal(triple, valid_from, None, None)
+            storage
+                .store_temporal(triple, valid_from, None, None)
                 .await
                 .unwrap();
         }
-        
+
         // Get entity history
         let history = storage.get_entity_history(entity).await.unwrap();
         assert!(history.is_some());
-        
+
         let history = history.unwrap();
         assert_eq!(history.states.len(), 6);
     }

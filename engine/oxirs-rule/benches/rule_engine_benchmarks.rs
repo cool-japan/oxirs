@@ -3,36 +3,38 @@
 //! This module provides detailed performance testing for all aspects of the rule engine
 //! including forward chaining, backward chaining, RETE networks, and built-in predicates.
 
-use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_rule::{
-    RuleEngine, Rule, RuleAtom, Term,
-    forward::ForwardChainer,
     backward::BackwardChainer,
+    forward::ForwardChainer,
+    integration::{rule_builders, RuleIntegration},
     rete::ReteNetwork,
-    swrl::{SwrlEngine, SwrlRule, SwrlAtom, SwrlArgument},
-    integration::{RuleIntegration, rule_builders},
+    swrl::{SwrlArgument, SwrlAtom, SwrlEngine, SwrlRule},
+    Rule, RuleAtom, RuleEngine, Term,
 };
 use std::collections::HashMap;
 
 /// Generate test facts for benchmarking
 fn generate_test_facts(size: usize) -> Vec<RuleAtom> {
     let mut facts = Vec::with_capacity(size);
-    
+
     for i in 0..size {
         // Generate person facts
         facts.push(RuleAtom::Triple {
             subject: Term::Constant(format!("http://example.org/person{}", i)),
-            predicate: Term::Constant("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string()),
+            predicate: Term::Constant(
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
+            ),
             object: Term::Constant("http://example.org/Person".to_string()),
         });
-        
+
         // Generate age facts
         facts.push(RuleAtom::Triple {
             subject: Term::Constant(format!("http://example.org/person{}", i)),
             predicate: Term::Constant("http://example.org/hasAge".to_string()),
             object: Term::Literal((20 + i % 60).to_string()),
         });
-        
+
         // Generate some relationships
         if i > 0 {
             facts.push(RuleAtom::Triple {
@@ -42,14 +44,14 @@ fn generate_test_facts(size: usize) -> Vec<RuleAtom> {
             });
         }
     }
-    
+
     facts
 }
 
 /// Generate test rules for benchmarking
 fn generate_test_rules(complexity: usize) -> Vec<Rule> {
     let mut rules = Vec::new();
-    
+
     // Basic type inheritance rules
     for i in 0..complexity {
         rules.push(Rule {
@@ -57,7 +59,9 @@ fn generate_test_rules(complexity: usize) -> Vec<Rule> {
             body: vec![
                 RuleAtom::Triple {
                     subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string()),
+                    predicate: Term::Constant(
+                        "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
+                    ),
                     object: Term::Constant("http://example.org/Person".to_string()),
                 },
                 RuleAtom::Triple {
@@ -66,31 +70,31 @@ fn generate_test_rules(complexity: usize) -> Vec<Rule> {
                     object: Term::Variable("Age".to_string()),
                 },
             ],
-            head: vec![
-                RuleAtom::Triple {
-                    subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string()),
-                    object: Term::Constant(format!("http://example.org/Adult{}", i)),
-                },
-            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant(
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
+                ),
+                object: Term::Constant(format!("http://example.org/Adult{}", i)),
+            }],
         });
     }
-    
+
     // Add RDFS reasoning rules
     rules.extend(rule_builders::all_rdfs_rules());
-    
+
     rules
 }
 
 /// Benchmark forward chaining performance
 fn benchmark_forward_chaining(c: &mut Criterion) {
     let mut group = c.benchmark_group("forward_chaining");
-    
+
     for fact_size in [100, 500, 1000, 5000].iter() {
         for rule_count in [5, 10, 20].iter() {
             let facts = generate_test_facts(*fact_size);
             let rules = generate_test_rules(*rule_count);
-            
+
             group.throughput(Throughput::Elements(*fact_size as u64));
             group.bench_with_input(
                 BenchmarkId::new("facts_rules", format!("{}_{}", fact_size, rule_count)),
@@ -107,24 +111,26 @@ fn benchmark_forward_chaining(c: &mut Criterion) {
             );
         }
     }
-    
+
     group.finish();
 }
 
 /// Benchmark backward chaining performance  
 fn benchmark_backward_chaining(c: &mut Criterion) {
     let mut group = c.benchmark_group("backward_chaining");
-    
+
     for fact_size in [100, 500, 1000].iter() {
         let facts = generate_test_facts(*fact_size);
         let rules = generate_test_rules(10);
-        
+
         let goal = RuleAtom::Triple {
             subject: Term::Constant("http://example.org/person0".to_string()),
-            predicate: Term::Constant("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string()),
+            predicate: Term::Constant(
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
+            ),
             object: Term::Constant("http://example.org/Adult0".to_string()),
         };
-        
+
         group.throughput(Throughput::Elements(*fact_size as u64));
         group.bench_with_input(
             BenchmarkId::new("goal_proving", fact_size),
@@ -141,18 +147,18 @@ fn benchmark_backward_chaining(c: &mut Criterion) {
             },
         );
     }
-    
+
     group.finish();
 }
 
 /// Benchmark RETE network performance
 fn benchmark_rete_network(c: &mut Criterion) {
     let mut group = c.benchmark_group("rete_network");
-    
+
     for fact_size in [100, 500, 1000, 2000].iter() {
         let facts = generate_test_facts(*fact_size);
         let rules = generate_test_rules(15);
-        
+
         group.throughput(Throughput::Elements(*fact_size as u64));
         group.bench_with_input(
             BenchmarkId::new("rete_execution", fact_size),
@@ -160,32 +166,32 @@ fn benchmark_rete_network(c: &mut Criterion) {
             |b, (facts, rules)| {
                 b.iter(|| {
                     let mut rete = ReteNetwork::new();
-                    
+
                     // Add rules to RETE network
                     for rule in rules.iter() {
                         rete.add_rule(rule.clone()).unwrap();
                     }
-                    
+
                     // Process facts
                     for fact in facts.iter() {
                         rete.assert_fact(fact.clone()).unwrap();
                     }
-                    
+
                     rete.get_inferred_facts()
                 });
             },
         );
     }
-    
+
     group.finish();
 }
 
 /// Benchmark SWRL built-in predicates
 fn benchmark_swrl_builtins(c: &mut Criterion) {
     let mut group = c.benchmark_group("swrl_builtins");
-    
+
     let mut engine = SwrlEngine::new();
-    
+
     // Mathematical operations
     group.bench_function("math_operations", |b| {
         b.iter(|| {
@@ -194,12 +200,12 @@ fn benchmark_swrl_builtins(c: &mut Criterion) {
                 SwrlArgument::Literal("3.2".to_string()),
                 SwrlArgument::Literal("8.7".to_string()),
             ];
-            
+
             // Test multiple mathematical operations
             for _ in 0..100 {
                 oxirs_rule::swrl::builtin_add(&args).unwrap();
                 oxirs_rule::swrl::builtin_multiply(&args).unwrap();
-                
+
                 let pow_args = vec![
                     SwrlArgument::Literal("2.0".to_string()),
                     SwrlArgument::Literal("3.0".to_string()),
@@ -209,7 +215,7 @@ fn benchmark_swrl_builtins(c: &mut Criterion) {
             }
         });
     });
-    
+
     // String operations
     group.bench_function("string_operations", |b| {
         b.iter(|| {
@@ -220,7 +226,7 @@ fn benchmark_swrl_builtins(c: &mut Criterion) {
                     SwrlArgument::Literal(format!("Hello{} World", i)),
                 ];
                 oxirs_rule::swrl::builtin_string_concat(&concat_args).unwrap();
-                
+
                 let upper_args = vec![
                     SwrlArgument::Literal("test string".to_string()),
                     SwrlArgument::Literal("TEST STRING".to_string()),
@@ -229,14 +235,14 @@ fn benchmark_swrl_builtins(c: &mut Criterion) {
             }
         });
     });
-    
+
     group.finish();
 }
 
 /// Benchmark rule integration with oxirs-core
 fn benchmark_integration(c: &mut Criterion) {
     let mut group = c.benchmark_group("integration");
-    
+
     for fact_size in [100, 500, 1000].iter() {
         group.throughput(Throughput::Elements(*fact_size as u64));
         group.bench_with_input(
@@ -245,79 +251,85 @@ fn benchmark_integration(c: &mut Criterion) {
             |b, &fact_size| {
                 b.iter(|| {
                     let mut integration = RuleIntegration::new();
-                    
+
                     // Add RDFS rules
                     integration.add_rules(rule_builders::all_rdfs_rules());
-                    
+
                     // Generate and add RDF triples
                     for i in 0..fact_size {
-                        let subject = oxirs_core::NamedNode::new(&format!("http://example.org/person{}", i)).unwrap();
-                        let predicate = oxirs_core::NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
-                        let object = oxirs_core::NamedNode::new("http://example.org/Person").unwrap();
-                        
+                        let subject =
+                            oxirs_core::NamedNode::new(&format!("http://example.org/person{}", i))
+                                .unwrap();
+                        let predicate = oxirs_core::NamedNode::new(
+                            "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+                        )
+                        .unwrap();
+                        let object =
+                            oxirs_core::NamedNode::new("http://example.org/Person").unwrap();
+
                         let triple = oxirs_core::Triple::new(subject, predicate, object);
                         integration.store.insert_triple(triple).unwrap();
                     }
-                    
+
                     // Apply rules and measure performance
                     integration.apply_rules().unwrap()
                 });
             },
         );
     }
-    
+
     group.finish();
 }
 
 /// Benchmark memory usage patterns
 fn benchmark_memory_usage(c: &mut Criterion) {
     let mut group = c.benchmark_group("memory_usage");
-    
+
     group.bench_function("rule_engine_memory", |b| {
         b.iter(|| {
             let mut engine = RuleEngine::new();
             let facts = generate_test_facts(1000);
             let rules = generate_test_rules(20);
-            
+
             // Add all facts and rules
             engine.add_facts(facts);
             for rule in rules {
                 engine.add_rule(rule);
             }
-            
+
             // Perform reasoning
             let initial_facts = engine.get_facts().clone();
             engine.forward_chain(&initial_facts).unwrap();
         });
     });
-    
+
     group.bench_function("rete_memory", |b| {
         b.iter(|| {
             let mut rete = ReteNetwork::new();
             let facts = generate_test_facts(1000);
             let rules = generate_test_rules(15);
-            
+
             // Build RETE network
             for rule in rules {
                 rete.add_rule(rule).unwrap();
             }
-            
+
             // Process all facts
             for fact in facts {
                 rete.assert_fact(fact).unwrap();
             }
         });
     });
-    
+
     group.finish();
 }
 
 /// Benchmark rule complexity scaling
 fn benchmark_rule_complexity(c: &mut Criterion) {
     let mut group = c.benchmark_group("rule_complexity");
-    
+
     let facts = generate_test_facts(500);
-    
+
     for rule_complexity in [1, 2, 3, 5, 8].iter() {
         group.bench_with_input(
             BenchmarkId::new("complex_rules", rule_complexity),
@@ -325,85 +337,89 @@ fn benchmark_rule_complexity(c: &mut Criterion) {
             |b, &complexity| {
                 b.iter(|| {
                     let mut engine = RuleEngine::new();
-                    
+
                     // Generate complex rules with multiple body conditions
                     let rule = Rule {
                         name: "complex_rule".to_string(),
-                        body: (0..complexity).map(|i| {
-                            RuleAtom::Triple {
+                        body: (0..complexity)
+                            .map(|i| RuleAtom::Triple {
                                 subject: Term::Variable(format!("X{}", i)),
-                                predicate: Term::Constant("http://example.org/hasProperty".to_string()),
+                                predicate: Term::Constant(
+                                    "http://example.org/hasProperty".to_string(),
+                                ),
                                 object: Term::Variable(format!("Y{}", i)),
-                            }
-                        }).collect(),
-                        head: vec![
-                            RuleAtom::Triple {
-                                subject: Term::Variable("X0".to_string()),
-                                predicate: Term::Constant("http://example.org/isComplex".to_string()),
-                                object: Term::Constant("true".to_string()),
-                            },
-                        ],
+                            })
+                            .collect(),
+                        head: vec![RuleAtom::Triple {
+                            subject: Term::Variable("X0".to_string()),
+                            predicate: Term::Constant("http://example.org/isComplex".to_string()),
+                            object: Term::Constant("true".to_string()),
+                        }],
                     };
-                    
+
                     engine.add_rule(rule);
                     engine.forward_chain(&facts).unwrap()
                 });
             },
         );
     }
-    
+
     group.finish();
 }
 
 /// Benchmark concurrent rule execution
 fn benchmark_concurrent_execution(c: &mut Criterion) {
     let mut group = c.benchmark_group("concurrent_execution");
-    
+
     group.bench_function("parallel_rule_application", |b| {
         b.iter(|| {
             use std::sync::{Arc, Mutex};
             use std::thread;
-            
+
             let facts = Arc::new(generate_test_facts(200));
             let rules = Arc::new(generate_test_rules(10));
             let results = Arc::new(Mutex::new(Vec::new()));
-            
+
             let mut handles = Vec::new();
-            
+
             // Spawn multiple threads to process rules concurrently
             for thread_id in 0..4 {
                 let facts_clone = Arc::clone(&facts);
                 let rules_clone = Arc::clone(&rules);
                 let results_clone = Arc::clone(&results);
-                
+
                 let handle = thread::spawn(move || {
                     let mut engine = RuleEngine::new();
-                    
+
                     // Each thread processes a subset of rules
                     let chunk_size = rules_clone.len() / 4;
                     let start = thread_id * chunk_size;
-                    let end = if thread_id == 3 { rules_clone.len() } else { start + chunk_size };
-                    
+                    let end = if thread_id == 3 {
+                        rules_clone.len()
+                    } else {
+                        start + chunk_size
+                    };
+
                     for rule in &rules_clone[start..end] {
                         engine.add_rule(rule.clone());
                     }
-                    
+
                     let result = engine.forward_chain(&facts_clone).unwrap();
-                    
+
                     let mut results_guard = results_clone.lock().unwrap();
                     results_guard.push(result);
                 });
-                
+
                 handles.push(handle);
             }
-            
+
             // Wait for all threads to complete
             for handle in handles {
                 handle.join().unwrap();
             }
         });
     });
-    
+
     group.finish();
 }
 

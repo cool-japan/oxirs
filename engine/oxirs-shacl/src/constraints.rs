@@ -1,20 +1,20 @@
 //! SHACL constraint implementation
-//! 
+//!
 //! This module implements all SHACL Core constraints and validation logic.
 
-use std::collections::{HashMap, HashSet};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 
 use oxirs_core::{
-    model::{NamedNode, Term, Triple, BlankNode, Literal},
+    model::{BlankNode, Literal, NamedNode, Term, Triple},
     store::Store,
     OxirsError,
 };
 
 use crate::{
-    ShaclError, Result, PropertyPath, Severity, ShapeId, ConstraintComponentId,
-    SHACL_VOCAB, sparql::SparqlConstraint,
+    sparql::SparqlConstraint, ConstraintComponentId, PropertyPath, Result, Severity, ShaclError,
+    ShapeId, SHACL_VOCAB,
 };
 
 /// SHACL constraint types
@@ -24,24 +24,24 @@ pub enum Constraint {
     Class(ClassConstraint),
     Datatype(DatatypeConstraint),
     NodeKind(NodeKindConstraint),
-    
+
     // Cardinality Constraints
     MinCount(MinCountConstraint),
     MaxCount(MaxCountConstraint),
-    
+
     // Range Constraints
     MinExclusive(MinExclusiveConstraint),
     MaxExclusive(MaxExclusiveConstraint),
     MinInclusive(MinInclusiveConstraint),
     MaxInclusive(MaxInclusiveConstraint),
-    
+
     // String Constraints
     MinLength(MinLengthConstraint),
     MaxLength(MaxLengthConstraint),
     Pattern(PatternConstraint),
     LanguageIn(LanguageInConstraint),
     UniqueLang(UniqueLangConstraint),
-    
+
     // Value Constraints
     Equals(EqualsConstraint),
     Disjoint(DisjointConstraint),
@@ -49,20 +49,20 @@ pub enum Constraint {
     LessThanOrEquals(LessThanOrEqualsConstraint),
     In(InConstraint),
     HasValue(HasValueConstraint),
-    
+
     // Logical Constraints
     Not(NotConstraint),
     And(AndConstraint),
     Or(OrConstraint),
     Xone(XoneConstraint),
-    
+
     // Shape-based Constraints
     Node(NodeConstraint),
     QualifiedValueShape(QualifiedValueShapeConstraint),
-    
+
     // Closed Shape Constraints
     Closed(ClosedConstraint),
-    
+
     // SPARQL Constraints
     Sparql(SparqlConstraint),
 }
@@ -101,47 +101,91 @@ impl Constraint {
             Constraint::Sparql(c) => c.validate(),
         }
     }
-    
+
     /// Get the constraint component ID for this constraint
     pub fn component_id(&self) -> ConstraintComponentId {
         match self {
-            Constraint::Class(_) => ConstraintComponentId("sh:ClassConstraintComponent".to_string()),
-            Constraint::Datatype(_) => ConstraintComponentId("sh:DatatypeConstraintComponent".to_string()),
-            Constraint::NodeKind(_) => ConstraintComponentId("sh:NodeKindConstraintComponent".to_string()),
-            Constraint::MinCount(_) => ConstraintComponentId("sh:MinCountConstraintComponent".to_string()),
-            Constraint::MaxCount(_) => ConstraintComponentId("sh:MaxCountConstraintComponent".to_string()),
-            Constraint::MinExclusive(_) => ConstraintComponentId("sh:MinExclusiveConstraintComponent".to_string()),
-            Constraint::MaxExclusive(_) => ConstraintComponentId("sh:MaxExclusiveConstraintComponent".to_string()),
-            Constraint::MinInclusive(_) => ConstraintComponentId("sh:MinInclusiveConstraintComponent".to_string()),
-            Constraint::MaxInclusive(_) => ConstraintComponentId("sh:MaxInclusiveConstraintComponent".to_string()),
-            Constraint::MinLength(_) => ConstraintComponentId("sh:MinLengthConstraintComponent".to_string()),
-            Constraint::MaxLength(_) => ConstraintComponentId("sh:MaxLengthConstraintComponent".to_string()),
-            Constraint::Pattern(_) => ConstraintComponentId("sh:PatternConstraintComponent".to_string()),
-            Constraint::LanguageIn(_) => ConstraintComponentId("sh:LanguageInConstraintComponent".to_string()),
-            Constraint::UniqueLang(_) => ConstraintComponentId("sh:UniqueLangConstraintComponent".to_string()),
-            Constraint::Equals(_) => ConstraintComponentId("sh:EqualsConstraintComponent".to_string()),
-            Constraint::Disjoint(_) => ConstraintComponentId("sh:DisjointConstraintComponent".to_string()),
-            Constraint::LessThan(_) => ConstraintComponentId("sh:LessThanConstraintComponent".to_string()),
-            Constraint::LessThanOrEquals(_) => ConstraintComponentId("sh:LessThanOrEqualsConstraintComponent".to_string()),
+            Constraint::Class(_) => {
+                ConstraintComponentId("sh:ClassConstraintComponent".to_string())
+            }
+            Constraint::Datatype(_) => {
+                ConstraintComponentId("sh:DatatypeConstraintComponent".to_string())
+            }
+            Constraint::NodeKind(_) => {
+                ConstraintComponentId("sh:NodeKindConstraintComponent".to_string())
+            }
+            Constraint::MinCount(_) => {
+                ConstraintComponentId("sh:MinCountConstraintComponent".to_string())
+            }
+            Constraint::MaxCount(_) => {
+                ConstraintComponentId("sh:MaxCountConstraintComponent".to_string())
+            }
+            Constraint::MinExclusive(_) => {
+                ConstraintComponentId("sh:MinExclusiveConstraintComponent".to_string())
+            }
+            Constraint::MaxExclusive(_) => {
+                ConstraintComponentId("sh:MaxExclusiveConstraintComponent".to_string())
+            }
+            Constraint::MinInclusive(_) => {
+                ConstraintComponentId("sh:MinInclusiveConstraintComponent".to_string())
+            }
+            Constraint::MaxInclusive(_) => {
+                ConstraintComponentId("sh:MaxInclusiveConstraintComponent".to_string())
+            }
+            Constraint::MinLength(_) => {
+                ConstraintComponentId("sh:MinLengthConstraintComponent".to_string())
+            }
+            Constraint::MaxLength(_) => {
+                ConstraintComponentId("sh:MaxLengthConstraintComponent".to_string())
+            }
+            Constraint::Pattern(_) => {
+                ConstraintComponentId("sh:PatternConstraintComponent".to_string())
+            }
+            Constraint::LanguageIn(_) => {
+                ConstraintComponentId("sh:LanguageInConstraintComponent".to_string())
+            }
+            Constraint::UniqueLang(_) => {
+                ConstraintComponentId("sh:UniqueLangConstraintComponent".to_string())
+            }
+            Constraint::Equals(_) => {
+                ConstraintComponentId("sh:EqualsConstraintComponent".to_string())
+            }
+            Constraint::Disjoint(_) => {
+                ConstraintComponentId("sh:DisjointConstraintComponent".to_string())
+            }
+            Constraint::LessThan(_) => {
+                ConstraintComponentId("sh:LessThanConstraintComponent".to_string())
+            }
+            Constraint::LessThanOrEquals(_) => {
+                ConstraintComponentId("sh:LessThanOrEqualsConstraintComponent".to_string())
+            }
             Constraint::In(_) => ConstraintComponentId("sh:InConstraintComponent".to_string()),
-            Constraint::HasValue(_) => ConstraintComponentId("sh:HasValueConstraintComponent".to_string()),
+            Constraint::HasValue(_) => {
+                ConstraintComponentId("sh:HasValueConstraintComponent".to_string())
+            }
             Constraint::Not(_) => ConstraintComponentId("sh:NotConstraintComponent".to_string()),
             Constraint::And(_) => ConstraintComponentId("sh:AndConstraintComponent".to_string()),
             Constraint::Or(_) => ConstraintComponentId("sh:OrConstraintComponent".to_string()),
             Constraint::Xone(_) => ConstraintComponentId("sh:XoneConstraintComponent".to_string()),
             Constraint::Node(_) => ConstraintComponentId("sh:NodeConstraintComponent".to_string()),
-            Constraint::QualifiedValueShape(_) => ConstraintComponentId("sh:QualifiedValueShapeConstraintComponent".to_string()),
-            Constraint::Closed(_) => ConstraintComponentId("sh:ClosedConstraintComponent".to_string()),
-            Constraint::Sparql(_) => ConstraintComponentId("sh:SPARQLConstraintComponent".to_string()),
+            Constraint::QualifiedValueShape(_) => {
+                ConstraintComponentId("sh:QualifiedValueShapeConstraintComponent".to_string())
+            }
+            Constraint::Closed(_) => {
+                ConstraintComponentId("sh:ClosedConstraintComponent".to_string())
+            }
+            Constraint::Sparql(_) => {
+                ConstraintComponentId("sh:SPARQLConstraintComponent".to_string())
+            }
         }
     }
-    
+
     /// Get severity for this constraint (if specified)
     pub fn severity(&self) -> Option<Severity> {
         // Most constraints don't specify their own severity
         None
     }
-    
+
     /// Get custom message for this constraint (if specified)
     pub fn message(&self) -> Option<&str> {
         match self {
@@ -150,9 +194,13 @@ impl Constraint {
             _ => None,
         }
     }
-    
+
     /// Evaluate this constraint against the given context
-    pub fn evaluate(&self, store: &Store, context: &ConstraintContext) -> Result<ConstraintEvaluationResult> {
+    pub fn evaluate(
+        &self,
+        store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
         match self {
             Constraint::Class(c) => c.evaluate(store, context),
             Constraint::Datatype(c) => c.evaluate(store, context),
@@ -161,10 +209,13 @@ impl Constraint {
             Constraint::MaxCount(c) => c.evaluate(store, context),
             Constraint::Pattern(c) => c.evaluate(store, context),
             Constraint::In(c) => c.evaluate(store, context),
-            
+
             // TODO: Implement evaluation for other constraint types
             _ => {
-                tracing::warn!("Constraint evaluation not yet implemented for {:?}", self.component_id());
+                tracing::warn!(
+                    "Constraint evaluation not yet implemented for {:?}",
+                    self.component_id()
+                );
                 Ok(ConstraintEvaluationResult::satisfied())
             }
         }
@@ -179,7 +230,11 @@ pub trait ConstraintValidator {
 /// Trait for evaluating constraints against data
 pub trait ConstraintEvaluator {
     /// Evaluate the constraint against the given context
-    fn evaluate(&self, store: &Store, context: &ConstraintContext) -> Result<ConstraintEvaluationResult>;
+    fn evaluate(
+        &self,
+        store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult>;
 }
 
 // Core Value Constraints
@@ -198,14 +253,21 @@ impl ConstraintValidator for ClassConstraint {
 }
 
 impl ConstraintEvaluator for ClassConstraint {
-    fn evaluate(&self, store: &Store, context: &ConstraintContext) -> Result<ConstraintEvaluationResult> {
+    fn evaluate(
+        &self,
+        store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
         // For each value, check if it's an instance of the required class
         for value in &context.values {
             let is_instance = self.check_class_membership(store, value)?;
             if !is_instance {
                 return Ok(ConstraintEvaluationResult::violated(
                     Some(value.clone()),
-                    Some(format!("Value {} is not an instance of class {}", value, self.class_iri))
+                    Some(format!(
+                        "Value {} is not an instance of class {}",
+                        value, self.class_iri
+                    )),
                 ));
             }
         }
@@ -220,15 +282,20 @@ impl ClassConstraint {
         match value {
             Term::NamedNode(node) => {
                 // Query for ?value rdf:type ?class where ?class is self.class_iri or a subclass
-                let type_predicate = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-                    .map_err(|e| ShaclError::ConstraintValidation(format!("Invalid RDF type IRI: {}", e)))?;
-                
+                let type_predicate = NamedNode::new(
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+                )
+                .map_err(|e| {
+                    ShaclError::ConstraintValidation(format!("Invalid RDF type IRI: {}", e))
+                })?;
+
                 // Check direct type assertion
-                let triple = Triple::new(node.clone(), type_predicate.clone(), self.class_iri.clone());
+                let triple =
+                    Triple::new(node.clone(), type_predicate.clone(), self.class_iri.clone());
                 if store.contains_quad(&triple.into()).unwrap_or(false) {
                     return Ok(true);
                 }
-                
+
                 // TODO: Check subclass relationships using RDFS reasoning
                 // For now, we only check direct type assertions
                 Ok(false)
@@ -255,7 +322,11 @@ impl ConstraintValidator for DatatypeConstraint {
 }
 
 impl ConstraintEvaluator for DatatypeConstraint {
-    fn evaluate(&self, store: &Store, context: &ConstraintContext) -> Result<ConstraintEvaluationResult> {
+    fn evaluate(
+        &self,
+        store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
         // For each value, check if it has the required datatype
         for value in &context.values {
             match value {
@@ -263,15 +334,22 @@ impl ConstraintEvaluator for DatatypeConstraint {
                     if literal.datatype() != Some(&self.datatype_iri) {
                         return Ok(ConstraintEvaluationResult::violated(
                             Some(value.clone()),
-                            Some(format!("Value {} has datatype {:?} but expected {}", 
-                                literal, literal.datatype(), self.datatype_iri))
+                            Some(format!(
+                                "Value {} has datatype {:?} but expected {}",
+                                literal,
+                                literal.datatype(),
+                                self.datatype_iri
+                            )),
                         ));
                     }
                 }
                 _ => {
                     return Ok(ConstraintEvaluationResult::violated(
                         Some(value.clone()),
-                        Some(format!("Value {} is not a literal, cannot check datatype", value))
+                        Some(format!(
+                            "Value {} is not a literal, cannot check datatype",
+                            value
+                        )),
                     ));
                 }
             }
@@ -304,13 +382,20 @@ impl ConstraintValidator for NodeKindConstraint {
 }
 
 impl ConstraintEvaluator for NodeKindConstraint {
-    fn evaluate(&self, store: &Store, context: &ConstraintContext) -> Result<ConstraintEvaluationResult> {
+    fn evaluate(
+        &self,
+        store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
         // For each value, check if it matches the required node kind
         for value in &context.values {
             if !self.matches_node_kind(value) {
                 return Ok(ConstraintEvaluationResult::violated(
                     Some(value.clone()),
-                    Some(format!("Value {} does not match required node kind {:?}", value, self.node_kind))
+                    Some(format!(
+                        "Value {} does not match required node kind {:?}",
+                        value, self.node_kind
+                    )),
                 ));
             }
         }
@@ -350,12 +435,19 @@ impl ConstraintValidator for MinCountConstraint {
 }
 
 impl ConstraintEvaluator for MinCountConstraint {
-    fn evaluate(&self, store: &Store, context: &ConstraintContext) -> Result<ConstraintEvaluationResult> {
+    fn evaluate(
+        &self,
+        store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
         let value_count = context.values.len() as u32;
         if value_count < self.min_count {
             return Ok(ConstraintEvaluationResult::violated(
                 None,
-                Some(format!("Expected at least {} values, but found {}", self.min_count, value_count))
+                Some(format!(
+                    "Expected at least {} values, but found {}",
+                    self.min_count, value_count
+                )),
             ));
         }
         Ok(ConstraintEvaluationResult::satisfied())
@@ -375,12 +467,19 @@ impl ConstraintValidator for MaxCountConstraint {
 }
 
 impl ConstraintEvaluator for MaxCountConstraint {
-    fn evaluate(&self, store: &Store, context: &ConstraintContext) -> Result<ConstraintEvaluationResult> {
+    fn evaluate(
+        &self,
+        store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
         let value_count = context.values.len() as u32;
         if value_count > self.max_count {
             return Ok(ConstraintEvaluationResult::violated(
                 None,
-                Some(format!("Expected at most {} values, but found {}", self.max_count, value_count))
+                Some(format!(
+                    "Expected at most {} values, but found {}",
+                    self.max_count, value_count
+                )),
             ));
         }
         Ok(ConstraintEvaluationResult::satisfied())
@@ -476,55 +575,69 @@ impl ConstraintValidator for PatternConstraint {
     fn validate(&self) -> Result<()> {
         // Validate that the pattern is a valid regex
         let mut regex_builder = regex::RegexBuilder::new(&self.pattern);
-        
+
         if let Some(flags) = &self.flags {
             // Parse regex flags
             let case_insensitive = flags.contains('i');
             let multi_line = flags.contains('m');
             let dot_matches_new_line = flags.contains('s');
-            
+
             let _regex = regex_builder
                 .case_insensitive(case_insensitive)
                 .multi_line(multi_line)
                 .dot_matches_new_line(dot_matches_new_line)
                 .build()
-                .map_err(|e| ShaclError::ConstraintValidation(
-                    format!("Invalid regex pattern '{}': {}", self.pattern, e)
-                ))?;
+                .map_err(|e| {
+                    ShaclError::ConstraintValidation(format!(
+                        "Invalid regex pattern '{}': {}",
+                        self.pattern, e
+                    ))
+                })?;
         } else {
-            let _regex = Regex::new(&self.pattern)
-                .map_err(|e| ShaclError::ConstraintValidation(
-                    format!("Invalid regex pattern '{}': {}", self.pattern, e)
-                ))?;
+            let _regex = Regex::new(&self.pattern).map_err(|e| {
+                ShaclError::ConstraintValidation(format!(
+                    "Invalid regex pattern '{}': {}",
+                    self.pattern, e
+                ))
+            })?;
         }
-        
+
         Ok(())
     }
 }
 
 impl ConstraintEvaluator for PatternConstraint {
-    fn evaluate(&self, store: &Store, context: &ConstraintContext) -> Result<ConstraintEvaluationResult> {
+    fn evaluate(
+        &self,
+        store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
         // Build the regex with flags
         let regex = if let Some(flags) = &self.flags {
             let case_insensitive = flags.contains('i');
             let multi_line = flags.contains('m');
             let dot_matches_new_line = flags.contains('s');
-            
+
             regex::RegexBuilder::new(&self.pattern)
                 .case_insensitive(case_insensitive)
                 .multi_line(multi_line)
                 .dot_matches_new_line(dot_matches_new_line)
                 .build()
-                .map_err(|e| ShaclError::ConstraintValidation(
-                    format!("Invalid regex pattern '{}': {}", self.pattern, e)
-                ))?
+                .map_err(|e| {
+                    ShaclError::ConstraintValidation(format!(
+                        "Invalid regex pattern '{}': {}",
+                        self.pattern, e
+                    ))
+                })?
         } else {
-            Regex::new(&self.pattern)
-                .map_err(|e| ShaclError::ConstraintValidation(
-                    format!("Invalid regex pattern '{}': {}", self.pattern, e)
-                ))?
+            Regex::new(&self.pattern).map_err(|e| {
+                ShaclError::ConstraintValidation(format!(
+                    "Invalid regex pattern '{}': {}",
+                    self.pattern, e
+                ))
+            })?
         };
-        
+
         // Check each value against the pattern
         for value in &context.values {
             match value {
@@ -532,23 +645,29 @@ impl ConstraintEvaluator for PatternConstraint {
                     let string_value = literal.value();
                     if !regex.is_match(string_value) {
                         let message = self.message.clone().unwrap_or_else(|| {
-                            format!("Value '{}' does not match pattern '{}'", string_value, self.pattern)
+                            format!(
+                                "Value '{}' does not match pattern '{}'",
+                                string_value, self.pattern
+                            )
                         });
                         return Ok(ConstraintEvaluationResult::violated(
                             Some(value.clone()),
-                            Some(message)
+                            Some(message),
                         ));
                     }
                 }
                 _ => {
                     return Ok(ConstraintEvaluationResult::violated(
                         Some(value.clone()),
-                        Some(format!("Value {} is not a literal, cannot check pattern", value))
+                        Some(format!(
+                            "Value {} is not a literal, cannot check pattern",
+                            value
+                        )),
                     ));
                 }
             }
         }
-        
+
         Ok(ConstraintEvaluationResult::satisfied())
     }
 }
@@ -565,7 +684,7 @@ impl ConstraintValidator for LanguageInConstraint {
         for lang in &self.languages {
             if lang.is_empty() {
                 return Err(ShaclError::ConstraintValidation(
-                    "Empty language tag in sh:languageIn".to_string()
+                    "Empty language tag in sh:languageIn".to_string(),
                 ));
             }
             // TODO: More thorough BCP 47 validation
@@ -646,7 +765,7 @@ impl ConstraintValidator for InConstraint {
     fn validate(&self) -> Result<()> {
         if self.values.is_empty() {
             return Err(ShaclError::ConstraintValidation(
-                "sh:in constraint must have at least one value".to_string()
+                "sh:in constraint must have at least one value".to_string(),
             ));
         }
         Ok(())
@@ -654,13 +773,20 @@ impl ConstraintValidator for InConstraint {
 }
 
 impl ConstraintEvaluator for InConstraint {
-    fn evaluate(&self, store: &Store, context: &ConstraintContext) -> Result<ConstraintEvaluationResult> {
+    fn evaluate(
+        &self,
+        store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
         // Check if each value is in the allowed set
         for value in &context.values {
             if !self.values.contains(value) {
                 return Ok(ConstraintEvaluationResult::violated(
                     Some(value.clone()),
-                    Some(format!("Value {} is not in the allowed set of values", value))
+                    Some(format!(
+                        "Value {} is not in the allowed set of values",
+                        value
+                    )),
                 ));
             }
         }
@@ -704,7 +830,7 @@ impl ConstraintValidator for AndConstraint {
     fn validate(&self) -> Result<()> {
         if self.shapes.is_empty() {
             return Err(ShaclError::ConstraintValidation(
-                "sh:and constraint must have at least one shape".to_string()
+                "sh:and constraint must have at least one shape".to_string(),
             ));
         }
         Ok(())
@@ -721,7 +847,7 @@ impl ConstraintValidator for OrConstraint {
     fn validate(&self) -> Result<()> {
         if self.shapes.is_empty() {
             return Err(ShaclError::ConstraintValidation(
-                "sh:or constraint must have at least one shape".to_string()
+                "sh:or constraint must have at least one shape".to_string(),
             ));
         }
         Ok(())
@@ -738,7 +864,7 @@ impl ConstraintValidator for XoneConstraint {
     fn validate(&self) -> Result<()> {
         if self.shapes.len() < 2 {
             return Err(ShaclError::ConstraintValidation(
-                "sh:xone constraint must have at least two shapes".to_string()
+                "sh:xone constraint must have at least two shapes".to_string(),
             ));
         }
         Ok(())
@@ -775,15 +901,16 @@ impl ConstraintValidator for QualifiedValueShapeConstraint {
                 "Qualified value shape constraint must have at least qualifiedMinCount or qualifiedMaxCount".to_string()
             ));
         }
-        
+
         if let (Some(min), Some(max)) = (self.qualified_min_count, self.qualified_max_count) {
             if min > max {
-                return Err(ShaclError::ConstraintValidation(
-                    format!("qualifiedMinCount ({}) cannot be greater than qualifiedMaxCount ({})", min, max)
-                ));
+                return Err(ShaclError::ConstraintValidation(format!(
+                    "qualifiedMinCount ({}) cannot be greater than qualifiedMaxCount ({})",
+                    min, max
+                )));
             }
         }
-        
+
         Ok(())
     }
 }
@@ -808,19 +935,19 @@ impl ConstraintValidator for ClosedConstraint {
 pub struct ConstraintContext {
     /// Current focus node being validated
     pub focus_node: Term,
-    
+
     /// Current property path (for property shapes)
     pub path: Option<PropertyPath>,
-    
+
     /// Values at the current path
     pub values: Vec<Term>,
-    
+
     /// Shape being validated
     pub shape_id: ShapeId,
-    
+
     /// Validation depth (for recursion control)
     pub depth: usize,
-    
+
     /// Custom validation context
     pub custom_context: HashMap<String, String>,
 }
@@ -836,17 +963,17 @@ impl ConstraintContext {
             custom_context: HashMap::new(),
         }
     }
-    
+
     pub fn with_path(mut self, path: PropertyPath) -> Self {
         self.path = Some(path);
         self
     }
-    
+
     pub fn with_values(mut self, values: Vec<Term>) -> Self {
         self.values = values;
         self
     }
-    
+
     pub fn with_depth(mut self, depth: usize) -> Self {
         self.depth = depth;
         self
@@ -858,24 +985,24 @@ impl ConstraintContext {
 pub enum ConstraintEvaluationResult {
     /// Constraint is satisfied
     Satisfied,
-    
+
     /// Constraint is violated
     Violated {
         /// Specific value that caused the violation (if applicable)
         violating_value: Option<Term>,
-        
+
         /// Custom violation message
         message: Option<String>,
-        
+
         /// Additional details about the violation
         details: HashMap<String, String>,
     },
-    
+
     /// Constraint evaluation failed due to error
     Error {
         /// Error message
         message: String,
-        
+
         /// Error details
         details: HashMap<String, String>,
     },
@@ -885,7 +1012,7 @@ impl ConstraintEvaluationResult {
     pub fn satisfied() -> Self {
         ConstraintEvaluationResult::Satisfied
     }
-    
+
     pub fn violated(violating_value: Option<Term>, message: Option<String>) -> Self {
         ConstraintEvaluationResult::Violated {
             violating_value,
@@ -893,11 +1020,11 @@ impl ConstraintEvaluationResult {
             details: HashMap::new(),
         }
     }
-    
+
     pub fn violated_with_details(
-        violating_value: Option<Term>, 
-        message: Option<String>, 
-        details: HashMap<String, String>
+        violating_value: Option<Term>,
+        message: Option<String>,
+        details: HashMap<String, String>,
     ) -> Self {
         ConstraintEvaluationResult::Violated {
             violating_value,
@@ -905,29 +1032,26 @@ impl ConstraintEvaluationResult {
             details,
         }
     }
-    
+
     pub fn error(message: String) -> Self {
         ConstraintEvaluationResult::Error {
             message,
             details: HashMap::new(),
         }
     }
-    
+
     pub fn error_with_details(message: String, details: HashMap<String, String>) -> Self {
-        ConstraintEvaluationResult::Error {
-            message,
-            details,
-        }
+        ConstraintEvaluationResult::Error { message, details }
     }
-    
+
     pub fn is_satisfied(&self) -> bool {
         matches!(self, ConstraintEvaluationResult::Satisfied)
     }
-    
+
     pub fn is_violated(&self) -> bool {
         matches!(self, ConstraintEvaluationResult::Violated { .. })
     }
-    
+
     pub fn is_error(&self) -> bool {
         matches!(self, ConstraintEvaluationResult::Error { .. })
     }
@@ -936,34 +1060,40 @@ impl ConstraintEvaluationResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_class_constraint() {
         let class_iri = NamedNode::new("http://example.org/Person").unwrap();
-        let constraint = ClassConstraint { class_iri: class_iri.clone() };
-        
+        let constraint = ClassConstraint {
+            class_iri: class_iri.clone(),
+        };
+
         assert!(constraint.validate().is_ok());
         assert_eq!(constraint.class_iri, class_iri);
     }
-    
+
     #[test]
     fn test_node_kind_constraint() {
-        let constraint = NodeKindConstraint { node_kind: NodeKind::Iri };
+        let constraint = NodeKindConstraint {
+            node_kind: NodeKind::Iri,
+        };
         assert!(constraint.validate().is_ok());
-        
-        let constraint = NodeKindConstraint { node_kind: NodeKind::BlankNodeOrLiteral };
+
+        let constraint = NodeKindConstraint {
+            node_kind: NodeKind::BlankNodeOrLiteral,
+        };
         assert!(constraint.validate().is_ok());
     }
-    
+
     #[test]
     fn test_min_max_count_constraints() {
         let min_constraint = MinCountConstraint { min_count: 1 };
         assert!(min_constraint.validate().is_ok());
-        
+
         let max_constraint = MaxCountConstraint { max_count: 5 };
         assert!(max_constraint.validate().is_ok());
     }
-    
+
     #[test]
     fn test_pattern_constraint_valid() {
         let constraint = PatternConstraint {
@@ -971,10 +1101,10 @@ mod tests {
             flags: Some("i".to_string()),
             message: Some("Must be letters only".to_string()),
         };
-        
+
         assert!(constraint.validate().is_ok());
     }
-    
+
     #[test]
     fn test_pattern_constraint_invalid() {
         let constraint = PatternConstraint {
@@ -982,10 +1112,10 @@ mod tests {
             flags: None,
             message: None,
         };
-        
+
         assert!(constraint.validate().is_err());
     }
-    
+
     #[test]
     fn test_in_constraint() {
         let values = vec![
@@ -993,44 +1123,44 @@ mod tests {
             Term::NamedNode(NamedNode::new("http://example.org/green").unwrap()),
             Term::NamedNode(NamedNode::new("http://example.org/blue").unwrap()),
         ];
-        
-        let constraint = InConstraint { values: values.clone() };
+
+        let constraint = InConstraint {
+            values: values.clone(),
+        };
         assert!(constraint.validate().is_ok());
-        
+
         let empty_constraint = InConstraint { values: vec![] };
         assert!(empty_constraint.validate().is_err());
     }
-    
+
     #[test]
     fn test_and_constraint() {
-        let shapes = vec![
-            ShapeId::new("shape1"),
-            ShapeId::new("shape2"),
-        ];
-        
-        let constraint = AndConstraint { shapes: shapes.clone() };
+        let shapes = vec![ShapeId::new("shape1"), ShapeId::new("shape2")];
+
+        let constraint = AndConstraint {
+            shapes: shapes.clone(),
+        };
         assert!(constraint.validate().is_ok());
-        
+
         let empty_constraint = AndConstraint { shapes: vec![] };
         assert!(empty_constraint.validate().is_err());
     }
-    
+
     #[test]
     fn test_xone_constraint() {
-        let shapes = vec![
-            ShapeId::new("shape1"),
-            ShapeId::new("shape2"),
-        ];
-        
-        let constraint = XoneConstraint { shapes: shapes.clone() };
+        let shapes = vec![ShapeId::new("shape1"), ShapeId::new("shape2")];
+
+        let constraint = XoneConstraint {
+            shapes: shapes.clone(),
+        };
         assert!(constraint.validate().is_ok());
-        
-        let single_shape_constraint = XoneConstraint { 
-            shapes: vec![ShapeId::new("shape1")] 
+
+        let single_shape_constraint = XoneConstraint {
+            shapes: vec![ShapeId::new("shape1")],
         };
         assert!(single_shape_constraint.validate().is_err());
     }
-    
+
     #[test]
     fn test_qualified_value_shape_constraint() {
         let constraint = QualifiedValueShapeConstraint {
@@ -1040,7 +1170,7 @@ mod tests {
             qualified_value_shapes_disjoint: false,
         };
         assert!(constraint.validate().is_ok());
-        
+
         let invalid_constraint = QualifiedValueShapeConstraint {
             qualified_value_shape: ShapeId::new("shape1"),
             qualified_min_count: Some(5),
@@ -1048,7 +1178,7 @@ mod tests {
             qualified_value_shapes_disjoint: false,
         };
         assert!(invalid_constraint.validate().is_err());
-        
+
         let no_counts_constraint = QualifiedValueShapeConstraint {
             qualified_value_shape: ShapeId::new("shape1"),
             qualified_min_count: None,
@@ -1057,22 +1187,24 @@ mod tests {
         };
         assert!(no_counts_constraint.validate().is_err());
     }
-    
+
     #[test]
     fn test_constraint_evaluation_result() {
         let satisfied = ConstraintEvaluationResult::satisfied();
         assert!(satisfied.is_satisfied());
         assert!(!satisfied.is_violated());
         assert!(!satisfied.is_error());
-        
+
         let violated = ConstraintEvaluationResult::violated(
-            Some(Term::NamedNode(NamedNode::new("http://example.org/test").unwrap())),
-            Some("Test violation".to_string())
+            Some(Term::NamedNode(
+                NamedNode::new("http://example.org/test").unwrap(),
+            )),
+            Some("Test violation".to_string()),
         );
         assert!(!violated.is_satisfied());
         assert!(violated.is_violated());
         assert!(!violated.is_error());
-        
+
         let error = ConstraintEvaluationResult::error("Test error".to_string());
         assert!(!error.is_satisfied());
         assert!(!error.is_violated());

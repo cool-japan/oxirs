@@ -11,7 +11,7 @@
 
 use axum_test::TestServer;
 use oxirs_fuseki::{
-    config::{ServerConfig, SecurityConfig, MonitoringConfig, PerformanceConfig},
+    config::{MonitoringConfig, PerformanceConfig, SecurityConfig, ServerConfig},
     store::Store,
 };
 use serde_json::{json, Value};
@@ -77,11 +77,16 @@ async fn create_test_server() -> TestServer {
 }
 
 fn create_test_router(state: oxirs_fuseki::server::AppState) -> axum::Router {
-    use axum::{routing::{get, post}, Router};
+    use axum::{
+        routing::{get, post},
+        Router,
+    };
     use oxirs_fuseki::handlers;
-    use oxirs_fuseki::server::{health_check, readiness_check, liveness_check, stats_handler, ping_handler};
-    use tower_http::{cors::CorsLayer, trace::TraceLayer};
+    use oxirs_fuseki::server::{
+        health_check, liveness_check, ping_handler, readiness_check, stats_handler,
+    };
     use tower::ServiceBuilder;
+    use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
     let cors = CorsLayer::permissive();
     let middleware = ServiceBuilder::new()
@@ -93,7 +98,10 @@ fn create_test_router(state: oxirs_fuseki::server::AppState) -> axum::Router {
         .route("/health", get(health_check))
         .route("/health/ready", get(readiness_check))
         .route("/health/live", get(liveness_check))
-        .route("/sparql", get(handlers::query_handler).post(handlers::query_handler))
+        .route(
+            "/sparql",
+            get(handlers::query_handler).post(handlers::query_handler),
+        )
         .route("/update", post(handlers::update_handler))
         .route("/$/stats", get(stats_handler))
         .route("/$/ping", get(ping_handler))
@@ -104,7 +112,7 @@ fn create_test_router(state: oxirs_fuseki::server::AppState) -> axum::Router {
 #[tokio::test]
 async fn test_health_endpoint() {
     let server = create_test_server().await;
-    
+
     let response = server.get("/health").await;
     response.assert_status_ok();
 }
@@ -112,7 +120,7 @@ async fn test_health_endpoint() {
 #[tokio::test]
 async fn test_readiness_endpoint() {
     let server = create_test_server().await;
-    
+
     let response = server.get("/health/ready").await;
     response.assert_status_ok();
 }
@@ -120,7 +128,7 @@ async fn test_readiness_endpoint() {
 #[tokio::test]
 async fn test_liveness_endpoint() {
     let server = create_test_server().await;
-    
+
     let response = server.get("/health/live").await;
     response.assert_status_ok();
 }
@@ -128,7 +136,7 @@ async fn test_liveness_endpoint() {
 #[tokio::test]
 async fn test_ping_endpoint() {
     let server = create_test_server().await;
-    
+
     let response = server.get("/$/ping").await;
     response.assert_status_ok();
     response.assert_text("pong");
@@ -137,10 +145,10 @@ async fn test_ping_endpoint() {
 #[tokio::test]
 async fn test_stats_endpoint() {
     let server = create_test_server().await;
-    
+
     let response = server.get("/$/stats").await;
     response.assert_status_ok();
-    
+
     let json: Value = response.json();
     assert!(json.get("datasets").is_some());
     assert!(json.get("version").is_some());
@@ -149,10 +157,10 @@ async fn test_stats_endpoint() {
 #[tokio::test]
 async fn test_admin_ui_endpoint() {
     let server = create_test_server().await;
-    
+
     let response = server.get("/").await;
     response.assert_status_ok();
-    
+
     let html = response.text();
     assert!(html.contains("OxiRS Fuseki Server"));
     assert!(html.contains("SPARQL"));
@@ -161,14 +169,14 @@ async fn test_admin_ui_endpoint() {
 #[tokio::test]
 async fn test_sparql_query_get() {
     let server = create_test_server().await;
-    
+
     let response = server
         .get("/sparql")
         .add_query_param("query", "SELECT * WHERE { ?s ?p ?o } LIMIT 10")
         .await;
-    
+
     response.assert_status_ok();
-    
+
     let json: Value = response.json();
     assert!(json.get("head").is_some());
     assert!(json.get("results").is_some());
@@ -177,17 +185,14 @@ async fn test_sparql_query_get() {
 #[tokio::test]
 async fn test_sparql_query_post_form() {
     let server = create_test_server().await;
-    
+
     let mut form_data = HashMap::new();
     form_data.insert("query", "SELECT * WHERE { ?s ?p ?o } LIMIT 10");
-    
-    let response = server
-        .post("/sparql")
-        .form(&form_data)
-        .await;
-    
+
+    let response = server.post("/sparql").form(&form_data).await;
+
     response.assert_status_ok();
-    
+
     let json: Value = response.json();
     assert!(json.get("head").is_some());
     assert!(json.get("results").is_some());
@@ -196,26 +201,26 @@ async fn test_sparql_query_post_form() {
 #[tokio::test]
 async fn test_sparql_query_post_sparql_query() {
     let server = create_test_server().await;
-    
+
     let response = server
         .post("/sparql")
         .content_type("application/sparql-query")
         .text("SELECT * WHERE { ?s ?p ?o } LIMIT 10")
         .await;
-    
+
     response.assert_status_ok();
 }
 
 #[tokio::test]
 async fn test_sparql_query_accept_json() {
     let server = create_test_server().await;
-    
+
     let response = server
         .get("/sparql")
         .add_query_param("query", "SELECT * WHERE { ?s ?p ?o } LIMIT 10")
         .add_header("Accept", "application/sparql-results+json")
         .await;
-    
+
     response.assert_status_ok();
     let header = response.header("content-type");
     let content_type = header.to_str().unwrap();
@@ -225,13 +230,13 @@ async fn test_sparql_query_accept_json() {
 #[tokio::test]
 async fn test_sparql_query_accept_xml() {
     let server = create_test_server().await;
-    
+
     let response = server
         .get("/sparql")
         .add_query_param("query", "SELECT * WHERE { ?s ?p ?o } LIMIT 10")
         .add_header("Accept", "application/sparql-results+xml")
         .await;
-    
+
     response.assert_status_ok();
     let header = response.header("content-type");
     let content_type = header.to_str().unwrap();
@@ -241,13 +246,13 @@ async fn test_sparql_query_accept_xml() {
 #[tokio::test]
 async fn test_sparql_query_accept_csv() {
     let server = create_test_server().await;
-    
+
     let response = server
         .get("/sparql")
         .add_query_param("query", "SELECT * WHERE { ?s ?p ?o } LIMIT 10")
         .add_header("Accept", "text/csv")
         .await;
-    
+
     response.assert_status_ok();
     let header = response.header("content-type");
     let content_type = header.to_str().unwrap();
@@ -257,7 +262,7 @@ async fn test_sparql_query_accept_csv() {
 #[tokio::test]
 async fn test_sparql_query_no_query() {
     let server = create_test_server().await;
-    
+
     let response = server.get("/sparql").await;
     response.assert_status_bad_request();
 }
@@ -265,22 +270,22 @@ async fn test_sparql_query_no_query() {
 #[tokio::test]
 async fn test_sparql_update_post() {
     let server = create_test_server().await;
-    
+
     let mut form_data = HashMap::new();
-    form_data.insert("query", "INSERT DATA { <http://example.org/s> <http://example.org/p> <http://example.org/o> }");
-    
-    let response = server
-        .post("/update")
-        .form(&form_data)
-        .await;
-    
+    form_data.insert(
+        "query",
+        "INSERT DATA { <http://example.org/s> <http://example.org/p> <http://example.org/o> }",
+    );
+
+    let response = server.post("/update").form(&form_data).await;
+
     response.assert_status(axum::http::StatusCode::NO_CONTENT);
 }
 
 #[tokio::test]
 async fn test_sparql_update_no_update() {
     let server = create_test_server().await;
-    
+
     let response = server.post("/update").await;
     response.assert_status_bad_request();
 }
@@ -288,27 +293,30 @@ async fn test_sparql_update_no_update() {
 #[tokio::test]
 async fn test_cors_headers() {
     let server = create_test_server().await;
-    
+
     // Test that CORS is enabled by checking a simple request works
     let response = server
         .get("/health")
         .add_header("Origin", "http://localhost:3000")
         .await;
-    
+
     response.assert_status_ok();
 }
 
 #[tokio::test]
 async fn test_multiple_requests() {
     let server = create_test_server().await;
-    
+
     // Test multiple sequential requests
     for i in 0..5 {
         let response = server
             .get("/sparql")
-            .add_query_param("query", &format!("SELECT * WHERE {{ ?s ?p ?o }} LIMIT {}", i + 1))
+            .add_query_param(
+                "query",
+                &format!("SELECT * WHERE {{ ?s ?p ?o }} LIMIT {}", i + 1),
+            )
             .await;
-        
+
         response.assert_status_ok();
     }
 }
@@ -323,12 +331,12 @@ mod graph_store_tests {
     #[tokio::test]
     async fn test_graph_store_get_default() {
         let server = create_test_server().await;
-        
+
         let response = server
             .get("/graph-store")
             .add_query_param("default", "true")
             .await;
-        
+
         response.assert_status_ok();
         // Should return RDF content
         let content = response.text();
@@ -338,63 +346,64 @@ mod graph_store_tests {
     #[tokio::test]
     async fn test_graph_store_get_named() {
         let server = create_test_server().await;
-        
+
         let response = server
             .get("/graph-store")
             .add_query_param("graph", "http://example.org/graph1")
             .await;
-        
+
         response.assert_status_ok();
     }
 
     #[tokio::test]
     async fn test_graph_store_put_turtle() {
         let server = create_test_server().await;
-        
-        let turtle_data = "@prefix ex: <http://example.org/> .\nex:subject ex:predicate \"object\" .";
-        
+
+        let turtle_data =
+            "@prefix ex: <http://example.org/> .\nex:subject ex:predicate \"object\" .";
+
         let response = server
             .put("/graph-store")
             .add_query_param("default", "true")
             .content_type("text/turtle")
             .text(turtle_data)
             .await;
-        
+
         response.assert_status_ok();
     }
 
     #[tokio::test]
     async fn test_graph_store_post_ntriples() {
         let server = create_test_server().await;
-        
+
         let ntriples_data = "<http://example.org/s> <http://example.org/p> \"object\" .";
-        
+
         let response = server
             .post("/graph-store")
             .add_query_param("graph", "http://example.org/test")
             .content_type("application/n-triples")
             .text(ntriples_data)
             .await;
-        
+
         response.assert_status_ok();
     }
 
     #[tokio::test]
     async fn test_graph_store_delete() {
         let server = create_test_server().await;
-        
+
         let response = server
             .delete("/graph-store")
             .add_query_param("graph", "http://example.org/test")
             .await;
-        
+
         response.assert_status_ok();
     }
 
     #[tokio::test]
     async fn test_graph_store_content_negotiation() {
         let server = create_test_server().await;
-        
+
         // Test different Accept headers
         let formats = vec![
             ("text/turtle", "text/turtle"),
@@ -408,7 +417,7 @@ mod graph_store_tests {
                 .add_query_param("default", "true")
                 .add_header("Accept", accept)
                 .await;
-            
+
             response.assert_status_ok();
             let content_type = response.header("content-type").to_str().unwrap();
             assert!(content_type.contains(expected_content_type));
@@ -418,14 +427,14 @@ mod graph_store_tests {
     #[tokio::test]
     async fn test_graph_store_invalid_params() {
         let server = create_test_server().await;
-        
+
         // Test both graph and default parameters (should fail)
         let response = server
             .get("/graph-store")
             .add_query_param("graph", "http://example.org/test")
             .add_query_param("default", "true")
             .await;
-        
+
         response.assert_status_bad_request();
     }
 }
@@ -438,12 +447,12 @@ mod error_handling_tests {
     #[tokio::test]
     async fn test_malformed_sparql_queries() {
         let server = create_test_server().await;
-        
+
         let invalid_queries = vec![
             "",
             "INVALID SPARQL",
             "SELECT * WHERE",
-            "SELECT * { ?s ?p ?o", // Missing closing brace
+            "SELECT * { ?s ?p ?o",          // Missing closing brace
             "CONSTRUCT WHERE { ?s ?p ?o }", // Missing construct template
         ];
 
@@ -452,7 +461,7 @@ mod error_handling_tests {
                 .get("/sparql")
                 .add_query_param("query", invalid_query)
                 .await;
-            
+
             response.assert_status_bad_request();
         }
     }
@@ -460,11 +469,11 @@ mod error_handling_tests {
     #[tokio::test]
     async fn test_unsupported_methods() {
         let server = create_test_server().await;
-        
+
         // SPARQL endpoint should not support PUT/DELETE
         let response = server.put("/sparql").await;
         response.assert_status(axum::http::StatusCode::METHOD_NOT_ALLOWED);
-        
+
         let response = server.delete("/sparql").await;
         response.assert_status(axum::http::StatusCode::METHOD_NOT_ALLOWED);
     }
@@ -472,7 +481,7 @@ mod error_handling_tests {
     #[tokio::test]
     async fn test_large_query_handling() {
         let server = create_test_server().await;
-        
+
         // Create a very large query
         let mut large_query = "SELECT * WHERE {\n".to_string();
         for i in 0..1000 {
@@ -493,31 +502,34 @@ mod error_handling_tests {
     #[tokio::test]
     async fn test_request_timeout() {
         let server = create_test_server().await;
-        
+
         // Test that requests complete within reasonable time
         let start = Instant::now();
-        
+
         let response = server
             .get("/sparql")
             .add_query_param("query", "SELECT * WHERE { ?s ?p ?o }")
             .await;
-        
+
         let elapsed = start.elapsed();
-        
+
         response.assert_status_ok();
-        assert!(elapsed < Duration::from_secs(10), "Request should complete within timeout");
+        assert!(
+            elapsed < Duration::from_secs(10),
+            "Request should complete within timeout"
+        );
     }
 
     #[tokio::test]
     async fn test_invalid_content_types() {
         let server = create_test_server().await;
-        
+
         let response = server
             .post("/sparql")
             .content_type("application/invalid")
             .text("SELECT * WHERE { ?s ?p ?o }")
             .await;
-        
+
         response.assert_status_bad_request();
     }
 }
@@ -530,10 +542,10 @@ mod performance_tests {
     #[tokio::test]
     async fn test_concurrent_requests() {
         let server = create_test_server().await;
-        
+
         // Send multiple concurrent requests
         let mut handles = Vec::new();
-        
+
         for i in 0..10 {
             let server_clone = server.clone();
             let handle = tokio::spawn(async move {
@@ -556,18 +568,18 @@ mod performance_tests {
     #[tokio::test]
     async fn test_response_time_consistency() {
         let server = create_test_server().await;
-        
+
         let mut response_times = Vec::new();
-        
+
         // Make several requests and measure response times
         for _ in 0..5 {
             let start = Instant::now();
-            
+
             let response = server
                 .get("/sparql")
                 .add_query_param("query", "SELECT * WHERE { ?s ?p ?o }")
                 .await;
-            
+
             let elapsed = start.elapsed();
             response.assert_status_ok();
             response_times.push(elapsed.as_millis());
@@ -576,21 +588,24 @@ mod performance_tests {
         // Response times should be reasonably consistent (no extreme outliers)
         let avg_time = response_times.iter().sum::<u128>() / response_times.len() as u128;
         for &time in &response_times {
-            assert!(time < avg_time * 3, "Response time should be reasonably consistent");
+            assert!(
+                time < avg_time * 3,
+                "Response time should be reasonably consistent"
+            );
         }
     }
 
     #[tokio::test]
     async fn test_memory_stability() {
         let server = create_test_server().await;
-        
+
         // Send many requests to test for memory leaks
         for i in 0..50 {
             let response = server
                 .get("/sparql")
                 .add_query_param("query", &format!("SELECT * WHERE {{ ?s{} ?p ?o }}", i))
                 .await;
-            
+
             response.assert_status_ok();
         }
 
@@ -607,7 +622,7 @@ mod security_tests {
     #[tokio::test]
     async fn test_injection_prevention() {
         let server = create_test_server().await;
-        
+
         // Test potential injection attempts
         let malicious_inputs = vec![
             "'; DROP TABLE users; --",
@@ -625,10 +640,9 @@ mod security_tests {
 
             // Should either reject the query or handle it safely
             assert!(
-                response.status_code().is_client_error() ||
-                response.status_code().is_success()
+                response.status_code().is_client_error() || response.status_code().is_success()
             );
-            
+
             // Response should not contain the malicious input echoed back
             let response_text = response.text();
             assert!(!response_text.contains("<script>"));
@@ -638,7 +652,7 @@ mod security_tests {
     #[tokio::test]
     async fn test_cors_security() {
         let server = create_test_server().await;
-        
+
         // Test CORS preflight request
         let response = server
             .options("/sparql")
@@ -653,13 +667,13 @@ mod security_tests {
     #[tokio::test]
     async fn test_sensitive_headers() {
         let server = create_test_server().await;
-        
+
         let response = server.get("/health").await;
-        
+
         // Check that sensitive information is not leaked in headers
         let headers = response.headers();
         assert!(!headers.contains_key("server")); // Don't expose server version
-        
+
         response.assert_status_ok();
     }
 }
@@ -672,10 +686,10 @@ mod admin_tests {
     #[tokio::test]
     async fn test_admin_ui_content() {
         let server = create_test_server().await;
-        
+
         let response = server.get("/").await;
         response.assert_status_ok();
-        
+
         let html = response.text();
         assert!(html.contains("OxiRS Fuseki"));
         assert!(html.contains("SPARQL"));
@@ -686,14 +700,14 @@ mod admin_tests {
     #[tokio::test]
     async fn test_server_stats_detailed() {
         let server = create_test_server().await;
-        
+
         let response = server.get("/$/stats").await;
         response.assert_status_ok();
-        
+
         let json: Value = response.json();
         assert!(json["datasets"].is_number());
         assert!(json["version"].is_string());
-        
+
         // Stats should contain reasonable values
         let datasets_count = json["datasets"].as_u64().unwrap();
         assert!(datasets_count >= 0);
@@ -702,10 +716,10 @@ mod admin_tests {
     #[tokio::test]
     async fn test_health_check_detailed() {
         let server = create_test_server().await;
-        
+
         let response = server.get("/health").await;
         response.assert_status_ok();
-        
+
         // Health endpoint might return JSON with detailed status
         if let Ok(json) = serde_json::from_str::<Value>(&response.text()) {
             if json.is_object() {
@@ -723,20 +737,14 @@ mod config_tests {
     #[tokio::test]
     async fn test_different_configurations() {
         // Test server with different configurations
-        let server_with_auth = TestServerBuilder::new()
-            .with_auth()
-            .build()
-            .await;
-        
-        let server_with_metrics = TestServerBuilder::new()
-            .with_metrics()
-            .build()
-            .await;
+        let server_with_auth = TestServerBuilder::new().with_auth().build().await;
+
+        let server_with_metrics = TestServerBuilder::new().with_metrics().build().await;
 
         // Both should start successfully
         let response1 = server_with_auth.get("/health").await;
         response1.assert_status_ok();
-        
+
         let response2 = server_with_metrics.get("/health").await;
         response2.assert_status_ok();
     }
@@ -744,18 +752,18 @@ mod config_tests {
     #[test]
     fn test_config_validation() {
         let mut config = ServerConfig::default();
-        
+
         // Default config should be valid
         assert!(config.validate().is_ok());
-        
+
         // Invalid port should fail
         config.server.port = 0;
         assert!(config.validate().is_err());
-        
+
         // Reset to valid
         config.server.port = 3030;
         assert!(config.validate().is_ok());
-        
+
         // Empty host should fail
         config.server.host = String::new();
         assert!(config.validate().is_err());
@@ -770,27 +778,31 @@ mod sparql_protocol_tests {
     #[tokio::test]
     async fn test_sparql_query_types() {
         let server = create_test_server().await;
-        
+
         let query_types = vec![
             ("SELECT * WHERE { ?s ?p ?o } LIMIT 1", "SELECT"),
-            ("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o } LIMIT 1", "CONSTRUCT"),
+            (
+                "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o } LIMIT 1",
+                "CONSTRUCT",
+            ),
             ("ASK { ?s ?p ?o }", "ASK"),
             ("DESCRIBE <http://example.org/resource>", "DESCRIBE"),
         ];
 
         for (query, query_type) in query_types {
-            let response = server
-                .get("/sparql")
-                .add_query_param("query", query)
-                .await;
-            
+            let response = server.get("/sparql").add_query_param("query", query).await;
+
             response.assert_status_ok();
-            
+
             // Verify appropriate response format for query type
             let content_type = response.header("content-type").to_str().unwrap();
             match query_type {
-                "SELECT" | "ASK" => assert!(content_type.contains("sparql-results") || content_type.contains("json")),
-                "CONSTRUCT" | "DESCRIBE" => assert!(content_type.contains("turtle") || content_type.contains("rdf")),
+                "SELECT" | "ASK" => assert!(
+                    content_type.contains("sparql-results") || content_type.contains("json")
+                ),
+                "CONSTRUCT" | "DESCRIBE" => {
+                    assert!(content_type.contains("turtle") || content_type.contains("rdf"))
+                }
                 _ => {}
             }
         }
@@ -799,7 +811,7 @@ mod sparql_protocol_tests {
     #[tokio::test]
     async fn test_sparql_update_types() {
         let server = create_test_server().await;
-        
+
         let update_operations = vec![
             "INSERT DATA { <http://example.org/s> <http://example.org/p> <http://example.org/o> }",
             "DELETE DATA { <http://example.org/s> <http://example.org/p> <http://example.org/o> }",
@@ -813,32 +825,34 @@ mod sparql_protocol_tests {
                 .content_type("application/sparql-update")
                 .text(update)
                 .await;
-            
+
             // Updates should succeed or return appropriate error
-            assert!(response.status_code().is_success() || response.status_code().is_client_error());
+            assert!(
+                response.status_code().is_success() || response.status_code().is_client_error()
+            );
         }
     }
 
     #[tokio::test]
     async fn test_query_parameters() {
         let server = create_test_server().await;
-        
+
         // Test with default graph URI
         let response = server
             .get("/sparql")
             .add_query_param("query", "SELECT * WHERE { ?s ?p ?o }")
             .add_query_param("default-graph-uri", "http://example.org/default")
             .await;
-        
+
         response.assert_status_ok();
-        
+
         // Test with named graph URI
         let response = server
             .get("/sparql")
             .add_query_param("query", "SELECT * WHERE { ?s ?p ?o }")
             .add_query_param("named-graph-uri", "http://example.org/named")
             .await;
-        
+
         response.assert_status_ok();
     }
 }
@@ -847,38 +861,41 @@ mod sparql_protocol_tests {
 #[tokio::test]
 async fn test_end_to_end_workflow() {
     let server = create_test_server().await;
-    
+
     // 1. Check server health
     let response = server.get("/health").await;
     response.assert_status_ok();
-    
+
     // 2. Load some data via SPARQL Update
     let insert_data = "INSERT DATA { 
         <http://example.org/alice> <http://example.org/name> \"Alice\" .
         <http://example.org/bob> <http://example.org/name> \"Bob\" .
         <http://example.org/alice> <http://example.org/knows> <http://example.org/bob> .
     }";
-    
+
     let response = server
         .post("/update")
         .content_type("application/sparql-update")
         .text(insert_data)
         .await;
-    
+
     assert!(response.status_code().is_success());
-    
+
     // 3. Query the data
     let response = server
         .get("/sparql")
-        .add_query_param("query", "SELECT ?name WHERE { ?person <http://example.org/name> ?name }")
+        .add_query_param(
+            "query",
+            "SELECT ?name WHERE { ?person <http://example.org/name> ?name }",
+        )
         .await;
-    
+
     response.assert_status_ok();
-    
+
     // 4. Check that we can get statistics
     let response = server.get("/$/stats").await;
     response.assert_status_ok();
-    
+
     // 5. Test Graph Store Protocol
     let turtle_data = "@prefix ex: <http://example.org/> .\nex:charlie ex:name \"Charlie\" .";
     let response = server
@@ -887,16 +904,16 @@ async fn test_end_to_end_workflow() {
         .content_type("text/turtle")
         .text(turtle_data)
         .await;
-    
+
     assert!(response.status_code().is_success());
-    
+
     // 6. Retrieve the graph
     let response = server
         .get("/graph-store")
         .add_query_param("graph", "http://example.org/test-graph")
         .add_header("Accept", "text/turtle")
         .await;
-    
+
     response.assert_status_ok();
     let content = response.text();
     assert!(content.contains("Charlie") || content.len() > 0);

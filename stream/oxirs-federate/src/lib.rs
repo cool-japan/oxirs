@@ -23,7 +23,7 @@
 //! - `FaultHandler`: Manages service failures and retries
 
 use anyhow::{anyhow, Result};
-use oxirs_core::{Graph, Triple, Quad, Term};
+use oxirs_core::{Graph, Quad, Term, Triple};
 use oxirs_gql::types::Schema as GraphQLSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -32,23 +32,23 @@ use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
-pub mod service;
-pub mod planner;
-pub mod executor;
-pub mod integration;
-pub mod graphql;
-pub mod discovery;
-pub mod monitoring;
 pub mod cache;
+pub mod discovery;
+pub mod executor;
+pub mod graphql;
+pub mod integration;
+pub mod monitoring;
+pub mod planner;
+pub mod service;
 
-pub use service::*;
-pub use planner::*;
-pub use executor::*;
-pub use integration::*;
-pub use graphql::*;
-pub use discovery::*;
-pub use monitoring::*;
 pub use cache::*;
+pub use discovery::*;
+pub use executor::*;
+pub use graphql::*;
+pub use integration::*;
+pub use monitoring::*;
+pub use planner::*;
+pub use service::*;
 
 /// Main federation engine that coordinates all federated query processing
 #[derive(Debug, Clone)]
@@ -93,7 +93,9 @@ impl FederationEngine {
 
     /// Create a new federation engine with custom configuration
     pub fn with_config(config: FederationConfig) -> Self {
-        let service_registry = Arc::new(RwLock::new(ServiceRegistry::with_config(config.registry_config)));
+        let service_registry = Arc::new(RwLock::new(ServiceRegistry::with_config(
+            config.registry_config,
+        )));
         let query_planner = Arc::new(QueryPlanner::with_config(config.planner_config));
         let executor = Arc::new(FederatedExecutor::with_config(config.executor_config));
         let integrator = Arc::new(ResultIntegrator::with_config(config.integrator_config));
@@ -127,21 +129,23 @@ impl FederationEngine {
     /// Execute a federated SPARQL query
     pub async fn execute_sparql(&self, query: &str) -> Result<FederatedResult> {
         let start_time = Instant::now();
-        
+
         // Parse and analyze the query
         let query_info = self.query_planner.analyze_sparql(query).await?;
-        
+
         // Generate cache key
         let cache_key = self.cache.generate_query_key(&query_info);
-        
+
         // Check cache first
         if let Some(cached_result) = self.cache.get_query_result(&cache_key).await {
             let execution_time = start_time.elapsed();
-            
+
             // Record cache hit
             self.monitor.record_cache_hit("query_cache", true).await;
-            self.monitor.record_query_execution("sparql", execution_time, true).await;
-            
+            self.monitor
+                .record_query_execution("sparql", execution_time, true)
+                .await;
+
             return match cached_result {
                 QueryResultCache::Sparql(sparql_results) => {
                     // Convert back to FederatedResult
@@ -151,11 +155,14 @@ impl FederationEngine {
                         .into_iter()
                         .map(|binding| {
                             // Convert SparqlBinding to HashMap<String, Term>
-                            binding.into_iter()
+                            binding
+                                .into_iter()
                                 .filter_map(|(var, sparql_value)| {
                                     match sparql_value.value_type.as_str() {
                                         "uri" => {
-                                            if let Ok(iri) = oxirs_core::NamedNode::new(&sparql_value.value) {
+                                            if let Ok(iri) =
+                                                oxirs_core::NamedNode::new(&sparql_value.value)
+                                            {
                                                 Some((var, oxirs_core::Term::NamedNode(iri)))
                                             } else {
                                                 None
@@ -163,31 +170,59 @@ impl FederationEngine {
                                         }
                                         "literal" => {
                                             if let Some(datatype_str) = sparql_value.datatype {
-                                                if let Ok(datatype) = oxirs_core::NamedNode::new(&datatype_str) {
-                                                    Some((var, oxirs_core::Term::Literal(
-                                                        oxirs_core::Literal::new_typed(&sparql_value.value, datatype)
-                                                    )))
+                                                if let Ok(datatype) =
+                                                    oxirs_core::NamedNode::new(&datatype_str)
+                                                {
+                                                    Some((
+                                                        var,
+                                                        oxirs_core::Term::Literal(
+                                                            oxirs_core::Literal::new_typed(
+                                                                &sparql_value.value,
+                                                                datatype,
+                                                            ),
+                                                        ),
+                                                    ))
                                                 } else {
-                                                    Some((var, oxirs_core::Term::Literal(
-                                                        oxirs_core::Literal::new(&sparql_value.value)
-                                                    )))
+                                                    Some((
+                                                        var,
+                                                        oxirs_core::Term::Literal(
+                                                            oxirs_core::Literal::new(
+                                                                &sparql_value.value,
+                                                            ),
+                                                        ),
+                                                    ))
                                                 }
                                             } else if let Some(lang) = sparql_value.lang {
-                                                if let Ok(literal) = oxirs_core::Literal::new_lang(&sparql_value.value, &lang) {
+                                                if let Ok(literal) = oxirs_core::Literal::new_lang(
+                                                    &sparql_value.value,
+                                                    &lang,
+                                                ) {
                                                     Some((var, oxirs_core::Term::Literal(literal)))
                                                 } else {
-                                                    Some((var, oxirs_core::Term::Literal(
-                                                        oxirs_core::Literal::new(&sparql_value.value)
-                                                    )))
+                                                    Some((
+                                                        var,
+                                                        oxirs_core::Term::Literal(
+                                                            oxirs_core::Literal::new(
+                                                                &sparql_value.value,
+                                                            ),
+                                                        ),
+                                                    ))
                                                 }
                                             } else {
-                                                Some((var, oxirs_core::Term::Literal(
-                                                    oxirs_core::Literal::new(&sparql_value.value)
-                                                )))
+                                                Some((
+                                                    var,
+                                                    oxirs_core::Term::Literal(
+                                                        oxirs_core::Literal::new(
+                                                            &sparql_value.value,
+                                                        ),
+                                                    ),
+                                                ))
                                             }
                                         }
                                         "bnode" => {
-                                            if let Ok(bnode) = oxirs_core::BlankNode::new(&sparql_value.value) {
+                                            if let Ok(bnode) =
+                                                oxirs_core::BlankNode::new(&sparql_value.value)
+                                            {
                                                 Some((var, oxirs_core::Term::BlankNode(bnode)))
                                             } else {
                                                 None
@@ -219,21 +254,27 @@ impl FederationEngine {
                 }
             };
         }
-        
+
         // Cache miss - execute normally
         self.monitor.record_cache_hit("query_cache", false).await;
-        
+
         // Plan the federated execution
         let registry = self.service_registry.read().await;
-        let execution_plan = self.query_planner.plan_sparql(&query_info, &*registry).await?;
+        let execution_plan = self
+            .query_planner
+            .plan_sparql(&query_info, &*registry)
+            .await?;
         drop(registry);
-        
+
         // Execute the plan
         let partial_results = self.executor.execute_plan(&execution_plan).await?;
-        
+
         // Integrate results
-        let final_result = self.integrator.integrate_sparql_results(partial_results).await?;
-        
+        let final_result = self
+            .integrator
+            .integrate_sparql_results(partial_results)
+            .await?;
+
         // Cache the result if successful
         if final_result.is_success() {
             if let QueryResult::Sparql(ref result_bindings) = final_result.data {
@@ -241,15 +282,18 @@ impl FederationEngine {
                 let sparql_bindings: Vec<crate::executor::SparqlBinding> = result_bindings
                     .iter()
                     .map(|binding| {
-                        binding.iter()
+                        binding
+                            .iter()
                             .map(|(var, term)| {
                                 let sparql_value = match term {
-                                    oxirs_core::Term::NamedNode(node) => crate::executor::SparqlValue {
-                                        value_type: "uri".to_string(),
-                                        value: node.to_string(),
-                                        datatype: None,
-                                        lang: None,
-                                    },
+                                    oxirs_core::Term::NamedNode(node) => {
+                                        crate::executor::SparqlValue {
+                                            value_type: "uri".to_string(),
+                                            value: node.to_string(),
+                                            datatype: None,
+                                            lang: None,
+                                        }
+                                    }
                                     oxirs_core::Term::Literal(literal) => {
                                         if let Some(lang) = literal.language() {
                                             crate::executor::SparqlValue {
@@ -262,23 +306,29 @@ impl FederationEngine {
                                             crate::executor::SparqlValue {
                                                 value_type: "literal".to_string(),
                                                 value: literal.value().to_string(),
-                                                datatype: literal.datatype().map(|dt| dt.to_string()),
+                                                datatype: literal
+                                                    .datatype()
+                                                    .map(|dt| dt.to_string()),
                                                 lang: None,
                                             }
                                         }
                                     }
-                                    oxirs_core::Term::BlankNode(bnode) => crate::executor::SparqlValue {
-                                        value_type: "bnode".to_string(),
-                                        value: bnode.to_string(),
-                                        datatype: None,
-                                        lang: None,
-                                    },
-                                    oxirs_core::Term::Variable(var) => crate::executor::SparqlValue {
-                                        value_type: "variable".to_string(),
-                                        value: var.to_string(),
-                                        datatype: None,
-                                        lang: None,
-                                    },
+                                    oxirs_core::Term::BlankNode(bnode) => {
+                                        crate::executor::SparqlValue {
+                                            value_type: "bnode".to_string(),
+                                            value: bnode.to_string(),
+                                            datatype: None,
+                                            lang: None,
+                                        }
+                                    }
+                                    oxirs_core::Term::Variable(var) => {
+                                        crate::executor::SparqlValue {
+                                            value_type: "variable".to_string(),
+                                            value: var.to_string(),
+                                            datatype: None,
+                                            lang: None,
+                                        }
+                                    }
                                 };
                                 (var.clone(), sparql_value)
                             })
@@ -288,7 +338,8 @@ impl FederationEngine {
 
                 let cached_result = crate::executor::SparqlResults {
                     head: crate::executor::SparqlHead {
-                        vars: result_bindings.first()
+                        vars: result_bindings
+                            .first()
                             .map(|binding| binding.keys().cloned().collect())
                             .unwrap_or_default(),
                     },
@@ -298,39 +349,61 @@ impl FederationEngine {
                 };
 
                 // Cache with default TTL
-                self.cache.put_query_result(&cache_key, QueryResultCache::Sparql(cached_result), None).await;
+                self.cache
+                    .put_query_result(&cache_key, QueryResultCache::Sparql(cached_result), None)
+                    .await;
             }
         }
-        
+
         // Record metrics
         let execution_time = start_time.elapsed();
-        self.monitor.record_query_execution("sparql", execution_time, final_result.is_success()).await;
-        
+        self.monitor
+            .record_query_execution("sparql", execution_time, final_result.is_success())
+            .await;
+
         Ok(final_result)
     }
 
     /// Execute a federated GraphQL query
-    pub async fn execute_graphql(&self, query: &str, variables: Option<serde_json::Value>) -> Result<FederatedResult> {
+    pub async fn execute_graphql(
+        &self,
+        query: &str,
+        variables: Option<serde_json::Value>,
+    ) -> Result<FederatedResult> {
         let start_time = Instant::now();
-        
+
         // Parse and analyze the GraphQL query
-        let query_info = self.query_planner.analyze_graphql(query, variables.as_ref()).await?;
-        
+        let query_info = self
+            .query_planner
+            .analyze_graphql(query, variables.as_ref())
+            .await?;
+
         // Plan the federated execution
         let registry = self.service_registry.read().await;
-        let execution_plan = self.query_planner.plan_graphql(&query_info, &*registry).await?;
+        let execution_plan = self
+            .query_planner
+            .plan_graphql(&query_info, &*registry)
+            .await?;
         drop(registry);
-        
+
         // Execute the plan using GraphQL federation
-        let partial_results = self.graphql_federation.execute_federated(&execution_plan).await?;
-        
+        let partial_results = self
+            .graphql_federation
+            .execute_federated(&execution_plan)
+            .await?;
+
         // Integrate results
-        let final_result = self.integrator.integrate_graphql_results(partial_results).await?;
-        
+        let final_result = self
+            .integrator
+            .integrate_graphql_results(partial_results)
+            .await?;
+
         // Record metrics
         let execution_time = start_time.elapsed();
-        self.monitor.record_query_execution("graphql", execution_time, final_result.is_success()).await;
-        
+        self.monitor
+            .record_query_execution("graphql", execution_time, final_result.is_success())
+            .await;
+
         Ok(final_result)
     }
 
@@ -340,9 +413,9 @@ impl FederationEngine {
             let registry = self.service_registry.read().await;
             registry.get_stats().await
         };
-        
+
         let monitor_stats = self.monitor.get_stats().await;
-        
+
         FederationStats {
             registry: registry_stats,
             monitor: monitor_stats,
@@ -437,7 +510,7 @@ impl FederatedResult {
     pub fn is_success(&self) -> bool {
         !self.errors.iter().any(|e| e.is_critical())
     }
-    
+
     /// Get the number of results
     pub fn result_count(&self) -> usize {
         match &self.data {
@@ -482,25 +555,28 @@ pub struct ExecutionMetadata {
 pub enum FederationError {
     #[error("Service unavailable: {service_id}")]
     ServiceUnavailable { service_id: String },
-    
+
     #[error("Query planning failed: {reason}")]
     PlanningFailed { reason: String },
-    
+
     #[error("Execution timeout after {timeout:?}")]
     ExecutionTimeout { timeout: Duration },
-    
+
     #[error("Result integration failed: {reason}")]
     IntegrationFailed { reason: String },
-    
+
     #[error("Partial results: {successful_services}/{total_services} services responded")]
-    PartialResults { successful_services: usize, total_services: usize },
-    
+    PartialResults {
+        successful_services: usize,
+        total_services: usize,
+    },
+
     #[error("Schema conflict: {conflict}")]
     SchemaConflict { conflict: String },
-    
+
     #[error("Authentication failed for service: {service_id}")]
     AuthenticationFailed { service_id: String },
-    
+
     #[error("Rate limit exceeded for service: {service_id}")]
     RateLimitExceeded { service_id: String },
 }
@@ -557,7 +633,7 @@ mod tests {
     async fn test_federation_engine_creation() {
         let engine = FederationEngine::new();
         let stats = engine.get_stats().await;
-        
+
         assert_eq!(stats.registry.total_services, 0);
     }
 
@@ -566,7 +642,7 @@ mod tests {
         let config = FederationConfig::default();
         let engine = FederationEngine::with_config(config);
         let health = engine.health_check().await.unwrap();
-        
+
         assert_eq!(health.overall_status, ServiceStatus::Healthy);
         assert_eq!(health.total_services, 0);
     }
@@ -577,7 +653,7 @@ mod tests {
             reason: "Test error".to_string(),
         };
         assert!(critical_error.is_critical());
-        
+
         let non_critical_error = FederationError::ServiceUnavailable {
             service_id: "test-service".to_string(),
         };
@@ -597,7 +673,7 @@ mod tests {
             },
             errors: vec![],
         };
-        
+
         assert!(result.is_success());
         assert_eq!(result.result_count(), 0);
     }

@@ -16,24 +16,24 @@
 //!
 //! ```rust
 //! use oxirs_star::{StarStore, StarTriple, StarTerm};
-//! 
+//!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let mut store = StarStore::new();
-//! 
+//!
 //! // Create a quoted triple
 //! let quoted = StarTriple::new(
 //!     StarTerm::iri("http://example.org/person1")?,
 //!     StarTerm::iri("http://example.org/age")?,
 //!     StarTerm::literal("25")?,
 //! );
-//! 
+//!
 //! // Use the quoted triple as a subject
 //! let meta_triple = StarTriple::new(
 //!     StarTerm::quoted_triple(quoted),
 //!     StarTerm::iri("http://example.org/certainty")?,
 //!     StarTerm::literal("0.9")?,
 //! );
-//! 
+//!
 //! store.insert(&meta_triple)?;
 //! # Ok(())
 //! # }
@@ -53,9 +53,9 @@ use tracing::{debug, error, info, span, Level};
 pub mod model;
 pub mod parser;
 pub mod query;
+pub mod reification;
 pub mod serializer;
 pub mod store;
-pub mod reification;
 
 // Re-export main types
 pub use model::*;
@@ -129,23 +129,23 @@ pub struct StarStatistics {
 pub fn init_star_system(config: StarConfig) -> StarResult<()> {
     let span = span!(Level::INFO, "init_star_system");
     let _enter = span.enter();
-    
+
     info!("Initializing OxiRS RDF-star system");
     debug!("Configuration: {:?}", config);
-    
+
     // Validate configuration
     if config.max_nesting_depth == 0 {
         return Err(StarError::InvalidQuotedTriple(
-            "Max nesting depth must be greater than 0".to_string()
+            "Max nesting depth must be greater than 0".to_string(),
         ));
     }
-    
+
     if config.buffer_size == 0 {
         return Err(StarError::InvalidQuotedTriple(
-            "Buffer size must be greater than 0".to_string()
+            "Buffer size must be greater than 0".to_string(),
         ));
     }
-    
+
     info!("RDF-star system initialized successfully");
     Ok(())
 }
@@ -156,21 +156,22 @@ pub fn validate_nesting_depth(term: &StarTerm, max_depth: usize) -> StarResult<(
         match term {
             StarTerm::QuotedTriple(triple) => {
                 if current_depth >= max_depth {
-                    return Err(StarError::InvalidQuotedTriple(
-                        format!("Nesting depth {} exceeds maximum {}", current_depth, max_depth)
-                    ));
+                    return Err(StarError::InvalidQuotedTriple(format!(
+                        "Nesting depth {} exceeds maximum {}",
+                        current_depth, max_depth
+                    )));
                 }
-                
+
                 let subj_depth = check_depth(&triple.subject, current_depth + 1, max_depth)?;
                 let pred_depth = check_depth(&triple.predicate, current_depth + 1, max_depth)?;
                 let obj_depth = check_depth(&triple.object, current_depth + 1, max_depth)?;
-                
+
                 Ok(subj_depth.max(pred_depth).max(obj_depth))
             }
-            _ => Ok(current_depth)
+            _ => Ok(current_depth),
         }
     }
-    
+
     check_depth(term, 0, max_depth)?;
     Ok(())
 }
@@ -181,7 +182,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_config_default() {
         let config = StarConfig::default();
@@ -190,12 +191,12 @@ mod tests {
         assert!(!config.strict_mode);
         assert!(config.enable_sparql_star);
     }
-    
+
     #[test]
     fn test_nesting_depth_validation() {
         let simple_term = StarTerm::iri("http://example.org/test").unwrap();
         assert!(validate_nesting_depth(&simple_term, 5).is_ok());
-        
+
         // Test nested quoted triple
         let inner_triple = StarTriple::new(
             StarTerm::iri("http://example.org/s").unwrap(),

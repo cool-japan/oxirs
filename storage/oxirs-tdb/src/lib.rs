@@ -8,20 +8,20 @@
 use anyhow::Result;
 use std::path::Path;
 
-pub mod storage;
-pub mod transactions;
-pub mod mvcc;
 pub mod assembler;
 pub mod btree;
-pub mod page;
+pub mod mvcc;
 pub mod nodes;
+pub mod page;
+pub mod storage;
+pub mod transactions;
 pub mod triple_store;
 pub mod wal;
 
 // Re-export main types for convenience
-pub use triple_store::{TripleStore, TripleStoreConfig, Triple, Quad, TripleStoreStats};
-pub use nodes::{Term, NodeId, NodeTable};
 pub use mvcc::{TransactionId, Version};
+pub use nodes::{NodeId, NodeTable, Term};
+pub use triple_store::{Quad, Triple, TripleStore, TripleStoreConfig, TripleStoreStats};
 
 /// TDB storage engine configuration
 #[derive(Debug, Clone)]
@@ -60,15 +60,15 @@ impl TdbStore {
             },
             ..Default::default()
         };
-        
+
         let triple_store = TripleStore::with_config(triple_store_config)?;
-        
-        Ok(Self { 
+
+        Ok(Self {
             config,
             triple_store,
         })
     }
-    
+
     /// Open an existing TDB store
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
         let config = TdbConfig {
@@ -77,41 +77,47 @@ impl TdbStore {
         };
         Self::new(config)
     }
-    
+
     /// Begin a new transaction
     pub fn begin_transaction(&self) -> Result<Transaction> {
         let tx_id = self.triple_store.begin_transaction()?;
         Ok(Transaction::new(tx_id))
     }
-    
+
     /// Begin a read-only transaction
     pub fn begin_read_transaction(&self) -> Result<Transaction> {
         let tx_id = self.triple_store.begin_read_transaction()?;
         Ok(Transaction::new(tx_id))
     }
-    
+
     /// Commit a transaction
     pub fn commit_transaction(&self, transaction: Transaction) -> Result<Version> {
         self.triple_store.commit_transaction(transaction.tx_id)
     }
-    
+
     /// Rollback a transaction
     pub fn rollback_transaction(&self, transaction: Transaction) -> Result<()> {
         self.triple_store.abort_transaction(transaction.tx_id)
     }
-    
+
     /// Insert a triple
     pub fn insert_triple(&self, subject: &Term, predicate: &Term, object: &Term) -> Result<()> {
         let subject_id = self.triple_store.store_term(subject)?;
         let predicate_id = self.triple_store.store_term(predicate)?;
         let object_id = self.triple_store.store_term(object)?;
-        
+
         let triple = Triple::new(subject_id, predicate_id, object_id);
         self.triple_store.insert_triple(&triple)
     }
-    
+
     /// Insert a quad
-    pub fn insert_quad(&self, subject: &Term, predicate: &Term, object: &Term, graph: Option<&Term>) -> Result<()> {
+    pub fn insert_quad(
+        &self,
+        subject: &Term,
+        predicate: &Term,
+        object: &Term,
+        graph: Option<&Term>,
+    ) -> Result<()> {
         let subject_id = self.triple_store.store_term(subject)?;
         let predicate_id = self.triple_store.store_term(predicate)?;
         let object_id = self.triple_store.store_term(object)?;
@@ -120,25 +126,25 @@ impl TdbStore {
         } else {
             Some(self.triple_store.default_graph())
         };
-        
+
         let quad = Quad::new(subject_id, predicate_id, object_id, graph_id);
         self.triple_store.insert_quad(&quad)
     }
-    
+
     /// Delete a triple
     pub fn delete_triple(&self, subject: &Term, predicate: &Term, object: &Term) -> Result<bool> {
         let subject_id = self.triple_store.get_node_id(subject)?.unwrap_or(0);
         let predicate_id = self.triple_store.get_node_id(predicate)?.unwrap_or(0);
         let object_id = self.triple_store.get_node_id(object)?.unwrap_or(0);
-        
+
         if subject_id == 0 || predicate_id == 0 || object_id == 0 {
             return Ok(false); // Triple doesn't exist
         }
-        
+
         let triple = Triple::new(subject_id, predicate_id, object_id);
         self.triple_store.delete_triple(&triple)
     }
-    
+
     /// Query triples
     pub fn query_triples(
         &self,
@@ -161,47 +167,58 @@ impl TdbStore {
         } else {
             None
         };
-        
-        let triples = self.triple_store.query_triples(subject_id, predicate_id, object_id)?;
-        
+
+        let triples = self
+            .triple_store
+            .query_triples(subject_id, predicate_id, object_id)?;
+
         // Convert back to terms
         let mut result = Vec::new();
         for triple in triples {
-            let subject_term = self.triple_store.get_term(triple.subject)?.unwrap_or_else(|| Term::iri("unknown"));
-            let predicate_term = self.triple_store.get_term(triple.predicate)?.unwrap_or_else(|| Term::iri("unknown"));
-            let object_term = self.triple_store.get_term(triple.object)?.unwrap_or_else(|| Term::iri("unknown"));
-            
+            let subject_term = self
+                .triple_store
+                .get_term(triple.subject)?
+                .unwrap_or_else(|| Term::iri("unknown"));
+            let predicate_term = self
+                .triple_store
+                .get_term(triple.predicate)?
+                .unwrap_or_else(|| Term::iri("unknown"));
+            let object_term = self
+                .triple_store
+                .get_term(triple.object)?
+                .unwrap_or_else(|| Term::iri("unknown"));
+
             result.push((subject_term, predicate_term, object_term));
         }
-        
+
         Ok(result)
     }
-    
+
     /// Get statistics
     pub fn get_stats(&self) -> Result<TripleStoreStats> {
         self.triple_store.get_stats()
     }
-    
+
     /// Get the number of triples
     pub fn len(&self) -> Result<u64> {
         self.triple_store.len()
     }
-    
+
     /// Check if the store is empty
     pub fn is_empty(&self) -> Result<bool> {
         self.triple_store.is_empty()
     }
-    
+
     /// Compact the store
     pub fn compact(&self) -> Result<()> {
         self.triple_store.compact()
     }
-    
+
     /// Clear all data
     pub fn clear(&self) -> Result<()> {
         self.triple_store.clear()
     }
-    
+
     /// Access the underlying triple store
     pub fn triple_store(&self) -> &TripleStore {
         &self.triple_store
@@ -217,7 +234,7 @@ impl Transaction {
     fn new(tx_id: TransactionId) -> Self {
         Self { tx_id }
     }
-    
+
     /// Get the transaction ID
     pub fn id(&self) -> TransactionId {
         self.tx_id

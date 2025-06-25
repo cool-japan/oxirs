@@ -61,7 +61,7 @@ impl ReificationContext {
     /// Generate a unique identifier for a quoted triple
     fn generate_id(&mut self, triple: &StarTriple) -> String {
         let triple_key = format!("{}|{}|{}", triple.subject, triple.predicate, triple.object);
-        
+
         if let Some(existing_id) = self.triple_to_id.get(&triple_key) {
             return existing_id.clone();
         }
@@ -121,21 +121,24 @@ impl Reificator {
             }
         }
 
-        debug!("Reified {} triples to {} standard RDF triples", 
-               star_graph.len(), reified_graph.len());
+        debug!(
+            "Reified {} triples to {} standard RDF triples",
+            star_graph.len(),
+            reified_graph.len()
+        );
         Ok(reified_graph)
     }
 
     /// Convert a single RDF-star triple to standard RDF triples
     pub fn reify_triple(&mut self, triple: &StarTriple) -> StarResult<Vec<StarTriple>> {
         let mut result = Vec::new();
-        
+
         // Process subject
         let subject = self.reify_term(&triple.subject, &mut result)?;
-        
+
         // Process predicate (should not contain quoted triples in valid RDF-star)
         let predicate = self.reify_term(&triple.predicate, &mut result)?;
-        
+
         // Process object
         let object = self.reify_term(&triple.object, &mut result)?;
 
@@ -147,14 +150,19 @@ impl Reificator {
     }
 
     /// Reify a single term, generating additional triples if needed
-    fn reify_term(&mut self, term: &StarTerm, additional_triples: &mut Vec<StarTriple>) -> StarResult<StarTerm> {
+    fn reify_term(
+        &mut self,
+        term: &StarTerm,
+        additional_triples: &mut Vec<StarTriple>,
+    ) -> StarResult<StarTerm> {
         match term {
             StarTerm::QuotedTriple(quoted_triple) => {
                 // Generate identifier for the quoted triple
                 let stmt_id = self.context.generate_id(quoted_triple);
-                
+
                 // Create reification triples
-                let reification_triples = self.create_reification_triples(&stmt_id, quoted_triple)?;
+                let reification_triples =
+                    self.create_reification_triples(&stmt_id, quoted_triple)?;
                 additional_triples.extend(reification_triples);
 
                 // Return the statement identifier as the term
@@ -173,7 +181,11 @@ impl Reificator {
     }
 
     /// Create the standard reification triples for a quoted triple
-    fn create_reification_triples(&mut self, stmt_id: &str, triple: &StarTriple) -> StarResult<Vec<StarTriple>> {
+    fn create_reification_triples(
+        &mut self,
+        stmt_id: &str,
+        triple: &StarTriple,
+    ) -> StarResult<Vec<StarTriple>> {
         let mut triples = Vec::new();
 
         // Create statement identifier term
@@ -188,7 +200,10 @@ impl Reificator {
         };
 
         // stmt_id rdf:type rdf:Statement
-        if matches!(self.context.strategy, ReificationStrategy::StandardReification) {
+        if matches!(
+            self.context.strategy,
+            ReificationStrategy::StandardReification
+        ) {
             triples.push(StarTriple::new(
                 stmt_term.clone(),
                 StarTerm::iri(vocab::RDF_TYPE)?,
@@ -260,15 +275,18 @@ impl Dereificator {
 
         // Second pass: reconstruct quoted triples
         let mut star_graph = StarGraph::new();
-        
+
         // Add non-reification triples, substituting statement identifiers with quoted triples
         for triple in non_reification_triples {
             let star_triple = self.substitute_quoted_triples(triple, &statements)?;
             star_graph.insert(star_triple)?;
         }
 
-        debug!("Dereified {} standard RDF triples to {} RDF-star triples", 
-               reified_graph.len(), star_graph.len());
+        debug!(
+            "Dereified {} standard RDF triples to {} RDF-star triples",
+            reified_graph.len(),
+            star_graph.len()
+        );
         Ok(star_graph)
     }
 
@@ -279,26 +297,29 @@ impl Dereificator {
         statements: &mut HashMap<String, (StarTerm, StarTerm, StarTerm)>,
         non_reification_triples: &mut Vec<StarTriple>,
     ) -> StarResult<()> {
-        
         let mut potential_statements = HashMap::new();
-        
+
         for triple in graph.triples() {
             // Check if this is a reification triple
             if let Some(stmt_id) = self.extract_statement_id(&triple.subject) {
-                if let Some(reification_property) = self.get_reification_property(&triple.predicate) {
+                if let Some(reification_property) = self.get_reification_property(&triple.predicate)
+                {
                     match reification_property.as_str() {
                         "subject" => {
-                            potential_statements.entry(stmt_id)
+                            potential_statements
+                                .entry(stmt_id)
                                 .or_insert((None, None, None))
                                 .0 = Some(triple.object.clone());
                         }
                         "predicate" => {
-                            potential_statements.entry(stmt_id)
+                            potential_statements
+                                .entry(stmt_id)
                                 .or_insert((None, None, None))
                                 .1 = Some(triple.object.clone());
                         }
                         "object" => {
-                            potential_statements.entry(stmt_id)
+                            potential_statements
+                                .entry(stmt_id)
                                 .or_insert((None, None, None))
                                 .2 = Some(triple.object.clone());
                         }
@@ -392,7 +413,7 @@ impl Dereificator {
                 let sub_subject = self.substitute_term(subject.clone(), statements)?;
                 let sub_predicate = self.substitute_term(predicate.clone(), statements)?;
                 let sub_object = self.substitute_term(object.clone(), statements)?;
-                
+
                 let quoted_triple = StarTriple::new(sub_subject, sub_predicate, sub_object);
                 Ok(StarTerm::quoted_triple(quoted_triple))
             } else {
@@ -412,8 +433,10 @@ pub mod utils {
     pub fn has_reifications(graph: &StarGraph) -> bool {
         for triple in graph.triples() {
             if let StarTerm::NamedNode(node) = &triple.predicate {
-                if matches!(node.iri.as_str(), 
-                    vocab::RDF_SUBJECT | vocab::RDF_PREDICATE | vocab::RDF_OBJECT) {
+                if matches!(
+                    node.iri.as_str(),
+                    vocab::RDF_SUBJECT | vocab::RDF_PREDICATE | vocab::RDF_OBJECT
+                ) {
                     return true;
                 }
             }
@@ -424,11 +447,13 @@ pub mod utils {
     /// Count the number of reification statements in a graph
     pub fn count_reifications(graph: &StarGraph) -> usize {
         let mut statements = std::collections::HashSet::new();
-        
+
         for triple in graph.triples() {
             if let StarTerm::NamedNode(pred_node) = &triple.predicate {
-                if matches!(pred_node.iri.as_str(), 
-                    vocab::RDF_SUBJECT | vocab::RDF_PREDICATE | vocab::RDF_OBJECT) {
+                if matches!(
+                    pred_node.iri.as_str(),
+                    vocab::RDF_SUBJECT | vocab::RDF_PREDICATE | vocab::RDF_OBJECT
+                ) {
                     if let StarTerm::NamedNode(subj_node) = &triple.subject {
                         statements.insert(&subj_node.iri);
                     } else if let StarTerm::BlankNode(subj_node) = &triple.subject {
@@ -437,14 +462,14 @@ pub mod utils {
                 }
             }
         }
-        
+
         statements.len()
     }
 
     /// Validate that reification patterns are complete
     pub fn validate_reifications(graph: &StarGraph) -> StarResult<()> {
         let mut statements = HashMap::new();
-        
+
         for triple in graph.triples() {
             if let StarTerm::NamedNode(pred_node) = &triple.predicate {
                 match pred_node.iri.as_str() {
@@ -471,9 +496,10 @@ pub mod utils {
         // Check for incomplete reifications
         for (stmt_id, completeness) in statements {
             if !completeness.iter().all(|&x| x) {
-                return Err(StarError::ReificationError(
-                    format!("Incomplete reification for statement {}", stmt_id)
-                ));
+                return Err(StarError::ReificationError(format!(
+                    "Incomplete reification for statement {}",
+                    stmt_id
+                )));
             }
         }
 
@@ -517,10 +543,10 @@ mod tests {
         star_graph.insert(outer).unwrap();
 
         let reified = reificator.reify_graph(&star_graph).unwrap();
-        
+
         // Should have multiple triples for reification
         assert!(reified.len() > 1);
-        
+
         // Should contain rdf:type rdf:Statement triple
         let has_type_triple = reified.triples().iter().any(|t| {
             if let (StarTerm::NamedNode(p), StarTerm::NamedNode(o)) = (&t.predicate, &t.object) {
@@ -536,43 +562,53 @@ mod tests {
     fn test_dereification() {
         // Create a reified graph manually
         let mut reified_graph = StarGraph::new();
-        
+
         let stmt_iri = "http://example.org/stmt/1";
-        
+
         // stmt rdf:type rdf:Statement
-        reified_graph.insert(StarTriple::new(
-            StarTerm::iri(stmt_iri).unwrap(),
-            StarTerm::iri(vocab::RDF_TYPE).unwrap(),
-            StarTerm::iri(vocab::RDF_STATEMENT).unwrap(),
-        )).unwrap();
-        
+        reified_graph
+            .insert(StarTriple::new(
+                StarTerm::iri(stmt_iri).unwrap(),
+                StarTerm::iri(vocab::RDF_TYPE).unwrap(),
+                StarTerm::iri(vocab::RDF_STATEMENT).unwrap(),
+            ))
+            .unwrap();
+
         // stmt rdf:subject alice
-        reified_graph.insert(StarTriple::new(
-            StarTerm::iri(stmt_iri).unwrap(),
-            StarTerm::iri(vocab::RDF_SUBJECT).unwrap(),
-            StarTerm::iri("http://example.org/alice").unwrap(),
-        )).unwrap();
-        
+        reified_graph
+            .insert(StarTriple::new(
+                StarTerm::iri(stmt_iri).unwrap(),
+                StarTerm::iri(vocab::RDF_SUBJECT).unwrap(),
+                StarTerm::iri("http://example.org/alice").unwrap(),
+            ))
+            .unwrap();
+
         // stmt rdf:predicate age
-        reified_graph.insert(StarTriple::new(
-            StarTerm::iri(stmt_iri).unwrap(),
-            StarTerm::iri(vocab::RDF_PREDICATE).unwrap(),
-            StarTerm::iri("http://example.org/age").unwrap(),
-        )).unwrap();
-        
+        reified_graph
+            .insert(StarTriple::new(
+                StarTerm::iri(stmt_iri).unwrap(),
+                StarTerm::iri(vocab::RDF_PREDICATE).unwrap(),
+                StarTerm::iri("http://example.org/age").unwrap(),
+            ))
+            .unwrap();
+
         // stmt rdf:object "25"
-        reified_graph.insert(StarTriple::new(
-            StarTerm::iri(stmt_iri).unwrap(),
-            StarTerm::iri(vocab::RDF_OBJECT).unwrap(),
-            StarTerm::literal("25").unwrap(),
-        )).unwrap();
-        
+        reified_graph
+            .insert(StarTriple::new(
+                StarTerm::iri(stmt_iri).unwrap(),
+                StarTerm::iri(vocab::RDF_OBJECT).unwrap(),
+                StarTerm::literal("25").unwrap(),
+            ))
+            .unwrap();
+
         // stmt certainty "0.9"
-        reified_graph.insert(StarTriple::new(
-            StarTerm::iri(stmt_iri).unwrap(),
-            StarTerm::iri("http://example.org/certainty").unwrap(),
-            StarTerm::literal("0.9").unwrap(),
-        )).unwrap();
+        reified_graph
+            .insert(StarTriple::new(
+                StarTerm::iri(stmt_iri).unwrap(),
+                StarTerm::iri("http://example.org/certainty").unwrap(),
+                StarTerm::literal("0.9").unwrap(),
+            ))
+            .unwrap();
 
         let mut dereificator = Dereificator::new(
             ReificationStrategy::StandardReification,
@@ -580,10 +616,10 @@ mod tests {
         );
 
         let star_graph = dereificator.dereify_graph(&reified_graph).unwrap();
-        
+
         // Should have one triple with quoted triple as subject
         assert_eq!(star_graph.len(), 1);
-        
+
         let triple = &star_graph.triples()[0];
         assert!(triple.subject.is_quoted_triple());
     }
@@ -622,7 +658,7 @@ mod tests {
 
         // Should have the same structure (though possibly different identifiers)
         assert_eq!(recovered_graph.len(), original_graph.len());
-        
+
         let recovered_triple = &recovered_graph.triples()[0];
         assert!(recovered_triple.subject.is_quoted_triple());
     }
@@ -630,17 +666,19 @@ mod tests {
     #[test]
     fn test_utils() {
         let mut graph = StarGraph::new();
-        
+
         // Add some reification triples
-        graph.insert(StarTriple::new(
-            StarTerm::iri("http://example.org/stmt1").unwrap(),
-            StarTerm::iri(vocab::RDF_SUBJECT).unwrap(),
-            StarTerm::iri("http://example.org/alice").unwrap(),
-        )).unwrap();
+        graph
+            .insert(StarTriple::new(
+                StarTerm::iri("http://example.org/stmt1").unwrap(),
+                StarTerm::iri(vocab::RDF_SUBJECT).unwrap(),
+                StarTerm::iri("http://example.org/alice").unwrap(),
+            ))
+            .unwrap();
 
         assert!(utils::has_reifications(&graph));
         assert_eq!(utils::count_reifications(&graph), 1);
-        
+
         // Incomplete reification should fail validation
         assert!(utils::validate_reifications(&graph).is_err());
     }

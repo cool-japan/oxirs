@@ -6,24 +6,24 @@
 //! consumer groups, persistence, and real-time message processing capabilities.
 //! Optimized for ultra-low latency and high throughput scenarios.
 
-use anyhow::{anyhow, Result};
-use crate::{StreamEvent, StreamConfig, StreamBackend, RdfPatch, PatchOperation, EventMetadata};
 use crate::kafka::KafkaEvent;
+use crate::{EventMetadata, PatchOperation, RdfPatch, StreamBackend, StreamConfig, StreamEvent};
+use anyhow::{anyhow, Result};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tokio::time;
 use tracing::{debug, error, info, warn};
-use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 #[cfg(feature = "redis")]
 use redis::{
-    AsyncCommands, Client, ConnectionManager, RedisResult, 
-    streams::{StreamReadOptions, StreamReadReply},
+    aio::ConnectionManager as AsyncConnectionManager,
     cluster::ClusterClient,
     cluster_async::ClusterConnection,
-    aio::ConnectionManager as AsyncConnectionManager,
+    streams::{StreamReadOptions, StreamReadReply},
+    AsyncCommands, Client, ConnectionManager, RedisResult,
 };
 
 /// Redis Streams configuration with clustering and performance tuning
@@ -120,86 +120,155 @@ pub struct RedisStreamEvent {
 impl From<StreamEvent> for RedisStreamEvent {
     fn from(event: StreamEvent) -> Self {
         let (event_type, data, metadata) = match event {
-            StreamEvent::TripleAdded { subject, predicate, object, graph, metadata } => {
-                ("triple_added".to_string(), serde_json::json!({
+            StreamEvent::TripleAdded {
+                subject,
+                predicate,
+                object,
+                graph,
+                metadata,
+            } => (
+                "triple_added".to_string(),
+                serde_json::json!({
                     "subject": subject,
                     "predicate": predicate,
                     "object": object,
                     "graph": graph
-                }), metadata)
-            }
-            StreamEvent::TripleRemoved { subject, predicate, object, graph, metadata } => {
-                ("triple_removed".to_string(), serde_json::json!({
+                }),
+                metadata,
+            ),
+            StreamEvent::TripleRemoved {
+                subject,
+                predicate,
+                object,
+                graph,
+                metadata,
+            } => (
+                "triple_removed".to_string(),
+                serde_json::json!({
                     "subject": subject,
                     "predicate": predicate,
                     "object": object,
                     "graph": graph
-                }), metadata)
-            }
-            StreamEvent::QuadAdded { subject, predicate, object, graph, metadata } => {
-                ("quad_added".to_string(), serde_json::json!({
+                }),
+                metadata,
+            ),
+            StreamEvent::QuadAdded {
+                subject,
+                predicate,
+                object,
+                graph,
+                metadata,
+            } => (
+                "quad_added".to_string(),
+                serde_json::json!({
                     "subject": subject,
                     "predicate": predicate,
                     "object": object,
                     "graph": graph
-                }), metadata)
-            }
-            StreamEvent::QuadRemoved { subject, predicate, object, graph, metadata } => {
-                ("quad_removed".to_string(), serde_json::json!({
+                }),
+                metadata,
+            ),
+            StreamEvent::QuadRemoved {
+                subject,
+                predicate,
+                object,
+                graph,
+                metadata,
+            } => (
+                "quad_removed".to_string(),
+                serde_json::json!({
                     "subject": subject,
                     "predicate": predicate,
                     "object": object,
                     "graph": graph
-                }), metadata)
-            }
-            StreamEvent::GraphCreated { graph, metadata } => {
-                ("graph_created".to_string(), serde_json::json!({
+                }),
+                metadata,
+            ),
+            StreamEvent::GraphCreated { graph, metadata } => (
+                "graph_created".to_string(),
+                serde_json::json!({
                     "graph": graph
-                }), metadata)
-            }
-            StreamEvent::GraphCleared { graph, metadata } => {
-                ("graph_cleared".to_string(), serde_json::json!({
+                }),
+                metadata,
+            ),
+            StreamEvent::GraphCleared { graph, metadata } => (
+                "graph_cleared".to_string(),
+                serde_json::json!({
                     "graph": graph
-                }), metadata)
-            }
-            StreamEvent::GraphDeleted { graph, metadata } => {
-                ("graph_deleted".to_string(), serde_json::json!({
+                }),
+                metadata,
+            ),
+            StreamEvent::GraphDeleted { graph, metadata } => (
+                "graph_deleted".to_string(),
+                serde_json::json!({
                     "graph": graph
-                }), metadata)
-            }
-            StreamEvent::SparqlUpdate { query, operation_type, metadata } => {
-                ("sparql_update".to_string(), serde_json::json!({
+                }),
+                metadata,
+            ),
+            StreamEvent::SparqlUpdate {
+                query,
+                operation_type,
+                metadata,
+            } => (
+                "sparql_update".to_string(),
+                serde_json::json!({
                     "query": query,
                     "operation_type": operation_type
-                }), metadata)
-            }
-            StreamEvent::TransactionBegin { transaction_id, isolation_level, metadata } => {
-                ("transaction_begin".to_string(), serde_json::json!({
+                }),
+                metadata,
+            ),
+            StreamEvent::TransactionBegin {
+                transaction_id,
+                isolation_level,
+                metadata,
+            } => (
+                "transaction_begin".to_string(),
+                serde_json::json!({
                     "transaction_id": transaction_id,
                     "isolation_level": isolation_level
-                }), metadata)
-            }
-            StreamEvent::TransactionCommit { transaction_id, metadata } => {
-                ("transaction_commit".to_string(), serde_json::json!({
+                }),
+                metadata,
+            ),
+            StreamEvent::TransactionCommit {
+                transaction_id,
+                metadata,
+            } => (
+                "transaction_commit".to_string(),
+                serde_json::json!({
                     "transaction_id": transaction_id
-                }), metadata)
-            }
-            StreamEvent::TransactionAbort { transaction_id, metadata } => {
-                ("transaction_abort".to_string(), serde_json::json!({
+                }),
+                metadata,
+            ),
+            StreamEvent::TransactionAbort {
+                transaction_id,
+                metadata,
+            } => (
+                "transaction_abort".to_string(),
+                serde_json::json!({
                     "transaction_id": transaction_id
-                }), metadata)
-            }
-            StreamEvent::SchemaChanged { schema_type, change_type, details, metadata } => {
-                ("schema_changed".to_string(), serde_json::json!({
+                }),
+                metadata,
+            ),
+            StreamEvent::SchemaChanged {
+                schema_type,
+                change_type,
+                details,
+                metadata,
+            } => (
+                "schema_changed".to_string(),
+                serde_json::json!({
                     "schema_type": schema_type,
                     "change_type": change_type,
                     "details": details
-                }), metadata)
-            }
-            StreamEvent::Heartbeat { timestamp, source } => {
-                ("heartbeat".to_string(), serde_json::json!({
+                }),
+                metadata,
+            ),
+            StreamEvent::Heartbeat { timestamp, source } => (
+                "heartbeat".to_string(),
+                serde_json::json!({
                     "source": source
-                }), EventMetadata {
+                }),
+                EventMetadata {
                     event_id: Uuid::new_v4().to_string(),
                     timestamp,
                     source: source.clone(),
@@ -209,8 +278,8 @@ impl From<StreamEvent> for RedisStreamEvent {
                     version: "1.0".to_string(),
                     properties: HashMap::new(),
                     checksum: None,
-                })
-            }
+                },
+            ),
         };
 
         Self {
@@ -259,27 +328,34 @@ impl RedisProducer {
         let connection = if self.redis_config.cluster_mode {
             let cluster_client = ClusterClient::new(self.redis_config.urls.clone())
                 .map_err(|e| anyhow!("Failed to create Redis cluster client: {}", e))?;
-            
-            let connection = cluster_client.get_async_connection().await
+
+            let connection = cluster_client
+                .get_async_connection()
+                .await
                 .map_err(|e| anyhow!("Failed to connect to Redis cluster: {}", e))?;
-            
+
             RedisConnectionManager::Cluster(connection)
         } else {
             let client = Client::open(self.redis_config.urls[0].as_str())
                 .map_err(|e| anyhow!("Failed to create Redis client: {}", e))?;
-            
-            let manager = client.get_connection_manager().await
+
+            let manager = client
+                .get_connection_manager()
+                .await
                 .map_err(|e| anyhow!("Failed to get Redis connection manager: {}", e))?;
-            
+
             RedisConnectionManager::Standalone(manager)
         };
 
         self.connection = Some(connection);
-        
+
         // Create consumer group if it doesn't exist
         self.ensure_consumer_group().await?;
-        
-        info!("Connected to Redis: cluster={}", self.redis_config.cluster_mode);
+
+        info!(
+            "Connected to Redis: cluster={}",
+            self.redis_config.cluster_mode
+        );
         Ok(())
     }
 
@@ -304,9 +380,15 @@ impl RedisProducer {
                     .await;
 
                 match result {
-                    Ok(_) => info!("Created consumer group: {}", self.redis_config.consumer_group),
+                    Ok(_) => info!(
+                        "Created consumer group: {}",
+                        self.redis_config.consumer_group
+                    ),
                     Err(e) if e.to_string().contains("BUSYGROUP") => {
-                        debug!("Consumer group already exists: {}", self.redis_config.consumer_group);
+                        debug!(
+                            "Consumer group already exists: {}",
+                            self.redis_config.consumer_group
+                        );
                     }
                     Err(e) => warn!("Failed to create consumer group: {}", e),
                 }
@@ -322,9 +404,15 @@ impl RedisProducer {
                     .await;
 
                 match result {
-                    Ok(_) => info!("Created consumer group: {}", self.redis_config.consumer_group),
+                    Ok(_) => info!(
+                        "Created consumer group: {}",
+                        self.redis_config.consumer_group
+                    ),
                     Err(e) if e.to_string().contains("BUSYGROUP") => {
-                        debug!("Consumer group already exists: {}", self.redis_config.consumer_group);
+                        debug!(
+                            "Consumer group already exists: {}",
+                            self.redis_config.consumer_group
+                        );
                     }
                     Err(e) => warn!("Failed to create consumer group: {}", e),
                 }
@@ -336,7 +424,7 @@ impl RedisProducer {
 
     pub async fn publish(&mut self, event: StreamEvent) -> Result<()> {
         let start_time = Instant::now();
-        
+
         if self.connection.is_none() {
             self.connect().await?;
         }
@@ -353,7 +441,7 @@ impl RedisProducer {
         // Add to pipeline buffer if pipelining is enabled
         if self.redis_config.enable_pipeline {
             self.pipeline_buffer.push(redis_event);
-            
+
             if self.pipeline_buffer.len() >= self.redis_config.pipeline_size {
                 self.flush_pipeline().await?;
             }
@@ -387,7 +475,7 @@ impl RedisProducer {
             Some(RedisConnectionManager::Standalone(manager)) => {
                 let mut cmd = redis::cmd("XADD");
                 cmd.arg(&self.redis_config.stream_name);
-                
+
                 if let Some(max_len) = self.redis_config.max_len {
                     if self.redis_config.approximate_trimming {
                         cmd.arg("MAXLEN").arg("~").arg(max_len);
@@ -395,14 +483,16 @@ impl RedisProducer {
                         cmd.arg("MAXLEN").arg(max_len);
                     }
                 }
-                
+
                 cmd.arg("*"); // Auto-generate ID
-                
+
                 for (key, value) in fields {
                     cmd.arg(key).arg(value);
                 }
 
-                let _: String = cmd.query_async(manager).await
+                let _: String = cmd
+                    .query_async(manager)
+                    .await
                     .map_err(|e| anyhow!("Failed to publish to Redis: {}", e))?;
 
                 self.stats.events_published += 1;
@@ -412,7 +502,7 @@ impl RedisProducer {
             Some(RedisConnectionManager::Cluster(connection)) => {
                 let mut cmd = redis::cmd("XADD");
                 cmd.arg(&self.redis_config.stream_name);
-                
+
                 if let Some(max_len) = self.redis_config.max_len {
                     if self.redis_config.approximate_trimming {
                         cmd.arg("MAXLEN").arg("~").arg(max_len);
@@ -420,14 +510,16 @@ impl RedisProducer {
                         cmd.arg("MAXLEN").arg(max_len);
                     }
                 }
-                
+
                 cmd.arg("*");
-                
+
                 for (key, value) in fields {
                     cmd.arg(key).arg(value);
                 }
 
-                let _: String = cmd.query_async(connection).await
+                let _: String = cmd
+                    .query_async(connection)
+                    .await
                     .map_err(|e| anyhow!("Failed to publish to Redis cluster: {}", e))?;
 
                 self.stats.events_published += 1;
@@ -455,13 +547,16 @@ impl RedisProducer {
         }
 
         let events = std::mem::take(&mut self.pipeline_buffer);
-        
+
         for event in events {
             self.publish_single_event(&event).await?;
         }
 
         self.stats.pipeline_flushes += 1;
-        debug!("Flushed pipeline with {} events", self.pipeline_buffer.len());
+        debug!(
+            "Flushed pipeline with {} events",
+            self.pipeline_buffer.len()
+        );
         Ok(())
     }
 
@@ -487,38 +582,38 @@ impl RedisProducer {
             };
 
             let event = match operation {
-                PatchOperation::Add { subject, predicate, object } => {
-                    StreamEvent::TripleAdded {
-                        subject: subject.clone(),
-                        predicate: predicate.clone(),
-                        object: object.clone(),
-                        graph: None,
-                        metadata,
-                    }
-                }
-                PatchOperation::Delete { subject, predicate, object } => {
-                    StreamEvent::TripleRemoved {
-                        subject: subject.clone(),
-                        predicate: predicate.clone(),
-                        object: object.clone(),
-                        graph: None,
-                        metadata,
-                    }
-                }
-                PatchOperation::AddGraph { graph } => {
-                    StreamEvent::GraphCreated {
-                        graph: graph.clone(),
-                        metadata,
-                    }
-                }
-                PatchOperation::DeleteGraph { graph } => {
-                    StreamEvent::GraphDeleted {
-                        graph: graph.clone(),
-                        metadata,
-                    }
-                }
+                PatchOperation::Add {
+                    subject,
+                    predicate,
+                    object,
+                } => StreamEvent::TripleAdded {
+                    subject: subject.clone(),
+                    predicate: predicate.clone(),
+                    object: object.clone(),
+                    graph: None,
+                    metadata,
+                },
+                PatchOperation::Delete {
+                    subject,
+                    predicate,
+                    object,
+                } => StreamEvent::TripleRemoved {
+                    subject: subject.clone(),
+                    predicate: predicate.clone(),
+                    object: object.clone(),
+                    graph: None,
+                    metadata,
+                },
+                PatchOperation::AddGraph { graph } => StreamEvent::GraphCreated {
+                    graph: graph.clone(),
+                    metadata,
+                },
+                PatchOperation::DeleteGraph { graph } => StreamEvent::GraphDeleted {
+                    graph: graph.clone(),
+                    metadata,
+                },
             };
-            
+
             self.publish(event).await?;
         }
         self.flush().await
@@ -537,11 +632,16 @@ impl RedisProducer {
     fn compress_event(&self, mut event: RedisStreamEvent) -> Result<RedisStreamEvent> {
         if self.redis_config.compression_enabled {
             let data_str = event.data.to_string();
-            if data_str.len() > 1024 { // Only compress large events
+            if data_str.len() > 1024 {
+                // Only compress large events
                 // Simple compression using flate2 would go here
                 // For now, just mark as compressed
                 event.compressed = true;
-                debug!("Compressed event {} from {} bytes", event.event_id, data_str.len());
+                debug!(
+                    "Compressed event {} from {} bytes",
+                    event.event_id,
+                    data_str.len()
+                );
             }
         }
         Ok(event)
@@ -611,23 +711,30 @@ impl RedisConsumer {
         let connection = if self.redis_config.cluster_mode {
             let cluster_client = ClusterClient::new(self.redis_config.urls.clone())
                 .map_err(|e| anyhow!("Failed to create Redis cluster client: {}", e))?;
-            
-            let connection = cluster_client.get_async_connection().await
+
+            let connection = cluster_client
+                .get_async_connection()
+                .await
                 .map_err(|e| anyhow!("Failed to connect to Redis cluster: {}", e))?;
-            
+
             RedisConnectionManager::Cluster(connection)
         } else {
             let client = Client::open(self.redis_config.urls[0].as_str())
                 .map_err(|e| anyhow!("Failed to create Redis client: {}", e))?;
-            
-            let manager = client.get_connection_manager().await
+
+            let manager = client
+                .get_connection_manager()
+                .await
                 .map_err(|e| anyhow!("Failed to get Redis connection manager: {}", e))?;
-            
+
             RedisConnectionManager::Standalone(manager)
         };
 
         self.connection = Some(connection);
-        info!("Connected Redis consumer to stream: {}", self.redis_config.stream_name);
+        info!(
+            "Connected Redis consumer to stream: {}",
+            self.redis_config.stream_name
+        );
         Ok(())
     }
 
@@ -648,7 +755,10 @@ impl RedisConsumer {
             match &mut self.connection {
                 Some(RedisConnectionManager::Standalone(manager)) => {
                     let opts = StreamReadOptions::default()
-                        .group(&self.redis_config.consumer_group, &self.redis_config.consumer_name)
+                        .group(
+                            &self.redis_config.consumer_group,
+                            &self.redis_config.consumer_name,
+                        )
                         .count(1)
                         .block(self.block_time_ms);
 
@@ -675,7 +785,10 @@ impl RedisConsumer {
                 }
                 Some(RedisConnectionManager::Cluster(connection)) => {
                     let opts = StreamReadOptions::default()
-                        .group(&self.redis_config.consumer_group, &self.redis_config.consumer_name)
+                        .group(
+                            &self.redis_config.consumer_group,
+                            &self.redis_config.consumer_name,
+                        )
                         .count(1)
                         .block(self.block_time_ms);
 
@@ -700,7 +813,7 @@ impl RedisConsumer {
                         }
                     }
                 }
-                _ => Err(anyhow!("Redis connection not available"))
+                _ => Err(anyhow!("Redis connection not available")),
             }
         }
         #[cfg(not(feature = "redis"))]
@@ -710,9 +823,12 @@ impl RedisConsumer {
         }
     }
 
-    async fn parse_redis_message(&mut self, fields: &HashMap<String, String>) -> Result<Option<StreamEvent>> {
+    async fn parse_redis_message(
+        &mut self,
+        fields: &HashMap<String, String>,
+    ) -> Result<Option<StreamEvent>> {
         let start_time = Instant::now();
-        
+
         if let Some(data) = fields.get("data") {
             match serde_json::from_str::<RedisStreamEvent>(data) {
                 Ok(redis_event) => {
@@ -721,7 +837,7 @@ impl RedisConsumer {
                     self.stats.last_message = Some(Utc::now());
 
                     let processing_time = start_time.elapsed().as_millis() as f64;
-                    self.stats.avg_processing_time_ms = 
+                    self.stats.avg_processing_time_ms =
                         (self.stats.avg_processing_time_ms + processing_time) / 2.0;
 
                     let stream_event = self.convert_redis_event(redis_event)?;
@@ -742,33 +858,59 @@ impl RedisConsumer {
 
     fn convert_redis_event(&self, redis_event: RedisStreamEvent) -> Result<StreamEvent> {
         let metadata = redis_event.metadata;
-        
+
         match redis_event.event_type.as_str() {
             "triple_added" => {
-                let subject = redis_event.data["subject"].as_str()
-                    .ok_or_else(|| anyhow!("Missing subject"))?.to_string();
-                let predicate = redis_event.data["predicate"].as_str()
-                    .ok_or_else(|| anyhow!("Missing predicate"))?.to_string();
-                let object = redis_event.data["object"].as_str()
-                    .ok_or_else(|| anyhow!("Missing object"))?.to_string();
+                let subject = redis_event.data["subject"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing subject"))?
+                    .to_string();
+                let predicate = redis_event.data["predicate"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing predicate"))?
+                    .to_string();
+                let object = redis_event.data["object"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing object"))?
+                    .to_string();
                 let graph = redis_event.data["graph"].as_str().map(|s| s.to_string());
-                
-                Ok(StreamEvent::TripleAdded { subject, predicate, object, graph, metadata })
+
+                Ok(StreamEvent::TripleAdded {
+                    subject,
+                    predicate,
+                    object,
+                    graph,
+                    metadata,
+                })
             }
             "triple_removed" => {
-                let subject = redis_event.data["subject"].as_str()
-                    .ok_or_else(|| anyhow!("Missing subject"))?.to_string();
-                let predicate = redis_event.data["predicate"].as_str()
-                    .ok_or_else(|| anyhow!("Missing predicate"))?.to_string();
-                let object = redis_event.data["object"].as_str()
-                    .ok_or_else(|| anyhow!("Missing object"))?.to_string();
+                let subject = redis_event.data["subject"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing subject"))?
+                    .to_string();
+                let predicate = redis_event.data["predicate"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing predicate"))?
+                    .to_string();
+                let object = redis_event.data["object"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing object"))?
+                    .to_string();
                 let graph = redis_event.data["graph"].as_str().map(|s| s.to_string());
-                
-                Ok(StreamEvent::TripleRemoved { subject, predicate, object, graph, metadata })
+
+                Ok(StreamEvent::TripleRemoved {
+                    subject,
+                    predicate,
+                    object,
+                    graph,
+                    metadata,
+                })
             }
             "graph_created" => {
-                let graph = redis_event.data["graph"].as_str()
-                    .ok_or_else(|| anyhow!("Missing graph"))?.to_string();
+                let graph = redis_event.data["graph"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing graph"))?
+                    .to_string();
                 Ok(StreamEvent::GraphCreated { graph, metadata })
             }
             "graph_cleared" => {
@@ -776,18 +918,24 @@ impl RedisConsumer {
                 Ok(StreamEvent::GraphCleared { graph, metadata })
             }
             "heartbeat" => {
-                let source = redis_event.data["source"].as_str()
-                    .ok_or_else(|| anyhow!("Missing source"))?.to_string();
-                Ok(StreamEvent::Heartbeat { 
-                    timestamp: redis_event.timestamp, 
-                    source 
+                let source = redis_event.data["source"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Missing source"))?
+                    .to_string();
+                Ok(StreamEvent::Heartbeat {
+                    timestamp: redis_event.timestamp,
+                    source,
                 })
             }
-            _ => Err(anyhow!("Unknown event type: {}", redis_event.event_type))
+            _ => Err(anyhow!("Unknown event type: {}", redis_event.event_type)),
         }
     }
 
-    pub async fn consume_batch(&mut self, max_events: usize, timeout: Duration) -> Result<Vec<StreamEvent>> {
+    pub async fn consume_batch(
+        &mut self,
+        max_events: usize,
+        timeout: Duration,
+    ) -> Result<Vec<StreamEvent>> {
         let mut events = Vec::new();
         let start_time = time::Instant::now();
 
@@ -823,18 +971,22 @@ impl RedisAdmin {
         let connection = if config.cluster_mode {
             let cluster_client = ClusterClient::new(config.urls.clone())
                 .map_err(|e| anyhow!("Failed to create Redis cluster client: {}", e))?;
-            
-            let connection = cluster_client.get_async_connection().await
+
+            let connection = cluster_client
+                .get_async_connection()
+                .await
                 .map_err(|e| anyhow!("Failed to connect to Redis cluster: {}", e))?;
-            
+
             Some(RedisConnectionManager::Cluster(connection))
         } else {
             let client = Client::open(config.urls[0].as_str())
                 .map_err(|e| anyhow!("Failed to create Redis client: {}", e))?;
-            
-            let manager = client.get_connection_manager().await
+
+            let manager = client
+                .get_connection_manager()
+                .await
                 .map_err(|e| anyhow!("Failed to get Redis connection manager: {}", e))?;
-            
+
             Some(RedisConnectionManager::Standalone(manager))
         };
 
@@ -843,7 +995,7 @@ impl RedisAdmin {
 
     #[cfg(not(feature = "redis"))]
     pub async fn new(config: RedisStreamConfig) -> Result<Self> {
-        Ok(Self { 
+        Ok(Self {
             _phantom: std::marker::PhantomData,
             config,
         })
@@ -860,7 +1012,7 @@ impl RedisAdmin {
                     .arg("true")
                     .query_async(manager)
                     .await;
-                
+
                 info!("Created Redis stream: {}", stream_name);
             }
             Some(RedisConnectionManager::Cluster(connection)) => {
@@ -871,7 +1023,7 @@ impl RedisAdmin {
                     .arg("true")
                     .query_async(connection)
                     .await;
-                
+
                 info!("Created Redis cluster stream: {}", stream_name);
             }
             _ => return Err(anyhow!("No Redis connection available")),
@@ -895,7 +1047,7 @@ impl RedisAdmin {
                     .query_async(manager)
                     .await
                     .map_err(|e| anyhow!("Failed to get stream info: {}", e))?;
-                
+
                 // Parse Redis response into HashMap
                 Ok(HashMap::new()) // Simplified for now
             }
@@ -906,7 +1058,7 @@ impl RedisAdmin {
                     .query_async(connection)
                     .await
                     .map_err(|e| anyhow!("Failed to get stream info: {}", e))?;
-                
+
                 Ok(HashMap::new()) // Simplified for now
             }
             _ => Err(anyhow!("No Redis connection available")),

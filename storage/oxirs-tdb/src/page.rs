@@ -11,7 +11,7 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, SystemTime};
-use tracing::{debug, warn, info};
+use tracing::{debug, info, warn};
 
 /// Standard page size for TDB (8KB)
 pub const PAGE_SIZE: usize = 8192;
@@ -126,7 +126,7 @@ impl Page {
     pub fn new(page_id: PageId, page_type: PageType) -> Self {
         let header = PageHeader::new(page_id, page_type);
         let data = vec![0; PAGE_SIZE - PageHeader::SIZE];
-        
+
         Self {
             header,
             data,
@@ -139,7 +139,11 @@ impl Page {
     /// Create a page from bytes
     pub fn from_bytes(data: &[u8]) -> Result<Self> {
         if data.len() != PAGE_SIZE {
-            return Err(anyhow!("Invalid page size: expected {}, got {}", PAGE_SIZE, data.len()));
+            return Err(anyhow!(
+                "Invalid page size: expected {}, got {}",
+                PAGE_SIZE,
+                data.len()
+            ));
         }
 
         let header = PageHeader::from_bytes(data)?;
@@ -159,7 +163,7 @@ impl Page {
         let mut result = Vec::with_capacity(PAGE_SIZE);
         result.extend_from_slice(&self.header.to_bytes()?);
         result.extend_from_slice(&self.data);
-        
+
         // Ensure exact page size
         result.resize(PAGE_SIZE, 0);
         Ok(result)
@@ -291,7 +295,7 @@ impl BufferPool {
     /// Create a new buffer pool with configuration
     pub fn with_config<P: AsRef<Path>>(file_path: P, config: BufferPoolConfig) -> Result<Self> {
         let file_path = file_path.as_ref().to_path_buf();
-        
+
         // Create or open the page file
         let page_file = OpenOptions::new()
             .create(true)
@@ -327,10 +331,10 @@ impl BufferPool {
         // Page not in buffer, need to load from disk
         self.update_stats_miss();
         let page = self.load_page_from_disk(page_id)?;
-        
+
         // Add to buffer pool
         self.add_to_buffer(page_id, page.clone())?;
-        
+
         Ok(page)
     }
 
@@ -338,37 +342,42 @@ impl BufferPool {
     pub fn create_page(&self, page_type: PageType) -> Result<(PageId, Arc<Mutex<Page>>)> {
         let page_id = self.allocate_page_id()?;
         let page = Arc::new(Mutex::new(Page::new(page_id, page_type)));
-        
+
         self.add_to_buffer(page_id, page.clone())?;
         self.mark_page_dirty(page_id)?;
-        
+
         Ok((page_id, page))
     }
 
     /// Flush a specific page to disk
     pub fn flush_page(&self, page_id: PageId) -> Result<()> {
         if let Some(page_arc) = self.get_cached_page(page_id) {
-            let page = page_arc.lock()
+            let page = page_arc
+                .lock()
                 .map_err(|_| anyhow!("Failed to lock page"))?;
-            
+
             if page.is_dirty {
                 self.write_page_to_disk(&*page)?;
                 self.update_stats_write();
-                
+
                 // Remove from dirty pages queue
-                let mut dirty_pages = self.dirty_pages.lock()
+                let mut dirty_pages = self
+                    .dirty_pages
+                    .lock()
                     .map_err(|_| anyhow!("Failed to lock dirty pages"))?;
                 dirty_pages.retain(|&id| id != page_id);
             }
         }
-        
+
         Ok(())
     }
 
     /// Flush all dirty pages to disk
     pub fn flush_all(&self) -> Result<()> {
         let dirty_page_ids = {
-            let dirty_pages = self.dirty_pages.lock()
+            let dirty_pages = self
+                .dirty_pages
+                .lock()
                 .map_err(|_| anyhow!("Failed to lock dirty pages"))?;
             dirty_pages.iter().copied().collect::<Vec<_>>()
         };
@@ -378,7 +387,9 @@ impl BufferPool {
         }
 
         // Sync file to disk
-        let mut file = self.page_file.lock()
+        let mut file = self
+            .page_file
+            .lock()
             .map_err(|_| anyhow!("Failed to lock page file"))?;
         file.sync_all()
             .map_err(|e| anyhow!("Failed to sync file: {}", e))?;
@@ -390,22 +401,26 @@ impl BufferPool {
     pub fn evict_page(&self, page_id: PageId) -> Result<()> {
         // Flush if dirty
         self.flush_page(page_id)?;
-        
+
         // Remove from buffer
-        let mut pages = self.pages.write()
+        let mut pages = self
+            .pages
+            .write()
             .map_err(|_| anyhow!("Failed to lock pages"))?;
         pages.remove(&page_id);
-        
+
         // Remove from LRU
         self.remove_from_lru(page_id)?;
-        
+
         self.update_stats_eviction();
         Ok(())
     }
 
     /// Get buffer pool statistics
     pub fn get_stats(&self) -> Result<BufferPoolStats> {
-        let stats = self.stats.lock()
+        let stats = self
+            .stats
+            .lock()
             .map_err(|_| anyhow!("Failed to lock stats"))?;
         Ok(stats.clone())
     }
@@ -414,26 +429,32 @@ impl BufferPool {
     pub fn compact(&self) -> Result<usize> {
         let mut evicted = 0;
         let max_pages = self.config.max_pages;
-        
+
         let current_count = {
-            let pages = self.pages.read()
+            let pages = self
+                .pages
+                .read()
                 .map_err(|_| anyhow!("Failed to lock pages"))?;
             pages.len()
         };
 
         if current_count > max_pages {
             let to_evict = current_count - max_pages;
-            let mut tail = self.lru_tail.lock()
+            let mut tail = self
+                .lru_tail
+                .lock()
                 .map_err(|_| anyhow!("Failed to lock LRU tail"))?;
-            
+
             for _ in 0..to_evict {
                 if let Some(page_id) = *tail {
                     let next_tail = {
-                        let lru_nodes = self.lru_nodes.read()
+                        let lru_nodes = self
+                            .lru_nodes
+                            .read()
                             .map_err(|_| anyhow!("Failed to lock LRU nodes"))?;
                         lru_nodes.get(&page_id).and_then(|node| node.prev)
                     };
-                    
+
                     self.evict_page(page_id)?;
                     *tail = next_tail;
                     evicted += 1;
@@ -455,35 +476,39 @@ impl BufferPool {
     }
 
     fn load_page_from_disk(&self, page_id: PageId) -> Result<Arc<Mutex<Page>>> {
-        let mut file = self.page_file.lock()
+        let mut file = self
+            .page_file
+            .lock()
             .map_err(|_| anyhow!("Failed to lock page file"))?;
-        
+
         let offset = page_id * PAGE_SIZE as u64;
         file.seek(SeekFrom::Start(offset))
             .map_err(|e| anyhow!("Failed to seek to page {}: {}", page_id, e))?;
-        
+
         let mut buffer = vec![0; PAGE_SIZE];
         file.read_exact(&mut buffer)
             .map_err(|e| anyhow!("Failed to read page {}: {}", page_id, e))?;
-        
+
         let page = Page::from_bytes(&buffer)?;
         self.update_stats_read();
-        
+
         Ok(Arc::new(Mutex::new(page)))
     }
 
     fn write_page_to_disk(&self, page: &Page) -> Result<()> {
-        let mut file = self.page_file.lock()
+        let mut file = self
+            .page_file
+            .lock()
             .map_err(|_| anyhow!("Failed to lock page file"))?;
-        
+
         let offset = page.header.page_id * PAGE_SIZE as u64;
         file.seek(SeekFrom::Start(offset))
             .map_err(|e| anyhow!("Failed to seek to page {}: {}", page.header.page_id, e))?;
-        
+
         let data = page.to_bytes()?;
         file.write_all(&data)
             .map_err(|e| anyhow!("Failed to write page {}: {}", page.header.page_id, e))?;
-        
+
         Ok(())
     }
 
@@ -491,18 +516,22 @@ impl BufferPool {
         // Check if we need to evict pages first
         if self.config.enable_lru {
             let current_count = {
-                let pages = self.pages.read()
+                let pages = self
+                    .pages
+                    .read()
                     .map_err(|_| anyhow!("Failed to lock pages"))?;
                 pages.len()
             };
-            
+
             if current_count >= self.config.max_pages {
                 self.compact()?;
             }
         }
 
         // Add to pages map
-        let mut pages = self.pages.write()
+        let mut pages = self
+            .pages
+            .write()
             .map_err(|_| anyhow!("Failed to lock pages"))?;
         pages.insert(page_id, page);
 
@@ -513,53 +542,63 @@ impl BufferPool {
     }
 
     fn add_to_lru(&self, page_id: PageId) -> Result<()> {
-        let mut lru_nodes = self.lru_nodes.write()
+        let mut lru_nodes = self
+            .lru_nodes
+            .write()
             .map_err(|_| anyhow!("Failed to lock LRU nodes"))?;
-        
-        let mut head = self.lru_head.lock()
+
+        let mut head = self
+            .lru_head
+            .lock()
             .map_err(|_| anyhow!("Failed to lock LRU head"))?;
-        
+
         let node = LruNode {
             page_id,
             prev: None,
             next: *head,
         };
-        
+
         if let Some(old_head) = *head {
             if let Some(old_head_node) = lru_nodes.get_mut(&old_head) {
                 old_head_node.prev = Some(page_id);
             }
         } else {
             // First node, also set as tail
-            let mut tail = self.lru_tail.lock()
+            let mut tail = self
+                .lru_tail
+                .lock()
                 .map_err(|_| anyhow!("Failed to lock LRU tail"))?;
             *tail = Some(page_id);
         }
-        
+
         lru_nodes.insert(page_id, node);
         *head = Some(page_id);
-        
+
         Ok(())
     }
 
     fn update_lru(&self, page_id: PageId) -> Result<()> {
         // Move to head if not already there
-        let mut head = self.lru_head.lock()
+        let mut head = self
+            .lru_head
+            .lock()
             .map_err(|_| anyhow!("Failed to lock LRU head"))?;
-        
+
         if *head != Some(page_id) {
             self.remove_from_lru(page_id)?;
             drop(head);
             self.add_to_lru(page_id)?;
         }
-        
+
         Ok(())
     }
 
     fn remove_from_lru(&self, page_id: PageId) -> Result<()> {
-        let mut lru_nodes = self.lru_nodes.write()
+        let mut lru_nodes = self
+            .lru_nodes
+            .write()
             .map_err(|_| anyhow!("Failed to lock LRU nodes"))?;
-        
+
         if let Some(node) = lru_nodes.remove(&page_id) {
             // Update prev node's next pointer
             if let Some(prev_id) = node.prev {
@@ -568,11 +607,13 @@ impl BufferPool {
                 }
             } else {
                 // This was the head
-                let mut head = self.lru_head.lock()
+                let mut head = self
+                    .lru_head
+                    .lock()
                     .map_err(|_| anyhow!("Failed to lock LRU head"))?;
                 *head = node.next;
             }
-            
+
             // Update next node's prev pointer
             if let Some(next_id) = node.next {
                 if let Some(next_node) = lru_nodes.get_mut(&next_id) {
@@ -580,35 +621,42 @@ impl BufferPool {
                 }
             } else {
                 // This was the tail
-                let mut tail = self.lru_tail.lock()
+                let mut tail = self
+                    .lru_tail
+                    .lock()
                     .map_err(|_| anyhow!("Failed to lock LRU tail"))?;
                 *tail = node.prev;
             }
         }
-        
+
         Ok(())
     }
 
     fn mark_page_dirty(&self, page_id: PageId) -> Result<()> {
-        let mut dirty_pages = self.dirty_pages.lock()
+        let mut dirty_pages = self
+            .dirty_pages
+            .lock()
             .map_err(|_| anyhow!("Failed to lock dirty pages"))?;
-        
+
         if !dirty_pages.contains(&page_id) {
             dirty_pages.push_back(page_id);
         }
-        
+
         Ok(())
     }
 
     fn allocate_page_id(&self) -> Result<PageId> {
         // Simple allocation - in production, use a free page list
-        let file = self.page_file.lock()
+        let file = self
+            .page_file
+            .lock()
             .map_err(|_| anyhow!("Failed to lock page file"))?;
-        
-        let file_size = file.metadata()
+
+        let file_size = file
+            .metadata()
             .map_err(|e| anyhow!("Failed to get file metadata: {}", e))?
             .len();
-        
+
         Ok(file_size / PAGE_SIZE as u64)
     }
 
@@ -668,7 +716,7 @@ mod tests {
         let page = Page::new(42, PageType::Index);
         let bytes = page.to_bytes().unwrap();
         assert_eq!(bytes.len(), PAGE_SIZE);
-        
+
         let deserialized = Page::from_bytes(&bytes).unwrap();
         assert_eq!(deserialized.header.page_id, 42);
         assert_eq!(deserialized.header.page_type, PageType::Index);
@@ -678,18 +726,18 @@ mod tests {
     fn test_buffer_pool_basic() {
         let temp_file = NamedTempFile::new().unwrap();
         let buffer_pool = BufferPool::new(temp_file.path()).unwrap();
-        
+
         // Create a new page
         let (page_id, page) = buffer_pool.create_page(PageType::Data).unwrap();
         assert_eq!(page.lock().unwrap().header.page_id, page_id);
-        
+
         // Get the same page (should be cached)
         let page2 = buffer_pool.get_page(page_id).unwrap();
         assert_eq!(page2.lock().unwrap().header.page_id, page_id);
-        
+
         // Flush the page
         buffer_pool.flush_page(page_id).unwrap();
-        
+
         let stats = buffer_pool.get_stats().unwrap();
         assert_eq!(stats.total_requests, 1);
         assert_eq!(stats.cache_hits, 1);
@@ -703,16 +751,16 @@ mod tests {
             ..Default::default()
         };
         let buffer_pool = BufferPool::with_config(temp_file.path(), config).unwrap();
-        
+
         // Create pages exceeding buffer pool capacity
         let (page1_id, _) = buffer_pool.create_page(PageType::Data).unwrap();
         let (page2_id, _) = buffer_pool.create_page(PageType::Data).unwrap();
         let (page3_id, _) = buffer_pool.create_page(PageType::Data).unwrap();
-        
+
         // Compact should evict the least recently used page
         let evicted = buffer_pool.compact().unwrap();
         assert!(evicted > 0);
-        
+
         let stats = buffer_pool.get_stats().unwrap();
         assert!(stats.evicted_pages > 0);
     }

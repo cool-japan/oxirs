@@ -5,35 +5,35 @@
 
 // Re-export core GraphQL functionality
 pub use crate::ast::*;
-pub use crate::types::*;
 pub use crate::execution::*;
-pub use crate::schema::*;
 pub use crate::parser::*;
+pub use crate::schema::*;
+pub use crate::types::*;
 
 /// Core GraphQL components
 pub mod components {
     //! Individual core components
-    
+
     /// Abstract Syntax Tree definitions
     pub mod ast {
         pub use crate::ast::*;
     }
-    
+
     /// GraphQL type system
     pub mod types {
         pub use crate::types::*;
     }
-    
+
     /// Query execution engine
     pub mod execution {
         pub use crate::execution::*;
     }
-    
+
     /// Schema definition and management
     pub mod schema {
         pub use crate::schema::*;
     }
-    
+
     /// GraphQL query parser
     pub mod parser {
         pub use crate::parser::*;

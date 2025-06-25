@@ -8,19 +8,19 @@
 use anyhow::Result;
 
 pub mod algebra;
-pub mod optimizer;
+pub mod builtin_fixed;
 pub mod executor;
 pub mod extensions;
+pub mod optimizer;
 pub mod path;
-pub mod builtin_fixed;
 pub use builtin_fixed as builtin;
 pub mod query;
 
 // Re-export main types for convenience
 pub use algebra::*;
-pub use optimizer::*;
 pub use executor::*;
 pub use extensions::*;
+pub use optimizer::*;
 pub use path::*;
 pub use query::*;
 
@@ -37,7 +37,7 @@ impl SparqlEngine {
     pub fn new() -> Result<Self> {
         let mut extensions = ExtensionRegistry::new();
         builtin::register_builtin_functions(&extensions)?;
-        
+
         Ok(Self {
             executor: QueryExecutor::new(),
             optimizer: QueryOptimizer::new(),
@@ -45,12 +45,15 @@ impl SparqlEngine {
             parser: query::QueryParser::new(),
         })
     }
-    
+
     /// Create a new SPARQL engine with custom configuration
-    pub fn with_config(executor_config: executor::ExecutionContext, optimizer_config: optimizer::OptimizerConfig) -> Result<Self> {
+    pub fn with_config(
+        executor_config: executor::ExecutionContext,
+        optimizer_config: optimizer::OptimizerConfig,
+    ) -> Result<Self> {
         let mut extensions = ExtensionRegistry::new();
         builtin::register_builtin_functions(&extensions)?;
-        
+
         Ok(Self {
             executor: QueryExecutor::with_context(executor_config),
             optimizer: QueryOptimizer::with_config(optimizer_config),
@@ -58,22 +61,26 @@ impl SparqlEngine {
             parser: query::QueryParser::new(),
         })
     }
-    
+
     /// Parse and execute a SPARQL query
-    pub fn execute_query(&mut self, query_str: &str, dataset: &dyn executor::Dataset) -> Result<(algebra::Solution, executor::ExecutionStats)> {
+    pub fn execute_query(
+        &mut self,
+        query_str: &str,
+        dataset: &dyn executor::Dataset,
+    ) -> Result<(algebra::Solution, executor::ExecutionStats)> {
         // Parse query
         let query = self.parser.parse(query_str)?;
-        
+
         // Convert to algebra
         let algebra = self.convert_query_to_algebra(query)?;
-        
+
         // Optimize algebra
         let optimized_algebra = self.optimizer.optimize(algebra)?;
-        
+
         // Execute
         self.executor.execute(&optimized_algebra, dataset)
     }
-    
+
     /// Register a custom function
     pub fn register_function<F>(&self, function: F) -> Result<()>
     where
@@ -81,7 +88,7 @@ impl SparqlEngine {
     {
         self.extensions.register_function(function)
     }
-    
+
     /// Register a custom aggregate
     pub fn register_aggregate<A>(&self, aggregate: A) -> Result<()>
     where
@@ -89,13 +96,13 @@ impl SparqlEngine {
     {
         self.extensions.register_aggregate(aggregate)
     }
-    
+
     /// Convert parsed query to algebra expression
     fn convert_query_to_algebra(&self, query: query::Query) -> Result<Algebra> {
         let mut algebra = query.where_clause;
-        
+
         // Apply query modifiers in reverse order of precedence
-        
+
         // 1. Apply GROUP BY and aggregates if present
         if !query.group_by.is_empty() {
             algebra = Algebra::Group {
@@ -104,7 +111,7 @@ impl SparqlEngine {
                 aggregates: Vec::new(), // TODO: Extract from select variables
             };
         }
-        
+
         // 2. Apply HAVING clause if present
         if let Some(having_condition) = query.having {
             algebra = Algebra::Having {
@@ -112,7 +119,7 @@ impl SparqlEngine {
                 condition: having_condition,
             };
         }
-        
+
         // 3. Apply projection (SELECT variables)
         match query.query_type {
             query::QueryType::Select => {
@@ -122,7 +129,7 @@ impl SparqlEngine {
                         variables: query.select_variables,
                     };
                 }
-                
+
                 // Apply DISTINCT or REDUCED
                 if query.distinct {
                     algebra = Algebra::Distinct {
@@ -147,7 +154,7 @@ impl SparqlEngine {
                 // ASK and DESCRIBE don't need projection modifications
             }
         }
-        
+
         // 4. Apply ORDER BY if present
         if !query.order_by.is_empty() {
             algebra = Algebra::OrderBy {
@@ -155,7 +162,7 @@ impl SparqlEngine {
                 conditions: query.order_by,
             };
         }
-        
+
         // 5. Apply SLICE (LIMIT and OFFSET) if present
         if query.limit.is_some() || query.offset.is_some() {
             algebra = Algebra::Slice {
@@ -164,7 +171,7 @@ impl SparqlEngine {
                 limit: query.limit,
             };
         }
-        
+
         Ok(algebra)
     }
 }

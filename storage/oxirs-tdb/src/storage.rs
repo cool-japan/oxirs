@@ -7,13 +7,25 @@ use anyhow::Result;
 /// Storage backend interface
 pub trait StorageBackend {
     /// Insert a quad into storage
-    fn insert_quad(&mut self, subject: &str, predicate: &str, object: &str, graph: Option<&str>) -> Result<()>;
-    
+    fn insert_quad(
+        &mut self,
+        subject: &str,
+        predicate: &str,
+        object: &str,
+        graph: Option<&str>,
+    ) -> Result<()>;
+
     /// Query quads from storage
     fn query_quads(&self, pattern: QuadPattern) -> Result<Vec<Quad>>;
-    
+
     /// Remove a quad from storage
-    fn remove_quad(&mut self, subject: &str, predicate: &str, object: &str, graph: Option<&str>) -> Result<()>;
+    fn remove_quad(
+        &mut self,
+        subject: &str,
+        predicate: &str,
+        object: &str,
+        graph: Option<&str>,
+    ) -> Result<()>;
 }
 
 /// Quad pattern for querying
@@ -41,14 +53,18 @@ pub struct MemoryStorage {
 
 impl MemoryStorage {
     pub fn new() -> Self {
-        Self {
-            quads: Vec::new(),
-        }
+        Self { quads: Vec::new() }
     }
 }
 
 impl StorageBackend for MemoryStorage {
-    fn insert_quad(&mut self, subject: &str, predicate: &str, object: &str, graph: Option<&str>) -> Result<()> {
+    fn insert_quad(
+        &mut self,
+        subject: &str,
+        predicate: &str,
+        object: &str,
+        graph: Option<&str>,
+    ) -> Result<()> {
         let quad = Quad {
             subject: subject.to_string(),
             predicate: predicate.to_string(),
@@ -58,9 +74,11 @@ impl StorageBackend for MemoryStorage {
         self.quads.push(quad);
         Ok(())
     }
-    
+
     fn query_quads(&self, pattern: QuadPattern) -> Result<Vec<Quad>> {
-        let results = self.quads.iter()
+        let results = self
+            .quads
+            .iter()
             .filter(|quad| {
                 if let Some(ref subject) = pattern.subject {
                     if &quad.subject != subject {
@@ -88,13 +106,19 @@ impl StorageBackend for MemoryStorage {
             .collect();
         Ok(results)
     }
-    
-    fn remove_quad(&mut self, subject: &str, predicate: &str, object: &str, graph: Option<&str>) -> Result<()> {
+
+    fn remove_quad(
+        &mut self,
+        subject: &str,
+        predicate: &str,
+        object: &str,
+        graph: Option<&str>,
+    ) -> Result<()> {
         self.quads.retain(|quad| {
-            !(quad.subject == subject && 
-              quad.predicate == predicate && 
-              quad.object == object && 
-              quad.graph.as_deref() == graph)
+            !(quad.subject == subject
+                && quad.predicate == predicate
+                && quad.object == object
+                && quad.graph.as_deref() == graph)
         });
         Ok(())
     }

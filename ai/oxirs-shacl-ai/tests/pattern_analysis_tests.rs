@@ -1,8 +1,8 @@
 //! Tests for pattern analysis functionality
 
-use oxirs_shacl_ai::patterns::*;
-use oxirs_core::model::{NamedNode, Triple, Literal};
+use oxirs_core::model::{Literal, NamedNode, Triple};
 use oxirs_core::store::Store;
+use oxirs_shacl_ai::patterns::*;
 
 #[test]
 fn test_pattern_analyzer_creation() {
@@ -26,7 +26,7 @@ fn test_custom_pattern_config() {
         enable_training: false,
         cache_settings: PatternCacheSettings::default(),
     };
-    
+
     let analyzer = PatternAnalyzer::with_config(config);
     assert_eq!(analyzer.config().min_support_threshold, 0.2);
     assert_eq!(analyzer.config().min_confidence_threshold, 0.8);
@@ -45,7 +45,7 @@ fn test_pattern_algorithms_config() {
         enable_anomaly_detection: true,
         enable_sequential_patterns: false,
     };
-    
+
     assert!(algorithms.enable_frequent_itemsets);
     assert!(!algorithms.enable_association_rules);
     assert!(algorithms.enable_graph_patterns);
@@ -63,7 +63,7 @@ fn test_pattern_cache_settings() {
         enable_persistent_cache: false,
         cache_compression: true,
     };
-    
+
     assert!(cache_settings.enable_caching);
     assert_eq!(cache_settings.max_cache_size, 500);
     assert_eq!(cache_settings.cache_ttl_minutes, 30);
@@ -81,11 +81,11 @@ fn test_pattern_types() {
         confidence: 0.9,
         pattern_type: PatternType::Structural,
     };
-    
+
     assert_eq!(class_pattern.support(), 0.8);
     assert_eq!(class_pattern.confidence(), 0.9);
     assert_eq!(class_pattern.pattern_type(), &PatternType::Structural);
-    
+
     // Test PropertyUsage pattern
     let property_pattern = Pattern::PropertyUsage {
         property: NamedNode::new("http://example.org/name").unwrap(),
@@ -95,7 +95,7 @@ fn test_pattern_types() {
         confidence: 1.0,
         pattern_type: PatternType::Usage,
     };
-    
+
     assert_eq!(property_pattern.support(), 0.95);
     assert_eq!(property_pattern.confidence(), 1.0);
     assert_eq!(property_pattern.pattern_type(), &PatternType::Usage);
@@ -113,12 +113,17 @@ fn test_cardinality_pattern() {
         confidence: 1.0,
         pattern_type: PatternType::Usage,
     };
-    
+
     assert_eq!(cardinality_pattern.support(), 0.95);
     assert_eq!(cardinality_pattern.confidence(), 1.0);
-    
+
     match &cardinality_pattern {
-        Pattern::Cardinality { cardinality_type, min_count, max_count, .. } => {
+        Pattern::Cardinality {
+            cardinality_type,
+            min_count,
+            max_count,
+            ..
+        } => {
             assert_eq!(*cardinality_type, CardinalityType::Functional);
             assert_eq!(*min_count, Some(1));
             assert_eq!(*max_count, Some(1));
@@ -138,12 +143,16 @@ fn test_hierarchy_pattern() {
         confidence: 1.0,
         pattern_type: PatternType::Structural,
     };
-    
+
     assert_eq!(hierarchy_pattern.support(), 0.2);
     assert_eq!(hierarchy_pattern.confidence(), 1.0);
-    
+
     match &hierarchy_pattern {
-        Pattern::Hierarchy { relationship_type, depth, .. } => {
+        Pattern::Hierarchy {
+            relationship_type,
+            depth,
+            ..
+        } => {
             assert_eq!(*relationship_type, HierarchyType::SubClassOf);
             assert_eq!(*depth, 1);
         }
@@ -161,10 +170,10 @@ fn test_datatype_pattern() {
         confidence: 0.98,
         pattern_type: PatternType::Structural,
     };
-    
+
     assert_eq!(datatype_pattern.support(), 0.95);
     assert_eq!(datatype_pattern.confidence(), 0.98);
-    
+
     match &datatype_pattern {
         Pattern::Datatype { usage_ratio, .. } => {
             assert_eq!(*usage_ratio, 0.98);
@@ -183,7 +192,7 @@ fn test_range_pattern() {
         "65",
         NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
     );
-    
+
     let range_pattern = Pattern::Range {
         property: NamedNode::new("http://example.org/age").unwrap(),
         min_value: Some(literal_min),
@@ -193,10 +202,10 @@ fn test_range_pattern() {
         confidence: 0.95,
         pattern_type: PatternType::Usage,
     };
-    
+
     assert_eq!(range_pattern.support(), 0.9);
     assert_eq!(range_pattern.confidence(), 0.95);
-    
+
     match &range_pattern {
         Pattern::Range { avg_value, .. } => {
             assert_eq!(*avg_value, 35.5);
@@ -216,12 +225,16 @@ fn test_co_occurrence_pattern() {
         confidence: 0.95,
         pattern_type: PatternType::Usage,
     };
-    
+
     assert_eq!(co_occurrence_pattern.support(), 0.9);
     assert_eq!(co_occurrence_pattern.confidence(), 0.95);
-    
+
     match &co_occurrence_pattern {
-        Pattern::CoOccurrence { co_occurrence_ratio, conditional_probability, .. } => {
+        Pattern::CoOccurrence {
+            co_occurrence_ratio,
+            conditional_probability,
+            ..
+        } => {
             assert_eq!(*co_occurrence_ratio, 0.95);
             assert_eq!(*conditional_probability, 0.98);
         }
@@ -232,7 +245,10 @@ fn test_co_occurrence_pattern() {
 #[test]
 fn test_cardinality_types() {
     assert_eq!(CardinalityType::Functional, CardinalityType::Functional);
-    assert_ne!(CardinalityType::Functional, CardinalityType::InverseFunctional);
+    assert_ne!(
+        CardinalityType::Functional,
+        CardinalityType::InverseFunctional
+    );
     assert_ne!(CardinalityType::Optional, CardinalityType::Required);
     assert_ne!(CardinalityType::Multiple, CardinalityType::Single);
 }
@@ -265,7 +281,7 @@ fn test_pattern_analysis_statistics() {
         cache_hits: 10,
         cache_misses: 40,
     };
-    
+
     assert_eq!(stats.total_patterns_discovered, 50);
     assert_eq!(stats.structural_patterns, 20);
     assert_eq!(stats.usage_patterns, 25);
@@ -278,32 +294,30 @@ fn test_pattern_analysis_statistics() {
 
 #[test]
 fn test_cached_pattern_result() {
-    let patterns = vec![
-        Pattern::ClassUsage {
-            class: NamedNode::new("http://example.org/Test").unwrap(),
-            instance_count: 10,
-            support: 0.5,
-            confidence: 0.8,
-            pattern_type: PatternType::Structural,
-        }
-    ];
-    
+    let patterns = vec![Pattern::ClassUsage {
+        class: NamedNode::new("http://example.org/Test").unwrap(),
+        instance_count: 10,
+        support: 0.5,
+        confidence: 0.8,
+        pattern_type: PatternType::Structural,
+    }];
+
     let cached = CachedPatternResult {
         patterns: patterns.clone(),
         timestamp: chrono::Utc::now(),
         ttl: std::time::Duration::from_hours(1),
     };
-    
+
     assert_eq!(cached.patterns.len(), 1);
     assert!(!cached.is_expired()); // Should not be expired immediately
-    
+
     // Test expired cache
     let expired_cached = CachedPatternResult {
         patterns,
         timestamp: chrono::Utc::now() - chrono::Duration::hours(2),
         ttl: std::time::Duration::from_hours(1),
     };
-    
+
     assert!(expired_cached.is_expired());
 }
 
@@ -311,13 +325,13 @@ fn test_cached_pattern_result() {
 fn test_empty_store_pattern_analysis() {
     let analyzer = PatternAnalyzer::new();
     let empty_store = Store::new();
-    
+
     let result = analyzer.discover_patterns(&empty_store, None);
-    
+
     // Should handle empty store gracefully
     match result {
         Ok(patterns) => assert!(patterns.is_empty()),
-        Err(_) => {}, // Error is acceptable for empty store
+        Err(_) => {} // Error is acceptable for empty store
     }
 }
 
@@ -325,12 +339,12 @@ fn test_empty_store_pattern_analysis() {
 fn test_pattern_analysis_with_graph_name() {
     let analyzer = PatternAnalyzer::new();
     let store = Store::new();
-    
+
     let result = analyzer.discover_patterns(&store, Some("http://example.org/graph"));
-    
+
     // Should handle graph-specific analysis
     match result {
         Ok(patterns) => assert!(patterns.is_empty()), // Empty store should produce no patterns
-        Err(_) => {}, // Error is acceptable for empty store with graph name
+        Err(_) => {} // Error is acceptable for empty store with graph name
     }
 }

@@ -3,17 +3,17 @@
 //! This module provides lock-free, SIMD-optimized indexing structures
 //! for maximum throughput in concurrent environments.
 
+use crate::interning::InternedString;
+use crate::model::*;
+use ahash::{AHasher, RandomState};
+use bumpalo::Bump;
+use crossbeam::queue::SegQueue;
+use dashmap::DashMap;
+use parking_lot::RwLock;
+use rayon::prelude::*;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use dashmap::DashMap;
-use parking_lot::RwLock;
-use ahash::{AHasher, RandomState};
-use rayon::prelude::*;
-use crossbeam::queue::SegQueue;
-use bumpalo::Bump;
-use crate::model::*;
-use crate::interning::InternedString;
 
 /// Query pattern types for index optimization
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -78,37 +78,37 @@ impl UltraIndex {
     /// Insert a quad and return its ID
     pub fn insert_quad(&self, quad: &Quad) -> u64 {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed) as u64;
-        
+
         // Insert into quad storage
         self.quad_storage.insert(id, quad.clone());
-        
+
         // Add to subject index
         self.subject_index
             .entry(quad.subject().clone())
             .or_insert_with(BTreeSet::new)
             .insert(id);
-        
+
         // Add to predicate index
         self.predicate_index
             .entry(quad.predicate().clone())
             .or_insert_with(BTreeSet::new)
             .insert(id);
-        
+
         // Add to object index
         self.object_index
             .entry(quad.object().clone())
             .or_insert_with(BTreeSet::new)
             .insert(id);
-        
+
         // Add to graph index
         self.graph_index
             .entry(quad.graph_name().clone())
             .or_insert_with(BTreeSet::new)
             .insert(id);
-        
+
         // Update statistics
         self.stats.insertions.fetch_add(1, Ordering::Relaxed);
-        
+
         id
     }
 
@@ -126,9 +126,9 @@ impl UltraIndex {
         graph_name: Option<&GraphName>,
     ) -> Vec<Quad> {
         self.stats.lookups.fetch_add(1, Ordering::Relaxed);
-        
+
         let mut result_ids: Option<HashSet<u64>> = None;
-        
+
         // Intersect results from each bound term
         if let Some(s) = subject {
             if let Some(ids_set) = self.subject_index.get(s) {
@@ -141,7 +141,7 @@ impl UltraIndex {
                 return Vec::new(); // No matches
             }
         }
-        
+
         if let Some(p) = predicate {
             if let Some(ids_set) = self.predicate_index.get(p) {
                 let ids: HashSet<u64> = ids_set.iter().cloned().collect();
@@ -153,7 +153,7 @@ impl UltraIndex {
                 return Vec::new(); // No matches
             }
         }
-        
+
         if let Some(o) = object {
             if let Some(ids_set) = self.object_index.get(o) {
                 let ids: HashSet<u64> = ids_set.iter().cloned().collect();
@@ -165,7 +165,7 @@ impl UltraIndex {
                 return Vec::new(); // No matches
             }
         }
-        
+
         if let Some(g) = graph_name {
             if let Some(ids_set) = self.graph_index.get(g) {
                 let ids: HashSet<u64> = ids_set.iter().cloned().collect();
@@ -177,12 +177,11 @@ impl UltraIndex {
                 return Vec::new(); // No matches
             }
         }
-        
+
         // If no constraints were provided, return all quads
-        let final_ids = result_ids.unwrap_or_else(|| {
-            self.quad_storage.iter().map(|entry| *entry.key()).collect()
-        });
-        
+        let final_ids = result_ids
+            .unwrap_or_else(|| self.quad_storage.iter().map(|entry| *entry.key()).collect());
+
         // Retrieve quads by IDs
         let mut results = Vec::new();
         for id in final_ids {
@@ -190,7 +189,7 @@ impl UltraIndex {
                 results.push(quad.clone());
             }
         }
-        
+
         results
     }
 
@@ -218,14 +217,14 @@ impl UltraIndex {
                 0
             }
         };
-        
+
         // Estimate index memory usage
-        let index_usage = self.subject_index.len() * 64 +
-                         self.predicate_index.len() * 64 +
-                         self.object_index.len() * 64 +
-                         self.graph_index.len() * 64 +
-                         self.quad_storage.len() * 128; // Rough estimate
-        
+        let index_usage = self.subject_index.len() * 64
+            + self.predicate_index.len() * 64
+            + self.object_index.len() * 64
+            + self.graph_index.len() * 64
+            + self.quad_storage.len() * 128; // Rough estimate
+
         MemoryUsage {
             total_bytes: arena_usage + index_usage,
             heap_bytes: index_usage,
@@ -241,9 +240,9 @@ impl UltraIndex {
             Some(quad.subject()),
             Some(quad.predicate()),
             Some(quad.object()),
-            Some(quad.graph_name())
+            Some(quad.graph_name()),
         );
-        
+
         for existing_quad in matching_quads {
             if existing_quad == *quad {
                 // Find the ID by iterating through storage (not optimal, but functional)
@@ -310,7 +309,11 @@ impl IndexStats {
     pub fn hit_ratio(&self) -> f64 {
         let hits = self.cache_hits.load(Ordering::Relaxed);
         let total = hits + self.cache_misses.load(Ordering::Relaxed);
-        if total == 0 { 0.0 } else { hits as f64 / total as f64 }
+        if total == 0 {
+            0.0
+        } else {
+            hits as f64 / total as f64
+        }
     }
 
     pub fn operations_per_second(&self, duration_secs: f64) -> f64 {
@@ -329,7 +332,12 @@ impl QueryPattern {
         object: Option<&Object>,
         graph_name: Option<&GraphName>,
     ) -> Self {
-        match (subject.is_some(), predicate.is_some(), object.is_some(), graph_name.is_some()) {
+        match (
+            subject.is_some(),
+            predicate.is_some(),
+            object.is_some(),
+            graph_name.is_some(),
+        ) {
             (false, false, false, false) => QueryPattern::FullScan,
             (true, false, false, false) => QueryPattern::SubjectOnly,
             (false, true, false, false) => QueryPattern::PredicateOnly,
@@ -489,14 +497,12 @@ impl QuadIndex {
     /// Query quads matching the given key
     pub fn query(&mut self, key: &IndexKey) -> Option<&BTreeSet<Quad>> {
         self.last_access = std::time::Instant::now();
-        
+
         match self.index_type {
             IndexType::BTree | IndexType::Composite | IndexType::FullText => {
                 self.btree_indexes.get(key)
             }
-            IndexType::Hash => {
-                self.hash_indexes.get(key)
-            }
+            IndexType::Hash => self.hash_indexes.get(key),
         }
     }
 
@@ -652,7 +658,7 @@ impl IndexManager {
         graph_name: Option<&GraphName>,
     ) -> Option<Vec<Quad>> {
         let pattern = QueryPattern::from_query(subject, predicate, object, graph_name);
-        
+
         // Update query frequency
         if self.config.collect_stats {
             *self.query_frequency.entry(pattern.clone()).or_insert(0) += 1;
@@ -671,7 +677,7 @@ impl IndexManager {
         if self.config.collect_stats {
             let stats = self.global_stats.read();
             stats.lookups.fetch_add(1, Ordering::Relaxed);
-            
+
             if result.is_some() {
                 stats.cache_hits.fetch_add(1, Ordering::Relaxed);
             } else {
@@ -693,18 +699,15 @@ impl IndexManager {
         // Try composite index first (most selective)
         if let (Some(s), Some(p)) = (subject, predicate) {
             if let Some(index) = self.indexes.get_mut("subject_predicate") {
-                let key = IndexKey::Composite(vec![
-                    Term::from_subject(s),
-                    Term::from_predicate(p),
-                ]);
+                let key = IndexKey::Composite(vec![Term::from_subject(s), Term::from_predicate(p)]);
                 if let Some(quads) = index.query(&key) {
                     let mut result: Vec<Quad> = quads.iter().cloned().collect();
-                    
+
                     // Filter by object if specified
                     if let Some(o) = object {
                         result.retain(|quad| quad.object() == o);
                     }
-                    
+
                     return Some(result);
                 }
             }
@@ -716,7 +719,7 @@ impl IndexManager {
                 let key = IndexKey::Single(Term::from_subject(s));
                 if let Some(quads) = index.query(&key) {
                     let mut result: Vec<Quad> = quads.iter().cloned().collect();
-                    
+
                     // Filter by predicate and object if specified
                     if let Some(p) = predicate {
                         result.retain(|quad| quad.predicate() == p);
@@ -724,7 +727,7 @@ impl IndexManager {
                     if let Some(o) = object {
                         result.retain(|quad| quad.object() == o);
                     }
-                    
+
                     return Some(result);
                 }
             }
@@ -735,7 +738,7 @@ impl IndexManager {
                 let key = IndexKey::Single(Term::from_predicate(p));
                 if let Some(quads) = index.query(&key) {
                     let mut result: Vec<Quad> = quads.iter().cloned().collect();
-                    
+
                     // Filter by subject and object if specified
                     if let Some(s) = subject {
                         result.retain(|quad| quad.subject() == s);
@@ -743,7 +746,7 @@ impl IndexManager {
                     if let Some(o) = object {
                         result.retain(|quad| quad.object() == o);
                     }
-                    
+
                     return Some(result);
                 }
             }
@@ -754,7 +757,7 @@ impl IndexManager {
                 let key = IndexKey::Single(Term::from_object(o));
                 if let Some(quads) = index.query(&key) {
                     let mut result: Vec<Quad> = quads.iter().cloned().collect();
-                    
+
                     // Filter by subject and predicate if specified
                     if let Some(s) = subject {
                         result.retain(|quad| quad.subject() == s);
@@ -762,7 +765,7 @@ impl IndexManager {
                     if let Some(p) = predicate {
                         result.retain(|quad| quad.predicate() == p);
                     }
-                    
+
                     return Some(result);
                 }
             }
@@ -775,7 +778,7 @@ impl IndexManager {
     /// Consider creating an index based on query patterns
     fn consider_auto_index_creation(&mut self, pattern: &QueryPattern) {
         let frequency = self.query_frequency.get(pattern).copied().unwrap_or(0);
-        
+
         if frequency >= self.config.min_query_frequency {
             match pattern {
                 QueryPattern::SubjectOnly => {
@@ -826,15 +829,17 @@ impl IndexManager {
 
     /// Evict least recently used indexes when over memory budget
     fn evict_least_used_indexes(&mut self) {
-        let mut indexes_by_access: Vec<_> = self.indexes
+        let mut indexes_by_access: Vec<_> = self
+            .indexes
             .iter()
             .map(|(name, index)| (name.clone(), index.last_access))
             .collect();
-        
+
         indexes_by_access.sort_by_key(|(_, access_time)| *access_time);
-        
+
         // Remove oldest indexes until under budget
-        while self.total_memory_usage() > self.config.memory_budget && !indexes_by_access.is_empty() {
+        while self.total_memory_usage() > self.config.memory_budget && !indexes_by_access.is_empty()
+        {
             if let Some((name, _)) = indexes_by_access.pop() {
                 self.indexes.remove(&name);
             }
@@ -851,12 +856,12 @@ impl IndexManager {
 impl Default for IndexManager {
     fn default() -> Self {
         let mut manager = Self::new(IndexConfig::default());
-        
+
         // Create default indexes
         manager.create_subject_index();
         manager.create_predicate_index();
         manager.create_object_index();
-        
+
         manager
     }
 }
@@ -871,7 +876,7 @@ mod tests {
         let predicate = NamedNode::new("http://example.org/predicate").unwrap();
         let object = Literal::new("test object");
         let graph = NamedNode::new("http://example.org/graph").unwrap();
-        
+
         Quad::new(subject, predicate, object, graph)
     }
 
@@ -886,28 +891,42 @@ mod tests {
             QueryPattern::from_query(None, None, None, None),
             QueryPattern::FullScan
         );
-        
+
         assert_eq!(
             QueryPattern::from_query(Some(&subject), None, None, None),
             QueryPattern::SubjectOnly
         );
-        
+
         assert_eq!(
             QueryPattern::from_query(Some(&subject), Some(&predicate), None, None),
             QueryPattern::SubjectPredicate
         );
-        
+
         assert_eq!(
-            QueryPattern::from_query(Some(&subject), Some(&predicate), Some(&object), Some(&graph)),
+            QueryPattern::from_query(
+                Some(&subject),
+                Some(&predicate),
+                Some(&object),
+                Some(&graph)
+            ),
             QueryPattern::FullMatch
         );
     }
 
     #[test]
     fn test_selectivity_estimates() {
-        assert!(QueryPattern::FullMatch.estimated_selectivity() < QueryPattern::SubjectPredicate.estimated_selectivity());
-        assert!(QueryPattern::SubjectPredicate.estimated_selectivity() < QueryPattern::SubjectOnly.estimated_selectivity());
-        assert!(QueryPattern::SubjectOnly.estimated_selectivity() < QueryPattern::FullScan.estimated_selectivity());
+        assert!(
+            QueryPattern::FullMatch.estimated_selectivity()
+                < QueryPattern::SubjectPredicate.estimated_selectivity()
+        );
+        assert!(
+            QueryPattern::SubjectPredicate.estimated_selectivity()
+                < QueryPattern::SubjectOnly.estimated_selectivity()
+        );
+        assert!(
+            QueryPattern::SubjectOnly.estimated_selectivity()
+                < QueryPattern::FullScan.estimated_selectivity()
+        );
     }
 
     #[test]
@@ -928,7 +947,7 @@ mod tests {
     #[test]
     fn test_index_manager_creation() {
         let manager = IndexManager::default();
-        
+
         // Should have default indexes
         assert!(manager.indexes.contains_key("subject"));
         assert!(manager.indexes.contains_key("predicate"));
@@ -942,7 +961,7 @@ mod tests {
 
         // Test insertion
         manager.insert_quad(&quad);
-        
+
         // Test querying by subject
         let subject = quad.subject();
         let results = manager.query_optimized(Some(subject), None, None, None);
@@ -954,7 +973,7 @@ mod tests {
     fn test_composite_index_creation() {
         let mut manager = IndexManager::default();
         manager.create_subject_predicate_index();
-        
+
         assert!(manager.indexes.contains_key("subject_predicate"));
     }
 
@@ -962,7 +981,7 @@ mod tests {
     fn test_auto_index_creation() {
         let mut config = IndexConfig::default();
         config.min_query_frequency = 2;
-        
+
         let mut manager = IndexManager::new(config);
         let subject = Subject::NamedNode(NamedNode::new("http://example.org/s").unwrap());
 
@@ -979,17 +998,22 @@ mod tests {
     fn test_index_memory_usage() {
         let mut manager = IndexManager::default();
         let initial_memory = manager.total_memory_usage();
-        
+
         // Add some quads
         for i in 0..100 {
             let subject = NamedNode::new(&format!("http://example.org/subject{}", i)).unwrap();
             let predicate = NamedNode::new("http://example.org/predicate").unwrap();
             let object = Literal::new(&format!("object{}", i));
-            let quad = Quad::new(subject, predicate, object, NamedNode::new("http://example.org/graph").unwrap());
-            
+            let quad = Quad::new(
+                subject,
+                predicate,
+                object,
+                NamedNode::new("http://example.org/graph").unwrap(),
+            );
+
             manager.insert_quad(&quad);
         }
-        
+
         let final_memory = manager.total_memory_usage();
         assert!(final_memory > initial_memory);
     }
@@ -997,12 +1021,12 @@ mod tests {
     #[test]
     fn test_statistics_collection() {
         let mut manager = IndexManager::default();
-        
+
         // Perform some queries
         let subject = Subject::NamedNode(NamedNode::new("http://example.org/s").unwrap());
         manager.query_optimized(Some(&subject), None, None, None);
         manager.query_optimized(None, None, None, None);
-        
+
         let stats = manager.stats();
         assert_eq!(stats.lookups.load(Ordering::Relaxed), 2);
     }

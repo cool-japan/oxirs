@@ -78,7 +78,9 @@ impl StarStore {
         debug!("Configuration: {:?}", config);
 
         Self {
-            core_store: Arc::new(RwLock::new(CoreStore::new().expect("Failed to create core store"))),
+            core_store: Arc::new(RwLock::new(
+                CoreStore::new().expect("Failed to create core store"),
+            )),
             star_triples: Arc::new(RwLock::new(Vec::new())),
             quoted_triple_index: Arc::new(RwLock::new(QuotedTripleIndex::new())),
             config,
@@ -114,7 +116,8 @@ impl StarStore {
             stats.processing_time_us += start_time.elapsed().as_micros() as u64;
             if triple.contains_quoted_triples() {
                 stats.quoted_triples_count += 1;
-                stats.max_nesting_encountered = stats.max_nesting_encountered.max(triple.nesting_depth());
+                stats.max_nesting_encountered =
+                    stats.max_nesting_encountered.max(triple.nesting_depth());
             }
         }
 
@@ -128,12 +131,12 @@ impl StarStore {
         // This is a simplified conversion - in reality we'd need proper conversion
         // from StarTerm to core RDF terms
         debug!("Inserting regular triple into core store");
-        
+
         // For now, we'll store all triples in the star storage
         // In a full implementation, we'd convert non-star triples to core format
         let mut star_triples = self.star_triples.write().unwrap();
         star_triples.push(triple.clone());
-        
+
         Ok(())
     }
 
@@ -148,30 +151,55 @@ impl StarStore {
         // Build index for quoted triples
         self.index_quoted_triples(triple, triple_index, &mut index);
 
-        debug!("Inserted star triple with {} quoted triples", self.count_quoted_triples_in_triple(triple));
+        debug!(
+            "Inserted star triple with {} quoted triples",
+            self.count_quoted_triples_in_triple(triple)
+        );
         Ok(())
     }
 
     /// Build index entries for quoted triples in a given triple using B-tree indices
-    fn index_quoted_triples(&self, triple: &StarTriple, triple_index: usize, index: &mut QuotedTripleIndex) {
+    fn index_quoted_triples(
+        &self,
+        triple: &StarTriple,
+        triple_index: usize,
+        index: &mut QuotedTripleIndex,
+    ) {
         self.index_quoted_triples_recursive(triple, triple_index, index);
-        
+
         // Index by nesting depth for performance optimization
         let depth = triple.nesting_depth();
-        index.nesting_depth_index.entry(depth).or_insert_with(BTreeSet::new).insert(triple_index);
+        index
+            .nesting_depth_index
+            .entry(depth)
+            .or_insert_with(BTreeSet::new)
+            .insert(triple_index);
     }
 
     /// Recursively index quoted triples with multi-dimensional indexing
-    fn index_quoted_triples_recursive(&self, triple: &StarTriple, triple_index: usize, index: &mut QuotedTripleIndex) {
+    fn index_quoted_triples_recursive(
+        &self,
+        triple: &StarTriple,
+        triple_index: usize,
+        index: &mut QuotedTripleIndex,
+    ) {
         // Index quoted triples in subject
         if let StarTerm::QuotedTriple(qt) = &triple.subject {
             let signature = self.quoted_triple_key(qt);
-            index.signature_to_indices.entry(signature).or_insert_with(BTreeSet::new).insert(triple_index);
-            
+            index
+                .signature_to_indices
+                .entry(signature)
+                .or_insert_with(BTreeSet::new)
+                .insert(triple_index);
+
             // Index by subject signature for S?? queries
             let subject_key = format!("SUBJ:{}", qt.subject);
-            index.subject_index.entry(subject_key).or_insert_with(BTreeSet::new).insert(triple_index);
-            
+            index
+                .subject_index
+                .entry(subject_key)
+                .or_insert_with(BTreeSet::new)
+                .insert(triple_index);
+
             // Recursively index nested quoted triples
             self.index_quoted_triples_recursive(qt, triple_index, index);
         }
@@ -179,12 +207,20 @@ impl StarStore {
         // Index quoted triples in predicate (rare but possible in some extensions)
         if let StarTerm::QuotedTriple(qt) = &triple.predicate {
             let signature = self.quoted_triple_key(qt);
-            index.signature_to_indices.entry(signature).or_insert_with(BTreeSet::new).insert(triple_index);
-            
+            index
+                .signature_to_indices
+                .entry(signature)
+                .or_insert_with(BTreeSet::new)
+                .insert(triple_index);
+
             // Index by predicate signature for ?P? queries
             let predicate_key = format!("PRED:{}", qt.predicate);
-            index.predicate_index.entry(predicate_key).or_insert_with(BTreeSet::new).insert(triple_index);
-            
+            index
+                .predicate_index
+                .entry(predicate_key)
+                .or_insert_with(BTreeSet::new)
+                .insert(triple_index);
+
             // Recursively index nested quoted triples
             self.index_quoted_triples_recursive(qt, triple_index, index);
         }
@@ -192,12 +228,20 @@ impl StarStore {
         // Index quoted triples in object
         if let StarTerm::QuotedTriple(qt) = &triple.object {
             let signature = self.quoted_triple_key(qt);
-            index.signature_to_indices.entry(signature).or_insert_with(BTreeSet::new).insert(triple_index);
-            
+            index
+                .signature_to_indices
+                .entry(signature)
+                .or_insert_with(BTreeSet::new)
+                .insert(triple_index);
+
             // Index by object signature for ??O queries
             let object_key = format!("OBJ:{}", qt.object);
-            index.object_index.entry(object_key).or_insert_with(BTreeSet::new).insert(triple_index);
-            
+            index
+                .object_index
+                .entry(object_key)
+                .or_insert_with(BTreeSet::new)
+                .insert(triple_index);
+
             // Recursively index nested quoted triples
             self.index_quoted_triples_recursive(qt, triple_index, index);
         }
@@ -211,28 +255,28 @@ impl StarStore {
     /// Count quoted triples within a single triple
     fn count_quoted_triples_in_triple(&self, triple: &StarTriple) -> usize {
         let mut count = 0;
-        
+
         if triple.subject.is_quoted_triple() {
             count += 1;
             if let StarTerm::QuotedTriple(qt) = &triple.subject {
                 count += self.count_quoted_triples_in_triple(qt);
             }
         }
-        
+
         if triple.predicate.is_quoted_triple() {
             count += 1;
             if let StarTerm::QuotedTriple(qt) = &triple.predicate {
                 count += self.count_quoted_triples_in_triple(qt);
             }
         }
-        
+
         if triple.object.is_quoted_triple() {
             count += 1;
             if let StarTerm::QuotedTriple(qt) = &triple.object {
                 count += self.count_quoted_triples_in_triple(qt);
             }
         }
-        
+
         count
     }
 
@@ -242,64 +286,69 @@ impl StarStore {
         let _enter = span.enter();
 
         let mut star_triples = self.star_triples.write().unwrap();
-        
+
         if let Some(pos) = star_triples.iter().position(|t| t == triple) {
             star_triples.remove(pos);
-            
+
             // Update all indices
             let mut index = self.quoted_triple_index.write().unwrap();
-            
+
             // Update signature index
             for (_, indices) in index.signature_to_indices.iter_mut() {
                 indices.remove(&pos);
                 // Shift indices down for elements after the removed position
-                let indices_to_update: Vec<usize> = indices.iter().filter(|&&i| i > pos).cloned().collect();
+                let indices_to_update: Vec<usize> =
+                    indices.iter().filter(|&&i| i > pos).cloned().collect();
                 for idx in indices_to_update {
                     indices.remove(&idx);
                     indices.insert(idx - 1);
                 }
             }
-            
+
             // Update subject index
             for (_, indices) in index.subject_index.iter_mut() {
                 indices.remove(&pos);
-                let indices_to_update: Vec<usize> = indices.iter().filter(|&&i| i > pos).cloned().collect();
+                let indices_to_update: Vec<usize> =
+                    indices.iter().filter(|&&i| i > pos).cloned().collect();
                 for idx in indices_to_update {
                     indices.remove(&idx);
                     indices.insert(idx - 1);
                 }
             }
-            
+
             // Update predicate index
             for (_, indices) in index.predicate_index.iter_mut() {
                 indices.remove(&pos);
-                let indices_to_update: Vec<usize> = indices.iter().filter(|&&i| i > pos).cloned().collect();
+                let indices_to_update: Vec<usize> =
+                    indices.iter().filter(|&&i| i > pos).cloned().collect();
                 for idx in indices_to_update {
                     indices.remove(&idx);
                     indices.insert(idx - 1);
                 }
             }
-            
+
             // Update object index
             for (_, indices) in index.object_index.iter_mut() {
                 indices.remove(&pos);
-                let indices_to_update: Vec<usize> = indices.iter().filter(|&&i| i > pos).cloned().collect();
+                let indices_to_update: Vec<usize> =
+                    indices.iter().filter(|&&i| i > pos).cloned().collect();
                 for idx in indices_to_update {
                     indices.remove(&idx);
                     indices.insert(idx - 1);
                 }
             }
-            
+
             // Update nesting depth index
             for (_, indices) in index.nesting_depth_index.iter_mut() {
                 indices.remove(&pos);
-                let indices_to_update: Vec<usize> = indices.iter().filter(|&&i| i > pos).cloned().collect();
+                let indices_to_update: Vec<usize> =
+                    indices.iter().filter(|&&i| i > pos).cloned().collect();
                 for idx in indices_to_update {
                     indices.remove(&idx);
                     indices.insert(idx - 1);
                 }
             }
-            
+
             debug!("Removed triple: {}", triple);
             Ok(true)
         } else {
@@ -320,19 +369,24 @@ impl StarStore {
     }
 
     /// Query for triples matching a pattern
-    pub fn query_triples(&self, subject: Option<&StarTerm>, predicate: Option<&StarTerm>, object: Option<&StarTerm>) -> Vec<StarTriple> {
+    pub fn query_triples(
+        &self,
+        subject: Option<&StarTerm>,
+        predicate: Option<&StarTerm>,
+        object: Option<&StarTerm>,
+    ) -> Vec<StarTriple> {
         let span = span!(Level::DEBUG, "query_triples");
         let _enter = span.enter();
 
         let star_triples = self.star_triples.read().unwrap();
-        
+
         star_triples
             .iter()
             .filter(|triple| {
                 let subject_matches = subject.map_or(true, |s| &triple.subject == s);
                 let predicate_matches = predicate.map_or(true, |p| &triple.predicate == p);
                 let object_matches = object.map_or(true, |o| &triple.object == o);
-                
+
                 subject_matches && predicate_matches && object_matches
             })
             .cloned()
@@ -361,10 +415,10 @@ impl StarStore {
 
     /// Advanced query method: find triples by quoted triple pattern
     pub fn find_triples_by_quoted_pattern(
-        &self, 
+        &self,
         subject_pattern: Option<&StarTerm>,
-        predicate_pattern: Option<&StarTerm>, 
-        object_pattern: Option<&StarTerm>
+        predicate_pattern: Option<&StarTerm>,
+        object_pattern: Option<&StarTerm>,
     ) -> Vec<StarTriple> {
         let span = span!(Level::DEBUG, "find_triples_by_quoted_pattern");
         let _enter = span.enter();
@@ -376,27 +430,27 @@ impl StarStore {
         // Use subject index if subject pattern is provided
         if let Some(subject_term) = subject_pattern {
             let mut found_indices = BTreeSet::new();
-            
+
             // Search in all index types for the subject term, as it could appear in any position within quoted triples
             let subject_key = format!("SUBJ:{}", subject_term);
             if let Some(indices) = index.subject_index.get(&subject_key) {
                 found_indices.extend(indices);
             }
-            
+
             let predicate_key = format!("PRED:{}", subject_term);
             if let Some(indices) = index.predicate_index.get(&predicate_key) {
                 found_indices.extend(indices);
             }
-            
+
             let object_key = format!("OBJ:{}", subject_term);
             if let Some(indices) = index.object_index.get(&object_key) {
                 found_indices.extend(indices);
             }
-            
+
             if found_indices.is_empty() {
                 return Vec::new(); // No matches
             }
-            
+
             candidate_indices = Some(found_indices);
         }
 
@@ -409,7 +463,7 @@ impl StarStore {
                 } else {
                     candidate_indices = Some(indices.clone());
                 }
-                
+
                 if candidate_indices.as_ref().unwrap().is_empty() {
                     return Vec::new(); // No matches
                 }
@@ -427,7 +481,7 @@ impl StarStore {
                 } else {
                     candidate_indices = Some(indices.clone());
                 }
-                
+
                 if candidate_indices.as_ref().unwrap().is_empty() {
                     return Vec::new(); // No matches
                 }
@@ -438,7 +492,8 @@ impl StarStore {
 
         // If no pattern was provided, return all triples with quoted triples
         let final_indices = candidate_indices.unwrap_or_else(|| {
-            index.signature_to_indices
+            index
+                .signature_to_indices
                 .values()
                 .flat_map(|indices| indices.iter())
                 .cloned()
@@ -453,7 +508,11 @@ impl StarStore {
     }
 
     /// Find triples by nesting depth
-    pub fn find_triples_by_nesting_depth(&self, min_depth: usize, max_depth: Option<usize>) -> Vec<StarTriple> {
+    pub fn find_triples_by_nesting_depth(
+        &self,
+        min_depth: usize,
+        max_depth: Option<usize>,
+    ) -> Vec<StarTriple> {
         let span = span!(Level::DEBUG, "find_triples_by_nesting_depth");
         let _enter = span.enter();
 
@@ -462,7 +521,7 @@ impl StarStore {
         let mut result_indices = BTreeSet::new();
 
         let max_d = max_depth.unwrap_or(usize::MAX);
-        
+
         for (&depth, indices) in index.nesting_depth_index.range(min_depth..=max_d) {
             result_indices.extend(indices);
         }
@@ -520,12 +579,12 @@ impl StarStore {
     pub fn to_graph(&self) -> StarGraph {
         let star_triples = self.star_triples.read().unwrap();
         let mut graph = StarGraph::new();
-        
+
         for triple in star_triples.iter() {
             // Unwrap is safe here because we validate on insert
             graph.insert(triple.clone()).unwrap();
         }
-        
+
         graph
     }
 
@@ -549,7 +608,7 @@ impl StarStore {
 
         let star_triples = self.star_triples.read().unwrap();
         let mut index = self.quoted_triple_index.write().unwrap();
-        
+
         // Rebuild the quoted triple index with all new B-tree structures
         index.clear();
         for (i, triple) in star_triples.iter().enumerate() {
@@ -559,18 +618,26 @@ impl StarStore {
         }
 
         // Compact the indices by removing empty entries
-        index.signature_to_indices.retain(|_, indices| !indices.is_empty());
+        index
+            .signature_to_indices
+            .retain(|_, indices| !indices.is_empty());
         index.subject_index.retain(|_, indices| !indices.is_empty());
-        index.predicate_index.retain(|_, indices| !indices.is_empty());
+        index
+            .predicate_index
+            .retain(|_, indices| !indices.is_empty());
         index.object_index.retain(|_, indices| !indices.is_empty());
-        index.nesting_depth_index.retain(|_, indices| !indices.is_empty());
+        index
+            .nesting_depth_index
+            .retain(|_, indices| !indices.is_empty());
 
-        info!("Store optimization completed - rebuilt {} index entries", 
-              index.signature_to_indices.len() + 
-              index.subject_index.len() + 
-              index.predicate_index.len() + 
-              index.object_index.len() + 
-              index.nesting_depth_index.len());
+        info!(
+            "Store optimization completed - rebuilt {} index entries",
+            index.signature_to_indices.len()
+                + index.subject_index.len()
+                + index.predicate_index.len()
+                + index.object_index.len()
+                + index.nesting_depth_index.len()
+        );
         Ok(())
     }
 
@@ -628,7 +695,7 @@ mod tests {
     #[test]
     fn test_basic_operations() {
         let store = StarStore::new();
-        
+
         let triple = StarTriple::new(
             StarTerm::iri("http://example.org/alice").unwrap(),
             StarTerm::iri("http://example.org/knows").unwrap(),
@@ -682,7 +749,7 @@ mod tests {
     #[test]
     fn test_store_statistics() {
         let store = StarStore::new();
-        
+
         let regular = StarTriple::new(
             StarTerm::iri("http://example.org/s").unwrap(),
             StarTerm::iri("http://example.org/p").unwrap(),
@@ -706,7 +773,7 @@ mod tests {
     #[test]
     fn test_btree_indexing_performance() {
         let store = StarStore::new();
-        
+
         // Create multiple quoted triples with different patterns
         let base_triple = StarTriple::new(
             StarTerm::iri("http://example.org/alice").unwrap(),
@@ -733,14 +800,14 @@ mod tests {
         let results = store.find_triples_by_quoted_pattern(
             Some(&StarTerm::iri("http://example.org/alice").unwrap()),
             None,
-            None
+            None,
         );
         assert_eq!(results.len(), 2);
 
         // Test nesting depth queries
         let shallow_results = store.find_triples_by_nesting_depth(0, Some(0));
         assert_eq!(shallow_results.len(), 0); // No triples with depth 0
-        
+
         let depth_1_results = store.find_triples_by_nesting_depth(1, Some(1));
         assert_eq!(depth_1_results.len(), 2); // Both quoted triples have depth 1
     }

@@ -5,13 +5,13 @@
 //! metrics integration, and advanced recovery strategies.
 
 use anyhow::{anyhow, Result};
-use serde::{Deserialize, Serialize};
-use std::time::{Duration, Instant};
-use std::collections::{HashMap, VecDeque};
-use tokio::sync::{RwLock, Mutex};
-use std::sync::Arc;
-use tracing::{debug, error, info, warn};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, VecDeque};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::{Mutex, RwLock};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 /// Enhanced circuit breaker configuration
@@ -98,14 +98,14 @@ impl FailureType {
     /// Check if this failure type should contribute to circuit breaking
     pub fn is_circuit_breaking(&self) -> bool {
         match self {
-            FailureType::NetworkError | 
-            FailureType::ServiceUnavailable | 
-            FailureType::Timeout | 
-            FailureType::ServerError => true,
-            FailureType::AuthError | 
-            FailureType::RateLimited | 
-            FailureType::BadRequest | 
-            FailureType::Unknown => false,
+            FailureType::NetworkError
+            | FailureType::ServiceUnavailable
+            | FailureType::Timeout
+            | FailureType::ServerError => true,
+            FailureType::AuthError
+            | FailureType::RateLimited
+            | FailureType::BadRequest
+            | FailureType::Unknown => false,
         }
     }
 
@@ -198,13 +198,11 @@ impl AdaptiveThreshold {
             return self.baseline_threshold;
         }
 
-        let recent_events: Vec<_> = events.iter()
-            .rev()
-            .take(self.window_size)
-            .collect();
+        let recent_events: Vec<_> = events.iter().rev().take(self.window_size).collect();
 
         let total_events = recent_events.len();
-        let failure_events = recent_events.iter()
+        let failure_events = recent_events
+            .iter()
             .filter(|e| matches!(e.event_type, EventType::Failure))
             .count();
 
@@ -213,7 +211,7 @@ impl AdaptiveThreshold {
         }
 
         let failure_rate = (failure_events as f64 / total_events as f64) * 100.0;
-        
+
         // Adjust threshold based on recent failure rate
         let adjustment_factor = if failure_rate > self.max_failure_rate {
             0.8 // Lower threshold if failure rate is high
@@ -259,21 +257,20 @@ impl RecoveryHandler {
                 let multiplier = 2u64.pow(self.retry_count.min(10));
                 let jitter = fastrand::f64() * 0.1 + 0.95; // 5% jitter
                 Duration::from_millis(
-                    (self.base_timeout.as_millis() as f64 * multiplier as f64 * jitter) as u64
+                    (self.base_timeout.as_millis() as f64 * multiplier as f64 * jitter) as u64,
                 )
             }
-            RecoveryStrategy::Linear => {
-                Duration::from_millis(
-                    self.base_timeout.as_millis() as u64 * (self.retry_count as u64 + 1)
-                )
-            }
+            RecoveryStrategy::Linear => Duration::from_millis(
+                self.base_timeout.as_millis() as u64 * (self.retry_count as u64 + 1),
+            ),
             RecoveryStrategy::Adaptive => {
                 // Simplified adaptive strategy
                 if self.retry_count == 0 {
                     self.base_timeout
                 } else {
                     Duration::from_millis(
-                        (self.base_timeout.as_millis() as f64 * 1.5f64.powi(self.retry_count as i32)) as u64
+                        (self.base_timeout.as_millis() as f64
+                            * 1.5f64.powi(self.retry_count as i32)) as u64,
                     )
                 }
             }
@@ -325,9 +322,10 @@ impl CircuitBreakerMetrics {
         }
 
         // Update average response time
-        let total_time = self.average_response_time.as_nanos() as f64 * (self.total_requests - 1) as f64;
+        let total_time =
+            self.average_response_time.as_nanos() as f64 * (self.total_requests - 1) as f64;
         self.average_response_time = Duration::from_nanos(
-            ((total_time + duration.as_nanos() as f64) / self.total_requests as f64) as u64
+            ((total_time + duration.as_nanos() as f64) / self.total_requests as f64) as u64,
         );
     }
 
@@ -388,16 +386,16 @@ impl CircuitBreaker {
         cb.id = id;
         cb
     }
-    
+
     pub fn is_open(&self) -> bool {
         self.state == CircuitBreakerState::Open
     }
-    
+
     pub fn state(&self) -> CircuitBreakerState {
         if !self.config.enabled {
             return CircuitBreakerState::Closed;
         }
-        
+
         match self.state {
             CircuitBreakerState::Open => {
                 if let Some(last_failure) = self.last_failure_time {
@@ -413,7 +411,7 @@ impl CircuitBreaker {
             other => other,
         }
     }
-    
+
     /// Record a successful operation
     pub fn record_success(&mut self) {
         self.record_success_with_duration(Duration::from_millis(100))
@@ -426,16 +424,16 @@ impl CircuitBreaker {
         }
 
         let old_state = self.state;
-        
+
         // Record event
         self.record_event(EventType::Success, None, duration);
-        
+
         // Update metrics
         self.metrics.record_request(true, duration);
-        
+
         // Update recovery handler
         self.recovery_handler.on_success();
-        
+
         match self.state {
             CircuitBreakerState::Closed => {
                 self.failure_count = 0;
@@ -458,8 +456,10 @@ impl CircuitBreaker {
         }
 
         if old_state != self.state {
-            info!("Circuit breaker {} transitioned from {:?} to {:?}", 
-                  self.id, old_state, self.state);
+            info!(
+                "Circuit breaker {} transitioned from {:?} to {:?}",
+                self.id, old_state, self.state
+            );
         }
     }
 
@@ -475,37 +475,42 @@ impl CircuitBreaker {
         }
 
         let old_state = self.state;
-        
+
         // Record event
         self.record_event(EventType::Failure, Some(failure_type.clone()), duration);
-        
+
         // Update metrics
         self.metrics.record_request(false, duration);
-        
+
         // Update recovery handler
         self.recovery_handler.on_failure();
-        
+
         // Update failure counts by type
-        *self.failure_by_type.entry(failure_type.clone()).or_insert(0) += 1;
-        
+        *self
+            .failure_by_type
+            .entry(failure_type.clone())
+            .or_insert(0) += 1;
+
         self.last_failure_time = Some(Instant::now());
-        
+
         // Only count circuit-breaking failures
         if self.config.classify_failures && !failure_type.is_circuit_breaking() {
             debug!("Non-circuit-breaking failure recorded: {:?}", failure_type);
             return;
         }
-        
+
         // Calculate weighted failure count
         let weighted_failure = if self.config.classify_failures {
             failure_type.weight()
         } else {
             1.0
         };
-        
+
         // Get adaptive threshold
-        let current_threshold = self.adaptive_threshold.calculate_threshold(&self.event_window);
-        
+        let current_threshold = self
+            .adaptive_threshold
+            .calculate_threshold(&self.event_window);
+
         match self.state {
             CircuitBreakerState::Closed => {
                 self.failure_count += weighted_failure as u32;
@@ -524,10 +529,13 @@ impl CircuitBreaker {
         }
 
         if old_state != self.state {
-            warn!("Circuit breaker {} opened due to {:?} failure", self.id, failure_type);
+            warn!(
+                "Circuit breaker {} opened due to {:?} failure",
+                self.id, failure_type
+            );
         }
     }
-    
+
     /// Record a generic failure (backward compatibility)
     pub fn record_failure(&mut self) {
         self.record_failure_with_type(FailureType::Unknown)
@@ -563,7 +571,10 @@ impl CircuitBreaker {
     }
 
     /// Execute an async function with circuit breaker protection
-    pub async fn execute_async<F, Fut, R, E>(&mut self, operation: F) -> Result<R, CircuitBreakerError>
+    pub async fn execute_async<F, Fut, R, E>(
+        &mut self,
+        operation: F,
+    ) -> Result<R, CircuitBreakerError>
     where
         F: FnOnce() -> Fut,
         Fut: std::future::Future<Output = std::result::Result<R, E>>,
@@ -595,7 +606,7 @@ impl CircuitBreaker {
     /// Classify error type for failure handling
     fn classify_error<E: std::fmt::Debug>(&self, error: &E) -> FailureType {
         let error_str = format!("{:?}", error).to_lowercase();
-        
+
         if error_str.contains("timeout") || error_str.contains("timed out") {
             FailureType::Timeout
         } else if error_str.contains("connection") || error_str.contains("network") {
@@ -616,7 +627,12 @@ impl CircuitBreaker {
     }
 
     /// Helper method to record events
-    fn record_event(&mut self, event_type: EventType, failure_type: Option<FailureType>, duration: Duration) {
+    fn record_event(
+        &mut self,
+        event_type: EventType,
+        failure_type: Option<FailureType>,
+        duration: Duration,
+    ) {
         let event = CircuitBreakerEvent {
             timestamp: Instant::now(),
             event_type,
@@ -636,22 +652,24 @@ impl CircuitBreaker {
     fn transition_to_state(&mut self, new_state: CircuitBreakerState) {
         let old_state = self.state;
         self.state = new_state;
-        
+
         self.metrics.record_state_change(old_state, new_state);
         self.record_event(EventType::StateChange(new_state), None, Duration::ZERO);
-        
-        debug!("Circuit breaker {} transitioned from {:?} to {:?}", 
-               self.id, old_state, new_state);
+
+        debug!(
+            "Circuit breaker {} transitioned from {:?} to {:?}",
+            self.id, old_state, new_state
+        );
     }
-    
+
     /// Check if the circuit breaker allows execution
     pub fn can_execute(&mut self) -> bool {
         if !self.config.enabled {
             return true;
         }
-        
+
         let current_state = self.state();
-        
+
         match current_state {
             CircuitBreakerState::Closed => true,
             CircuitBreakerState::Open => {
@@ -713,8 +731,11 @@ impl CircuitBreaker {
         self.half_open_calls = 0;
         self.last_failure_time = None;
         self.recovery_handler.on_success();
-        
-        info!("Circuit breaker {} manually reset from {:?}", self.id, old_state);
+
+        info!(
+            "Circuit breaker {} manually reset from {:?}",
+            self.id, old_state
+        );
     }
 
     /// Force circuit breaker to open state
@@ -722,8 +743,11 @@ impl CircuitBreaker {
         let old_state = self.state;
         self.transition_to_state(CircuitBreakerState::Open);
         self.last_failure_time = Some(Instant::now());
-        
-        warn!("Circuit breaker {} manually forced open from {:?}", self.id, old_state);
+
+        warn!(
+            "Circuit breaker {} manually forced open from {:?}",
+            self.id, old_state
+        );
     }
 
     /// Get circuit breaker ID
@@ -739,7 +763,7 @@ impl CircuitBreaker {
             CircuitBreakerState::Open => false,
         }
     }
-    
+
     /// Get circuit breaker statistics
     pub fn stats(&self) -> CircuitBreakerStats {
         CircuitBreakerStats {
@@ -794,8 +818,15 @@ pub enum CircuitBreakerError {
 impl std::fmt::Display for CircuitBreakerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CircuitBreakerError::CircuitOpen { state, last_failure } => {
-                write!(f, "Circuit breaker is {:?}, last failure: {:?}", state, last_failure)
+            CircuitBreakerError::CircuitOpen {
+                state,
+                last_failure,
+            } => {
+                write!(
+                    f,
+                    "Circuit breaker is {:?}, last failure: {:?}",
+                    state, last_failure
+                )
             }
             CircuitBreakerError::OperationFailed(msg) => {
                 write!(f, "Operation failed: {}", msg)
@@ -821,18 +852,21 @@ pub fn new_shared_circuit_breaker(config: CircuitBreakerConfig) -> SharedCircuit
 }
 
 /// Create a new shared circuit breaker with custom ID
-pub fn new_shared_circuit_breaker_with_id(config: CircuitBreakerConfig, id: String) -> SharedCircuitBreaker {
+pub fn new_shared_circuit_breaker_with_id(
+    config: CircuitBreakerConfig,
+    id: String,
+) -> SharedCircuitBreaker {
     Arc::new(RwLock::new(CircuitBreaker::with_id(config, id)))
 }
 
 /// Helper functions for working with shared circuit breakers
 pub mod shared_helpers {
     use super::*;
-    
+
     /// Execute an async operation with circuit breaker protection
     pub async fn execute_protected<F, Fut, R, E>(
         cb: &SharedCircuitBreaker,
-        operation: F
+        operation: F,
     ) -> Result<R, CircuitBreakerError>
     where
         F: FnOnce() -> Fut,
@@ -868,31 +902,31 @@ impl SharedCircuitBreakerExt for SharedCircuitBreaker {
         let mut cb = self.write().await;
         cb.can_execute()
     }
-    
+
     /// Record a successful operation with execution duration
     async fn record_success_with_duration(&self, duration: Duration) {
         let mut cb = self.write().await;
         cb.record_success_with_duration(duration);
     }
-    
+
     /// Record a failure with specific failure type
     async fn record_failure_with_type(&self, failure_type: FailureType) {
         let mut cb = self.write().await;
         cb.record_failure_with_type(failure_type);
     }
-    
+
     /// Check if the circuit breaker is healthy
     async fn is_healthy(&self) -> bool {
         let cb = self.read().await;
         cb.is_healthy()
     }
-    
+
     /// Reset the circuit breaker to closed state
     async fn reset(&self) {
         let mut cb = self.write().await;
         cb.reset();
     }
-    
+
     /// Get enhanced statistics
     async fn get_enhanced_stats(&self) -> EnhancedCircuitBreakerStats {
         let cb = self.read().await;
@@ -917,10 +951,13 @@ impl CircuitBreakerManager {
     /// Get or create a circuit breaker
     pub async fn get_or_create(&self, name: String) -> SharedCircuitBreaker {
         let mut breakers = self.circuit_breakers.write().await;
-        
-        breakers.entry(name.clone()).or_insert_with(|| {
-            new_shared_circuit_breaker_with_id(self.default_config.clone(), name)
-        }).clone()
+
+        breakers
+            .entry(name.clone())
+            .or_insert_with(|| {
+                new_shared_circuit_breaker_with_id(self.default_config.clone(), name)
+            })
+            .clone()
     }
 
     /// Get circuit breaker by name
@@ -956,7 +993,7 @@ impl CircuitBreakerManager {
     /// Reset all circuit breakers
     pub async fn reset_all(&self) {
         let breakers = self.circuit_breakers.read().await;
-        
+
         for cb in breakers.values() {
             cb.reset().await;
         }
@@ -979,7 +1016,7 @@ impl CircuitBreakerManager {
 mod tests {
     use super::*;
     use std::time::Duration;
-    
+
     fn test_config() -> CircuitBreakerConfig {
         CircuitBreakerConfig {
             enabled: true,
@@ -989,67 +1026,67 @@ mod tests {
             half_open_max_calls: 2,
         }
     }
-    
+
     #[test]
     fn test_circuit_breaker_closed_state() {
         let mut cb = CircuitBreaker::new(test_config());
-        
+
         assert_eq!(cb.state(), CircuitBreakerState::Closed);
         assert!(cb.can_execute());
-        
+
         // Record some successes
         cb.record_success();
         cb.record_success();
-        
+
         assert_eq!(cb.state(), CircuitBreakerState::Closed);
     }
-    
+
     #[test]
     fn test_circuit_breaker_opens_on_failures() {
         let mut cb = CircuitBreaker::new(test_config());
-        
+
         // Record failures up to threshold
         cb.record_failure();
         cb.record_failure();
         assert_eq!(cb.state(), CircuitBreakerState::Closed);
-        
+
         cb.record_failure(); // This should open the circuit
         assert_eq!(cb.state(), CircuitBreakerState::Open);
         assert!(!cb.can_execute());
     }
-    
+
     #[tokio::test]
     async fn test_circuit_breaker_transitions_to_half_open() {
         let mut cb = CircuitBreaker::new(test_config());
-        
+
         // Open the circuit
         cb.record_failure();
         cb.record_failure();
         cb.record_failure();
         assert_eq!(cb.state(), CircuitBreakerState::Open);
-        
+
         // Wait for timeout
         tokio::time::sleep(Duration::from_millis(150)).await;
-        
+
         // Should transition to half-open
         assert!(cb.can_execute());
         assert_eq!(cb.state(), CircuitBreakerState::HalfOpen);
     }
-    
+
     #[test]
     fn test_disabled_circuit_breaker() {
         let mut config = test_config();
         config.enabled = false;
-        
+
         let mut cb = CircuitBreaker::new(config);
-        
+
         // Should always allow execution when disabled
         assert!(cb.can_execute());
-        
+
         cb.record_failure();
         cb.record_failure();
         cb.record_failure();
-        
+
         assert!(cb.can_execute());
         assert_eq!(cb.state(), CircuitBreakerState::Closed);
     }

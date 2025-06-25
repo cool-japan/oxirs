@@ -1,9 +1,9 @@
 //! SHACL vocabulary terms and constants
-//! 
+//!
 //! This module defines all SHACL vocabulary terms according to the W3C SHACL specification.
 
+use crate::{Result, ShaclError, SHACL_NS};
 use oxirs_core::model::NamedNode;
-use crate::{ShaclError, Result, SHACL_NS};
 
 /// SHACL vocabulary containing all standard SHACL terms
 #[derive(Debug)]
@@ -14,14 +14,14 @@ pub struct ShaclVocabulary {
     pub constraint_component: NamedNode,
     pub validation_report: NamedNode,
     pub validation_result: NamedNode,
-    
+
     // Target Properties
     pub target_class: NamedNode,
     pub target_node: NamedNode,
     pub target_objects_of: NamedNode,
     pub target_subjects_of: NamedNode,
     pub target: NamedNode,
-    
+
     // Shape Properties
     pub path: NamedNode,
     pub deactivated: NamedNode,
@@ -31,7 +31,7 @@ pub struct ShaclVocabulary {
     pub description: NamedNode,
     pub group: NamedNode,
     pub order: NamedNode,
-    
+
     // Core Constraints
     pub class: NamedNode,
     pub datatype: NamedNode,
@@ -54,31 +54,31 @@ pub struct ShaclVocabulary {
     pub less_than_or_equals: NamedNode,
     pub in_list: NamedNode,
     pub has_value: NamedNode,
-    
+
     // Logical Constraints
     pub not: NamedNode,
     pub and: NamedNode,
     pub or: NamedNode,
     pub xone: NamedNode,
-    
+
     // Shape-based Constraints
     pub node: NamedNode,
     pub qualified_value_shape: NamedNode,
     pub qualified_min_count: NamedNode,
     pub qualified_max_count: NamedNode,
     pub qualified_value_shapes_disjoint: NamedNode,
-    
+
     // Closed Shapes
     pub closed: NamedNode,
     pub ignored_properties: NamedNode,
-    
+
     // Property Paths
     pub alternative_path: NamedNode,
     pub inverse_path: NamedNode,
     pub zero_or_more_path: NamedNode,
     pub one_or_more_path: NamedNode,
     pub zero_or_one_path: NamedNode,
-    
+
     // Node Kinds
     pub iri: NamedNode,
     pub blank_node: NamedNode,
@@ -86,12 +86,12 @@ pub struct ShaclVocabulary {
     pub blank_node_or_iri: NamedNode,
     pub blank_node_or_literal: NamedNode,
     pub iri_or_literal: NamedNode,
-    
+
     // Severity Levels
     pub violation: NamedNode,
     pub warning: NamedNode,
     pub info: NamedNode,
-    
+
     // Validation Result Properties
     pub conforms: NamedNode,
     pub result: NamedNode,
@@ -103,7 +103,7 @@ pub struct ShaclVocabulary {
     pub result_severity: NamedNode,
     pub result_message: NamedNode,
     pub detail: NamedNode,
-    
+
     // SHACL-SPARQL
     pub sparql: NamedNode,
     pub select: NamedNode,
@@ -111,13 +111,13 @@ pub struct ShaclVocabulary {
     pub construct: NamedNode,
     pub update: NamedNode,
     pub prefixes: NamedNode,
-    
+
     // Built-in Functions
     pub this: NamedNode,
     pub current_shape: NamedNode,
     pub shapes_graph: NamedNode,
     pub value_type: NamedNode,
-    
+
     // Constraint Components
     pub class_constraint_component: NamedNode,
     pub datatype_constraint_component: NamedNode,
@@ -158,14 +158,14 @@ impl ShaclVocabulary {
             constraint_component: named_node("ConstraintComponent"),
             validation_report: named_node("ValidationReport"),
             validation_result: named_node("ValidationResult"),
-            
+
             // Target Properties
             target_class: named_node("targetClass"),
             target_node: named_node("targetNode"),
             target_objects_of: named_node("targetObjectsOf"),
             target_subjects_of: named_node("targetSubjectsOf"),
             target: named_node("target"),
-            
+
             // Shape Properties
             path: named_node("path"),
             deactivated: named_node("deactivated"),
@@ -175,7 +175,7 @@ impl ShaclVocabulary {
             description: named_node("description"),
             group: named_node("group"),
             order: named_node("order"),
-            
+
             // Core Constraints
             class: named_node("class"),
             datatype: named_node("datatype"),
@@ -198,31 +198,31 @@ impl ShaclVocabulary {
             less_than_or_equals: named_node("lessThanOrEquals"),
             in_list: named_node("in"),
             has_value: named_node("hasValue"),
-            
+
             // Logical Constraints
             not: named_node("not"),
             and: named_node("and"),
             or: named_node("or"),
             xone: named_node("xone"),
-            
+
             // Shape-based Constraints
             node: named_node("node"),
             qualified_value_shape: named_node("qualifiedValueShape"),
             qualified_min_count: named_node("qualifiedMinCount"),
             qualified_max_count: named_node("qualifiedMaxCount"),
             qualified_value_shapes_disjoint: named_node("qualifiedValueShapesDisjoint"),
-            
+
             // Closed Shapes
             closed: named_node("closed"),
             ignored_properties: named_node("ignoredProperties"),
-            
+
             // Property Paths
             alternative_path: named_node("alternativePath"),
             inverse_path: named_node("inversePath"),
             zero_or_more_path: named_node("zeroOrMorePath"),
             one_or_more_path: named_node("oneOrMorePath"),
             zero_or_one_path: named_node("zeroOrOnePath"),
-            
+
             // Node Kinds
             iri: named_node("IRI"),
             blank_node: named_node("BlankNode"),
@@ -230,12 +230,12 @@ impl ShaclVocabulary {
             blank_node_or_iri: named_node("BlankNodeOrIRI"),
             blank_node_or_literal: named_node("BlankNodeOrLiteral"),
             iri_or_literal: named_node("IRIOrLiteral"),
-            
+
             // Severity Levels
             violation: named_node("Violation"),
             warning: named_node("Warning"),
             info: named_node("Info"),
-            
+
             // Validation Result Properties
             conforms: named_node("conforms"),
             result: named_node("result"),
@@ -247,7 +247,7 @@ impl ShaclVocabulary {
             result_severity: named_node("resultSeverity"),
             result_message: named_node("resultMessage"),
             detail: named_node("detail"),
-            
+
             // SHACL-SPARQL
             sparql: named_node("sparql"),
             select: named_node("select"),
@@ -255,13 +255,13 @@ impl ShaclVocabulary {
             construct: named_node("construct"),
             update: named_node("update"),
             prefixes: named_node("prefixes"),
-            
+
             // Built-in Functions
             this: named_node("this"),
             current_shape: named_node("currentShape"),
             shapes_graph: named_node("shapesGraph"),
             value_type: named_node("valueType"),
-            
+
             // Constraint Components
             class_constraint_component: named_node("ClassConstraintComponent"),
             datatype_constraint_component: named_node("DatatypeConstraintComponent"),
@@ -280,7 +280,9 @@ impl ShaclVocabulary {
             equals_constraint_component: named_node("EqualsConstraintComponent"),
             disjoint_constraint_component: named_node("DisjointConstraintComponent"),
             less_than_constraint_component: named_node("LessThanConstraintComponent"),
-            less_than_or_equals_constraint_component: named_node("LessThanOrEqualsConstraintComponent"),
+            less_than_or_equals_constraint_component: named_node(
+                "LessThanOrEqualsConstraintComponent",
+            ),
             in_constraint_component: named_node("InConstraintComponent"),
             has_value_constraint_component: named_node("HasValueConstraintComponent"),
             not_constraint_component: named_node("NotConstraintComponent"),
@@ -288,17 +290,19 @@ impl ShaclVocabulary {
             or_constraint_component: named_node("OrConstraintComponent"),
             xone_constraint_component: named_node("XoneConstraintComponent"),
             node_constraint_component: named_node("NodeConstraintComponent"),
-            qualified_value_shape_constraint_component: named_node("QualifiedValueShapeConstraintComponent"),
+            qualified_value_shape_constraint_component: named_node(
+                "QualifiedValueShapeConstraintComponent",
+            ),
             closed_constraint_component: named_node("ClosedConstraintComponent"),
             sparql_constraint_component: named_node("SPARQLConstraintComponent"),
         }
     }
-    
+
     /// Check if a named node is a SHACL term
     pub fn is_shacl_term(&self, node: &NamedNode) -> bool {
         node.as_str().starts_with(SHACL_NS)
     }
-    
+
     /// Get the local name of a SHACL term
     pub fn get_local_name<'a>(&self, node: &'a NamedNode) -> Option<&'a str> {
         if self.is_shacl_term(node) {
@@ -307,7 +311,7 @@ impl ShaclVocabulary {
             None
         }
     }
-    
+
     /// Create a SHACL named node from a local name
     pub fn create_term(&self, local_name: &str) -> NamedNode {
         named_node(local_name)
@@ -316,8 +320,7 @@ impl ShaclVocabulary {
 
 /// Helper function to create a SHACL named node
 fn named_node(local_name: &str) -> NamedNode {
-    NamedNode::new(format!("{}{}", SHACL_NS, local_name))
-        .expect("Invalid SHACL IRI")
+    NamedNode::new(format!("{}{}", SHACL_NS, local_name)).expect("Invalid SHACL IRI")
 }
 
 /// Standard SHACL prefixes for use in SPARQL queries
@@ -332,52 +335,70 @@ PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_shacl_vocabulary() {
         let vocab = ShaclVocabulary::new();
-        
+
         // Test core classes
-        assert_eq!(vocab.node_shape.as_str(), "http://www.w3.org/ns/shacl#NodeShape");
-        assert_eq!(vocab.property_shape.as_str(), "http://www.w3.org/ns/shacl#PropertyShape");
-        
+        assert_eq!(
+            vocab.node_shape.as_str(),
+            "http://www.w3.org/ns/shacl#NodeShape"
+        );
+        assert_eq!(
+            vocab.property_shape.as_str(),
+            "http://www.w3.org/ns/shacl#PropertyShape"
+        );
+
         // Test constraint properties
         assert_eq!(vocab.class.as_str(), "http://www.w3.org/ns/shacl#class");
-        assert_eq!(vocab.datatype.as_str(), "http://www.w3.org/ns/shacl#datatype");
-        
+        assert_eq!(
+            vocab.datatype.as_str(),
+            "http://www.w3.org/ns/shacl#datatype"
+        );
+
         // Test validation result properties
-        assert_eq!(vocab.conforms.as_str(), "http://www.w3.org/ns/shacl#conforms");
-        assert_eq!(vocab.focus_node.as_str(), "http://www.w3.org/ns/shacl#focusNode");
+        assert_eq!(
+            vocab.conforms.as_str(),
+            "http://www.w3.org/ns/shacl#conforms"
+        );
+        assert_eq!(
+            vocab.focus_node.as_str(),
+            "http://www.w3.org/ns/shacl#focusNode"
+        );
     }
-    
+
     #[test]
     fn test_is_shacl_term() {
         let vocab = ShaclVocabulary::new();
-        
+
         assert!(vocab.is_shacl_term(&vocab.node_shape));
         assert!(vocab.is_shacl_term(&vocab.class));
-        
+
         let non_shacl = NamedNode::new("http://example.org/test").unwrap();
         assert!(!vocab.is_shacl_term(&non_shacl));
     }
-    
+
     #[test]
     fn test_get_local_name() {
         let vocab = ShaclVocabulary::new();
-        
+
         assert_eq!(vocab.get_local_name(&vocab.node_shape), Some("NodeShape"));
         assert_eq!(vocab.get_local_name(&vocab.class), Some("class"));
-        
+
         let non_shacl = NamedNode::new("http://example.org/test").unwrap();
         assert_eq!(vocab.get_local_name(&non_shacl), None);
     }
-    
+
     #[test]
     fn test_create_term() {
         let vocab = ShaclVocabulary::new();
         let custom_term = vocab.create_term("customProperty");
-        
-        assert_eq!(custom_term.as_str(), "http://www.w3.org/ns/shacl#customProperty");
+
+        assert_eq!(
+            custom_term.as_str(),
+            "http://www.w3.org/ns/shacl#customProperty"
+        );
         assert!(vocab.is_shacl_term(&custom_term));
         assert_eq!(vocab.get_local_name(&custom_term), Some("customProperty"));
     }

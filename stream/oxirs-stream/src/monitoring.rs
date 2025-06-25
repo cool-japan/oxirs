@@ -4,13 +4,13 @@
 //! for the OxiRS streaming platform.
 
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
-use chrono::{DateTime, Utc};
 
 /// Monitoring configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,7 +43,7 @@ pub struct StreamingMetrics {
     pub producer_batches_sent: u64,
     pub producer_average_latency_ms: f64,
     pub producer_throughput_eps: f64,
-    
+
     // Consumer metrics
     pub consumer_events_consumed: u64,
     pub consumer_events_processed: u64,
@@ -54,7 +54,7 @@ pub struct StreamingMetrics {
     pub consumer_average_processing_time_ms: f64,
     pub consumer_throughput_eps: f64,
     pub consumer_lag_ms: Option<f64>,
-    
+
     // System metrics
     pub system_memory_usage_bytes: u64,
     pub system_cpu_usage_percent: f64,
@@ -62,21 +62,21 @@ pub struct StreamingMetrics {
     pub system_network_bytes_out: u64,
     pub system_gc_collections: u64,
     pub system_gc_time_ms: u64,
-    
+
     // Backend metrics
     pub backend_connections_active: u32,
     pub backend_connections_idle: u32,
     pub backend_connection_errors: u64,
     pub backend_circuit_breaker_trips: u64,
     pub backend_retry_attempts: u64,
-    
+
     // Stream processing metrics
     pub window_operations_count: u64,
     pub aggregation_operations_count: u64,
     pub pattern_matches_found: u64,
     pub state_store_operations: u64,
     pub subscriptions_active: u32,
-    
+
     // Quality metrics
     pub message_loss_rate: f64,
     pub duplicate_rate: f64,
@@ -84,7 +84,7 @@ pub struct StreamingMetrics {
     pub error_rate: f64,
     pub success_rate: f64,
     pub availability: f64,
-    
+
     // Timestamps
     pub last_updated: DateTime<Utc>,
     pub collection_start_time: DateTime<Utc>,
@@ -177,7 +177,7 @@ impl MetricsCollector {
         } else {
             None
         };
-        
+
         Self {
             config,
             metrics: Arc::new(RwLock::new(StreamingMetrics::default())),
@@ -185,66 +185,70 @@ impl MetricsCollector {
             profiler,
         }
     }
-    
+
     /// Start metrics collection
     pub async fn start(&self) -> Result<()> {
-        info!("Starting metrics collection with interval: {:?}", self.config.metrics_interval);
-        
+        info!(
+            "Starting metrics collection with interval: {:?}",
+            self.config.metrics_interval
+        );
+
         // Start metrics collection task
         self.start_metrics_collection().await;
-        
+
         // Start health checking task
         self.start_health_checking().await;
-        
+
         // Start system metrics collection
         self.start_system_metrics_collection().await;
-        
+
         Ok(())
     }
-    
+
     /// Update producer metrics
     pub async fn update_producer_metrics(&self, metrics: ProducerMetricsUpdate) {
         let mut current_metrics = self.metrics.write().await;
-        
+
         current_metrics.producer_events_published += metrics.events_published;
         current_metrics.producer_events_failed += metrics.events_failed;
         current_metrics.producer_bytes_sent += metrics.bytes_sent;
         current_metrics.producer_batches_sent += metrics.batches_sent;
-        
+
         if metrics.latency_ms > 0.0 {
-            current_metrics.producer_average_latency_ms = 
+            current_metrics.producer_average_latency_ms =
                 (current_metrics.producer_average_latency_ms + metrics.latency_ms) / 2.0;
         }
-        
+
         current_metrics.producer_throughput_eps = metrics.throughput_eps;
         current_metrics.last_updated = Utc::now();
     }
-    
+
     /// Update consumer metrics
     pub async fn update_consumer_metrics(&self, metrics: ConsumerMetricsUpdate) {
         let mut current_metrics = self.metrics.write().await;
-        
+
         current_metrics.consumer_events_consumed += metrics.events_consumed;
         current_metrics.consumer_events_processed += metrics.events_processed;
         current_metrics.consumer_events_filtered += metrics.events_filtered;
         current_metrics.consumer_events_failed += metrics.events_failed;
         current_metrics.consumer_bytes_received += metrics.bytes_received;
         current_metrics.consumer_batches_received += metrics.batches_received;
-        
+
         if metrics.processing_time_ms > 0.0 {
-            current_metrics.consumer_average_processing_time_ms = 
-                (current_metrics.consumer_average_processing_time_ms + metrics.processing_time_ms) / 2.0;
+            current_metrics.consumer_average_processing_time_ms =
+                (current_metrics.consumer_average_processing_time_ms + metrics.processing_time_ms)
+                    / 2.0;
         }
-        
+
         current_metrics.consumer_throughput_eps = metrics.throughput_eps;
         current_metrics.consumer_lag_ms = metrics.lag_ms;
         current_metrics.last_updated = Utc::now();
     }
-    
+
     /// Update backend metrics
     pub async fn update_backend_metrics(&self, metrics: BackendMetricsUpdate) {
         let mut current_metrics = self.metrics.write().await;
-        
+
         current_metrics.backend_connections_active = metrics.connections_active;
         current_metrics.backend_connections_idle = metrics.connections_idle;
         current_metrics.backend_connection_errors += metrics.connection_errors;
@@ -252,41 +256,42 @@ impl MetricsCollector {
         current_metrics.backend_retry_attempts += metrics.retry_attempts;
         current_metrics.last_updated = Utc::now();
     }
-    
+
     /// Get current metrics snapshot
     pub async fn get_metrics(&self) -> StreamingMetrics {
         self.metrics.read().await.clone()
     }
-    
+
     /// Start metrics collection task
     async fn start_metrics_collection(&self) {
         let metrics = self.metrics.clone();
         let interval = self.config.metrics_interval;
-        
+
         tokio::spawn(async move {
             let mut interval_timer = tokio::time::interval(interval);
-            
+
             loop {
                 interval_timer.tick().await;
-                
+
                 // Collect system metrics
                 let mut current_metrics = metrics.write().await;
-                
+
                 // Calculate rates and derived metrics
-                let elapsed = current_metrics.last_updated
+                let elapsed = current_metrics
+                    .last_updated
                     .signed_duration_since(current_metrics.collection_start_time)
                     .num_seconds() as f64;
-                
+
                 if elapsed > 0.0 {
                     // Calculate error rate
-                    let total_events = current_metrics.producer_events_published + 
-                                     current_metrics.producer_events_failed;
+                    let total_events = current_metrics.producer_events_published
+                        + current_metrics.producer_events_failed;
                     if total_events > 0 {
-                        current_metrics.error_rate = 
+                        current_metrics.error_rate =
                             current_metrics.producer_events_failed as f64 / total_events as f64;
                         current_metrics.success_rate = 1.0 - current_metrics.error_rate;
                     }
-                    
+
                     // Calculate availability (simplified)
                     current_metrics.availability = if current_metrics.error_rate < 0.01 {
                         99.9 + (1.0 - current_metrics.error_rate) * 0.1
@@ -294,43 +299,45 @@ impl MetricsCollector {
                         100.0 - (current_metrics.error_rate * 100.0)
                     };
                 }
-                
-                debug!("Updated metrics: throughput={:.2} eps, error_rate={:.4}", 
-                       current_metrics.producer_throughput_eps, current_metrics.error_rate);
+
+                debug!(
+                    "Updated metrics: throughput={:.2} eps, error_rate={:.4}",
+                    current_metrics.producer_throughput_eps, current_metrics.error_rate
+                );
             }
         });
     }
-    
+
     /// Start health checking task
     async fn start_health_checking(&self) {
         let health_checker = self.health_checker.clone();
         let interval = self.config.health_check_interval;
-        
+
         tokio::spawn(async move {
             let mut interval_timer = tokio::time::interval(interval);
-            
+
             loop {
                 interval_timer.tick().await;
-                
+
                 if let Err(e) = health_checker.check_all_components().await {
                     error!("Health check failed: {}", e);
                 }
             }
         });
     }
-    
+
     /// Start system metrics collection
     async fn start_system_metrics_collection(&self) {
         let metrics = self.metrics.clone();
-        
+
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(10));
-            
+
             loop {
                 interval.tick().await;
-                
+
                 let mut current_metrics = metrics.write().await;
-                
+
                 // Collect system metrics (simplified - would use actual system APIs)
                 current_metrics.system_memory_usage_bytes = Self::get_memory_usage();
                 current_metrics.system_cpu_usage_percent = Self::get_cpu_usage();
@@ -339,35 +346,35 @@ impl MetricsCollector {
             }
         });
     }
-    
+
     /// Get system memory usage (simplified)
     fn get_memory_usage() -> u64 {
         // Would use actual system APIs like sysinfo crate
         1024 * 1024 * 512 // 512MB placeholder
     }
-    
+
     /// Get CPU usage (simplified)
     fn get_cpu_usage() -> f64 {
         // Would use actual system APIs
         25.0 // 25% placeholder
     }
-    
+
     /// Get network bytes in (simplified)
     fn get_network_bytes_in() -> u64 {
         // Would use actual network statistics
         1024 // 1KB placeholder
     }
-    
+
     /// Get network bytes out (simplified)
     fn get_network_bytes_out() -> u64 {
         // Would use actual network statistics
         1024 // 1KB placeholder
     }
-    
+
     /// Export metrics in Prometheus format
     pub async fn export_prometheus(&self) -> String {
         let metrics = self.metrics.read().await;
-        
+
         format!(
             r#"# HELP oxirs_producer_events_published_total Total number of events published by producers
 # TYPE oxirs_producer_events_published_total counter
@@ -406,7 +413,7 @@ oxirs_availability {}
             metrics.availability
         )
     }
-    
+
     /// Get health status
     pub async fn get_health(&self) -> SystemHealth {
         self.health_checker.get_health().await
@@ -421,22 +428,22 @@ impl HealthChecker {
             component_checkers: Vec::new(),
         }
     }
-    
+
     /// Add a component health checker
     pub fn add_component_checker(&mut self, checker: Box<dyn ComponentHealthChecker>) {
         self.component_checkers.push(checker);
     }
-    
+
     /// Check health of all components
     pub async fn check_all_components(&self) -> Result<()> {
         let mut component_health = HashMap::new();
         let mut overall_status = HealthStatus::Healthy;
         let mut alerts = Vec::new();
-        
+
         for checker in &self.component_checkers {
             let health = checker.check_health().await;
             let component_name = checker.component_name().to_string();
-            
+
             match health.status {
                 HealthStatus::Warning => {
                     if overall_status == HealthStatus::Healthy {
@@ -464,19 +471,19 @@ impl HealthChecker {
                 }
                 _ => {}
             }
-            
+
             component_health.insert(component_name, health);
         }
-        
+
         let mut health_status = self.health_status.write().await;
         health_status.overall_status = overall_status;
         health_status.component_health = component_health;
         health_status.last_check = Utc::now();
         health_status.alerts.extend(alerts);
-        
+
         Ok(())
     }
-    
+
     /// Get current health status
     pub async fn get_health(&self) -> SystemHealth {
         self.health_status.read().await.clone()
@@ -491,13 +498,13 @@ impl Profiler {
             sampling_rate,
         }
     }
-    
+
     /// Start a performance trace
     pub async fn start_trace(&self, operation: String) -> Option<TraceHandle> {
         if !self.enabled || fastrand::f64() > self.sampling_rate {
             return None;
         }
-        
+
         Some(TraceHandle {
             operation,
             start_time: Instant::now(),
@@ -523,7 +530,7 @@ impl Drop for TraceHandle {
             metadata: HashMap::new(),
             call_stack: Vec::new(), // Would be populated with actual call stack
         };
-        
+
         let traces = self.traces.clone();
         tokio::spawn(async move {
             traces.write().await.push(trace);
@@ -579,7 +586,7 @@ pub struct BackendMetricsUpdate {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_metrics_collection() {
         let config = MonitoringConfig {
@@ -592,25 +599,27 @@ mod tests {
             jaeger_endpoint: None,
             log_level: "info".to_string(),
         };
-        
+
         let collector = MetricsCollector::new(config);
-        
+
         // Update some metrics
-        collector.update_producer_metrics(ProducerMetricsUpdate {
-            events_published: 100,
-            events_failed: 5,
-            bytes_sent: 1024,
-            batches_sent: 10,
-            latency_ms: 5.0,
-            throughput_eps: 1000.0,
-        }).await;
-        
+        collector
+            .update_producer_metrics(ProducerMetricsUpdate {
+                events_published: 100,
+                events_failed: 5,
+                bytes_sent: 1024,
+                batches_sent: 10,
+                latency_ms: 5.0,
+                throughput_eps: 1000.0,
+            })
+            .await;
+
         let metrics = collector.get_metrics().await;
         assert_eq!(metrics.producer_events_published, 100);
         assert_eq!(metrics.producer_events_failed, 5);
         assert_eq!(metrics.producer_throughput_eps, 1000.0);
     }
-    
+
     #[tokio::test]
     async fn test_prometheus_export() {
         let config = MonitoringConfig {
@@ -623,18 +632,20 @@ mod tests {
             jaeger_endpoint: None,
             log_level: "info".to_string(),
         };
-        
+
         let collector = MetricsCollector::new(config);
-        
-        collector.update_producer_metrics(ProducerMetricsUpdate {
-            events_published: 500,
-            events_failed: 10,
-            bytes_sent: 2048,
-            batches_sent: 50,
-            latency_ms: 3.0,
-            throughput_eps: 2000.0,
-        }).await;
-        
+
+        collector
+            .update_producer_metrics(ProducerMetricsUpdate {
+                events_published: 500,
+                events_failed: 10,
+                bytes_sent: 2048,
+                batches_sent: 50,
+                latency_ms: 3.0,
+                throughput_eps: 2000.0,
+            })
+            .await;
+
         let prometheus_output = collector.export_prometheus().await;
         assert!(prometheus_output.contains("oxirs_producer_events_published_total 500"));
         assert!(prometheus_output.contains("oxirs_producer_events_failed_total 10"));

@@ -5,20 +5,19 @@
 //! This module provides lightweight NATS integration for streaming
 //! RDF updates with JetStream for persistence and delivery guarantees.
 
-use anyhow::{anyhow, Result};
-use crate::{StreamEvent, StreamConfig, StreamBackend, RdfPatch, PatchOperation, EventMetadata};
 use crate::kafka::KafkaEvent; // Reuse the same event format
+use crate::{EventMetadata, PatchOperation, RdfPatch, StreamBackend, StreamConfig, StreamEvent};
+use anyhow::{anyhow, Result};
+use futures_util::{StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tokio::time;
 use tracing::{debug, error, info, warn};
-use futures_util::{StreamExt, TryStreamExt};
 
 #[cfg(feature = "nats")]
 use async_nats::{
-    Client,
     jetstream::{self, consumer::PullConsumer, stream::Stream},
-    ConnectOptions,
+    Client, ConnectOptions,
 };
 
 /// NATS-specific configuration
@@ -38,7 +37,7 @@ impl Default for NatsConfig {
             url: "nats://localhost:4222".to_string(),
             stream_name: "OXIRS_RDF".to_string(),
             subject_prefix: "oxirs.rdf".to_string(),
-            max_age_seconds: 86400, // 24 hours
+            max_age_seconds: 86400,        // 24 hours
             max_bytes: 1024 * 1024 * 1024, // 1GB
             replicas: 1,
         }
@@ -85,7 +84,7 @@ impl NatsProducer {
                 NatsConfig::default()
             }
         };
-        
+
         Ok(Self {
             config,
             nats_config,
@@ -98,35 +97,36 @@ impl NatsProducer {
             stats: ProducerStats::default(),
         })
     }
-    
+
     pub fn with_nats_config(mut self, nats_config: NatsConfig) -> Self {
         self.nats_config = nats_config;
         self
     }
-    
+
     #[cfg(feature = "nats")]
     pub async fn connect(&mut self) -> Result<()> {
-        let client = async_nats::connect(&self.nats_config.url).await
+        let client = async_nats::connect(&self.nats_config.url)
+            .await
             .map_err(|e| anyhow!("Failed to connect to NATS: {}", e))?;
-        
+
         let jetstream = jetstream::new(client.clone());
-        
+
         // Create JetStream stream if it doesn't exist
         self.ensure_stream(&jetstream).await?;
-        
+
         self.client = Some(client);
         self.jetstream = Some(jetstream);
-        
+
         info!("Connected to NATS at {}", self.nats_config.url);
         Ok(())
     }
-    
+
     #[cfg(not(feature = "nats"))]
     pub async fn connect(&mut self) -> Result<()> {
         warn!("NATS feature not enabled, using mock connection");
         Ok(())
     }
-    
+
     #[cfg(feature = "nats")]
     async fn ensure_stream(&self, jetstream: &jetstream::Context) -> Result<()> {
         let stream_config = jetstream::stream::Config {
@@ -139,37 +139,43 @@ impl NatsProducer {
             retention: jetstream::stream::RetentionPolicy::Limits,
             ..Default::default()
         };
-        
+
         match jetstream.get_or_create_stream(stream_config).await {
             Ok(_) => {
-                info!("Got or created JetStream stream: {}", self.nats_config.stream_name);
+                info!(
+                    "Got or created JetStream stream: {}",
+                    self.nats_config.stream_name
+                );
             }
             Err(e) => {
                 return Err(anyhow!("Failed to get or create JetStream stream: {}", e));
             }
         }
-        
+
         Ok(())
     }
-    
+
     pub async fn publish(&mut self, event: StreamEvent) -> Result<()> {
         let kafka_event = KafkaEvent::from(event); // Reuse the same serialization format
-        let subject = format!("{}.{}", self.nats_config.subject_prefix, kafka_event.event_type);
-        
+        let subject = format!(
+            "{}.{}",
+            self.nats_config.subject_prefix, kafka_event.event_type
+        );
+
         #[cfg(feature = "nats")]
         {
             if self.jetstream.is_none() {
                 self.connect().await?;
             }
-            
+
             if let Some(ref jetstream) = self.jetstream {
                 let payload = serde_json::to_string(&kafka_event)
                     .map_err(|e| anyhow!("Failed to serialize event: {}", e))?;
-                
+
                 let headers = async_nats::HeaderMap::default();
                 // Add correlation ID header
                 // headers.insert("correlation-id", kafka_event.correlation_id.as_str());
-                
+
                 match jetstream
                     .publish_with_headers(subject, headers, payload.clone().into())
                     .await
@@ -192,20 +198,23 @@ impl NatsProducer {
         }
         #[cfg(not(feature = "nats"))]
         {
-            debug!("Mock NATS publish: {} to {}", kafka_event.correlation_id, subject);
+            debug!(
+                "Mock NATS publish: {} to {}",
+                kafka_event.correlation_id, subject
+            );
             self.stats.events_published += 1;
         }
-        
+
         Ok(())
     }
-    
+
     pub async fn publish_batch(&mut self, events: Vec<StreamEvent>) -> Result<()> {
         for event in events {
             self.publish(event).await?;
         }
         self.flush().await
     }
-    
+
     pub async fn publish_patch(&mut self, patch: &RdfPatch) -> Result<()> {
         for operation in &patch.operations {
             let metadata = EventMetadata {
@@ -221,47 +230,49 @@ impl NatsProducer {
             };
 
             let event = match operation {
-                PatchOperation::Add { subject, predicate, object } => {
-                    StreamEvent::TripleAdded {
-                        subject: subject.clone(),
-                        predicate: predicate.clone(),
-                        object: object.clone(),
-                        graph: None,
-                        metadata,
-                    }
-                }
-                PatchOperation::Delete { subject, predicate, object } => {
-                    StreamEvent::TripleRemoved {
-                        subject: subject.clone(),
-                        predicate: predicate.clone(),
-                        object: object.clone(),
-                        graph: None,
-                        metadata,
-                    }
-                }
-                PatchOperation::AddGraph { graph } => {
-                    StreamEvent::GraphCreated {
-                        graph: graph.clone(),
-                        metadata,
-                    }
-                }
-                PatchOperation::DeleteGraph { graph } => {
-                    StreamEvent::GraphDeleted {
-                        graph: graph.clone(),
-                        metadata,
-                    }
-                }
+                PatchOperation::Add {
+                    subject,
+                    predicate,
+                    object,
+                } => StreamEvent::TripleAdded {
+                    subject: subject.clone(),
+                    predicate: predicate.clone(),
+                    object: object.clone(),
+                    graph: None,
+                    metadata,
+                },
+                PatchOperation::Delete {
+                    subject,
+                    predicate,
+                    object,
+                } => StreamEvent::TripleRemoved {
+                    subject: subject.clone(),
+                    predicate: predicate.clone(),
+                    object: object.clone(),
+                    graph: None,
+                    metadata,
+                },
+                PatchOperation::AddGraph { graph } => StreamEvent::GraphCreated {
+                    graph: graph.clone(),
+                    metadata,
+                },
+                PatchOperation::DeleteGraph { graph } => StreamEvent::GraphDeleted {
+                    graph: graph.clone(),
+                    metadata,
+                },
             };
             self.publish(event).await?;
         }
         self.flush().await
     }
-    
+
     pub async fn flush(&mut self) -> Result<()> {
         #[cfg(feature = "nats")]
         {
             if let Some(ref client) = self.client {
-                client.flush().await
+                client
+                    .flush()
+                    .await
                     .map_err(|e| anyhow!("Failed to flush NATS client: {}", e))?;
                 debug!("Flushed NATS client");
             }
@@ -272,7 +283,7 @@ impl NatsProducer {
         }
         Ok(())
     }
-    
+
     pub fn get_stats(&self) -> &ProducerStats {
         &self.stats
     }
@@ -318,7 +329,7 @@ impl NatsConsumer {
                 NatsConfig::default()
             }
         };
-        
+
         Ok(Self {
             config,
             nats_config,
@@ -331,19 +342,20 @@ impl NatsConsumer {
             stats: ConsumerStats::default(),
         })
     }
-    
+
     pub fn with_nats_config(mut self, nats_config: NatsConfig) -> Self {
         self.nats_config = nats_config;
         self
     }
-    
+
     #[cfg(feature = "nats")]
     pub async fn connect(&mut self) -> Result<()> {
-        let client = async_nats::connect(&self.nats_config.url).await
+        let client = async_nats::connect(&self.nats_config.url)
+            .await
             .map_err(|e| anyhow!("Failed to connect to NATS: {}", e))?;
-        
+
         let jetstream = jetstream::new(client.clone());
-        
+
         // Get or create the stream first
         let stream = jetstream
             .get_or_create_stream(jetstream::stream::Config {
@@ -356,7 +368,7 @@ impl NatsConsumer {
             })
             .await
             .map_err(|e| anyhow!("Failed to create NATS stream: {}", e))?;
-        
+
         // Create consumer on the stream
         let consumer_config = jetstream::consumer::pull::Config {
             name: Some("oxirs-consumer".to_string()),
@@ -370,55 +382,69 @@ impl NatsConsumer {
             replay_policy: jetstream::consumer::ReplayPolicy::Instant,
             ..Default::default()
         };
-        
+
         let consumer = stream
             .create_consumer(consumer_config)
             .await
             .map_err(|e| anyhow!("Failed to create NATS consumer: {}", e))?;
-        
+
         self.client = Some(client);
         self.consumer = Some(consumer);
-        
-        info!("Connected NATS consumer to stream: {}", self.nats_config.stream_name);
+
+        info!(
+            "Connected NATS consumer to stream: {}",
+            self.nats_config.stream_name
+        );
         Ok(())
     }
-    
+
     #[cfg(not(feature = "nats"))]
     pub async fn connect(&mut self) -> Result<()> {
         warn!("NATS feature not enabled, using mock consumer");
         Ok(())
     }
-    
+
     pub async fn consume(&mut self) -> Result<Option<StreamEvent>> {
         #[cfg(feature = "nats")]
         {
             if self.consumer.is_none() {
                 self.connect().await?;
             }
-            
+
             if let Some(ref consumer) = self.consumer {
-                match consumer.fetch().max_messages(1).max_bytes(1024 * 1024).messages().await {
+                match consumer
+                    .fetch()
+                    .max_messages(1)
+                    .max_bytes(1024 * 1024)
+                    .messages()
+                    .await
+                {
                     Ok(mut messages) => {
                         if let Some(message) = messages.next().await {
                             match message {
                                 Ok(msg) => {
-                                    let payload = String::from_utf8(msg.payload.to_vec())
-                                        .map_err(|e| anyhow!("Failed to decode message payload: {}", e))?;
-                                    
+                                    let payload =
+                                        String::from_utf8(msg.payload.to_vec()).map_err(|e| {
+                                            anyhow!("Failed to decode message payload: {}", e)
+                                        })?;
+
                                     match serde_json::from_str::<KafkaEvent>(&payload) {
                                         Ok(kafka_event) => {
                                             self.stats.events_consumed += 1;
                                             self.stats.bytes_received += payload.len() as u64;
                                             self.stats.last_message = Some(chrono::Utc::now());
-                                            
+
                                             // Acknowledge the message
                                             if let Err(e) = msg.ack().await {
                                                 warn!("Failed to acknowledge NATS message: {}", e);
                                             }
-                                            
+
                                             match kafka_event.try_into() {
                                                 Ok(stream_event) => {
-                                                    debug!("Consumed NATS event: {:?}", stream_event);
+                                                    debug!(
+                                                        "Consumed NATS event: {:?}",
+                                                        stream_event
+                                                    );
                                                     Ok(Some(stream_event))
                                                 }
                                                 Err(e) => {
@@ -460,11 +486,15 @@ impl NatsConsumer {
             Ok(None)
         }
     }
-    
-    pub async fn consume_batch(&mut self, max_events: usize, timeout: Duration) -> Result<Vec<StreamEvent>> {
+
+    pub async fn consume_batch(
+        &mut self,
+        max_events: usize,
+        timeout: Duration,
+    ) -> Result<Vec<StreamEvent>> {
         let mut events = Vec::new();
         let start_time = time::Instant::now();
-        
+
         while events.len() < max_events && start_time.elapsed() < timeout {
             match time::timeout(Duration::from_millis(100), self.consume()).await {
                 Ok(Ok(Some(event))) => events.push(event),
@@ -473,10 +503,10 @@ impl NatsConsumer {
                 Err(_) => break, // Timeout
             }
         }
-        
+
         Ok(events)
     }
-    
+
     pub fn get_stats(&self) -> &ConsumerStats {
         &self.stats
     }
@@ -495,38 +525,43 @@ pub struct NatsAdmin {
 impl NatsAdmin {
     #[cfg(feature = "nats")]
     pub async fn new(url: &str) -> Result<Self> {
-        let client = async_nats::connect(url).await
+        let client = async_nats::connect(url)
+            .await
             .map_err(|e| anyhow!("Failed to connect to NATS: {}", e))?;
-        
+
         let jetstream = jetstream::new(client.clone());
-        
+
         Ok(Self { client, jetstream })
     }
-    
+
     #[cfg(not(feature = "nats"))]
     pub async fn new(_url: &str) -> Result<Self> {
-        Ok(Self { _phantom: std::marker::PhantomData })
+        Ok(Self {
+            _phantom: std::marker::PhantomData,
+        })
     }
-    
+
     #[cfg(feature = "nats")]
     pub async fn list_streams(&self) -> Result<Vec<String>> {
         let mut stream_names = Vec::new();
         let mut streams = self.jetstream.streams();
-        
-        while let Some(stream) = streams.try_next().await
-            .map_err(|e| anyhow!("Failed to list streams: {}", e))? 
+
+        while let Some(stream) = streams
+            .try_next()
+            .await
+            .map_err(|e| anyhow!("Failed to list streams: {}", e))?
         {
             stream_names.push(stream.config.name);
         }
-        
+
         Ok(stream_names)
     }
-    
+
     #[cfg(not(feature = "nats"))]
     pub async fn list_streams(&self) -> Result<Vec<String>> {
         Ok(vec!["mock-stream".to_string()])
     }
-    
+
     #[cfg(feature = "nats")]
     pub async fn create_stream(&self, config: jetstream::stream::Config) -> Result<()> {
         match self.jetstream.create_stream(config.clone()).await {
@@ -539,27 +574,33 @@ impl NatsAdmin {
                     debug!("NATS stream '{}' already exists", config.name);
                     Ok(())
                 } else {
-                    Err(anyhow!("Failed to create NATS stream '{}': {}", config.name, e))
+                    Err(anyhow!(
+                        "Failed to create NATS stream '{}': {}",
+                        config.name,
+                        e
+                    ))
                 }
             }
         }
     }
-    
+
     #[cfg(not(feature = "nats"))]
     pub async fn create_stream(&self, _config: ()) -> Result<()> {
         info!("Mock: created NATS stream");
         Ok(())
     }
-    
+
     #[cfg(feature = "nats")]
     pub async fn delete_stream(&self, name: &str) -> Result<()> {
-        self.jetstream.delete_stream(name).await
+        self.jetstream
+            .delete_stream(name)
+            .await
             .map_err(|e| anyhow!("Failed to delete stream '{}': {}", name, e))?;
-        
+
         info!("Deleted NATS stream: {}", name);
         Ok(())
     }
-    
+
     #[cfg(not(feature = "nats"))]
     pub async fn delete_stream(&self, name: &str) -> Result<()> {
         info!("Mock: deleted NATS stream {}", name);

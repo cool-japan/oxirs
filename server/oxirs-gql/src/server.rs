@@ -1,7 +1,7 @@
 //! GraphQL HTTP server implementation
 
 use crate::ast::Document;
-use crate::execution::{ExecutionContext, QueryExecutor, FieldResolver};
+use crate::execution::{ExecutionContext, FieldResolver, QueryExecutor};
 use crate::types::Schema;
 use crate::validation::{QueryValidator, ValidationConfig};
 use anyhow::Result;
@@ -10,8 +10,8 @@ use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::net::TcpListener;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpListener;
 use tracing::{error, info, warn};
 
 /// GraphQL request payload
@@ -118,13 +118,13 @@ impl Server {
     async fn handle_connection(&self, mut stream: tokio::net::TcpStream) -> Result<()> {
         let mut buffer = [0; 4096];
         let n = stream.read(&mut buffer).await?;
-        
+
         let request = String::from_utf8_lossy(&buffer[..n]);
         let response = self.process_http_request(&request).await;
-        
+
         stream.write_all(response.as_bytes()).await?;
         stream.flush().await?;
-        
+
         Ok(())
     }
 
@@ -153,8 +153,14 @@ impl Server {
                 if let Some(body_start) = request.find("\r\n\r\n") {
                     let body = &request[body_start + 4..];
                     match self.execute_graphql_from_json(body).await {
-                        Ok(response) => self.create_http_response(200, &response, "application/json"),
-                        Err(_) => self.create_http_response(500, r#"{"errors":[{"message":"Internal server error"}]}"#, "application/json"),
+                        Ok(response) => {
+                            self.create_http_response(200, &response, "application/json")
+                        }
+                        Err(_) => self.create_http_response(
+                            500,
+                            r#"{"errors":[{"message":"Internal server error"}]}"#,
+                            "application/json",
+                        ),
                     }
                 } else {
                     self.create_http_response(400, "Bad Request", "text/plain")
@@ -165,9 +171,7 @@ impl Server {
                 let test_response = r#"{"data":{"hello":"Hello from OxiRS GraphQL!"}}"#;
                 self.create_http_response(200, test_response, "application/json")
             }
-            _ => {
-                self.create_http_response(404, "Not Found", "text/plain")
-            }
+            _ => self.create_http_response(404, "Not Found", "text/plain"),
         }
     }
 
@@ -189,44 +193,57 @@ impl Server {
              Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n\
              \r\n\
              {}",
-            status, status_text, content_type, body.len(), body
+            status,
+            status_text,
+            content_type,
+            body.len(),
+            body
         )
     }
 
     async fn execute_graphql_from_json(&self, body: &str) -> Result<String> {
         let request: GraphQLRequest = serde_json::from_str(body)?;
-        
+
         // Parse the GraphQL document
         let document = self.parse_graphql_document(&request.query)?;
-        
+
         // Validate the query if validation is enabled
         if self.enable_validation {
             if let Some(ref validator) = self.validator {
                 let validation_result = validator.validate(&document)?;
-                
+
                 if !validation_result.is_valid {
                     // Return validation errors as GraphQL errors
-                    let errors = validation_result.errors.into_iter()
+                    let errors = validation_result
+                        .errors
+                        .into_iter()
                         .map(|err| GraphQLErrorResponse {
                             message: err.message,
                             locations: None,
-                            path: if err.path.is_empty() { None } else { Some(err.path) },
+                            path: if err.path.is_empty() {
+                                None
+                            } else {
+                                Some(err.path)
+                            },
                             extensions: Some({
                                 let mut ext = HashMap::new();
-                                ext.insert("rule".to_string(), JsonValue::String(format!("{:?}", err.rule)));
+                                ext.insert(
+                                    "rule".to_string(),
+                                    JsonValue::String(format!("{:?}", err.rule)),
+                                );
                                 ext
                             }),
                         })
                         .collect();
-                    
+
                     let response = GraphQLResponse {
                         data: None,
                         errors: Some(errors),
                     };
-                    
+
                     return Ok(serde_json::to_string(&response)?);
                 }
-                
+
                 // Log validation warnings if any
                 for warning in validation_result.warnings {
                     warn!("Query validation warning: {}", warning.message);
@@ -236,9 +253,11 @@ impl Server {
                 }
             }
         }
-        
+
         // Convert variables to our Value type
-        let variables = request.variables.unwrap_or_default()
+        let variables = request
+            .variables
+            .unwrap_or_default()
             .into_iter()
             .map(|(k, v)| (k, self.json_to_value(v)))
             .collect();
@@ -257,15 +276,34 @@ impl Server {
             errors: if result.errors.is_empty() {
                 None
             } else {
-                Some(result.errors.into_iter().map(|err| GraphQLErrorResponse {
-                    message: err.message,
-                    locations: err.locations.into_iter().map(|loc| Location {
-                        line: loc.line as u32,
-                        column: loc.column as u32,
-                    }).collect::<Vec<_>>().into(),
-                    path: if err.path.is_empty() { None } else { Some(err.path) },
-                    extensions: if err.extensions.is_empty() { None } else { Some(err.extensions) },
-                }).collect())
+                Some(
+                    result
+                        .errors
+                        .into_iter()
+                        .map(|err| GraphQLErrorResponse {
+                            message: err.message,
+                            locations: err
+                                .locations
+                                .into_iter()
+                                .map(|loc| Location {
+                                    line: loc.line as u32,
+                                    column: loc.column as u32,
+                                })
+                                .collect::<Vec<_>>()
+                                .into(),
+                            path: if err.path.is_empty() {
+                                None
+                            } else {
+                                Some(err.path)
+                            },
+                            extensions: if err.extensions.is_empty() {
+                                None
+                            } else {
+                                Some(err.extensions)
+                            },
+                        })
+                        .collect(),
+                )
             },
         };
 
@@ -290,19 +328,16 @@ impl Server {
                 }
             }
             JsonValue::String(s) => crate::ast::Value::StringValue(s),
-            JsonValue::Array(arr) => {
-                crate::ast::Value::ListValue(
-                    arr.into_iter().map(|v| self.json_to_value(v)).collect()
-                )
-            }
-            JsonValue::Object(obj) => {
-                crate::ast::Value::ObjectValue(
-                    obj.into_iter().map(|(k, v)| (k, self.json_to_value(v))).collect()
-                )
-            }
+            JsonValue::Array(arr) => crate::ast::Value::ListValue(
+                arr.into_iter().map(|v| self.json_to_value(v)).collect(),
+            ),
+            JsonValue::Object(obj) => crate::ast::Value::ObjectValue(
+                obj.into_iter()
+                    .map(|(k, v)| (k, self.json_to_value(v)))
+                    .collect(),
+            ),
         }
     }
-
 
     fn get_playground_html(&self) -> String {
         r#"
@@ -466,7 +501,8 @@ impl Server {
     </script>
 </body>
 </html>
-        "#.to_string()
+        "#
+        .to_string()
     }
 }
 

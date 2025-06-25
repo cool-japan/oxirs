@@ -158,7 +158,7 @@ where
                 parent: None,
                 level: self.get_node_level(root_id)? + 1,
             };
-            
+
             self.set_node(new_root_id, new_root)?;
             self.set_parent(root_id, Some(new_root_id))?;
             self.set_parent(right_child, Some(new_root_id))?;
@@ -185,7 +185,7 @@ where
             let deleted = self.delete_recursive(root_id, key)?;
             if deleted {
                 self.stats.total_entries -= 1;
-                
+
                 // Check if root became empty and has a single child
                 if self.is_root_empty_internal()? {
                     if let Some(new_root) = self.get_single_child(root_id)? {
@@ -310,9 +310,11 @@ where
     }
 
     fn get_node(&self, node_id: NodeId) -> Result<BTreeNode<K, V>> {
-        let nodes = self.nodes.read()
+        let nodes = self
+            .nodes
+            .read()
             .map_err(|_| anyhow!("Failed to acquire nodes lock"))?;
-        
+
         if let Some(Some(node)) = nodes.get(node_id as usize) {
             Ok(node.clone())
         } else {
@@ -321,29 +323,49 @@ where
     }
 
     fn set_node(&self, node_id: NodeId, node: BTreeNode<K, V>) -> Result<()> {
-        let mut nodes = self.nodes.write()
+        let mut nodes = self
+            .nodes
+            .write()
             .map_err(|_| anyhow!("Failed to acquire nodes lock"))?;
-        
+
         // Ensure the vector is large enough
         while nodes.len() <= node_id as usize {
             nodes.push(None);
         }
-        
+
         nodes[node_id as usize] = Some(node);
         Ok(())
     }
 
-    fn insert_recursive(&mut self, node_id: NodeId, key: K, value: V) -> Result<(Option<K>, Option<NodeId>)> {
+    fn insert_recursive(
+        &mut self,
+        node_id: NodeId,
+        key: K,
+        value: V,
+    ) -> Result<(Option<K>, Option<NodeId>)> {
         let node = self.get_node(node_id)?;
-        
+
         match node {
-            BTreeNode::Leaf { mut entries, parent, next, prev } => {
+            BTreeNode::Leaf {
+                mut entries,
+                parent,
+                next,
+                prev,
+            } => {
                 // Find insertion position
                 let pos = match entries.binary_search_by(|probe| probe.0.cmp(&key)) {
                     Ok(pos) => {
                         // Key exists, update value
                         entries[pos] = (key, value);
-                        self.set_node(node_id, BTreeNode::Leaf { entries, parent, next, prev })?;
+                        self.set_node(
+                            node_id,
+                            BTreeNode::Leaf {
+                                entries,
+                                parent,
+                                next,
+                                prev,
+                            },
+                        )?;
                         return Ok((None, None));
                     }
                     Err(pos) => pos,
@@ -353,7 +375,15 @@ where
 
                 // Check if node is full
                 if entries.len() <= self.config.max_keys_per_node {
-                    self.set_node(node_id, BTreeNode::Leaf { entries, parent, next, prev })?;
+                    self.set_node(
+                        node_id,
+                        BTreeNode::Leaf {
+                            entries,
+                            parent,
+                            next,
+                            prev,
+                        },
+                    )?;
                     Ok((None, None))
                 } else {
                     // Split leaf node
@@ -362,16 +392,27 @@ where
                     let split_key = right_entries[0].0.clone();
 
                     // Update left node
-                    self.set_node(node_id, BTreeNode::Leaf { entries, parent, next: None, prev })?;
+                    self.set_node(
+                        node_id,
+                        BTreeNode::Leaf {
+                            entries,
+                            parent,
+                            next: None,
+                            prev,
+                        },
+                    )?;
 
                     // Create right node
                     let right_id = self.create_leaf_node()?;
-                    self.set_node(right_id, BTreeNode::Leaf { 
-                        entries: right_entries, 
-                        parent, 
-                        next, 
-                        prev: Some(node_id) 
-                    })?;
+                    self.set_node(
+                        right_id,
+                        BTreeNode::Leaf {
+                            entries: right_entries,
+                            parent,
+                            next,
+                            prev: Some(node_id),
+                        },
+                    )?;
 
                     // Update sibling pointers
                     if let Some(next_id) = next {
@@ -382,7 +423,12 @@ where
                     Ok((Some(split_key), Some(right_id)))
                 }
             }
-            BTreeNode::Internal { keys, children, parent, level } => {
+            BTreeNode::Internal {
+                keys,
+                children,
+                parent,
+                level,
+            } => {
                 // Find child to insert into
                 let child_idx = match keys.binary_search(&key) {
                     Ok(idx) => idx + 1,
@@ -408,38 +454,47 @@ where
 
                     // Check if internal node is full
                     if new_keys.len() <= self.config.max_keys_per_node {
-                        self.set_node(node_id, BTreeNode::Internal { 
-                            keys: new_keys, 
-                            children: new_children, 
-                            parent, 
-                            level 
-                        })?;
+                        self.set_node(
+                            node_id,
+                            BTreeNode::Internal {
+                                keys: new_keys,
+                                children: new_children,
+                                parent,
+                                level,
+                            },
+                        )?;
                         Ok((None, None))
                     } else {
                         // Split internal node
                         let mid = new_keys.len() / 2;
                         let split_key = new_keys[mid].clone();
-                        
+
                         let right_keys = new_keys.split_off(mid + 1);
                         let right_children = new_children.split_off(mid + 1);
                         new_keys.pop(); // Remove the split key from left node
 
                         // Update left node
-                        self.set_node(node_id, BTreeNode::Internal { 
-                            keys: new_keys, 
-                            children: new_children, 
-                            parent, 
-                            level 
-                        })?;
+                        self.set_node(
+                            node_id,
+                            BTreeNode::Internal {
+                                keys: new_keys,
+                                children: new_children,
+                                parent,
+                                level,
+                            },
+                        )?;
 
                         // Create right node
                         let right_id = self.create_internal_node()?;
-                        self.set_node(right_id, BTreeNode::Internal { 
-                            keys: right_keys, 
-                            children: right_children.clone(), 
-                            parent, 
-                            level 
-                        })?;
+                        self.set_node(
+                            right_id,
+                            BTreeNode::Internal {
+                                keys: right_keys,
+                                children: right_children.clone(),
+                                parent,
+                                level,
+                            },
+                        )?;
 
                         // Update parent pointers for children in right node
                         for child_id in &right_children {
@@ -457,7 +512,7 @@ where
 
     fn find_recursive(&self, node_id: NodeId, key: &K) -> Result<Option<V>> {
         let node = self.get_node(node_id)?;
-        
+
         match node {
             BTreeNode::Leaf { entries, .. } => {
                 match entries.binary_search_by(|probe| probe.0.cmp(key)) {
@@ -478,18 +533,29 @@ where
     fn delete_recursive(&mut self, node_id: NodeId, key: &K) -> Result<bool> {
         // Simplified delete implementation - full implementation would handle underflow
         let node = self.get_node(node_id)?;
-        
+
         match node {
-            BTreeNode::Leaf { mut entries, parent, next, prev } => {
-                match entries.binary_search_by(|probe| probe.0.cmp(key)) {
-                    Ok(pos) => {
-                        entries.remove(pos);
-                        self.set_node(node_id, BTreeNode::Leaf { entries, parent, next, prev })?;
-                        Ok(true)
-                    }
-                    Err(_) => Ok(false),
+            BTreeNode::Leaf {
+                mut entries,
+                parent,
+                next,
+                prev,
+            } => match entries.binary_search_by(|probe| probe.0.cmp(key)) {
+                Ok(pos) => {
+                    entries.remove(pos);
+                    self.set_node(
+                        node_id,
+                        BTreeNode::Leaf {
+                            entries,
+                            parent,
+                            next,
+                            prev,
+                        },
+                    )?;
+                    Ok(true)
                 }
-            }
+                Err(_) => Ok(false),
+            },
             BTreeNode::Internal { keys, children, .. } => {
                 let child_idx = match keys.binary_search(key) {
                     Ok(idx) => idx + 1,
@@ -502,7 +568,7 @@ where
 
     fn find_leaf(&self, node_id: NodeId, key: &K) -> Result<NodeId> {
         let node = self.get_node(node_id)?;
-        
+
         match node {
             BTreeNode::Leaf { .. } => Ok(node_id),
             BTreeNode::Internal { keys, children, .. } => {
@@ -515,12 +581,18 @@ where
         }
     }
 
-    fn collect_range(&self, start_leaf: NodeId, start: &K, end: &K, results: &mut Vec<(K, V)>) -> Result<()> {
+    fn collect_range(
+        &self,
+        start_leaf: NodeId,
+        start: &K,
+        end: &K,
+        results: &mut Vec<(K, V)>,
+    ) -> Result<()> {
         let mut current_leaf = Some(start_leaf);
-        
+
         while let Some(leaf_id) = current_leaf {
             let node = self.get_node(leaf_id)?;
-            
+
             if let BTreeNode::Leaf { entries, next, .. } = node {
                 for (k, v) in entries {
                     if k >= *start && k <= *end {
@@ -534,19 +606,24 @@ where
                 return Err(anyhow!("Expected leaf node"));
             }
         }
-        
+
         Ok(())
     }
 
-    fn collect_prefix(&self, start_leaf: NodeId, prefix: &K, results: &mut Vec<(K, V)>) -> Result<()>
+    fn collect_prefix(
+        &self,
+        start_leaf: NodeId,
+        prefix: &K,
+        results: &mut Vec<(K, V)>,
+    ) -> Result<()>
     where
         K: PartialOrd,
     {
         let mut current_leaf = Some(start_leaf);
-        
+
         while let Some(leaf_id) = current_leaf {
             let node = self.get_node(leaf_id)?;
-            
+
             if let BTreeNode::Leaf { entries, next, .. } = node {
                 for (k, v) in entries {
                     if k >= *prefix {
@@ -559,14 +636,14 @@ where
                 return Err(anyhow!("Expected leaf node"));
             }
         }
-        
+
         Ok(())
     }
 
     fn build_leaf_level(&mut self, entries: Vec<(K, V)>) -> Result<Vec<NodeId>> {
         let mut leaf_nodes = Vec::new();
         let mut prev_leaf: Option<NodeId> = None;
-        
+
         for chunk in entries.chunks(self.config.max_keys_per_node) {
             let leaf_id = self.create_leaf_node()?;
             let leaf = BTreeNode::Leaf {
@@ -575,121 +652,119 @@ where
                 next: None,
                 prev: prev_leaf,
             };
-            
+
             self.set_node(leaf_id, leaf)?;
-            
+
             // Update previous leaf's next pointer
             if let Some(prev_id) = prev_leaf {
                 self.set_next_sibling(prev_id, Some(leaf_id))?;
             }
-            
+
             leaf_nodes.push(leaf_id);
             prev_leaf = Some(leaf_id);
         }
-        
+
         Ok(leaf_nodes)
     }
 
     fn build_internal_levels(&mut self, mut current_level: Vec<NodeId>) -> Result<()> {
         let mut level = 1;
-        
+
         while current_level.len() > 1 {
             let mut next_level = Vec::new();
-            
+
             for chunk in current_level.chunks(self.config.max_keys_per_node + 1) {
                 let internal_id = self.create_internal_node()?;
                 let mut keys = Vec::new();
                 let children = chunk.to_vec();
-                
+
                 // Get separator keys from first key of each child (except first)
                 for &child_id in &children[1..] {
                     if let Ok(first_key) = self.get_first_key(child_id) {
                         keys.push(first_key);
                     }
                 }
-                
+
                 let internal = BTreeNode::Internal {
                     keys,
                     children: children.clone(),
                     parent: None,
                     level,
                 };
-                
+
                 self.set_node(internal_id, internal)?;
-                
+
                 // Update parent pointers for children
                 for &child_id in &children {
                     self.set_parent(child_id, Some(internal_id))?;
                 }
-                
+
                 next_level.push(internal_id);
             }
-            
+
             current_level = next_level;
             level += 1;
         }
-        
+
         if let Some(root_id) = current_level.first() {
             self.root = Some(*root_id);
             self.stats.height = level - 1;
         }
-        
+
         Ok(())
     }
 
     fn get_first_key(&self, node_id: NodeId) -> Result<K> {
         let node = self.get_node(node_id)?;
-        
+
         match node {
-            BTreeNode::Leaf { entries, .. } => {
-                entries.first()
-                    .map(|(k, _)| k.clone())
-                    .ok_or_else(|| anyhow!("Empty leaf node"))
-            }
-            BTreeNode::Internal { keys, .. } => {
-                keys.first()
-                    .cloned()
-                    .ok_or_else(|| anyhow!("Empty internal node"))
-            }
+            BTreeNode::Leaf { entries, .. } => entries
+                .first()
+                .map(|(k, _)| k.clone())
+                .ok_or_else(|| anyhow!("Empty leaf node")),
+            BTreeNode::Internal { keys, .. } => keys
+                .first()
+                .cloned()
+                .ok_or_else(|| anyhow!("Empty internal node")),
         }
     }
 
     fn set_parent(&self, node_id: NodeId, parent_id: Option<NodeId>) -> Result<()> {
         let mut node = self.get_node(node_id)?;
-        
+
         match &mut node {
             BTreeNode::Leaf { parent, .. } => *parent = parent_id,
             BTreeNode::Internal { parent, .. } => *parent = parent_id,
         }
-        
+
         self.set_node(node_id, node)
     }
 
     fn set_next_sibling(&self, node_id: NodeId, next_id: Option<NodeId>) -> Result<()> {
         let mut node = self.get_node(node_id)?;
-        
+
         match &mut node {
             BTreeNode::Leaf { next, .. } => *next = next_id,
             _ => return Err(anyhow!("Cannot set next sibling on internal node")),
         }
-        
+
         self.set_node(node_id, node)
     }
 
     fn set_prev_sibling(&self, node_id: NodeId, prev_id: Option<NodeId>) -> Result<()> {
         let mut node = self.get_node(node_id)?;
-        
+
         match &mut node {
             BTreeNode::Leaf { prev, .. } => *prev = prev_id,
             _ => return Err(anyhow!("Cannot set prev sibling on internal node")),
         }
-        
+
         self.set_node(node_id, node)
     }
 
     fn get_node_level(&self, node_id: NodeId) -> Result<u32> {
         let node = self.get_node(node_id)?;
-        
+
         match node {
             BTreeNode::Leaf { .. } => Ok(0),
             BTreeNode::Internal { level, .. } => Ok(level),
@@ -710,7 +785,7 @@ where
 
     fn get_single_child(&self, node_id: NodeId) -> Result<Option<NodeId>> {
         let node = self.get_node(node_id)?;
-        
+
         match node {
             BTreeNode::Internal { children, .. } => {
                 if children.len() == 1 {
@@ -733,7 +808,7 @@ where
 
     fn count_entries_recursive(&self, node_id: NodeId) -> Result<usize> {
         let node = self.get_node(node_id)?;
-        
+
         match node {
             BTreeNode::Leaf { entries, .. } => Ok(entries.len()),
             BTreeNode::Internal { children, .. } => {
@@ -746,9 +821,14 @@ where
         }
     }
 
-    fn validate_recursive(&self, node_id: NodeId, min_key: Option<&K>, max_key: Option<&K>) -> Result<bool> {
+    fn validate_recursive(
+        &self,
+        node_id: NodeId,
+        min_key: Option<&K>,
+        max_key: Option<&K>,
+    ) -> Result<bool> {
         let node = self.get_node(node_id)?;
-        
+
         match node {
             BTreeNode::Leaf { entries, .. } => {
                 // Check ordering
@@ -757,7 +837,7 @@ where
                         return Ok(false);
                     }
                 }
-                
+
                 // Check bounds
                 if let Some(min) = min_key {
                     if let Some((first_key, _)) = entries.first() {
@@ -766,7 +846,7 @@ where
                         }
                     }
                 }
-                
+
                 if let Some(max) = max_key {
                     if let Some((last_key, _)) = entries.last() {
                         if last_key > max {
@@ -774,7 +854,7 @@ where
                         }
                     }
                 }
-                
+
                 Ok(true)
             }
             BTreeNode::Internal { keys, children, .. } => {
@@ -784,17 +864,17 @@ where
                         return Ok(false);
                     }
                 }
-                
+
                 // Validate children recursively
                 for (i, &child_id) in children.iter().enumerate() {
                     let child_min = if i == 0 { min_key } else { keys.get(i - 1) };
                     let child_max = keys.get(i);
-                    
+
                     if !self.validate_recursive(child_id, child_min, child_max)? {
                         return Ok(false);
                     }
                 }
-                
+
                 Ok(true)
             }
         }
@@ -818,17 +898,17 @@ mod tests {
     #[test]
     fn test_btree_basic_operations() {
         let mut tree = BTree::new();
-        
+
         // Test insert and find
         assert!(tree.insert(5, "five".to_string()).is_ok());
         assert!(tree.insert(3, "three".to_string()).is_ok());
         assert!(tree.insert(7, "seven".to_string()).is_ok());
-        
+
         assert_eq!(tree.find(&5).unwrap(), Some("five".to_string()));
         assert_eq!(tree.find(&3).unwrap(), Some("three".to_string()));
         assert_eq!(tree.find(&7).unwrap(), Some("seven".to_string()));
         assert_eq!(tree.find(&10).unwrap(), None);
-        
+
         // Test delete
         assert!(tree.delete(&3).unwrap());
         assert_eq!(tree.find(&3).unwrap(), None);
@@ -838,14 +918,14 @@ mod tests {
     #[test]
     fn test_btree_range_query() {
         let mut tree = BTree::new();
-        
+
         for i in 0..10 {
             tree.insert(i, format!("value_{}", i)).unwrap();
         }
-        
+
         let range_result = tree.range(&3, &7).unwrap();
         assert_eq!(range_result.len(), 5);
-        
+
         for (i, (key, value)) in range_result.iter().enumerate() {
             assert_eq!(*key, 3 + i);
             assert_eq!(*value, format!("value_{}", 3 + i));
@@ -855,18 +935,16 @@ mod tests {
     #[test]
     fn test_btree_bulk_load() {
         let mut tree = BTree::new();
-        
-        let entries: Vec<(i32, String)> = (0..1000)
-            .map(|i| (i, format!("value_{}", i)))
-            .collect();
-        
+
+        let entries: Vec<(i32, String)> = (0..1000).map(|i| (i, format!("value_{}", i))).collect();
+
         assert!(tree.bulk_load(entries).is_ok());
-        
+
         // Verify all entries are present
         for i in 0..1000 {
             assert_eq!(tree.find(&i).unwrap(), Some(format!("value_{}", i)));
         }
-        
+
         let stats = tree.get_stats();
         assert_eq!(stats.total_entries, 1000);
         assert!(stats.height > 0);
@@ -875,11 +953,11 @@ mod tests {
     #[test]
     fn test_btree_validation() {
         let mut tree = BTree::new();
-        
+
         for i in 0..100 {
             tree.insert(i, format!("value_{}", i)).unwrap();
         }
-        
+
         assert!(tree.validate().unwrap());
     }
 }

@@ -1,8 +1,8 @@
 //! Basic usage example for oxirs-embed
-//! 
+//!
 //! This example demonstrates the core functionality of the embedding system.
 
-use oxirs_embed::{Vector, Triple, ModelConfig, TrainingStats, EmbeddingModel};
+use oxirs_embed::{EmbeddingModel, ModelConfig, TrainingStats, Triple, Vector};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -31,87 +31,89 @@ impl SimpleTransE {
             is_trained: false,
         }
     }
-    
+
     fn get_or_create_entity_id(&mut self, entity: String) -> usize {
         if let Some(&id) = self.entity_to_id.get(&entity) {
             id
         } else {
             let id = self.entity_embeddings.len();
             self.entity_to_id.insert(entity, id);
-            
+
             // Initialize random embedding
             let embedding: Vec<f64> = (0..self.config.dimensions)
                 .map(|_| (rand::random::<f64>() - 0.5) * 0.1)
                 .collect();
             self.entity_embeddings.push(embedding);
-            
+
             id
         }
     }
-    
+
     fn get_or_create_relation_id(&mut self, relation: String) -> usize {
         if let Some(&id) = self.relation_to_id.get(&relation) {
             id
         } else {
             let id = self.relation_embeddings.len();
             self.relation_to_id.insert(relation, id);
-            
+
             // Initialize random embedding
             let embedding: Vec<f64> = (0..self.config.dimensions)
                 .map(|_| (rand::random::<f64>() - 0.5) * 0.1)
                 .collect();
             self.relation_embeddings.push(embedding);
-            
+
             id
         }
     }
-    
+
     fn score_triple_ids(&self, subject_id: usize, predicate_id: usize, object_id: usize) -> f64 {
-        if subject_id >= self.entity_embeddings.len() || 
-           object_id >= self.entity_embeddings.len() ||
-           predicate_id >= self.relation_embeddings.len() {
+        if subject_id >= self.entity_embeddings.len()
+            || object_id >= self.entity_embeddings.len()
+            || predicate_id >= self.relation_embeddings.len()
+        {
             return f64::NEG_INFINITY;
         }
-        
+
         let h = &self.entity_embeddings[subject_id];
         let r = &self.relation_embeddings[predicate_id];
         let t = &self.entity_embeddings[object_id];
-        
+
         // TransE score: -||h + r - t||
         let mut distance = 0.0;
         for i in 0..self.config.dimensions {
             let diff = h[i] + r[i] - t[i];
             distance += diff * diff;
         }
-        
+
         -distance.sqrt()
     }
-    
+
     fn train_epoch(&mut self) -> f64 {
         if self.triples.is_empty() {
             return 0.0;
         }
-        
+
         let mut epoch_loss = 0.0;
         let mut updates = 0;
-        
+
         for &(s, p, o) in &self.triples {
             // Generate negative sample by corrupting object
             let neg_o = rand::random::<usize>() % self.entity_embeddings.len();
-            
-            if neg_o != o { // Make sure it's actually negative
+
+            if neg_o != o {
+                // Make sure it's actually negative
                 let pos_score = self.score_triple_ids(s, p, o);
                 let neg_score = self.score_triple_ids(s, p, neg_o);
-                
+
                 // Margin loss: max(0, margin + neg_score - pos_score)
                 let margin = 1.0;
                 let loss = (margin + neg_score - pos_score).max(0.0);
                 epoch_loss += loss;
-                
+
                 if loss > 0.0 {
                     // Simple gradient update (simplified)
                     let update_magnitude = self.config.learning_rate * 0.1;
-                    
+
                     // Update embeddings slightly
                     for i in 0..self.config.dimensions {
                         // Positive triple: decrease distance
@@ -119,7 +121,7 @@ impl SimpleTransE {
                         let r_val = self.relation_embeddings[p][i];
                         let t_val = self.entity_embeddings[o][i];
                         let diff = h_val + r_val - t_val;
-                        
+
                         if diff > 0.0 {
                             self.entity_embeddings[s][i] -= update_magnitude;
                             self.relation_embeddings[p][i] -= update_magnitude;
@@ -134,8 +136,12 @@ impl SimpleTransE {
                 }
             }
         }
-        
-        if updates > 0 { epoch_loss / updates as f64 } else { 0.0 }
+
+        if updates > 0 {
+            epoch_loss / updates as f64
+        } else {
+            0.0
+        }
     }
 }
 
@@ -144,50 +150,50 @@ impl EmbeddingModel for SimpleTransE {
     fn config(&self) -> &ModelConfig {
         &self.config
     }
-    
+
     fn model_id(&self) -> &Uuid {
         &self.model_id
     }
-    
+
     fn model_type(&self) -> &'static str {
         "SimpleTransE"
     }
-    
+
     fn add_triple(&mut self, triple: Triple) -> anyhow::Result<()> {
         let subject_id = self.get_or_create_entity_id(triple.subject);
         let predicate_id = self.get_or_create_relation_id(triple.predicate);
         let object_id = self.get_or_create_entity_id(triple.object);
-        
+
         self.triples.push((subject_id, predicate_id, object_id));
         Ok(())
     }
-    
+
     async fn train(&mut self, epochs: Option<usize>) -> anyhow::Result<TrainingStats> {
         let start_time = std::time::Instant::now();
         let epochs = epochs.unwrap_or(self.config.max_epochs);
-        
+
         if self.triples.is_empty() {
             return Err(anyhow::anyhow!("No training data available"));
         }
-        
+
         let mut loss_history = Vec::new();
-        
+
         for epoch in 0..epochs {
             let epoch_loss = self.train_epoch();
             loss_history.push(epoch_loss);
-            
+
             if epoch % 10 == 0 {
                 println!("Epoch {}: loss = {:.6}", epoch, epoch_loss);
             }
-            
+
             if epoch > 10 && epoch_loss < 1e-6 {
                 break;
             }
         }
-        
+
         self.is_trained = true;
         let training_time = start_time.elapsed().as_secs_f64();
-        
+
         Ok(TrainingStats {
             epochs_completed: loss_history.len(),
             final_loss: loss_history.last().copied().unwrap_or(0.0),
@@ -196,7 +202,7 @@ impl EmbeddingModel for SimpleTransE {
             loss_history,
         })
     }
-    
+
     fn get_entity_embedding(&self, entity: &str) -> anyhow::Result<Vector> {
         if let Some(&id) = self.entity_to_id.get(entity) {
             let embedding = &self.entity_embeddings[id];
@@ -206,7 +212,7 @@ impl EmbeddingModel for SimpleTransE {
             Err(anyhow::anyhow!("Entity not found: {}", entity))
         }
     }
-    
+
     fn get_relation_embedding(&self, relation: &str) -> anyhow::Result<Vector> {
         if let Some(&id) = self.relation_to_id.get(relation) {
             let embedding = &self.relation_embeddings[id];
@@ -216,26 +222,32 @@ impl EmbeddingModel for SimpleTransE {
             Err(anyhow::anyhow!("Relation not found: {}", relation))
         }
     }
-    
+
     fn score_triple(&self, subject: &str, predicate: &str, object: &str) -> anyhow::Result<f64> {
-        let subject_id = self.entity_to_id.get(subject)
+        let subject_id = self
+            .entity_to_id
+            .get(subject)
             .ok_or_else(|| anyhow::anyhow!("Subject not found: {}", subject))?;
-        let predicate_id = self.relation_to_id.get(predicate)
+        let predicate_id = self
+            .relation_to_id
+            .get(predicate)
             .ok_or_else(|| anyhow::anyhow!("Predicate not found: {}", predicate))?;
-        let object_id = self.entity_to_id.get(object)
+        let object_id = self
+            .entity_to_id
+            .get(object)
             .ok_or_else(|| anyhow::anyhow!("Object not found: {}", object))?;
-        
+
         Ok(self.score_triple_ids(*subject_id, *predicate_id, *object_id))
     }
-    
+
     fn get_entities(&self) -> Vec<String> {
         self.entity_to_id.keys().cloned().collect()
     }
-    
+
     fn get_relations(&self) -> Vec<String> {
         self.relation_to_id.keys().cloned().collect()
     }
-    
+
     fn clear(&mut self) {
         self.entity_to_id.clear();
         self.relation_to_id.clear();
@@ -244,7 +256,7 @@ impl EmbeddingModel for SimpleTransE {
         self.relation_embeddings.clear();
         self.is_trained = false;
     }
-    
+
     fn is_trained(&self) -> bool {
         self.is_trained
     }
@@ -254,7 +266,7 @@ impl EmbeddingModel for SimpleTransE {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔥 OxiRS Embed - Basic Usage Example");
     println!("=====================================");
-    
+
     // Create a simple TransE model
     let config = ModelConfig {
         dimensions: 50,
@@ -263,78 +275,92 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     };
     let mut model = SimpleTransE::new(config);
-    
+
     println!("\n📊 Adding training data...");
-    
+
     // Add some simple triples
     model.add_triple(Triple::new(
         "alice".to_string(),
         "knows".to_string(),
         "bob".to_string(),
     ))?;
-    
+
     model.add_triple(Triple::new(
         "bob".to_string(),
         "knows".to_string(),
         "charlie".to_string(),
     ))?;
-    
+
     model.add_triple(Triple::new(
         "alice".to_string(),
         "likes".to_string(),
         "charlie".to_string(),
     ))?;
-    
+
     model.add_triple(Triple::new(
         "charlie".to_string(),
         "works_at".to_string(),
         "company".to_string(),
     ))?;
-    
+
     println!("✅ Added {} triples", model.triples.len());
     println!("✅ Found {} entities", model.entity_embeddings.len());
     println!("✅ Found {} relations", model.relation_embeddings.len());
-    
+
     println!("\n🏋️ Training model...");
     let stats = model.train(Some(30)).await?;
     println!("✅ Training completed. Final loss: {:.6}", stats.final_loss);
-    println!("✅ Training time: {:.2} seconds", stats.training_time_seconds);
+    println!(
+        "✅ Training time: {:.2} seconds",
+        stats.training_time_seconds
+    );
     println!("✅ Epochs completed: {}", stats.epochs_completed);
-    
+
     println!("\n🧮 Testing embeddings...");
-    
+
     // Test entity embeddings
     let alice_emb = model.get_entity_embedding("alice")?;
     let bob_emb = model.get_entity_embedding("bob")?;
     println!("✅ Alice embedding: {} dimensions", alice_emb.values.len());
     println!("✅ Bob embedding: {} dimensions", bob_emb.values.len());
-    
+
     // Test relation embeddings
     let knows_emb = model.get_relation_embedding("knows")?;
     let likes_emb = model.get_relation_embedding("likes")?;
-    println!("✅ 'knows' embedding: {} dimensions", knows_emb.values.len());
-    println!("✅ 'likes' embedding: {} dimensions", likes_emb.values.len());
-    
+    println!(
+        "✅ 'knows' embedding: {} dimensions",
+        knows_emb.values.len()
+    );
+    println!(
+        "✅ 'likes' embedding: {} dimensions",
+        likes_emb.values.len()
+    );
+
     println!("\n🎯 Testing triple scoring...");
-    
+
     // Test scoring
     let score1 = model.score_triple("alice", "knows", "bob")?;
     let score2 = model.score_triple("alice", "knows", "charlie")?;
     let score3 = model.score_triple("bob", "likes", "alice")?;
-    
+
     println!("📈 Score(alice, knows, bob): {:.4}", score1);
     println!("📈 Score(alice, knows, charlie): {:.4}", score2);
     println!("📈 Score(bob, likes, alice): {:.4}", score3);
-    
+
     // Similarity test
-    let similarity = alice_emb.values.iter()
+    let similarity = alice_emb
+        .values
+        .iter()
         .zip(&bob_emb.values)
         .map(|(a, b)| a * b)
         .sum::<f32>();
     println!("🔗 Alice-Bob similarity: {:.4}", similarity);
-    
+
     println!("\n🎉 Example completed successfully!");
-    println!("🚀 OxiRS Embed is working with {} dimensions", alice_emb.values.len());
-    
+    println!(
+        "🚀 OxiRS Embed is working with {} dimensions",
+        alice_emb.values.len()
+    );
+
     Ok(())
 }
