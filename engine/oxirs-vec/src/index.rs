@@ -75,6 +75,13 @@ impl DistanceMetric {
             DistanceMetric::DotProduct => -dot_product(a, b), // Negative for max-heap
         }
     }
+
+    /// Calculate distance between two Vector objects
+    pub fn distance_vectors(&self, a: &Vector, b: &Vector) -> f32 {
+        let a_f32 = a.as_f32();
+        let b_f32 = b.as_f32();
+        self.distance(&a_f32, &b_f32)
+    }
 }
 
 /// Search result with distance/score
@@ -244,7 +251,7 @@ impl AdvancedVectorIndex {
             let distance = self
                 .config
                 .distance_metric
-                .distance(&query.values, &vector.values);
+                .distance_vectors(query, vector);
 
             if heap.len() < k {
                 heap.push(std::cmp::Reverse(SearchResult {
@@ -325,7 +332,7 @@ impl VectorIndex for AdvancedVectorIndex {
             let distance = self
                 .config
                 .distance_metric
-                .distance(&query.values, &vector.values);
+                .distance_vectors(query, vector);
             if distance <= threshold {
                 results.push((uri.clone(), distance));
             }
@@ -386,12 +393,14 @@ impl QuantizedVectorIndex {
         // Find nearest centroid for each dimension chunk
         let chunk_size = vector.dimensions / self.centroids.len().max(1);
 
-        for chunk in vector.values.chunks(chunk_size) {
+        let vector_f32 = vector.as_f32();
+        for chunk in vector_f32.chunks(chunk_size) {
             let mut best_centroid = 0u8;
             let mut best_distance = f32::INFINITY;
 
             for (i, centroid) in self.centroids.iter().enumerate() {
-                let centroid_chunk = &centroid.values[0..chunk.len().min(centroid.dimensions)];
+                let centroid_f32 = centroid.as_f32();
+                let centroid_chunk = &centroid_f32[0..chunk.len().min(centroid.dimensions)];
                 let distance = euclidean_distance(chunk, centroid_chunk);
                 if distance < best_distance {
                     best_distance = distance;
@@ -513,7 +522,9 @@ fn kmeans_clustering(vectors: &[Vector], k: usize) -> Result<Vec<Vector>> {
             let mut best_distance = f32::INFINITY;
 
             for (i, centroid) in centroids.iter().enumerate() {
-                let distance = euclidean_distance(&vector.values, &centroid.values);
+                let vector_f32 = vector.as_f32();
+                let centroid_f32 = centroid.as_f32();
+                let distance = euclidean_distance(&vector_f32, &centroid_f32);
                 if distance < best_distance {
                     best_distance = distance;
                     best_centroid = i;
@@ -529,7 +540,8 @@ fn kmeans_clustering(vectors: &[Vector], k: usize) -> Result<Vec<Vector>> {
                 let mut new_centroid = vec![0.0; dimensions];
 
                 for vector in cluster {
-                    for (j, &value) in vector.values.iter().enumerate() {
+                    let vector_f32 = vector.as_f32();
+                    for (j, &value) in vector_f32.iter().enumerate() {
                         new_centroid[j] += value;
                     }
                 }

@@ -20,7 +20,7 @@ use uuid::Uuid;
 #[cfg(feature = "kafka")]
 use rdkafka::{
     admin::{AdminClient, AdminOptions, ConfigEntry, ConfigResource, NewTopic, TopicReplication},
-    client::DefaultClientContext,
+    client::{ClientContext, DefaultClientContext},
     config::{ClientConfig, RDKafkaLogLevel},
     consumer::{CommitMode, Consumer, ConsumerContext, Rebalance, StreamConsumer},
     error::{KafkaError, KafkaResult},
@@ -817,22 +817,22 @@ impl KafkaProducer {
                 let mut headers = OwnedHeaders::new();
                 headers = headers.insert(Header {
                     key: "event_type",
-                    value: Some(&kafka_event.event_type),
+                    value: Some(kafka_event.event_type.as_str()),
                 });
                 headers = headers.insert(Header {
                     key: "source",
-                    value: Some(&kafka_event.source),
+                    value: Some(kafka_event.source.as_str()),
                 });
                 headers = headers.insert(Header {
                     key: "schema_version",
-                    value: Some(&kafka_event.schema_version),
+                    value: Some(kafka_event.schema_version.as_str()),
                 });
 
                 // Add custom headers
                 for (key, value) in &kafka_event.headers {
                     headers = headers.insert(Header {
-                        key,
-                        value: Some(value),
+                        key: key.as_str(),
+                        value: Some(value.as_str()),
                     });
                 }
 
@@ -887,7 +887,7 @@ impl KafkaProducer {
 
     pub async fn publish_batch(&mut self, events: Vec<StreamEvent>) -> Result<()> {
         if events.is_empty() {
-            return Ok();
+            return Ok(());
         }
 
         let start_time = Instant::now();
@@ -895,7 +895,9 @@ impl KafkaProducer {
         #[cfg(feature = "kafka")]
         {
             if let Some(ref producer) = self.producer {
-                let mut futures = Vec::new();
+                // Send events sequentially to avoid borrowing issues with FutureRecord
+                let mut success_count = 0;
+                let mut failure_count = 0;
 
                 for event in events {
                     let kafka_event = KafkaEvent::from(event);
@@ -905,7 +907,7 @@ impl KafkaProducer {
                     let mut headers = OwnedHeaders::new();
                     headers = headers.insert(Header {
                         key: "event_type",
-                        value: Some(&kafka_event.event_type),
+                        value: Some(kafka_event.event_type.as_str()),
                     });
 
                     let mut record = FutureRecord::to(&self.config.topic)
@@ -913,23 +915,17 @@ impl KafkaProducer {
                         .timestamp(kafka_event.timestamp.timestamp_millis())
                         .headers(headers);
 
-                    if let Some(partition_key) = &kafka_event.partition_key {
+                    if let Some(ref partition_key) = kafka_event.partition_key {
                         record = record.key(partition_key);
                     }
 
-                    let future = producer.send(record, Timeout::After(Duration::from_secs(30)));
-                    futures.push(future);
-                }
-
-                // Wait for all sends to complete
-                let results = futures::future::join_all(futures).await;
-                let mut success_count = 0;
-                let mut failure_count = 0;
-
-                for result in results {
-                    match result {
+                    // Send and await immediately
+                    match producer.send(record, Timeout::After(Duration::from_secs(30))).await {
                         Ok(_) => success_count += 1,
-                        Err(_) => failure_count += 1,
+                        Err((err, _)) => {
+                            error!("Failed to send Kafka message: {}", err);
+                            failure_count += 1;
+                        }
                     }
                 }
 
@@ -1130,6 +1126,9 @@ impl ToString for IsolationLevel {
 /// Consumer context for handling rebalances and statistics
 #[cfg(feature = "kafka")]
 struct KafkaConsumerContext;
+
+#[cfg(feature = "kafka")]
+impl ClientContext for KafkaConsumerContext {}
 
 #[cfg(feature = "kafka")]
 impl ConsumerContext for KafkaConsumerContext {

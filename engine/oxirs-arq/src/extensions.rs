@@ -292,6 +292,50 @@ impl PartialEq for Value {
     }
 }
 
+impl PartialOrd for Value {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        use std::cmp::Ordering;
+        match (self, other) {
+            (Value::String(a), Value::String(b)) => a.partial_cmp(b),
+            (Value::Integer(a), Value::Integer(b)) => a.partial_cmp(b),
+            (Value::Float(a), Value::Float(b)) => a.partial_cmp(b),
+            (Value::Boolean(a), Value::Boolean(b)) => a.partial_cmp(b),
+            (Value::DateTime(a), Value::DateTime(b)) => a.partial_cmp(b),
+            (Value::Duration(a), Value::Duration(b)) => a.partial_cmp(b),
+            (Value::Iri(a), Value::Iri(b)) => a.partial_cmp(b),
+            (Value::BlankNode(a), Value::BlankNode(b)) => a.partial_cmp(b),
+            (
+                Value::Literal {
+                    value: v1,
+                    language: l1,
+                    datatype: d1,
+                },
+                Value::Literal {
+                    value: v2,
+                    language: l2,
+                    datatype: d2,
+                },
+            ) => {
+                match v1.partial_cmp(v2) {
+                    Some(Ordering::Equal) => {
+                        match l1.partial_cmp(l2) {
+                            Some(Ordering::Equal) => d1.partial_cmp(d2),
+                            other => other,
+                        }
+                    }
+                    other => other,
+                }
+            }
+            (Value::Integer(a), Value::Float(b)) => (*a as f64).partial_cmp(b),
+            (Value::Float(a), Value::Integer(b)) => a.partial_cmp(&(*b as f64)),
+            (Value::Null, Value::Null) => Some(Ordering::Equal),
+            (Value::Null, _) => Some(Ordering::Less),
+            (_, Value::Null) => Some(Ordering::Greater),
+            _ => None, // Incomparable types
+        }
+    }
+}
+
 /// Operator associativity
 #[derive(Debug, Clone, PartialEq)]
 pub enum Associativity {

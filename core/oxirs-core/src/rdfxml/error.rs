@@ -14,6 +14,15 @@ pub enum RdfXmlParseError {
     /// An error in the file syntax.
     #[error(transparent)]
     Syntax(#[from] RdfXmlSyntaxError),
+    /// XML error during parsing.
+    #[error("XML error: {0}")]
+    XmlError(String),
+    /// Undefined prefix error.
+    #[error("Undefined prefix: {0}")]
+    UndefinedPrefix(String),
+    /// Invalid parse type error.
+    #[error("Invalid parse type: {0}")]
+    InvalidParseType(String),
 }
 
 impl From<RdfXmlParseError> for io::Error {
@@ -22,6 +31,9 @@ impl From<RdfXmlParseError> for io::Error {
         match error {
             RdfXmlParseError::Io(error) => error,
             RdfXmlParseError::Syntax(error) => error.into(),
+            RdfXmlParseError::XmlError(msg) => Self::new(io::ErrorKind::InvalidData, msg),
+            RdfXmlParseError::UndefinedPrefix(msg) => Self::new(io::ErrorKind::InvalidData, format!("Undefined prefix: {}", msg)),
+            RdfXmlParseError::InvalidParseType(msg) => Self::new(io::ErrorKind::InvalidData, format!("Invalid parse type: {}", msg)),
         }
     }
 }

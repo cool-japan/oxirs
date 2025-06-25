@@ -415,7 +415,7 @@ impl PulsarProducer {
 
     async fn flush_batch(&mut self) -> Result<()> {
         if self.batch_buffer.is_empty() {
-            return Ok();
+            return Ok(());
         }
 
         let batch = std::mem::take(&mut self.batch_buffer);
@@ -855,7 +855,7 @@ pub struct PulsarSubscriptionStats {
     pub unacked_messages: u64,
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "pulsar"))]
 mod tests {
     use super::*;
     use crate::{StreamBackend, StreamConfig};

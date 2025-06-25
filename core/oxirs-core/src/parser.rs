@@ -597,6 +597,7 @@ impl Parser {
     where
         F: FnMut(Quad) -> Result<()>,
     {
+        // TODO: Enable when rdfxml module compilation issues are resolved
         Err(OxirsError::Parse(
             "RDF/XML parsing temporarily disabled".to_string(),
         ))

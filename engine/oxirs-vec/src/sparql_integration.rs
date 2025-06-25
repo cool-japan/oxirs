@@ -200,6 +200,54 @@ impl SparqlVectorService {
                 },
             ],
         });
+
+        // vec:vector_similarity(vector1, vector2) -> similarity_score
+        self.register_function(VectorServiceFunction {
+            name: "vector_similarity".to_string(),
+            arity: 2,
+            description: "Calculate similarity between two vectors".to_string(),
+            parameters: vec![
+                VectorServiceParameter {
+                    name: "vector1".to_string(),
+                    param_type: VectorParameterType::Vector,
+                    required: true,
+                    description: "First vector".to_string(),
+                },
+                VectorServiceParameter {
+                    name: "vector2".to_string(),
+                    param_type: VectorParameterType::Vector,
+                    required: true,
+                    description: "Second vector".to_string(),
+                },
+            ],
+        });
+
+        // vec:search_in_graph(query_text, graph_uri, limit) -> results
+        self.register_function(VectorServiceFunction {
+            name: "search_in_graph".to_string(),
+            arity: 3,
+            description: "Search for resources in a specific named graph".to_string(),
+            parameters: vec![
+                VectorServiceParameter {
+                    name: "query_text".to_string(),
+                    param_type: VectorParameterType::String,
+                    required: true,
+                    description: "Query text to search for".to_string(),
+                },
+                VectorServiceParameter {
+                    name: "graph_uri".to_string(),
+                    param_type: VectorParameterType::IRI,
+                    required: true,
+                    description: "Named graph URI to search in".to_string(),
+                },
+                VectorServiceParameter {
+                    name: "limit".to_string(),
+                    param_type: VectorParameterType::Number,
+                    required: false,
+                    description: "Maximum number of results to return".to_string(),
+                },
+            ],
+        });
     }
 
     /// Register a custom vector service function
@@ -220,6 +268,8 @@ impl SparqlVectorService {
             "embed_text" => self.execute_embed_text(args),
             "search_text" => self.execute_search_text(args),
             "cluster" => self.execute_cluster(args),
+            "vector_similarity" => self.execute_vector_similarity(args),
+            "search_in_graph" => self.execute_search_in_graph(args),
             _ => Err(anyhow!(
                 "Unknown vector service function: {}",
                 function_name
@@ -393,9 +443,12 @@ impl SparqlVectorService {
             _ => return Err(anyhow!("Second argument must be a resource URI")),
         };
 
-        // For now, return a dummy similarity score
-        // In a real implementation, this would look up vectors and calculate similarity
-        let similarity = 0.8; // Placeholder
+        // Calculate actual similarity between two resources
+        // This is a simplified implementation - in practice, you'd need to:
+        // 1. Look up the vectors for both URIs from the vector store
+        // 2. Calculate their similarity
+        // For now, we'll use a hash-based similarity based on URI similarity
+        let similarity = self.calculate_uri_similarity(uri1, uri2);
 
         Ok(VectorServiceResult::Number(similarity))
     }
@@ -448,6 +501,63 @@ impl SparqlVectorService {
             vec!["cluster2_item1".to_string(), "cluster2_item2".to_string()],
         ];
         Ok(VectorServiceResult::Clusters(clusters))
+    }
+
+    fn execute_vector_similarity(&mut self, args: &[VectorServiceArg]) -> Result<VectorServiceResult> {
+        if args.len() != 2 {
+            return Err(anyhow!(
+                "vector_similarity function requires exactly two arguments"
+            ));
+        }
+
+        let vector1 = match &args[0] {
+            VectorServiceArg::Vector(v) => v,
+            _ => return Err(anyhow!("First argument must be a vector")),
+        };
+
+        let vector2 = match &args[1] {
+            VectorServiceArg::Vector(v) => v,
+            _ => return Err(anyhow!("Second argument must be a vector")),
+        };
+
+        let similarity = vector1.cosine_similarity(vector2)?;
+        Ok(VectorServiceResult::Number(similarity))
+    }
+
+    fn execute_search_in_graph(&mut self, args: &[VectorServiceArg]) -> Result<VectorServiceResult> {
+        if args.len() < 2 {
+            return Err(anyhow!(
+                "search_in_graph function requires at least two arguments"
+            ));
+        }
+
+        let query_text = match &args[0] {
+            VectorServiceArg::String(text) => text,
+            _ => return Err(anyhow!("First argument must be a string")),
+        };
+
+        let graph_uri = match &args[1] {
+            VectorServiceArg::IRI(uri) => uri,
+            _ => return Err(anyhow!("Second argument must be a graph URI")),
+        };
+
+        let limit = if args.len() > 2 {
+            match &args[2] {
+                VectorServiceArg::Number(n) => *n as usize,
+                _ => self.config.default_limit,
+            }
+        } else {
+            self.config.default_limit
+        };
+
+        // For now, just perform regular text search and add graph context
+        let mut results = self.vector_store.similarity_search(query_text, limit)?;
+        
+        // Filter results to only include items from the specified graph
+        // In a real implementation, this would check graph membership
+        results.retain(|(uri, _)| uri.starts_with(graph_uri));
+
+        Ok(VectorServiceResult::SimilarityList(results))
     }
 
     // Helper methods for hybrid queries
@@ -504,6 +614,41 @@ impl SparqlVectorService {
     /// Get cache statistics
     pub fn cache_stats(&self) -> (usize, usize) {
         (self.query_cache.len(), self.config.cache_size)
+    }
+
+    /// Calculate similarity between two URIs (simplified implementation)
+    fn calculate_uri_similarity(&self, uri1: &str, uri2: &str) -> f32 {
+        if uri1 == uri2 {
+            return 1.0;
+        }
+
+        // Simple Jaccard similarity based on character n-grams
+        let ngrams1 = self.generate_ngrams(uri1, 3);
+        let ngrams2 = self.generate_ngrams(uri2, 3);
+
+        let intersection: usize = ngrams1.iter().filter(|g| ngrams2.contains(*g)).count();
+        let union_size = ngrams1.len() + ngrams2.len() - intersection;
+
+        if union_size == 0 {
+            0.0
+        } else {
+            intersection as f32 / union_size as f32
+        }
+    }
+
+    /// Generate character n-grams for similarity calculation
+    fn generate_ngrams(&self, text: &str, n: usize) -> std::collections::HashSet<String> {
+        let chars: Vec<char> = text.chars().collect();
+        let mut ngrams = std::collections::HashSet::new();
+
+        if chars.len() >= n {
+            for i in 0..=chars.len() - n {
+                let ngram: String = chars[i..i + n].iter().collect();
+                ngrams.insert(ngram);
+            }
+        }
+
+        ngrams
     }
 }
 

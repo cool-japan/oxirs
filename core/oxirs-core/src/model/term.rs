@@ -791,6 +791,41 @@ impl From<Variable> for Object {
     }
 }
 
+// Conversion from Subject to Object
+impl From<Subject> for Object {
+    fn from(subject: Subject) -> Self {
+        match subject {
+            Subject::NamedNode(n) => Object::NamedNode(n),
+            Subject::BlankNode(b) => Object::BlankNode(b),
+            Subject::Variable(v) => Object::Variable(v),
+            Subject::QuotedTriple(qt) => Object::QuotedTriple(qt),
+        }
+    }
+}
+
+// Conversion from Predicate to Object
+impl From<Predicate> for Object {
+    fn from(predicate: Predicate) -> Self {
+        match predicate {
+            Predicate::NamedNode(n) => Object::NamedNode(n),
+            Predicate::Variable(v) => Object::Variable(v),
+        }
+    }
+}
+
+// Conversion from Term to Object
+impl From<Term> for Object {
+    fn from(term: Term) -> Self {
+        match term {
+            Term::NamedNode(n) => Object::NamedNode(n),
+            Term::BlankNode(b) => Object::BlankNode(b),
+            Term::Literal(l) => Object::Literal(l),
+            Term::Variable(v) => Object::Variable(v),
+            Term::QuotedTriple(qt) => Object::QuotedTriple(qt),
+        }
+    }
+}
+
 // Term to position conversions (needed for rdfxml parser)
 impl TryFrom<Term> for Subject {
     type Error = OxirsError;
@@ -828,19 +863,8 @@ impl TryFrom<Term> for Predicate {
     }
 }
 
-impl TryFrom<Term> for Object {
-    type Error = OxirsError;
-
-    fn try_from(term: Term) -> Result<Self, Self::Error> {
-        match term {
-            Term::NamedNode(n) => Ok(Object::NamedNode(n)),
-            Term::BlankNode(b) => Ok(Object::BlankNode(b)),
-            Term::Literal(l) => Ok(Object::Literal(l)),
-            Term::Variable(v) => Ok(Object::Variable(v)),
-            Term::QuotedTriple(qt) => Ok(Object::QuotedTriple(qt)),
-        }
-    }
-}
+// Note: We already have From<Term> for Object above, so TryFrom is not needed
+// The From implementation handles all cases infallibly
 
 #[cfg(test)]
 mod tests {

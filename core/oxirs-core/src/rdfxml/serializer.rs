@@ -1,10 +1,9 @@
 use crate::rdfxml::utils::*;
-// TODO: Phase 3 - Replace with native OxiRS types
-// use oxiri::{Iri, IriParseError};
-// use oxrdf::vocab::{rdf, xsd};
-// use oxrdf::{NamedNodeRef, NamedOrBlankNode, NamedOrBlankNodeRef, TermRef, TripleRef};
+use crate::rdfxml::parser::{NamedOrBlankNode, NamedOrBlankNodeRef};
+use oxiri::{Iri, IriParseError};
 use crate::model::*;
-use crate::OxirsError as IriParseError; // Temporary alias
+use crate::vocab::{rdf, xsd};
+use crate::optimization::TermRef;
 use quick_xml::Writer;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use std::borrow::Cow;
@@ -15,6 +14,24 @@ use std::io::Write;
 use std::sync::Arc;
 #[cfg(feature = "async-tokio")]
 use tokio::io::AsyncWrite;
+
+// Helper function to convert SubjectRef to NamedOrBlankNodeRef
+fn subject_to_named_or_blank<'a>(subject: SubjectRef<'a>) -> Option<NamedOrBlankNodeRef<'a>> {
+    match subject {
+        SubjectRef::NamedNode(n) => Some(NamedOrBlankNodeRef::NamedNode(n)),
+        SubjectRef::BlankNode(b) => Some(NamedOrBlankNodeRef::BlankNode(b)),
+        _ => None,
+    }
+}
+
+// Helper function for owned conversion
+fn subject_to_named_or_blank_owned(subject: &Subject) -> Option<NamedOrBlankNode> {
+    match subject {
+        Subject::NamedNode(n) => Some(NamedOrBlankNode::NamedNode(n.clone())),
+        Subject::BlankNode(b) => Some(NamedOrBlankNode::BlankNode(b.clone())),
+        _ => None,
+    }
+}
 
 /// A [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/) serializer.
 ///
@@ -249,7 +266,7 @@ impl<W: Write> WriterRdfXmlSerializer<W> {
 
     fn flush_buffer(&mut self, buffer: &mut Vec<Event<'_>>) -> io::Result<()> {
         for event in buffer.drain(0..) {
-            self.writer.write_event(event)?;
+            self.writer.write_event(event).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
         }
         Ok(())
     }
@@ -341,7 +358,7 @@ pub struct InnerRdfXmlWriter {
 
 impl InnerRdfXmlWriter {
     fn serialize_triple<'a>(
-        &mut self,
+        &'a mut self,
         t: impl Into<TripleRef<'a>>,
         output: &mut Vec<Event<'a>>,
     ) -> io::Result<()> {
@@ -351,7 +368,7 @@ impl InnerRdfXmlWriter {
 
         let triple = t.into();
         // We open a new rdf:Description if useful
-        if self.current_subject.as_ref().map(NamedOrBlankNode::as_ref) != Some(triple.subject) {
+        if self.current_subject.as_ref().map(NamedOrBlankNode::as_ref) != subject_to_named_or_blank(triple.subject()) {
             if self.current_subject.is_some() {
                 output.push(Event::End(
                     self.current_resource_tag
@@ -359,17 +376,24 @@ impl InnerRdfXmlWriter {
                         .map_or_else(|| BytesEnd::new("rdf:Description"), BytesEnd::new),
                 ));
             }
-            self.current_subject = Some(triple.subject.into_owned());
+            if let Some(subj) = subject_to_named_or_blank_owned(&triple.subject().to_owned()) {
+                self.current_subject = Some(subj);
+            } else {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "RDF/XML only supports named or blank subject",
+                ));
+            }
 
-            let (mut description_open, with_type_tag) = if triple.predicate == rdf::TYPE {
-                if let TermRef::NamedNode(t) = triple.object {
+            let (mut description_open, with_type_tag) = if matches!(triple.predicate(), PredicateRef::NamedNode(n) if n == &*rdf::TYPE) {
+                if let ObjectRef::NamedNode(t) = triple.object() {
                     if RESERVED_SYNTAX_TERMS.contains(&t.as_str()) {
                         (BytesStart::new("rdf:Description"), false)
                     } else {
                         let (prop_qname, prop_xmlns) = self.uri_to_qname_and_xmlns(t);
                         let mut description_open = BytesStart::new(prop_qname.clone());
-                        if let Some(prop_xmlns) = prop_xmlns {
-                            description_open.push_attribute(prop_xmlns);
+                        if let Some((attr_name, attr_value)) = prop_xmlns {
+                            description_open.push_attribute((attr_name.as_str(), attr_value.as_str()));
                         }
                         self.current_resource_tag = Some(prop_qname.into_owned());
                         (description_open, true)
@@ -385,10 +409,10 @@ impl InnerRdfXmlWriter {
                 clippy::match_wildcard_for_single_variants,
                 clippy::allow_attributes
             )]
-            match triple.subject {
-                NamedOrBlankNodeRef::NamedNode(node) => description_open
+            match triple.subject() {
+                SubjectRef::NamedNode(node) => description_open
                     .push_attribute(("rdf:about", relative_iri(node.as_str(), &self.base_iri).as_ref())),
-                NamedOrBlankNodeRef::BlankNode(node) => {
+                SubjectRef::BlankNode(node) => {
                     description_open.push_attribute(("rdf:nodeID", node.as_str()))
                 }
                 _ => {
@@ -404,36 +428,44 @@ impl InnerRdfXmlWriter {
             }
         }
 
-        if RESERVED_SYNTAX_TERMS.contains(&triple.predicate.as_str()) {
+        let pred_node = match triple.predicate() {
+            PredicateRef::NamedNode(n) => n,
+            _ => return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "RDF/XML only supports named node predicates",
+            )),
+        };
+        
+        if RESERVED_SYNTAX_TERMS.contains(&pred_node.as_str()) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "RDF/XML reserved syntax term is not allowed as a predicate",
             ));
         }
-        let (prop_qname, prop_xmlns) = self.uri_to_qname_and_xmlns(triple.predicate);
+        let (prop_qname, prop_xmlns) = self.uri_to_qname_and_xmlns(pred_node);
         let mut property_open = BytesStart::new(prop_qname.clone());
-        if let Some(prop_xmlns) = prop_xmlns {
-            property_open.push_attribute(prop_xmlns);
+        if let Some((attr_name, attr_value)) = prop_xmlns {
+            property_open.push_attribute((attr_name.as_str(), attr_value.as_str()));
         }
         #[allow(
             unreachable_patterns,
             clippy::match_wildcard_for_single_variants,
             clippy::allow_attributes
         )]
-        let content = match triple.object {
-            TermRef::NamedNode(node) => {
+        let content = match triple.object() {
+            ObjectRef::NamedNode(node) => {
                 property_open
                     .push_attribute(("rdf:resource", relative_iri(node.as_str(), &self.base_iri).as_ref()));
                 None
             }
-            TermRef::BlankNode(node) => {
+            ObjectRef::BlankNode(node) => {
                 property_open.push_attribute(("rdf:nodeID", node.as_str()));
                 None
             }
-            TermRef::Literal(literal) => {
+            ObjectRef::Literal(literal) => {
                 if let Some(language) = literal.language() {
                     property_open.push_attribute(("xml:lang", language));
-                } else if literal.datatype() != xsd::STRING {
+                } else if literal.datatype() != xsd::STRING.as_ref() {
                     property_open.push_attribute((
                         "rdf:datatype",
                         relative_iri(literal.datatype().as_str(), &self.base_iri).as_ref(),
@@ -491,29 +523,30 @@ impl InnerRdfXmlWriter {
         output.push(Event::End(BytesEnd::new("rdf:RDF")));
     }
 
-    fn uri_to_qname_and_xmlns<'a>(
+    fn uri_to_qname_and_xmlns(
         &self,
-        uri: NamedNodeRef<'a>,
-    ) -> (Cow<'a, str>, Option<(&'a str, &'a str)>) {
-        let (prop_prefix, prop_value) = split_iri(uri.as_str());
-        if let Some(prop_prefix) = self.prefixes_by_iri.get(prop_prefix) {
+        uri: &NamedNode,
+    ) -> (Cow<str>, Option<(String, String)>) {
+        let uri_str = uri.as_str();
+        let (prop_prefix, prop_value) = split_iri(uri_str);
+        if let Some(prefix) = self.prefixes_by_iri.get(prop_prefix) {
             (
-                if prop_prefix.is_empty() {
-                    Cow::Borrowed(prop_value)
+                if prefix.is_empty() {
+                    Cow::Owned(prop_value.to_string())
                 } else {
-                    Cow::Owned(format!("{prop_prefix}:{prop_value}"))
+                    Cow::Owned(format!("{prefix}:{prop_value}"))
                 },
                 None,
             )
         } else if prop_prefix == "http://www.w3.org/2000/xmlns/" {
             (Cow::Owned(format!("xmlns:{prop_value}")), None)
         } else if !prop_value.is_empty() && !self.custom_default_prefix {
-            (Cow::Borrowed(prop_value), Some(("xmlns", prop_prefix)))
+            (Cow::Owned(prop_value.to_string()), Some(("xmlns".to_string(), prop_prefix.to_string())))
         } else {
             // TODO: does not work on recursive elements
             (
                 Cow::Owned(format!("oxprefix:{prop_value}")),
-                Some(("xmlns:oxprefix", prop_prefix)),
+                Some(("xmlns:oxprefix".to_string(), prop_prefix.to_string())),
             )
         }
     }
@@ -589,14 +622,14 @@ mod tests {
             .with_prefix("", "http://example.com/")?
             .for_writer(Vec::new());
         serializer.serialize_triple(TripleRef::new(
-            NamedNodeRef::new("http://example.com/s")?,
-            rdf::TYPE,
-            NamedNodeRef::new("http://example.org/o")?,
+            SubjectRef::NamedNode(&NamedNode::new("http://example.com/s")?),
+            PredicateRef::NamedNode(&*rdf::TYPE),
+            ObjectRef::NamedNode(&NamedNode::new("http://example.org/o")?),
         ))?;
         serializer.serialize_triple(TripleRef::new(
-            NamedNodeRef::new("http://example.com/s")?,
-            NamedNodeRef::new("http://example.com/p")?,
-            NamedNodeRef::new("http://example.com/o2")?,
+            SubjectRef::NamedNode(&NamedNode::new("http://example.com/s")?),
+            PredicateRef::NamedNode(&NamedNode::new("http://example.com/p")?),
+            ObjectRef::NamedNode(&NamedNode::new("http://example.com/o2")?),
         ))?;
         let output = serializer.finish()?;
         assert_eq!(

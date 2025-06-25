@@ -207,17 +207,29 @@ impl Constraint {
             Constraint::NodeKind(c) => c.evaluate(store, context),
             Constraint::MinCount(c) => c.evaluate(store, context),
             Constraint::MaxCount(c) => c.evaluate(store, context),
+            Constraint::MinLength(c) => c.evaluate(store, context),
+            Constraint::MaxLength(c) => c.evaluate(store, context),
             Constraint::Pattern(c) => c.evaluate(store, context),
+            Constraint::LanguageIn(c) => c.evaluate(store, context),
+            Constraint::UniqueLang(c) => c.evaluate(store, context),
+            Constraint::MinInclusive(c) => c.evaluate(store, context),
+            Constraint::MaxInclusive(c) => c.evaluate(store, context),
+            Constraint::MinExclusive(c) => c.evaluate(store, context),
+            Constraint::MaxExclusive(c) => c.evaluate(store, context),
+            Constraint::LessThan(c) => c.evaluate(store, context),
+            Constraint::LessThanOrEquals(c) => c.evaluate(store, context),
+            Constraint::Equals(c) => c.evaluate(store, context),
+            Constraint::Disjoint(c) => c.evaluate(store, context),
             Constraint::In(c) => c.evaluate(store, context),
-
-            // TODO: Implement evaluation for other constraint types
-            _ => {
-                tracing::warn!(
-                    "Constraint evaluation not yet implemented for {:?}",
-                    self.component_id()
-                );
-                Ok(ConstraintEvaluationResult::satisfied())
-            }
+            Constraint::HasValue(c) => c.evaluate(store, context),
+            Constraint::Not(c) => c.evaluate(store, context),
+            Constraint::And(c) => c.evaluate(store, context),
+            Constraint::Or(c) => c.evaluate(store, context),
+            Constraint::Xone(c) => c.evaluate(store, context),
+            Constraint::Node(c) => c.evaluate(store, context),
+            Constraint::QualifiedValueShape(c) => c.evaluate(store, context),
+            Constraint::Closed(c) => c.evaluate(store, context),
+            Constraint::Sparql(c) => c.evaluate(store, context),
         }
     }
 }
@@ -331,7 +343,7 @@ impl ConstraintEvaluator for DatatypeConstraint {
         for value in &context.values {
             match value {
                 Term::Literal(literal) => {
-                    if literal.datatype() != Some(&self.datatype_iri) {
+                    if literal.datatype() != self.datatype_iri.as_ref() {
                         return Ok(ConstraintEvaluationResult::violated(
                             Some(value.clone()),
                             Some(format!(
@@ -537,6 +549,151 @@ impl ConstraintValidator for MaxInclusiveConstraint {
     }
 }
 
+impl ConstraintEvaluator for MinInclusiveConstraint {
+    fn evaluate(
+        &self,
+        _store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
+        for value in &context.values {
+            if let Term::Literal(literal) = value {
+                if !self.compare_values_gte(literal, &self.min_value)? {
+                    return Ok(ConstraintEvaluationResult::violated(
+                        Some(value.clone()),
+                        Some(format!(
+                            "Value {} is less than minimum value {}",
+                            literal, self.min_value
+                        )),
+                    ));
+                }
+            } else {
+                return Ok(ConstraintEvaluationResult::violated(
+                    Some(value.clone()),
+                    Some("Value must be a literal for range comparison".to_string()),
+                ));
+            }
+        }
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+}
+
+impl ConstraintEvaluator for MaxInclusiveConstraint {
+    fn evaluate(
+        &self,
+        _store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
+        for value in &context.values {
+            if let Term::Literal(literal) = value {
+                if !self.compare_values_lte(literal, &self.max_value)? {
+                    return Ok(ConstraintEvaluationResult::violated(
+                        Some(value.clone()),
+                        Some(format!(
+                            "Value {} is greater than maximum value {}",
+                            literal, self.max_value
+                        )),
+                    ));
+                }
+            } else {
+                return Ok(ConstraintEvaluationResult::violated(
+                    Some(value.clone()),
+                    Some("Value must be a literal for range comparison".to_string()),
+                ));
+            }
+        }
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+}
+
+impl ConstraintEvaluator for MinExclusiveConstraint {
+    fn evaluate(
+        &self,
+        _store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
+        for value in &context.values {
+            if let Term::Literal(literal) = value {
+                if !self.compare_values_gt(literal, &self.min_value)? {
+                    return Ok(ConstraintEvaluationResult::violated(
+                        Some(value.clone()),
+                        Some(format!(
+                            "Value {} is not greater than minimum value {}",
+                            literal, self.min_value
+                        )),
+                    ));
+                }
+            } else {
+                return Ok(ConstraintEvaluationResult::violated(
+                    Some(value.clone()),
+                    Some("Value must be a literal for range comparison".to_string()),
+                ));
+            }
+        }
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+}
+
+impl ConstraintEvaluator for MaxExclusiveConstraint {
+    fn evaluate(
+        &self,
+        _store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
+        for value in &context.values {
+            if let Term::Literal(literal) = value {
+                if !self.compare_values_lt(literal, &self.max_value)? {
+                    return Ok(ConstraintEvaluationResult::violated(
+                        Some(value.clone()),
+                        Some(format!(
+                            "Value {} is not less than maximum value {}",
+                            literal, self.max_value
+                        )),
+                    ));
+                }
+            } else {
+                return Ok(ConstraintEvaluationResult::violated(
+                    Some(value.clone()),
+                    Some("Value must be a literal for range comparison".to_string()),
+                ));
+            }
+        }
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+}
+
+// Helper methods for range constraints
+impl MinInclusiveConstraint {
+    fn compare_values_gte(&self, value: &Literal, min_value: &Literal) -> Result<bool> {
+        // Basic comparison - for now just compare string representations
+        // TODO: Implement proper typed comparison for numbers, dates, etc.
+        Ok(value.value() >= min_value.value())
+    }
+}
+
+impl MaxInclusiveConstraint {
+    fn compare_values_lte(&self, value: &Literal, max_value: &Literal) -> Result<bool> {
+        // Basic comparison - for now just compare string representations
+        // TODO: Implement proper typed comparison for numbers, dates, etc.
+        Ok(value.value() <= max_value.value())
+    }
+}
+
+impl MinExclusiveConstraint {
+    fn compare_values_gt(&self, value: &Literal, min_value: &Literal) -> Result<bool> {
+        // Basic comparison - for now just compare string representations
+        // TODO: Implement proper typed comparison for numbers, dates, etc.
+        Ok(value.value() > min_value.value())
+    }
+}
+
+impl MaxExclusiveConstraint {
+    fn compare_values_lt(&self, value: &Literal, max_value: &Literal) -> Result<bool> {
+        // Basic comparison - for now just compare string representations
+        // TODO: Implement proper typed comparison for numbers, dates, etc.
+        Ok(value.value() < max_value.value())
+    }
+}
+
 // String Constraints
 
 /// sh:minLength constraint - validates minimum string length
@@ -551,6 +708,39 @@ impl ConstraintValidator for MinLengthConstraint {
     }
 }
 
+impl ConstraintEvaluator for MinLengthConstraint {
+    fn evaluate(
+        &self,
+        _store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
+        for value in &context.values {
+            match value {
+                Term::Literal(literal) => {
+                    let string_value = literal.value();
+                    if (string_value.chars().count() as u32) < self.min_length {
+                        return Ok(ConstraintEvaluationResult::violated(
+                            Some(value.clone()),
+                            Some(format!(
+                                "String length {} is less than minimum length {}",
+                                string_value.chars().count(),
+                                self.min_length
+                            )),
+                        ));
+                    }
+                }
+                _ => {
+                    return Ok(ConstraintEvaluationResult::violated(
+                        Some(value.clone()),
+                        Some("Value must be a literal for length validation".to_string()),
+                    ));
+                }
+            }
+        }
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+}
+
 /// sh:maxLength constraint - validates maximum string length
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MaxLengthConstraint {
@@ -560,6 +750,39 @@ pub struct MaxLengthConstraint {
 impl ConstraintValidator for MaxLengthConstraint {
     fn validate(&self) -> Result<()> {
         Ok(())
+    }
+}
+
+impl ConstraintEvaluator for MaxLengthConstraint {
+    fn evaluate(
+        &self,
+        _store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
+        for value in &context.values {
+            match value {
+                Term::Literal(literal) => {
+                    let string_value = literal.value();
+                    if (string_value.chars().count() as u32) > self.max_length {
+                        return Ok(ConstraintEvaluationResult::violated(
+                            Some(value.clone()),
+                            Some(format!(
+                                "String length {} is greater than maximum length {}",
+                                string_value.chars().count(),
+                                self.max_length
+                            )),
+                        ));
+                    }
+                }
+                _ => {
+                    return Ok(ConstraintEvaluationResult::violated(
+                        Some(value.clone()),
+                        Some("Value must be a literal for length validation".to_string()),
+                    ));
+                }
+            }
+        }
+        Ok(ConstraintEvaluationResult::satisfied())
     }
 }
 
@@ -693,6 +916,44 @@ impl ConstraintValidator for LanguageInConstraint {
     }
 }
 
+impl ConstraintEvaluator for LanguageInConstraint {
+    fn evaluate(
+        &self,
+        _store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
+        for value in &context.values {
+            match value {
+                Term::Literal(literal) => {
+                    if let Some(lang) = literal.language() {
+                        if !self.languages.contains(&lang.to_string()) {
+                            return Ok(ConstraintEvaluationResult::violated(
+                                Some(value.clone()),
+                                Some(format!(
+                                    "Language tag '{}' is not in allowed languages: {:?}",
+                                    lang, self.languages
+                                )),
+                            ));
+                        }
+                    } else if !self.languages.is_empty() {
+                        return Ok(ConstraintEvaluationResult::violated(
+                            Some(value.clone()),
+                            Some("Literal has no language tag but constraint requires one".to_string()),
+                        ));
+                    }
+                }
+                _ => {
+                    return Ok(ConstraintEvaluationResult::violated(
+                        Some(value.clone()),
+                        Some("Value must be a literal for language validation".to_string()),
+                    ));
+                }
+            }
+        }
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+}
+
 /// sh:uniqueLang constraint - validates unique language tags
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UniqueLangConstraint {
@@ -702,6 +963,46 @@ pub struct UniqueLangConstraint {
 impl ConstraintValidator for UniqueLangConstraint {
     fn validate(&self) -> Result<()> {
         Ok(())
+    }
+}
+
+impl ConstraintEvaluator for UniqueLangConstraint {
+    fn evaluate(
+        &self,
+        _store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
+        if !self.unique_lang {
+            // If uniqueLang is false, no constraint
+            return Ok(ConstraintEvaluationResult::satisfied());
+        }
+
+        let mut seen_languages = HashSet::new();
+        for value in &context.values {
+            match value {
+                Term::Literal(literal) => {
+                    if let Some(lang) = literal.language() {
+                        if seen_languages.contains(lang) {
+                            return Ok(ConstraintEvaluationResult::violated(
+                                Some(value.clone()),
+                                Some(format!(
+                                    "Duplicate language tag '{}' found, but unique languages required",
+                                    lang
+                                )),
+                            ));
+                        }
+                        seen_languages.insert(lang);
+                    }
+                }
+                _ => {
+                    return Ok(ConstraintEvaluationResult::violated(
+                        Some(value.clone()),
+                        Some("Value must be a literal for language uniqueness validation".to_string()),
+                    ));
+                }
+            }
+        }
+        Ok(ConstraintEvaluationResult::satisfied())
     }
 }
 
@@ -719,6 +1020,20 @@ impl ConstraintValidator for EqualsConstraint {
     }
 }
 
+impl ConstraintEvaluator for EqualsConstraint {
+    fn evaluate(
+        &self,
+        store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
+        // TODO: Implement sh:equals constraint evaluation
+        // This requires evaluating the property path on the focus node
+        // and comparing the resulting values
+        tracing::warn!("sh:equals constraint evaluation not yet implemented");
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+}
+
 /// sh:disjoint constraint - validates value disjointness
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DisjointConstraint {
@@ -728,6 +1043,20 @@ pub struct DisjointConstraint {
 impl ConstraintValidator for DisjointConstraint {
     fn validate(&self) -> Result<()> {
         Ok(())
+    }
+}
+
+impl ConstraintEvaluator for DisjointConstraint {
+    fn evaluate(
+        &self,
+        store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
+        // TODO: Implement sh:disjoint constraint evaluation
+        // This requires evaluating the property path on the focus node
+        // and ensuring no values overlap
+        tracing::warn!("sh:disjoint constraint evaluation not yet implemented");
+        Ok(ConstraintEvaluationResult::satisfied())
     }
 }
 
@@ -743,6 +1072,19 @@ impl ConstraintValidator for LessThanConstraint {
     }
 }
 
+impl ConstraintEvaluator for LessThanConstraint {
+    fn evaluate(
+        &self,
+        store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
+        // TODO: Implement sh:lessThan constraint evaluation
+        // This requires evaluating the property path and comparing values
+        tracing::warn!("sh:lessThan constraint evaluation not yet implemented");
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+}
+
 /// sh:lessThanOrEquals constraint - validates value ordering
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LessThanOrEqualsConstraint {
@@ -752,6 +1094,19 @@ pub struct LessThanOrEqualsConstraint {
 impl ConstraintValidator for LessThanOrEqualsConstraint {
     fn validate(&self) -> Result<()> {
         Ok(())
+    }
+}
+
+impl ConstraintEvaluator for LessThanOrEqualsConstraint {
+    fn evaluate(
+        &self,
+        store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
+        // TODO: Implement sh:lessThanOrEquals constraint evaluation
+        // This requires evaluating the property path and comparing values
+        tracing::warn!("sh:lessThanOrEquals constraint evaluation not yet implemented");
+        Ok(ConstraintEvaluationResult::satisfied())
     }
 }
 
@@ -806,6 +1161,26 @@ impl ConstraintValidator for HasValueConstraint {
     }
 }
 
+impl ConstraintEvaluator for HasValueConstraint {
+    fn evaluate(
+        &self,
+        _store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
+        // Check if the required value is present in the value set
+        if !context.values.contains(&self.value) {
+            return Ok(ConstraintEvaluationResult::violated(
+                None,
+                Some(format!(
+                    "Required value {} is not present",
+                    self.value
+                )),
+            ));
+        }
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+}
+
 // Logical Constraints
 
 /// sh:not constraint - negation constraint
@@ -817,6 +1192,19 @@ pub struct NotConstraint {
 impl ConstraintValidator for NotConstraint {
     fn validate(&self) -> Result<()> {
         Ok(())
+    }
+}
+
+impl ConstraintEvaluator for NotConstraint {
+    fn evaluate(
+        &self,
+        store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
+        // TODO: Implement sh:not constraint evaluation
+        // This requires evaluating the referenced shape and negating the result
+        tracing::warn!("sh:not constraint evaluation not yet implemented");
+        Ok(ConstraintEvaluationResult::satisfied())
     }
 }
 
@@ -837,6 +1225,19 @@ impl ConstraintValidator for AndConstraint {
     }
 }
 
+impl ConstraintEvaluator for AndConstraint {
+    fn evaluate(
+        &self,
+        store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
+        // TODO: Implement sh:and constraint evaluation
+        // This requires evaluating all shapes and ensuring all are satisfied
+        tracing::warn!("sh:and constraint evaluation not yet implemented");
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+}
+
 /// sh:or constraint - disjunction constraint
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OrConstraint {
@@ -851,6 +1252,19 @@ impl ConstraintValidator for OrConstraint {
             ));
         }
         Ok(())
+    }
+}
+
+impl ConstraintEvaluator for OrConstraint {
+    fn evaluate(
+        &self,
+        store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
+        // TODO: Implement sh:or constraint evaluation
+        // This requires evaluating shapes and ensuring at least one is satisfied
+        tracing::warn!("sh:or constraint evaluation not yet implemented");
+        Ok(ConstraintEvaluationResult::satisfied())
     }
 }
 
@@ -871,6 +1285,19 @@ impl ConstraintValidator for XoneConstraint {
     }
 }
 
+impl ConstraintEvaluator for XoneConstraint {
+    fn evaluate(
+        &self,
+        store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
+        // TODO: Implement sh:xone constraint evaluation
+        // This requires evaluating shapes and ensuring exactly one is satisfied
+        tracing::warn!("sh:xone constraint evaluation not yet implemented");
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+}
+
 // Shape-based Constraints
 
 /// sh:node constraint - nested shape validation
@@ -882,6 +1309,19 @@ pub struct NodeConstraint {
 impl ConstraintValidator for NodeConstraint {
     fn validate(&self) -> Result<()> {
         Ok(())
+    }
+}
+
+impl ConstraintEvaluator for NodeConstraint {
+    fn evaluate(
+        &self,
+        store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
+        // TODO: Implement sh:node constraint evaluation
+        // This requires validating each value against the referenced shape
+        tracing::warn!("sh:node constraint evaluation not yet implemented");
+        Ok(ConstraintEvaluationResult::satisfied())
     }
 }
 
@@ -915,6 +1355,19 @@ impl ConstraintValidator for QualifiedValueShapeConstraint {
     }
 }
 
+impl ConstraintEvaluator for QualifiedValueShapeConstraint {
+    fn evaluate(
+        &self,
+        store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
+        // TODO: Implement sh:qualifiedValueShape constraint evaluation
+        // This requires validating qualified values against the shape and checking cardinality
+        tracing::warn!("sh:qualifiedValueShape constraint evaluation not yet implemented");
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+}
+
 // Closed Shape Constraints
 
 /// sh:closed constraint - closed shape validation
@@ -927,6 +1380,19 @@ pub struct ClosedConstraint {
 impl ConstraintValidator for ClosedConstraint {
     fn validate(&self) -> Result<()> {
         Ok(())
+    }
+}
+
+impl ConstraintEvaluator for ClosedConstraint {
+    fn evaluate(
+        &self,
+        store: &Store,
+        context: &ConstraintContext,
+    ) -> Result<ConstraintEvaluationResult> {
+        // TODO: Implement sh:closed constraint evaluation
+        // This requires checking that the focus node only has properties allowed by the shape
+        tracing::warn!("sh:closed constraint evaluation not yet implemented");
+        Ok(ConstraintEvaluationResult::satisfied())
     }
 }
 

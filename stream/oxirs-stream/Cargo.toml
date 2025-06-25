@@ -37,6 +37,7 @@ aws-sdk-kinesis = { version = "1.1", optional = true }
 aws-smithy-types = { version = "1.1", optional = true }
 redis = { version = "0.24", features = ["tokio-comp", "connection-manager", "cluster-async", "streams"], optional = true }
 pulsar = { version = "6.0", optional = true }
+time = { version = "0.3", optional = true }
 
 [dev-dependencies]
 criterion.workspace = true
@@ -44,7 +45,7 @@ criterion.workspace = true
 [features]
 default = ["kafka", "nats"]
 kafka = ["rdkafka"]
-nats = ["async-nats"]
+nats = ["async-nats", "time"]
 kinesis = ["aws-config", "aws-sdk-kinesis", "aws-smithy-types"]
 redis = ["dep:redis"]
 pulsar = ["dep:pulsar"]

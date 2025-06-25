@@ -323,6 +323,22 @@ pub struct EventMetadata {
     pub checksum: Option<String>,
 }
 
+impl Default for EventMetadata {
+    fn default() -> Self {
+        Self {
+            event_id: uuid::Uuid::new_v4().to_string(),
+            timestamp: chrono::Utc::now(),
+            source: "default".to_string(),
+            user: None,
+            context: None,
+            caused_by: None,
+            version: "1.0".to_string(),
+            properties: HashMap::new(),
+            checksum: None,
+        }
+    }
+}
+
 /// SPARQL operation types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SparqlOperationType {
@@ -823,10 +839,16 @@ impl StreamProducer {
 
         // Flush any pending batch buffer
         if self.config.performance.enable_batching {
-            let mut batch_buffer = self.batch_buffer.write().await;
-            if !batch_buffer.is_empty() {
-                let events = std::mem::take(&mut *batch_buffer);
-                drop(batch_buffer);
+            let events = {
+                let mut batch_buffer = self.batch_buffer.write().await;
+                if !batch_buffer.is_empty() {
+                    std::mem::take(&mut *batch_buffer)
+                } else {
+                    Vec::new()
+                }
+            };
+            if !events.is_empty() {
+                drop(_permit); // Release permit before mutable borrow
                 self.publish_batch_internal(events).await?;
             }
         }

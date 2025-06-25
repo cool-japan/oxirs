@@ -7,7 +7,7 @@
 use crate::{
     circuit_breaker::{
         new_shared_circuit_breaker, CircuitBreaker, CircuitBreakerConfig, FailureType,
-        SharedCircuitBreaker,
+        SharedCircuitBreaker, SharedCircuitBreakerExt,
     },
     StreamConfig,
 };
@@ -103,6 +103,7 @@ pub struct PoolStatus {
     pub idle_connections: usize,
     pub pending_requests: usize,
     pub is_healthy: bool,
+    #[serde(skip)]
     pub last_health_check: Option<Instant>,
     /// Current pool utilization percentage
     pub utilization_percent: f64,
@@ -117,6 +118,7 @@ pub struct PoolStatus {
 }
 
 /// Generic connection trait
+#[async_trait::async_trait]
 pub trait PooledConnection: Send + Sync + 'static {
     /// Check if connection is healthy
     async fn is_healthy(&self) -> bool;
@@ -264,7 +266,7 @@ struct PoolStats {
 }
 
 /// Comprehensive pool metrics for monitoring
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 struct PoolMetrics {
     /// Current pool size
     current_size: usize,
@@ -284,6 +286,23 @@ struct PoolMetrics {
     error_rates: HashMap<String, f64>,
     /// Last update timestamp
     last_updated: Instant,
+}
+
+impl Default for PoolMetrics {
+    fn default() -> Self {
+        Self {
+            current_size: 0,
+            peak_size: 0,
+            total_requests: 0,
+            avg_wait_time_ms: 0.0,
+            utilization_history: VecDeque::new(),
+            response_time_p50: Duration::ZERO,
+            response_time_p95: Duration::ZERO,
+            response_time_p99: Duration::ZERO,
+            error_rates: HashMap::new(),
+            last_updated: Instant::now(),
+        }
+    }
 }
 
 /// Adaptive sizing controller
@@ -437,14 +456,14 @@ impl<T: PooledConnection> ConnectionPool<T> {
             Some(conn) => {
                 // Record successful circuit breaker operation
                 if let Some(cb) = &self.circuit_breaker {
-                    cb.record_success().await;
+                    cb.record_success_with_duration(start_time.elapsed()).await;
                 }
                 conn
             }
             None => match self.create_new_connection().await {
                 Ok(conn) => {
                     if let Some(cb) = &self.circuit_breaker {
-                        cb.record_success().await;
+                        cb.record_success_with_duration(start_time.elapsed()).await;
                     }
                     conn
                 }
@@ -844,10 +863,6 @@ impl<T: PooledConnection> ConnectionPool<T> {
         });
     }
 
-    /// Health check for the entire pool
-    pub async fn health_check(&self) -> PoolStatus {
-        self.status().await
-    }
 }
 
 /// Enhanced connection handle with usage tracking and metrics
@@ -963,6 +978,7 @@ impl<T: PooledConnection> Drop for PooledConnectionHandle<T> {
                 wrapper.record_usage(avg_execution_time, overall_success);
                 wrapper.is_in_use = false;
 
+                let usage_count = wrapper.usage_count;
                 pool_connections.lock().await.push_back(wrapper);
 
                 let mut active = active_count.lock().await;
@@ -982,7 +998,7 @@ impl<T: PooledConnection> Drop for PooledConnectionHandle<T> {
 
                 debug!(
                     "Returned connection to pool: held_time={:?}, ops={}, success_rate={:.2}",
-                    total_held_time, wrapper.usage_count, success_rate
+                    total_held_time, usage_count, success_rate
                 );
             });
         }
@@ -1075,6 +1091,7 @@ impl ConnectionFactory<()> for DummyConnectionFactory {
     }
 }
 
+#[async_trait::async_trait]
 impl PooledConnection for () {
     async fn is_healthy(&self) -> bool {
         true
@@ -1104,13 +1121,17 @@ pub struct DetailedPoolMetrics {
     pub total_requests: u64,
     pub peak_size: usize,
     pub avg_wait_time_ms: f64,
+    #[serde(skip)]
     pub response_time_p50: Duration,
+    #[serde(skip)]
     pub response_time_p95: Duration,
+    #[serde(skip)]
     pub response_time_p99: Duration,
     pub adaptive_scaling_events: u64,
     pub circuit_breaker_failures: u64,
     pub load_balancing_decisions: u64,
     pub current_target_size: usize,
+    #[serde(skip)]
     pub pool_uptime: Duration,
 }
 
@@ -1141,6 +1162,7 @@ mod tests {
         }
     }
 
+    #[async_trait::async_trait]
     impl PooledConnection for TestConnection {
         async fn is_healthy(&self) -> bool {
             !self.is_closed && self.is_healthy.load(Ordering::Relaxed)

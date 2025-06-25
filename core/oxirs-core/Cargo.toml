@@ -76,12 +76,12 @@ zstd = "0.13"
 blake3 = "1.5"
 hex = "0.4"
 
-# Additional dependencies for oxigraph compatibility
+# Dependencies for Unicode normalization (replacing oxiri/oxilangtag)
 icu = "1.5"
 icu_normalizer = "1.5"
 icu_properties = "1.5"
-oxiri = "0.2"
-oxilangtag = "0.1"
+# oxiri = "0.2"         # REMOVED: Using native IRI validation
+# oxilangtag = "0.1"    # REMOVED: Using native language tag validation
 
 [dev-dependencies]
 criterion.workspace = true

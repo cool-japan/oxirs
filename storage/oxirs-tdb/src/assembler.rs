@@ -71,7 +71,7 @@ impl Assembler {
         self.stats.bytes_assembled += bytecode.len() as u64;
 
         let metadata = AssemblyMetadata {
-            operations_count: operation_count,
+            operations_count: operation_count as usize,
             size: bytecode.len(),
             checksum,
             compression_ratio: 1.0, // No compression for now
@@ -344,6 +344,10 @@ impl Assembler {
                     predicate,
                     object,
                 }
+            }
+
+            OperationType::Checkpoint => {
+                Operation::Checkpoint
             }
 
             _ => {

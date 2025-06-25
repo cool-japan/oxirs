@@ -37,7 +37,7 @@ pub mod store;
 pub mod vocab;
 // pub mod config;
 // pub mod jsonld;
-// pub mod rdfxml;
+// pub mod rdfxml; // Disabled due to oxiri/oxilangtag dependencies - needs native implementation
 
 // Re-export core types for convenience
 pub use model::*;

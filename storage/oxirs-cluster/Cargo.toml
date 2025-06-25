@@ -26,6 +26,7 @@ async-trait.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
+tempfile = "3.0"
 
 [features]
 default = []

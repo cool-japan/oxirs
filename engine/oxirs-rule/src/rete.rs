@@ -363,9 +363,110 @@ impl ReteNetwork {
 
     /// Analyze join conditions between two nodes
     fn analyze_join_conditions(&self, left_id: NodeId, right_id: NodeId) -> Result<JoinCondition> {
-        // For now, implement basic variable matching
-        // In a full implementation, this would analyze variable overlap
-        Ok(JoinCondition::default())
+        let mut constraints = Vec::new();
+        let mut filters = Vec::new();
+
+        // Get patterns from both nodes
+        let left_pattern = self.get_node_pattern(left_id)?;
+        let right_pattern = self.get_node_pattern(right_id)?;
+
+        if let (Some(left_pattern), Some(right_pattern)) = (left_pattern, right_pattern) {
+            // Find shared variables between patterns
+            let left_vars = self.extract_variables(&left_pattern);
+            let right_vars = self.extract_variables(&right_pattern);
+
+            for left_var in &left_vars {
+                if right_vars.contains(left_var) {
+                    // Shared variable - create constraint
+                    constraints.push((left_var.clone(), left_var.clone()));
+                }
+            }
+
+            // Add type-based constraints
+            if self.should_add_type_constraint(&left_pattern, &right_pattern) {
+                filters.push("type_constraint".to_string());
+            }
+
+            // Add domain/range constraints for properties
+            if self.should_add_domain_range_constraint(&left_pattern, &right_pattern) {
+                filters.push("domain_range_constraint".to_string());
+            }
+        }
+
+        if self.debug_mode && !constraints.is_empty() {
+            debug!("Generated {} join constraints between nodes {} and {}", 
+                   constraints.len(), left_id, right_id);
+        }
+
+        Ok(JoinCondition { constraints, filters })
+    }
+
+    /// Get the pattern associated with a node
+    fn get_node_pattern(&self, node_id: NodeId) -> Result<Option<RuleAtom>> {
+        match self.nodes.get(&node_id) {
+            Some(ReteNode::Alpha { pattern, .. }) => Ok(Some(pattern.clone())),
+            Some(ReteNode::Beta { left_parent, .. }) => {
+                // For beta nodes, get the left parent's pattern
+                self.get_node_pattern(*left_parent)
+            }
+            _ => Ok(None),
+        }
+    }
+
+    /// Extract variables from a rule atom
+    fn extract_variables(&self, atom: &RuleAtom) -> Vec<String> {
+        match atom {
+            RuleAtom::Triple { subject, predicate, object } => {
+                let mut vars = Vec::new();
+                if let Term::Variable(var) = subject {
+                    vars.push(var.clone());
+                }
+                if let Term::Variable(var) = predicate {
+                    vars.push(var.clone());
+                }
+                if let Term::Variable(var) = object {
+                    vars.push(var.clone());
+                }
+                vars
+            }
+            RuleAtom::Builtin { args, .. } => {
+                let mut vars = Vec::new();
+                for arg in args {
+                    if let Term::Variable(var) = arg {
+                        vars.push(var.clone());
+                    }
+                }
+                vars
+            }
+        }
+    }
+
+    /// Check if type constraint should be added
+    fn should_add_type_constraint(&self, left: &RuleAtom, right: &RuleAtom) -> bool {
+        match (left, right) {
+            (
+                RuleAtom::Triple { predicate: Term::Constant(p1), .. },
+                RuleAtom::Triple { predicate: Term::Constant(p2), .. },
+            ) => {
+                p1 == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" ||
+                p2 == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+            }
+            _ => false,
+        }
+    }
+
+    /// Check if domain/range constraint should be added
+    fn should_add_domain_range_constraint(&self, left: &RuleAtom, right: &RuleAtom) -> bool {
+        match (left, right) {
+            (
+                RuleAtom::Triple { predicate: Term::Constant(p1), .. },
+                RuleAtom::Triple { predicate: Term::Constant(p2), .. },
+            ) => {
+                p1.contains("domain") || p1.contains("range") ||
+                p2.contains("domain") || p2.contains("range")
+            }
+            _ => false,
+        }
     }
 
     /// Add a fact to the network
@@ -447,21 +548,151 @@ impl ReteNetwork {
         Ok(derived_facts)
     }
 
-    /// Perform beta join operation
+    /// Perform beta join operation with proper memory management
     fn perform_beta_join(
         &mut self,
-        _beta_id: NodeId,
+        beta_id: NodeId,
         token: Token,
-        _join_condition: &JoinCondition,
+        join_condition: &JoinCondition,
     ) -> Result<Vec<Token>> {
-        // Simplified beta join - in a full implementation this would:
-        // 1. Check which side the token came from
-        // 2. Join with tokens from the other side
-        // 3. Apply join conditions
-        // 4. Update beta memory
+        // Get beta memory for this node
+        let (left_memory, right_memory) = self.beta_memory.get_mut(&beta_id)
+            .ok_or_else(|| anyhow::anyhow!("Beta memory not found for node {}", beta_id))?;
 
-        // For now, just pass through the token
-        Ok(vec![token])
+        let mut joined_tokens = Vec::new();
+
+        // Determine which side the token came from based on the token's facts
+        let is_left_token = self.is_left_token(&token, beta_id)?;
+
+        if is_left_token {
+            // Token came from left side - join with all right side tokens
+            left_memory.push(token.clone());
+            
+            for right_token in right_memory.iter() {
+                if self.satisfies_join_condition(&token, right_token, join_condition)? {
+                    let joined = self.join_tokens(&token, right_token)?;
+                    joined_tokens.push(joined);
+                }
+            }
+        } else {
+            // Token came from right side - join with all left side tokens
+            right_memory.push(token.clone());
+            
+            for left_token in left_memory.iter() {
+                if self.satisfies_join_condition(left_token, &token, join_condition)? {
+                    let joined = self.join_tokens(left_token, &token)?;
+                    joined_tokens.push(joined);
+                }
+            }
+        }
+
+        // Implement memory management - limit memory size
+        const MAX_MEMORY_SIZE: usize = 10000;
+        if left_memory.len() > MAX_MEMORY_SIZE {
+            left_memory.drain(0..left_memory.len() / 2); // Remove oldest half
+        }
+        if right_memory.len() > MAX_MEMORY_SIZE {
+            right_memory.drain(0..right_memory.len() / 2); // Remove oldest half
+        }
+
+        if self.debug_mode && !joined_tokens.is_empty() {
+            debug!("Beta join {} produced {} joined tokens", beta_id, joined_tokens.len());
+        }
+
+        Ok(joined_tokens)
+    }
+
+    /// Check if a token came from the left side of a beta join
+    fn is_left_token(&self, token: &Token, beta_id: NodeId) -> Result<bool> {
+        if let Some(ReteNode::Beta { left_parent, .. }) = self.nodes.get(&beta_id) {
+            // Check if any of the token's facts match the left parent's pattern
+            if let Some(ReteNode::Alpha { pattern, .. }) = self.nodes.get(left_parent) {
+                for fact in &token.facts {
+                    if let Some(_) = self.unify_atoms(pattern, fact, &HashMap::new())? {
+                        return Ok(true);
+                    }
+                }
+            }
+        }
+        Ok(false)
+    }
+
+    /// Check if two tokens satisfy the join condition
+    fn satisfies_join_condition(
+        &self,
+        left_token: &Token,
+        right_token: &Token,
+        join_condition: &JoinCondition,
+    ) -> Result<bool> {
+        // Check variable constraints
+        for (left_var, right_var) in &join_condition.constraints {
+            let left_value = left_token.bindings.get(left_var);
+            let right_value = right_token.bindings.get(right_var);
+            
+            match (left_value, right_value) {
+                (Some(left_val), Some(right_val)) => {
+                    if !self.terms_equal(left_val, right_val) {
+                        return Ok(false);
+                    }
+                }
+                (None, None) => continue,
+                _ => return Ok(false), // One bound, one unbound
+            }
+        }
+
+        // Apply additional filters
+        for filter in &join_condition.filters {
+            if !self.apply_filter(filter, left_token, right_token)? {
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
+    }
+
+    /// Join two tokens into a single token
+    fn join_tokens(&self, left_token: &Token, right_token: &Token) -> Result<Token> {
+        let mut joined_token = Token::new();
+        
+        // Merge bindings
+        joined_token.bindings.extend(left_token.bindings.clone());
+        for (var, value) in &right_token.bindings {
+            if let Some(existing_value) = joined_token.bindings.get(var) {
+                // Check for binding conflicts
+                if !self.terms_equal(existing_value, value) {
+                    return Err(anyhow::anyhow!("Binding conflict for variable {}", var));
+                }
+            } else {
+                joined_token.bindings.insert(var.clone(), value.clone());
+            }
+        }
+        
+        // Merge tags
+        joined_token.tags.extend(left_token.tags.clone());
+        joined_token.tags.extend(right_token.tags.clone());
+        
+        // Merge facts
+        joined_token.facts.extend(left_token.facts.clone());
+        joined_token.facts.extend(right_token.facts.clone());
+        
+        Ok(joined_token)
+    }
+
+    /// Check if two terms are equal
+    fn terms_equal(&self, term1: &Term, term2: &Term) -> bool {
+        match (term1, term2) {
+            (Term::Constant(c1), Term::Constant(c2)) => c1 == c2,
+            (Term::Literal(l1), Term::Literal(l2)) => l1 == l2,
+            (Term::Variable(v1), Term::Variable(v2)) => v1 == v2,
+            _ => false,
+        }
+    }
+
+    /// Apply a filter condition
+    fn apply_filter(&self, _filter: &str, _left_token: &Token, _right_token: &Token) -> Result<bool> {
+        // Simplified filter implementation
+        // In a full implementation, this would parse and evaluate filter expressions
+        Ok(true)
     }
 
     /// Execute a production node

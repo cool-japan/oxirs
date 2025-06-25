@@ -221,6 +221,21 @@ impl StarStore {
                 .or_insert_with(BTreeSet::new)
                 .insert(triple_index);
 
+            // ALSO index the subject and object of the quoted triple found in predicate position
+            let qt_subject_key = format!("SUBJ:{}", qt.subject);
+            index
+                .subject_index
+                .entry(qt_subject_key)
+                .or_insert_with(BTreeSet::new)
+                .insert(triple_index);
+                
+            let qt_object_key = format!("OBJ:{}", qt.object);
+            index
+                .object_index
+                .entry(qt_object_key)
+                .or_insert_with(BTreeSet::new)
+                .insert(triple_index);
+
             // Recursively index nested quoted triples
             self.index_quoted_triples_recursive(qt, triple_index, index);
         }
@@ -239,6 +254,22 @@ impl StarStore {
             index
                 .object_index
                 .entry(object_key)
+                .or_insert_with(BTreeSet::new)
+                .insert(triple_index);
+
+            // ALSO index the subject and predicate of the quoted triple found in object position
+            // This allows finding triples like "bob believes <<alice age 25>>" when searching for alice
+            let qt_subject_key = format!("SUBJ:{}", qt.subject);
+            index
+                .subject_index
+                .entry(qt_subject_key)
+                .or_insert_with(BTreeSet::new)
+                .insert(triple_index);
+                
+            let qt_predicate_key = format!("PRED:{}", qt.predicate);
+            index
+                .predicate_index
+                .entry(qt_predicate_key)
                 .or_insert_with(BTreeSet::new)
                 .insert(triple_index);
 

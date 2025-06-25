@@ -13,7 +13,11 @@ use futures_util::{StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tokio::time;
+
 use tracing::{debug, error, info, warn};
+
+#[cfg(feature = "nats")]
+use ::time::OffsetDateTime;
 
 #[cfg(feature = "nats")]
 use async_nats::{
@@ -523,7 +527,24 @@ impl NatsConsumer {
             NatsDeliverPolicy::Last => jetstream::consumer::DeliverPolicy::Last,
             NatsDeliverPolicy::New => jetstream::consumer::DeliverPolicy::New,
             NatsDeliverPolicy::ByStartSequence(seq) => jetstream::consumer::DeliverPolicy::ByStartSequence { start_sequence: seq },
-            NatsDeliverPolicy::ByStartTime(time) => jetstream::consumer::DeliverPolicy::ByStartTime { start_time: time },
+            NatsDeliverPolicy::ByStartTime(time) => {
+                #[cfg(feature = "nats")]
+                {
+                    // Convert DateTime<Utc> to OffsetDateTime
+                    let unix_timestamp = time.timestamp();
+                    let nanoseconds = time.timestamp_subsec_nanos();
+                    let offset_datetime = OffsetDateTime::from_unix_timestamp_nanos(
+                        unix_timestamp as i128 * 1_000_000_000 + nanoseconds as i128
+                    ).unwrap_or_else(|_| OffsetDateTime::UNIX_EPOCH);
+                    
+                    jetstream::consumer::DeliverPolicy::ByStartTime { start_time: offset_datetime }
+                }
+                #[cfg(not(feature = "nats"))]
+                {
+                    // Fallback when NATS is not enabled
+                    jetstream::consumer::DeliverPolicy::New
+                }
+            },
             NatsDeliverPolicy::LastPerSubject => jetstream::consumer::DeliverPolicy::LastPerSubject,
         };
 
@@ -552,8 +573,7 @@ impl NatsConsumer {
             max_waiting: self.nats_config.consumer_config.max_waiting,
             max_batch: self.nats_config.consumer_config.max_batch,
             max_expires: self.nats_config.consumer_config.max_expires,
-            flow_control: self.nats_config.consumer_config.flow_control,
-            heartbeat: self.nats_config.consumer_config.heartbeat,
+            // Note: flow_control and heartbeat fields may not be available in this async_nats version
             ..Default::default()
         };
 

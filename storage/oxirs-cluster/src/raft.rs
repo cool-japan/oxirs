@@ -414,6 +414,7 @@ mod raft_impl {
 pub use raft_impl::*;
 
 /// Raft node implementation
+#[derive(Debug)]
 pub struct RaftNode {
     node_id: OxirsNodeId,
     #[cfg(feature = "raft")]
@@ -548,5 +549,209 @@ impl RaftNode {
     pub async fn is_empty(&self) -> bool {
         let state = self.storage.read().await;
         state.is_empty()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_rdf_command_serialization() {
+        let cmd = RdfCommand::Insert {
+            subject: "s".to_string(),
+            predicate: "p".to_string(),
+            object: "o".to_string(),
+        };
+        
+        let serialized = serde_json::to_string(&cmd).unwrap();
+        let deserialized: RdfCommand = serde_json::from_str(&serialized).unwrap();
+        
+        assert_eq!(cmd, deserialized);
+    }
+
+    #[test]
+    fn test_rdf_response_serialization() {
+        let response = RdfResponse::Success;
+        
+        let serialized = serde_json::to_string(&response).unwrap();
+        let deserialized: RdfResponse = serde_json::from_str(&serialized).unwrap();
+        
+        assert_eq!(response, deserialized);
+    }
+
+    #[test]
+    fn test_rdf_app_apply_insert() {
+        let mut app = RdfApp::default();
+        
+        let cmd = RdfCommand::Insert {
+            subject: "s".to_string(),
+            predicate: "p".to_string(),
+            object: "o".to_string(),
+        };
+        
+        let response = app.apply_command(&cmd);
+        assert_eq!(response, RdfResponse::Success);
+        assert_eq!(app.len(), 1);
+        assert!(!app.is_empty());
+    }
+
+    #[test]
+    fn test_rdf_app_apply_delete() {
+        let mut app = RdfApp::default();
+        
+        // Insert first
+        let insert_cmd = RdfCommand::Insert {
+            subject: "s".to_string(),
+            predicate: "p".to_string(),
+            object: "o".to_string(),
+        };
+        app.apply_command(&insert_cmd);
+        assert_eq!(app.len(), 1);
+        
+        // Then delete
+        let delete_cmd = RdfCommand::Delete {
+            subject: "s".to_string(),
+            predicate: "p".to_string(),
+            object: "o".to_string(),
+        };
+        let response = app.apply_command(&delete_cmd);
+        assert_eq!(response, RdfResponse::Success);
+        assert_eq!(app.len(), 0);
+        assert!(app.is_empty());
+    }
+
+    #[test]
+    fn test_rdf_app_apply_clear() {
+        let mut app = RdfApp::default();
+        
+        // Insert some data
+        app.apply_command(&RdfCommand::Insert {
+            subject: "s1".to_string(),
+            predicate: "p1".to_string(),
+            object: "o1".to_string(),
+        });
+        app.apply_command(&RdfCommand::Insert {
+            subject: "s2".to_string(),
+            predicate: "p2".to_string(),
+            object: "o2".to_string(),
+        });
+        assert_eq!(app.len(), 2);
+        
+        // Clear all
+        let response = app.apply_command(&RdfCommand::Clear);
+        assert_eq!(response, RdfResponse::Success);
+        assert_eq!(app.len(), 0);
+        assert!(app.is_empty());
+    }
+
+    #[test]
+    fn test_rdf_app_transactions() {
+        let mut app = RdfApp::default();
+        let tx_id = "tx1".to_string();
+        
+        // Begin transaction
+        let response = app.apply_command(&RdfCommand::BeginTransaction { tx_id: tx_id.clone() });
+        assert_eq!(response, RdfResponse::TransactionStarted { tx_id: tx_id.clone() });
+        assert!(app.transactions.contains_key(&tx_id));
+        
+        // Commit transaction
+        let response = app.apply_command(&RdfCommand::CommitTransaction { tx_id: tx_id.clone() });
+        assert_eq!(response, RdfResponse::TransactionCommitted { tx_id: tx_id.clone() });
+        assert!(!app.transactions.contains_key(&tx_id));
+    }
+
+    #[test]
+    fn test_rdf_app_transaction_rollback() {
+        let mut app = RdfApp::default();
+        let tx_id = "tx1".to_string();
+        
+        // Begin transaction
+        app.apply_command(&RdfCommand::BeginTransaction { tx_id: tx_id.clone() });
+        assert!(app.transactions.contains_key(&tx_id));
+        
+        // Rollback transaction
+        let response = app.apply_command(&RdfCommand::RollbackTransaction { tx_id: tx_id.clone() });
+        assert_eq!(response, RdfResponse::TransactionRolledBack { tx_id: tx_id.clone() });
+        assert!(!app.transactions.contains_key(&tx_id));
+    }
+
+    #[test]
+    fn test_rdf_app_query() {
+        let mut app = RdfApp::default();
+        
+        // Insert test data
+        app.apply_command(&RdfCommand::Insert {
+            subject: "s1".to_string(),
+            predicate: "p1".to_string(),
+            object: "o1".to_string(),
+        });
+        app.apply_command(&RdfCommand::Insert {
+            subject: "s1".to_string(),
+            predicate: "p2".to_string(),
+            object: "o2".to_string(),
+        });
+        app.apply_command(&RdfCommand::Insert {
+            subject: "s2".to_string(),
+            predicate: "p1".to_string(),
+            object: "o3".to_string(),
+        });
+        
+        // Query all triples
+        let results = app.query(None, None, None);
+        assert_eq!(results.len(), 3);
+        
+        // Query by subject
+        let results = app.query(Some("s1"), None, None);
+        assert_eq!(results.len(), 2);
+        
+        // Query by predicate
+        let results = app.query(None, Some("p1"), None);
+        assert_eq!(results.len(), 2);
+        
+        // Query by object
+        let results = app.query(None, None, Some("o1"));
+        assert_eq!(results.len(), 1);
+        
+        // Query specific triple
+        let results = app.query(Some("s1"), Some("p1"), Some("o1"));
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0], ("s1".to_string(), "p1".to_string(), "o1".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_raft_node_creation() {
+        let node = RaftNode::new(1);
+        assert_eq!(node.node_id, 1);
+        // In non-raft mode (default for tests), node always returns true for is_leader
+        #[cfg(not(feature = "raft"))]
+        assert!(node.is_leader().await);
+        #[cfg(feature = "raft")]
+        assert!(!node.is_leader().await);
+        assert_eq!(node.current_term().await, 0);
+        assert_eq!(node.len().await, 0);
+        assert!(node.is_empty().await);
+    }
+
+    #[tokio::test]
+    async fn test_raft_node_local_operations() {
+        let node = RaftNode::new(1);
+        
+        // Test insert command without Raft
+        let cmd = RdfCommand::Insert {
+            subject: "s".to_string(),
+            predicate: "p".to_string(),
+            object: "o".to_string(),
+        };
+        
+        let response = node.submit_command(cmd).await.unwrap();
+        assert_eq!(response, RdfResponse::Success);
+        assert_eq!(node.len().await, 1);
+        assert!(!node.is_empty().await);
+        
+        // Test query
+        let results = node.query(Some("s"), Some("p"), Some("o")).await;
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0], ("s".to_string(), "p".to_string(), "o".to_string()));
     }
 }

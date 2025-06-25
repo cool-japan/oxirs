@@ -1,16 +1,15 @@
-# OxiRS ARQ Implementation TODO - Ultrathink Mode
+# OxiRS ARQ Implementation TODO
 
-## 📋 Executive Summary
+## Executive Summary
 
-This document outlines the comprehensive implementation plan for oxirs-arq, a high-performance SPARQL algebra and query optimization engine inspired by Apache Jena ARQ. This implementation will provide advanced query processing capabilities with state-of-the-art optimization techniques and extension points for custom functions.
+This document outlines the implementation plan for oxirs-arq, a high-performance SPARQL algebra and query optimization engine inspired by Apache Jena ARQ. This implementation provides advanced query processing capabilities with optimization techniques and extension points for custom functions.
 
 **Apache Jena ARQ Reference**: https://jena.apache.org/documentation/query/
 **SPARQL 1.1 Specification**: https://www.w3.org/TR/sparql11-query/
-**Query Optimization Research**: https://link.springer.com/book/10.1007/978-3-642-25073-6
 
 ---
 
-## 🎯 Phase 1: Core Algebra Foundation (Week 1-3)
+## Phase 1: Core Algebra Foundation
 
 ### 1.1 Enhanced Algebra Types
 
@@ -137,7 +136,7 @@ This document outlines the comprehensive implementation plan for oxirs-arq, a hi
 
 ---
 
-## 🚀 Phase 2: Query Parser and AST (Week 4-6)
+## Phase 2: Query Parser and AST
 
 ### 2.1 SPARQL Parser Implementation
 
@@ -193,7 +192,7 @@ This document outlines the comprehensive implementation plan for oxirs-arq, a hi
 
 ---
 
-## ⚡ Phase 3: Query Optimization Engine (Week 7-10)
+## Phase 3: Query Optimization Engine
 
 ### 3.1 Cost-Based Optimization
 
@@ -274,7 +273,7 @@ This document outlines the comprehensive implementation plan for oxirs-arq, a hi
 
 ---
 
-## 🔧 Phase 4: Execution Engine (Week 11-14)
+## Phase 4: Execution Engine
 
 ### 4.1 Iterator Framework
 
@@ -362,7 +361,7 @@ This document outlines the comprehensive implementation plan for oxirs-arq, a hi
 
 ---
 
-## 🌐 Phase 5: Extension Framework (Week 15-17)
+## Phase 5: Extension Framework
 
 ### 5.1 Custom Function System
 
@@ -422,7 +421,7 @@ This document outlines the comprehensive implementation plan for oxirs-arq, a hi
 
 ---
 
-## 🔍 Phase 6: Advanced Features (Week 18-20)
+## Phase 6: Advanced Features
 
 ### 6.1 Federated Query Processing
 
@@ -491,7 +490,7 @@ This document outlines the comprehensive implementation plan for oxirs-arq, a hi
 
 ---
 
-## 📊 Phase 7: Performance and Monitoring (Week 21-22)
+## Phase 7: Performance and Monitoring
 
 ### 7.1 Performance Monitoring
 
@@ -545,7 +544,7 @@ This document outlines the comprehensive implementation plan for oxirs-arq, a hi
 
 ---
 
-## 🔄 Phase 8: Integration and Ecosystem (Week 23-24)
+## Phase 8: Integration and Ecosystem
 
 ### 8.1 OxiRS Ecosystem Integration
 
@@ -599,9 +598,9 @@ This document outlines the comprehensive implementation plan for oxirs-arq, a hi
 
 ---
 
-## 🎯 Success Criteria and Milestones
+## Success Criteria and Milestones
 
-### ✅ Definition of Done
+### Definition of Done
 1. **100% SPARQL 1.1 Compliance** - Pass all W3C test suites
 2. **Performance Parity** - Match or exceed Apache Jena ARQ performance
 3. **Memory Efficiency** - Sub-linear memory usage for joins
@@ -610,7 +609,7 @@ This document outlines the comprehensive implementation plan for oxirs-arq, a hi
 6. **Integration** - Seamless integration with oxirs ecosystem
 7. **Documentation** - Complete API documentation and tutorials
 
-### 📊 Key Performance Indicators
+### Key Performance Indicators
 - **SPARQL Compliance**: 100% W3C test suite pass rate
 - **Query Performance**: <2x Apache Jena ARQ on TPC-H queries
 - **Memory Usage**: <1.5x Apache Jena ARQ for equivalent queries
@@ -620,7 +619,7 @@ This document outlines the comprehensive implementation plan for oxirs-arq, a hi
 
 ---
 
-## 🚀 Risk Mitigation and Contingency Plans
+## Risk Mitigation and Contingency Plans
 
 ### High-Risk Areas
 1. **Complex Join Optimization**: Implement proven algorithms first, optimize later
@@ -636,7 +635,7 @@ This document outlines the comprehensive implementation plan for oxirs-arq, a hi
 
 ---
 
-## 🔄 Post-1.0 Roadmap
+## Post-1.0 Roadmap
 
 ### Version 1.1 Features
 - [ ] Distributed query processing
@@ -652,7 +651,7 @@ This document outlines the comprehensive implementation plan for oxirs-arq, a hi
 
 ---
 
-## 📋 Implementation Checklist
+## Implementation Checklist
 
 ### Pre-implementation
 - [ ] Study Apache Jena ARQ architecture and algorithms
@@ -674,8 +673,7 @@ This document outlines the comprehensive implementation plan for oxirs-arq, a hi
 
 ---
 
-*This TODO document represents a comprehensive implementation plan for oxirs-arq. The implementation prioritizes correctness, performance, and extensibility while maintaining compatibility with SPARQL standards and integration with the broader OxiRS ecosystem.*
+*This TODO document represents the implementation plan for oxirs-arq. The implementation prioritizes correctness, performance, and extensibility while maintaining compatibility with SPARQL standards and integration with the broader OxiRS ecosystem.*
 
-**Total Estimated Timeline: 24 weeks (6 months) for full implementation**
 **Priority Focus: Core SPARQL compliance first, then performance optimization**
 **Success Metric: 100% SPARQL 1.1 compliance + performance parity with Apache Jena ARQ**

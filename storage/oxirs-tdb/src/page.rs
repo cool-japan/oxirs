@@ -47,7 +47,7 @@ pub struct PageHeader {
 
 impl PageHeader {
     /// Header size in bytes
-    pub const SIZE: usize = 64;
+    pub const SIZE: usize = 72;
 
     /// Create a new page header
     pub fn new(page_id: PageId, page_type: PageType) -> Self {
@@ -77,15 +77,98 @@ impl PageHeader {
         checksum
     }
 
-    /// Serialize header to bytes
+    /// Serialize header to bytes (fixed size)
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
-        bincode::serialize(self).map_err(|e| anyhow!("Failed to serialize page header: {}", e))
+        let mut bytes = Vec::with_capacity(Self::SIZE);
+        
+        // Fixed-size serialization to ensure consistent header size
+        bytes.extend_from_slice(&self.page_id.to_le_bytes());          // 8 bytes
+        bytes.push(self.page_type as u8);                              // 1 byte
+        bytes.extend_from_slice(&self.record_count.to_le_bytes());     // 4 bytes
+        bytes.extend_from_slice(&self.free_space.to_le_bytes());       // 4 bytes
+        bytes.extend_from_slice(&self.next_page.to_le_bytes());        // 8 bytes
+        bytes.extend_from_slice(&self.prev_page.to_le_bytes());        // 8 bytes
+        bytes.extend_from_slice(&self.checksum.to_le_bytes());         // 8 bytes
+        bytes.extend_from_slice(&self.modified.to_le_bytes());         // 8 bytes
+        bytes.extend_from_slice(&self.reserved);                       // 16 bytes
+        
+        // Total: 8+1+4+4+8+8+8+8+16 = 65 bytes, pad to 72 for alignment
+        bytes.resize(Self::SIZE, 0);
+        Ok(bytes)
     }
 
     /// Deserialize header from bytes
     pub fn from_bytes(data: &[u8]) -> Result<Self> {
-        bincode::deserialize(&data[..Self::SIZE])
-            .map_err(|e| anyhow!("Failed to deserialize page header: {}", e))
+        if data.len() < Self::SIZE {
+            return Err(anyhow!("Insufficient data for page header: {} < {}", data.len(), Self::SIZE));
+        }
+        
+        let mut offset = 0;
+        
+        let page_id = u64::from_le_bytes([
+            data[offset], data[offset+1], data[offset+2], data[offset+3],
+            data[offset+4], data[offset+5], data[offset+6], data[offset+7],
+        ]);
+        offset += 8;
+        
+        let page_type = match data[offset] {
+            1 => PageType::Data,
+            2 => PageType::Index,
+            3 => PageType::FreeSpace,
+            4 => PageType::Metadata,
+            5 => PageType::Overflow,
+            _ => return Err(anyhow!("Invalid page type: {}", data[offset])),
+        };
+        offset += 1;
+        
+        let record_count = u32::from_le_bytes([
+            data[offset], data[offset+1], data[offset+2], data[offset+3],
+        ]);
+        offset += 4;
+        
+        let free_space = u32::from_le_bytes([
+            data[offset], data[offset+1], data[offset+2], data[offset+3],
+        ]);
+        offset += 4;
+        
+        let next_page = u64::from_le_bytes([
+            data[offset], data[offset+1], data[offset+2], data[offset+3],
+            data[offset+4], data[offset+5], data[offset+6], data[offset+7],
+        ]);
+        offset += 8;
+        
+        let prev_page = u64::from_le_bytes([
+            data[offset], data[offset+1], data[offset+2], data[offset+3],
+            data[offset+4], data[offset+5], data[offset+6], data[offset+7],
+        ]);
+        offset += 8;
+        
+        let checksum = u64::from_le_bytes([
+            data[offset], data[offset+1], data[offset+2], data[offset+3],
+            data[offset+4], data[offset+5], data[offset+6], data[offset+7],
+        ]);
+        offset += 8;
+        
+        let modified = u64::from_le_bytes([
+            data[offset], data[offset+1], data[offset+2], data[offset+3],
+            data[offset+4], data[offset+5], data[offset+6], data[offset+7],
+        ]);
+        offset += 8;
+        
+        let mut reserved = [0u8; 16];
+        reserved.copy_from_slice(&data[offset..offset+16]);
+        
+        Ok(Self {
+            page_id,
+            page_type,
+            record_count,
+            free_space,
+            next_page,
+            prev_page,
+            checksum,
+            modified,
+            reserved,
+        })
     }
 }
 
@@ -284,6 +367,8 @@ pub struct BufferPool {
     page_file: Arc<Mutex<File>>,
     /// File path
     file_path: PathBuf,
+    /// Next page ID counter
+    next_page_id: Arc<Mutex<PageId>>,
 }
 
 impl BufferPool {
@@ -314,6 +399,7 @@ impl BufferPool {
             stats: Arc::new(Mutex::new(BufferPoolStats::default())),
             page_file: Arc::new(Mutex::new(page_file)),
             file_path,
+            next_page_id: Arc::new(Mutex::new(0)),
         })
     }
 
@@ -468,6 +554,37 @@ impl BufferPool {
         Ok(evicted)
     }
 
+    /// Evict the least recently used page
+    fn evict_lru(&self) -> Result<()> {
+        let tail_page_id = {
+            let tail = self
+                .lru_tail
+                .lock()
+                .map_err(|_| anyhow!("Failed to lock LRU tail"))?;
+            *tail
+        };
+
+        if let Some(page_id) = tail_page_id {
+            let next_tail = {
+                let lru_nodes = self
+                    .lru_nodes
+                    .read()
+                    .map_err(|_| anyhow!("Failed to lock LRU nodes"))?;
+                lru_nodes.get(&page_id).and_then(|node| node.prev)
+            };
+
+            self.evict_page(page_id)?;
+            
+            let mut tail = self
+                .lru_tail
+                .lock()
+                .map_err(|_| anyhow!("Failed to lock LRU tail"))?;
+            *tail = next_tail;
+        }
+
+        Ok(())
+    }
+
     // Private helper methods
 
     fn get_cached_page(&self, page_id: PageId) -> Option<Arc<Mutex<Page>>> {
@@ -523,8 +640,12 @@ impl BufferPool {
                 pages.len()
             };
 
-            if current_count >= self.config.max_pages {
-                self.compact()?;
+            // If adding one more page would exceed capacity, evict LRU pages
+            if current_count + 1 > self.config.max_pages {
+                let to_evict = (current_count + 1) - self.config.max_pages;
+                for _ in 0..to_evict {
+                    self.evict_lru()?;
+                }
             }
         }
 
@@ -646,18 +767,14 @@ impl BufferPool {
     }
 
     fn allocate_page_id(&self) -> Result<PageId> {
-        // Simple allocation - in production, use a free page list
-        let file = self
-            .page_file
+        let mut next_id = self
+            .next_page_id
             .lock()
-            .map_err(|_| anyhow!("Failed to lock page file"))?;
-
-        let file_size = file
-            .metadata()
-            .map_err(|e| anyhow!("Failed to get file metadata: {}", e))?
-            .len();
-
-        Ok(file_size / PAGE_SIZE as u64)
+            .map_err(|_| anyhow!("Failed to lock next_page_id"))?;
+        
+        let id = *next_id;
+        *next_id += 1;
+        Ok(id)
     }
 
     fn update_stats_request(&self) {
@@ -752,16 +869,26 @@ mod tests {
         };
         let buffer_pool = BufferPool::with_config(temp_file.path(), config).unwrap();
 
-        // Create pages exceeding buffer pool capacity
+        // Create pages up to capacity
         let (page1_id, _) = buffer_pool.create_page(PageType::Data).unwrap();
         let (page2_id, _) = buffer_pool.create_page(PageType::Data).unwrap();
+        
+        // Check initial stats
+        let initial_stats = buffer_pool.get_stats().unwrap();
+        assert_eq!(initial_stats.evicted_pages, 0);
+
+        // Creating a third page should trigger automatic eviction
         let (page3_id, _) = buffer_pool.create_page(PageType::Data).unwrap();
 
-        // Compact should evict the least recently used page
-        let evicted = buffer_pool.compact().unwrap();
-        assert!(evicted > 0);
-
+        // Check that eviction occurred during page creation
         let stats = buffer_pool.get_stats().unwrap();
         assert!(stats.evicted_pages > 0);
+        
+        // Verify buffer pool is at capacity
+        let current_count = {
+            let pages = buffer_pool.pages.read().unwrap();
+            pages.len()
+        };
+        assert_eq!(current_count, 2); // Should be at max capacity
     }
 }

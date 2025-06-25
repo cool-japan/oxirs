@@ -862,10 +862,10 @@ impl RaftNode {
 
     /// Compact log
     async fn compact_log(log: &mut RaftLog, config: &CompactionConfig) {
-        let entries_to_compact = log.entries.len() - config.min_entries;
-        if entries_to_compact <= 0 {
+        if log.entries.len() <= config.min_entries {
             return;
         }
+        let entries_to_compact = log.entries.len() - config.min_entries;
 
         tracing::info!(
             "Starting log compaction, compacting {} entries",

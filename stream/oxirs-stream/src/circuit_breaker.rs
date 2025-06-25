@@ -125,7 +125,7 @@ impl FailureType {
 }
 
 /// Circuit breaker states
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CircuitBreakerState {
     Closed,
     Open,
@@ -783,24 +783,50 @@ pub struct CircuitBreakerStats {
     pub failure_count: u32,
     pub success_count: u32,
     pub half_open_calls: u32,
+    #[serde(skip)]
     pub last_failure_time: Option<Instant>,
 }
 
 /// Enhanced circuit breaker statistics
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct EnhancedCircuitBreakerStats {
     pub id: String,
     pub state: CircuitBreakerState,
     pub failure_count: u32,
     pub success_count: u32,
     pub half_open_calls: u32,
+    #[serde(skip)]
     pub last_failure_time: Option<Instant>,
     pub failure_by_type: HashMap<FailureType, u32>,
+    #[serde(skip)]
     pub metrics: CircuitBreakerMetrics,
     pub adaptive_threshold: f64,
+    #[serde(skip)]
     pub recovery_timeout: Duration,
+    #[serde(skip)]
     pub created_at: Instant,
+    #[serde(skip)]
     pub uptime: Duration,
+}
+
+impl Default for EnhancedCircuitBreakerStats {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            state: CircuitBreakerState::Closed,
+            failure_count: 0,
+            success_count: 0,
+            half_open_calls: 0,
+            last_failure_time: None,
+            failure_by_type: HashMap::new(),
+            metrics: CircuitBreakerMetrics::default(),
+            adaptive_threshold: 0.0,
+            recovery_timeout: Duration::ZERO,
+            created_at: Instant::now(),
+            uptime: Duration::ZERO,
+        }
+    }
 }
 
 /// Circuit breaker error types
@@ -808,6 +834,7 @@ pub struct EnhancedCircuitBreakerStats {
 pub enum CircuitBreakerError {
     CircuitOpen {
         state: CircuitBreakerState,
+        #[serde(skip)]
         last_failure: Option<Instant>,
     },
     OperationFailed(String),

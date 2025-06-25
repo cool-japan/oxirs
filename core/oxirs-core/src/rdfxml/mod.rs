@@ -6,8 +6,9 @@
 mod error;
 mod parser;
 mod serializer;
-mod streaming;
+// mod streaming; // TODO: Fix compilation errors
 mod utils;
+mod wrapper;
 
 pub use error::{RdfXmlParseError, RdfXmlSyntaxError};
 pub use parser::{RdfXmlParser, RdfXmlPrefixesIter, ReaderRdfXmlParser, SliceRdfXmlParser};
@@ -16,8 +17,9 @@ pub use parser::TokioAsyncReaderRdfXmlParser;
 pub use serializer::{RdfXmlSerializer, WriterRdfXmlSerializer};
 #[cfg(feature = "async")]
 pub use serializer::TokioAsyncWriterRdfXmlSerializer;
-pub use streaming::{
-    DomFreeStreamingRdfXmlParser, RdfXmlStreamingConfig, RdfXmlStreamingSink,
-    RdfXmlStreamingStatistics, MemoryRdfXmlSink, RdfXmlSinkStatistics,
-    ElementType, ParseType, NamespaceContext, ElementContext
-};
+// pub use streaming::{
+//     DomFreeStreamingRdfXmlParser, RdfXmlStreamingConfig, RdfXmlStreamingSink,
+//     RdfXmlStreamingStatistics, MemoryRdfXmlSink, RdfXmlSinkStatistics,
+//     ElementType, ParseType, NamespaceContext, ElementContext
+// }; // TODO: Re-enable when streaming module is fixed
+pub use wrapper::parse_rdfxml;

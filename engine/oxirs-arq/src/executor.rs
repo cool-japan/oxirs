@@ -4,7 +4,7 @@
 //! SPARQL algebra expressions and produces result bindings.
 
 use crate::algebra::{
-    Aggregate, Algebra, BinaryOperator, Binding, Expression, PropertyPath, PropertyPathPattern,
+    Aggregate, Algebra, BinaryOperator, Binding, Expression, Literal, PropertyPath, PropertyPathPattern,
     Solution, Term, TriplePattern, UnaryOperator, Variable,
 };
 use anyhow::{anyhow, Result};
@@ -854,26 +854,66 @@ impl QueryExecutor {
         }
     }
 
-    /// Placeholder implementations for remaining operators
+    /// Execute BIND operation
     fn execute_extend(
         &self,
-        _pattern: &Algebra,
-        _variable: &Variable,
-        _expr: &Expression,
-        _dataset: &dyn Dataset,
-        _stats: &mut ExecutionStats,
+        pattern: &Algebra,
+        variable: &Variable,
+        expr: &Expression,
+        dataset: &dyn Dataset,
+        stats: &mut ExecutionStats,
     ) -> Result<Solution> {
-        Ok(vec![]) // TODO: Implement BIND operation
+        let pattern_result = self.execute_algebra(pattern, dataset, stats)?;
+        let mut result = Vec::new();
+
+        for binding in pattern_result {
+            let mut extended_binding = binding.clone();
+            
+            // Evaluate expression and bind to variable
+            if let Ok(value) = self.evaluate_expression_to_term(expr, &binding) {
+                extended_binding.insert(variable.clone(), value);
+                result.push(extended_binding);
+            } else {
+                // Skip binding if expression evaluation fails
+                continue;
+            }
+        }
+
+        stats.intermediate_results += result.len();
+        Ok(result)
     }
 
     fn execute_minus(
         &self,
-        _left: &Algebra,
-        _right: &Algebra,
-        _dataset: &dyn Dataset,
-        _stats: &mut ExecutionStats,
+        left: &Algebra,
+        right: &Algebra,
+        dataset: &dyn Dataset,
+        stats: &mut ExecutionStats,
     ) -> Result<Solution> {
-        Ok(vec![]) // TODO: Implement MINUS operation
+        let left_result = self.execute_algebra(left, dataset, stats)?;
+        let right_result = self.execute_algebra(right, dataset, stats)?;
+        
+        let mut result = Vec::new();
+        
+        // For each left binding, check if it has a compatible binding in right
+        for left_binding in left_result {
+            let mut has_compatible = false;
+            
+            for right_binding in &right_result {
+                if self.bindings_compatible(&left_binding, right_binding) {
+                    has_compatible = true;
+                    break;
+                }
+            }
+            
+            // Include left binding only if no compatible right binding found
+            if !has_compatible {
+                result.push(left_binding);
+            }
+        }
+        
+        stats.intermediate_results += result.len();
+        Ok(result)
     }
 
     fn execute_service(
@@ -986,33 +1026,110 @@ impl QueryExecutor {
 
     fn execute_order_by(
         &self,
-        _pattern: &Algebra,
-        _conditions: &[crate::algebra::OrderCondition],
-        _dataset: &dyn Dataset,
-        _stats: &mut ExecutionStats,
+        pattern: &Algebra,
+        conditions: &[crate::algebra::OrderCondition],
+        dataset: &dyn Dataset,
+        stats: &mut ExecutionStats,
     ) -> Result<Solution> {
-        Ok(vec![]) // TODO: Implement ORDER BY
+        let mut pattern_result = self.execute_algebra(pattern, dataset, stats)?;
+        
+        // Sort by multiple conditions
+        pattern_result.sort_by(|a, b| {
+            for condition in conditions {
+                let a_val = self.evaluate_expression_to_term(&condition.expr, a)
+                    .unwrap_or_else(|_| Term::Literal(Literal::string("")))
+                    .to_string();
+                let b_val = self.evaluate_expression_to_term(&condition.expr, b)
+                    .unwrap_or_else(|_| Term::Literal(Literal::string("")))
+                    .to_string();
+                
+                let cmp = if condition.ascending {
+                    a_val.cmp(&b_val)
+                } else {
+                    b_val.cmp(&a_val)
+                };
+                
+                if cmp != std::cmp::Ordering::Equal {
+                    return cmp;
+                }
+            }
+            std::cmp::Ordering::Equal
+        });
+        
+        stats.intermediate_results += pattern_result.len();
+        Ok(pattern_result)
     }
 
     fn execute_group(
         &self,
-        _pattern: &Algebra,
-        _variables: &[crate::algebra::GroupCondition],
-        _aggregates: &[(Variable, Aggregate)],
-        _dataset: &dyn Dataset,
-        _stats: &mut ExecutionStats,
+        pattern: &Algebra,
+        variables: &[crate::algebra::GroupCondition],
+        aggregates: &[(Variable, Aggregate)],
+        dataset: &dyn Dataset,
+        stats: &mut ExecutionStats,
     ) -> Result<Solution> {
-        Ok(vec![]) // TODO: Implement GROUP BY
+        let pattern_result = self.execute_algebra(pattern, dataset, stats)?;
+        
+        // Group bindings by group variables
+        let mut groups: HashMap<Vec<Term>, Vec<Binding>> = HashMap::new();
+        
+        for binding in pattern_result {
+            let mut group_key = Vec::new();
+            
+            for group_var in variables {
+                let value = self.evaluate_expression_to_term(&group_var.expr, &binding)
+                    .unwrap_or_else(|_| Term::Literal(Literal::string("")));
+                group_key.push(value);
+            }
+            
+            groups.entry(group_key).or_insert_with(Vec::new).push(binding);
+        }
+        
+        // Compute aggregates for each group
+        let mut result = Vec::new();
+        
+        for (group_key, group_bindings) in groups {
+            let mut group_binding = HashMap::new();
+            
+            // Add group variables to binding
+            for (i, group_var) in variables.iter().enumerate() {
+                if let Some(alias) = &group_var.alias {
+                    group_binding.insert(alias.clone(), group_key[i].clone());
+                }
+            }
+            
+            // Compute aggregates
+            for (agg_var, aggregate) in aggregates {
+                let agg_value = self.compute_aggregate(aggregate, &group_bindings)?;
+                group_binding.insert(agg_var.clone(), agg_value);
+            }
+            
+            result.push(group_binding);
+        }
+        
+        stats.intermediate_results += result.len();
+        Ok(result)
     }
 
     fn execute_having(
         &self,
-        _pattern: &Algebra,
-        _condition: &Expression,
-        _dataset: &dyn Dataset,
-        _stats: &mut ExecutionStats,
+        pattern: &Algebra,
+        condition: &Expression,
+        dataset: &dyn Dataset,
+        stats: &mut ExecutionStats,
     ) -> Result<Solution> {
-        Ok(vec![]) // TODO: Implement HAVING
+        let pattern_result = self.execute_algebra(pattern, dataset, stats)?;
+        
+        let filtered: Vec<_> = pattern_result
+            .into_iter()
+            .filter(|binding| {
+                self.evaluate_expression(condition, binding)
+                    .unwrap_or(false)
+            })
+            .collect();
+        
+        stats.intermediate_results += filtered.len();
+        Ok(filtered)
     }
 
     fn execute_property_path(
@@ -1046,6 +1163,356 @@ impl QueryExecutor {
 
         stats.intermediate_results += result.len();
         Ok(result)
+    }
+
+    /// Evaluate expression against binding returning a term
+    fn evaluate_expression_to_term(&self, expr: &Expression, binding: &Binding) -> Result<Term> {
+        match expr {
+            Expression::Variable(var) => {
+                binding.get(var)
+                    .cloned()
+                    .ok_or_else(|| anyhow!("Unbound variable: {}", var))
+            }
+            Expression::Literal(lit) => Ok(Term::Literal(lit.clone())),
+            Expression::Iri(iri) => Ok(Term::Iri(iri.clone())),
+            Expression::Function { name, args } => {
+                self.evaluate_function(name, args, binding)
+            }
+            Expression::Binary { op, left, right } => {
+                let left_term = self.evaluate_expression_to_term(left, binding)?;
+                let right_term = self.evaluate_expression_to_term(right, binding)?;
+                self.evaluate_binary_operation(op, &left_term, &right_term)
+            }
+            Expression::Unary { op, expr } => {
+                let term = self.evaluate_expression_to_term(expr, binding)?;
+                self.evaluate_unary_operation(op, &term)
+            }
+            Expression::Conditional { condition, then_expr, else_expr } => {
+                if self.evaluate_expression(condition, binding)? {
+                    self.evaluate_expression_to_term(then_expr, binding)
+                } else {
+                    self.evaluate_expression_to_term(else_expr, binding)
+                }
+            }
+            Expression::Bound(var) => {
+                Ok(Term::Literal(Literal::boolean(binding.contains_key(var))))
+            }
+            _ => Err(anyhow!("Unsupported expression type"))
+        }
+    }
+
+    /// Check if two bindings are compatible (share common variables with same values)
+    fn bindings_compatible(&self, left: &Binding, right: &Binding) -> bool {
+        for (var, left_term) in left {
+            if let Some(right_term) = right.get(var) {
+                if left_term != right_term {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
+    /// Compute aggregate value for a group
+    fn compute_aggregate(&self, aggregate: &Aggregate, bindings: &[Binding]) -> Result<Term> {
+        match aggregate {
+            Aggregate::Count { distinct, expr } => {
+                let count = if let Some(expr) = expr {
+                    let mut values = Vec::new();
+                    for binding in bindings {
+                        if let Ok(value) = self.evaluate_expression_to_term(expr, binding) {
+                            if *distinct {
+                                if !values.contains(&value) {
+                                    values.push(value);
+                                }
+                            } else {
+                                values.push(value);
+                            }
+                        }
+                    }
+                    values.len()
+                } else {
+                    bindings.len()
+                };
+                Ok(Term::Literal(Literal::integer(count as i64)))
+            }
+            Aggregate::Sum { distinct, expr } => {
+                let mut sum = 0.0;
+                let mut values = Vec::new();
+                
+                for binding in bindings {
+                    if let Ok(term) = self.evaluate_expression_to_term(expr, binding) {
+                        if let Term::Literal(lit) = term {
+                            if lit.is_numeric() {
+                                let value: f64 = lit.value.parse().unwrap_or(0.0);
+                                if *distinct {
+                                    if !values.contains(&value) {
+                                        values.push(value);
+                                        sum += value;
+                                    }
+                                } else {
+                                    sum += value;
+                                }
+                            }
+                        }
+                    }
+                }
+                Ok(Term::Literal(Literal::decimal(sum)))
+            }
+            Aggregate::Min { distinct: _, expr } => {
+                let mut min_val: Option<String> = None;
+                
+                for binding in bindings {
+                    if let Ok(term) = self.evaluate_expression_to_term(expr, binding) {
+                        let val = term.to_string();
+                        min_val = Some(match min_val {
+                            None => val,
+                            Some(current_min) => if val < current_min { val } else { current_min },
+                        });
+                    }
+                }
+                
+                Ok(Term::Literal(Literal::string(min_val.unwrap_or_default())))
+            }
+            Aggregate::Max { distinct: _, expr } => {
+                let mut max_val: Option<String> = None;
+                
+                for binding in bindings {
+                    if let Ok(term) = self.evaluate_expression_to_term(expr, binding) {
+                        let val = term.to_string();
+                        max_val = Some(match max_val {
+                            None => val,
+                            Some(current_max) => if val > current_max { val } else { current_max },
+                        });
+                    }
+                }
+                
+                Ok(Term::Literal(Literal::string(max_val.unwrap_or_default())))
+            }
+            Aggregate::Avg { distinct, expr } => {
+                let mut sum = 0.0;
+                let mut count = 0;
+                let mut values = Vec::new();
+                
+                for binding in bindings {
+                    if let Ok(term) = self.evaluate_expression_to_term(expr, binding) {
+                        if let Term::Literal(lit) = term {
+                            if lit.is_numeric() {
+                                let value: f64 = lit.value.parse().unwrap_or(0.0);
+                                if *distinct {
+                                    if !values.contains(&value) {
+                                        values.push(value);
+                                        sum += value;
+                                        count += 1;
+                                    }
+                                } else {
+                                    sum += value;
+                                    count += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                let avg = if count > 0 { sum / count as f64 } else { 0.0 };
+                Ok(Term::Literal(Literal::decimal(avg)))
+            }
+            Aggregate::Sample { distinct: _, expr } => {
+                // Return first non-null value (simplified)
+                for binding in bindings {
+                    if let Ok(term) = self.evaluate_expression_to_term(expr, binding) {
+                        return Ok(term);
+                    }
+                }
+                Ok(Term::Literal(Literal::string("")))
+            }
+            Aggregate::GroupConcat { distinct, expr, separator } => {
+                let mut values = Vec::new();
+                let sep = separator.as_deref().unwrap_or(" ");
+                
+                for binding in bindings {
+                    if let Ok(term) = self.evaluate_expression_to_term(expr, binding) {
+                        let value = term.to_string();
+                        if *distinct {
+                            if !values.contains(&value) {
+                                values.push(value);
+                            }
+                        } else {
+                            values.push(value);
+                        }
+                    }
+                }
+                
+                Ok(Term::Literal(Literal::string(values.join(sep))))
+            }
+        }
+    }
+
+    /// Evaluate function call
+    fn evaluate_function(&self, name: &str, args: &[Expression], binding: &Binding) -> Result<Term> {
+        let arg_terms: Result<Vec<_>> = args.iter()
+            .map(|arg| self.evaluate_expression_to_term(arg, binding))
+            .collect();
+        let arg_terms = arg_terms?;
+
+        match name {
+            "str" => {
+                if let Some(term) = arg_terms.first() {
+                    Ok(Term::Literal(Literal::string(term.to_string())))
+                } else {
+                    Err(anyhow!("str() requires one argument"))
+                }
+            }
+            "strlen" => {
+                if let Some(Term::Literal(lit)) = arg_terms.first() {
+                    Ok(Term::Literal(Literal::integer(lit.value.len() as i64)))
+                } else {
+                    Err(anyhow!("strlen() requires a literal argument"))
+                }
+            }
+            "ucase" => {
+                if let Some(Term::Literal(lit)) = arg_terms.first() {
+                    Ok(Term::Literal(Literal::string(lit.value.to_uppercase())))
+                } else {
+                    Err(anyhow!("ucase() requires a literal argument"))
+                }
+            }
+            "lcase" => {
+                if let Some(Term::Literal(lit)) = arg_terms.first() {
+                    Ok(Term::Literal(Literal::string(lit.value.to_lowercase())))
+                } else {
+                    Err(anyhow!("lcase() requires a literal argument"))
+                }
+            }
+            _ => Err(anyhow!("Unknown function: {}", name))
+        }
+    }
+
+    /// Evaluate binary operation
+    fn evaluate_binary_operation(&self, op: &BinaryOperator, left: &Term, right: &Term) -> Result<Term> {
+        match (left, right) {
+            (Term::Literal(left_lit), Term::Literal(right_lit)) => {
+                match op {
+                    BinaryOperator::Add => {
+                        if left_lit.is_numeric() && right_lit.is_numeric() {
+                            let left_val: f64 = left_lit.value.parse().unwrap_or(0.0);
+                            let right_val: f64 = right_lit.value.parse().unwrap_or(0.0);
+                            Ok(Term::Literal(Literal::decimal(left_val + right_val)))
+                        } else {
+                            Err(anyhow!("Addition requires numeric operands"))
+                        }
+                    }
+                    BinaryOperator::Subtract => {
+                        if left_lit.is_numeric() && right_lit.is_numeric() {
+                            let left_val: f64 = left_lit.value.parse().unwrap_or(0.0);
+                            let right_val: f64 = right_lit.value.parse().unwrap_or(0.0);
+                            Ok(Term::Literal(Literal::decimal(left_val - right_val)))
+                        } else {
+                            Err(anyhow!("Subtraction requires numeric operands"))
+                        }
+                    }
+                    BinaryOperator::Multiply => {
+                        if left_lit.is_numeric() && right_lit.is_numeric() {
+                            let left_val: f64 = left_lit.value.parse().unwrap_or(0.0);
+                            let right_val: f64 = right_lit.value.parse().unwrap_or(0.0);
+                            Ok(Term::Literal(Literal::decimal(left_val * right_val)))
+                        } else {
+                            Err(anyhow!("Multiplication requires numeric operands"))
+                        }
+                    }
+                    BinaryOperator::Divide => {
+                        if left_lit.is_numeric() && right_lit.is_numeric() {
+                            let left_val: f64 = left_lit.value.parse().unwrap_or(0.0);
+                            let right_val: f64 = right_lit.value.parse().unwrap_or(1.0);
+                            if right_val != 0.0 {
+                                Ok(Term::Literal(Literal::decimal(left_val / right_val)))
+                            } else {
+                                Err(anyhow!("Division by zero"))
+                            }
+                        } else {
+                            Err(anyhow!("Division requires numeric operands"))
+                        }
+                    }
+                    BinaryOperator::Equal => {
+                        Ok(Term::Literal(Literal::boolean(left_lit.value == right_lit.value)))
+                    }
+                    BinaryOperator::NotEqual => {
+                        Ok(Term::Literal(Literal::boolean(left_lit.value != right_lit.value)))
+                    }
+                    BinaryOperator::Less => {
+                        Ok(Term::Literal(Literal::boolean(left_lit.value < right_lit.value)))
+                    }
+                    BinaryOperator::LessEqual => {
+                        Ok(Term::Literal(Literal::boolean(left_lit.value <= right_lit.value)))
+                    }
+                    BinaryOperator::Greater => {
+                        Ok(Term::Literal(Literal::boolean(left_lit.value > right_lit.value)))
+                    }
+                    BinaryOperator::GreaterEqual => {
+                        Ok(Term::Literal(Literal::boolean(left_lit.value >= right_lit.value)))
+                    }
+                    _ => Err(anyhow!("Unsupported binary operation"))
+                }
+            }
+            _ => Err(anyhow!("Binary operations require literal operands"))
+        }
+    }
+
+    /// Evaluate unary operation
+    fn evaluate_unary_operation(&self, op: &UnaryOperator, operand: &Term) -> Result<Term> {
+        match op {
+            UnaryOperator::Not => {
+                if let Term::Literal(lit) = operand {
+                    if lit.is_boolean() {
+                        let val = lit.value == "true";
+                        Ok(Term::Literal(Literal::boolean(!val)))
+                    } else {
+                        Err(anyhow!("NOT operation requires boolean operand"))
+                    }
+                } else {
+                    Err(anyhow!("NOT operation requires literal operand"))
+                }
+            }
+            UnaryOperator::Plus => {
+                if let Term::Literal(lit) = operand {
+                    if lit.is_numeric() {
+                        Ok(operand.clone())
+                    } else {
+                        Err(anyhow!("Plus operation requires numeric operand"))
+                    }
+                } else {
+                    Err(anyhow!("Plus operation requires literal operand"))
+                }
+            }
+            UnaryOperator::Minus => {
+                if let Term::Literal(lit) = operand {
+                    if lit.is_numeric() {
+                        let val: f64 = lit.value.parse().unwrap_or(0.0);
+                        Ok(Term::Literal(Literal::decimal(-val)))
+                    } else {
+                        Err(anyhow!("Minus operation requires numeric operand"))
+                    }
+                } else {
+                    Err(anyhow!("Minus operation requires literal operand"))
+                }
+            }
+            UnaryOperator::IsIri => {
+                Ok(Term::Literal(Literal::boolean(matches!(operand, Term::Iri(_)))))
+            }
+            UnaryOperator::IsBlank => {
+                Ok(Term::Literal(Literal::boolean(matches!(operand, Term::BlankNode(_)))))
+            }
+            UnaryOperator::IsLiteral => {
+                Ok(Term::Literal(Literal::boolean(matches!(operand, Term::Literal(_)))))
+            }
+            UnaryOperator::IsNumeric => {
+                if let Term::Literal(lit) = operand {
+                    Ok(Term::Literal(Literal::boolean(lit.is_numeric())))
+                } else {
+                    Ok(Term::Literal(Literal::boolean(false)))
+                }
+            }
+        }
     }
 }
 

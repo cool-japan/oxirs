@@ -7,13 +7,14 @@
 //! It supports tracking changes at the triple level and provides efficient
 //! streaming of update operations.
 
-use crate::{PatchOperation, RdfPatch, StreamEvent};
+use crate::{PatchOperation, RdfPatch, SparqlOperationType, StreamEvent};
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use tracing::{debug, error, warn};
+use uuid::Uuid;
 
 /// Delta computation for SPARQL Updates with advanced parsing
 pub struct DeltaComputer {
@@ -77,6 +78,7 @@ impl DeltaComputer {
                     subject,
                     predicate,
                     object,
+                    ..
                 } => PatchOperation::Add {
                     subject: subject.clone(),
                     predicate: predicate.clone(),
@@ -86,12 +88,13 @@ impl DeltaComputer {
                     subject,
                     predicate,
                     object,
+                    ..
                 } => PatchOperation::Delete {
                     subject: subject.clone(),
                     predicate: predicate.clone(),
                     object: object.clone(),
                 },
-                StreamEvent::GraphCleared { graph } => {
+                StreamEvent::GraphCleared { graph, .. } => {
                     if let Some(graph_uri) = graph {
                         PatchOperation::DeleteGraph {
                             graph: graph_uri.clone(),
@@ -103,6 +106,18 @@ impl DeltaComputer {
                 }
                 StreamEvent::SparqlUpdate { .. } => {
                     // Skip SPARQL update events in patch conversion
+                    continue;
+                }
+                StreamEvent::QuadAdded { .. } | 
+                StreamEvent::QuadRemoved { .. } |
+                StreamEvent::GraphCreated { .. } |
+                StreamEvent::GraphDeleted { .. } |
+                StreamEvent::TransactionBegin { .. } |
+                StreamEvent::TransactionCommit { .. } |
+                StreamEvent::TransactionAbort { .. } |
+                StreamEvent::ConnectionError { .. } |
+                StreamEvent::ReaderMessage { .. } => {
+                    // These events don't translate to basic patch operations
                     continue;
                 }
             };
@@ -422,6 +437,8 @@ impl DeltaComputer {
                         subject: triple.subject.clone(),
                         predicate: triple.predicate.clone(),
                         object: triple.object.clone(),
+                        graph: None,
+                        metadata: Default::default(),
                     });
                 }
             }
@@ -431,6 +448,8 @@ impl DeltaComputer {
                         subject: triple.subject.clone(),
                         predicate: triple.predicate.clone(),
                         object: triple.object.clone(),
+                        graph: None,
+                        metadata: Default::default(),
                     });
                 }
             }
@@ -442,6 +461,8 @@ impl DeltaComputer {
                         subject: triple.subject.clone(),
                         predicate: triple.predicate.clone(),
                         object: triple.object.clone(),
+                        graph: None,
+                        metadata: Default::default(),
                     });
                 }
             }
@@ -452,6 +473,8 @@ impl DeltaComputer {
                         subject: pattern.subject.clone(),
                         predicate: pattern.predicate.clone(),
                         object: pattern.object.clone(),
+                        graph: None,
+                        metadata: Default::default(),
                     });
                 }
             }
@@ -462,6 +485,8 @@ impl DeltaComputer {
                         subject: triple.subject.clone(),
                         predicate: triple.predicate.clone(),
                         object: triple.object.clone(),
+                        graph: None,
+                        metadata: Default::default(),
                     });
                 }
                 for triple in insert {
@@ -469,23 +494,33 @@ impl DeltaComputer {
                         subject: triple.subject.clone(),
                         predicate: triple.predicate.clone(),
                         object: triple.object.clone(),
+                        graph: None,
+                        metadata: Default::default(),
                     });
                 }
             }
             UpdateOperation::ClearAll => {
-                events.push(StreamEvent::GraphCleared { graph: None });
+                events.push(StreamEvent::GraphCleared { 
+                    graph: None, 
+                    metadata: Default::default(),
+                });
             }
             UpdateOperation::ClearDefault => {
-                events.push(StreamEvent::GraphCleared { graph: None });
+                events.push(StreamEvent::GraphCleared { 
+                    graph: None, 
+                    metadata: Default::default(),
+                });
             }
             UpdateOperation::ClearGraph { graph } => {
                 events.push(StreamEvent::GraphCleared {
                     graph: graph.clone(),
+                    metadata: Default::default(),
                 });
             }
             UpdateOperation::DropGraph { graph } => {
                 events.push(StreamEvent::GraphCleared {
                     graph: graph.clone(),
+                    metadata: Default::default(),
                 });
             }
             UpdateOperation::CreateGraph { .. } => {
@@ -496,6 +531,8 @@ impl DeltaComputer {
                 // For now, we just record the operation
                 events.push(StreamEvent::SparqlUpdate {
                     query: format!("Operation #{}: {:?}", self.operation_counter, operation),
+                    operation_type: SparqlOperationType::Load,
+                    metadata: Default::default(),
                 });
             }
         }
@@ -515,19 +552,25 @@ impl DeltaComputer {
                     subject,
                     predicate,
                     object,
+                    ..
                 }
                 | StreamEvent::TripleRemoved {
                     subject,
                     predicate,
                     object,
+                    ..
                 } => {
                     format!("{}|{}|{}", subject, predicate, object)
                 }
-                StreamEvent::GraphCleared { graph } => {
+                StreamEvent::GraphCleared { graph, .. } => {
                     format!("graph_clear|{:?}", graph)
                 }
-                StreamEvent::SparqlUpdate { query } => {
+                StreamEvent::SparqlUpdate { query, .. } => {
                     format!("sparql|{}", query)
+                }
+                _ => {
+                    // Other events get unique keys to avoid deduplication
+                    format!("other|{}", uuid::Uuid::new_v4())
                 }
             };
 

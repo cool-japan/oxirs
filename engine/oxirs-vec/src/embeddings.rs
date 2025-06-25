@@ -159,7 +159,7 @@ impl TfIdfEmbeddingGenerator {
 
         // Calculate IDF scores
         let total_docs = documents.len() as f32;
-        for (word, idx) in &self.vocabulary {
+        for (word, _idx) in &self.vocabulary {
             let doc_freq = doc_counts.get(word).unwrap_or(&0);
             let idf = (total_docs / (*doc_freq as f32 + 1.0)).ln();
             self.idf_scores.insert(word.clone(), idf);
@@ -247,7 +247,7 @@ impl SentenceTransformerGenerator {
 
 impl EmbeddingGenerator for SentenceTransformerGenerator {
     fn generate(&self, content: &EmbeddableContent) -> Result<Vector> {
-        let text = content.to_text();
+        let _text = content.to_text();
         let text_hash = content.content_hash();
 
         // Generate deterministic "embeddings" based on text hash for now

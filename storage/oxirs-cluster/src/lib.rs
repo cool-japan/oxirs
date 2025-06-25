@@ -27,6 +27,8 @@
 //!     address: "127.0.0.1:8080".parse()?,
 //!     data_dir: "./data".to_string(),
 //!     peers: vec![2, 3],
+//!     discovery: None,
+//!     replication_strategy: None,
 //! };
 //!
 //! let mut node = ClusterNode::new(config).await?;
@@ -51,8 +53,10 @@ use tokio::sync::RwLock;
 
 pub mod consensus;
 pub mod discovery;
+pub mod network;
 pub mod raft;
 pub mod replication;
+pub mod storage;
 
 use consensus::{ConsensusManager, ConsensusStatus};
 use discovery::{DiscoveryConfig, DiscoveryService, NodeInfo};
@@ -111,6 +115,7 @@ impl NodeConfig {
 }
 
 /// Cluster node implementation
+#[derive(Debug)]
 pub struct ClusterNode {
     config: NodeConfig,
     consensus: ConsensusManager,
@@ -578,4 +583,93 @@ pub enum ClusterError {
 
     #[error("Network error: {0}")]
     Network(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::{IpAddr, Ipv4Addr};
+
+    #[tokio::test]
+    async fn test_node_config_creation() {
+        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
+        let config = NodeConfig::new(1, addr);
+
+        assert_eq!(config.node_id, 1);
+        assert_eq!(config.address, addr);
+        assert_eq!(config.data_dir, "./data/node-1");
+        assert!(config.peers.is_empty());
+        assert!(config.discovery.is_some());
+        assert!(config.replication_strategy.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_node_config_add_peer() {
+        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
+        let mut config = NodeConfig::new(1, addr);
+
+        config.add_peer(2);
+        config.add_peer(3);
+        config.add_peer(2); // Duplicate should be ignored
+
+        assert_eq!(config.peers, vec![2, 3]);
+    }
+
+    #[tokio::test]
+    async fn test_node_config_no_self_peer() {
+        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
+        let mut config = NodeConfig::new(1, addr);
+
+        config.add_peer(1); // Should not add self
+
+        assert!(config.peers.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_cluster_node_creation() {
+        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
+        let config = NodeConfig::new(1, addr);
+
+        let node = ClusterNode::new(config).await;
+        assert!(node.is_ok());
+
+        let node = node.unwrap();
+        assert_eq!(node.config.node_id, 1);
+        assert_eq!(node.config.address, addr);
+    }
+
+    #[tokio::test]
+    async fn test_cluster_node_empty_data_dir_error() {
+        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
+        let mut config = NodeConfig::new(1, addr);
+        config.data_dir = String::new();
+
+        let result = ClusterNode::new(config).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Data directory cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn test_distributed_store_creation() {
+        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
+        let config = NodeConfig::new(1, addr);
+
+        let store = DistributedStore::new(config).await;
+        assert!(store.is_ok());
+    }
+
+    #[test]
+    fn test_cluster_error_types() {
+        let err = ClusterError::Configuration("test error".to_string());
+        assert!(err.to_string().contains("Configuration error: test error"));
+
+        let err = ClusterError::NotLeader;
+        assert_eq!(err.to_string(), "Not the leader");
+
+        let err = ClusterError::NodeNotFound { node_id: 42 };
+        assert!(err.to_string().contains("Node not found: 42"));
+
+        let err = ClusterError::Network("connection failed".to_string());
+        assert!(err.to_string().contains("Network error: connection failed"));
+    }
 }

@@ -3,8 +3,8 @@
 //! This is a placeholder implementation that will be enhanced with full
 //! SPARQL 1.1 parsing capabilities in future iterations.
 
-use crate::model::{Variable, Term, NamedNode, BlankNode, Literal};
-use crate::query::algebra::{GraphPattern, TriplePattern, TermPattern, Query, QueryForm, SelectVariables, Expression, OrderExpression, Dataset};
+use crate::model::{Variable, Term, NamedNode, BlankNode, Literal, Quad};
+use crate::query::algebra::{GraphPattern, TriplePattern, TermPattern, Query, QueryForm, SelectVariables, Expression, OrderExpression, Dataset, Update, UpdateOperation};
 use crate::OxirsError;
 use std::collections::HashMap;
 
@@ -112,7 +112,7 @@ impl SparqlParser {
                 offset: 0,
                 limit: None,
             },
-            dataset: crate::query::algebra::Dataset::default(),
+            dataset: Dataset::default(),
         })
     }
 
@@ -135,7 +135,7 @@ impl SparqlParser {
             base: self.base_iri.clone(),
             prefixes: self.prefixes.clone(),
             form: QueryForm::Ask { where_clause },
-            dataset: crate::query::algebra::Dataset::default(),
+            dataset: Dataset::default(),
         })
     }
 

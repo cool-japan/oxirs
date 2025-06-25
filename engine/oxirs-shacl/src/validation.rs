@@ -505,29 +505,16 @@ impl<'a> ValidationEngine<'a> {
         for value in &context.values {
             if let Term::Literal(literal) = value {
                 // Check if literal has the required datatype
-                if let Some(literal_datatype) = literal.datatype() {
-                    if literal_datatype.as_str() != constraint.datatype_iri.as_str() {
-                        return Ok(ConstraintEvaluationResult::violated(
-                            Some(value.clone()),
-                            Some(format!(
-                                "Value has datatype {} but expected {}",
-                                literal_datatype.as_str(),
-                                constraint.datatype_iri.as_str()
-                            )),
-                        ));
-                    }
-                } else {
-                    // Literal without explicit datatype - check if it's a simple literal that should have xsd:string
-                    let xsd_string = "http://www.w3.org/2001/XMLSchema#string";
-                    if constraint.datatype_iri.as_str() != xsd_string {
-                        return Ok(ConstraintEvaluationResult::violated(
-                            Some(value.clone()),
-                            Some(format!(
-                                "Value is a plain literal but expected datatype {}",
-                                constraint.datatype_iri.as_str()
-                            )),
-                        ));
-                    }
+                let literal_datatype = literal.datatype();
+                if literal_datatype.as_str() != constraint.datatype_iri.as_str() {
+                    return Ok(ConstraintEvaluationResult::violated(
+                        Some(value.clone()),
+                        Some(format!(
+                            "Value has datatype {} but expected {}",
+                            literal_datatype.as_str(),
+                            constraint.datatype_iri.as_str()
+                        )),
+                    ));
                 }
             } else {
                 return Ok(ConstraintEvaluationResult::violated(
@@ -2059,5 +2046,8 @@ fn format_term_for_sparql(term: &Term) -> Result<String> {
             Ok(format!("\"{}\"", literal.as_str().replace('"', "\\\"")))
         }
         Term::Variable(var) => Ok(format!("?{}", var.name())),
+        Term::QuotedTriple(_) => Err(ShaclError::ValidationEngine(
+            "Quoted triples not supported in validation queries".to_string()
+        )),
     }
 }

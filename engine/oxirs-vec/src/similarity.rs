@@ -48,6 +48,8 @@ pub enum SimilarityMetric {
     Euclidean,
     /// Manhattan distance (converted to similarity)
     Manhattan,
+    /// Minkowski distance (general Lp norm)
+    Minkowski(f32),
     /// Pearson correlation coefficient
     Pearson,
     /// Spearman rank correlation
@@ -68,6 +70,8 @@ pub enum SimilarityMetric {
     Canberra,
     /// Angular distance
     Angular,
+    /// Chebyshev distance (L∞ norm)
+    Chebyshev,
 }
 
 impl SimilarityMetric {
@@ -81,6 +85,7 @@ impl SimilarityMetric {
             SimilarityMetric::Cosine => cosine_similarity(a, b),
             SimilarityMetric::Euclidean => euclidean_similarity(a, b),
             SimilarityMetric::Manhattan => manhattan_similarity(a, b),
+            SimilarityMetric::Minkowski(p) => minkowski_similarity(a, b, *p),
             SimilarityMetric::Pearson => pearson_correlation(a, b)?,
             SimilarityMetric::Spearman => spearman_correlation(a, b)?,
             SimilarityMetric::Jaccard => jaccard_similarity(a, b),
@@ -94,6 +99,7 @@ impl SimilarityMetric {
             SimilarityMetric::Hamming => hamming_similarity(a, b),
             SimilarityMetric::Canberra => canberra_similarity(a, b),
             SimilarityMetric::Angular => angular_similarity(a, b),
+            SimilarityMetric::Chebyshev => chebyshev_similarity(a, b),
         };
 
         Ok(similarity.clamp(0.0, 1.0))
@@ -128,14 +134,17 @@ impl SemanticSimilarity {
 
     /// Calculate similarity using primary metric
     pub fn similarity(&self, a: &Vector, b: &Vector) -> Result<f32> {
+        let a_f32 = a.as_f32();
+        let b_f32 = b.as_f32();
+        
         let mut similarity = self
             .config
             .primary_metric
-            .similarity(&a.values, &b.values)?;
+            .similarity(&a_f32, &b_f32)?;
 
         // Apply feature weighting if available
         if let Some(ref weights) = self.feature_weights {
-            similarity = self.apply_feature_weights(&a.values, &b.values, weights);
+            similarity = self.apply_feature_weights(&a_f32, &b_f32, weights);
         }
 
         // Apply semantic boosting
@@ -152,6 +161,9 @@ impl SemanticSimilarity {
             return Err(anyhow!("Ensemble metrics and weights length mismatch"));
         }
 
+        let a_f32 = a.as_f32();
+        let b_f32 = b.as_f32();
+        
         let mut weighted_sum = 0.0;
         let mut total_weight = 0.0;
 
@@ -161,7 +173,7 @@ impl SemanticSimilarity {
             .iter()
             .zip(&self.config.ensemble_weights)
         {
-            let similarity = metric.similarity(&a.values, &b.values)?;
+            let similarity = metric.similarity(&a_f32, &b_f32)?;
             weighted_sum += similarity * weight;
             total_weight += weight;
         }
@@ -266,8 +278,10 @@ impl SemanticSimilarity {
 
     fn apply_semantic_boost(&self, similarity: f32, a: &Vector, b: &Vector) -> f32 {
         // Simple semantic boosting based on vector magnitude similarity
-        let mag_a = vector_magnitude(&a.values);
-        let mag_b = vector_magnitude(&b.values);
+        let a_f32 = a.as_f32();
+        let b_f32 = b.as_f32();
+        let mag_a = vector_magnitude(&a_f32);
+        let mag_b = vector_magnitude(&b_f32);
         let magnitude_similarity = 1.0 - (mag_a - mag_b).abs() / (mag_a + mag_b + f32::EPSILON);
 
         // Weighted combination
@@ -389,6 +403,30 @@ fn euclidean_similarity(a: &[f32], b: &[f32]) -> f32 {
 
 fn manhattan_similarity(a: &[f32], b: &[f32]) -> f32 {
     let distance: f32 = a.iter().zip(b).map(|(x, y)| (x - y).abs()).sum();
+    1.0 / (1.0 + distance)
+}
+
+fn minkowski_similarity(a: &[f32], b: &[f32], p: f32) -> f32 {
+    if p <= 0.0 {
+        // Handle edge case
+        return euclidean_similarity(a, b);
+    }
+    
+    let distance: f32 = a
+        .iter()
+        .zip(b)
+        .map(|(x, y)| (x - y).abs().powf(p))
+        .sum::<f32>()
+        .powf(1.0 / p);
+    1.0 / (1.0 + distance)
+}
+
+fn chebyshev_similarity(a: &[f32], b: &[f32]) -> f32 {
+    let distance: f32 = a
+        .iter()
+        .zip(b)
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0, |acc, diff| acc.max(diff));
     1.0 / (1.0 + distance)
 }
 

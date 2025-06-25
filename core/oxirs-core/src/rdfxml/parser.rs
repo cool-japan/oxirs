@@ -1,6 +1,7 @@
 use crate::rdfxml::error::{RdfXmlParseError, RdfXmlSyntaxError};
 use crate::rdfxml::utils::*;
 use crate::model::{BlankNode, Literal, NamedNode, Term, Triple};
+use crate::model::term::{Object, Subject, Predicate};
 use oxilangtag::LanguageTag;
 use oxiri::{Iri, IriParseError};
 use quick_xml::escape::{resolve_xml_entity, unescape_with};
@@ -41,6 +42,22 @@ impl From<NamedOrBlankNode> for crate::model::term::Subject {
             NamedOrBlankNode::BlankNode(n) => crate::model::term::Subject::BlankNode(n),
         }
     }
+}
+
+impl NamedOrBlankNode {
+    pub fn as_ref(&self) -> NamedOrBlankNodeRef<'_> {
+        match self {
+            NamedOrBlankNode::NamedNode(n) => NamedOrBlankNodeRef::NamedNode(n),
+            NamedOrBlankNode::BlankNode(n) => NamedOrBlankNodeRef::BlankNode(n),
+        }
+    }
+}
+
+/// Reference variant of NamedOrBlankNode
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NamedOrBlankNodeRef<'a> {
+    NamedNode(&'a NamedNode),
+    BlankNode(&'a BlankNode),
 }
 
 impl From<NamedOrBlankNode> for Term {
@@ -1415,11 +1432,14 @@ impl<R> InternalRdfXmlParser<R> {
                 ..
             } => {
                 let object = match object {
-                    Some(NodeOrText::Node(node)) => Term::from(node),
+                    Some(NodeOrText::Node(node)) => match node {
+                        NamedOrBlankNode::NamedNode(n) => Object::NamedNode(n),
+                        NamedOrBlankNode::BlankNode(b) => Object::BlankNode(b),
+                    },
                     Some(NodeOrText::Text(text)) => {
-                        Term::Literal(self.new_literal(text, language, datatype_attr))
+                        Object::Literal(self.new_literal(text, language, datatype_attr))
                     }
-                    None => Term::Literal(self.new_literal(String::new(), language, datatype_attr)),
+                    None => Object::Literal(self.new_literal(String::new(), language, datatype_attr)),
                 };
                 let triple = Triple::new(crate::model::term::Subject::from(subject), iri, object);
                 if let Some(id_attr) = id_attr {
@@ -1533,12 +1553,20 @@ impl<R> InternalRdfXmlParser<R> {
         results.push(Triple::new(
             statement_id.clone(),
             NamedNode::new_unchecked(RDF_SUBJECT),
-            triple.subject().clone(),
+            match triple.subject() {
+                Subject::NamedNode(n) => Object::NamedNode(n.clone()),
+                Subject::BlankNode(b) => Object::BlankNode(b.clone()),
+                Subject::Variable(v) => Object::Variable(v.clone()),
+                Subject::QuotedTriple(qt) => Object::QuotedTriple(qt.clone()),
+            },
         ));
         results.push(Triple::new(
             statement_id.clone(),
             NamedNode::new_unchecked(RDF_PREDICATE),
-            triple.predicate().clone(),
+            match triple.predicate() {
+                Predicate::NamedNode(n) => Object::NamedNode(n.clone()),
+                Predicate::Variable(v) => Object::Variable(v.clone()),
+            },
         ));
         results.push(Triple::new(
             statement_id, 
@@ -1559,7 +1587,7 @@ impl<R> InternalRdfXmlParser<R> {
                 crate::model::term::Subject::from(subject.clone()),
                 literal_predicate,
                 if let Some(language) = language.or_else(|| self.current_language()) {
-                    Literal::new_lang(literal_value, language).unwrap_or_else(|_| Literal::new(literal_value))
+                    Literal::new_lang(&literal_value, language).unwrap_or_else(|_| Literal::new(literal_value))
                 } else {
                     Literal::new(literal_value)
                 }

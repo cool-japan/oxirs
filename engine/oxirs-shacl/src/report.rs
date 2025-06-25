@@ -244,6 +244,7 @@ impl ValidationReport {
                 Ok(format!("\"{}\"", literal.as_str().replace('"', "\\\"")))
             }
             Term::Variable(var) => Ok(format!("?{}", var.name())),
+            Term::QuotedTriple(_) => Ok("<<quoted_triple>>".to_string()),
         }
     }
 

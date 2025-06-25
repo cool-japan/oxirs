@@ -737,12 +737,22 @@ impl NodeTable {
     }
 
     fn dictionary_compress(&self, data: &[u8], term: &Term) -> Result<Vec<u8>> {
-        // Simplified dictionary compression
-        let term_str = match term {
-            Term::Iri(iri) => iri,
-            Term::Literal { value, .. } => value,
-            Term::BlankNode(id) => id,
-            Term::Variable(name) => name,
+        // For complex terms with metadata, don't use dictionary compression
+        match term {
+            Term::Literal { datatype: Some(_), .. } |
+            Term::Literal { language: Some(_), .. } => {
+                // Don't compress literals with datatype or language tags
+                return Err(anyhow!("Complex literals not suitable for dictionary compression"));
+            }
+            _ => {}
+        }
+        
+        // Simplified dictionary compression for simple terms
+        let (term_type, term_str) = match term {
+            Term::Iri(iri) => (1u8, iri),
+            Term::Literal { value, .. } => (2u8, value),
+            Term::BlankNode(id) => (3u8, id),
+            Term::Variable(name) => (4u8, name),
         };
 
         let mut dictionary = self
@@ -751,23 +761,43 @@ impl NodeTable {
             .map_err(|_| anyhow!("Failed to acquire dictionary lock"))?;
 
         let dict_id = dictionary.intern(term_str);
-        Ok(dict_id.to_le_bytes().to_vec())
+        
+        // Store term type + dictionary ID
+        let mut result = vec![term_type];
+        result.extend_from_slice(&dict_id.to_le_bytes());
+        Ok(result)
     }
 
     fn dictionary_decompress(&self, data: &[u8]) -> Result<Vec<u8>> {
-        if data.len() != 4 {
+        if data.len() < 5 {
             return Err(anyhow!("Invalid dictionary compressed data length"));
         }
 
-        let dict_id = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
+        // First byte indicates the term type
+        let term_type = data[0];
+        let dict_id = u32::from_le_bytes([data[1], data[2], data[3], data[4]]);
+        
         let dictionary = self
             .dictionary
             .read()
             .map_err(|_| anyhow!("Failed to acquire dictionary lock"))?;
 
         if let Some(string) = dictionary.get_string(dict_id) {
-            bincode::serialize(string)
-                .map_err(|e| anyhow!("Failed to serialize dictionary string: {}", e))
+            // Reconstruct the original Term based on type
+            let term = match term_type {
+                1 => Term::Iri(string.clone()),
+                2 => Term::Literal { 
+                    value: string.clone(), 
+                    datatype: None, 
+                    language: None 
+                },
+                3 => Term::BlankNode(string.clone()),
+                4 => Term::Variable(string.clone()),
+                _ => return Err(anyhow!("Invalid term type: {}", term_type)),
+            };
+            
+            bincode::serialize(&term)
+                .map_err(|e| anyhow!("Failed to serialize reconstructed term: {}", e))
         } else {
             Err(anyhow!("Dictionary ID {} not found", dict_id))
         }

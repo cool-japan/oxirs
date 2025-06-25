@@ -493,6 +493,9 @@ fn format_term_for_sparql(term: &Term) -> Result<String> {
             Ok(format!("\"{}\"", literal.as_str()))
         }
         Term::Variable(var) => Ok(format!("?{}", var.name())),
+        Term::QuotedTriple(_) => Err(ShaclError::SparqlExecution(
+            "Quoted triples not supported in SPARQL constraints".to_string()
+        )),
     }
 }
 

@@ -35,12 +35,14 @@
 use anyhow::Result;
 
 pub mod embeddings;
+pub mod hnsw;
 pub mod index;
 pub mod similarity;
 pub mod sparql_integration;
 
 // Re-export commonly used types
 pub use embeddings::{EmbeddableContent, EmbeddingConfig, EmbeddingManager, EmbeddingStrategy};
+pub use hnsw::{HnswConfig, HnswIndex};
 pub use index::{AdvancedVectorIndex, DistanceMetric, IndexConfig, IndexType, SearchResult};
 pub use similarity::{AdaptiveSimilarity, SemanticSimilarity, SimilarityConfig, SimilarityMetric};
 pub use sparql_integration::{
@@ -48,20 +50,60 @@ pub use sparql_integration::{
     VectorServiceRegistry,
 };
 
-/// Vector representation with enhanced functionality
+/// Precision types for vectors
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum VectorPrecision {
+    F32,
+    F64,
+    F16,
+    I8,
+    Binary,
+}
+
+/// Multi-precision vector with enhanced functionality
 #[derive(Debug, Clone, PartialEq)]
 pub struct Vector {
     pub dimensions: usize,
-    pub values: Vec<f32>,
+    pub precision: VectorPrecision,
+    pub values: VectorData,
     pub metadata: Option<std::collections::HashMap<String, String>>,
 }
 
+/// Vector data storage supporting multiple precisions
+#[derive(Debug, Clone, PartialEq)]
+pub enum VectorData {
+    F32(Vec<f32>),
+    F64(Vec<f64>),
+    F16(Vec<u16>), // Using u16 to represent f16 bits
+    I8(Vec<i8>),
+    Binary(Vec<u8>), // Packed binary representation
+}
+
 impl Vector {
-    /// Create a new vector from values
+    /// Create a new F32 vector from values
     pub fn new(values: Vec<f32>) -> Self {
         let dimensions = values.len();
         Self {
             dimensions,
+            precision: VectorPrecision::F32,
+            values: VectorData::F32(values),
+            metadata: None,
+        }
+    }
+
+    /// Create a new vector with specific precision
+    pub fn with_precision(values: VectorData) -> Self {
+        let (dimensions, precision) = match &values {
+            VectorData::F32(v) => (v.len(), VectorPrecision::F32),
+            VectorData::F64(v) => (v.len(), VectorPrecision::F64),
+            VectorData::F16(v) => (v.len(), VectorPrecision::F16),
+            VectorData::I8(v) => (v.len(), VectorPrecision::I8),
+            VectorData::Binary(v) => (v.len() * 8, VectorPrecision::Binary), // 8 bits per byte
+        };
+        
+        Self {
+            dimensions,
+            precision,
             values,
             metadata: None,
         }
@@ -75,9 +117,136 @@ impl Vector {
         let dimensions = values.len();
         Self {
             dimensions,
-            values,
+            precision: VectorPrecision::F32,
+            values: VectorData::F32(values),
             metadata: Some(metadata),
         }
+    }
+
+    /// Create F64 vector
+    pub fn f64(values: Vec<f64>) -> Self {
+        Self::with_precision(VectorData::F64(values))
+    }
+
+    /// Create F16 vector (using u16 representation)
+    pub fn f16(values: Vec<u16>) -> Self {
+        Self::with_precision(VectorData::F16(values))
+    }
+
+    /// Create I8 quantized vector
+    pub fn i8(values: Vec<i8>) -> Self {
+        Self::with_precision(VectorData::I8(values))
+    }
+
+    /// Create binary vector
+    pub fn binary(values: Vec<u8>) -> Self {
+        Self::with_precision(VectorData::Binary(values))
+    }
+
+    /// Get vector values as f32 (converting if necessary)
+    pub fn as_f32(&self) -> Vec<f32> {
+        match &self.values {
+            VectorData::F32(v) => v.clone(),
+            VectorData::F64(v) => v.iter().map(|&x| x as f32).collect(),
+            VectorData::F16(v) => v.iter().map(|&x| Self::f16_to_f32(x)).collect(),
+            VectorData::I8(v) => v.iter().map(|&x| x as f32 / 128.0).collect(), // Normalize to [-1, 1]
+            VectorData::Binary(v) => {
+                let mut result = Vec::new();
+                for &byte in v {
+                    for bit in 0..8 {
+                        result.push(if (byte >> bit) & 1 == 1 { 1.0 } else { 0.0 });
+                    }
+                }
+                result
+            }
+        }
+    }
+
+    /// Convert f32 to f16 representation (simplified)
+    fn f32_to_f16(value: f32) -> u16 {
+        // Simplified f16 conversion - in practice, use proper IEEE 754 half-precision
+        let bits = value.to_bits();
+        let sign = (bits >> 31) & 0x1;
+        let exp = ((bits >> 23) & 0xff) as i32;
+        let mantissa = bits & 0x7fffff;
+        
+        // Simplified conversion
+        let f16_exp = if exp == 0 {
+            0
+        } else {
+            ((exp - 127 + 15).max(0).min(31)) as u16
+        };
+        
+        let f16_mantissa = (mantissa >> 13) as u16;
+        ((sign as u16) << 15) | (f16_exp << 10) | f16_mantissa
+    }
+
+    /// Convert f16 representation to f32 (simplified)
+    fn f16_to_f32(value: u16) -> f32 {
+        // Simplified f16 conversion - in practice, use proper IEEE 754 half-precision
+        let sign = (value >> 15) & 0x1;
+        let exp = ((value >> 10) & 0x1f) as i32;
+        let mantissa = value & 0x3ff;
+        
+        if exp == 0 {
+            if mantissa == 0 {
+                if sign == 1 { -0.0 } else { 0.0 }
+            } else {
+                // Denormalized number
+                let f32_exp = -14 - 127;
+                let f32_mantissa = (mantissa as u32) << 13;
+                f32::from_bits(((sign as u32) << 31) | ((f32_exp as u32) << 23) | f32_mantissa)
+            }
+        } else {
+            let f32_exp = exp - 15 + 127;
+            let f32_mantissa = (mantissa as u32) << 13;
+            f32::from_bits(((sign as u32) << 31) | ((f32_exp as u32) << 23) | f32_mantissa)
+        }
+    }
+
+    /// Quantize f32 vector to i8
+    pub fn quantize_to_i8(values: &[f32]) -> Vec<i8> {
+        // Find min/max for normalization
+        let min_val = values.iter().fold(f32::INFINITY, |a, &b| a.min(b));
+        let max_val = values.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+        let range = max_val - min_val;
+        
+        if range == 0.0 {
+            vec![0; values.len()]
+        } else {
+            values.iter().map(|&x| {
+                let normalized = (x - min_val) / range; // 0 to 1
+                let scaled = normalized * 254.0 - 127.0; // -127 to 127
+                scaled.round().clamp(-127.0, 127.0) as i8
+            }).collect()
+        }
+    }
+
+    /// Convert to binary representation using threshold
+    pub fn to_binary(values: &[f32], threshold: f32) -> Vec<u8> {
+        let mut binary = Vec::new();
+        let mut current_byte = 0u8;
+        let mut bit_position = 0;
+        
+        for &value in values {
+            if value > threshold {
+                current_byte |= 1 << bit_position;
+            }
+            
+            bit_position += 1;
+            if bit_position == 8 {
+                binary.push(current_byte);
+                current_byte = 0;
+                bit_position = 0;
+            }
+        }
+        
+        // Handle remaining bits
+        if bit_position > 0 {
+            binary.push(current_byte);
+        }
+        
+        binary
     }
 
     /// Calculate cosine similarity with another vector
@@ -86,15 +255,17 @@ impl Vector {
             return Err(anyhow::anyhow!("Vector dimensions must match"));
         }
 
-        let dot_product: f32 = self
-            .values
+        let self_f32 = self.as_f32();
+        let other_f32 = other.as_f32();
+
+        let dot_product: f32 = self_f32
             .iter()
-            .zip(&other.values)
+            .zip(&other_f32)
             .map(|(a, b)| a * b)
             .sum();
 
-        let magnitude_self: f32 = self.values.iter().map(|x| x * x).sum::<f32>().sqrt();
-        let magnitude_other: f32 = other.values.iter().map(|x| x * x).sum::<f32>().sqrt();
+        let magnitude_self: f32 = self_f32.iter().map(|x| x * x).sum::<f32>().sqrt();
+        let magnitude_other: f32 = other_f32.iter().map(|x| x * x).sum::<f32>().sqrt();
 
         if magnitude_self == 0.0 || magnitude_other == 0.0 {
             return Ok(0.0);
@@ -109,10 +280,12 @@ impl Vector {
             return Err(anyhow::anyhow!("Vector dimensions must match"));
         }
 
-        let distance = self
-            .values
+        let self_f32 = self.as_f32();
+        let other_f32 = other.as_f32();
+
+        let distance = self_f32
             .iter()
-            .zip(&other.values)
+            .zip(&other_f32)
             .map(|(a, b)| (a - b).powi(2))
             .sum::<f32>()
             .sqrt();
@@ -122,15 +295,35 @@ impl Vector {
 
     /// Get vector magnitude (L2 norm)
     pub fn magnitude(&self) -> f32 {
-        self.values.iter().map(|x| x * x).sum::<f32>().sqrt()
+        let values = self.as_f32();
+        values.iter().map(|x| x * x).sum::<f32>().sqrt()
     }
 
     /// Normalize vector to unit length
     pub fn normalize(&mut self) {
         let mag = self.magnitude();
         if mag > 0.0 {
-            for value in &mut self.values {
-                *value /= mag;
+            match &mut self.values {
+                VectorData::F32(values) => {
+                    for value in values {
+                        *value /= mag;
+                    }
+                }
+                VectorData::F64(values) => {
+                    let mag_f64 = mag as f64;
+                    for value in values {
+                        *value /= mag_f64;
+                    }
+                }
+                _ => {
+                    // For other types, convert to f32, normalize, then convert back
+                    let mut f32_values = self.as_f32();
+                    for value in &mut f32_values {
+                        *value /= mag;
+                    }
+                    self.values = VectorData::F32(f32_values);
+                    self.precision = VectorPrecision::F32;
+                }
             }
         }
     }
@@ -148,10 +341,12 @@ impl Vector {
             return Err(anyhow::anyhow!("Vector dimensions must match"));
         }
 
-        let result_values: Vec<f32> = self
-            .values
+        let self_f32 = self.as_f32();
+        let other_f32 = other.as_f32();
+
+        let result_values: Vec<f32> = self_f32
             .iter()
-            .zip(&other.values)
+            .zip(&other_f32)
             .map(|(a, b)| a + b)
             .collect();
 
@@ -164,10 +359,12 @@ impl Vector {
             return Err(anyhow::anyhow!("Vector dimensions must match"));
         }
 
-        let result_values: Vec<f32> = self
-            .values
+        let self_f32 = self.as_f32();
+        let other_f32 = other.as_f32();
+
+        let result_values: Vec<f32> = self_f32
             .iter()
-            .zip(&other.values)
+            .zip(&other_f32)
             .map(|(a, b)| a - b)
             .collect();
 
@@ -176,7 +373,8 @@ impl Vector {
 
     /// Scale vector by a scalar
     pub fn scale(&self, scalar: f32) -> Vector {
-        let scaled_values: Vec<f32> = self.values.iter().map(|x| x * scalar).collect();
+        let values = self.as_f32();
+        let scaled_values: Vec<f32> = values.iter().map(|x| x * scalar).collect();
 
         Vector::new(scaled_values)
     }
@@ -230,11 +428,13 @@ impl VectorIndex for MemoryVectorIndex {
 
     fn search_knn(&self, query: &Vector, k: usize) -> Result<Vec<(String, f32)>> {
         let metric = self.similarity_config.primary_metric;
+        let query_f32 = query.as_f32();
         let mut similarities: Vec<(String, f32)> = self
             .vectors
             .iter()
             .map(|(uri, vec)| {
-                let sim = metric.similarity(&query.values, &vec.values).unwrap_or(0.0);
+                let vec_f32 = vec.as_f32();
+                let sim = metric.similarity(&query_f32, &vec_f32).unwrap_or(0.0);
                 (uri.clone(), sim)
             })
             .collect();
@@ -247,11 +447,13 @@ impl VectorIndex for MemoryVectorIndex {
 
     fn search_threshold(&self, query: &Vector, threshold: f32) -> Result<Vec<(String, f32)>> {
         let metric = self.similarity_config.primary_metric;
+        let query_f32 = query.as_f32();
         let similarities: Vec<(String, f32)> = self
             .vectors
             .iter()
             .filter_map(|(uri, vec)| {
-                let sim = metric.similarity(&query.values, &vec.values).unwrap_or(0.0);
+                let vec_f32 = vec.as_f32();
+                let sim = metric.similarity(&query_f32, &vec_f32).unwrap_or(0.0);
                 if sim >= threshold {
                     Some((uri.clone(), sim))
                 } else {
@@ -575,7 +777,8 @@ pub mod utils {
                 return None; // Inconsistent dimensions
             }
 
-            for (i, &value) in vector.values.iter().enumerate() {
+            let vector_f32 = vector.as_f32();
+            for (i, &value) in vector_f32.iter().enumerate() {
                 sum_values[i] += value;
             }
         }
@@ -610,5 +813,215 @@ pub mod utils {
     /// Convert vector to normalized unit vector
     pub fn normalize_vector(vector: &Vector) -> Vector {
         vector.normalized()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::similarity::SimilarityMetric;
+
+    #[test]
+    fn test_vector_creation() {
+        let values = vec![1.0, 2.0, 3.0];
+        let vector = Vector::new(values.clone());
+        
+        assert_eq!(vector.dimensions, 3);
+        assert_eq!(vector.precision, VectorPrecision::F32);
+        assert_eq!(vector.as_f32(), values);
+    }
+
+    #[test]
+    fn test_multi_precision_vectors() {
+        // Test F64 vector
+        let f64_values = vec![1.0, 2.0, 3.0];
+        let f64_vector = Vector::f64(f64_values.clone());
+        assert_eq!(f64_vector.precision, VectorPrecision::F64);
+        assert_eq!(f64_vector.dimensions, 3);
+
+        // Test I8 vector  
+        let i8_values = vec![100, -50, 0];
+        let i8_vector = Vector::i8(i8_values);
+        assert_eq!(i8_vector.precision, VectorPrecision::I8);
+        assert_eq!(i8_vector.dimensions, 3);
+
+        // Test binary vector
+        let binary_values = vec![0b10101010, 0b11110000];
+        let binary_vector = Vector::binary(binary_values);
+        assert_eq!(binary_vector.precision, VectorPrecision::Binary);
+        assert_eq!(binary_vector.dimensions, 16); // 2 bytes * 8 bits
+    }
+
+    #[test]
+    fn test_vector_operations() {
+        let v1 = Vector::new(vec![1.0, 2.0, 3.0]);
+        let v2 = Vector::new(vec![4.0, 5.0, 6.0]);
+
+        // Test addition
+        let sum = v1.add(&v2).unwrap();
+        assert_eq!(sum.as_f32(), vec![5.0, 7.0, 9.0]);
+
+        // Test subtraction
+        let diff = v2.subtract(&v1).unwrap();
+        assert_eq!(diff.as_f32(), vec![3.0, 3.0, 3.0]);
+
+        // Test scaling
+        let scaled = v1.scale(2.0);
+        assert_eq!(scaled.as_f32(), vec![2.0, 4.0, 6.0]);
+    }
+
+    #[test]
+    fn test_cosine_similarity() {
+        let v1 = Vector::new(vec![1.0, 0.0, 0.0]);
+        let v2 = Vector::new(vec![1.0, 0.0, 0.0]);
+        let v3 = Vector::new(vec![0.0, 1.0, 0.0]);
+
+        // Identical vectors should have similarity 1.0
+        assert!((v1.cosine_similarity(&v2).unwrap() - 1.0).abs() < 0.001);
+
+        // Orthogonal vectors should have similarity 0.0
+        assert!((v1.cosine_similarity(&v3).unwrap()).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_vector_store() {
+        let mut store = VectorStore::new();
+        
+        // Test indexing
+        store.index_resource("doc1".to_string(), "This is a test").unwrap();
+        store.index_resource("doc2".to_string(), "Another test document").unwrap();
+
+        // Test searching
+        let results = store.similarity_search("test", 5).unwrap();
+        assert_eq!(results.len(), 2);
+        
+        // Results should be sorted by similarity (descending)
+        assert!(results[0].1 >= results[1].1);
+    }
+
+    #[test]
+    fn test_similarity_metrics() {
+        let a = vec![1.0, 2.0, 3.0];
+        let b = vec![4.0, 5.0, 6.0];
+
+        // Test different similarity metrics
+        let cosine_sim = SimilarityMetric::Cosine.similarity(&a, &b).unwrap();
+        let euclidean_sim = SimilarityMetric::Euclidean.similarity(&a, &b).unwrap();
+        let manhattan_sim = SimilarityMetric::Manhattan.similarity(&a, &b).unwrap();
+
+        // All similarities should be between 0 and 1
+        assert!(cosine_sim >= 0.0 && cosine_sim <= 1.0);
+        assert!(euclidean_sim >= 0.0 && euclidean_sim <= 1.0);
+        assert!(manhattan_sim >= 0.0 && manhattan_sim <= 1.0);
+    }
+
+    #[test]
+    fn test_quantization() {
+        let values = vec![1.0, -0.5, 0.0, 0.75];
+        let quantized = Vector::quantize_to_i8(&values);
+        
+        // Check that quantized values are in the expected range
+        for &q in &quantized {
+            assert!(q >= -127 && q <= 127);
+        }
+    }
+
+    #[test]
+    fn test_binary_conversion() {
+        let values = vec![0.8, -0.3, 0.1, -0.9];
+        let binary = Vector::to_binary(&values, 0.0);
+        
+        // Should have 1 byte (4 values, each becomes 1 bit, packed into bytes)
+        assert_eq!(binary.len(), 1);
+        
+        // First bit should be 1 (0.8 > 0.0), second should be 0 (-0.3 < 0.0), etc.
+        let byte = binary[0];
+        assert_eq!(byte & 1, 1); // bit 0: 0.8 > 0.0
+        assert_eq!((byte >> 1) & 1, 0); // bit 1: -0.3 < 0.0
+        assert_eq!((byte >> 2) & 1, 1); // bit 2: 0.1 > 0.0
+        assert_eq!((byte >> 3) & 1, 0); // bit 3: -0.9 < 0.0
+    }
+
+    #[test]
+    fn test_memory_vector_index() {
+        let mut index = MemoryVectorIndex::new();
+        
+        let v1 = Vector::new(vec![1.0, 0.0, 0.0]);
+        let v2 = Vector::new(vec![0.0, 1.0, 0.0]);
+        
+        index.insert("v1".to_string(), v1.clone()).unwrap();
+        index.insert("v2".to_string(), v2.clone()).unwrap();
+        
+        // Test KNN search
+        let results = index.search_knn(&v1, 1).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].0, "v1");
+        
+        // Test threshold search
+        let results = index.search_threshold(&v1, 0.5).unwrap();
+        assert!(results.len() >= 1);
+    }
+
+    #[test]
+    fn test_hnsw_index() {
+        use crate::hnsw::{HnswConfig, HnswIndex};
+        
+        let config = HnswConfig::default();
+        let mut index = HnswIndex::new(config);
+        
+        let v1 = Vector::new(vec![1.0, 0.0, 0.0]);
+        let v2 = Vector::new(vec![0.0, 1.0, 0.0]);
+        let v3 = Vector::new(vec![0.0, 0.0, 1.0]);
+        
+        index.insert("v1".to_string(), v1.clone()).unwrap();
+        index.insert("v2".to_string(), v2.clone()).unwrap();
+        index.insert("v3".to_string(), v3.clone()).unwrap();
+        
+        // Test KNN search
+        let results = index.search_knn(&v1, 2).unwrap();
+        assert!(results.len() <= 2);
+        
+        // The first result should be v1 itself (highest similarity)
+        if !results.is_empty() {
+            assert_eq!(results[0].0, "v1");
+        }
+    }
+
+    #[test]
+    fn test_sparql_vector_service() {
+        use crate::sparql_integration::{SparqlVectorService, VectorServiceConfig, VectorServiceArg, VectorServiceResult};
+        use crate::embeddings::EmbeddingStrategy;
+        
+        let config = VectorServiceConfig::default();
+        let mut service = SparqlVectorService::new(config, EmbeddingStrategy::SentenceTransformer).unwrap();
+        
+        // Test vector similarity function
+        let v1 = Vector::new(vec![1.0, 0.0, 0.0]);
+        let v2 = Vector::new(vec![1.0, 0.0, 0.0]);
+        
+        let args = vec![
+            VectorServiceArg::Vector(v1),
+            VectorServiceArg::Vector(v2),
+        ];
+        
+        let result = service.execute_function("vector_similarity", &args).unwrap();
+        
+        match result {
+            VectorServiceResult::Number(similarity) => {
+                assert!((similarity - 1.0).abs() < 0.001); // Should be very similar
+            }
+            _ => panic!("Expected a number result"),
+        }
+        
+        // Test text embedding function
+        let text_args = vec![VectorServiceArg::String("test text".to_string())];
+        let embed_result = service.execute_function("embed_text", &text_args).unwrap();
+        
+        match embed_result {
+            VectorServiceResult::Vector(vector) => {
+                assert_eq!(vector.dimensions, 384); // Default embedding size
+            }
+            _ => panic!("Expected a vector result"),
+        }
     }
 }

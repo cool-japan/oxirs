@@ -8,6 +8,7 @@ use anyhow::Result;
 use std::collections::BTreeSet;
 
 /// Consensus manager for distributed RDF operations
+#[derive(Debug)]
 pub struct ConsensusManager {
     raft_node: RaftNode,
     peers: BTreeSet<OxirsNodeId>,
@@ -200,4 +201,96 @@ pub enum ConsensusError {
     Storage(String),
     #[error("Timeout: {0}")]
     Timeout(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_consensus_manager_creation() {
+        let peers = vec![2, 3, 4];
+        let manager = ConsensusManager::new(1, peers.clone());
+        
+        assert_eq!(manager.get_peers().len(), 3);
+        assert!(manager.get_peers().contains(&2));
+        assert!(manager.get_peers().contains(&3));
+        assert!(manager.get_peers().contains(&4));
+    }
+
+    #[test]
+    fn test_consensus_manager_add_peer() {
+        let mut manager = ConsensusManager::new(1, vec![2, 3]);
+        
+        assert!(manager.add_peer(4));
+        assert_eq!(manager.get_peers().len(), 3);
+        assert!(manager.get_peers().contains(&4));
+        
+        // Adding same peer again should return false
+        assert!(!manager.add_peer(4));
+        assert_eq!(manager.get_peers().len(), 3);
+    }
+
+    #[test]
+    fn test_consensus_manager_remove_peer() {
+        let mut manager = ConsensusManager::new(1, vec![2, 3, 4]);
+        
+        assert!(manager.remove_peer(3));
+        assert_eq!(manager.get_peers().len(), 2);
+        assert!(!manager.get_peers().contains(&3));
+        
+        // Removing non-existent peer should return false
+        assert!(!manager.remove_peer(5));
+        assert_eq!(manager.get_peers().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_consensus_manager_basic_operations() {
+        let manager = ConsensusManager::new(1, vec![]);
+        
+        // In single-node mode, should be leader
+        assert!(manager.is_leader().await);
+        assert_eq!(manager.current_term().await, 0);
+        assert_eq!(manager.len().await, 0);
+        assert!(manager.is_empty().await);
+    }
+
+    #[tokio::test]
+    async fn test_consensus_status() {
+        let manager = ConsensusManager::new(1, vec![2, 3]);
+        let status = manager.get_status().await;
+        
+        assert!(status.is_leader);
+        assert_eq!(status.current_term, 0);
+        assert_eq!(status.peer_count, 2);
+        assert_eq!(status.triple_count, 0);
+    }
+
+    #[test]
+    fn test_consensus_error_display() {
+        assert_eq!(
+            ConsensusError::NotLeader.to_string(),
+            "Not the leader"
+        );
+        
+        assert_eq!(
+            ConsensusError::CommandFailed("test".to_string()).to_string(),
+            "Command failed: test"
+        );
+        
+        assert_eq!(
+            ConsensusError::Network("conn error".to_string()).to_string(),
+            "Network error: conn error"
+        );
+        
+        assert_eq!(
+            ConsensusError::Storage("disk error".to_string()).to_string(),
+            "Storage error: disk error"
+        );
+        
+        assert_eq!(
+            ConsensusError::Timeout("5s".to_string()).to_string(),
+            "Timeout: 5s"
+        );
+    }
 }

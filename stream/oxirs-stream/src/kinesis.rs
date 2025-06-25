@@ -576,8 +576,16 @@ impl KinesisProducer {
     pub async fn publish(&mut self, event: StreamEvent) -> Result<()> {
         let start_time = Instant::now();
 
-        if self.client.is_none() {
-            self.connect().await?;
+        #[cfg(feature = "kinesis")]
+        {
+            if self.client.is_none() {
+                self.connect().await?;
+            }
+        }
+        
+        #[cfg(not(feature = "kinesis"))]
+        {
+            warn!("Kinesis feature not enabled, using mock producer");
         }
 
         let mut kinesis_event = KinesisStreamEvent::from(event);
@@ -599,6 +607,7 @@ impl KinesisProducer {
         }
 
         // Check for auto-scaling if enabled
+        #[cfg(feature = "kinesis")]
         if self.kinesis_config.auto_scaling_enabled
             && self.last_scaling_check.elapsed() >= self.kinesis_config.scaling_cooldown
         {

@@ -1,23 +1,23 @@
 # OxiRS ARQ
 
-**Advanced SPARQL query engine with Jena ARQ-compatible algebra and optimization**
+**SPARQL query engine with algebra and optimization**
 
 ## Overview
 
-`oxirs-arq` is a high-performance SPARQL 1.1/1.2 query engine inspired by Apache Jena's ARQ engine. It provides advanced query optimization, extensible algebra operations, and comprehensive built-in function support while maintaining the performance benefits of Rust.
+`oxirs-arq` is a SPARQL 1.1/1.2 query engine inspired by Apache Jena's ARQ engine. It provides query optimization, extensible algebra operations, and built-in function support.
 
 ## Features
 
-- **SPARQL 1.1/1.2 Compliance**: Complete implementation of SPARQL standards
-- **Advanced Optimization**: Cost-based optimization with statistics and cardinality estimation
+- **SPARQL 1.1/1.2 Compliance**: Implementation of SPARQL standards
+- **Query Optimization**: Cost-based optimization with statistics
 - **Extensible Algebra**: Pluggable operators and custom function support
-- **Parallel Execution**: Multi-threaded query execution with work-stealing
-- **Memory Management**: Efficient memory usage with streaming and incremental evaluation
-- **Custom Functions**: Easy integration of domain-specific functions
-- **Query Planning**: Sophisticated join reordering and optimization passes
-- **Result Streaming**: Support for large result sets with streaming output
-- **Federation Support**: SERVICE keyword for distributed query execution
-- **Caching**: Query plan and result caching for improved performance
+- **Parallel Execution**: Multi-threaded query execution
+- **Memory Management**: Efficient memory usage with streaming evaluation
+- **Custom Functions**: Integration of domain-specific functions
+- **Query Planning**: Join reordering and optimization passes
+- **Result Streaming**: Support for large result sets
+- **Federation Support**: SERVICE keyword for distributed queries
+- **Caching**: Query plan and result caching
 
 ## Installation
 
@@ -455,11 +455,11 @@ at your option.
 
 ## Status
 
-🚧 **Under Development** - Core component for Phase 0 release.
+**Under Development** - Core component for OxiRS platform.
 
-Current focus:
-- ✅ Basic SPARQL parsing and execution
-- 🚧 Advanced optimization passes
-- 🚧 Parallel execution framework
-- ⏳ Federation support
-- ⏳ Custom function framework
+Current implementation status:
+- Basic SPARQL parsing and execution
+- Query optimization passes
+- Parallel execution framework
+- Federation support
+- Custom function framework

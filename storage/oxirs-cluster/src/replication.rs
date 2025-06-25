@@ -88,6 +88,7 @@ pub struct ReplicationStats {
 }
 
 /// Replication manager for distributed RDF data
+#[derive(Debug)]
 pub struct ReplicationManager {
     strategy: ReplicationStrategy,
     replicas: HashMap<OxirsNodeId, ReplicaInfo>,
@@ -349,4 +350,270 @@ pub enum ReplicationError {
 
     #[error("Serialization error: {message}")]
     Serialization { message: String },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_replication_strategy_default() {
+        let strategy = ReplicationStrategy::default();
+        assert_eq!(strategy, ReplicationStrategy::RaftConsensus);
+    }
+
+    #[test]
+    fn test_replica_info_creation() {
+        let replica = ReplicaInfo::new(1, "127.0.0.1:8080".to_string());
+        
+        assert_eq!(replica.node_id, 1);
+        assert_eq!(replica.address, "127.0.0.1:8080");
+        assert_eq!(replica.last_applied_index, 0);
+        assert!(replica.is_healthy);
+        assert_eq!(replica.replication_lag, 0);
+        assert_eq!(replica.latency, Duration::from_millis(0));
+    }
+
+    #[test]
+    fn test_replica_info_staleness() {
+        let replica = ReplicaInfo::new(1, "127.0.0.1:8080".to_string());
+        
+        // Fresh replica should not be stale
+        assert!(!replica.is_stale(Duration::from_secs(10)));
+        
+        // Simulate old replica by checking against very short threshold
+        assert!(replica.is_stale(Duration::from_nanos(1)));
+    }
+
+    #[test]
+    fn test_replica_info_update_health() {
+        let mut replica = ReplicaInfo::new(1, "127.0.0.1:8080".to_string());
+        
+        // Update to unhealthy
+        replica.update_health(false);
+        assert!(!replica.is_healthy);
+        
+        // Update to healthy
+        replica.update_health(true);
+        assert!(replica.is_healthy);
+    }
+
+    #[test]
+    fn test_replication_manager_creation() {
+        let manager = ReplicationManager::new(ReplicationStrategy::Synchronous, 1);
+        
+        assert_eq!(manager.strategy, ReplicationStrategy::Synchronous);
+        assert_eq!(manager.local_node_id, 1);
+        assert!(manager.replicas.is_empty());
+        assert_eq!(manager.stats.total_replicas, 0);
+    }
+
+    #[test]
+    fn test_replication_manager_with_raft_consensus() {
+        let manager = ReplicationManager::with_raft_consensus(1);
+        
+        assert_eq!(manager.strategy, ReplicationStrategy::RaftConsensus);
+        assert_eq!(manager.local_node_id, 1);
+    }
+
+    #[test]
+    fn test_replication_manager_add_replica() {
+        let mut manager = ReplicationManager::new(ReplicationStrategy::Synchronous, 1);
+        
+        // Add replica
+        assert!(manager.add_replica(2, "127.0.0.1:8081".to_string()));
+        assert_eq!(manager.replicas.len(), 1);
+        assert!(manager.replicas.contains_key(&2));
+        
+        // Adding same replica again should return false
+        assert!(!manager.add_replica(2, "127.0.0.1:8081".to_string()));
+        assert_eq!(manager.replicas.len(), 1);
+        
+        // Cannot add local node as replica
+        assert!(!manager.add_replica(1, "127.0.0.1:8080".to_string()));
+        assert_eq!(manager.replicas.len(), 1);
+    }
+
+    #[test]
+    fn test_replication_manager_remove_replica() {
+        let mut manager = ReplicationManager::new(ReplicationStrategy::Synchronous, 1);
+        
+        manager.add_replica(2, "127.0.0.1:8081".to_string());
+        manager.add_replica(3, "127.0.0.1:8082".to_string());
+        assert_eq!(manager.replicas.len(), 2);
+        
+        // Remove replica
+        assert!(manager.remove_replica(2));
+        assert_eq!(manager.replicas.len(), 1);
+        assert!(!manager.replicas.contains_key(&2));
+        
+        // Removing non-existent replica should return false
+        assert!(!manager.remove_replica(4));
+        assert_eq!(manager.replicas.len(), 1);
+    }
+
+    #[test]
+    fn test_replication_manager_get_healthy_replicas() {
+        let mut manager = ReplicationManager::new(ReplicationStrategy::Synchronous, 1);
+        
+        manager.add_replica(2, "127.0.0.1:8081".to_string());
+        manager.add_replica(3, "127.0.0.1:8082".to_string());
+        
+        // Mark one replica as unhealthy
+        manager.update_replica_health(3, false);
+        
+        let healthy_replicas = manager.get_healthy_replicas();
+        assert_eq!(healthy_replicas.len(), 1);
+        assert_eq!(healthy_replicas[0].node_id, 2);
+    }
+
+    #[test]
+    fn test_replication_manager_update_replica_health() {
+        let mut manager = ReplicationManager::new(ReplicationStrategy::Synchronous, 1);
+        
+        manager.add_replica(2, "127.0.0.1:8081".to_string());
+        
+        // Update health status
+        assert!(manager.update_replica_health(2, false));
+        let replica = manager.get_replica(2).unwrap();
+        assert!(!replica.is_healthy);
+        
+        // Update non-existent replica should return false
+        assert!(!manager.update_replica_health(3, true));
+    }
+
+    #[test]
+    fn test_replication_manager_update_replica_lag() {
+        let mut manager = ReplicationManager::new(ReplicationStrategy::Synchronous, 1);
+        
+        manager.add_replica(2, "127.0.0.1:8081".to_string());
+        
+        // Update lag information
+        manager.update_replica_lag(2, 50, 100);
+        let replica = manager.get_replica(2).unwrap();
+        assert_eq!(replica.last_applied_index, 50);
+        assert_eq!(replica.replication_lag, 50);
+    }
+
+    #[tokio::test]
+    async fn test_replication_manager_health_check() {
+        let mut manager = ReplicationManager::new(ReplicationStrategy::Synchronous, 1);
+        
+        manager.add_replica(2, "127.0.0.1:8081".to_string());
+        manager.add_replica(3, "127.0.0.1:8082".to_string());
+        
+        // Both replicas should be healthy initially
+        assert_eq!(manager.get_healthy_replicas().len(), 2);
+        
+        // Run health check with very short threshold - should mark all as unhealthy
+        manager.health_check(Duration::from_nanos(1)).await;
+        assert_eq!(manager.get_healthy_replicas().len(), 0);
+    }
+
+    #[test]
+    fn test_replication_manager_strategy_change() {
+        let mut manager = ReplicationManager::new(ReplicationStrategy::Synchronous, 1);
+        
+        assert_eq!(manager.get_strategy(), &ReplicationStrategy::Synchronous);
+        
+        manager.set_strategy(ReplicationStrategy::Asynchronous);
+        assert_eq!(manager.get_strategy(), &ReplicationStrategy::Asynchronous);
+    }
+
+    #[test]
+    fn test_replication_manager_health_status() {
+        let mut manager = ReplicationManager::new(ReplicationStrategy::SemiSynchronous { min_replicas: 2 }, 1);
+        
+        // Add replicas
+        manager.add_replica(2, "127.0.0.1:8081".to_string());
+        manager.add_replica(3, "127.0.0.1:8082".to_string());
+        manager.add_replica(4, "127.0.0.1:8083".to_string());
+        
+        // All healthy - should meet requirements
+        assert!(manager.is_replication_healthy());
+        
+        // Mark one as unhealthy - should still meet requirements (2 out of 3)
+        manager.update_replica_health(4, false);
+        assert!(manager.is_replication_healthy());
+        
+        // Mark another as unhealthy - should not meet requirements (1 out of 3)
+        manager.update_replica_health(3, false);
+        assert!(!manager.is_replication_healthy());
+    }
+
+    #[test]
+    fn test_replication_manager_required_replica_count() {
+        let mut manager = ReplicationManager::new(ReplicationStrategy::Synchronous, 1);
+        manager.add_replica(2, "127.0.0.1:8081".to_string());
+        manager.add_replica(3, "127.0.0.1:8082".to_string());
+        
+        // Synchronous requires all replicas
+        assert_eq!(manager.required_replica_count(), 2);
+        
+        // Asynchronous requires no replicas
+        manager.set_strategy(ReplicationStrategy::Asynchronous);
+        assert_eq!(manager.required_replica_count(), 0);
+        
+        // Semi-synchronous requires minimum specified
+        manager.set_strategy(ReplicationStrategy::SemiSynchronous { min_replicas: 1 });
+        assert_eq!(manager.required_replica_count(), 1);
+        
+        // Raft consensus requires majority
+        manager.set_strategy(ReplicationStrategy::RaftConsensus);
+        // With 2 replicas + 1 local = 3 total, majority is 2, so we need 1 replica (since local is always available)
+        assert_eq!(manager.required_replica_count(), 1);
+    }
+
+    #[test]
+    fn test_replication_manager_raft_consensus_health() {
+        let mut manager = ReplicationManager::new(ReplicationStrategy::RaftConsensus, 1);
+        
+        // Single node cluster (1 local + 0 replicas = 1 total) - should be healthy
+        assert!(manager.is_replication_healthy());
+        
+        // Add replicas to form 3-node cluster
+        manager.add_replica(2, "127.0.0.1:8081".to_string());
+        manager.add_replica(3, "127.0.0.1:8082".to_string());
+        
+        // All healthy (3 total, majority = 2, local + 2 replicas = 3) - should be healthy
+        assert!(manager.is_replication_healthy());
+        
+        // Mark one replica as unhealthy (local + 1 replica = 2, still majority) - should be healthy
+        manager.update_replica_health(3, false);
+        assert!(manager.is_replication_healthy());
+        
+        // Mark both replicas as unhealthy (only local = 1, not majority) - should not be healthy
+        manager.update_replica_health(2, false);
+        assert!(!manager.is_replication_healthy());
+    }
+
+    #[test]
+    fn test_replication_stats_default() {
+        let stats = ReplicationStats::default();
+        assert_eq!(stats.total_replicas, 0);
+        assert_eq!(stats.healthy_replicas, 0);
+        assert_eq!(stats.average_lag, 0.0);
+        assert_eq!(stats.max_lag, 0);
+        assert_eq!(stats.min_lag, 0);
+        assert_eq!(stats.average_latency, Duration::from_millis(0));
+        assert_eq!(stats.replication_throughput, 0.0);
+    }
+
+    #[test]
+    fn test_replication_error_display() {
+        let err = ReplicationError::InsufficientReplicas { required: 3, available: 1 };
+        assert!(err.to_string().contains("Insufficient replicas: need 3, have 1"));
+        
+        let err = ReplicationError::UnhealthyReplica { node_id: 42 };
+        assert!(err.to_string().contains("Replica 42 is unhealthy"));
+        
+        let err = ReplicationError::Timeout { timeout: Duration::from_secs(5) };
+        assert!(err.to_string().contains("Replication timeout after 5s"));
+        
+        let err = ReplicationError::Network { message: "connection failed".to_string() };
+        assert!(err.to_string().contains("Network error: connection failed"));
+        
+        let err = ReplicationError::Serialization { message: "json error".to_string() };
+        assert!(err.to_string().contains("Serialization error: json error"));
+    }
 }

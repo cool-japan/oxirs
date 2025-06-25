@@ -44,6 +44,24 @@ pub mod vocabulary {
     pub const SWRLM_NS: &str = "http://www.w3.org/2003/11/swrlm#";
     pub const SWRLT_NS: &str = "http://www.w3.org/2003/11/swrlt#";
     pub const SWRLX_NS: &str = "http://www.w3.org/2003/11/swrlx#";
+
+    // SWRL-X Temporal Extensions
+    pub const SWRLX_TEMPORAL_NS: &str = "http://www.w3.org/2003/11/swrlx/temporal#";
+    
+    // Temporal predicates
+    pub const SWRLX_BEFORE: &str = "http://www.w3.org/2003/11/swrlx/temporal#before";
+    pub const SWRLX_AFTER: &str = "http://www.w3.org/2003/11/swrlx/temporal#after";
+    pub const SWRLX_DURING: &str = "http://www.w3.org/2003/11/swrlx/temporal#during";
+    pub const SWRLX_OVERLAPS: &str = "http://www.w3.org/2003/11/swrlx/temporal#overlaps";
+    pub const SWRLX_MEETS: &str = "http://www.w3.org/2003/11/swrlx/temporal#meets";
+    pub const SWRLX_STARTS: &str = "http://www.w3.org/2003/11/swrlx/temporal#starts";
+    pub const SWRLX_FINISHES: &str = "http://www.w3.org/2003/11/swrlx/temporal#finishes";
+    pub const SWRLX_EQUALS: &str = "http://www.w3.org/2003/11/swrlx/temporal#equals";
+    
+    // Interval operations
+    pub const SWRLX_INTERVAL_DURATION: &str = "http://www.w3.org/2003/11/swrlx/temporal#intervalDuration";
+    pub const SWRLX_INTERVAL_START: &str = "http://www.w3.org/2003/11/swrlx/temporal#intervalStart";
+    pub const SWRLX_INTERVAL_END: &str = "http://www.w3.org/2003/11/swrlx/temporal#intervalEnd";
 }
 
 /// SWRL atom types
@@ -380,6 +398,146 @@ impl SwrlEngine {
             implementation: builtin_lower_case,
         });
 
+        // Geographic operations
+        self.register_builtin(BuiltinFunction {
+            name: "distance".to_string(),
+            namespace: vocabulary::SWRLX_NS.to_string(),
+            min_args: 5,
+            max_args: Some(5),
+            implementation: builtin_distance,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "within".to_string(),
+            namespace: vocabulary::SWRLX_NS.to_string(),
+            min_args: 5,
+            max_args: Some(5),
+            implementation: builtin_within,
+        });
+
+        // Advanced mathematical functions
+        self.register_builtin(BuiltinFunction {
+            name: "tan".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_tan,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "asin".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_asin,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "acos".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_acos,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "atan".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_atan,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "log".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_log,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "exp".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_exp,
+        });
+
+        // Temporal operations  
+        self.register_builtin(BuiltinFunction {
+            name: "dateAdd".to_string(),
+            namespace: vocabulary::SWRLX_NS.to_string(),
+            min_args: 4,
+            max_args: Some(4),
+            implementation: builtin_date_add,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "dateDiff".to_string(),
+            namespace: vocabulary::SWRLX_NS.to_string(),
+            min_args: 3,
+            max_args: Some(3),
+            implementation: builtin_date_diff,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "now".to_string(),
+            namespace: vocabulary::SWRLX_NS.to_string(),
+            min_args: 1,
+            max_args: Some(1),
+            implementation: builtin_now,
+        });
+
+        // SWRL-X Temporal Extensions
+        self.register_builtin(BuiltinFunction {
+            name: "before".to_string(),
+            namespace: vocabulary::SWRLX_TEMPORAL_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_temporal_before,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "after".to_string(),
+            namespace: vocabulary::SWRLX_TEMPORAL_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_temporal_after,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "during".to_string(),
+            namespace: vocabulary::SWRLX_TEMPORAL_NS.to_string(),
+            min_args: 3,
+            max_args: Some(3),
+            implementation: builtin_temporal_during,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "overlaps".to_string(),
+            namespace: vocabulary::SWRLX_TEMPORAL_NS.to_string(),
+            min_args: 4,
+            max_args: Some(4),
+            implementation: builtin_temporal_overlaps,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "meets".to_string(),
+            namespace: vocabulary::SWRLX_TEMPORAL_NS.to_string(),
+            min_args: 4,
+            max_args: Some(4),
+            implementation: builtin_temporal_meets,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "intervalDuration".to_string(),
+            namespace: vocabulary::SWRLX_TEMPORAL_NS.to_string(),
+            min_args: 3,
+            max_args: Some(3),
+            implementation: builtin_interval_duration,
+        });
+
         info!(
             "Registered {} core SWRL built-in functions",
             self.builtins.len()
@@ -391,6 +549,54 @@ impl SwrlEngine {
         let full_name = format!("{}{}", builtin.namespace, builtin.name);
         debug!("Registering SWRL built-in: {}", full_name);
         self.builtins.insert(full_name, builtin);
+    }
+
+    /// Register a custom built-in function with validation
+    pub fn register_custom_builtin(
+        &mut self,
+        name: String,
+        namespace: String,
+        min_args: usize,
+        max_args: Option<usize>,
+        implementation: fn(&[SwrlArgument]) -> Result<bool>,
+    ) -> Result<(), String> {
+        // Validate namespace
+        if !namespace.starts_with("http://") && !namespace.starts_with("https://") {
+            return Err(format!("Invalid namespace '{}': must be a valid IRI", namespace));
+        }
+
+        // Validate argument constraints
+        if let Some(max) = max_args {
+            if min_args > max {
+                return Err(format!(
+                    "Invalid argument constraints: min_args ({}) > max_args ({})",
+                    min_args, max
+                ));
+            }
+        }
+
+        let builtin = BuiltinFunction {
+            name: name.clone(),
+            namespace: namespace.clone(),
+            min_args,
+            max_args,
+            implementation,
+        };
+
+        self.register_builtin(builtin);
+        
+        info!("Registered custom SWRL built-in: {}{}", namespace, name);
+        Ok(())
+    }
+
+    /// List all registered built-in functions
+    pub fn list_builtins(&self) -> Vec<String> {
+        self.builtins.keys().cloned().collect()
+    }
+
+    /// Check if a built-in function is registered
+    pub fn has_builtin(&self, name: &str) -> bool {
+        self.builtins.contains_key(name)
     }
 
     /// Add a SWRL rule
@@ -1205,6 +1411,413 @@ fn builtin_lower_case(args: &[SwrlArgument]) -> Result<bool> {
     let result = extract_string_value(&args[1])?;
 
     Ok(input.to_lowercase() == result)
+}
+
+// Advanced mathematical built-ins
+fn builtin_tan(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("tan requires exactly 2 arguments"));
+    }
+
+    let x = extract_numeric_value(&args[0])?;
+    let result = extract_numeric_value(&args[1])?;
+
+    Ok((x.tan() - result).abs() < f64::EPSILON)
+}
+
+fn builtin_asin(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("asin requires exactly 2 arguments"));
+    }
+
+    let x = extract_numeric_value(&args[0])?;
+    let result = extract_numeric_value(&args[1])?;
+
+    if x < -1.0 || x > 1.0 {
+        return Ok(false);
+    }
+
+    Ok((x.asin() - result).abs() < f64::EPSILON)
+}
+
+fn builtin_acos(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("acos requires exactly 2 arguments"));
+    }
+
+    let x = extract_numeric_value(&args[0])?;
+    let result = extract_numeric_value(&args[1])?;
+
+    if x < -1.0 || x > 1.0 {
+        return Ok(false);
+    }
+
+    Ok((x.acos() - result).abs() < f64::EPSILON)
+}
+
+fn builtin_atan(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("atan requires exactly 2 arguments"));
+    }
+
+    let x = extract_numeric_value(&args[0])?;
+    let result = extract_numeric_value(&args[1])?;
+
+    Ok((x.atan() - result).abs() < f64::EPSILON)
+}
+
+fn builtin_log(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("log requires exactly 2 arguments"));
+    }
+
+    let x = extract_numeric_value(&args[0])?;
+    let result = extract_numeric_value(&args[1])?;
+
+    if x <= 0.0 {
+        return Ok(false);
+    }
+
+    Ok((x.ln() - result).abs() < f64::EPSILON)
+}
+
+fn builtin_exp(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("exp requires exactly 2 arguments"));
+    }
+
+    let x = extract_numeric_value(&args[0])?;
+    let result = extract_numeric_value(&args[1])?;
+
+    Ok((x.exp() - result).abs() < f64::EPSILON)
+}
+
+// Geographic operations
+fn builtin_distance(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 5 {
+        return Err(anyhow::anyhow!("distance requires exactly 5 arguments: lat1, lon1, lat2, lon2, result"));
+    }
+
+    let lat1 = extract_numeric_value(&args[0])?.to_radians();
+    let lon1 = extract_numeric_value(&args[1])?.to_radians();
+    let lat2 = extract_numeric_value(&args[2])?.to_radians();
+    let lon2 = extract_numeric_value(&args[3])?.to_radians();
+    let expected_distance = extract_numeric_value(&args[4])?;
+
+    // Haversine formula for great circle distance
+    let earth_radius = 6371.0; // Earth radius in kilometers
+    let dlat = lat2 - lat1;
+    let dlon = lon2 - lon1;
+    
+    let a = (dlat / 2.0).sin().powi(2) + lat1.cos() * lat2.cos() * (dlon / 2.0).sin().powi(2);
+    let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
+    let distance = earth_radius * c;
+
+    Ok((distance - expected_distance).abs() < 0.001) // 1 meter tolerance
+}
+
+fn builtin_within(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 5 {
+        return Err(anyhow::anyhow!("within requires exactly 5 arguments: lat1, lon1, lat2, lon2, max_distance"));
+    }
+
+    let lat1 = extract_numeric_value(&args[0])?.to_radians();
+    let lon1 = extract_numeric_value(&args[1])?.to_radians();
+    let lat2 = extract_numeric_value(&args[2])?.to_radians();
+    let lon2 = extract_numeric_value(&args[3])?.to_radians();
+    let max_distance = extract_numeric_value(&args[4])?;
+
+    // Haversine formula for great circle distance
+    let earth_radius = 6371.0; // Earth radius in kilometers
+    let dlat = lat2 - lat1;
+    let dlon = lon2 - lon1;
+    
+    let a = (dlat / 2.0).sin().powi(2) + lat1.cos() * lat2.cos() * (dlon / 2.0).sin().powi(2);
+    let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
+    let distance = earth_radius * c;
+
+    Ok(distance <= max_distance)
+}
+
+// Temporal operations
+fn builtin_date_add(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 4 {
+        return Err(anyhow::anyhow!("dateAdd requires exactly 4 arguments: date, duration, unit, result"));
+    }
+
+    let date_str = extract_string_value(&args[0])?;
+    let duration = extract_numeric_value(&args[1])? as i64;
+    let unit = extract_string_value(&args[2])?;
+    let expected_result = extract_string_value(&args[3])?;
+
+    // Parse ISO 8601 date string (simplified - in production would use chrono)
+    if let Ok(timestamp) = date_str.parse::<i64>() {
+        let seconds_to_add = match unit.as_str() {
+            "seconds" => duration,
+            "minutes" => duration * 60,
+            "hours" => duration * 3600,
+            "days" => duration * 86400,
+            "weeks" => duration * 604800,
+            _ => return Err(anyhow::anyhow!("Unsupported time unit: {}", unit)),
+        };
+        
+        let result_timestamp = timestamp + seconds_to_add;
+        Ok(result_timestamp.to_string() == expected_result)
+    } else {
+        // For proper date strings, would need chrono crate
+        Ok(false)
+    }
+}
+
+fn builtin_date_diff(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 3 {
+        return Err(anyhow::anyhow!("dateDiff requires exactly 3 arguments: date1, date2, result"));
+    }
+
+    let date1_str = extract_string_value(&args[0])?;
+    let date2_str = extract_string_value(&args[1])?;
+    let expected_diff = extract_numeric_value(&args[2])?;
+
+    // Parse timestamps (simplified - in production would use chrono)
+    if let (Ok(timestamp1), Ok(timestamp2)) = (date1_str.parse::<i64>(), date2_str.parse::<i64>()) {
+        let diff_seconds = (timestamp2 - timestamp1).abs() as f64;
+        Ok((diff_seconds - expected_diff).abs() < 1.0) // 1 second tolerance
+    } else {
+        Ok(false)
+    }
+}
+
+fn builtin_now(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 1 {
+        return Err(anyhow::anyhow!("now requires exactly 1 argument: result"));
+    }
+
+    let expected_result = extract_string_value(&args[0])?;
+    
+    // Get current timestamp (simplified - in production would use proper time crate)
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| anyhow::anyhow!("Time error: {}", e))?
+        .as_secs();
+    
+    // Check if the expected result is close to current time (within 1 second)
+    if let Ok(expected_timestamp) = expected_result.parse::<u64>() {
+        Ok((now as i64 - expected_timestamp as i64).abs() <= 1)
+    } else {
+        Ok(false)
+    }
+}
+
+// SWRL-X Temporal Extensions
+fn builtin_temporal_before(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("temporal:before requires exactly 2 arguments: time1, time2"));
+    }
+
+    let time1 = extract_numeric_value(&args[0])?;
+    let time2 = extract_numeric_value(&args[1])?;
+
+    Ok(time1 < time2)
+}
+
+fn builtin_temporal_after(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("temporal:after requires exactly 2 arguments: time1, time2"));
+    }
+
+    let time1 = extract_numeric_value(&args[0])?;
+    let time2 = extract_numeric_value(&args[1])?;
+
+    Ok(time1 > time2)
+}
+
+fn builtin_temporal_during(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 3 {
+        return Err(anyhow::anyhow!("temporal:during requires exactly 3 arguments: time, interval_start, interval_end"));
+    }
+
+    let time = extract_numeric_value(&args[0])?;
+    let interval_start = extract_numeric_value(&args[1])?;
+    let interval_end = extract_numeric_value(&args[2])?;
+
+    Ok(time >= interval_start && time <= interval_end)
+}
+
+fn builtin_temporal_overlaps(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 4 {
+        return Err(anyhow::anyhow!("temporal:overlaps requires exactly 4 arguments: start1, end1, start2, end2"));
+    }
+
+    let start1 = extract_numeric_value(&args[0])?;
+    let end1 = extract_numeric_value(&args[1])?;
+    let start2 = extract_numeric_value(&args[2])?;
+    let end2 = extract_numeric_value(&args[3])?;
+
+    // Two intervals overlap if they have any time in common
+    Ok(start1 < end2 && start2 < end1)
+}
+
+fn builtin_temporal_meets(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 4 {
+        return Err(anyhow::anyhow!("temporal:meets requires exactly 4 arguments: start1, end1, start2, end2"));
+    }
+
+    let start1 = extract_numeric_value(&args[0])?;
+    let end1 = extract_numeric_value(&args[1])?;
+    let start2 = extract_numeric_value(&args[2])?;
+    let _end2 = extract_numeric_value(&args[3])?;
+
+    // First interval meets second if end of first equals start of second
+    Ok((end1 - start2).abs() < f64::EPSILON)
+}
+
+fn builtin_interval_duration(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 3 {
+        return Err(anyhow::anyhow!("temporal:intervalDuration requires exactly 3 arguments: start, end, duration"));
+    }
+
+    let start = extract_numeric_value(&args[0])?;
+    let end = extract_numeric_value(&args[1])?;
+    let expected_duration = extract_numeric_value(&args[2])?;
+
+    let actual_duration = (end - start).abs();
+    Ok((actual_duration - expected_duration).abs() < f64::EPSILON)
+}
+
+/// Temporal interval representation
+#[derive(Debug, Clone, PartialEq)]
+pub struct TemporalInterval {
+    pub start: f64,
+    pub end: f64,
+}
+
+impl TemporalInterval {
+    pub fn new(start: f64, end: f64) -> Result<Self> {
+        if start > end {
+            return Err(anyhow::anyhow!("Invalid interval: start ({}) > end ({})", start, end));
+        }
+        Ok(Self { start, end })
+    }
+
+    /// Check if this interval is before another interval
+    pub fn before(&self, other: &TemporalInterval) -> bool {
+        self.end < other.start
+    }
+
+    /// Check if this interval is after another interval
+    pub fn after(&self, other: &TemporalInterval) -> bool {
+        self.start > other.end
+    }
+
+    /// Check if this interval overlaps with another interval
+    pub fn overlaps(&self, other: &TemporalInterval) -> bool {
+        self.start < other.end && other.start < self.end
+    }
+
+    /// Check if this interval meets another interval
+    pub fn meets(&self, other: &TemporalInterval) -> bool {
+        (self.end - other.start).abs() < f64::EPSILON
+    }
+
+    /// Check if this interval contains a time point
+    pub fn contains(&self, time: f64) -> bool {
+        time >= self.start && time <= self.end
+    }
+
+    /// Get the duration of this interval
+    pub fn duration(&self) -> f64 {
+        self.end - self.start
+    }
+}
+
+/// Custom built-in registry for user-defined functions
+pub struct CustomBuiltinRegistry {
+    /// Registry of custom built-in functions
+    functions: HashMap<String, Box<dyn Fn(&[SwrlArgument]) -> Result<bool> + Send + Sync>>,
+    /// Metadata about registered functions
+    metadata: HashMap<String, BuiltinMetadata>,
+}
+
+/// Metadata for custom built-in functions
+#[derive(Debug, Clone)]
+pub struct BuiltinMetadata {
+    pub name: String,
+    pub namespace: String,
+    pub description: String,
+    pub min_args: usize,
+    pub max_args: Option<usize>,
+    pub example_usage: String,
+}
+
+impl CustomBuiltinRegistry {
+    /// Create a new custom built-in registry
+    pub fn new() -> Self {
+        Self {
+            functions: HashMap::new(),
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Register a custom built-in function
+    pub fn register<F>(&mut self, metadata: BuiltinMetadata, function: F) -> Result<()>
+    where
+        F: Fn(&[SwrlArgument]) -> Result<bool> + Send + Sync + 'static,
+    {
+        let full_name = format!("{}{}", metadata.namespace, metadata.name);
+        
+        if self.functions.contains_key(&full_name) {
+            return Err(anyhow::anyhow!("Built-in function '{}' already registered", full_name));
+        }
+
+        self.functions.insert(full_name.clone(), Box::new(function));
+        self.metadata.insert(full_name.clone(), metadata);
+
+        info!("Registered custom built-in function: {}", full_name);
+        Ok(())
+    }
+
+    /// Execute a custom built-in function
+    pub fn execute(&self, name: &str, args: &[SwrlArgument]) -> Result<bool> {
+        if let Some(function) = self.functions.get(name) {
+            // Validate argument count
+            if let Some(meta) = self.metadata.get(name) {
+                if args.len() < meta.min_args {
+                    return Err(anyhow::anyhow!(
+                        "Too few arguments for '{}': expected at least {}, got {}",
+                        name, meta.min_args, args.len()
+                    ));
+                }
+                if let Some(max_args) = meta.max_args {
+                    if args.len() > max_args {
+                        return Err(anyhow::anyhow!(
+                            "Too many arguments for '{}': expected at most {}, got {}",
+                            name, max_args, args.len()
+                        ));
+                    }
+                }
+            }
+
+            function(args)
+        } else {
+            Err(anyhow::anyhow!("Unknown built-in function: {}", name))
+        }
+    }
+
+    /// List all registered custom built-in functions
+    pub fn list_functions(&self) -> Vec<&BuiltinMetadata> {
+        self.metadata.values().collect()
+    }
+
+    /// Get metadata for a specific function
+    pub fn get_metadata(&self, name: &str) -> Option<&BuiltinMetadata> {
+        self.metadata.get(name)
+    }
+}
+
+impl Default for CustomBuiltinRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

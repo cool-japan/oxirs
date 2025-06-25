@@ -2,6 +2,15 @@
 
 This document outlines the roadmap and pending tasks for the oxirs-star RDF-star implementation.
 
+## Current Status
+- ✅ Core RDF-star data model implementation
+- ✅ Basic parsing infrastructure for Turtle-star and N-Triples-star  
+- ✅ SPARQL-star query execution framework
+- ✅ Storage backend integration with oxirs-core
+- 🔄 Parser implementations (partial - missing N-Quads-star, TriG-star improvements)
+- 🔄 Serializer implementations (partial - missing TriG-star, N-Quads-star)
+- ⚠️ Storage optimizations needed (unsafe iterator issues)
+
 ## High Priority
 
 ### 🔧 Parser Implementations
@@ -263,5 +272,20 @@ When working on these tasks:
 
 ---
 
-*Last updated: 2024-06-24*
-*Next review: 2024-07-24*
+## Recently Completed (2024-12-25)
+- ✅ Core RDF-star data model with proper type safety
+- ✅ Basic Turtle-star and N-Triples-star parsing
+- ✅ SPARQL-star query framework
+- ✅ Storage backend integration
+- ✅ Error handling and validation framework
+- ✅ Configuration and statistics system
+
+## Immediate Next Steps
+1. Complete N-Quads-star parser implementation (Line 346 in parser.rs)
+2. Fix unsafe iterator in quoted triple indexing (Line 378-381 in store.rs)
+3. Complete TriG-star and N-Quads-star serializers (Lines 207, 213 in serializer.rs)
+4. Add comprehensive test coverage for all parsers/serializers
+5. Implement performance benchmarks and optimizations
+
+*Last updated: 2024-12-25*
+*Next review: 2025-01-25*

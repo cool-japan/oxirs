@@ -1,11 +1,14 @@
 //! Performance analysis and profiling utilities for the rule engine
 //!
 //! This module provides tools for analyzing rule engine performance,
-//! identifying bottlenecks, and generating performance reports.
+//! identifying bottlenecks, generating performance reports, and enabling
+//! parallel rule evaluation for improved throughput.
 
 use crate::{Rule, RuleAtom, RuleEngine, Term};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
@@ -512,5 +515,210 @@ mod tests {
 
         let metrics = harness.run_comprehensive_test(rules, facts);
         assert!(metrics.rules_processed > 0);
+    }
+}
+
+/// Parallel rule evaluation engine for improved performance
+pub struct ParallelRuleEngine {
+    /// Number of worker threads
+    num_threads: usize,
+    /// Shared rule storage
+    rules: Arc<Mutex<Vec<Rule>>>,
+    /// Shared fact storage
+    facts: Arc<Mutex<Vec<RuleAtom>>>,
+    /// Performance metrics
+    metrics: Arc<Mutex<PerformanceMetrics>>,
+}
+
+impl ParallelRuleEngine {
+    /// Create a new parallel rule engine
+    pub fn new(num_threads: Option<usize>) -> Self {
+        let num_threads = num_threads.unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(4)
+        });
+
+        info!("Initializing parallel rule engine with {} threads", num_threads);
+
+        Self {
+            num_threads,
+            rules: Arc::new(Mutex::new(Vec::new())),
+            facts: Arc::new(Mutex::new(Vec::new())),
+            metrics: Arc::new(Mutex::new(PerformanceMetrics {
+                total_time: Duration::new(0, 0),
+                rule_loading_time: Duration::new(0, 0),
+                fact_processing_time: Duration::new(0, 0),
+                forward_chaining_time: Duration::new(0, 0),
+                backward_chaining_time: Duration::new(0, 0),
+                rules_processed: 0,
+                facts_processed: 0,
+                inferred_facts: 0,
+                memory_stats: MemoryStats {
+                    peak_memory_usage: 0,
+                    facts_memory: 0,
+                    rules_memory: 0,
+                    derived_facts_memory: 0,
+                },
+                rule_timings: HashMap::new(),
+                warnings: Vec::new(),
+            })),
+        }
+    }
+
+    /// Add rules to the parallel engine
+    pub fn add_rules(&mut self, rules: Vec<Rule>) -> Result<(), String> {
+        let start_time = Instant::now();
+        
+        if let Ok(mut rule_storage) = self.rules.lock() {
+            rule_storage.extend(rules.clone());
+            
+            if let Ok(mut metrics) = self.metrics.lock() {
+                metrics.rules_processed += rules.len();
+                metrics.rule_loading_time += start_time.elapsed();
+            }
+            
+            info!("Added {} rules to parallel engine", rules.len());
+            Ok(())
+        } else {
+            Err("Failed to acquire rule storage lock".to_string())
+        }
+    }
+
+    /// Execute parallel forward chaining
+    pub fn parallel_forward_chain(&mut self) -> Result<Vec<RuleAtom>, String> {
+        let start_time = Instant::now();
+        info!("Starting parallel forward chaining with {} threads", self.num_threads);
+
+        // Clone shared data for workers
+        let rules = self.rules.clone();
+        let facts = self.facts.clone();
+        let metrics = self.metrics.clone();
+        
+        let derived_facts = Arc::new(Mutex::new(Vec::new()));
+        let mut handles = Vec::new();
+
+        // Spawn worker threads
+        for thread_id in 0..self.num_threads {
+            let rules_clone = rules.clone();
+            let facts_clone = facts.clone();
+            let derived_facts_clone = derived_facts.clone();
+            let metrics_clone = metrics.clone();
+
+            let handle = thread::spawn(move || {
+                Self::worker_forward_chain(
+                    thread_id,
+                    rules_clone,
+                    facts_clone,
+                    derived_facts_clone,
+                    metrics_clone,
+                );
+            });
+            
+            handles.push(handle);
+        }
+
+        // Wait for all workers to complete
+        for handle in handles {
+            if let Err(e) = handle.join() {
+                warn!("Worker thread panicked: {:?}", e);
+            }
+        }
+
+        // Collect results
+        let results = if let Ok(derived) = derived_facts.lock() {
+            derived.clone()
+        } else {
+            return Err("Failed to acquire derived facts lock".to_string());
+        };
+
+        // Update metrics
+        if let Ok(mut metrics) = self.metrics.lock() {
+            metrics.forward_chaining_time += start_time.elapsed();
+            metrics.inferred_facts += results.len();
+        }
+
+        info!("Parallel forward chaining completed, derived {} facts", results.len());
+        Ok(results)
+    }
+
+    /// Worker function for parallel forward chaining
+    fn worker_forward_chain(
+        thread_id: usize,
+        rules: Arc<Mutex<Vec<Rule>>>,
+        facts: Arc<Mutex<Vec<RuleAtom>>>,
+        derived_facts: Arc<Mutex<Vec<RuleAtom>>>,
+        _metrics: Arc<Mutex<PerformanceMetrics>>,
+    ) {
+        debug!("Worker thread {} starting forward chaining", thread_id);
+
+        // Create local rule engine for this worker
+        let mut local_engine = RuleEngine::new();
+
+        // Get a snapshot of rules and facts
+        let (local_rules, local_facts) = {
+            let rules_guard = rules.lock().unwrap();
+            let facts_guard = facts.lock().unwrap();
+            (rules_guard.clone(), facts_guard.clone())
+        };
+
+        // Add rules to local engine
+        for rule in local_rules {
+            local_engine.add_rule(rule);
+        }
+
+        // Process facts in chunks for this worker
+        let chunk_size = (local_facts.len() + 3) / 4; // Divide facts among threads
+        let start_idx = thread_id * chunk_size;
+        let end_idx = std::cmp::min(start_idx + chunk_size, local_facts.len());
+
+        if start_idx < local_facts.len() {
+            let worker_facts = &local_facts[start_idx..end_idx];
+            
+            match local_engine.forward_chain(worker_facts) {
+                Ok(new_facts) => {
+                    if let Ok(mut derived) = derived_facts.lock() {
+                        derived.extend(new_facts);
+                    }
+                    debug!("Worker thread {} processed {} facts", thread_id, worker_facts.len());
+                }
+                Err(e) => {
+                    warn!("Worker thread {} failed: {}", thread_id, e);
+                }
+            }
+        }
+    }
+
+    /// Get performance metrics
+    pub fn get_metrics(&self) -> PerformanceMetrics {
+        if let Ok(metrics) = self.metrics.lock() {
+            metrics.clone()
+        } else {
+            warn!("Failed to acquire metrics lock");
+            PerformanceMetrics {
+                total_time: Duration::new(0, 0),
+                rule_loading_time: Duration::new(0, 0),
+                fact_processing_time: Duration::new(0, 0),
+                forward_chaining_time: Duration::new(0, 0),
+                backward_chaining_time: Duration::new(0, 0),
+                rules_processed: 0,
+                facts_processed: 0,
+                inferred_facts: 0,
+                memory_stats: MemoryStats {
+                    peak_memory_usage: 0,
+                    facts_memory: 0,
+                    rules_memory: 0,
+                    derived_facts_memory: 0,
+                },
+                rule_timings: HashMap::new(),
+                warnings: Vec::new(),
+            }
+        }
+    }
+}
+
+impl Default for ParallelRuleEngine {
+    fn default() -> Self {
+        Self::new(None)
     }
 }

@@ -22,6 +22,10 @@ tracing.workspace = true
 [dev-dependencies]
 criterion.workspace = true
 
+[[bench]]
+name = "benchmarks"
+harness = false
+
 [features]
 default = []
 

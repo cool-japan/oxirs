@@ -979,6 +979,9 @@ fn format_term_for_sparql(term: &Term) -> Result<String> {
             Ok(format!("\"{}\"", literal.as_str().replace('"', "\\\"")))
         }
         Term::Variable(var) => Ok(format!("?{}", var.name())),
+        Term::QuotedTriple(_) => Err(ShaclError::PropertyPath(
+            "Quoted triples not supported in property paths".to_string()
+        )),
     }
 }
 
