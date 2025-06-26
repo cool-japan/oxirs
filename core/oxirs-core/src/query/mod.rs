@@ -23,7 +23,7 @@ pub use wasm::{OptimizationLevel, WasmQueryCompiler, WasmTarget};
 // TODO: Temporary compatibility layer for SHACL module
 pub use exec::{QueryResults, Solution, QueryExecutor};
 
-use crate::store::Store;
+use crate::Store;
 use crate::model::{Variable, Term};
 use crate::OxirsError;
 use std::collections::HashMap;

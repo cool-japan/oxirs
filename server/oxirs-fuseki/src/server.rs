@@ -286,6 +286,15 @@ impl Runtime {
                 );
         }
 
+        // LDAP/Active Directory authentication routes (if LDAP is configured)
+        if self.config.security.ldap.is_some() {
+            app = app
+                .route("/auth/ldap/login", post(handlers::ldap::ldap_login))
+                .route("/auth/ldap/test", get(handlers::ldap::test_ldap_connection))
+                .route("/auth/ldap/groups", get(handlers::ldap::get_ldap_groups))
+                .route("/auth/ldap/config", get(handlers::ldap::get_ldap_config));
+        }
+
         // SAML 2.0 authentication routes (if SAML is configured)
         if self.config.security.saml.is_some() {
             app = app

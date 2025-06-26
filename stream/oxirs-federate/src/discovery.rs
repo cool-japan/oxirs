@@ -126,6 +126,7 @@ impl ServiceDiscovery {
                     data_patterns: vec!["*".to_string()], // TODO: Analyze actual patterns
                     auth: None, // TODO: Detect authentication requirements
                     metadata,
+                    extended_metadata: None,
                     performance,
                 }));
             }
@@ -164,6 +165,7 @@ impl ServiceDiscovery {
                     data_patterns: vec!["*".to_string()], // TODO: Extract from schema
                     auth: None, // TODO: Detect authentication requirements
                     metadata,
+                    extended_metadata: None,
                     performance,
                 }));
             }
@@ -198,6 +200,7 @@ impl ServiceDiscovery {
                     data_patterns: vec!["*".to_string()],
                     auth: None,
                     metadata: ServiceMetadata::default(),
+                    extended_metadata: None,
                     performance: ServicePerformance::default(),
                 }))
             }

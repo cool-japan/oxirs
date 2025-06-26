@@ -36,17 +36,23 @@ pub use connection_pool::{DetailedPoolMetrics, PoolConfig, PoolStatus};
 #[cfg(test)]
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+pub mod backend;
 pub mod circuit_breaker;
 pub mod connection_pool;
+pub mod consumer;
 pub mod delta;
+pub mod error;
+pub mod event;
 pub mod kafka;
 pub mod kinesis;
 pub mod monitoring;
 pub mod nats;
 pub mod patch;
 pub mod processing;
+pub mod producer;
 pub mod pulsar;
 pub mod redis;
+pub mod types;
 
 /// Enhanced stream configuration with advanced features
 #[derive(Debug, Clone, Serialize, Deserialize)]

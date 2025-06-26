@@ -41,12 +41,14 @@ pub mod export;
 pub mod import;
 pub mod server;
 pub mod tools;
+pub mod cli;
 
 /// Oxide CLI application
 #[derive(Parser)]
 #[command(name = "oxide")]
 #[command(about = "OxiRS command-line interface")]
 #[command(version)]
+#[command(long_about = "OxiRS command-line interface for RDF processing, SPARQL operations, and semantic data management.\n\nComplete documentation at https://oxirs.io/docs/cli")]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
@@ -58,6 +60,26 @@ pub struct Cli {
     /// Configuration file
     #[arg(short, long, global = true)]
     pub config: Option<PathBuf>,
+
+    /// Suppress output (quiet mode)
+    #[arg(short, long, global = true, conflicts_with = "verbose")]
+    pub quiet: bool,
+
+    /// Disable colored output
+    #[arg(long, global = true)]
+    pub no_color: bool,
+
+    /// Interactive mode (where applicable)
+    #[arg(short, long, global = true)]
+    pub interactive: bool,
+
+    /// Configuration profile to use
+    #[arg(short = 'P', long, global = true)]
+    pub profile: Option<String>,
+
+    /// Generate shell completion
+    #[arg(long, value_enum, hide = true)]
+    pub completion: Option<clap_complete::Shell>,
 }
 
 /// Available CLI commands
@@ -590,6 +612,16 @@ pub enum Commands {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
+
+    /// Start interactive REPL mode
+    Interactive {
+        /// Initial dataset to connect to
+        #[arg(short, long)]
+        dataset: Option<String>,
+        /// History file location
+        #[arg(long)]
+        history: Option<PathBuf>,
+    },
 }
 
 /// Configuration management actions
@@ -615,14 +647,42 @@ pub enum ConfigAction {
 
 /// Run the CLI application
 pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize logging
-    let level = if cli.verbose {
+    use cli::{CliContext, completion};
+
+    // Handle shell completion generation
+    if let Some(shell) = cli.completion {
+        use clap::CommandFactory;
+        let mut app = Cli::command();
+        completion::print_completions(shell, &mut app);
+        return Ok(());
+    }
+
+    // Create CLI context
+    let ctx = CliContext::from_cli(cli.verbose, cli.quiet, cli.no_color);
+
+    // Initialize logging with context
+    let level = if ctx.verbose {
         tracing::Level::DEBUG
+    } else if ctx.quiet {
+        tracing::Level::ERROR
     } else {
         tracing::Level::INFO
     };
 
-    tracing_subscriber::fmt().with_max_level(level).init();
+    let subscriber = tracing_subscriber::fmt()
+        .with_max_level(level)
+        .with_ansi(!ctx.no_color);
+    
+    if ctx.quiet {
+        subscriber.without_time().init();
+    } else {
+        subscriber.init();
+    }
+
+    // Show startup message if not quiet
+    if ctx.should_show_output() {
+        ctx.info(&format!("Oxide CLI v{}", env!("CARGO_PKG_VERSION")));
+    }
 
     match cli.command {
         Commands::Init {
@@ -840,5 +900,12 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             output_format,
             output,
         } => tools::rset::run(input, input_format, output_format, output).await,
+        Commands::Interactive { dataset, history } => {
+            use cli::InteractiveMode;
+            
+            ctx.info("Starting interactive mode...");
+            let mut interactive = InteractiveMode::new()?;
+            interactive.run().await
+        }
     }
 }

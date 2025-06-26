@@ -188,7 +188,7 @@ impl Serializer {
         Ok(result)
     }
 
-    fn serialize_quad_to_nquads(&self, quad: &Quad) -> Result<String> {
+    pub fn serialize_quad_to_nquads(&self, quad: &Quad) -> Result<String> {
         let mut result = String::new();
 
         // Serialize subject

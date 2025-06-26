@@ -5,7 +5,8 @@
 
 use crate::{
     model::*,
-    store::{Store as OxirsStore, OxirsQueryResults},
+    Store as OxirsStore,
+    rdf_store::OxirsQueryResults,
     parser::RdfFormat,
     serializer::Serializer,
     OxirsError, Result,

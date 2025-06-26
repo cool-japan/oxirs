@@ -3,6 +3,7 @@
 pub mod admin;
 pub mod auth;
 pub mod graph;
+pub mod ldap;
 pub mod mfa;
 pub mod oauth2;
 pub mod saml;
@@ -11,6 +12,9 @@ pub mod websocket;
 
 // Re-export commonly used handlers
 pub use admin::ui_handler;
+pub use ldap::{
+    get_ldap_config, get_ldap_groups, ldap_login, test_ldap_connection,
+};
 pub use mfa::{
     create_mfa_challenge, disable_mfa, enroll_mfa, get_mfa_status, regenerate_backup_codes,
     verify_mfa,

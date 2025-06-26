@@ -417,7 +417,10 @@ pub struct CachedResult {
 
 impl QueryExecutor {
     pub fn new() -> Self {
-        let context = ExecutionContext::default();
+        let mut context = ExecutionContext::default();
+        // TODO: Parallel execution is not yet implemented
+        context.parallel = false;
+        
         let parallel_executor = if context.parallel {
             Some(Arc::new(ParallelExecutor::new(
                 context.parallel_config.clone(),
@@ -477,10 +480,12 @@ impl QueryExecutor {
         algebra: &Algebra,
         dataset: &dyn Dataset,
     ) -> Result<(Solution, ExecutionStats)> {
+        // println!("DEBUG execute: Starting execution");
         let start_time = Instant::now();
         let mut stats = ExecutionStats::default();
 
         // Check cache if enabled
+        // println!("DEBUG execute: Cache enabled = {}", self.context.enable_caching);
         if self.context.enable_caching {
             let cache_key = format!("{:?}", algebra);
             if let Ok(cache) = self.result_cache.read() {
@@ -496,7 +501,10 @@ impl QueryExecutor {
         }
 
         // Determine if parallel execution should be used
-        let solution = if self.should_use_parallel_execution(algebra) {
+        let use_parallel = self.should_use_parallel_execution(algebra);
+        // println!("DEBUG execute: Use parallel = {}", use_parallel);
+        
+        let solution = if use_parallel {
             self.execute_parallel(algebra, dataset, &mut stats)?
         } else {
             self.execute_algebra(algebra, dataset, &mut stats)?
@@ -530,6 +538,7 @@ impl QueryExecutor {
         dataset: &dyn Dataset,
         stats: &mut ExecutionStats,
     ) -> Result<Solution> {
+        // println!("DEBUG execute_parallel: parallel_executor is_some = {}", self.parallel_executor.is_some());
         if let Some(ref parallel_executor) = self.parallel_executor {
             parallel_executor.execute(algebra, dataset, stats)
         } else {
@@ -594,6 +603,8 @@ impl QueryExecutor {
         stats: &mut ExecutionStats,
     ) -> Result<Solution> {
         stats.operations += 1;
+        
+        // println!("DEBUG execute_algebra: Executing algebra type: {:?}", std::mem::discriminant(algebra));
 
         match algebra {
             Algebra::Bgp(patterns) => self.execute_bgp(patterns, dataset, stats),
@@ -1537,60 +1548,78 @@ impl QueryExecutor {
     ) -> Result<Solution> {
         let pattern_result = self.execute_algebra(pattern, dataset, stats)?;
         
-        eprintln!("DEBUG execute_group: pattern_result.len() = {}", pattern_result.len());
-        eprintln!("DEBUG execute_group: variables.len() = {}", variables.len());
-        eprintln!("DEBUG execute_group: aggregates.len() = {}", aggregates.len());
+        // println!("DEBUG execute_group: pattern_result.len() = {}", pattern_result.len());
+        // println!("DEBUG execute_group: variables.len() = {}", variables.len());
+        // println!("DEBUG execute_group: aggregates.len() = {}", aggregates.len());
         
         // Group bindings by group variables
         let mut groups: HashMap<Vec<AlgebraTerm>, Vec<Binding>> = HashMap::new();
         
-        for binding in pattern_result {
-            let mut group_key = Vec::new();
-            
-            for group_var in variables {
-                let value = self.evaluate_expression_to_term(&group_var.expr, &binding)
-                    .unwrap_or_else(|_| AlgebraTerm::Literal(Literal {
-                        value: String::new(),
-                        language: None,
-                        datatype: None,
-                    }));
-                group_key.push(value);
+        // Special case: if no grouping variables and we have results, create a single group
+        if variables.is_empty() && !pattern_result.is_empty() {
+            // println!("DEBUG execute_group: No grouping variables - creating single group with all bindings");
+            groups.insert(vec![], pattern_result);
+        } else if variables.is_empty() && aggregates.is_empty() {
+            // No grouping and no aggregates - return empty result
+            // println!("DEBUG execute_group: No grouping variables and no aggregates - returning empty");
+            return Ok(vec![]);
+        } else {
+            // Normal grouping
+            for binding in pattern_result {
+                let mut group_key = Vec::new();
+                
+                for group_var in variables {
+                    let value = self.evaluate_expression_to_term(&group_var.expr, &binding)
+                        .unwrap_or_else(|_| AlgebraTerm::Literal(Literal {
+                            value: String::new(),
+                            language: None,
+                            datatype: None,
+                        }));
+                    group_key.push(value);
+                }
+                
+                // println!("DEBUG execute_group: Adding binding to group with key len = {}", group_key.len());
+                groups.entry(group_key).or_insert_with(Vec::new).push(binding);
             }
-            
-            eprintln!("DEBUG execute_group: Adding binding to group with key len = {}", group_key.len());
-            groups.entry(group_key).or_insert_with(Vec::new).push(binding);
         }
         
-        eprintln!("DEBUG execute_group: Number of groups = {}", groups.len());
+        // println!("DEBUG execute_group: Number of groups = {}", groups.len());
         
         // Compute aggregates for each group
         let mut result = Vec::new();
         
         for (group_key, group_bindings) in groups {
-            eprintln!("DEBUG execute_group: Processing group with {} bindings", group_bindings.len());
+            // println!("DEBUG execute_group: Processing group with {} bindings", group_bindings.len());
             let mut group_binding = HashMap::new();
             
             // Add group variables to binding
             for (i, group_var) in variables.iter().enumerate() {
-                if let Some(alias) = &group_var.alias {
-                    eprintln!("DEBUG execute_group: Adding group variable {} = {:?}", alias, group_key[i]);
-                    group_binding.insert(alias.clone(), group_key[i].clone());
-                }
+                let var_name = if let Some(alias) = &group_var.alias {
+                    alias.clone()
+                } else {
+                    // Extract variable name from expression
+                    match &group_var.expr {
+                        Expression::Variable(var) => var.clone(),
+                        _ => format!("_group_{}", i), // Fallback for complex expressions
+                    }
+                };
+                // println!("DEBUG execute_group: Adding group variable {} = {:?}", var_name, group_key[i]);
+                group_binding.insert(var_name, group_key[i].clone());
             }
             
             // Compute aggregates
             for (agg_var, aggregate) in aggregates {
-                eprintln!("DEBUG execute_group: Computing aggregate {:?} for variable {}", aggregate, agg_var);
+                // println!("DEBUG execute_group: Computing aggregate {:?} for variable {}", aggregate, agg_var);
                 let agg_value = self.compute_aggregate(aggregate, &group_bindings)?;
-                eprintln!("DEBUG execute_group: Aggregate result = {:?}", agg_value);
+                // println!("DEBUG execute_group: Aggregate result = {:?}", agg_value);
                 group_binding.insert(agg_var.clone(), agg_value);
             }
             
-            eprintln!("DEBUG execute_group: Final group_binding has {} entries", group_binding.len());
+            // println!("DEBUG execute_group: Final group_binding has {} entries", group_binding.len());
             result.push(group_binding);
         }
         
-        eprintln!("DEBUG execute_group: Final result.len() = {}", result.len());
+        // println!("DEBUG execute_group: Final result.len() = {}", result.len());
         stats.intermediate_results += result.len();
         Ok(result)
     }
@@ -1740,11 +1769,11 @@ impl QueryExecutor {
 
     /// Compute aggregate value for a group
     fn compute_aggregate(&self, aggregate: &Aggregate, bindings: &[Binding]) -> Result<AlgebraTerm> {
-        eprintln!("DEBUG compute_aggregate: aggregate = {:?}, bindings.len() = {}", aggregate, bindings.len());
+        // println!("DEBUG compute_aggregate: aggregate = {:?}, bindings.len() = {}", aggregate, bindings.len());
         match aggregate {
             Aggregate::Count { distinct, expr } => {
                 let count = if let Some(expr) = expr {
-                    eprintln!("DEBUG compute_aggregate: COUNT with expression");
+                    // println!("DEBUG compute_aggregate: COUNT with expression");
                     let mut values = Vec::new();
                     for binding in bindings {
                         if let Ok(value) = self.evaluate_expression_to_term(expr, binding) {
@@ -1759,10 +1788,10 @@ impl QueryExecutor {
                     }
                     values.len()
                 } else {
-                    eprintln!("DEBUG compute_aggregate: COUNT(*) - counting all bindings");
+                    // println!("DEBUG compute_aggregate: COUNT(*) - counting all bindings");
                     bindings.len()
                 };
-                eprintln!("DEBUG compute_aggregate: COUNT result = {}", count);
+                // println!("DEBUG compute_aggregate: COUNT result = {}", count);
                 Ok(AlgebraTerm::Literal(Literal {
                     value: (count as i64).to_string(),
                     language: None,

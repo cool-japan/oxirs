@@ -257,7 +257,7 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_ntriples_line(&self, line: &str) -> Result<Option<Quad>> {
+    pub fn parse_ntriples_line(&self, line: &str) -> Result<Option<Quad>> {
         // Simple N-Triples parser - parse line like: <s> <p> "o" .
         let line = line.trim();
 
@@ -535,7 +535,7 @@ impl Parser {
         Ok(())
     }
 
-    fn parse_nquads_line(&self, line: &str) -> Result<Option<Quad>> {
+    pub fn parse_nquads_line(&self, line: &str) -> Result<Option<Quad>> {
         // N-Quads parser - parse line like: <s> <p> "o" <g> .
         let line = line.trim();
 

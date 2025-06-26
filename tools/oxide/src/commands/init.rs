@@ -1,7 +1,7 @@
 //! Dataset initialization command
 
 use super::CommandResult;
-use oxirs_core::store::Store;
+use super::stubs::Store;
 use std::fs;
 use std::path::PathBuf;
 
@@ -23,24 +23,22 @@ pub async fn run(name: String, format: String, location: Option<PathBuf>) -> Com
         }
     }
 
-    // Create directory structure if needed
-    if format == "tdb2" {
-        if dataset_path.exists() {
-            return Err(format!(
-                "Dataset directory '{}' already exists",
-                dataset_path.display()
-            )
-            .into());
-        }
-
-        fs::create_dir_all(&dataset_path)?;
-        println!("Created dataset directory: {}", dataset_path.display());
+    // Create directory structure
+    if dataset_path.exists() {
+        return Err(format!(
+            "Dataset directory '{}' already exists",
+            dataset_path.display()
+        )
+        .into());
     }
+
+    fs::create_dir_all(&dataset_path)?;
+    println!("Created dataset directory: {}", dataset_path.display());
 
     // Initialize storage backend
     let _store = match format.as_str() {
-        "tdb2" => Store::open(&dataset_path)?,
-        "memory" => Store::new()?,
+        "tdb2" => Store::create(&dataset_path)?,
+        "memory" => Store::create(&dataset_path)?, // Use create for both
         _ => unreachable!(),
     };
 

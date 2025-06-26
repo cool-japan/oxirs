@@ -113,14 +113,16 @@ pub enum LdapScope {
 
 impl LdapService {
     /// Create new LDAP service
-    pub fn new(config: LdapConfig) -> Self {
+    pub async fn new(config: LdapConfig) -> Result<Self, FusekiError> {
         let connection_pool = LdapConnectionPool::new(10); // Default max 10 connections
 
-        LdapService {
+        let service = LdapService {
             config: Arc::new(config),
             connection_pool: Arc::new(RwLock::new(connection_pool)),
             user_cache: Arc::new(RwLock::new(HashMap::new())),
-        }
+        };
+        
+        Ok(service)
     }
 
     /// Authenticate user against LDAP directory

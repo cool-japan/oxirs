@@ -32,23 +32,33 @@ use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
+pub mod auto_discovery;
 pub mod cache;
+pub mod capability_assessment;
 pub mod discovery;
 pub mod executor;
 pub mod graphql;
 pub mod integration;
+pub mod metadata;
 pub mod monitoring;
 pub mod planner;
+pub mod query_decomposition;
 pub mod service;
+pub mod service_client;
 
+pub use auto_discovery::*;
 pub use cache::*;
+pub use capability_assessment::*;
 pub use discovery::*;
 pub use executor::*;
 pub use graphql::*;
 pub use integration::*;
+pub use metadata::*;
 pub use monitoring::*;
 pub use planner::*;
+pub use query_decomposition::*;
 pub use service::*;
+pub use service_client::*;
 
 /// Main federation engine that coordinates all federated query processing
 #[derive(Debug, Clone)]
@@ -67,6 +77,8 @@ pub struct FederationEngine {
     monitor: Arc<FederationMonitor>,
     /// Advanced caching system
     cache: Arc<FederationCache>,
+    /// Automatic service discovery
+    auto_discovery: Arc<RwLock<Option<AutoDiscovery>>>,
 }
 
 impl FederationEngine {
@@ -88,6 +100,7 @@ impl FederationEngine {
             graphql_federation,
             monitor,
             cache,
+            auto_discovery: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -111,6 +124,7 @@ impl FederationEngine {
             graphql_federation,
             monitor,
             cache,
+            auto_discovery: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -459,6 +473,115 @@ impl FederationEngine {
     /// Clean up expired cache entries
     pub async fn cleanup_cache(&self) {
         self.cache.cleanup_expired().await;
+    }
+    
+    /// Start automatic service discovery
+    pub async fn start_auto_discovery(&self, config: AutoDiscoveryConfig) -> Result<()> {
+        let mut auto_discovery_guard = self.auto_discovery.write().await;
+        
+        if auto_discovery_guard.is_some() {
+            return Err(anyhow!("Auto-discovery is already running"));
+        }
+        
+        let mut discovery = AutoDiscovery::new(config);
+        let mut receiver = discovery.start().await?;
+        
+        let registry = self.service_registry.clone();
+        let service_discovery = ServiceDiscovery::new();
+        
+        // Spawn task to handle discovered services
+        tokio::spawn(async move {
+            while let Some(discovered) = receiver.recv().await {
+                info!("Auto-discovered service: {} via {:?}", 
+                      discovered.url, discovered.discovery_method);
+                
+                // Register the discovered service
+                if let Ok(Some(service)) = service_discovery
+                    .discover_service_at_endpoint(&discovered.url)
+                    .await
+                {
+                    let mut registry_guard = registry.write().await;
+                    if let Err(e) = registry_guard.register(service).await {
+                        warn!("Failed to register auto-discovered service: {}", e);
+                    }
+                }
+            }
+        });
+        
+        *auto_discovery_guard = Some(discovery);
+        info!("Auto-discovery started");
+        Ok(())
+    }
+    
+    /// Stop automatic service discovery
+    pub async fn stop_auto_discovery(&self) -> Result<()> {
+        let mut auto_discovery_guard = self.auto_discovery.write().await;
+        
+        if let Some(mut discovery) = auto_discovery_guard.take() {
+            discovery.stop().await;
+            info!("Auto-discovery stopped");
+            Ok(())
+        } else {
+            Err(anyhow!("Auto-discovery is not running"))
+        }
+    }
+    
+    /// Get auto-discovered services
+    pub async fn get_auto_discovered_services(&self) -> Result<Vec<DiscoveredEndpoint>> {
+        let auto_discovery_guard = self.auto_discovery.read().await;
+        
+        if let Some(ref discovery) = *auto_discovery_guard {
+            Ok(discovery.get_discovered_services().await)
+        } else {
+            Err(anyhow!("Auto-discovery is not running"))
+        }
+    }
+    
+    /// Assess capabilities of a registered service
+    pub async fn assess_service_capabilities(&self, service_id: &str) -> Result<AssessmentResult> {
+        let registry = self.service_registry.read().await;
+        let service = registry
+            .get_service(service_id)
+            .ok_or_else(|| anyhow!("Service {} not found", service_id))?
+            .clone();
+        drop(registry);
+        
+        let assessor = CapabilityAssessor::new();
+        let assessment = assessor.assess_service(&service).await?;
+        
+        // Update service with enhanced capabilities
+        let mut registry = self.service_registry.write().await;
+        if let Some(service) = registry.services.get_mut(service_id) {
+            // Update capabilities based on assessment
+            service.capabilities.extend(assessment.detected_capabilities.clone());
+            
+            // Update extended metadata if available
+            if let Some(ref mut extended) = service.extended_metadata {
+                extended.capability_details.extend(assessment.capability_details.clone());
+                extended.query_patterns.extend(assessment.query_patterns.clone());
+            }
+        }
+        
+        info!("Capability assessment completed for service: {}", service_id);
+        Ok(assessment)
+    }
+    
+    /// Assess all registered services
+    pub async fn assess_all_services(&self) -> Result<Vec<AssessmentResult>> {
+        let service_ids: Vec<String> = {
+            let registry = self.service_registry.read().await;
+            registry.services.keys().cloned().collect()
+        };
+        
+        let mut results = Vec::new();
+        for service_id in service_ids {
+            match self.assess_service_capabilities(&service_id).await {
+                Ok(assessment) => results.push(assessment),
+                Err(e) => warn!("Failed to assess service {}: {}", service_id, e),
+            }
+        }
+        
+        Ok(results)
     }
 }
 

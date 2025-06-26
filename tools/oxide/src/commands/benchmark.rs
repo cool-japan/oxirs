@@ -1,10 +1,19 @@
 //! Benchmark command
 
 use super::CommandResult;
-use oxirs_core::store::Store;
+// use oxirs_core::store::Store;
 use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
+
+// Placeholder Store type until oxirs_core is available
+struct Store;
+
+impl Store {
+    fn open(_path: &std::path::Path) -> Result<Self, Box<dyn std::error::Error>> {
+        Ok(Store)
+    }
+}
 
 /// Run performance benchmarks on a dataset
 pub async fn run(

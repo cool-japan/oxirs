@@ -97,6 +97,9 @@ flate2 = "1.0"
 reqwest = { version = "0.12", features = ["json"] }
 percent-encoding = "2.3"
 
+# LDAP authentication
+ldap3 = { version = "0.11", optional = true }
+
 # System utilities
 libc = "0.2"
 
@@ -135,8 +138,9 @@ admin-ui = ["askama"]
 tracing = ["tracing-opentelemetry"]
 rate-limit = ["governor"]
 hot-reload = ["notify"]
+ldap = ["ldap3"]
 development = ["admin-ui", "tracing"]
-production = ["metrics", "auth", "rate-limit"]
+production = ["metrics", "auth", "rate-limit", "ldap"]
 
 [[bin]]
 name = "oxirs-fuseki"

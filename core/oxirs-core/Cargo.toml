@@ -42,7 +42,7 @@ ahash = "0.8"
 simd-json = "0.13"
 wide = "0.7"
 num_cpus = "1.16"
-tokio = { workspace = true, features = ["rt", "sync", "time", "macros"] }
+tokio = { workspace = true, features = ["rt", "sync", "time", "macros", "io-util"] }
 async-trait = "0.1"
 futures = "0.3"
 
@@ -76,6 +76,9 @@ zstd = "0.13"
 blake3 = "1.5"
 hex = "0.4"
 
+# BiMap for term interning
+bimap = "0.6"
+
 # Dependencies for Unicode normalization (replacing oxiri/oxilangtag)
 icu = "1.5"
 icu_normalizer = "1.5"
@@ -86,10 +89,15 @@ icu_properties = "1.5"
 [dev-dependencies]
 criterion.workspace = true
 tokio = { workspace = true, features = ["test-util", "rt", "io-util", "macros"] }
+tempfile = "3.14"
 
 [features]
 default = ["serde"]
 serde = []
 async = []
 async-tokio = ["async"]
+
+[[bench]]
+name = "indexed_graph_bench"
+harness = false
 

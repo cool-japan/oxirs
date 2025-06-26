@@ -27,12 +27,14 @@ pub mod distributed;
 pub mod graph;
 pub mod indexing;
 pub mod interning;
+pub mod io;
 pub mod model;
 pub mod optimization;
 pub mod parser;
 pub mod query;
 pub mod serializer;
 pub mod storage;
+pub mod rdf_store;
 pub mod store;
 pub mod vocab;
 // pub mod config;
@@ -42,6 +44,7 @@ pub mod oxigraph_compat; // Oxigraph compatibility layer
 
 // Re-export core types for convenience
 pub use model::*;
+pub use rdf_store::Store;
 
 /// Core error type for OxiRS operations
 #[derive(Debug, thiserror::Error)]

@@ -9,12 +9,16 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::Duration;
 use tracing::{debug, info, warn};
 
-use crate::{FederatedService, ServiceCapability, ServiceRegistry};
+use crate::{
+    FederatedService, ServiceCapability, ServiceRegistry,
+    query_decomposition::{QueryDecomposer, DecompositionResult, DecomposerConfig},
+};
 
 /// Query planner for federated queries
 #[derive(Debug)]
 pub struct QueryPlanner {
     config: QueryPlannerConfig,
+    decomposer: QueryDecomposer,
 }
 
 impl QueryPlanner {
@@ -22,12 +26,28 @@ impl QueryPlanner {
     pub fn new() -> Self {
         Self {
             config: QueryPlannerConfig::default(),
+            decomposer: QueryDecomposer::new(),
         }
     }
 
     /// Create a new query planner with custom configuration
     pub fn with_config(config: QueryPlannerConfig) -> Self {
-        Self { config }
+        let decomposer_config = DecomposerConfig {
+            min_patterns_for_distribution: 3,
+            max_services_per_query: config.max_services_per_query,
+            optimization_strategy: match config.optimization_level {
+                OptimizationLevel::None => crate::query_decomposition::OptimizationStrategy::MinimizeTime,
+                OptimizationLevel::Basic => crate::query_decomposition::OptimizationStrategy::MinimizeCost,
+                OptimizationLevel::Balanced => crate::query_decomposition::OptimizationStrategy::Balanced,
+                OptimizationLevel::Aggressive => crate::query_decomposition::OptimizationStrategy::MinimizeTransfer,
+            },
+            enable_advanced_algorithms: config.optimization_level != OptimizationLevel::None,
+        };
+        
+        Self {
+            config,
+            decomposer: QueryDecomposer::with_config(decomposer_config),
+        }
     }
 
     /// Analyze a SPARQL query and extract planning information
@@ -153,6 +173,32 @@ impl QueryPlanner {
 
         self.optimize_plan(&mut plan);
         Ok(plan)
+    }
+    
+    /// Create an execution plan using advanced decomposition for complex queries
+    pub async fn plan_sparql_advanced(
+        &self,
+        query_info: &QueryInfo,
+        registry: &ServiceRegistry,
+    ) -> Result<ExecutionPlan> {
+        info!("Using advanced query decomposition for {} patterns", query_info.patterns.len());
+        
+        // Use advanced decomposition for complex queries
+        if query_info.complexity as u8 >= QueryComplexity::High as u8 || 
+           query_info.patterns.len() >= self.config.advanced_decomposition_threshold {
+            let decomposition_result = self.decomposer.decompose(query_info, registry).await?;
+            
+            info!(
+                "Advanced decomposition found {} components, generated {} total plans",
+                decomposition_result.statistics.components_found,
+                decomposition_result.statistics.total_plans_generated
+            );
+            
+            return Ok(decomposition_result.plan);
+        }
+        
+        // Fall back to regular planning for simple queries
+        self.plan_sparql(query_info, registry).await
     }
 
     /// Create an execution plan for a GraphQL query
@@ -684,12 +730,13 @@ impl QueryPlanner {
     /// Get current load of a service
     fn get_service_load(&self, service: &crate::FederatedService, _registry: &ServiceRegistry) -> f64 {
         // In a real implementation, this would query service metrics
-        // For now, use a simple heuristic based on service status
-        match service.status {
-            crate::ServiceStatus::Healthy => 0.3,
-            crate::ServiceStatus::Degraded => 0.7,
-            crate::ServiceStatus::Unavailable => f64::INFINITY,
-            crate::ServiceStatus::Unknown => 0.5,
+        // For now, use a simple heuristic based on performance characteristics
+        if let Some(avg_response_time) = service.performance.average_response_time {
+            // Convert response time to load estimate (0.0 to 1.0)
+            let millis = avg_response_time.as_millis() as f64;
+            (millis / 1000.0).min(1.0) // Normalize to 0-1 range
+        } else {
+            0.5 // Default moderate load
         }
     }
 
@@ -710,12 +757,10 @@ impl QueryPlanner {
             PatternComplexity::Complex => 200,
         };
 
-        // Service performance factor
-        cost = (cost as f64 * service.performance_score.unwrap_or(1.0)) as u64;
-
-        // Network latency factor (estimated)
-        if let Some(latency) = service.latency {
-            cost += latency.as_millis() as u64;
+        // Service performance factor based on average response time
+        if let Some(avg_response_time) = service.performance.average_response_time {
+            let perf_factor = avg_response_time.as_millis() as f64 / 100.0;
+            cost = (cost as f64 * perf_factor.max(0.5)) as u64;
         }
 
         cost
@@ -744,8 +789,11 @@ impl QueryPlanner {
             score += 1.5;
         }
 
-        // Performance factor
-        score *= service.performance_score.unwrap_or(1.0);
+        // Performance factor based on response time (lower is better)
+        if let Some(avg_response_time) = service.performance.average_response_time {
+            let perf_factor = 100.0 / (avg_response_time.as_millis() as f64 + 1.0);
+            score *= perf_factor;
+        }
 
         score
     }
@@ -848,6 +896,7 @@ pub struct QueryPlannerConfig {
     pub enable_caching: bool,
     pub cost_threshold: u64,
     pub service_selection_strategy: ServiceSelectionStrategy,
+    pub advanced_decomposition_threshold: usize,
 }
 
 impl Default for QueryPlannerConfig {
@@ -859,6 +908,7 @@ impl Default for QueryPlannerConfig {
             enable_caching: true,
             cost_threshold: 1000,
             service_selection_strategy: ServiceSelectionStrategy::CapabilityBased,
+            advanced_decomposition_threshold: 5,
         }
     }
 }

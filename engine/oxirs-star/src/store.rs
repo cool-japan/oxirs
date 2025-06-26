@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
-use oxirs_core::store::Store as CoreStore;
+use oxirs_core::rdf_store::Store as CoreStore;
 use tracing::{debug, info, span, Level};
 
 use crate::model::{StarGraph, StarQuad, StarTerm, StarTriple};
@@ -283,6 +283,22 @@ impl StarStore {
         format!("{}|{}|{}", triple.subject, triple.predicate, triple.object)
     }
 
+    /// Update indices after removing an item at position `pos`
+    /// This efficiently updates all indices > pos by decrementing them
+    fn update_indices_after_removal(indices: &mut BTreeSet<usize>, pos: usize) {
+        // Remove the item at pos
+        indices.remove(&pos);
+        
+        // Create a new set with updated indices
+        let updated: BTreeSet<usize> = indices
+            .iter()
+            .map(|&idx| if idx > pos { idx - 1 } else { idx })
+            .collect();
+        
+        // Replace the old set with the updated one
+        *indices = updated;
+    }
+
     /// Count quoted triples within a single triple
     fn count_quoted_triples_in_triple(&self, triple: &StarTriple) -> usize {
         let mut count = 0;
@@ -326,58 +342,27 @@ impl StarStore {
 
             // Update signature index
             for (_, indices) in index.signature_to_indices.iter_mut() {
-                indices.remove(&pos);
-                // Shift indices down for elements after the removed position
-                let indices_to_update: Vec<usize> =
-                    indices.iter().filter(|&&i| i > pos).cloned().collect();
-                for idx in indices_to_update {
-                    indices.remove(&idx);
-                    indices.insert(idx - 1);
-                }
+                Self::update_indices_after_removal(indices, pos);
             }
 
             // Update subject index
             for (_, indices) in index.subject_index.iter_mut() {
-                indices.remove(&pos);
-                let indices_to_update: Vec<usize> =
-                    indices.iter().filter(|&&i| i > pos).cloned().collect();
-                for idx in indices_to_update {
-                    indices.remove(&idx);
-                    indices.insert(idx - 1);
-                }
+                Self::update_indices_after_removal(indices, pos);
             }
 
             // Update predicate index
             for (_, indices) in index.predicate_index.iter_mut() {
-                indices.remove(&pos);
-                let indices_to_update: Vec<usize> =
-                    indices.iter().filter(|&&i| i > pos).cloned().collect();
-                for idx in indices_to_update {
-                    indices.remove(&idx);
-                    indices.insert(idx - 1);
-                }
+                Self::update_indices_after_removal(indices, pos);
             }
 
             // Update object index
             for (_, indices) in index.object_index.iter_mut() {
-                indices.remove(&pos);
-                let indices_to_update: Vec<usize> =
-                    indices.iter().filter(|&&i| i > pos).cloned().collect();
-                for idx in indices_to_update {
-                    indices.remove(&idx);
-                    indices.insert(idx - 1);
-                }
+                Self::update_indices_after_removal(indices, pos);
             }
 
             // Update nesting depth index
             for (_, indices) in index.nesting_depth_index.iter_mut() {
-                indices.remove(&pos);
-                let indices_to_update: Vec<usize> =
-                    indices.iter().filter(|&&i| i > pos).cloned().collect();
-                for idx in indices_to_update {
-                    indices.remove(&idx);
-                    indices.insert(idx - 1);
-                }
+                Self::update_indices_after_removal(indices, pos);
             }
 
             debug!("Removed triple: {}", triple);

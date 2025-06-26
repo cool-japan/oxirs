@@ -1,13 +1,17 @@
 //! CLI configuration management
 
-/// CLI-specific configuration
+pub mod manager;
+
+pub use manager::{ConfigManager, OxideConfig};
+
+/// CLI-specific configuration (legacy compatibility)
 pub struct CliConfig {
     pub default_dataset: Option<String>,
     pub default_format: String,
     pub server_defaults: ServerDefaults,
 }
 
-/// Default server settings
+/// Default server settings (legacy compatibility)
 pub struct ServerDefaults {
     pub host: String,
     pub port: u16,
@@ -23,6 +27,21 @@ impl Default for CliConfig {
                 host: "localhost".to_string(),
                 port: 3030,
                 enable_graphql: false,
+            },
+        }
+    }
+}
+
+/// Convert from new config to legacy format
+impl From<&OxideConfig> for CliConfig {
+    fn from(config: &OxideConfig) -> Self {
+        CliConfig {
+            default_dataset: None, // TODO: Get from datasets
+            default_format: config.general.default_format.clone(),
+            server_defaults: ServerDefaults {
+                host: config.server.host.clone(),
+                port: config.server.port,
+                enable_graphql: false, // TODO: Get from server config
             },
         }
     }

@@ -5,7 +5,7 @@
 use crate::model::*;
 use crate::query::algebra::*;
 use crate::query::plan::ExecutionPlan;
-use crate::store::Store;
+use crate::Store;
 use crate::OxirsError;
 use std::collections::{HashMap, HashSet};
 

@@ -50,6 +50,9 @@ pub mod wwwenc;
 /// Common utilities for tools
 pub mod utils;
 
+/// Format detection and conversion
+pub mod format;
+
 /// Tool execution statistics
 #[derive(Debug, Clone)]
 pub struct ToolStats {

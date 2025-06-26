@@ -12,5 +12,9 @@ pub mod query;
 pub mod serve;
 pub mod update;
 
+// Temporary stubs until oxirs_core is available
+#[allow(dead_code)]
+mod stubs;
+
 /// Common command result type
 pub type CommandResult = Result<(), Box<dyn std::error::Error>>;

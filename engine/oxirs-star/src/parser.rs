@@ -7,6 +7,7 @@
 //! - N-Quads-star (*.nqs)
 
 use std::collections::HashMap;
+use std::fmt;
 use std::io::{BufRead, BufReader, Read};
 use std::str::FromStr;
 
@@ -137,6 +138,16 @@ pub enum ErrorSeverity {
     Error,
     /// Fatal - parsing must stop
     Fatal,
+}
+
+impl fmt::Display for ErrorSeverity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ErrorSeverity::Warning => write!(f, "Warning"),
+            ErrorSeverity::Error => write!(f, "Error"),
+            ErrorSeverity::Fatal => write!(f, "Fatal"),
+        }
+    }
 }
 
 impl ParseContext {
@@ -725,16 +736,21 @@ impl StarParser {
         let _enter = span.enter();
 
         let mut graph = StarGraph::new();
-        let mut context = ParseContext::new();
+        let mut context = self.create_parse_context();
         let buf_reader = BufReader::new(reader);
 
         // Enhanced state tracking for TriG parsing
         let mut trig_state = TrigParserState::new();
         let mut accumulated_line = String::new();
+        let mut error_count = 0;
+        let max_errors = self.config.max_parse_errors.unwrap_or(100);
 
         for (line_num, line_result) in buf_reader.lines().enumerate() {
             let line = line_result.map_err(|e| StarError::ParseError(e.to_string()))?;
             let line = line.trim();
+
+            // Update position tracking
+            context.update_position(line_num + 1, 0);
 
             // Skip empty lines and comments
             if line.is_empty() || line.starts_with('#') {
@@ -747,36 +763,106 @@ impl StarParser {
 
             // Check if we have a complete statement
             if self.is_complete_trig_statement(&accumulated_line, &mut trig_state) {
-                self.parse_complete_trig_statement(
+                match self.parse_complete_trig_statement(
                     &accumulated_line.trim(),
                     &mut context,
                     &mut graph,
                     &mut trig_state,
-                )
-                .with_context(|| {
-                    format!(
-                        "Error parsing TriG-star statement around line {}: {}",
-                        line_num + 1,
-                        accumulated_line.trim()
-                    )
-                })
-                .map_err(|e| StarError::ParseError(e.to_string()))?;
-                accumulated_line.clear();
+                ) {
+                    Ok(_) => {
+                        // Successfully parsed
+                        accumulated_line.clear();
+                    }
+                    Err(e) => {
+                        error_count += 1;
+                        let error_context = format!(
+                            "line {}: {}",
+                            line_num + 1,
+                            accumulated_line.trim()
+                        );
+                        context.add_error(
+                            format!("TriG-star parse error: {}", e),
+                            error_context,
+                            if context.strict_mode {
+                                ErrorSeverity::Fatal
+                            } else {
+                                ErrorSeverity::Error
+                            },
+                        );
+
+                        if context.strict_mode || error_count >= max_errors {
+                            return Err(StarError::ParseError(format!(
+                                "TriG-star parsing failed at line {} with {} errors. First error: {}",
+                                line_num + 1,
+                                context.get_errors().len(),
+                                context.get_errors().first().map(|e| &e.message).unwrap_or(&"Unknown error".to_string())
+                            )));
+                        }
+
+                        // Try to recover by resetting the accumulated line and state
+                        accumulated_line.clear();
+                        
+                        // If we're in a nested structure, try to recover the state
+                        if trig_state.brace_depth > 0 {
+                            debug!("Attempting to recover from error in nested graph block");
+                            // Don't reset state completely, just try to continue
+                        } else {
+                            // Reset to a clean state for top-level errors
+                            trig_state = TrigParserState::new();
+                        }
+                    }
+                }
             }
         }
 
         // Handle any remaining incomplete statement
         if !accumulated_line.trim().is_empty() {
-            return Err(StarError::ParseError(format!(
-                "Incomplete TriG-star statement at end of input: {}",
-                accumulated_line.trim()
-            )));
+            context.add_error(
+                "Incomplete TriG-star statement at end of input".to_string(),
+                accumulated_line.trim().to_string(),
+                ErrorSeverity::Error,
+            );
+            if context.strict_mode {
+                return Err(StarError::ParseError(format!(
+                    "Incomplete TriG-star statement at end of input: {}",
+                    accumulated_line.trim()
+                )));
+            }
+        }
+
+        // Check for unclosed graph blocks
+        if trig_state.in_graph_block {
+            context.add_error(
+                format!("Unclosed graph block at end of input. Missing {} closing brace(s)", trig_state.brace_depth),
+                "End of file".to_string(),
+                ErrorSeverity::Error,
+            );
+            if context.strict_mode {
+                return Err(StarError::ParseError(
+                    "Unclosed graph block at end of input".to_string()
+                ));
+            }
+        }
+
+        // Report any accumulated errors
+        if !context.get_errors().is_empty() {
+            debug!(
+                "TriG-star parsing completed with {} warnings/errors",
+                context.get_errors().len()
+            );
+            for error in context.get_errors() {
+                debug!(
+                    "Line {}, Column {}: {} [{}] ({})",
+                    error.line, error.column, error.message, error.severity, error.context
+                );
+            }
         }
 
         debug!(
-            "Parsed {} quads ({} total triples) in TriG-star format",
+            "Parsed {} quads ({} total triples) in TriG-star format with {} errors",
             graph.quad_len(),
-            graph.total_len()
+            graph.total_len(),
+            context.get_errors().len()
         );
         Ok(graph)
     }
@@ -1324,8 +1410,37 @@ impl StarParser {
             let graph_term = if graph_part.is_empty() {
                 None // Default graph
             } else {
-                Some(self.parse_term(graph_part, context)?)
+                match self.parse_term_safe(graph_part, context) {
+                    Ok(term) => {
+                        // Validate that the graph name is appropriate (IRI or blank node)
+                        match &term {
+                            StarTerm::NamedNode(_) | StarTerm::BlankNode(_) => Some(term),
+                            _ => {
+                                return Err(anyhow::anyhow!(
+                                    "Graph name must be an IRI or blank node, found: {:?}",
+                                    term
+                                ));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        return Err(anyhow::anyhow!(
+                            "Failed to parse graph name '{}': {}",
+                            graph_part,
+                            e
+                        ));
+                    }
+                }
             };
+
+            // Check for nested graph declarations
+            if state.in_graph_block {
+                debug!(
+                    "Warning: Nested graph declaration detected. Previous graph: {:?}, New graph: {:?}",
+                    state.current_graph, graph_term
+                );
+                // Store the previous graph context for potential recovery
+            }
 
             state.enter_graph_block(graph_term);
 
@@ -1336,14 +1451,28 @@ impl StarParser {
                 for triple_candidate in remaining_content.split('.') {
                     let triple_str = triple_candidate.trim();
                     if !triple_str.is_empty() && !triple_str.starts_with('}') {
-                        if let Ok(triple) = self.parse_triple_pattern(triple_str, context) {
-                            let quad = StarQuad::new(
-                                triple.subject,
-                                triple.predicate,
-                                triple.object,
-                                state.current_graph.clone(),
-                            );
-                            graph.insert_quad(quad)?;
+                        match self.parse_triple_pattern_safe(triple_str, context) {
+                            Ok(triple) => {
+                                let quad = StarQuad::new(
+                                    triple.subject,
+                                    triple.predicate,
+                                    triple.object,
+                                    state.current_graph.clone(),
+                                );
+                                graph.insert_quad(quad)?;
+                            }
+                            Err(e) => {
+                                // Log error but continue parsing
+                                debug!(
+                                    "Error parsing triple in graph block: '{}' - Error: {}",
+                                    triple_str, e
+                                );
+                                context.add_error(
+                                    format!("Failed to parse triple in graph block: {}", e),
+                                    triple_str.to_string(),
+                                    ErrorSeverity::Warning,
+                                );
+                            }
                         }
                     }
                 }
@@ -1476,5 +1605,106 @@ mod tests {
             StarFormat::NTriplesStar,
         );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_nquads_star_parsing() {
+        let parser = StarParser::new();
+        
+        // Simple quad
+        let nquads = r#"<http://example.org/s> <http://example.org/p> "test" <http://example.org/g> .
+<http://example.org/s2> <http://example.org/p2> <http://example.org/o2> ."#;
+        
+        let result = parser.parse_str(nquads, StarFormat::NQuadsStar).unwrap();
+        assert_eq!(result.quad_len(), 2);
+        assert_eq!(result.total_len(), 2);
+        
+        // Quad with quoted triple
+        let nquads_with_quoted = r#"<< <http://example.org/alice> <http://example.org/says> "hello" >> <http://example.org/certainty> "0.9" <http://example.org/provenance> ."#;
+        
+        let result = parser.parse_str(nquads_with_quoted, StarFormat::NQuadsStar).unwrap();
+        assert_eq!(result.quad_len(), 1);
+        assert!(result.has_quoted_triples());
+    }
+
+    #[test]
+    fn test_trig_star_parsing() {
+        let parser = StarParser::new();
+        
+        // Simple TriG with named graphs
+        let trig = r#"
+@prefix ex: <http://example.org/> .
+
+{
+    ex:alice ex:knows ex:bob .
+}
+
+ex:graph1 {
+    ex:charlie ex:likes ex:dave .
+    << ex:charlie ex:likes ex:dave >> ex:certainty "0.8" .
+}
+"#;
+        
+        let result = parser.parse_str(trig, StarFormat::TrigStar).unwrap();
+        assert_eq!(result.quad_len(), 3);
+        assert_eq!(result.named_graph_names().len(), 1);
+        
+        // Test default graph
+        let default_triples = result.triples();
+        assert_eq!(default_triples.len(), 1);
+        
+        // Test named graph
+        let graph_name = result.named_graph_names()[0];
+        let named_triples = result.named_graph_triples(graph_name).unwrap();
+        assert_eq!(named_triples.len(), 2);
+    }
+
+    #[test]
+    fn test_trig_star_error_recovery() {
+        let mut config = ParserConfig::default();
+        config.strict_mode = false; // Enable error recovery
+        let parser = StarParser::with_config(config);
+        
+        // TriG with errors that should be recoverable
+        let trig_with_errors = r#"
+@prefix ex: <http://example.org/> .
+
+# Valid triple
+ex:alice ex:knows ex:bob .
+
+# Invalid triple (missing object) - should be skipped
+ex:charlie ex:likes .
+
+# Valid graph block
+ex:graph1 {
+    ex:dave ex:age "30" .
+}
+
+# Unclosed graph block - should report error but continue
+ex:graph2 {
+    ex:eve ex:age "25" .
+    # Missing closing brace
+
+# Valid triple after error
+ex:frank ex:knows ex:grace .
+"#;
+        
+        let result = parser.parse_str(trig_with_errors, StarFormat::TrigStar);
+        // Should parse successfully with errors logged
+        assert!(result.is_ok());
+        let graph = result.unwrap();
+        // Should have parsed the valid triples
+        assert!(graph.quad_len() >= 3); // At least the valid triples
+    }
+
+    #[test]
+    fn test_nquads_star_with_blank_nodes() {
+        let parser = StarParser::new();
+        
+        let nquads = r#"_:b1 <http://example.org/p> "test" <http://example.org/g> .
+<< _:b1 <http://example.org/says> "hello" >> <http://example.org/certainty> "0.9" _:g1 ."#;
+        
+        let result = parser.parse_str(nquads, StarFormat::NQuadsStar).unwrap();
+        assert_eq!(result.quad_len(), 2);
     }
 }

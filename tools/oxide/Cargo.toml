@@ -12,7 +12,7 @@ categories.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-oxirs-core = { path = "../../core/oxirs-core" }
+# oxirs-core = { path = "../../core/oxirs-core" }
 # oxirs-fuseki = { path = "../../server/oxirs-fuseki" }
 # oxirs-gql = { path = "../../server/oxirs-gql" }
 # oxirs-tdb = { path = "../../storage/oxirs-tdb" }
@@ -26,6 +26,19 @@ thiserror.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 rand = "0.8"
+
+# Enhanced CLI features
+indicatif = "0.17"  # Progress bars
+colored = "2.1"     # Colored output
+prettytable-rs = "0.10"  # Table formatting
+rustyline = "14.0"  # Interactive mode
+rustyline-derive = "0.10"  # Helper derive macros
+strsim = "0.11"     # String similarity for suggestions
+atty = "0.2"        # Terminal detection
+regex = "1.10"      # Pattern matching for validation
+url = "2.5"         # URL parsing and validation
+dirs = "5.0"        # Platform-specific directories
+clap_complete = "4.5"  # Shell completion support
 
 [dev-dependencies]
 criterion.workspace = true

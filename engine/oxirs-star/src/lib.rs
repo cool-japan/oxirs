@@ -96,6 +96,8 @@ pub struct StarConfig {
     pub enable_sparql_star: bool,
     /// Buffer size for streaming operations
     pub buffer_size: usize,
+    /// Maximum parse errors before aborting (None for unlimited)
+    pub max_parse_errors: Option<usize>,
 }
 
 impl Default for StarConfig {
@@ -106,6 +108,7 @@ impl Default for StarConfig {
             strict_mode: false,
             enable_sparql_star: true,
             buffer_size: 8192,
+            max_parse_errors: Some(100),
         }
     }
 }

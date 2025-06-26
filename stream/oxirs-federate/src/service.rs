@@ -20,12 +20,15 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
-use crate::{HealthStatus, ServiceStatus};
+use crate::{
+    metadata::{ExtendedServiceMetadata, HealthCheckResult},
+    HealthStatus, ServiceStatus,
+};
 
 /// Registry for managing federated services
 #[derive(Debug)]
 pub struct ServiceRegistry {
-    services: HashMap<String, FederatedService>,
+    pub(crate) services: HashMap<String, FederatedService>,
     config: ServiceRegistryConfig,
     last_health_check: Option<Instant>,
     http_client: Client,
@@ -215,6 +218,77 @@ impl ServiceRegistry {
         }
     }
 
+    /// Enable extended metadata collection for a service
+    pub async fn enable_extended_metadata(&mut self, service_id: &str) -> Result<()> {
+        if let Some(service) = self.services.get_mut(service_id) {
+            if service.extended_metadata.is_none() {
+                let extended = ExtendedServiceMetadata::from_basic(service.metadata.clone());
+                service.extended_metadata = Some(extended);
+                info!("Enabled extended metadata for service: {}", service_id);
+            }
+            Ok(())
+        } else {
+            Err(anyhow!("Service {} not found", service_id))
+        }
+    }
+    
+    /// Collect dataset statistics for a SPARQL service
+    pub async fn collect_dataset_statistics(&mut self, service_id: &str) -> Result<()> {
+        let service = self
+            .services
+            .get(service_id)
+            .ok_or_else(|| anyhow!("Service {} not found", service_id))?
+            .clone();
+        
+        if service.service_type != ServiceType::Sparql && service.service_type != ServiceType::Hybrid {
+            return Err(anyhow!("Service {} does not support SPARQL", service_id));
+        }
+        
+        // Query to get dataset statistics
+        let stats_query = r#"
+            SELECT 
+                (COUNT(*) as ?totalTriples)
+                (COUNT(DISTINCT ?s) as ?subjects)
+                (COUNT(DISTINCT ?p) as ?predicates)
+                (COUNT(DISTINCT ?o) as ?objects)
+            WHERE { ?s ?p ?o }
+        "#;
+        
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/sparql-query"),
+        );
+        headers.insert(
+            ACCEPT,
+            HeaderValue::from_static("application/sparql-results+json"),
+        );
+        
+        if let Some(auth) = &service.auth {
+            self.add_auth_header(&mut headers, auth)?;
+        }
+        
+        let response = self
+            .http_client
+            .post(&service.endpoint)
+            .headers(headers)
+            .body(stats_query)
+            .send()
+            .await?;
+        
+        if response.status().is_success() {
+            // Parse statistics and update extended metadata
+            if let Some(service) = self.services.get_mut(service_id) {
+                if let Some(ref mut extended) = service.extended_metadata {
+                    // TODO: Parse actual response and update dataset_stats
+                    debug!("Updated dataset statistics for service: {}", service_id);
+                }
+            }
+        }
+        
+        Ok(())
+    }
+    
     /// Check health of a specific service
     async fn check_service_health(&self, service: &FederatedService) -> Result<ServiceStatus> {
         let start_time = Instant::now();
@@ -241,6 +315,23 @@ impl ServiceRegistry {
             "Health check for {} completed in {:?}: {:?}",
             service.id, response_time, health_result
         );
+
+        // Update extended metadata with health check result if available
+        if let Some(extended) = &service.extended_metadata {
+            let check_result = HealthCheckResult {
+                timestamp: chrono::Utc::now(),
+                success: matches!(health_result, Ok(ServiceStatus::Healthy)),
+                response_time: Some(response_time),
+                error_message: if health_result.is_err() {
+                    Some(format!("{:?}", health_result))
+                } else {
+                    None
+                },
+            };
+            
+            // We need mutable access to update - will be handled in caller
+            debug!("Health check result recorded for extended metadata");
+        }
 
         health_result
     }
@@ -561,6 +652,8 @@ pub struct FederatedService {
     pub auth: Option<AuthConfig>,
     /// Service metadata
     pub metadata: ServiceMetadata,
+    /// Extended metadata (optional, for enhanced tracking)
+    pub extended_metadata: Option<ExtendedServiceMetadata>,
     /// Performance characteristics
     pub performance: ServicePerformance,
 }
@@ -582,6 +675,7 @@ impl FederatedService {
             data_patterns: vec!["*".to_string()], // Accept all patterns by default
             auth: None,
             metadata: ServiceMetadata::default(),
+            extended_metadata: None,
             performance: ServicePerformance::default(),
         }
     }
@@ -603,6 +697,7 @@ impl FederatedService {
             data_patterns: vec!["*".to_string()],
             auth: None,
             metadata: ServiceMetadata::default(),
+            extended_metadata: None,
             performance: ServicePerformance::default(),
         }
     }
@@ -663,6 +758,8 @@ pub enum ServiceCapability {
     RealTime,
     Versioning,
     Analytics,
+    FullTextSearch,
+    Geospatial,
 }
 
 /// Authentication configuration for services

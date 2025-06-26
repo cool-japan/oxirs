@@ -1,7 +1,7 @@
 //! SPARQL query command
 
 use super::CommandResult;
-use oxirs_core::store::Store;
+use super::stubs::Store;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -91,7 +91,7 @@ fn load_dataset_from_config(dataset: &str) -> Result<PathBuf, Box<dyn std::error
 
 /// Format and display query results
 fn format_results(
-    results: &oxirs_core::store::OxirsQueryResults,
+    results: &super::stubs::OxirsQueryResults,
     format: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     match format {
@@ -120,7 +120,7 @@ fn format_results(
 
 /// Format results as a table
 fn format_table_results(
-    _results: &oxirs_core::store::OxirsQueryResults,
+    _results: &super::stubs::OxirsQueryResults,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // TODO: Implement proper table formatting
     println!("Results (table format):");
@@ -132,7 +132,7 @@ fn format_table_results(
 
 /// Format results as JSON
 fn format_json_results(
-    _results: &oxirs_core::store::OxirsQueryResults,
+    _results: &super::stubs::OxirsQueryResults,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // TODO: Implement proper JSON formatting
     println!("Results (JSON format):");
@@ -145,7 +145,7 @@ fn format_json_results(
 
 /// Format results as CSV/TSV
 fn format_csv_results(
-    _results: &oxirs_core::store::OxirsQueryResults,
+    _results: &super::stubs::OxirsQueryResults,
     _separator: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // TODO: Implement proper CSV/TSV formatting
@@ -156,7 +156,7 @@ fn format_csv_results(
 
 /// Format results as XML
 fn format_xml_results(
-    _results: &oxirs_core::store::OxirsQueryResults,
+    _results: &super::stubs::OxirsQueryResults,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // TODO: Implement proper XML formatting
     println!("Results (XML format):");

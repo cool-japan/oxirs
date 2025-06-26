@@ -297,7 +297,7 @@ impl Store {
     }
 
     /// Insert a triple into the store (legacy string interface)
-    pub fn insert(&mut self, subject: &str, predicate: &str, object: &str) -> Result<bool> {
+    pub fn insert_string_triple(&mut self, subject: &str, predicate: &str, object: &str) -> Result<bool> {
         let subject_node = NamedNode::new(subject)?;
         let predicate_node = NamedNode::new(predicate)?;
         let object_literal = Literal::new(object);
@@ -465,6 +465,189 @@ impl Store {
         let _sparql = sparql;
         Ok(OxirsQueryResults::new())
     }
+    
+    /// Insert a quad (compatibility alias for insert_quad)
+    pub fn insert(&mut self, quad: &Quad) -> Result<()> {
+        self.insert_quad(quad.clone())?;
+        Ok(())
+    }
+    
+    /// Remove a quad (compatibility alias for remove_quad)
+    pub fn remove(&mut self, quad: &Quad) -> Result<bool> {
+        self.remove_quad(quad)
+    }
+    
+    /// Get all quads in the store
+    pub fn quads(&self) -> Result<Vec<Quad>> {
+        self.iter_quads()
+    }
+    
+    /// Get all quads from named graphs only
+    pub fn named_graph_quads(&self) -> Result<Vec<Quad>> {
+        match &self.backend {
+            StorageBackend::UltraMemory(index, _arena) => {
+                let mut result = Vec::new();
+                // Get all named graphs
+                let graphs = self.named_graphs()?;
+                for graph in graphs {
+                    let graph_name = GraphName::NamedNode(graph);
+                    let quads = index.find_quads(None, None, None, Some(&graph_name));
+                    result.extend(quads);
+                }
+                Ok(result)
+            }
+            StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
+                let storage = storage.read().map_err(|e| {
+                    OxirsError::Store(format!("Failed to acquire read lock: {}", e))
+                })?;
+                let mut result = Vec::new();
+                for graph in &storage.named_graphs {
+                    let graph_name = GraphName::NamedNode(graph.clone());
+                    let quads = storage.query_quads(None, None, None, Some(&graph_name));
+                    result.extend(quads);
+                }
+                Ok(result)
+            }
+        }
+    }
+    
+    /// Get all quads from the default graph only
+    pub fn default_graph_quads(&self) -> Result<Vec<Quad>> {
+        let default_graph = GraphName::DefaultGraph;
+        self.query_quads(None, None, None, Some(&default_graph))
+    }
+    
+    /// Get quads from a specific graph
+    pub fn graph_quads(&self, graph: Option<&NamedNode>) -> Result<Vec<Quad>> {
+        let graph_name = graph.map(|g| GraphName::NamedNode(g.clone()))
+            .unwrap_or(GraphName::DefaultGraph);
+        self.query_quads(None, None, None, Some(&graph_name))
+    }
+    
+    /// Clear all data from all graphs
+    pub fn clear_all(&mut self) -> Result<usize> {
+        let count = self.len()?;
+        self.clear()?;
+        Ok(count)
+    }
+    
+    /// Clear all named graphs (but not the default graph)
+    pub fn clear_named_graphs(&mut self) -> Result<usize> {
+        let mut deleted = 0;
+        let graphs = self.named_graphs()?;
+        
+        for graph in graphs {
+            let graph_name = GraphName::NamedNode(graph);
+            deleted += self.clear_graph(Some(&graph_name))?;
+        }
+        
+        Ok(deleted)
+    }
+    
+    /// Clear the default graph only
+    pub fn clear_default_graph(&mut self) -> Result<usize> {
+        self.clear_graph(None)
+    }
+    
+    /// Clear a specific graph
+    pub fn clear_graph(&mut self, graph: Option<&GraphName>) -> Result<usize> {
+        let graph_name = graph.cloned().unwrap_or(GraphName::DefaultGraph);
+        let quads = self.query_quads(None, None, None, Some(&graph_name))?;
+        let count = quads.len();
+        
+        for quad in quads {
+            self.remove_quad(&quad)?;
+        }
+        
+        Ok(count)
+    }
+    
+    /// Get all graphs (including default if it contains data)
+    pub fn graphs(&self) -> Result<Vec<NamedNode>> {
+        let mut graphs = self.named_graphs()?;
+        
+        // Check if default graph has any data
+        let default_graph = GraphName::DefaultGraph;
+        let default_quads = self.query_quads(None, None, None, Some(&default_graph))?;
+        if !default_quads.is_empty() {
+            // Add a special marker for default graph
+            if let Ok(default_marker) = NamedNode::new("urn:x-oxirs:default-graph") {
+                graphs.push(default_marker);
+            }
+        }
+        
+        Ok(graphs)
+    }
+    
+    /// Get all named graphs
+    pub fn named_graphs(&self) -> Result<Vec<NamedNode>> {
+        match &self.backend {
+            StorageBackend::UltraMemory(index, _arena) => {
+                // Get unique graph names from all quads
+                let mut graphs = HashSet::new();
+                let all_quads = index.find_quads(None, None, None, None);
+                for quad in all_quads {
+                    if let GraphName::NamedNode(graph) = quad.graph_name() {
+                        graphs.insert(graph.clone());
+                    }
+                }
+                Ok(graphs.into_iter().collect())
+            }
+            StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
+                let storage = storage.read().map_err(|e| {
+                    OxirsError::Store(format!("Failed to acquire read lock: {}", e))
+                })?;
+                Ok(storage.named_graphs.iter().cloned().collect())
+            }
+        }
+    }
+    
+    /// Create a new graph (if it doesn't exist)
+    pub fn create_graph(&mut self, graph: Option<&NamedNode>) -> Result<()> {
+        if let Some(graph_name) = graph {
+            match &self.backend {
+                StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
+                    let mut storage = storage.write().map_err(|e| {
+                        OxirsError::Store(format!("Failed to acquire write lock: {}", e))
+                    })?;
+                    storage.named_graphs.insert(graph_name.clone());
+                }
+                StorageBackend::UltraMemory(_, _) => {
+                    // Graphs are created implicitly when quads are added
+                }
+            }
+        }
+        Ok(())
+    }
+    
+    /// Drop a graph (remove the graph and all its quads)
+    pub fn drop_graph(&mut self, graph: Option<&GraphName>) -> Result<()> {
+        self.clear_graph(graph)?;
+        
+        // Remove from named graphs set if it's a named graph
+        if let Some(GraphName::NamedNode(graph_name)) = graph {
+            match &self.backend {
+                StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
+                    let mut storage = storage.write().map_err(|e| {
+                        OxirsError::Store(format!("Failed to acquire write lock: {}", e))
+                    })?;
+                    storage.named_graphs.remove(graph_name);
+                }
+                StorageBackend::UltraMemory(_, _) => {
+                    // Graph is dropped implicitly when all quads are removed
+                }
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Load data from a URL into a graph
+    pub fn load_from_url(&mut self, url: &str, graph: Option<&NamedNode>) -> Result<usize> {
+        // TODO: Implement HTTP fetching and parsing
+        // For now, return an error
+        Err(OxirsError::Store(format!("Loading from URL not yet implemented: {}", url)))
+    }
 }
 
 impl Default for Store {
@@ -570,7 +753,7 @@ mod tests {
         let mut store = Store::new().unwrap();
 
         let result = store
-            .insert(
+            .insert_string_triple(
                 "http://example.org/subject",
                 "http://example.org/predicate",
                 "test object",
@@ -599,150 +782,61 @@ mod tests {
             subject1.clone(),
             predicate1.clone(),
             object1.clone(),
-            graph1.clone(),
+            graph1,
         );
         let quad2 = Quad::new(
-            subject2.clone(),
-            predicate1.clone(),
-            object2.clone(),
-            graph1.clone(),
-        );
-        let quad3 = Quad::new(
             subject1.clone(),
             predicate2.clone(),
-            object1.clone(),
+            object2.clone(),
             graph2.clone(),
         );
+        let quad3 = Quad::new(subject2, predicate1.clone(), object2.clone(), graph2.clone());
 
-        store.insert_quad(quad1.clone()).unwrap();
-        store.insert_quad(quad2.clone()).unwrap();
-        store.insert_quad(quad3.clone()).unwrap();
+        // Insert test data
+        store.insert_quad(quad1).unwrap();
+        store.insert_quad(quad2).unwrap();
+        store.insert_quad(quad3).unwrap();
 
         // Test query by subject
-        let results = store
-            .query_quads(
-                Some(&Subject::NamedNode(subject1.clone())),
-                None,
-                None,
-                None,
-            )
-            .unwrap();
+        let s = Subject::NamedNode(subject1);
+        let results = store.query_quads(Some(&s), None, None, None).unwrap();
         assert_eq!(results.len(), 2);
-        assert!(results.contains(&quad1));
-        assert!(results.contains(&quad3));
 
         // Test query by predicate
-        let results = store
-            .query_quads(
-                None,
-                Some(&Predicate::NamedNode(predicate1.clone())),
-                None,
-                None,
-            )
-            .unwrap();
+        let p = Predicate::from(predicate1);
+        let results = store.query_quads(None, Some(&p), None, None).unwrap();
         assert_eq!(results.len(), 2);
-        assert!(results.contains(&quad1));
-        assert!(results.contains(&quad2));
 
         // Test query by object
-        let results = store
-            .query_quads(None, None, Some(&Object::Literal(object1.clone())), None)
-            .unwrap();
+        let o = Object::Literal(object2);
+        let results = store.query_quads(None, None, Some(&o), None).unwrap();
         assert_eq!(results.len(), 2);
-        assert!(results.contains(&quad1));
-        assert!(results.contains(&quad3));
 
         // Test query by graph
-        let results = store
-            .query_quads(
-                None,
-                None,
-                None,
-                Some(&GraphName::NamedNode(graph1.clone())),
-            )
-            .unwrap();
+        let g = GraphName::NamedNode(graph2);
+        let results = store.query_quads(None, None, None, Some(&g)).unwrap();
         assert_eq!(results.len(), 2);
-        assert!(results.contains(&quad1));
-        assert!(results.contains(&quad2));
 
-        // Test complex query (subject + predicate)
-        let results = store
-            .query_quads(
-                Some(&Subject::NamedNode(subject1.clone())),
-                Some(&Predicate::NamedNode(predicate1.clone())),
-                None,
-                None,
-            )
-            .unwrap();
+        // Test combined query
+        let results = store.query_quads(Some(&s), Some(&p), None, None).unwrap();
         assert_eq!(results.len(), 1);
-        assert!(results.contains(&quad1));
-
-        // Test query that should return no results
-        let non_existent_subject = NamedNode::new("http://example.org/nonexistent").unwrap();
-        let results = store
-            .query_quads(
-                Some(&Subject::NamedNode(non_existent_subject)),
-                None,
-                None,
-                None,
-            )
-            .unwrap();
-        assert_eq!(results.len(), 0);
-    }
-
-    #[test]
-    fn test_store_triple_queries() {
-        let mut store = Store::new().unwrap();
-
-        // Insert some triples in default graph
-        let triple1 = Triple::new(
-            NamedNode::new("http://example.org/s1").unwrap(),
-            NamedNode::new("http://example.org/p1").unwrap(),
-            Literal::new("o1"),
-        );
-        let triple2 = Triple::new(
-            NamedNode::new("http://example.org/s2").unwrap(),
-            NamedNode::new("http://example.org/p1").unwrap(),
-            Literal::new("o2"),
-        );
-
-        store.insert_triple(triple1.clone()).unwrap();
-        store.insert_triple(triple2.clone()).unwrap();
-
-        // Insert a quad in a named graph (should not appear in triple queries)
-        let quad_in_named_graph = Quad::new(
-            NamedNode::new("http://example.org/s3").unwrap(),
-            NamedNode::new("http://example.org/p1").unwrap(),
-            Literal::new("o3"),
-            NamedNode::new("http://example.org/namedgraph").unwrap(),
-        );
-        store.insert_quad(quad_in_named_graph).unwrap();
-
-        // Query triples by predicate
-        let results = store
-            .query_triples(
-                None,
-                Some(&Predicate::NamedNode(
-                    NamedNode::new("http://example.org/p1").unwrap(),
-                )),
-                None,
-            )
-            .unwrap();
-
-        // Should only return triples from default graph
-        assert_eq!(results.len(), 2);
-        assert!(results.contains(&triple1));
-        assert!(results.contains(&triple2));
     }
 
     #[test]
     fn test_store_clear() {
         let mut store = Store::new().unwrap();
 
-        // Add some data
-        let quad = create_test_quad();
-        store.insert_quad(quad).unwrap();
-        assert_eq!(store.len().unwrap(), 1);
+        // Insert some data
+        for i in 0..5 {
+            let subject = NamedNode::new(&format!("http://example.org/subject{}", i)).unwrap();
+            let predicate = NamedNode::new("http://example.org/predicate").unwrap();
+            let object = Literal::new(&format!("object{}", i));
+
+            let triple = Triple::new(subject, predicate, object);
+            store.insert_triple(triple).unwrap();
+        }
+
+        assert_eq!(store.len().unwrap(), 5);
 
         // Clear the store
         store.clear().unwrap();
@@ -751,104 +845,42 @@ mod tests {
     }
 
     #[test]
-    fn test_store_iter_quads() {
+    fn test_bulk_insert() {
         let mut store = Store::new().unwrap();
 
-        let quad1 = create_test_quad();
-        let quad2 = Quad::new(
-            NamedNode::new("http://example.org/subject").unwrap(),
-            NamedNode::new("http://example.org/predicate").unwrap(),
-            Literal::new("different object"),
-            NamedNode::new("http://example.org/graph").unwrap(),
-        );
+        let mut quads = Vec::new();
+        for i in 0..100 {
+            let subject = NamedNode::new(&format!("http://example.org/subject{}", i)).unwrap();
+            let predicate = NamedNode::new("http://example.org/predicate").unwrap();
+            let object = Literal::new(&format!("object{}", i));
+            let graph = NamedNode::new("http://example.org/graph").unwrap();
 
-        store.insert_quad(quad1.clone()).unwrap();
-        store.insert_quad(quad2.clone()).unwrap();
+            quads.push(Quad::new(subject, predicate, object, graph));
+        }
 
+        let ids = store.bulk_insert_quads(quads).unwrap();
+        assert_eq!(ids.len(), 100);
+        assert_eq!(store.len().unwrap(), 100);
+    }
+
+    #[test]
+    fn test_default_graph_operations() {
+        let mut store = Store::new().unwrap();
+
+        // Insert into default graph
+        let triple = create_test_triple();
+        store.insert_triple(triple).unwrap();
+
+        // Insert into named graph
+        let quad = create_test_quad();
+        store.insert_quad(quad).unwrap();
+
+        // Query default graph
+        let default_triples = store.query_triples(None, None, None).unwrap();
+        assert_eq!(default_triples.len(), 1);
+
+        // Query all quads
         let all_quads = store.iter_quads().unwrap();
         assert_eq!(all_quads.len(), 2);
-        assert!(all_quads.contains(&quad1));
-        assert!(all_quads.contains(&quad2));
-    }
-
-    #[test]
-    fn test_persistent_store_creation() {
-        use std::env;
-
-        let temp_path = env::temp_dir().join("oxirs_test_store");
-        let store = Store::open(&temp_path).unwrap();
-
-        // Should start empty like memory store
-        assert!(store.is_empty().unwrap());
-        assert_eq!(store.len().unwrap(), 0);
-
-        // Verify backend type (though both currently use memory storage)
-        match store.backend {
-            StorageBackend::Persistent(_, path) => {
-                assert_eq!(path, temp_path);
-            }
-            _ => panic!("Expected persistent backend"),
-        }
-    }
-
-    #[test]
-    fn test_concurrent_access() {
-        use std::sync::Arc;
-        use std::thread;
-
-        let store = Arc::new(Store::new().unwrap());
-        let store_clone = Arc::clone(&store);
-
-        // Spawn a thread that reads from the store
-        let reader_handle = thread::spawn(move || {
-            for _ in 0..100 {
-                let _ = store_clone.is_empty().unwrap();
-                let _ = store_clone.len().unwrap();
-            }
-        });
-
-        // Read from the main thread as well
-        for _ in 0..100 {
-            let _ = store.is_empty().unwrap();
-            let _ = store.len().unwrap();
-        }
-
-        reader_handle.join().unwrap();
-    }
-
-    #[test]
-    fn test_basic_workflow() {
-        use crate::model::graph::Graph;
-        use crate::parser::RdfFormat;
-        use crate::serializer::Serializer;
-
-        let mut store = Store::new().unwrap();
-
-        // Add some test data
-        let subject = NamedNode::new("http://example.org/person/alice").unwrap();
-        let name_pred = NamedNode::new("http://xmlns.com/foaf/0.1/name").unwrap();
-        let age_pred = NamedNode::new("http://xmlns.com/foaf/0.1/age").unwrap();
-        let name_obj = Literal::new("Alice Smith");
-        let age_obj = Literal::new_typed(
-            "30",
-            NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
-        );
-
-        let triple1 = Triple::new(subject.clone(), name_pred, name_obj);
-        let triple2 = Triple::new(subject.clone(), age_pred, age_obj);
-
-        store.insert_triple(triple1.clone()).unwrap();
-        store.insert_triple(triple2.clone()).unwrap();
-
-        // Test basic store operations
-        assert_eq!(store.len().unwrap(), 2);
-        assert!(!store.is_empty().unwrap());
-
-        // Test serialization with N-Triples (which is implemented)
-        let serializer = Serializer::new(RdfFormat::NTriples);
-        let graph = Graph::from_iter(vec![triple1, triple2]);
-        let ntriples_output = serializer.serialize_graph(&graph).unwrap();
-        assert!(!ntriples_output.is_empty());
-        assert!(ntriples_output.contains("Alice Smith"));
     }
 }

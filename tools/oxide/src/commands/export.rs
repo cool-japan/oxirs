@@ -1,7 +1,7 @@
 //! Data export command
 
 use super::CommandResult;
-use oxirs_core::store::Store;
+use super::stubs::Store;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;

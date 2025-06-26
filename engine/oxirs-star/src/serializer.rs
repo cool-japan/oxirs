@@ -788,4 +788,156 @@ mod tests {
             assert!(serialized.contains("certainty"));
         }
     }
+
+    #[test]
+    fn test_nquads_star_serialization() {
+        let serializer = StarSerializer::new();
+        let mut graph = StarGraph::new();
+
+        // Add triples to default graph
+        let triple1 = StarTriple::new(
+            StarTerm::iri("http://example.org/alice").unwrap(),
+            StarTerm::iri("http://example.org/knows").unwrap(),
+            StarTerm::iri("http://example.org/bob").unwrap(),
+        );
+        graph.insert(triple1).unwrap();
+
+        // Add quad with named graph
+        let quad1 = StarQuad::new(
+            StarTerm::iri("http://example.org/charlie").unwrap(),
+            StarTerm::iri("http://example.org/likes").unwrap(),
+            StarTerm::iri("http://example.org/dave").unwrap(),
+            Some(StarTerm::iri("http://example.org/graph1").unwrap()),
+        );
+        graph.insert_quad(quad1).unwrap();
+
+        // Add quad with quoted triple
+        let quoted = StarTriple::new(
+            StarTerm::iri("http://example.org/eve").unwrap(),
+            StarTerm::iri("http://example.org/says").unwrap(),
+            StarTerm::literal("hello").unwrap(),
+        );
+        let quad2 = StarQuad::new(
+            StarTerm::quoted_triple(quoted),
+            StarTerm::iri("http://example.org/certainty").unwrap(),
+            StarTerm::literal("0.8").unwrap(),
+            Some(StarTerm::iri("http://example.org/graph2").unwrap()),
+        );
+        graph.insert_quad(quad2).unwrap();
+
+        let serialized = serializer.serialize_to_string(&graph, StarFormat::NQuadsStar).unwrap();
+        
+        // Verify each quad is on its own line
+        let lines: Vec<&str> = serialized.lines().filter(|l| !l.trim().is_empty()).collect();
+        assert_eq!(lines.len(), 3);
+        
+        // Verify graph contexts are present
+        assert!(serialized.contains("<http://example.org/graph1>"));
+        assert!(serialized.contains("<http://example.org/graph2>"));
+        
+        // Verify quoted triple syntax
+        assert!(serialized.contains("<< "));
+        assert!(serialized.contains(" >>"));
+    }
+
+    #[test]
+    fn test_trig_star_serialization_with_multiple_graphs() {
+        let serializer = StarSerializer::new();
+        let mut graph = StarGraph::new();
+
+        // Add to default graph
+        let triple1 = StarTriple::new(
+            StarTerm::iri("http://example.org/alice").unwrap(),
+            StarTerm::iri("http://example.org/age").unwrap(),
+            StarTerm::literal("30").unwrap(),
+        );
+        graph.insert(triple1).unwrap();
+
+        // Add to named graph 1
+        let quad1 = StarQuad::new(
+            StarTerm::iri("http://example.org/bob").unwrap(),
+            StarTerm::iri("http://example.org/likes").unwrap(),
+            StarTerm::iri("http://example.org/coffee").unwrap(),
+            Some(StarTerm::iri("http://example.org/preferences").unwrap()),
+        );
+        graph.insert_quad(quad1).unwrap();
+
+        // Add quoted triple to named graph 2
+        let inner = StarTriple::new(
+            StarTerm::iri("http://example.org/charlie").unwrap(),
+            StarTerm::iri("http://example.org/believes").unwrap(),
+            StarTerm::literal("earth is round").unwrap(),
+        );
+        let quad2 = StarQuad::new(
+            StarTerm::quoted_triple(inner),
+            StarTerm::iri("http://example.org/confidence").unwrap(),
+            StarTerm::literal("1.0").unwrap(),
+            Some(StarTerm::iri("http://example.org/beliefs").unwrap()),
+        );
+        graph.insert_quad(quad2).unwrap();
+
+        let serialized = serializer.serialize_to_string(&graph, StarFormat::TrigStar).unwrap();
+        
+        // Verify prefixes are included
+        assert!(serialized.contains("@prefix"));
+        
+        // Verify default graph block
+        assert!(serialized.contains("{\n"));
+        assert!(serialized.contains("alice"));
+        
+        // Verify named graph blocks
+        assert!(serialized.contains("<http://example.org/preferences> {"));
+        assert!(serialized.contains("<http://example.org/beliefs> {"));
+        
+        // Verify quoted triple in TriG format
+        assert!(serialized.contains("<<"));
+        assert!(serialized.contains(">>"));
+    }
+
+    #[test]
+    fn test_serialization_roundtrip() {
+        let parser = StarParser::new();
+        let serializer = StarSerializer::new();
+        let mut original_graph = StarGraph::new();
+
+        // Create complex graph with various features
+        let simple = StarTriple::new(
+            StarTerm::iri("http://example.org/s1").unwrap(),
+            StarTerm::iri("http://example.org/p1").unwrap(),
+            StarTerm::literal("test").unwrap(),
+        );
+        original_graph.insert(simple).unwrap();
+
+        // Quoted triple
+        let inner = StarTriple::new(
+            StarTerm::iri("http://example.org/alice").unwrap(),
+            StarTerm::iri("http://example.org/says").unwrap(),
+            StarTerm::literal("hello").unwrap(),
+        );
+        let quoted = StarTriple::new(
+            StarTerm::quoted_triple(inner),
+            StarTerm::iri("http://example.org/certainty").unwrap(),
+            StarTerm::literal("0.9").unwrap(),
+        );
+        original_graph.insert(quoted).unwrap();
+
+        // Test roundtrip for each format
+        for format in [
+            StarFormat::TurtleStar,
+            StarFormat::NTriplesStar,
+            StarFormat::TrigStar,
+            StarFormat::NQuadsStar,
+        ] {
+            let serialized = serializer.serialize_to_string(&original_graph, format).unwrap();
+            let parsed_graph = parser.parse_str(&serialized, format).unwrap();
+            
+            // Verify same number of triples
+            assert_eq!(
+                original_graph.total_len(),
+                parsed_graph.total_len(),
+                "Roundtrip failed for format {:?}",
+                format
+            );
+        }
+    }
 }

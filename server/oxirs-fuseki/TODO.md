@@ -357,12 +357,12 @@
   - [ ] Single Sign-On (SSO) integration
   - [ ] API key management with scopes
 
-- [ ] **LDAP/Active Directory Integration** (Q3 2025)
-  - [ ] LDAP authentication provider
-  - [ ] Active Directory integration
-  - [ ] Group-based authorization
-  - [ ] Dynamic role mapping
-  - [ ] LDAP connection pooling
+- [x] **LDAP/Active Directory Integration** ✅ **COMPLETED** (Q3 2025)
+  - [x] LDAP authentication provider
+  - [x] Active Directory integration
+  - [x] Group-based authorization
+  - [x] Dynamic role mapping
+  - [x] LDAP connection pooling
 
 ### Priority 4: Clustering & High Availability
 - [ ] **Multi-node Clustering** (Q4 2025)

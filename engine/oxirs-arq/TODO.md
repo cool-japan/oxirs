@@ -10,14 +10,16 @@
 - ✅ Query Parser: Basic SPARQL query parsing with tokenization
 - ✅ Optimizer: Filter pushdown, join reordering, and cost-based optimization
 - ✅ Built-in Functions: Most SPARQL 1.1 functions implemented
+- ✅ Basic SPARQL Compliance Tests: 10/10 tests passing
+- ✅ Aggregation Support: COUNT, SUM, MIN, MAX, AVG, GROUP_CONCAT with GROUP BY
 
 **Key Pending Items:**
-- ⏳ W3C SPARQL Compliance Tests setup
 - ⏳ Index-aware optimizations
 - ⏳ Streaming and spilling for large datasets
 - ⏳ Update operations (INSERT/DELETE)
 - ⏳ Advanced statistics collection
 - ⏳ Distributed query processing
+- ⏳ Parallel query execution (framework in place, implementation pending)
 
 ## Executive Summary
 

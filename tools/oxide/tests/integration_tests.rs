@@ -16,6 +16,11 @@ async fn test_config_init_command() {
         },
         verbose: false,
         config: None,
+        quiet: false,
+        no_color: false,
+        interactive: false,
+        profile: None,
+        completion: None,
     };
 
     let result = run(cli).await;
@@ -57,6 +62,11 @@ port = 3030
         },
         verbose: false,
         config: None,
+        quiet: false,
+        no_color: false,
+        interactive: false,
+        profile: None,
+        completion: None,
     };
 
     let result = run(cli).await;
@@ -79,6 +89,11 @@ async fn test_init_command_memory() {
         },
         verbose: false,
         config: None,
+        quiet: false,
+        no_color: false,
+        interactive: false,
+        profile: None,
+        completion: None,
     };
 
     let result = run(cli).await;
@@ -101,6 +116,11 @@ async fn test_init_command_tdb2() {
         },
         verbose: false,
         config: None,
+        quiet: false,
+        no_color: false,
+        interactive: false,
+        profile: None,
+        completion: None,
     };
 
     let result = run(cli).await;
@@ -130,6 +150,11 @@ async fn test_init_command_invalid_format() {
         },
         verbose: false,
         config: None,
+        quiet: false,
+        no_color: false,
+        interactive: false,
+        profile: None,
+        completion: None,
     };
 
     let result = run(cli).await;
@@ -153,6 +178,11 @@ async fn test_export_command_basic() {
         },
         verbose: false,
         config: None,
+        quiet: false,
+        no_color: false,
+        interactive: false,
+        profile: None,
+        completion: None,
     };
 
     let result = run(cli).await;
@@ -174,6 +204,11 @@ async fn test_query_command_basic() {
         },
         verbose: false,
         config: None,
+        quiet: false,
+        no_color: false,
+        interactive: false,
+        profile: None,
+        completion: None,
     };
 
     let result = run(cli).await;
@@ -192,6 +227,11 @@ async fn test_benchmark_command_basic() {
         },
         verbose: false,
         config: None,
+        quiet: false,
+        no_color: false,
+        interactive: false,
+        profile: None,
+        completion: None,
     };
 
     let result = run(cli).await;
@@ -213,6 +253,11 @@ async fn test_benchmark_invalid_suite() {
         },
         verbose: false,
         config: None,
+        quiet: false,
+        no_color: false,
+        interactive: false,
+        profile: None,
+        completion: None,
     };
 
     let result = run(cli).await;

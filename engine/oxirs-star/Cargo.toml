@@ -21,9 +21,14 @@ tracing.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
+proptest.workspace = true
 
 [[bench]]
 name = "benchmarks"
+harness = false
+
+[[bench]]
+name = "enhanced_benchmarks"
 harness = false
 
 [features]
