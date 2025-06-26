@@ -341,6 +341,217 @@ fn bench_memory_efficiency(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_graph_parallel_methods(c: &mut Criterion) {
+    let mut group = c.benchmark_group("graph_parallel_methods");
+    
+    for size in [1000, 10000, 50000] {
+        let dataset = create_dataset(size);
+        
+        group.throughput(Throughput::Elements(size as u64));
+        
+        // Benchmark parallel insert
+        group.bench_with_input(
+            BenchmarkId::new("graph_par_insert", size),
+            &dataset,
+            |b, dataset| {
+                b.iter(|| {
+                    let mut graph = Graph::new();
+                    black_box(graph.par_insert_batch(dataset.clone()).unwrap())
+                });
+            },
+        );
+        
+        // Benchmark sequential insert for comparison
+        group.bench_with_input(
+            BenchmarkId::new("graph_seq_insert", size),
+            &dataset,
+            |b, dataset| {
+                b.iter(|| {
+                    let mut graph = Graph::new();
+                    for triple in dataset {
+                        graph.add_triple(triple.clone());
+                    }
+                    black_box(graph.len())
+                });
+            },
+        );
+        
+        // Setup graph for query benchmarks
+        let mut query_graph = Graph::new();
+        query_graph.extend(dataset.clone());
+        
+        // Benchmark parallel query
+        let queries: Vec<_> = (0..100)
+            .map(|i| {
+                (
+                    Some(Subject::NamedNode(NamedNode::new(&format!("http://s/{}", i)).unwrap())),
+                    None,
+                    None,
+                )
+            })
+            .collect();
+        
+        group.bench_with_input(
+            BenchmarkId::new("graph_par_query", size),
+            &queries,
+            |b, queries| {
+                b.iter(|| {
+                    black_box(query_graph.par_query_batch(queries.clone()).unwrap())
+                });
+            },
+        );
+        
+        // Benchmark parallel count patterns
+        let patterns: Vec<_> = (0..50)
+            .map(|i| {
+                (
+                    None,
+                    Some(Predicate::NamedNode(NamedNode::new(&format!("http://p/{}", i)).unwrap())),
+                    None,
+                )
+            })
+            .collect();
+        
+        group.bench_with_input(
+            BenchmarkId::new("graph_par_count", size),
+            &patterns,
+            |b, patterns| {
+                b.iter(|| {
+                    black_box(query_graph.par_count_patterns(patterns.clone()))
+                });
+            },
+        );
+        
+        // Benchmark parallel unique terms
+        group.bench_with_input(
+            BenchmarkId::new("graph_par_unique", size),
+            &query_graph,
+            |b, graph| {
+                b.iter(|| {
+                    black_box(graph.par_unique_terms())
+                });
+            },
+        );
+    }
+    
+    group.finish();
+}
+
+fn bench_graph_parallel_transform(c: &mut Criterion) {
+    let mut group = c.benchmark_group("graph_parallel_transform");
+    
+    for size in [5000, 20000] {
+        let mut graph = Graph::new();
+        graph.extend(create_dataset(size));
+        
+        group.throughput(Throughput::Elements(size as u64));
+        
+        // Benchmark transformation that modifies predicates
+        group.bench_with_input(
+            BenchmarkId::new("modify_predicates", size),
+            &graph,
+            |b, graph| {
+                let mut test_graph = graph.clone();
+                b.iter(|| {
+                    let (transformed, removed) = test_graph.par_transform(|triple| {
+                        Some(Triple::new(
+                            triple.subject().clone(),
+                            Predicate::NamedNode(NamedNode::new("http://p/modified").unwrap()),
+                            triple.object().clone(),
+                        ))
+                    }).unwrap();
+                    black_box((transformed, removed))
+                });
+            },
+        );
+        
+        // Benchmark filtering transformation
+        group.bench_with_input(
+            BenchmarkId::new("filter_evens", size),
+            &graph,
+            |b, graph| {
+                let mut test_graph = graph.clone();
+                b.iter(|| {
+                    let (transformed, removed) = test_graph.par_transform(|triple| {
+                        if let Subject::NamedNode(node) = triple.subject() {
+                            if let Some(id_str) = node.as_str().strip_prefix("http://s/") {
+                                if let Ok(id) = id_str.parse::<usize>() {
+                                    if id % 2 == 0 {
+                                        return None; // Remove even subjects
+                                    }
+                                }
+                            }
+                        }
+                        Some(triple.clone())
+                    }).unwrap();
+                    black_box((transformed, removed))
+                });
+            },
+        );
+    }
+    
+    group.finish();
+}
+
+fn bench_graph_parallel_iterator(c: &mut Criterion) {
+    let mut group = c.benchmark_group("graph_parallel_iterator");
+    
+    for size in [10000, 50000] {
+        let mut graph = Graph::new();
+        graph.extend(create_dataset(size));
+        
+        group.throughput(Throughput::Elements(size as u64));
+        
+        // Benchmark parallel iteration with complex filtering
+        group.bench_with_input(
+            BenchmarkId::new("par_iter_filter", size),
+            &graph,
+            |b, graph| {
+                b.iter(|| {
+                    let result: Vec<_> = graph
+                        .par_iter()
+                        .filter(|triple| {
+                            match (triple.subject(), triple.object()) {
+                                (Subject::NamedNode(s), Object::NamedNode(o)) => {
+                                    s.as_str().ends_with("0") || o.as_str().ends_with("5")
+                                }
+                                _ => false,
+                            }
+                        })
+                        .cloned()
+                        .collect();
+                    black_box(result.len())
+                });
+            },
+        );
+        
+        // Benchmark sequential iteration for comparison
+        group.bench_with_input(
+            BenchmarkId::new("seq_iter_filter", size),
+            &graph,
+            |b, graph| {
+                b.iter(|| {
+                    let result: Vec<_> = graph
+                        .iter_triples()
+                        .filter(|triple| {
+                            match (triple.subject(), triple.object()) {
+                                (Subject::NamedNode(s), Object::NamedNode(o)) => {
+                                    s.as_str().ends_with("0") || o.as_str().ends_with("5")
+                                }
+                                _ => false,
+                            }
+                        })
+                        .cloned()
+                        .collect();
+                    black_box(result.len())
+                });
+            },
+        );
+    }
+    
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_parallel_vs_sequential_insert,
@@ -349,6 +560,9 @@ criterion_group!(
     bench_work_stealing_efficiency,
     bench_parallel_transform,
     bench_batch_size_impact,
-    bench_memory_efficiency
+    bench_memory_efficiency,
+    bench_graph_parallel_methods,
+    bench_graph_parallel_transform,
+    bench_graph_parallel_iterator
 );
 criterion_main!(benches);

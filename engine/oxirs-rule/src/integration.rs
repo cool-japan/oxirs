@@ -5,11 +5,10 @@
 
 use crate::{Rule, RuleAtom, RuleEngine, Term};
 use anyhow::Result;
-use oxirs_core::model::RdfTerm;
-use oxirs_core::store::Store;
-use oxirs_core::{
-    GraphName, Literal, NamedNode, Object, OxirsError, Predicate, Quad, Subject, Triple, Variable,
+use oxirs_core::model::{
+    GraphName, Literal, NamedNode, Object, Predicate, Quad, RdfTerm, Subject, Triple, Variable,
 };
+use oxirs_core::{OxirsError, Store};
 use std::collections::HashMap;
 use tracing::{debug, info, trace, warn};
 
@@ -180,6 +179,10 @@ impl RuleIntegration {
             Subject::NamedNode(node) => Term::Constant(node.as_str().to_string()),
             Subject::BlankNode(node) => Term::Constant(format!("_:{}", node.as_str())),
             Subject::Variable(var) => Term::Variable(var.as_str().to_string()),
+            Subject::QuotedTriple(_) => {
+                // Skip quoted triples for now
+                Term::Constant("_:quoted_triple".to_string())
+            }
         }
     }
 
@@ -198,6 +201,10 @@ impl RuleIntegration {
             Object::BlankNode(node) => Term::Constant(format!("_:{}", node.as_str())),
             Object::Literal(literal) => Term::Literal(literal.value().to_string()),
             Object::Variable(var) => Term::Variable(var.as_str().to_string()),
+            Object::QuotedTriple(_) => {
+                // Skip quoted triples for now
+                Term::Constant("_:quoted_triple".to_string())
+            }
         }
     }
 
@@ -453,22 +460,15 @@ impl RuleIntegration {
             Object::NamedNode(node) => format!("<{}>", node.as_str()),
             Object::BlankNode(node) => format!("_:{}", node.as_str()),
             Object::Literal(literal) => {
-                if let Some(datatype) = literal.datatype() {
+                if let Some(lang) = literal.language() {
+                    format!("\"{}\"@{}", literal.value(), lang)
+                } else {
+                    let datatype = literal.datatype();
                     if datatype.as_str() == "http://www.w3.org/2001/XMLSchema#string" {
-                        format!(
-                            "\"{}\"@{}",
-                            literal.value(),
-                            literal.language().unwrap_or("en")
-                        )
+                        format!("\"{}\"", literal.value())
                     } else {
                         format!("\"{}\"^^<{}>", literal.value(), datatype.as_str())
                     }
-                } else {
-                    format!(
-                        "\"{}\"@{}",
-                        literal.value(),
-                        literal.language().unwrap_or("en")
-                    )
                 }
             }
             Object::Variable(var) => format!("?{}", var.as_str()),

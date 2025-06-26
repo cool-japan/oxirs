@@ -606,11 +606,7 @@ impl IndexedGraph {
             .flat_map(|(_, group)| {
                 let mut group_results = Vec::new();
                 for interned in group {
-                    let inserted = self.insert_interned(
-                        interned.subject_id,
-                        interned.predicate_id,
-                        interned.object_id,
-                    );
+                    let inserted = self.insert_interned(interned);
                     group_results.push(inserted);
                 }
                 group_results

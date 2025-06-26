@@ -5,6 +5,8 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
+use std::sync::{Arc, Mutex};
+use rayon::prelude::*;
 
 #[cfg(feature = "hnsw")]
 use hnsw_rs::prelude::*;
@@ -68,6 +70,16 @@ pub enum DistanceMetric {
 impl DistanceMetric {
     /// Calculate distance between two vectors
     pub fn distance(&self, a: &[f32], b: &[f32]) -> f32 {
+        #[cfg(feature = "simd")]
+        unsafe {
+            match self {
+                DistanceMetric::Cosine => crate::simd::cosine_distance_simd(a, b),
+                DistanceMetric::Euclidean => crate::simd::euclidean_distance_simd(a, b),
+                DistanceMetric::Manhattan => crate::simd::manhattan_distance_simd(a, b),
+                DistanceMetric::DotProduct => -crate::simd::dot_product_simd(a, b),
+            }
+        }
+        #[cfg(not(feature = "simd"))]
         match self {
             DistanceMetric::Cosine => 1.0 - cosine_similarity(a, b),
             DistanceMetric::Euclidean => euclidean_distance(a, b),
@@ -341,6 +353,14 @@ impl VectorIndex for AdvancedVectorIndex {
         results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
         Ok(results)
     }
+    
+    fn get_vector(&self, uri: &str) -> Option<&Vector> {
+        // For AdvancedVectorIndex, vectors are stored in the vectors field
+        // regardless of the index type being used
+        self.vectors.iter()
+            .find(|(u, _)| u == uri)
+            .map(|(_, v)| v)
+    }
 }
 
 /// Index performance statistics
@@ -460,6 +480,12 @@ impl VectorIndex for QuantizedVectorIndex {
 
         results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
         Ok(results)
+    }
+    
+    fn get_vector(&self, uri: &str) -> Option<&Vector> {
+        // Quantized index doesn't store original vectors
+        // Return None as we only have quantized representations
+        None
     }
 }
 
@@ -630,6 +656,14 @@ impl VectorIndex for MultiIndex {
             index.search_threshold(query, threshold)
         } else {
             Err(anyhow!("No default index set"))
+        }
+    }
+    
+    fn get_vector(&self, uri: &str) -> Option<&Vector> {
+        if let Some(index) = self.indices.get(&self.default_index) {
+            index.get_vector(uri)
+        } else {
+            None
         }
     }
 }

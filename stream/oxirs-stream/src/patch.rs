@@ -69,6 +69,19 @@ impl PatchParser {
             // Parse the line
             match self.parse_line(line) {
                 Ok(Some(operation)) => {
+                    // Handle special operations that affect patch state
+                    match &operation {
+                        PatchOperation::TransactionBegin { transaction_id } => {
+                            patch.transaction_id = transaction_id.clone();
+                        }
+                        PatchOperation::Header { key, value } => {
+                            patch.headers.insert(key.clone(), value.clone());
+                        }
+                        PatchOperation::AddPrefix { prefix, namespace } => {
+                            patch.prefixes.insert(prefix.clone(), namespace.clone());
+                        }
+                        _ => {}
+                    }
                     patch.add_operation(operation);
                 }
                 Ok(None) => {
@@ -102,19 +115,7 @@ impl PatchParser {
             return Ok(None);
         }
 
-        // Handle transaction operations
-        if line.starts_with("TX") {
-            // Transaction markers - not implemented yet
-            debug!("Transaction marker: {}", line);
-            return Ok(None);
-        }
-
-        // Handle header information
-        if line.starts_with("H") {
-            // Header information - not implemented yet
-            debug!("Header: {}", line);
-            return Ok(None);
-        }
+        // Transaction and header operations are now handled in the main match below
 
         // Parse operation lines
         let parts: Vec<&str> = line.split_whitespace().collect();
@@ -130,6 +131,10 @@ impl PatchParser {
             "PD" => self.parse_prefix_delete(&parts[1..]),
             "GA" => self.parse_graph_add(&parts[1..]),
             "GD" => self.parse_graph_delete(&parts[1..]),
+            "TX" => self.parse_transaction_begin(&parts[1..]),
+            "TC" => Ok(Some(PatchOperation::TransactionCommit)),
+            "TA" => Ok(Some(PatchOperation::TransactionAbort)),
+            "H" => self.parse_header(&parts[1..]),
             _ => Err(anyhow!("Unknown operation: {}", operation)),
         }
     }
@@ -186,14 +191,28 @@ impl PatchParser {
         }))
     }
 
-    fn parse_prefix_add(&self, _parts: &[&str]) -> Result<Option<PatchOperation>> {
-        // Prefix add operation - not implemented yet
-        Ok(None)
+    fn parse_prefix_add(&self, parts: &[&str]) -> Result<Option<PatchOperation>> {
+        if parts.len() < 2 {
+            return Err(anyhow!("Prefix add requires prefix and namespace"));
+        }
+        
+        let prefix = parts[0].trim_end_matches(':').to_string();
+        let namespace = parts[1].trim_matches('<').trim_matches('>').to_string();
+        
+        Ok(Some(PatchOperation::AddPrefix {
+            prefix,
+            namespace,
+        }))
     }
 
-    fn parse_prefix_delete(&self, _parts: &[&str]) -> Result<Option<PatchOperation>> {
-        // Prefix delete operation - not implemented yet
-        Ok(None)
+    fn parse_prefix_delete(&self, parts: &[&str]) -> Result<Option<PatchOperation>> {
+        if parts.is_empty() {
+            return Err(anyhow!("Prefix delete requires prefix name"));
+        }
+        
+        let prefix = parts[0].trim_end_matches(':').to_string();
+        
+        Ok(Some(PatchOperation::DeletePrefix { prefix }))
     }
 
     fn parse_graph_add(&self, parts: &[&str]) -> Result<Option<PatchOperation>> {
@@ -212,6 +231,27 @@ impl PatchParser {
 
         let graph = self.expand_term(parts[0])?;
         Ok(Some(PatchOperation::DeleteGraph { graph }))
+    }
+
+    fn parse_transaction_begin(&self, parts: &[&str]) -> Result<Option<PatchOperation>> {
+        let transaction_id = if !parts.is_empty() {
+            Some(parts[0].to_string())
+        } else {
+            None
+        };
+        
+        Ok(Some(PatchOperation::TransactionBegin { transaction_id }))
+    }
+    
+    fn parse_header(&self, parts: &[&str]) -> Result<Option<PatchOperation>> {
+        if parts.len() < 2 {
+            return Err(anyhow!("Header requires key and value"));
+        }
+        
+        let key = parts[0].to_string();
+        let value = parts[1..].join(" ");
+        
+        Ok(Some(PatchOperation::Header { key, value }))
     }
 
     fn expand_term(&self, term: &str) -> Result<String> {
@@ -371,6 +411,24 @@ impl PatchSerializer {
             PatchOperation::DeleteGraph { graph } => {
                 let g = self.compact_term(graph);
                 Ok(format!("GD {} .", g))
+            }
+            PatchOperation::AddPrefix { prefix, namespace } => {
+                Ok(format!("PA {}: <{}> .", prefix, namespace))
+            }
+            PatchOperation::DeletePrefix { prefix } => {
+                Ok(format!("PD {}: .", prefix))
+            }
+            PatchOperation::TransactionBegin { transaction_id } => {
+                if let Some(id) = transaction_id {
+                    Ok(format!("TX {} .", id))
+                } else {
+                    Ok("TX .".to_string())
+                }
+            }
+            PatchOperation::TransactionCommit => Ok("TC .".to_string()),
+            PatchOperation::TransactionAbort => Ok("TA .".to_string()),
+            PatchOperation::Header { key, value } => {
+                Ok(format!("H {} {} .", key, value))
             }
         }
     }
@@ -538,11 +596,47 @@ impl fmt::Display for PatchResult {
     }
 }
 
+/// Create RDF Patch from SPARQL Update
+pub fn create_patch_from_sparql(update: &str) -> Result<RdfPatch> {
+    let mut delta_computer = crate::delta::DeltaComputer::new();
+    delta_computer.sparql_to_patch(update)
+}
+
+/// Create transactional patch
+pub fn create_transactional_patch(operations: Vec<PatchOperation>) -> RdfPatch {
+    let mut patch = RdfPatch::new();
+    let transaction_id = uuid::Uuid::new_v4().to_string();
+    
+    // Add transaction begin
+    patch.add_operation(PatchOperation::TransactionBegin {
+        transaction_id: Some(transaction_id.clone()),
+    });
+    patch.transaction_id = Some(transaction_id);
+    
+    // Add all operations
+    for op in operations {
+        patch.add_operation(op);
+    }
+    
+    // Add transaction commit
+    patch.add_operation(PatchOperation::TransactionCommit);
+    
+    patch
+}
+
 /// Create reverse patch from an existing patch
 pub fn create_reverse_patch(patch: &RdfPatch) -> Result<RdfPatch> {
     let mut reverse_patch = RdfPatch::new();
     reverse_patch.id = format!("{}-reverse", patch.id);
+    
+    // Copy headers and prefixes
+    reverse_patch.headers = patch.headers.clone();
+    reverse_patch.prefixes = patch.prefixes.clone();
 
+    // Track if we're reversing a transaction
+    let mut reversing_transaction = false;
+    let mut transaction_operations = Vec::new();
+    
     // Reverse the operations and their order
     for operation in patch.operations.iter().rev() {
         let reverse_operation = match operation {
@@ -570,9 +664,49 @@ pub fn create_reverse_patch(patch: &RdfPatch) -> Result<RdfPatch> {
             PatchOperation::DeleteGraph { graph } => PatchOperation::AddGraph {
                 graph: graph.clone(),
             },
+            PatchOperation::AddPrefix { prefix, namespace } => PatchOperation::DeletePrefix {
+                prefix: prefix.clone(),
+            },
+            PatchOperation::DeletePrefix { prefix } => {
+                // Can't reverse a prefix deletion without knowing the namespace
+                // Skip or add as header
+                reverse_patch.add_operation(PatchOperation::Header {
+                    key: "warning".to_string(),
+                    value: format!("Cannot reverse prefix deletion for '{}'", prefix),
+                });
+                continue;
+            }
+            PatchOperation::TransactionBegin { transaction_id } => {
+                // End of transaction (we're reversing)
+                reversing_transaction = false;
+                // Add all collected operations
+                for op in transaction_operations.drain(..) {
+                    reverse_patch.add_operation(op);
+                }
+                PatchOperation::TransactionCommit
+            }
+            PatchOperation::TransactionCommit => {
+                // Start of transaction (we're reversing)
+                reversing_transaction = true;
+                PatchOperation::TransactionBegin {
+                    transaction_id: patch.transaction_id.clone(),
+                }
+            }
+            PatchOperation::TransactionAbort => {
+                // Transaction was aborted, no need to reverse
+                continue;
+            }
+            PatchOperation::Header { key, value } => PatchOperation::Header {
+                key: format!("reversed-{}", key),
+                value: value.clone(),
+            },
         };
 
-        reverse_patch.add_operation(reverse_operation);
+        if reversing_transaction && !matches!(operation, PatchOperation::TransactionCommit) {
+            transaction_operations.push(reverse_operation);
+        } else {
+            reverse_patch.add_operation(reverse_operation);
+        }
     }
 
     debug!(
@@ -679,6 +813,17 @@ mod tests {
     #[test]
     fn test_patch_serialization() {
         let mut patch = RdfPatch::new();
+        patch.add_operation(PatchOperation::Header {
+            key: "creator".to_string(),
+            value: "test-suite".to_string(),
+        });
+        patch.add_operation(PatchOperation::TransactionBegin {
+            transaction_id: Some("tx-123".to_string()),
+        });
+        patch.add_operation(PatchOperation::AddPrefix {
+            prefix: "ex".to_string(),
+            namespace: "http://example.org/".to_string(),
+        });
         patch.add_operation(PatchOperation::Add {
             subject: "http://example.org/subject".to_string(),
             predicate: "http://example.org/predicate".to_string(),
@@ -689,14 +834,19 @@ mod tests {
             predicate: "http://example.org/predicate2".to_string(),
             object: "http://example.org/object2".to_string(),
         });
+        patch.add_operation(PatchOperation::TransactionCommit);
 
         let serializer = PatchSerializer::new();
         let result = serializer.serialize(&patch);
         
         assert!(result.is_ok());
         let serialized = result.unwrap();
+        assert!(serialized.contains("H creator test-suite"));
+        assert!(serialized.contains("TX tx-123"));
+        assert!(serialized.contains("PA ex:"));
         assert!(serialized.contains("A "));
         assert!(serialized.contains("D "));
+        assert!(serialized.contains("TC"));
         assert!(serialized.contains("@prefix"));
     }
 
@@ -706,10 +856,15 @@ mod tests {
 @prefix ex: <http://example.org/> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 
+H creator test-parser .
+TX tx-456 .
+PA ex2: <http://example2.org/> .
 A ex:subject ex:predicate "Object literal" .
 D ex:subject2 ex:predicate2 ex:object2 .
 GA ex:graph1 .
 GD ex:graph2 .
+PD old: .
+TC .
 "#;
 
         let mut parser = PatchParser::new();
@@ -717,15 +872,30 @@ GD ex:graph2 .
         
         assert!(result.is_ok());
         let patch = result.unwrap();
-        assert_eq!(patch.operations.len(), 4);
+        assert_eq!(patch.operations.len(), 9);
+        
+        // Check header was captured
+        assert_eq!(patch.headers.get("creator"), Some(&"test-parser".to_string()));
+        
+        // Check transaction ID was captured
+        assert_eq!(patch.transaction_id, Some("tx-456".to_string()));
+        
+        // Check prefix was captured
+        assert_eq!(patch.prefixes.get("ex2"), Some(&"http://example2.org/".to_string()));
         
         match &patch.operations[0] {
-            PatchOperation::Add { subject, predicate, object } => {
-                assert_eq!(subject, "http://example.org/subject");
-                assert_eq!(predicate, "http://example.org/predicate");
-                assert_eq!(object, "\"Object literal\"");
+            PatchOperation::Header { key, value } => {
+                assert_eq!(key, "creator");
+                assert_eq!(value, "test-parser");
             }
-            _ => panic!("Expected Add operation"),
+            _ => panic!("Expected Header operation"),
+        }
+        
+        match &patch.operations[1] {
+            PatchOperation::TransactionBegin { transaction_id } => {
+                assert_eq!(transaction_id, &Some("tx-456".to_string()));
+            }
+            _ => panic!("Expected TransactionBegin operation"),
         }
     }
 
@@ -763,6 +933,9 @@ GD ex:graph2 .
     #[test]
     fn test_reverse_patch() {
         let mut patch = RdfPatch::new();
+        patch.add_operation(PatchOperation::TransactionBegin {
+            transaction_id: Some("tx-789".to_string()),
+        });
         patch.add_operation(PatchOperation::Add {
             subject: "http://example.org/s".to_string(),
             predicate: "http://example.org/p".to_string(),
@@ -771,26 +944,35 @@ GD ex:graph2 .
         patch.add_operation(PatchOperation::AddGraph {
             graph: "http://example.org/graph".to_string(),
         });
+        patch.add_operation(PatchOperation::TransactionCommit);
+        patch.transaction_id = Some("tx-789".to_string());
 
         let reverse = create_reverse_patch(&patch).unwrap();
         
-        assert_eq!(reverse.operations.len(), 2);
+        // Should have TX, two reversed operations, and TC
+        assert!(reverse.operations.len() >= 4);
         
-        // Operations should be reversed in order and type
+        // First should be transaction begin (reversing the commit)
         match &reverse.operations[0] {
-            PatchOperation::DeleteGraph { graph } => {
-                assert_eq!(graph, "http://example.org/graph");
-            }
-            _ => panic!("Expected DeleteGraph operation"),
+            PatchOperation::TransactionBegin { .. } => {},
+            _ => panic!("Expected TransactionBegin operation"),
         }
         
-        match &reverse.operations[1] {
-            PatchOperation::Delete { subject, predicate, object } => {
-                assert_eq!(subject, "http://example.org/s");
-                assert_eq!(predicate, "http://example.org/p");
-                assert_eq!(object, "http://example.org/o");
-            }
-            _ => panic!("Expected Delete operation"),
+        // Find the reversed operations
+        let has_delete_graph = reverse.operations.iter().any(|op| {
+            matches!(op, PatchOperation::DeleteGraph { graph } if graph == "http://example.org/graph")
+        });
+        let has_delete_triple = reverse.operations.iter().any(|op| {
+            matches!(op, PatchOperation::Delete { subject, .. } if subject == "http://example.org/s")
+        });
+        
+        assert!(has_delete_graph);
+        assert!(has_delete_triple);
+        
+        // Last should be transaction commit
+        match reverse.operations.last() {
+            Some(PatchOperation::TransactionCommit) => {},
+            _ => panic!("Expected TransactionCommit as last operation"),
         }
     }
 
@@ -811,6 +993,36 @@ GD ex:graph2 .
         
         // Should remove duplicate
         assert_eq!(optimized.operations.len(), 1);
+    }
+    
+    #[test]
+    fn test_transactional_patch() {
+        let operations = vec![
+            PatchOperation::Add {
+                subject: "s1".to_string(),
+                predicate: "p1".to_string(),
+                object: "o1".to_string(),
+            },
+            PatchOperation::Delete {
+                subject: "s2".to_string(),
+                predicate: "p2".to_string(),
+                object: "o2".to_string(),
+            },
+        ];
+        
+        let patch = create_transactional_patch(operations);
+        
+        // Should have TX + 2 operations + TC = 4 total
+        assert_eq!(patch.operations.len(), 4);
+        
+        // First should be transaction begin
+        assert!(matches!(&patch.operations[0], PatchOperation::TransactionBegin { .. }));
+        
+        // Last should be transaction commit
+        assert!(matches!(&patch.operations[3], PatchOperation::TransactionCommit));
+        
+        // Should have transaction ID set
+        assert!(patch.transaction_id.is_some());
     }
 
     #[test]

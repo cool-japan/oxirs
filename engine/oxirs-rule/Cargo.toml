@@ -19,9 +19,14 @@ anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 regex = "1.10"
+tokio = { version = "1", features = ["fs", "io-util"] }
+lazy_static = "1.4"
+rand = "0.8"
 
 [dev-dependencies]
 criterion.workspace = true
+tempfile = "3.8"
+tokio = { version = "1", features = ["full"] }
 
 [features]
 default = ["rdfs"]

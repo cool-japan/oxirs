@@ -43,6 +43,14 @@ pub mod jsonld; // Re-enabled after fixing StringInterner method calls
 // pub mod rdfxml; // TODO: Fix lifetime issues in serializer
 pub mod oxigraph_compat; // Oxigraph compatibility layer
 
+// Core abstractions for OxiRS ecosystem
+pub mod error;
+pub mod platform;
+#[cfg(feature = "parallel")]
+pub mod parallel;
+#[cfg(feature = "simd")]
+pub mod simd;
+
 // Re-export core types for convenience
 pub use model::*;
 pub use rdf_store::Store;

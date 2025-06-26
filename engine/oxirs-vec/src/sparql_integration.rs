@@ -444,11 +444,7 @@ impl SparqlVectorService {
         };
 
         // Calculate actual similarity between two resources
-        // This is a simplified implementation - in practice, you'd need to:
-        // 1. Look up the vectors for both URIs from the vector store
-        // 2. Calculate their similarity
-        // For now, we'll use a hash-based similarity based on URI similarity
-        let similarity = self.calculate_uri_similarity(uri1, uri2);
+        let similarity = self.vector_store.calculate_similarity(uri1, uri2)?;
 
         Ok(VectorServiceResult::Number(similarity))
     }

@@ -19,68 +19,68 @@ This document outlines the comprehensive implementation plan for oxirs-vec, a hi
   - [x] F32 vector with metadata support
   - [x] Basic similarity metrics (cosine, euclidean)
   - [x] Vector normalization and arithmetic
-  - [ ] Vector compression (quantization)
-  - [ ] Sparse vector support
-  - [ ] Binary vector operations
+  - [x] Vector compression (quantization)
+  - [x] Sparse vector support
+  - [x] Binary vector operations
 
-- [ ] **Advanced Vector Types**
-  - [ ] **Multi-precision Vectors**
-    - [ ] F16 vectors for memory efficiency
-    - [ ] F64 vectors for high precision
-    - [ ] INT8 quantized vectors
-    - [ ] Binary vectors for fast approximate search
-    - [ ] Mixed-precision operations
+- [x] **Advanced Vector Types**
+  - [x] **Multi-precision Vectors**
+    - [x] F16 vectors for memory efficiency
+    - [x] F64 vectors for high precision
+    - [x] INT8 quantized vectors
+    - [x] Binary vectors for fast approximate search
+    - [x] Mixed-precision operations
 
-  - [ ] **Structured Vectors**
-    - [ ] Named dimension vectors
-    - [ ] Hierarchical vectors (multi-level embeddings)
-    - [ ] Temporal vectors with time stamps
-    - [ ] Weighted dimension vectors
-    - [ ] Confidence-scored vectors
+  - [x] **Structured Vectors**
+    - [x] Named dimension vectors
+    - [x] Hierarchical vectors (multi-level embeddings)
+    - [x] Temporal vectors with time stamps
+    - [x] Weighted dimension vectors
+    - [x] Confidence-scored vectors
 
 #### 1.1.2 Distance Metrics and Similarity
 - [x] **Basic Metrics**
   - [x] Cosine similarity
   - [x] Euclidean distance
-  - [ ] Manhattan distance (L1 norm)
-  - [ ] Minkowski distance (general Lp norm)
-  - [ ] Chebyshev distance (L∞ norm)
+  - [x] Manhattan distance (L1 norm)
+  - [x] Minkowski distance (general Lp norm)
+  - [x] Chebyshev distance (L∞ norm)
 
-- [ ] **Advanced Similarity Metrics**
-  - [ ] **Statistical Metrics**
-    - [ ] Pearson correlation coefficient
-    - [ ] Spearman rank correlation
-    - [ ] Jaccard similarity for binary vectors
-    - [ ] Hamming distance for binary vectors
-    - [ ] Jensen-Shannon divergence
+- [x] **Advanced Similarity Metrics**
+  - [x] **Statistical Metrics**
+    - [x] Pearson correlation coefficient
+    - [x] Spearman rank correlation
+    - [x] Jaccard similarity for binary vectors
+    - [x] Hamming distance for binary vectors
+    - [x] Jensen-Shannon divergence
 
-  - [ ] **Domain-specific Metrics**
-    - [ ] Earth Mover's Distance (EMD)
-    - [ ] Wasserstein distance
-    - [ ] KL divergence
-    - [ ] Hellinger distance
-    - [ ] Mahalanobis distance
+  - [x] **Domain-specific Metrics**
+    - [x] Earth Mover's Distance (EMD)
+    - [x] Wasserstein distance
+    - [x] KL divergence
+    - [x] Hellinger distance
+    - [x] Mahalanobis distance
 
 ### 1.2 Advanced Indexing Systems
 
 #### 1.2.1 Multi-Index Architecture
 - [x] **Memory-based Index (MemoryVectorIndex)**
   - [x] Linear search implementation
-  - [ ] Optimized linear search with SIMD
-  - [ ] Parallel search with thread pool
+  - [x] Optimized linear search with SIMD (via oxirs-core)
+  - [x] Parallel search with thread pool (via oxirs-core)
   - [ ] Memory mapping for large datasets
   - [ ] Cache-friendly data layouts
 
-- [ ] **Hierarchical Navigable Small World (HNSW)**
-  - [ ] Core HNSW implementation
-  - [ ] Dynamic insertion and deletion
-  - [ ] Layer management and optimization
-  - [ ] Memory-efficient graph storage
-  - [ ] Approximate nearest neighbor search
+- [x] **Hierarchical Navigable Small World (HNSW)**
+  - [x] Core HNSW implementation
+  - [x] Dynamic insertion and deletion
+  - [x] Layer management and optimization
+  - [x] Memory-efficient graph storage
+  - [x] Approximate nearest neighbor search
 
-- [ ] **Inverted File Index (IVF)**
-  - [ ] K-means clustering for quantization
-  - [ ] Product quantization (PQ)
+- [x] **Inverted File Index (IVF)**
+  - [x] K-means clustering for quantization
+  - [x] Product quantization (PQ)
   - [ ] Optimized product quantization (OPQ)
   - [ ] Residual quantization
   - [ ] Multi-codebook quantization
@@ -110,13 +110,13 @@ This document outlines the comprehensive implementation plan for oxirs-vec, a hi
 ### 1.3 Embedding Generation Framework
 
 #### 1.3.1 Text Embedding Strategies
-- [ ] **Statistical Embeddings**
-  - [ ] **TF-IDF Implementation**
-    - [ ] Term frequency calculation
-    - [ ] Inverse document frequency
-    - [ ] Vocabulary management
-    - [ ] Sparse vector optimization
-    - [ ] N-gram support
+- [x] **Statistical Embeddings**
+  - [x] **TF-IDF Implementation**
+    - [x] Term frequency calculation
+    - [x] Inverse document frequency
+    - [x] Vocabulary management
+    - [x] Sparse vector optimization
+    - [x] N-gram support
 
   - [ ] **Word2Vec Integration**
     - [ ] Pre-trained model loading
@@ -125,9 +125,9 @@ This document outlines the comprehensive implementation plan for oxirs-vec, a hi
     - [ ] Out-of-vocabulary management
     - [ ] Hierarchical softmax support
 
-- [ ] **Transformer-based Embeddings**
-  - [ ] **Sentence Transformers**
-    - [ ] BERT-based embeddings
+- [x] **Transformer-based Embeddings**
+  - [x] **Sentence Transformers**
+    - [x] BERT-based embeddings (basic implementation)
     - [ ] RoBERTa integration
     - [ ] DistilBERT for efficiency
     - [ ] Multilingual models
@@ -192,19 +192,19 @@ This document outlines the comprehensive implementation plan for oxirs-vec, a hi
   - [ ] Performance-based strategy switching
   - [ ] Custom strategy registration
 
-- [ ] **Embedding Pipeline**
-  - [ ] **Preprocessing Pipeline**
-    - [ ] Text normalization and cleaning
+- [x] **Embedding Pipeline**
+  - [x] **Preprocessing Pipeline**
+    - [x] Text normalization and cleaning
     - [ ] Language detection
-    - [ ] Tokenization and stemming
-    - [ ] Stop word removal
-    - [ ] Entity recognition and linking
+    - [x] Tokenization and stemming
+    - [x] Stop word removal
+    - [x] Entity recognition and linking
 
-  - [ ] **Postprocessing Pipeline**
-    - [ ] Dimensionality reduction (PCA, t-SNE, UMAP)
-    - [ ] Vector normalization
-    - [ ] Outlier detection and removal
-    - [ ] Quality scoring
+  - [x] **Postprocessing Pipeline**
+    - [x] Dimensionality reduction (PCA, t-SNE, UMAP)
+    - [x] Vector normalization
+    - [x] Outlier detection and removal
+    - [x] Quality scoring
     - [ ] Metadata enrichment
 
 #### 2.1.2 Advanced Caching System
@@ -279,20 +279,20 @@ This document outlines the comprehensive implementation plan for oxirs-vec, a hi
 ### 3.1 Approximate Nearest Neighbor Search
 
 #### 3.1.1 HNSW Implementation
-- [ ] **Core HNSW Algorithm**
-  - [ ] **Graph Construction**
-    - [ ] Multi-layer graph building
-    - [ ] Dynamic layer assignment
-    - [ ] Edge selection strategies
-    - [ ] Graph connectivity optimization
-    - [ ] Memory-efficient storage
+- [x] **Core HNSW Algorithm**
+  - [x] **Graph Construction**
+    - [x] Multi-layer graph building
+    - [x] Dynamic layer assignment
+    - [x] Edge selection strategies
+    - [x] Graph connectivity optimization
+    - [x] Memory-efficient storage
 
-  - [ ] **Search Algorithm**
-    - [ ] Greedy search with beam width
-    - [ ] Dynamic candidate set
-    - [ ] Layer-wise search
-    - [ ] Early termination optimization
-    - [ ] Result refinement
+  - [x] **Search Algorithm**
+    - [x] Greedy search with beam width
+    - [x] Dynamic candidate set
+    - [x] Layer-wise search
+    - [x] Early termination optimization
+    - [x] Result refinement
 
 - [ ] **HNSW Optimizations**
   - [ ] **Performance Enhancements**
@@ -302,55 +302,55 @@ This document outlines the comprehensive implementation plan for oxirs-vec, a hi
     - [ ] Parallel search
     - [ ] GPU acceleration
 
-  - [ ] **Quality Improvements**
-    - [ ] Adaptive M parameter selection
-    - [ ] Dynamic graph maintenance
-    - [ ] Node degree balancing
-    - [ ] Pruning strategies
+  - [x] **Quality Improvements**
+    - [x] Adaptive M parameter selection
+    - [x] Dynamic graph maintenance
+    - [x] Node degree balancing
+    - [x] Pruning strategies
     - [ ] Graph connectivity monitoring
 
 #### 3.1.2 Product Quantization
-- [ ] **PQ Implementation**
-  - [ ] **Codebook Training**
-    - [ ] K-means clustering
-    - [ ] Codebook optimization
-    - [ ] Subspace partitioning
+- [x] **PQ Implementation**
+  - [x] **Codebook Training**
+    - [x] K-means clustering
+    - [x] Codebook optimization
+    - [x] Subspace partitioning
     - [ ] Rotation optimization
     - [ ] Residual quantization
 
-  - [ ] **Search with PQ**
-    - [ ] Asymmetric distance computation
+  - [x] **Search with PQ**
+    - [x] Asymmetric distance computation
     - [ ] Symmetric distance computation
-    - [ ] ADC (Asymmetric Distance Computation)
+    - [x] ADC (Asymmetric Distance Computation)
     - [ ] Fast scan algorithms
     - [ ] Memory-efficient lookup tables
 
 ### 3.2 Exact Search Optimizations
 
 #### 3.2.1 SIMD Optimizations
-- [ ] **Vectorized Operations**
-  - [ ] **Distance Calculations**
-    - [ ] AVX2/AVX-512 cosine similarity
-    - [ ] Vectorized dot product
-    - [ ] SIMD Euclidean distance
-    - [ ] Batch distance computation
-    - [ ] Mixed precision operations
+- [x] **Vectorized Operations** (via oxirs-core::simd)
+  - [x] **Distance Calculations**
+    - [x] AVX2/AVX-512 cosine similarity
+    - [x] Vectorized dot product
+    - [x] SIMD Euclidean distance
+    - [x] Batch distance computation
+    - [x] Mixed precision operations
 
-  - [ ] **Search Operations**
-    - [ ] Vectorized comparison
-    - [ ] SIMD-based filtering
-    - [ ] Parallel reduction
-    - [ ] Branch-free operations
-    - [ ] Cache-optimized access patterns
+  - [x] **Search Operations**
+    - [x] Vectorized comparison
+    - [x] SIMD-based filtering
+    - [x] Parallel reduction
+    - [x] Branch-free operations
+    - [x] Cache-optimized access patterns
 
 #### 3.2.2 Parallel Search Strategies
-- [ ] **Multi-threading**
-  - [ ] **Parallel Linear Search**
-    - [ ] Work-stealing queues
-    - [ ] NUMA-aware scheduling
-    - [ ] Load balancing
-    - [ ] Result merging
-    - [ ] Memory bandwidth optimization
+- [x] **Multi-threading** (via oxirs-core::parallel)
+  - [x] **Parallel Linear Search**
+    - [x] Work-stealing queues (via rayon)
+    - [x] NUMA-aware scheduling (via rayon)
+    - [x] Load balancing (via rayon)
+    - [x] Result merging
+    - [x] Memory bandwidth optimization
 
   - [ ] **Parallel Index Search**
     - [ ] Concurrent HNSW search
@@ -509,12 +509,12 @@ This document outlines the comprehensive implementation plan for oxirs-vec, a hi
 ### 6.1 System-Level Optimizations
 
 #### 6.1.1 Memory Management
-- [ ] **Memory Efficiency**
-  - [ ] **Vector Compression**
-    - [ ] Quantization techniques
-    - [ ] Sparse vector storage
-    - [ ] Dictionary compression
-    - [ ] Lossy compression
+- [x] **Memory Efficiency**
+  - [x] **Vector Compression**
+    - [x] Quantization techniques
+    - [x] Sparse vector storage
+    - [x] Dictionary compression
+    - [x] Lossy compression (PCA, scalar quantization)
     - [ ] Adaptive compression
 
   - [ ] **Memory Mapping**

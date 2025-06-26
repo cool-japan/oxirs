@@ -40,6 +40,8 @@ pub mod embeddings;
 pub mod embedding_pipeline;
 pub mod hnsw;
 pub mod index;
+pub mod ivf;
+pub mod pq;
 pub mod similarity;
 pub mod sparse;
 pub mod sparql_integration;
@@ -54,6 +56,8 @@ pub use embedding_pipeline::{
 };
 pub use hnsw::{HnswConfig, HnswIndex};
 pub use index::{AdvancedVectorIndex, DistanceMetric, IndexConfig, IndexType, SearchResult};
+pub use ivf::{IvfConfig, IvfIndex, IvfStats};
+pub use pq::{PQConfig, PQIndex, PQStats};
 pub use similarity::{AdaptiveSimilarity, SemanticSimilarity, SimilarityConfig, SimilarityMetric};
 pub use sparql_integration::{
     HybridQuery, SparqlVectorService, VectorOperation, VectorQueryBuilder, VectorServiceConfig,
@@ -469,6 +473,9 @@ pub trait VectorIndex: Send + Sync {
 
     /// Find all vectors within threshold similarity
     fn search_threshold(&self, query: &Vector, threshold: f32) -> Result<Vec<(String, f32)>>;
+    
+    /// Get a vector by its URI
+    fn get_vector(&self, uri: &str) -> Option<&Vector>;
 }
 
 /// In-memory vector index implementation
@@ -542,6 +549,13 @@ impl VectorIndex for MemoryVectorIndex {
             .collect();
 
         Ok(similarities)
+    }
+    
+    fn get_vector(&self, uri: &str) -> Option<&Vector> {
+        self.vectors
+            .iter()
+            .find(|(u, _)| u == uri)
+            .map(|(_, v)| v)
     }
 }
 
@@ -743,6 +757,24 @@ impl VectorStore {
         } else {
             Ok(()) // No-op if no embedding manager
         }
+    }
+    
+    /// Calculate similarity between two resources by their URIs
+    pub fn calculate_similarity(&self, uri1: &str, uri2: &str) -> Result<f32> {
+        // If the URIs are identical, return perfect similarity
+        if uri1 == uri2 {
+            return Ok(1.0);
+        }
+        
+        // Get the vectors for both URIs
+        let vector1 = self.index.get_vector(uri1)
+            .ok_or_else(|| anyhow::anyhow!("Vector not found for URI: {}", uri1))?;
+        
+        let vector2 = self.index.get_vector(uri2)
+            .ok_or_else(|| anyhow::anyhow!("Vector not found for URI: {}", uri2))?;
+        
+        // Calculate cosine similarity between the vectors
+        vector1.cosine_similarity(vector2)
     }
 }
 

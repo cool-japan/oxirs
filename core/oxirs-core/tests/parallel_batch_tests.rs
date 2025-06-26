@@ -8,6 +8,7 @@ use oxirs_core::store::IndexedGraph;
 use oxirs_core::model::{Triple, Subject, Predicate, Object, NamedNode};
 use oxirs_core::OxirsError;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 use rayon::prelude::*;
 
@@ -313,10 +314,11 @@ fn test_memory_aware_batching() {
     };
     
     let mut builder = BatchBuilder::new(config);
-    let mut flush_count = 0;
+    let flush_count = Arc::new(AtomicUsize::new(0));
+    let flush_count_clone = flush_count.clone();
     
     builder.on_flush(move |_| {
-        flush_count += 1;
+        flush_count_clone.fetch_add(1, Ordering::Relaxed);
     });
     
     // Add triples until memory limit triggers flush

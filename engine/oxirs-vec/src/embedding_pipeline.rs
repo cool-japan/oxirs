@@ -108,10 +108,6 @@ impl PreprocessingPipeline {
     fn tokenize(&self, text: &str) -> Vec<String> {
         let mut processed = text.to_string();
         
-        if self.tokenizer.lowercase {
-            processed = processed.to_lowercase();
-        }
-        
         if self.tokenizer.remove_punctuation {
             processed = processed.chars()
                 .map(|c| if c.is_alphanumeric() || c.is_whitespace() { c } else { ' ' })
@@ -124,10 +120,17 @@ impl PreprocessingPipeline {
             .map(|s| s.to_string())
             .collect();
         
-        // Split camelCase if enabled
+        // Split camelCase if enabled (must happen before lowercasing)
         if self.tokenizer.split_camel_case {
             tokens = tokens.into_iter()
                 .flat_map(|token| self.split_camel_case(&token))
+                .collect();
+        }
+        
+        // Lowercase after camel case splitting
+        if self.tokenizer.lowercase {
+            tokens = tokens.into_iter()
+                .map(|s| s.to_lowercase())
                 .collect();
         }
         
@@ -143,7 +146,7 @@ impl PreprocessingPipeline {
                 result.push(current.clone());
                 current.clear();
             }
-            current.push(ch.to_lowercase().next().unwrap_or(ch));
+            current.push(ch);
         }
         
         if !current.is_empty() {
@@ -324,7 +327,6 @@ impl PostprocessingPipeline {
             }
             DimensionalityReduction::AutoEncoder { .. } => {
                 // AutoEncoder would require neural network - placeholder
-                Ok(())
             }
         }
         Ok(())

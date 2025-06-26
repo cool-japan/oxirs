@@ -46,7 +46,7 @@ impl Default for BatchBuilderConfig {
         
         BatchBuilderConfig {
             max_batch_size: 10000,
-            max_memory_usage: total_memory / 10, // Use up to 10% of system memory
+            max_memory_usage: (total_memory as usize) / 10, // Use up to 10% of system memory
             coalescing_strategy: CoalescingStrategy::Deduplicate,
             auto_flush: true,
             group_by_type: true,
@@ -63,11 +63,11 @@ impl BatchBuilderConfig {
         let (max_batch_size, max_memory_usage) = if let Some(info) = mem_info {
             let total_mb = info.total / 1024;
             if total_mb > 16384 { // > 16GB
-                (50000, info.total * 1024 / 8) // Large batches, use 1/8 of memory
+                (50000, (info.total * 1024 / 8) as usize) // Large batches, use 1/8 of memory
             } else if total_mb > 8192 { // > 8GB
-                (20000, info.total * 1024 / 10) // Medium batches, use 1/10 of memory
+                (20000, (info.total * 1024 / 10) as usize) // Medium batches, use 1/10 of memory
             } else {
-                (5000, info.total * 1024 / 20) // Small batches, use 1/20 of memory
+                (5000, (info.total * 1024 / 20) as usize) // Small batches, use 1/20 of memory
             }
         } else {
             (10000, 1024 * 1024 * 1024) // 1GB default

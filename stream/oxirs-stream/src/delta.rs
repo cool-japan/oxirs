@@ -68,10 +68,19 @@ impl DeltaComputer {
         Ok(events)
     }
 
+    /// Convert SPARQL Update directly to RDF Patch
+    pub fn sparql_to_patch(&mut self, update: &str) -> Result<RdfPatch> {
+        let events = self.compute_delta(update)?;
+        self.delta_to_patch(&events)
+    }
+
     /// Convert delta to RDF Patch
     pub fn delta_to_patch(&self, events: &[StreamEvent]) -> Result<RdfPatch> {
         let mut patch = RdfPatch::new();
 
+        // Track if we're in a transaction
+        let mut in_transaction = false;
+        
         for event in events {
             let operation = match event {
                 StreamEvent::TripleAdded {
@@ -94,6 +103,54 @@ impl DeltaComputer {
                     predicate: predicate.clone(),
                     object: object.clone(),
                 },
+                StreamEvent::QuadAdded {
+                    subject,
+                    predicate,
+                    object,
+                    graph,
+                    ..
+                } => {
+                    // Add graph to patch prefixes if needed
+                    if !patch.prefixes.contains_key("g") {
+                        patch.add_operation(PatchOperation::AddPrefix {
+                            prefix: "g".to_string(),
+                            namespace: graph.clone(),
+                        });
+                        patch.prefixes.insert("g".to_string(), graph.clone());
+                    }
+                    PatchOperation::Add {
+                        subject: subject.clone(),
+                        predicate: predicate.clone(),
+                        object: object.clone(),
+                    }
+                }
+                StreamEvent::QuadRemoved {
+                    subject,
+                    predicate,
+                    object,
+                    graph,
+                    ..
+                } => {
+                    // Add graph to patch prefixes if needed
+                    if !patch.prefixes.contains_key("g") {
+                        patch.add_operation(PatchOperation::AddPrefix {
+                            prefix: "g".to_string(),
+                            namespace: graph.clone(),
+                        });
+                        patch.prefixes.insert("g".to_string(), graph.clone());
+                    }
+                    PatchOperation::Delete {
+                        subject: subject.clone(),
+                        predicate: predicate.clone(),
+                        object: object.clone(),
+                    }
+                }
+                StreamEvent::GraphCreated { graph, .. } => PatchOperation::AddGraph {
+                    graph: graph.clone(),
+                },
+                StreamEvent::GraphDeleted { graph, .. } => PatchOperation::DeleteGraph {
+                    graph: graph.clone(),
+                },
                 StreamEvent::GraphCleared { graph, .. } => {
                     if let Some(graph_uri) = graph {
                         PatchOperation::DeleteGraph {
@@ -104,20 +161,32 @@ impl DeltaComputer {
                         continue;
                     }
                 }
-                StreamEvent::SparqlUpdate { .. } => {
-                    // Skip SPARQL update events in patch conversion
+                StreamEvent::TransactionBegin { transaction_id, .. } => {
+                    in_transaction = true;
+                    patch.transaction_id = Some(transaction_id.clone());
+                    PatchOperation::TransactionBegin {
+                        transaction_id: Some(transaction_id.clone()),
+                    }
+                }
+                StreamEvent::TransactionCommit { .. } => {
+                    in_transaction = false;
+                    PatchOperation::TransactionCommit
+                }
+                StreamEvent::TransactionAbort { .. } => {
+                    in_transaction = false;
+                    PatchOperation::TransactionAbort
+                }
+                StreamEvent::SparqlUpdate { query, .. } => {
+                    // Add SPARQL query as a header for provenance
+                    patch.add_operation(PatchOperation::Header {
+                        key: "sparql-source".to_string(),
+                        value: query.clone(),
+                    });
+                    patch.headers.insert("sparql-source".to_string(), query.clone());
                     continue;
                 }
-                StreamEvent::QuadAdded { .. } | 
-                StreamEvent::QuadRemoved { .. } |
-                StreamEvent::GraphCreated { .. } |
-                StreamEvent::GraphDeleted { .. } |
-                StreamEvent::TransactionBegin { .. } |
-                StreamEvent::TransactionCommit { .. } |
-                StreamEvent::TransactionAbort { .. } |
-                StreamEvent::SchemaChanged { .. } |
-                StreamEvent::Heartbeat { .. } => {
-                    // These events don't translate to basic patch operations
+                StreamEvent::SchemaChanged { .. } | StreamEvent::Heartbeat { .. } => {
+                    // These events don't translate to patch operations
                     continue;
                 }
             };

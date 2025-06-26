@@ -768,16 +768,382 @@ impl ComplexEventProcessor {
     async fn check_pattern(
         &self,
         pattern: &EventPattern,
-        _current_event: &StreamEvent,
-        _event_time: DateTime<Utc>,
+        current_event: &StreamEvent,
+        event_time: DateTime<Utc>,
     ) -> Result<Option<PatternMatch>> {
-        // Simplified pattern matching - in a real implementation this would be much more sophisticated
-        // For now, just return None to indicate no match
-        Ok(None)
+        // Filter events within the time window if specified
+        let relevant_events = if let Some(within) = &pattern.within {
+            let cutoff_time = event_time - *within;
+            self.event_buffer
+                .iter()
+                .filter(|(_, t)| *t >= cutoff_time && *t <= event_time)
+                .map(|(e, _)| e.clone())
+                .collect::<Vec<_>>()
+        } else {
+            self.event_buffer
+                .iter()
+                .map(|(e, _)| e.clone())
+                .collect::<Vec<_>>()
+        };
+
+        // Check if the pattern conditions match
+        let mut matched_events = Vec::new();
+        let confidence = self.evaluate_conditions(
+            &pattern.conditions,
+            &relevant_events,
+            current_event,
+            &mut matched_events,
+        )?;
+
+        if confidence > 0.0 {
+            // Execute the pattern action
+            self.execute_action(&pattern.action, &matched_events).await?;
+
+            Ok(Some(PatternMatch {
+                pattern_name: pattern.name.clone(),
+                matched_events,
+                match_time: event_time,
+                confidence,
+            }))
+        } else {
+            Ok(None)
+        }
     }
 
     pub fn get_matches(&self) -> &[PatternMatch] {
         &self.matches
+    }
+
+    /// Evaluate pattern conditions against events
+    fn evaluate_conditions(
+        &self,
+        conditions: &[PatternCondition],
+        relevant_events: &[StreamEvent],
+        current_event: &StreamEvent,
+        matched_events: &mut Vec<StreamEvent>,
+    ) -> Result<f64> {
+        if conditions.is_empty() {
+            return Ok(0.0);
+        }
+
+        let mut total_confidence = 0.0;
+        let mut matches = 0;
+
+        for condition in conditions {
+            match condition {
+                PatternCondition::EventType(expected_type) => {
+                    if self.match_event_type(current_event, expected_type) {
+                        matched_events.push(current_event.clone());
+                        matches += 1;
+                        total_confidence += 1.0;
+                    }
+                }
+                PatternCondition::FieldEquals { field, value } => {
+                    if self.match_field_equals(current_event, field, value) {
+                        matched_events.push(current_event.clone());
+                        matches += 1;
+                        total_confidence += 1.0;
+                    }
+                }
+                PatternCondition::FieldGreater { field, value } => {
+                    if self.match_field_greater(current_event, field, *value) {
+                        matched_events.push(current_event.clone());
+                        matches += 1;
+                        total_confidence += 1.0;
+                    }
+                }
+                PatternCondition::FieldLess { field, value } => {
+                    if self.match_field_less(current_event, field, *value) {
+                        matched_events.push(current_event.clone());
+                        matches += 1;
+                        total_confidence += 1.0;
+                    }
+                }
+                PatternCondition::Sequence(seq_conditions) => {
+                    let seq_confidence = self.evaluate_sequence(
+                        seq_conditions,
+                        relevant_events,
+                        matched_events,
+                    )?;
+                    if seq_confidence > 0.0 {
+                        matches += 1;
+                        total_confidence += seq_confidence;
+                    }
+                }
+                PatternCondition::Any(any_conditions) => {
+                    let any_confidence = self.evaluate_any(
+                        any_conditions,
+                        relevant_events,
+                        current_event,
+                        matched_events,
+                    )?;
+                    if any_confidence > 0.0 {
+                        matches += 1;
+                        total_confidence += any_confidence;
+                    }
+                }
+                PatternCondition::All(all_conditions) => {
+                    let all_confidence = self.evaluate_all(
+                        all_conditions,
+                        relevant_events,
+                        current_event,
+                        matched_events,
+                    )?;
+                    if all_confidence > 0.0 {
+                        matches += 1;
+                        total_confidence += all_confidence;
+                    }
+                }
+            }
+        }
+
+        if matches > 0 {
+            Ok(total_confidence / conditions.len() as f64)
+        } else {
+            Ok(0.0)
+        }
+    }
+
+    /// Execute pattern action
+    async fn execute_action(
+        &self,
+        action: &PatternAction,
+        matched_events: &[StreamEvent],
+    ) -> Result<()> {
+        match action {
+            PatternAction::Log(message) => {
+                info!("Pattern matched: {} ({} events)", message, matched_events.len());
+            }
+            PatternAction::Alert { severity, message } => {
+                warn!("Pattern alert [{}]: {} ({} events)", severity, message, matched_events.len());
+            }
+            PatternAction::Emit(_event) => {
+                // In a real implementation, this would emit a new event to a stream
+                debug!("Emitting event for pattern match");
+            }
+            PatternAction::Custom(action_name) => {
+                debug!("Executing custom action: {}", action_name);
+            }
+        }
+        Ok(())
+    }
+
+    /// Match event type
+    fn match_event_type(&self, event: &StreamEvent, expected_type: &str) -> bool {
+        let event_type = match event {
+            StreamEvent::TripleAdded { .. } => "triple_added",
+            StreamEvent::TripleRemoved { .. } => "triple_removed",
+            StreamEvent::QuadAdded { .. } => "quad_added",
+            StreamEvent::QuadRemoved { .. } => "quad_removed",
+            StreamEvent::GraphCreated { .. } => "graph_created",
+            StreamEvent::GraphCleared { .. } => "graph_cleared",
+            StreamEvent::GraphDeleted { .. } => "graph_deleted",
+            StreamEvent::SparqlUpdate { .. } => "sparql_update",
+            StreamEvent::TransactionBegin { .. } => "transaction_begin",
+            StreamEvent::TransactionCommit { .. } => "transaction_commit",
+            StreamEvent::TransactionAbort { .. } => "transaction_abort",
+            StreamEvent::SchemaChanged { .. } => "schema_changed",
+            StreamEvent::Heartbeat { .. } => "heartbeat",
+        };
+        event_type == expected_type
+    }
+
+    /// Match field equals condition
+    fn match_field_equals(&self, event: &StreamEvent, field: &str, expected_value: &str) -> bool {
+        match field {
+            "subject" => match event {
+                StreamEvent::TripleAdded { subject, .. } |
+                StreamEvent::TripleRemoved { subject, .. } => subject == expected_value,
+                _ => false,
+            },
+            "predicate" => match event {
+                StreamEvent::TripleAdded { predicate, .. } |
+                StreamEvent::TripleRemoved { predicate, .. } => predicate == expected_value,
+                _ => false,
+            },
+            "object" => match event {
+                StreamEvent::TripleAdded { object, .. } |
+                StreamEvent::TripleRemoved { object, .. } => object == expected_value,
+                _ => false,
+            },
+            "graph" => match event {
+                StreamEvent::TripleAdded { graph, .. } |
+                StreamEvent::TripleRemoved { graph, .. } |
+                StreamEvent::QuadAdded { graph, .. } |
+                StreamEvent::QuadRemoved { graph, .. } => {
+                    graph.as_ref().map(|g| g == expected_value).unwrap_or(false)
+                }
+                StreamEvent::GraphCreated { graph_uri, .. } |
+                StreamEvent::GraphCleared { graph_uri, .. } |
+                StreamEvent::GraphDeleted { graph_uri, .. } => graph_uri == expected_value,
+                _ => false,
+            },
+            _ => {
+                // Check metadata properties
+                self.get_event_property(event, field)
+                    .map(|v| v == expected_value)
+                    .unwrap_or(false)
+            }
+        }
+    }
+
+    /// Match field greater than condition
+    fn match_field_greater(&self, event: &StreamEvent, field: &str, threshold: f64) -> bool {
+        self.get_event_numeric_property(event, field)
+            .map(|v| v > threshold)
+            .unwrap_or(false)
+    }
+
+    /// Match field less than condition
+    fn match_field_less(&self, event: &StreamEvent, field: &str, threshold: f64) -> bool {
+        self.get_event_numeric_property(event, field)
+            .map(|v| v < threshold)
+            .unwrap_or(false)
+    }
+
+    /// Evaluate sequence condition
+    fn evaluate_sequence(
+        &self,
+        conditions: &[PatternCondition],
+        events: &[StreamEvent],
+        matched_events: &mut Vec<StreamEvent>,
+    ) -> Result<f64> {
+        if conditions.is_empty() || events.len() < conditions.len() {
+            return Ok(0.0);
+        }
+
+        // Simple sequence matching - check if conditions match in order
+        let mut condition_idx = 0;
+        let mut sequence_matches = Vec::new();
+
+        for event in events {
+            if condition_idx >= conditions.len() {
+                break;
+            }
+
+            let mut temp_matches = Vec::new();
+            let confidence = self.evaluate_conditions(
+                &[conditions[condition_idx].clone()],
+                &[event.clone()],
+                event,
+                &mut temp_matches,
+            )?;
+
+            if confidence > 0.0 {
+                sequence_matches.push(event.clone());
+                condition_idx += 1;
+            }
+        }
+
+        if condition_idx == conditions.len() {
+            matched_events.extend(sequence_matches);
+            Ok(1.0)
+        } else {
+            Ok(0.0)
+        }
+    }
+
+    /// Evaluate any condition (OR)
+    fn evaluate_any(
+        &self,
+        conditions: &[PatternCondition],
+        events: &[StreamEvent],
+        current_event: &StreamEvent,
+        matched_events: &mut Vec<StreamEvent>,
+    ) -> Result<f64> {
+        let mut max_confidence = 0.0;
+
+        for condition in conditions {
+            let mut temp_matches = Vec::new();
+            let confidence = self.evaluate_conditions(
+                &[condition.clone()],
+                events,
+                current_event,
+                &mut temp_matches,
+            )?;
+
+            if confidence > max_confidence {
+                max_confidence = confidence;
+                matched_events.clear();
+                matched_events.extend(temp_matches);
+            }
+        }
+
+        Ok(max_confidence)
+    }
+
+    /// Evaluate all conditions (AND)
+    fn evaluate_all(
+        &self,
+        conditions: &[PatternCondition],
+        events: &[StreamEvent],
+        current_event: &StreamEvent,
+        matched_events: &mut Vec<StreamEvent>,
+    ) -> Result<f64> {
+        let mut total_confidence = 0.0;
+        let mut all_matches = Vec::new();
+
+        for condition in conditions {
+            let mut temp_matches = Vec::new();
+            let confidence = self.evaluate_conditions(
+                &[condition.clone()],
+                events,
+                current_event,
+                &mut temp_matches,
+            )?;
+
+            if confidence == 0.0 {
+                return Ok(0.0); // All conditions must match
+            }
+
+            total_confidence += confidence;
+            all_matches.extend(temp_matches);
+        }
+
+        matched_events.extend(all_matches);
+        Ok(total_confidence / conditions.len() as f64)
+    }
+
+    /// Get event property as string
+    fn get_event_property(&self, event: &StreamEvent, property: &str) -> Option<String> {
+        match event {
+            StreamEvent::TripleAdded { metadata, .. } |
+            StreamEvent::TripleRemoved { metadata, .. } |
+            StreamEvent::QuadAdded { metadata, .. } |
+            StreamEvent::QuadRemoved { metadata, .. } |
+            StreamEvent::GraphCreated { metadata, .. } |
+            StreamEvent::GraphCleared { metadata, .. } |
+            StreamEvent::GraphDeleted { metadata, .. } |
+            StreamEvent::SparqlUpdate { metadata, .. } |
+            StreamEvent::TransactionBegin { metadata, .. } |
+            StreamEvent::TransactionCommit { metadata, .. } |
+            StreamEvent::TransactionAbort { metadata, .. } |
+            StreamEvent::SchemaChanged { metadata, .. } => {
+                metadata.properties.get(property).cloned()
+            }
+            StreamEvent::Heartbeat { .. } => None,
+        }
+    }
+
+    /// Get event property as numeric value
+    fn get_event_numeric_property(&self, event: &StreamEvent, property: &str) -> Option<f64> {
+        self.get_event_property(event, property)
+            .and_then(|v| v.parse().ok())
+    }
+
+    /// Clear old matches based on retention policy
+    pub fn cleanup_old_matches(&mut self, retention_duration: ChronoDuration) {
+        let cutoff_time = Utc::now() - retention_duration;
+        self.matches.retain(|m| m.match_time >= cutoff_time);
+    }
+
+    /// Get pattern statistics
+    pub fn get_pattern_stats(&self) -> HashMap<String, usize> {
+        let mut stats = HashMap::new();
+        for match_item in &self.matches {
+            *stats.entry(match_item.pattern_name.clone()).or_insert(0) += 1;
+        }
+        stats
     }
 }
 

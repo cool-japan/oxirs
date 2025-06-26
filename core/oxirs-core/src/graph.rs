@@ -184,26 +184,29 @@ impl Graph {
         // Submit all operations
         processor.submit_batch(operations)?;
         
-        // Process with a reference to self
-        let graph = Arc::new(parking_lot::RwLock::new(&mut self.triples));
+        // Process operations and collect results
+        let all_triples = Arc::new(parking_lot::Mutex::new(Vec::new()));
         
-        let results = processor.process(|op| -> Result<usize> {
+        let all_triples_clone = all_triples.clone();
+        processor.process(move |op| -> Result<()> {
             match op {
                 BatchOperation::Insert(batch_triples) => {
-                    let mut graph = graph.write();
-                    let mut inserted = 0;
-                    for triple in batch_triples {
-                        if graph.insert(triple) {
-                            inserted += 1;
-                        }
-                    }
-                    Ok(inserted)
+                    all_triples_clone.lock().extend(batch_triples);
+                    Ok(())
                 }
-                _ => Ok(0),
+                _ => Ok(()),
             }
         })?;
         
-        Ok(results.into_iter().sum())
+        // Now insert all triples into the graph
+        let mut inserted = 0;
+        for triple in all_triples.lock().drain(..) {
+            if self.triples.insert(triple) {
+                inserted += 1;
+            }
+        }
+        
+        Ok(inserted)
     }
 
     /// Remove triples in parallel batches
@@ -229,26 +232,29 @@ impl Graph {
         // Submit all operations
         processor.submit_batch(operations)?;
         
-        // Process with a reference to self
-        let graph = Arc::new(parking_lot::RwLock::new(&mut self.triples));
+        // Process operations and collect results
+        let triples_to_remove = Arc::new(parking_lot::Mutex::new(Vec::new()));
         
-        let results = processor.process(|op| -> Result<usize> {
+        let triples_clone = triples_to_remove.clone();
+        processor.process(move |op| -> Result<()> {
             match op {
                 BatchOperation::Remove(batch_triples) => {
-                    let mut graph = graph.write();
-                    let mut removed = 0;
-                    for triple in batch_triples {
-                        if graph.remove(&triple) {
-                            removed += 1;
-                        }
-                    }
-                    Ok(removed)
+                    triples_clone.lock().extend(batch_triples);
+                    Ok(())
                 }
-                _ => Ok(0),
+                _ => Ok(()),
             }
         })?;
         
-        Ok(results.into_iter().sum())
+        // Now remove all triples from the graph
+        let mut removed = 0;
+        for triple in triples_to_remove.lock().drain(..) {
+            if self.triples.remove(&triple) {
+                removed += 1;
+            }
+        }
+        
+        Ok(removed)
     }
 
     /// Query triples in parallel batches
@@ -275,13 +281,13 @@ impl Graph {
         // Submit all operations
         processor.submit_batch(operations)?;
         
-        // Process queries
-        let graph = Arc::new(&self.triples);
+        // Clone the triples for processing
+        let triples = self.triples.clone();
         
-        let results = processor.process(|op| -> Result<Vec<Triple>> {
+        let results = processor.process(move |op| -> Result<Vec<Triple>> {
             match op {
                 BatchOperation::Query { subject, predicate, object } => {
-                    let matching: Vec<Triple> = graph
+                    let matching: Vec<Triple> = triples
                         .iter()
                         .filter(|triple| {
                             triple.matches_pattern(
@@ -315,7 +321,6 @@ impl Graph {
             return Ok((0, 0));
         }
 
-        let config = BatchConfig::auto();
         let transform_fn = Arc::new(transform_fn);
         
         // Process triples in parallel
@@ -384,7 +389,7 @@ impl Graph {
     ///
     /// This method finds all unique subjects, predicates, or objects in parallel.
     pub fn par_unique_terms(&self) -> (BTreeSet<Subject>, BTreeSet<Predicate>, BTreeSet<Object>) {
-        let (subjects, predicates, objects): (Vec<_>, Vec<_>, Vec<_>) = self
+        let terms: Vec<(Subject, Predicate, Object)> = self
             .triples
             .par_iter()
             .map(|triple| {
@@ -396,11 +401,17 @@ impl Graph {
             })
             .collect();
         
-        (
-            subjects.into_iter().collect(),
-            predicates.into_iter().collect(),
-            objects.into_iter().collect(),
-        )
+        let mut subjects = BTreeSet::new();
+        let mut predicates = BTreeSet::new();
+        let mut objects = BTreeSet::new();
+        
+        for (s, p, o) in terms {
+            subjects.insert(s);
+            predicates.insert(p);
+            objects.insert(o);
+        }
+        
+        (subjects, predicates, objects)
     }
 }
 

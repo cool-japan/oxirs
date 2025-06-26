@@ -41,15 +41,18 @@ pub mod circuit_breaker;
 pub mod connection_pool;
 pub mod consumer;
 pub mod delta;
+pub mod diagnostics;
 pub mod error;
 pub mod event;
 pub mod failover;
 pub mod health_monitor;
+pub mod join;
 pub mod monitoring;
 pub mod patch;
 pub mod processing;
 pub mod producer;
 pub mod reconnect;
+pub mod state;
 pub mod types;
 
 /// Enhanced stream configuration with advanced features
@@ -1407,33 +1410,65 @@ impl StreamConsumer {
     }
 }
 
-/// RDF patch operations
-#[derive(Debug, Clone)]
+/// RDF patch operations with full protocol support
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PatchOperation {
+    /// Add a triple (A operation)
     Add {
         subject: String,
         predicate: String,
         object: String,
     },
+    /// Delete a triple (D operation)
     Delete {
         subject: String,
         predicate: String,
         object: String,
     },
+    /// Add a graph (GA operation)
     AddGraph {
         graph: String,
     },
+    /// Delete a graph (GD operation)
     DeleteGraph {
         graph: String,
     },
+    /// Add a prefix (PA operation)
+    AddPrefix {
+        prefix: String,
+        namespace: String,
+    },
+    /// Delete a prefix (PD operation)
+    DeletePrefix {
+        prefix: String,
+    },
+    /// Transaction begin (TX operation)
+    TransactionBegin {
+        transaction_id: Option<String>,
+    },
+    /// Transaction commit (TC operation)
+    TransactionCommit,
+    /// Transaction abort (TA operation)
+    TransactionAbort,
+    /// Header information (H operation)
+    Header {
+        key: String,
+        value: String,
+    },
 }
 
-/// RDF patch for atomic updates
-#[derive(Debug, Clone)]
+/// RDF patch for atomic updates with full protocol support
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RdfPatch {
     pub operations: Vec<PatchOperation>,
     pub timestamp: chrono::DateTime<chrono::Utc>,
     pub id: String,
+    /// Patch headers for metadata
+    pub headers: HashMap<String, String>,
+    /// Current transaction ID if in transaction
+    pub transaction_id: Option<String>,
+    /// Prefixes used in the patch
+    pub prefixes: HashMap<String, String>,
 }
 
 impl RdfPatch {
@@ -1443,6 +1478,9 @@ impl RdfPatch {
             operations: Vec::new(),
             timestamp: chrono::Utc::now(),
             id: uuid::Uuid::new_v4().to_string(),
+            headers: HashMap::new(),
+            transaction_id: None,
+            prefixes: HashMap::new(),
         }
     }
 

@@ -32,7 +32,7 @@ regex = "1.10"
 lazy_static = "1.5"
 
 # Ultra performance dependencies
-rayon = "1.10"
+rayon = { version = "1.10", optional = true }
 crossbeam = "0.8"
 crossbeam-epoch = "0.9"
 crossbeam-utils = "0.8"
@@ -48,6 +48,7 @@ num_cpus = "1.16"
 sys-info = "0.9"
 tokio = { workspace = true, features = ["rt", "sync", "time", "macros", "io-util"] }
 async-trait = "0.1"
+smallvec = "1.13"
 futures = "0.3"
 
 # Hash function dependencies for SPARQL 1.2
@@ -100,6 +101,10 @@ default = ["serde"]
 serde = []
 async = []
 async-tokio = ["async"]
+parallel = ["rayon"]
+simd = ["wide"]
+gpu = []
+blas = []
 
 [[bench]]
 name = "indexed_graph_bench"

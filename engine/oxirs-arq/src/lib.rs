@@ -8,6 +8,7 @@
 use anyhow::Result;
 
 pub mod algebra;
+pub mod bgp_optimizer;
 pub mod builtin_fixed;
 pub mod executor;
 pub mod extensions;
@@ -15,6 +16,7 @@ pub mod optimizer;
 pub mod path;
 pub use builtin_fixed as builtin;
 pub mod query;
+pub mod statistics_collector;
 pub mod term;
 pub mod expression;
 pub mod update;

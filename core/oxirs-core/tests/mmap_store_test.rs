@@ -174,17 +174,17 @@ fn test_named_graphs() -> Result<()> {
     // Add quads to different graphs
     for i in 0..100 {
         let graph_name = if i % 4 == 0 {
-            None // Default graph
+            GraphName::DefaultGraph
         } else {
-            Some(NamedNode::new(&format!("http://example.org/graph/{}", i % 4))?)
+            GraphName::NamedNode(NamedNode::new(&format!("http://example.org/graph/{}", i % 4))?)
         };
         
-        let quad = Quad {
-            subject: Subject::NamedNode(NamedNode::new(&format!("http://example.org/s/{}", i))?),
-            predicate: Predicate::NamedNode(NamedNode::new("http://example.org/p")?,
-            object: Object::Literal(Literal::new_simple_literal(&format!("{}", i))),
+        let quad = Quad::new(
+            Subject::NamedNode(NamedNode::new(&format!("http://example.org/s/{}", i))?),
+            Predicate::NamedNode(NamedNode::new("http://example.org/p")?),
+            Object::Literal(Literal::new_simple_literal(&format!("{}", i))),
             graph_name,
-        };
+        );
         store.add(&quad)?;
     }
     
@@ -201,12 +201,11 @@ fn test_concurrent_reads() -> Result<()> {
     
     // Add some data
     for i in 0..1000 {
-        let quad = Quad {
-            subject: Subject::NamedNode(NamedNode::new(&format!("http://example.org/s/{}", i))?),
-            predicate: Predicate::NamedNode(NamedNode::new("http://example.org/p")?,
-            object: Object::Literal(Literal::new_simple_literal(&format!("{}", i))),
-            graph_name: None,
-        };
+        let quad = Quad::new_default_graph(
+            Subject::NamedNode(NamedNode::new(&format!("http://example.org/s/{}", i))?),
+            Predicate::NamedNode(NamedNode::new("http://example.org/p")?),
+            Object::Literal(Literal::new_simple_literal(&format!("{}", i))),
+        );
         store.add(&quad)?;
     }
     store.flush()?;
@@ -248,12 +247,11 @@ fn test_append_only_safety() -> Result<()> {
     
     // Add initial data
     for i in 0..50 {
-        let quad = Quad {
-            subject: Subject::NamedNode(NamedNode::new(&format!("http://example.org/s/{}", i))?),
-            predicate: Predicate::NamedNode(NamedNode::new("http://example.org/p")?,
-            object: Object::Literal(Literal::new_simple_literal(&format!("{}", i))),
-            graph_name: None,
-        };
+        let quad = Quad::new_default_graph(
+            Subject::NamedNode(NamedNode::new(&format!("http://example.org/s/{}", i))?),
+            Predicate::NamedNode(NamedNode::new("http://example.org/p")?),
+            Object::Literal(Literal::new_simple_literal(&format!("{}", i))),
+        );
         store.add(&quad)?;
     }
     
@@ -262,12 +260,11 @@ fn test_append_only_safety() -> Result<()> {
     
     // Add more data
     for i in 50..100 {
-        let quad = Quad {
-            subject: Subject::NamedNode(NamedNode::new(&format!("http://example.org/s/{}", i))?),
-            predicate: Predicate::NamedNode(NamedNode::new("http://example.org/p")?,
-            object: Object::Literal(Literal::new_simple_literal(&format!("{}", i))),
-            graph_name: None,
-        };
+        let quad = Quad::new_default_graph(
+            Subject::NamedNode(NamedNode::new(&format!("http://example.org/s/{}", i))?),
+            Predicate::NamedNode(NamedNode::new("http://example.org/p")?),
+            Object::Literal(Literal::new_simple_literal(&format!("{}", i))),
+        );
         store.add(&quad)?;
     }
     
@@ -292,15 +289,14 @@ fn test_very_large_dataset() -> Result<()> {
     
     // Add 1 million quads
     for i in 0..1_000_000 {
-        let quad = Quad {
-            subject: Subject::NamedNode(NamedNode::new(&format!("http://example.org/entity/{}", i))?),
-            predicate: Predicate::NamedNode(NamedNode::new(&format!("http://example.org/property/{}", i % 100))?,
-            object: Object::Literal(Literal::new_typed(
+        let quad = Quad::new_default_graph(
+            Subject::NamedNode(NamedNode::new(&format!("http://example.org/entity/{}", i))?),
+            Predicate::NamedNode(NamedNode::new(&format!("http://example.org/property/{}", i % 100))?),
+            Object::Literal(Literal::new_typed(
                 &format!("{}", i),
                 NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")?
             )),
-            graph_name: None,
-        };
+        );
         store.add(&quad)?;
         
         // Flush every 10,000 quads
@@ -330,24 +326,22 @@ fn test_recovery_after_crash() -> Result<()> {
         
         // Add some data and flush
         for i in 0..50 {
-            let quad = Quad {
-                subject: Subject::NamedNode(NamedNode::new(&format!("http://example.org/s/{}", i))?),
-                predicate: Predicate::NamedNode(NamedNode::new("http://example.org/p")?,
-                object: Object::Literal(Literal::new_simple_literal(&format!("{}", i))),
-                graph_name: None,
-            };
+            let quad = Quad::new_default_graph(
+                Subject::NamedNode(NamedNode::new(&format!("http://example.org/s/{}", i))?),
+                Predicate::NamedNode(NamedNode::new("http://example.org/p")?),
+                Object::Literal(Literal::new_simple_literal(&format!("{}", i))),
+            );
             store.add(&quad)?;
         }
         store.flush()?;
         
         // Add more data but don't flush (simulate crash)
         for i in 50..60 {
-            let quad = Quad {
-                subject: Subject::NamedNode(NamedNode::new(&format!("http://example.org/s/{}", i))?),
-                predicate: Predicate::NamedNode(NamedNode::new("http://example.org/p")?,
-                object: Object::Literal(Literal::new_simple_literal(&format!("{}", i))),
-                graph_name: None,
-            };
+            let quad = Quad::new_default_graph(
+                Subject::NamedNode(NamedNode::new(&format!("http://example.org/s/{}", i))?),
+                Predicate::NamedNode(NamedNode::new("http://example.org/p")?),
+                Object::Literal(Literal::new_simple_literal(&format!("{}", i))),
+            );
             store.add(&quad)?;
         }
         // Drop without flushing

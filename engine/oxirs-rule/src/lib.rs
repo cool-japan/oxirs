@@ -12,8 +12,11 @@ pub mod forward;
 pub mod integration;
 pub mod owl;
 pub mod performance;
+pub mod rdf_integration;
+pub mod rdf_processing_simple;
 pub mod rdfs;
 pub mod rete;
+pub mod rete_enhanced;
 pub mod swrl;
 
 /// Rule representation

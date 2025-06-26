@@ -5,7 +5,7 @@
 
 use crate::model::{Triple, Subject, Predicate, Object};
 use crate::OxirsError;
-use crossbeam_deque::{Injector, Stealer, Worker};
+use crossbeam_deque::Injector;
 use parking_lot::{Mutex, RwLock};
 use rayon::prelude::*;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -135,10 +135,6 @@ pub struct ParallelBatchProcessor {
     config: BatchConfig,
     /// Global work queue (injector)
     injector: Arc<Injector<BatchOperation>>,
-    /// Worker queues for each thread
-    workers: Vec<Worker<BatchOperation>>,
-    /// Stealers for work-stealing
-    stealers: Vec<Stealer<BatchOperation>>,
     /// Cancellation flag
     cancelled: Arc<AtomicBool>,
     /// Processing statistics
@@ -152,23 +148,11 @@ pub struct ParallelBatchProcessor {
 impl ParallelBatchProcessor {
     /// Create a new parallel batch processor
     pub fn new(config: BatchConfig) -> Self {
-        let num_threads = config.num_threads.unwrap_or_else(num_cpus::get);
         let injector = Arc::new(Injector::new());
-        
-        let mut workers = Vec::with_capacity(num_threads);
-        let mut stealers = Vec::with_capacity(num_threads);
-        
-        for _ in 0..num_threads {
-            let worker = Worker::new_fifo();
-            stealers.push(worker.stealer());
-            workers.push(worker);
-        }
         
         ParallelBatchProcessor {
             config,
             injector,
-            workers,
-            stealers,
             cancelled: Arc::new(AtomicBool::new(false)),
             stats: Arc::new(BatchStats::default()),
             progress_callback: Arc::new(Mutex::new(None)),
@@ -236,7 +220,7 @@ impl ParallelBatchProcessor {
     /// Process operations with the given executor
     pub fn process<E, R>(&self, executor: E) -> Result<Vec<R>, OxirsError>
     where
-        E: Fn(BatchOperation) -> Result<R, OxirsError> + Send + Sync,
+        E: Fn(BatchOperation) -> Result<R, OxirsError> + Send + Sync + 'static,
         R: Send + 'static,
     {
         let start_time = Instant::now();
@@ -250,10 +234,8 @@ impl ParallelBatchProcessor {
         
         // Spawn worker threads
         let handles: Vec<_> = (0..num_threads)
-            .map(|worker_id| {
+            .map(|_worker_id| {
                 let injector = self.injector.clone();
-                let worker = self.workers[worker_id].clone();
-                let stealers = self.stealers.clone();
                 let cancelled = self.cancelled.clone();
                 let stats = self.stats.clone();
                 let executor = executor.clone();
@@ -273,33 +255,14 @@ impl ParallelBatchProcessor {
                             break;
                         }
                         
-                        // Try to get work from local queue, global queue, or steal
-                        let task = worker.pop()
-                            .or_else(|| {
-                                // Try global queue
-                                loop {
-                                    match injector.steal_batch_and_pop(&worker) {
-                                        crossbeam_deque::Steal::Success(task) => return Some(task),
-                                        crossbeam_deque::Steal::Empty => break,
-                                        crossbeam_deque::Steal::Retry => continue,
-                                    }
-                                }
-                                None
-                            })
-                            .or_else(|| {
-                                // Try stealing from other workers
-                                stealers.iter()
-                                    .filter_map(|stealer| {
-                                        loop {
-                                            match stealer.steal() {
-                                                crossbeam_deque::Steal::Success(task) => return Some(task),
-                                                crossbeam_deque::Steal::Empty => return None,
-                                                crossbeam_deque::Steal::Retry => continue,
-                                            }
-                                        }
-                                    })
-                                    .next()
-                            });
+                        // Try to get work from global queue
+                        let task = loop {
+                            match injector.steal() {
+                                crossbeam_deque::Steal::Success(task) => break Some(task),
+                                crossbeam_deque::Steal::Empty => break None,
+                                crossbeam_deque::Steal::Retry => continue,
+                            }
+                        };
                         
                         match task {
                             Some(operation) => {
@@ -327,8 +290,7 @@ impl ParallelBatchProcessor {
                             }
                             None => {
                                 // No work available, check if we're done
-                                if injector.is_empty() && 
-                                   stealers.iter().all(|s| s.is_empty()) {
+                                if injector.is_empty() {
                                     break;
                                 }
                                 // Brief sleep to avoid busy-waiting
@@ -371,7 +333,12 @@ impl ParallelBatchProcessor {
             return Err(OxirsError::Store(format!("Batch processing failed with {} errors", errors.len())));
         }
         
-        Ok(Arc::try_unwrap(results).unwrap().into_inner())
+        // Extract results
+        let final_results = Arc::try_unwrap(results)
+            .map_err(|_| OxirsError::Store("Failed to extract results from Arc".to_string()))?
+            .into_inner();
+        
+        Ok(final_results)
     }
 
     /// Process operations in parallel using rayon
@@ -384,11 +351,17 @@ impl ParallelBatchProcessor {
         
         // Collect all operations from the queue
         let mut operations = Vec::new();
-        while let Some(op) = self.injector.steal() {
-            if self.is_cancelled() {
-                return Err(OxirsError::Store("Operation cancelled".to_string()));
+        loop {
+            match self.injector.steal() {
+                crossbeam_deque::Steal::Success(op) => {
+                    if self.is_cancelled() {
+                        return Err(OxirsError::Store("Operation cancelled".to_string()));
+                    }
+                    operations.push(op);
+                }
+                crossbeam_deque::Steal::Empty => break,
+                crossbeam_deque::Steal::Retry => continue,
             }
-            operations.push(op);
         }
         
         // Configure rayon thread pool
@@ -397,28 +370,35 @@ impl ParallelBatchProcessor {
             .build()
             .map_err(|e| OxirsError::Store(format!("Failed to build thread pool: {}", e)))?;
         
+        // Clone needed references
+        let cancelled = self.cancelled.clone();
+        let stats = self.stats.clone();
+        let errors = self.errors.clone();
+        let batch_size = self.config.batch_size;
+        let executor = Arc::new(executor);
+        
         // Process in parallel
-        let results = pool.install(|| {
+        let results = pool.install(move || {
             operations
                 .into_par_iter()
-                .chunks(self.config.batch_size)
-                .map(|chunk| {
+                .chunks(batch_size)
+                .map(move |chunk| {
                     let mut chunk_results = Vec::new();
                     for op in chunk {
-                        if self.is_cancelled() {
+                        if cancelled.load(Ordering::SeqCst) {
                             return Err(OxirsError::Store("Operation cancelled".to_string()));
                         }
                         
-                        self.stats.total_processed.fetch_add(1, Ordering::Relaxed);
+                        stats.total_processed.fetch_add(1, Ordering::Relaxed);
                         
                         match executor(op) {
                             Ok(result) => {
-                                self.stats.total_succeeded.fetch_add(1, Ordering::Relaxed);
+                                stats.total_succeeded.fetch_add(1, Ordering::Relaxed);
                                 chunk_results.push(result);
                             }
                             Err(e) => {
-                                self.stats.total_failed.fetch_add(1, Ordering::Relaxed);
-                                self.errors.write().push(e.clone());
+                                stats.total_failed.fetch_add(1, Ordering::Relaxed);
+                                errors.write().push(e.clone());
                                 return Err(e);
                             }
                         }
@@ -559,7 +539,7 @@ mod tests {
     #[test]
     fn test_cancellation() {
         let config = BatchConfig::default();
-        let processor = ParallelBatchProcessor::new(config);
+        let processor = Arc::new(ParallelBatchProcessor::new(config));
         
         // Submit many operations
         for i in 0..1000 {
@@ -567,8 +547,7 @@ mod tests {
         }
         
         // Start processing in a thread
-        let processor_clone = Arc::new(processor);
-        let processor_thread = processor_clone.clone();
+        let processor_thread = processor.clone();
         
         let handle = thread::spawn(move || {
             processor_thread.process(|op| -> Result<(), OxirsError> {
@@ -583,15 +562,15 @@ mod tests {
         
         // Cancel after a short delay
         thread::sleep(Duration::from_millis(50));
-        processor_clone.cancel();
+        processor.cancel();
         
         // Wait for completion
         let result = handle.join().unwrap();
         
         // Should have processed some but not all
-        let stats = processor_clone.stats();
+        let stats = processor.stats();
         assert!(stats.total_processed < 1000);
-        assert!(processor_clone.is_cancelled());
+        assert!(processor.is_cancelled());
     }
 
     #[test]

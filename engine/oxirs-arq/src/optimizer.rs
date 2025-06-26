@@ -6,11 +6,15 @@
 use crate::algebra::{
     Algebra, BinaryOperator, Expression, Term, TriplePattern, UnaryOperator, Variable,
 };
+use crate::bgp_optimizer::{BGPOptimizer, OptimizedBGP};
+use crate::statistics_collector::{
+    DynamicStatisticsUpdater, QueryExecutionRecord, StatisticsCollector,
+};
 use anyhow::{anyhow, Result};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Query optimizer configuration
 #[derive(Debug, Clone)]
@@ -392,6 +396,8 @@ impl Statistics {
 pub struct QueryOptimizer {
     config: OptimizerConfig,
     statistics: Statistics,
+    /// Dynamic statistics updater for learning from execution
+    dynamic_updater: DynamicStatisticsUpdater,
 }
 
 impl QueryOptimizer {
@@ -399,6 +405,7 @@ impl QueryOptimizer {
         Self {
             config: OptimizerConfig::default(),
             statistics: Statistics::new(),
+            dynamic_updater: DynamicStatisticsUpdater::new(),
         }
     }
 
@@ -406,6 +413,7 @@ impl QueryOptimizer {
         Self {
             config,
             statistics: Statistics::new(),
+            dynamic_updater: DynamicStatisticsUpdater::new(),
         }
     }
 
@@ -444,6 +452,84 @@ impl QueryOptimizer {
         }
 
         Ok(current)
+    }
+
+    /// Collect statistics from triple patterns
+    pub fn collect_statistics(&mut self, patterns: &[TriplePattern]) -> Result<()> {
+        let mut collector = StatisticsCollector::new()
+            .with_sample_rate(0.1)
+            .with_histogram_buckets(100);
+        
+        collector.collect_from_patterns(patterns)?;
+        
+        // Merge collected statistics into optimizer's statistics
+        let new_stats = collector.into_statistics();
+        self.merge_statistics(new_stats);
+        
+        Ok(())
+    }
+
+    /// Update statistics based on query execution feedback
+    pub fn update_from_execution(
+        &mut self,
+        algebra: Algebra,
+        estimated_cardinality: usize,
+        actual_cardinality: usize,
+        execution_time: Duration,
+    ) -> Result<()> {
+        let record = QueryExecutionRecord {
+            algebra,
+            estimated_cardinality,
+            actual_cardinality,
+            execution_time,
+            timestamp: Instant::now(),
+        };
+        
+        self.dynamic_updater.update_from_execution(record, &mut self.statistics)
+    }
+
+    /// Merge new statistics into existing ones
+    fn merge_statistics(&mut self, new_stats: Statistics) {
+        // Merge pattern cardinalities
+        for (pattern, count) in new_stats.pattern_cardinality {
+            self.statistics.pattern_cardinality
+                .entry(pattern)
+                .and_modify(|c| *c = (*c + count) / 2)
+                .or_insert(count);
+        }
+        
+        // Merge predicate frequencies
+        for (pred, freq) in new_stats.predicate_frequency {
+            self.statistics.predicate_frequency
+                .entry(pred)
+                .and_modify(|f| *f += freq)
+                .or_insert(freq);
+        }
+        
+        // Merge variable selectivities
+        for (var, sel) in new_stats.variable_selectivity {
+            self.statistics.variable_selectivity
+                .entry(var)
+                .and_modify(|s| *s = (*s + sel) / 2.0)
+                .or_insert(sel);
+        }
+        
+        // Merge index statistics
+        for index_type in new_stats.index_stats.available_indexes {
+            self.statistics.index_stats.available_indexes.insert(index_type);
+        }
+        
+        for (index_type, sel) in new_stats.index_stats.index_selectivity {
+            self.statistics.index_stats.index_selectivity
+                .entry(index_type)
+                .and_modify(|s| *s = (*s + sel) / 2.0)
+                .or_insert(sel);
+        }
+    }
+
+    /// Get reference to current statistics
+    pub fn get_statistics(&self) -> &Statistics {
+        &self.statistics
     }
 
     /// Apply advanced optimization passes
@@ -734,16 +820,14 @@ impl QueryOptimizer {
     fn index_aware_optimization(&self, algebra: Algebra) -> Result<Algebra> {
         match algebra {
             Algebra::Bgp(patterns) => {
-                // Reorder patterns based on available indexes
-                let mut optimized_patterns = patterns;
-                optimized_patterns.sort_by(|a, b| {
-                    let cost_a = self.estimate_pattern_cost_with_indexes(a);
-                    let cost_b = self.estimate_pattern_cost_with_indexes(b);
-                    cost_a
-                        .partial_cmp(&cost_b)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                });
-                Ok(Algebra::Bgp(optimized_patterns))
+                // Use the advanced BGP optimizer
+                let bgp_optimizer = BGPOptimizer::new(&self.statistics, &self.statistics.index_stats);
+                let optimized_bgp = bgp_optimizer.optimize_bgp(patterns)?;
+                
+                // Apply recommended index usage if needed
+                // In a real implementation, this would annotate the patterns with index hints
+                
+                Ok(Algebra::Bgp(optimized_bgp.patterns))
             }
             _ => self.apply_to_children(algebra, |child| self.index_aware_optimization(child)),
         }

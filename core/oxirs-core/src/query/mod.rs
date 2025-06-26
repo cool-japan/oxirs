@@ -1,6 +1,7 @@
 //! SPARQL query processing module
 
 pub mod algebra;
+pub mod binding_optimizer;
 pub mod distributed;
 pub mod exec;
 pub mod functions;
@@ -8,16 +9,19 @@ pub mod gpu;
 pub mod jit;
 pub mod optimizer;
 pub mod parser;
+pub mod pattern_optimizer;
 pub mod plan;
 pub mod property_paths;
 pub mod wasm;
 
 pub use algebra::*;
+pub use binding_optimizer::{BindingSet, BindingOptimizer, BindingIterator, Constraint, TermType};
 pub use distributed::{DistributedConfig, DistributedQueryEngine, FederatedEndpoint};
 pub use gpu::{GpuBackend, GpuQueryExecutor};
 pub use jit::{JitCompiler, JitConfig};
 pub use optimizer::{AIQueryOptimizer, MultiQueryOptimizer};
 pub use parser::*;
+pub use pattern_optimizer::{PatternOptimizer, PatternExecutor, OptimizedPatternPlan, IndexType};
 pub use wasm::{OptimizationLevel, WasmQueryCompiler, WasmTarget};
 
 // TODO: Temporary compatibility layer for SHACL module

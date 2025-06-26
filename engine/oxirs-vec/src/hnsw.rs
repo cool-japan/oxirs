@@ -351,6 +351,13 @@ impl VectorIndex for HnswIndex {
             .filter(|(_, similarity)| *similarity >= threshold)
             .collect())
     }
+    
+    fn get_vector(&self, uri: &str) -> Option<&Vector> {
+        self.uri_to_id.get(uri)
+            .and_then(|&id| self.nodes.get(id))
+            .filter(|node| !node.uri.is_empty()) // Skip deleted nodes
+            .map(|node| &node.vector)
+    }
 }
 
 impl HnswIndex {

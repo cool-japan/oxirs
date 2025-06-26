@@ -91,19 +91,44 @@ impl ShapeParser {
         format: &str,
         base_iri: Option<&str>,
     ) -> Result<Vec<Shape>> {
-        // For now, we'll parse the RDF into a Store instead of a Graph
-        // since we need store functionality for shape parsing
-        let mut store = Store::new().map_err(|e| 
-            ShaclError::ShapeParsing(format!("Failed to create store: {}", e))
+        use oxirs_core::parser::{Parser, RdfFormat, ParserConfig};
+        
+        // Determine RDF format from string
+        let rdf_format = match format.to_lowercase().as_str() {
+            "turtle" | "ttl" => RdfFormat::Turtle,
+            "ntriples" | "nt" => RdfFormat::NTriples,
+            "trig" => RdfFormat::TriG,
+            "nquads" | "nq" => RdfFormat::NQuads,
+            "rdfxml" | "rdf" | "xml" => RdfFormat::RdfXml,
+            "jsonld" | "json-ld" => RdfFormat::JsonLd,
+            _ => return Err(ShaclError::ShapeParsing(
+                format!("Unsupported RDF format: {}", format)
+            )),
+        };
+        
+        // Create parser with base IRI
+        let mut parser_config = ParserConfig::default();
+        if let Some(base) = base_iri {
+            parser_config.base_iri = Some(base.to_string());
+        }
+        let parser = Parser::with_config(rdf_format, parser_config);
+        
+        // Parse RDF data to quads
+        let quads = parser.parse_str_to_quads(rdf_data).map_err(|e| 
+            ShaclError::ShapeParsing(format!("Failed to parse RDF: {}", e))
         )?;
         
-        // TODO: Implement RDF parsing into the store based on format
-        // This would require RDF parser functionality in oxirs_core
-        // For now, return an error indicating this needs implementation
+        // Create a temporary graph from the quads
+        let mut graph = Graph::new();
+        for quad in quads {
+            // Only use triples from the default graph for shapes
+            if quad.is_default_graph() {
+                graph.insert(quad.to_triple());
+            }
+        }
         
-        Err(ShaclError::ShapeParsing(
-            "RDF string parsing requires RDF parser implementation in oxirs_core".to_string()
-        ))
+        // Parse shapes from the graph
+        self.parse_shapes_from_graph(&graph)
     }
 
     /// Parse shapes from an RDF graph
@@ -237,6 +262,15 @@ impl ShapeParser {
         
         // Parse deactivated status
         self.parse_shape_deactivated_from_graph(graph, &shape_node, &mut shape)?;
+        
+        // Parse inheritance (sh:extends)
+        self.parse_shape_extends_from_graph(graph, &shape_node, &mut shape)?;
+        
+        // Parse priority
+        self.parse_shape_priority_from_graph(graph, &shape_node, &mut shape)?;
+        
+        // Parse metadata
+        self.parse_shape_metadata_from_graph(graph, &shape_node, &mut shape)?;
         
         // Cache the parsed shape
         if self.shape_cache.len() < 1000 { // Limit cache size
@@ -793,6 +827,180 @@ impl ShapeParser {
                 shape.deactivated = literal.value() == "true";
             }
         }
+        
+        Ok(())
+    }
+    
+    /// Parse shape inheritance (sh:extends) from a graph
+    fn parse_shape_extends_from_graph(
+        &self,
+        graph: &Graph,
+        shape_node: &NamedNode,
+        shape: &mut Shape,
+    ) -> Result<()> {
+        use oxirs_core::model::{Subject, Predicate};
+        
+        let extends_pred = NamedNode::new("http://www.w3.org/ns/shacl#extends")
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid extends predicate: {}", e)))?;
+        
+        for triple in graph.query_triples(
+            Some(&Subject::NamedNode(shape_node.clone())),
+            Some(&Predicate::NamedNode(extends_pred)),
+            None
+        ) {
+            if let Ok(Term::NamedNode(parent_node)) = object_to_term(triple.object()) {
+                shape.extends(ShapeId::new(parent_node.as_str()));
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Parse shape priority from a graph
+    fn parse_shape_priority_from_graph(
+        &self,
+        graph: &Graph,
+        shape_node: &NamedNode,
+        shape: &mut Shape,
+    ) -> Result<()> {
+        use oxirs_core::model::{Subject, Predicate};
+        
+        // Using a custom predicate for priority since it's not standard SHACL
+        let priority_pred = NamedNode::new("http://www.w3.org/ns/shacl#priority")
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid priority predicate: {}", e)))?;
+        
+        if let Some(triple) = graph.query_triples(
+            Some(&Subject::NamedNode(shape_node.clone())),
+            Some(&Predicate::NamedNode(priority_pred)),
+            None
+        ).first() {
+            if let Ok(Term::Literal(literal)) = object_to_term(triple.object()) {
+                if let Ok(priority) = literal.value().parse::<i32>() {
+                    shape.with_priority(priority);
+                }
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Parse shape metadata from a graph
+    fn parse_shape_metadata_from_graph(
+        &self,
+        graph: &Graph,
+        shape_node: &NamedNode,
+        shape: &mut Shape,
+    ) -> Result<()> {
+        use oxirs_core::model::{Subject, Predicate};
+        use crate::ShapeMetadata;
+        
+        // Common metadata predicates
+        let dc_ns = "http://purl.org/dc/elements/1.1/";
+        let dcterms_ns = "http://purl.org/dc/terms/";
+        let rdfs_ns = "http://www.w3.org/2000/01/rdf-schema#";
+        
+        // Parse author (dc:creator or dcterms:creator)
+        for creator_pred_iri in &[
+            format!("{}creator", dc_ns),
+            format!("{}creator", dcterms_ns),
+        ] {
+            if let Ok(creator_pred) = NamedNode::new(creator_pred_iri) {
+                if let Some(triple) = graph.query_triples(
+                    Some(&Subject::NamedNode(shape_node.clone())),
+                    Some(&Predicate::NamedNode(creator_pred)),
+                    None
+                ).first() {
+                    if let Ok(Term::Literal(literal)) = object_to_term(triple.object()) {
+                        shape.metadata.author = Some(literal.value().to_string());
+                    }
+                }
+            }
+        }
+        
+        // Parse creation date (dcterms:created)
+        if let Ok(created_pred) = NamedNode::new(&format!("{}created", dcterms_ns)) {
+            if let Some(triple) = graph.query_triples(
+                Some(&Subject::NamedNode(shape_node.clone())),
+                Some(&Predicate::NamedNode(created_pred)),
+                None
+            ).first() {
+                if let Ok(Term::Literal(literal)) = object_to_term(triple.object()) {
+                    if let Ok(datetime) = chrono::DateTime::parse_from_rfc3339(literal.value()) {
+                        shape.metadata.created = Some(datetime.with_timezone(&chrono::Utc));
+                    }
+                }
+            }
+        }
+        
+        // Parse modification date (dcterms:modified)
+        if let Ok(modified_pred) = NamedNode::new(&format!("{}modified", dcterms_ns)) {
+            if let Some(triple) = graph.query_triples(
+                Some(&Subject::NamedNode(shape_node.clone())),
+                Some(&Predicate::NamedNode(modified_pred)),
+                None
+            ).first() {
+                if let Ok(Term::Literal(literal)) = object_to_term(triple.object()) {
+                    if let Ok(datetime) = chrono::DateTime::parse_from_rfc3339(literal.value()) {
+                        shape.metadata.modified = Some(datetime.with_timezone(&chrono::Utc));
+                    }
+                }
+            }
+        }
+        
+        // Parse version (dcterms:hasVersion)
+        if let Ok(version_pred) = NamedNode::new(&format!("{}hasVersion", dcterms_ns)) {
+            if let Some(triple) = graph.query_triples(
+                Some(&Subject::NamedNode(shape_node.clone())),
+                Some(&Predicate::NamedNode(version_pred)),
+                None
+            ).first() {
+                if let Ok(Term::Literal(literal)) = object_to_term(triple.object()) {
+                    shape.metadata.version = Some(literal.value().to_string());
+                }
+            }
+        }
+        
+        // Parse license (dcterms:license)
+        if let Ok(license_pred) = NamedNode::new(&format!("{}license", dcterms_ns)) {
+            if let Some(triple) = graph.query_triples(
+                Some(&Subject::NamedNode(shape_node.clone())),
+                Some(&Predicate::NamedNode(license_pred)),
+                None
+            ).first() {
+                if let Ok(Term::Literal(literal)) = object_to_term(triple.object()) {
+                    shape.metadata.license = Some(literal.value().to_string());
+                } else if let Ok(Term::NamedNode(license_node)) = object_to_term(triple.object()) {
+                    shape.metadata.license = Some(license_node.as_str().to_string());
+                }
+            }
+        }
+        
+        // Parse label and description for metadata too
+        if let Ok(label_pred) = NamedNode::new(&format!("{}label", rdfs_ns)) {
+            if let Some(triple) = graph.query_triples(
+                Some(&Subject::NamedNode(shape_node.clone())),
+                Some(&Predicate::NamedNode(label_pred)),
+                None
+            ).first() {
+                if let Ok(Term::Literal(literal)) = object_to_term(triple.object()) {
+                    shape.label = Some(literal.value().to_string());
+                }
+            }
+        }
+        
+        if let Ok(description_pred) = NamedNode::new(&format!("{}comment", rdfs_ns)) {
+            if let Some(triple) = graph.query_triples(
+                Some(&Subject::NamedNode(shape_node.clone())),
+                Some(&Predicate::NamedNode(description_pred)),
+                None
+            ).first() {
+                if let Ok(Term::Literal(literal)) = object_to_term(triple.object()) {
+                    shape.description = Some(literal.value().to_string());
+                }
+            }
+        }
+        
+        // TODO: Parse tags and custom properties from additional metadata
         
         Ok(())
     }

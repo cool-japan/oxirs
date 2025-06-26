@@ -1,5 +1,11 @@
 //! Example demonstrating async streaming RDF parsing and serialization
 
+#[cfg(not(feature = "async-tokio"))]
+fn main() {
+    eprintln!("This example requires the 'async-tokio' feature. Run with: cargo run --example async_streaming --features async-tokio");
+}
+
+#[cfg(feature = "async-tokio")]
 use oxirs_core::{
     io::{
         AsyncRdfParser, AsyncRdfSerializer, AsyncStreamingConfig, AsyncStreamingParser,
@@ -8,13 +14,17 @@ use oxirs_core::{
     model::*,
     parser::RdfFormat,
 };
+#[cfg(feature = "async-tokio")]
 use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
     Arc,
 };
+#[cfg(feature = "async-tokio")]
 use tokio::fs::File;
+#[cfg(feature = "async-tokio")]
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+#[cfg(feature = "async-tokio")]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example 1: Parse N-Triples with progress reporting
@@ -36,6 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(feature = "async-tokio")]
 async fn parse_with_progress() -> Result<(), Box<dyn std::error::Error>> {
     let ntriples_data = r#"<http://example.org/alice> <http://xmlns.com/foaf/0.1/name> "Alice" .
 <http://example.org/bob> <http://xmlns.com/foaf/0.1/name> "Bob" .
@@ -72,6 +83,7 @@ async fn parse_with_progress() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(feature = "async-tokio")]
 async fn parse_with_cancellation() -> Result<(), Box<dyn std::error::Error>> {
     // Create a large dataset
     let mut ntriples_data = String::new();
@@ -123,6 +135,7 @@ async fn parse_with_cancellation() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(feature = "async-tokio")]
 async fn serialize_with_streaming() -> Result<(), Box<dyn std::error::Error>> {
     // Create some test data
     let mut quads = Vec::new();
@@ -160,6 +173,7 @@ async fn serialize_with_streaming() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(feature = "async-tokio")]
 async fn parse_with_custom_config() -> Result<(), Box<dyn std::error::Error>> {
     let invalid_ntriples = r#"<http://example.org/alice> <http://xmlns.com/foaf/0.1/name> "Alice" .
 INVALID LINE HERE
@@ -195,28 +209,5 @@ ANOTHER INVALID LINE
         println!("  {}", quad);
     }
 
-    Ok(())
-}
-
-// Example function that would read from a real file
-#[allow(dead_code)]
-async fn parse_file_example(path: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let file = File::open(path).await?;
-    let parser = AsyncStreamingParser::new(RdfFormat::NTriples);
-
-    let mut config = AsyncStreamingConfig::default();
-    config.chunk_size = 65536; // 64KB chunks for file I/O
-
-    let progress_callback: ProgressCallback = Box::new(move |progress: &StreamingProgress| {
-        if let Some(percentage) = progress.completion_percentage() {
-            println!("Progress: {:.1}% complete", percentage);
-        }
-    });
-
-    let quads = parser
-        .parse_async(file, config, Some(progress_callback), None)
-        .await?;
-
-    println!("Parsed {} quads from file", quads.len());
     Ok(())
 }

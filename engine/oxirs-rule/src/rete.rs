@@ -4,6 +4,10 @@
 //! The RETE network precompiles rules into a network that allows for incremental updates.
 
 use crate::forward::Substitution;
+use crate::rete_enhanced::{
+    BetaJoinNode, ConflictResolution, EnhancedToken, JoinCondition, 
+    MemoryStrategy, ComparisonOp, JoinArg
+};
 use crate::{Rule, RuleAtom, Term};
 use anyhow::Result;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -128,12 +132,18 @@ pub struct ReteNetwork {
     alpha_memory: HashMap<NodeId, HashSet<RuleAtom>>,
     /// Beta memory for beta nodes (left and right)
     beta_memory: HashMap<NodeId, (Vec<Token>, Vec<Token>)>,
+    /// Enhanced beta join nodes
+    enhanced_beta_nodes: HashMap<NodeId, BetaJoinNode>,
     /// Root node ID
     root_id: NodeId,
     /// Pattern to alpha node mapping for efficiency
     pattern_index: HashMap<String, Vec<NodeId>>,
     /// Debug mode
     debug_mode: bool,
+    /// Memory management strategy
+    memory_strategy: MemoryStrategy,
+    /// Conflict resolution strategy
+    conflict_resolution: ConflictResolution,
 }
 
 impl Default for ReteNetwork {
@@ -145,15 +155,23 @@ impl Default for ReteNetwork {
 impl ReteNetwork {
     /// Create a new RETE network
     pub fn new() -> Self {
+        Self::with_strategies(MemoryStrategy::Adaptive, ConflictResolution::Combined)
+    }
+    
+    /// Create a new RETE network with specific strategies
+    pub fn with_strategies(memory: MemoryStrategy, conflict: ConflictResolution) -> Self {
         let mut network = Self {
             nodes: HashMap::new(),
             next_node_id: 0,
             token_memory: HashMap::new(),
             alpha_memory: HashMap::new(),
             beta_memory: HashMap::new(),
+            enhanced_beta_nodes: HashMap::new(),
             root_id: 0,
             pattern_index: HashMap::new(),
             debug_mode: false,
+            memory_strategy: memory,
+            conflict_resolution: conflict,
         };
 
         // Create root node
@@ -268,7 +286,7 @@ impl ReteNetwork {
         let node_id = self.create_node(ReteNode::Beta {
             left_parent,
             right_parent,
-            join_condition,
+            join_condition: join_condition.clone(),
             children: Vec::new(),
         });
 
@@ -276,12 +294,49 @@ impl ReteNetwork {
         self.add_child(left_parent, node_id)?;
         self.add_child(right_parent, node_id)?;
 
-        // Initialize beta memory
+        // Initialize old beta memory for compatibility
         self.beta_memory.insert(node_id, (Vec::new(), Vec::new()));
+
+        // Create enhanced beta join node
+        let mut enhanced_node = BetaJoinNode::new(
+            node_id,
+            left_parent,
+            right_parent,
+            self.memory_strategy,
+            self.conflict_resolution,
+        );
+
+        // Extract join variables from the condition
+        enhanced_node.join_variables = join_condition.constraints.iter()
+            .map(|(var, _)| var.clone())
+            .collect();
+
+        // Convert old-style filters to enhanced conditions
+        for filter in &join_condition.filters {
+            match filter.as_str() {
+                "type_constraint" => {
+                    // Add type checking condition
+                    enhanced_node.conditions.push(JoinCondition::Builtin {
+                        predicate: "type_check".to_string(),
+                        args: vec![],
+                    });
+                }
+                "domain_range_constraint" => {
+                    // Add domain/range checking
+                    enhanced_node.conditions.push(JoinCondition::Builtin {
+                        predicate: "domain_range_check".to_string(),
+                        args: vec![],
+                    });
+                }
+                _ => {}
+            }
+        }
+
+        self.enhanced_beta_nodes.insert(node_id, enhanced_node);
 
         if self.debug_mode {
             debug!(
-                "Created beta join node {} (left: {}, right: {})",
+                "Created enhanced beta join node {} (left: {}, right: {})",
                 node_id, left_parent, right_parent
             );
         }
@@ -555,51 +610,78 @@ impl ReteNetwork {
         token: Token,
         join_condition: &JoinCondition,
     ) -> Result<Vec<Token>> {
-        // Get beta memory for this node
-        let (left_memory, right_memory) = self.beta_memory.get_mut(&beta_id)
-            .ok_or_else(|| anyhow::anyhow!("Beta memory not found for node {}", beta_id))?;
-
-        let mut joined_tokens = Vec::new();
-
-        // Determine which side the token came from based on the token's facts
-        let is_left_token = self.is_left_token(&token, beta_id)?;
-
-        if is_left_token {
-            // Token came from left side - join with all right side tokens
-            left_memory.push(token.clone());
+        // Check if we have an enhanced beta node
+        if let Some(enhanced_node) = self.enhanced_beta_nodes.get_mut(&beta_id) {
+            // Convert Token to EnhancedToken
+            let mut enhanced_token = EnhancedToken::new();
+            enhanced_token.bindings = token.bindings.clone();
+            enhanced_token.facts = token.facts.clone();
+            enhanced_token.priority = 0; // Default priority
+            enhanced_token.specificity = token.facts.len();
             
-            for right_token in right_memory.iter() {
-                if self.satisfies_join_condition(&token, right_token, join_condition)? {
-                    let joined = self.join_tokens(&token, right_token)?;
-                    joined_tokens.push(joined);
+            // Determine which side the token came from
+            let from_left = self.is_left_token(&token, beta_id)?;
+            
+            // Use enhanced join
+            let enhanced_results = enhanced_node.join(enhanced_token, from_left)?;
+            
+            // Convert back to regular tokens
+            let mut joined_tokens = Vec::new();
+            for enhanced in enhanced_results {
+                let mut regular_token = Token::new();
+                regular_token.bindings = enhanced.bindings;
+                regular_token.facts = enhanced.facts;
+                regular_token.tags = enhanced.justification;
+                joined_tokens.push(regular_token);
+            }
+            
+            if self.debug_mode && !joined_tokens.is_empty() {
+                debug!("Enhanced beta join {} produced {} joined tokens", beta_id, joined_tokens.len());
+                if let Some(stats) = self.enhanced_beta_nodes.get(&beta_id) {
+                    debug!("Beta join stats: {:?}", stats.get_stats());
                 }
             }
+            
+            Ok(joined_tokens)
         } else {
-            // Token came from right side - join with all left side tokens
-            right_memory.push(token.clone());
-            
-            for left_token in left_memory.iter() {
-                if self.satisfies_join_condition(left_token, &token, join_condition)? {
-                    let joined = self.join_tokens(left_token, &token)?;
-                    joined_tokens.push(joined);
+            // Fall back to old implementation for compatibility
+            let (left_memory, right_memory) = self.beta_memory.get_mut(&beta_id)
+                .ok_or_else(|| anyhow::anyhow!("Beta memory not found for node {}", beta_id))?;
+
+            let mut joined_tokens = Vec::new();
+            let is_left_token = self.is_left_token(&token, beta_id)?;
+
+            if is_left_token {
+                left_memory.push(token.clone());
+                
+                for right_token in right_memory.iter() {
+                    if self.satisfies_join_condition(&token, right_token, join_condition)? {
+                        let joined = self.join_tokens(&token, right_token)?;
+                        joined_tokens.push(joined);
+                    }
+                }
+            } else {
+                right_memory.push(token.clone());
+                
+                for left_token in left_memory.iter() {
+                    if self.satisfies_join_condition(left_token, &token, join_condition)? {
+                        let joined = self.join_tokens(left_token, &token)?;
+                        joined_tokens.push(joined);
+                    }
                 }
             }
-        }
 
-        // Implement memory management - limit memory size
-        const MAX_MEMORY_SIZE: usize = 10000;
-        if left_memory.len() > MAX_MEMORY_SIZE {
-            left_memory.drain(0..left_memory.len() / 2); // Remove oldest half
-        }
-        if right_memory.len() > MAX_MEMORY_SIZE {
-            right_memory.drain(0..right_memory.len() / 2); // Remove oldest half
-        }
+            // Simple memory management
+            const MAX_MEMORY_SIZE: usize = 10000;
+            if left_memory.len() > MAX_MEMORY_SIZE {
+                left_memory.drain(0..left_memory.len() / 2);
+            }
+            if right_memory.len() > MAX_MEMORY_SIZE {
+                right_memory.drain(0..right_memory.len() / 2);
+            }
 
-        if self.debug_mode && !joined_tokens.is_empty() {
-            debug!("Beta join {} produced {} joined tokens", beta_id, joined_tokens.len());
+            Ok(joined_tokens)
         }
-
-        Ok(joined_tokens)
     }
 
     /// Check if a token came from the left side of a beta join
@@ -845,17 +927,6 @@ impl ReteNetwork {
         }
     }
 
-    /// Check if two terms are equal
-    fn terms_equal(&self, term1: &Term, term2: &Term) -> bool {
-        match (term1, term2) {
-            (Term::Variable(v1), Term::Variable(v2)) => v1 == v2,
-            (Term::Constant(c1), Term::Constant(c2)) => c1 == c2,
-            (Term::Literal(l1), Term::Literal(l2)) => l1 == l2,
-            (Term::Constant(c), Term::Literal(l)) | (Term::Literal(l), Term::Constant(c)) => c == l,
-            _ => false,
-        }
-    }
-
     /// Apply substitution to an atom
     fn apply_substitution(&self, atom: &RuleAtom, substitution: &Substitution) -> Result<RuleAtom> {
         match atom {
@@ -918,6 +989,56 @@ impl ReteNetwork {
             beta_nodes: beta_count,
             production_nodes: production_count,
             total_tokens,
+        }
+    }
+
+    /// Get enhanced network statistics including beta join performance
+    pub fn get_enhanced_stats(&self) -> EnhancedReteStats {
+        let basic_stats = self.get_stats();
+        
+        let mut total_joins = 0;
+        let mut successful_joins = 0;
+        let mut total_evictions = 0;
+        let mut peak_memory = 0;
+        
+        for enhanced_node in self.enhanced_beta_nodes.values() {
+            let stats = enhanced_node.get_stats();
+            total_joins += stats.total_joins;
+            successful_joins += stats.successful_joins;
+            total_evictions += stats.evictions;
+            peak_memory = peak_memory.max(stats.peak_size);
+        }
+        
+        EnhancedReteStats {
+            basic: basic_stats,
+            total_beta_joins: total_joins,
+            successful_beta_joins: successful_joins,
+            join_success_rate: if total_joins > 0 {
+                successful_joins as f64 / total_joins as f64
+            } else {
+                0.0
+            },
+            memory_evictions: total_evictions,
+            peak_memory_usage: peak_memory,
+            enhanced_nodes: self.enhanced_beta_nodes.len(),
+        }
+    }
+
+    /// Set memory strategy for all beta nodes
+    pub fn set_memory_strategy(&mut self, strategy: MemoryStrategy) {
+        self.memory_strategy = strategy;
+        // Update existing nodes
+        for node in self.enhanced_beta_nodes.values_mut() {
+            node.memory.memory_strategy = strategy;
+        }
+    }
+
+    /// Set conflict resolution strategy
+    pub fn set_conflict_resolution(&mut self, strategy: ConflictResolution) {
+        self.conflict_resolution = strategy;
+        // Update existing nodes
+        for node in self.enhanced_beta_nodes.values_mut() {
+            node.conflict_resolution = strategy;
         }
     }
 
