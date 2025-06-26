@@ -395,13 +395,14 @@ impl QueryRouter {
         
         if let Some(entry) = cache.entries.get_mut(query_id) {
             entry.access_count += 1;
+            let plan = entry.plan.clone();
             cache.hits += 1;
             
             // Update cache hit rate
             let hit_rate = cache.hits as f64 / (cache.hits + cache.misses) as f64;
             self.statistics.write().await.cache_hit_rate = hit_rate;
             
-            Some(entry.plan.clone())
+            Some(plan)
         } else {
             cache.misses += 1;
             None

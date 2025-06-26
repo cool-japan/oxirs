@@ -76,7 +76,7 @@ This document outlines the roadmap and pending tasks for the oxirs-star RDF-star
 - [ ] **SPARQL-star compliance**
   - Complete SPARQL-star specification implementation
   - Add support for all SPARQL-star operators
-  - Implement SPARQL-star built-in functions
+  - ✅ Implement SPARQL-star built-in functions (TRIPLE, SUBJECT, PREDICATE, OBJECT, isTRIPLE)
   - Add federated SPARQL-star query support
 
 - [ ] **Query optimization**
@@ -105,14 +105,14 @@ This document outlines the roadmap and pending tasks for the oxirs-star RDF-star
   - Optimize memory usage for large reifications
 
 ### 🧪 Testing and Quality Assurance
-- [ ] **Comprehensive test suite**
-  - Add property-based testing for all components
+- [x] **Comprehensive test suite**
+  - ✅ Add property-based testing for all components
   - Implement integration tests with real-world data
   - Add performance regression tests
   - Create test data generators for RDF-star
 
-- [ ] **Benchmarking framework**
-  - Implement comprehensive benchmarks
+- [x] **Benchmarking framework**
+  - ✅ Implement comprehensive benchmarks
   - Add memory usage profiling
   - Create performance comparison with other RDF-star implementations
   - Add continuous performance monitoring
@@ -279,6 +279,9 @@ When working on these tasks:
 - ✅ Storage backend integration
 - ✅ Error handling and validation framework
 - ✅ Configuration and statistics system
+- ✅ Property-based testing for all components
+- ✅ Comprehensive benchmarking framework
+- ✅ SPARQL-star built-in functions (TRIPLE, SUBJECT, PREDICATE, OBJECT, isTRIPLE)
 
 ## Immediate Next Steps
 1. Complete N-Quads-star parser implementation (Line 346 in parser.rs)

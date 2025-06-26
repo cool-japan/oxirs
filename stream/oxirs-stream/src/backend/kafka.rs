@@ -12,10 +12,16 @@ use chrono::{DateTime, Utc};
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tokio::sync::{RwLock, Semaphore};
 use tokio::time;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
+
+// TODO: Enable when reqwest is added
+// #[cfg(feature = "kafka")]
+// use crate::backend::kafka_schema_registry::{SchemaRegistryClient, RdfEventSchemas, SchemaType};
 
 #[cfg(feature = "kafka")]
 use rdkafka::{
@@ -574,6 +580,11 @@ pub struct KafkaProducer {
     batch_buffer: Vec<KafkaEvent>,
     partition_cache: HashMap<String, u32>,
     schema_cache: HashMap<String, u32>,
+    // TODO: Enable when reqwest is added
+    // #[cfg(feature = "kafka")]
+    // schema_registry_client: Option<Arc<SchemaRegistryClient>>,
+    metrics_collector: Option<Arc<RwLock<KafkaMetrics>>>,
+    send_semaphore: Arc<Semaphore>,
 }
 
 #[derive(Debug, Default)]
@@ -590,6 +601,44 @@ struct ProducerStats {
     partition_assignments: u64,
     last_publish: Option<DateTime<Utc>>,
     connection_errors: u64,
+}
+
+/// Comprehensive Kafka metrics for monitoring
+#[derive(Debug, Default, Clone)]
+pub struct KafkaMetrics {
+    // Producer metrics
+    pub producer_record_send_rate: f64,
+    pub producer_record_retry_rate: f64,
+    pub producer_record_error_rate: f64,
+    pub producer_request_latency_avg: f64,
+    pub producer_request_latency_max: f64,
+    pub producer_buffer_available_bytes: i64,
+    pub producer_batch_size_avg: f64,
+    pub producer_compression_rate_avg: f64,
+    
+    // Consumer metrics
+    pub consumer_records_lag: i64,
+    pub consumer_records_lag_max: i64,
+    pub consumer_fetch_rate: f64,
+    pub consumer_fetch_latency_avg: f64,
+    pub consumer_records_consumed_rate: f64,
+    pub consumer_bytes_consumed_rate: f64,
+    
+    // Connection metrics
+    pub connection_count: i32,
+    pub connection_creation_rate: f64,
+    pub connection_close_rate: f64,
+    pub network_io_rate: f64,
+    
+    // Schema registry metrics
+    pub schema_registry_requests: u64,
+    pub schema_registry_cache_hits: u64,
+    pub schema_registry_cache_misses: u64,
+    pub schema_registry_errors: u64,
+    
+    // Timestamps
+    pub last_update: Option<DateTime<Utc>>,
+    pub metrics_interval_ms: u64,
 }
 
 impl KafkaProducer {
@@ -621,12 +670,38 @@ impl KafkaProducer {
             batch_buffer: Vec::new(),
             partition_cache: HashMap::new(),
             schema_cache: HashMap::new(),
+            #[cfg(feature = "kafka")]
+            // TODO: Enable when reqwest is added
+            // schema_registry_client: None,
+            metrics_collector: None,
+            send_semaphore: Arc::new(Semaphore::new(1000)), // Max concurrent sends
         })
     }
 
     pub fn with_kafka_config(mut self, kafka_config: KafkaProducerConfig) -> Self {
         self.kafka_config = kafka_config;
         self
+    }
+
+    /// Initialize schema registry client if configured
+    #[cfg(feature = "kafka")]
+    async fn init_schema_registry(&mut self) -> Result<()> {
+        // TODO: Enable when reqwest is added
+        // if let Some(ref config) = self.kafka_config.schema_registry_config {
+        //     let client = SchemaRegistryClient::new(config.clone())?;
+        //     
+        //     // Pre-register RDF event schemas
+        //     RdfEventSchemas::register_all_schemas(&client, "oxirs").await?;
+        //     
+        //     self.schema_registry_client = Some(Arc::new(client));
+        //     info!("Initialized schema registry client");
+        // }
+        Ok(())
+    }
+    
+    /// Initialize metrics collector
+    fn init_metrics_collector(&mut self) {
+        self.metrics_collector = Some(Arc::new(RwLock::new(KafkaMetrics::default())));
     }
 
     #[cfg(feature = "kafka")]
@@ -699,9 +774,18 @@ impl KafkaProducer {
         }
 
         self.producer = Some(producer);
+        
+        // Initialize schema registry if configured
+        self.init_schema_registry().await?;
+        
+        // Initialize metrics collector
+        self.init_metrics_collector();
+        
         info!(
-            "Connected to Kafka: {}",
-            self.kafka_config.brokers.join(",")
+            "Connected to Kafka: {} (idempotence: {}, transactions: {})",
+            self.kafka_config.brokers.join(","),
+            self.kafka_config.enable_idempotence,
+            self.kafka_config.transaction_id.is_some()
         );
         Ok(())
     }
@@ -786,6 +870,57 @@ impl KafkaProducer {
         Ok(())
     }
 
+    /// Update metrics from Kafka statistics
+    #[cfg(feature = "kafka")]
+    fn update_metrics(&self, stats: &Statistics) {
+        if let Some(ref metrics_collector) = self.metrics_collector {
+            if let Ok(mut metrics) = metrics_collector.try_write() {
+                // Extract relevant metrics from Kafka statistics
+                if let Some(brokers) = stats.brokers.values().next() {
+                    metrics.producer_request_latency_avg = brokers.latency.avg as f64;
+                    metrics.producer_request_latency_max = brokers.latency.max as f64;
+                }
+                
+                // Update connection metrics
+                metrics.connection_count = stats.brokers.len() as i32;
+                
+                // Update timestamp
+                metrics.last_update = Some(Utc::now());
+            }
+        }
+    }
+    
+    // TODO: Enable when reqwest is added
+    // /// Register event schema with schema registry
+    // #[cfg(feature = "kafka")]
+    // async fn register_event_schema(
+    //     &self,
+    //     event: &KafkaEvent,
+    //     schema_registry: &SchemaRegistryClient,
+    // ) -> Result<u32> {
+    //     let subject = format!("oxirs-{}-value", event.event_type);
+    //     
+    //     // Check cache first
+    //     if let Some(&schema_id) = self.schema_cache.get(&subject) {
+    //         return Ok(schema_id);
+    //     }
+    //     
+    //     // Get the appropriate schema based on event type
+    //     let schema = match event.event_type.as_str() {
+    //         "triple_added" | "triple_removed" => RdfEventSchemas::triple_event_schema(),
+    //         "graph_created" | "graph_cleared" | "graph_deleted" => RdfEventSchemas::graph_event_schema(),
+    //         "sparql_update" => RdfEventSchemas::sparql_update_schema(),
+    //         _ => return Err(anyhow!("Unknown event type for schema: {}", event.event_type)),
+    //     };
+    //     
+    //     // Register schema and get ID
+    //     let metadata = schema_registry
+    //         .register_schema(&subject, schema, SchemaType::Json, None)
+    //         .await?;
+    //     
+    //     Ok(metadata.id)
+    // }
+
     pub async fn abort_transaction(&mut self) -> Result<()> {
         #[cfg(feature = "kafka")]
         {
@@ -805,10 +940,29 @@ impl KafkaProducer {
 
     pub async fn publish(&mut self, event: StreamEvent) -> Result<()> {
         let start_time = Instant::now();
-        let kafka_event = KafkaEvent::from(event);
+        let mut kafka_event = KafkaEvent::from(event);
 
         #[cfg(feature = "kafka")]
         {
+            // Acquire send permit to limit concurrent sends
+            let _permit = self.send_semaphore.acquire().await
+                .map_err(|_| anyhow!("Failed to acquire send permit"))?;
+            
+            // Register schema if using schema registry
+            // TODO: Enable when reqwest is added
+            // if let Some(ref schema_registry) = self.schema_registry_client {
+            //     match self.register_event_schema(&kafka_event, schema_registry.as_ref()).await {
+            //         Ok(schema_id) => {
+            //             kafka_event.schema_id = Some(schema_id);
+            //             self.stats.schema_registry_calls += 1;
+            //         }
+            //         Err(e) => {
+            //             warn!("Failed to register schema: {}", e);
+            //             // Continue without schema ID
+            //         }
+            //     }
+            // }
+            
             if let Some(ref producer) = self.producer {
                 let payload = serde_json::to_string(&kafka_event)
                     .map_err(|e| anyhow!("Failed to serialize event: {}", e))?;
@@ -1049,6 +1203,11 @@ pub struct KafkaConsumer {
     #[cfg(not(feature = "kafka"))]
     _phantom: std::marker::PhantomData<()>,
     stats: ConsumerStats,
+    // TODO: Enable when reqwest is added
+    // #[cfg(feature = "kafka")]
+    // schema_registry_client: Option<Arc<SchemaRegistryClient>>,
+    metrics_collector: Option<Arc<RwLock<KafkaMetrics>>>,
+    consumer_lag_monitor: Arc<RwLock<HashMap<i32, i64>>>, // partition -> lag
 }
 
 /// Enhanced consumer configuration
@@ -1204,6 +1363,11 @@ impl KafkaConsumer {
             #[cfg(not(feature = "kafka"))]
             _phantom: std::marker::PhantomData,
             stats: ConsumerStats::default(),
+            #[cfg(feature = "kafka")]
+            // TODO: Enable when reqwest is added
+            // schema_registry_client: None,
+            metrics_collector: None,
+            consumer_lag_monitor: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 

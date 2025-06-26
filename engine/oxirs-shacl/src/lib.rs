@@ -215,6 +215,17 @@ pub struct Shape {
 
     /// Custom messages for this shape
     pub messages: IndexMap<String, String>, // language -> message
+
+    /// --- Enhanced features ---
+    
+    /// Parent shapes for inheritance (sh:extends)
+    pub extends: Vec<ShapeId>,
+
+    /// Priority for conflict resolution (higher value = higher priority)
+    pub priority: Option<i32>,
+
+    /// Additional metadata
+    pub metadata: ShapeMetadata,
 }
 
 impl Shape {
@@ -232,6 +243,9 @@ impl Shape {
             order: None,
             severity: Severity::Violation,
             messages: IndexMap::new(),
+            extends: Vec::new(),
+            priority: None,
+            metadata: ShapeMetadata::default(),
         }
     }
 
@@ -264,11 +278,92 @@ impl Shape {
     pub fn is_property_shape(&self) -> bool {
         matches!(self.shape_type, ShapeType::PropertyShape)
     }
+
+    /// Set shape inheritance
+    pub fn extends(&mut self, parent_shape_id: ShapeId) -> &mut Self {
+        self.extends.push(parent_shape_id);
+        self
+    }
+
+    /// Set shape priority
+    pub fn with_priority(&mut self, priority: i32) -> &mut Self {
+        self.priority = Some(priority);
+        self
+    }
+
+    /// Set shape metadata
+    pub fn with_metadata(&mut self, metadata: ShapeMetadata) -> &mut Self {
+        self.metadata = metadata;
+        self
+    }
+
+    /// Update metadata fields
+    pub fn update_metadata<F>(&mut self, updater: F) -> &mut Self
+    where
+        F: FnOnce(&mut ShapeMetadata),
+    {
+        updater(&mut self.metadata);
+        self
+    }
+
+    /// Get effective priority (defaults to 0 if not set)
+    pub fn effective_priority(&self) -> i32 {
+        self.priority.unwrap_or(0)
+    }
+
+    /// Check if this shape extends another shape
+    pub fn extends_shape(&self, shape_id: &ShapeId) -> bool {
+        self.extends.contains(shape_id)
+    }
+
+    /// Get all parent shape IDs
+    pub fn parent_shapes(&self) -> &[ShapeId] {
+        &self.extends
+    }
 }
 
 impl Default for Shape {
     fn default() -> Self {
         Self::new(ShapeId("default:shape".to_string()), ShapeType::NodeShape)
+    }
+}
+
+/// Shape metadata for tracking additional information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShapeMetadata {
+    /// Author of the shape
+    pub author: Option<String>,
+    
+    /// Creation timestamp
+    pub created: Option<chrono::DateTime<chrono::Utc>>,
+    
+    /// Last modification timestamp
+    pub modified: Option<chrono::DateTime<chrono::Utc>>,
+    
+    /// Version string
+    pub version: Option<String>,
+    
+    /// License information
+    pub license: Option<String>,
+    
+    /// Tags for categorization
+    pub tags: Vec<String>,
+    
+    /// Custom properties
+    pub custom: HashMap<String, String>,
+}
+
+impl Default for ShapeMetadata {
+    fn default() -> Self {
+        Self {
+            author: None,
+            created: None,
+            modified: None,
+            version: None,
+            license: None,
+            tags: Vec::new(),
+            custom: HashMap::new(),
+        }
     }
 }
 
@@ -530,6 +625,12 @@ impl Validator {
         let shape_node = self.get_or_create_shape_node(&shape_id);
         
         if let Some(shape) = self.shapes.get(&shape_id) {
+            // Add dependencies from inheritance
+            for parent_shape_id in &shape.extends {
+                let parent_node = self.get_or_create_shape_node(parent_shape_id);
+                self.shape_dependencies.add_edge(shape_node, parent_node, ());
+            }
+            
             // Find dependencies from constraints
             for (_, constraint) in &shape.constraints {
                 let dependencies = self.extract_constraint_dependencies(constraint);
@@ -624,6 +725,93 @@ impl Validator {
     /// Clear all internal caches
     pub fn clear_caches(&mut self) {
         self.target_cache.clear();
+    }
+
+    /// Resolve inherited constraints for a shape
+    pub fn resolve_inherited_constraints(&self, shape_id: &ShapeId) -> Result<IndexMap<ConstraintComponentId, Constraint>> {
+        let mut resolved_constraints = IndexMap::new();
+        let mut visited = HashSet::new();
+        
+        self.collect_inherited_constraints(shape_id, &mut resolved_constraints, &mut visited)?;
+        
+        Ok(resolved_constraints)
+    }
+    
+    /// Recursively collect constraints from a shape and its parents
+    fn collect_inherited_constraints(
+        &self,
+        shape_id: &ShapeId,
+        resolved_constraints: &mut IndexMap<ConstraintComponentId, Constraint>,
+        visited: &mut HashSet<ShapeId>,
+    ) -> Result<()> {
+        // Avoid infinite recursion
+        if visited.contains(shape_id) {
+            return Ok(());
+        }
+        visited.insert(shape_id.clone());
+        
+        if let Some(shape) = self.shapes.get(shape_id) {
+            // First process parent shapes (depth-first)
+            for parent_id in &shape.extends {
+                self.collect_inherited_constraints(parent_id, resolved_constraints, visited)?;
+            }
+            
+            // Then add this shape's constraints, potentially overriding parent constraints
+            for (component_id, constraint) in &shape.constraints {
+                resolved_constraints.insert(component_id.clone(), constraint.clone());
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Resolve shapes with priority-based conflict resolution
+    /// Returns shapes sorted by priority (highest first)
+    pub fn resolve_shapes_by_priority(&self, shape_ids: &[ShapeId]) -> Vec<&Shape> {
+        let mut shapes: Vec<&Shape> = shape_ids
+            .iter()
+            .filter_map(|id| self.shapes.get(id))
+            .collect();
+        
+        // Sort by priority (highest first), then by ID for stability
+        shapes.sort_by(|a, b| {
+            b.effective_priority()
+                .cmp(&a.effective_priority())
+                .then_with(|| a.id.as_str().cmp(b.id.as_str()))
+        });
+        
+        shapes
+    }
+    
+    /// Get all shapes that a given shape inherits from (transitively)
+    pub fn get_all_parent_shapes(&self, shape_id: &ShapeId) -> Result<Vec<ShapeId>> {
+        let mut parents = Vec::new();
+        let mut visited = HashSet::new();
+        
+        self.collect_parent_shapes(shape_id, &mut parents, &mut visited)?;
+        
+        Ok(parents)
+    }
+    
+    fn collect_parent_shapes(
+        &self,
+        shape_id: &ShapeId,
+        parents: &mut Vec<ShapeId>,
+        visited: &mut HashSet<ShapeId>,
+    ) -> Result<()> {
+        if visited.contains(shape_id) {
+            return Ok(());
+        }
+        visited.insert(shape_id.clone());
+        
+        if let Some(shape) = self.shapes.get(shape_id) {
+            for parent_id in &shape.extends {
+                parents.push(parent_id.clone());
+                self.collect_parent_shapes(parent_id, parents, visited)?;
+            }
+        }
+        
+        Ok(())
     }
 
     /// Get validation statistics

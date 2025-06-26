@@ -10,13 +10,13 @@ fn simple_triple_strategy() -> impl Strategy<Value = StarTriple> {
         prop::string::string_regex("http://example.org/[a-z]+").unwrap(),
         prop_oneof![
             prop::string::string_regex("http://example.org/[a-z]+[0-9]*").unwrap()
-                .prop_map(|s| (s, None, None)),
+                .prop_map(|s| (s, None::<String>, None::<String>)),
             prop::string::string_regex("[a-zA-Z0-9]+").unwrap()
-                .prop_map(|s| (s, None, None)),
+                .prop_map(|s| (s, None::<String>, None::<String>)),
             (
                 prop::string::string_regex("[a-zA-Z0-9]+").unwrap(),
                 prop::string::string_regex("[a-z]{2}").unwrap()
-            ).prop_map(|(val, lang)| (val, Some(lang), None)),
+            ).prop_map(|(val, lang)| (val, Some(lang), None::<String>)),
         ]
     ).prop_map(|(subj, pred, (obj_val, lang, dt))| {
         let subject = StarTerm::iri(&subj).unwrap();
@@ -132,7 +132,7 @@ mod tests {
                 s_pattern.as_ref(),
                 p_pattern.as_ref(),
                 o_pattern.as_ref()
-            );
+            ).unwrap();
             
             // All results should match the pattern
             for result in &results {

@@ -23,6 +23,7 @@
 //! # }
 //! ```
 
+pub mod concurrent;
 pub mod distributed;
 pub mod graph;
 pub mod indexing;
@@ -47,7 +48,7 @@ pub use model::*;
 pub use rdf_store::Store;
 
 /// Core error type for OxiRS operations
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum OxirsError {
     #[error("Store error: {0}")]
     Store(String),
@@ -58,7 +59,13 @@ pub enum OxirsError {
     #[error("Serialization error: {0}")]
     Serialize(String),
     #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
+    Io(String),
+}
+
+impl From<std::io::Error> for OxirsError {
+    fn from(err: std::io::Error) -> Self {
+        OxirsError::Io(err.to_string())
+    }
 }
 
 // Additional error conversions

@@ -1,8 +1,10 @@
 //! CLI configuration management
 
 pub mod manager;
+pub mod secrets;
 
 pub use manager::{ConfigManager, OxideConfig};
+pub use secrets::{SecretManager, SecretBackend};
 
 /// CLI-specific configuration (legacy compatibility)
 pub struct CliConfig {

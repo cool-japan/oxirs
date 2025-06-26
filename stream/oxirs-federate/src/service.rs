@@ -278,10 +278,89 @@ impl ServiceRegistry {
         
         if response.status().is_success() {
             // Parse statistics and update extended metadata
+            let json: serde_json::Value = response.json().await?;
+            
             if let Some(service) = self.services.get_mut(service_id) {
                 if let Some(ref mut extended) = service.extended_metadata {
-                    // TODO: Parse actual response and update dataset_stats
+                    // Parse SPARQL JSON results
+                    if let Some(results) = json.get("results")
+                        .and_then(|r| r.get("bindings"))
+                        .and_then(|b| b.as_array())
+                        .and_then(|a| a.first()) 
+                    {
+                        if let Some(total) = results.get("totalTriples")
+                            .and_then(|v| v.get("value"))
+                            .and_then(|v| v.as_str())
+                            .and_then(|s| s.parse::<u64>().ok()) 
+                        {
+                            extended.dataset_stats.triple_count = Some(total);
+                        }
+                        
+                        if let Some(subjects) = results.get("subjects")
+                            .and_then(|v| v.get("value"))
+                            .and_then(|v| v.as_str())
+                            .and_then(|s| s.parse::<u64>().ok()) 
+                        {
+                            extended.dataset_stats.subject_count = Some(subjects);
+                        }
+                        
+                        if let Some(predicates) = results.get("predicates")
+                            .and_then(|v| v.get("value"))
+                            .and_then(|v| v.as_str())
+                            .and_then(|s| s.parse::<u64>().ok()) 
+                        {
+                            extended.dataset_stats.predicate_count = Some(predicates);
+                        }
+                        
+                        if let Some(objects) = results.get("objects")
+                            .and_then(|v| v.get("value"))
+                            .and_then(|v| v.as_str())
+                            .and_then(|s| s.parse::<u64>().ok()) 
+                        {
+                            extended.dataset_stats.object_count = Some(objects);
+                        }
+                        
+                        extended.dataset_stats.last_modified = Some(chrono::Utc::now());
+                    }
+                    
                     debug!("Updated dataset statistics for service: {}", service_id);
+                }
+            }
+        }
+        
+        // Also try to get named graphs
+        let graphs_query = "SELECT DISTINCT ?g WHERE { GRAPH ?g { ?s ?p ?o } } LIMIT 100";
+        if let Ok(graphs_response) = self
+            .http_client
+            .post(&service.endpoint)
+            .headers(headers.clone())
+            .body(graphs_query)
+            .send()
+            .await
+        {
+            if graphs_response.status().is_success() {
+                if let Ok(json) = graphs_response.json::<serde_json::Value>().await {
+                    if let Some(service) = self.services.get_mut(service_id) {
+                        if let Some(ref mut extended) = service.extended_metadata {
+                            if let Some(results) = json.get("results")
+                                .and_then(|r| r.get("bindings"))
+                                .and_then(|b| b.as_array())
+                            {
+                                extended.dataset_stats.named_graphs = results.iter()
+                                    .filter_map(|binding| {
+                                        binding.get("g")
+                                            .and_then(|v| v.get("value"))
+                                            .and_then(|v| v.as_str())
+                                            .map(|uri| crate::metadata::NamedGraphInfo {
+                                                uri: uri.to_string(),
+                                                triple_count: None,
+                                                description: None,
+                                            })
+                                    })
+                                    .collect();
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -462,6 +541,43 @@ impl ServiceRegistry {
                 {
                     detected_capabilities.insert(ServiceCapability::SparqlService);
                 }
+                
+                // Test SPARQL 1.1 Extended Features
+                if self.test_sparql_feature(service, "SELECT (COUNT(*) as ?count) WHERE { ?s ?p ?o }").await {
+                    detected_capabilities.insert(ServiceCapability::SparqlAggregation);
+                }
+                
+                if self.test_sparql_feature(service, "SELECT ?s WHERE { ?s ?p ?o { SELECT ?s WHERE { ?s a ?type } LIMIT 10 } }").await {
+                    detected_capabilities.insert(ServiceCapability::SparqlSubqueries);
+                }
+                
+                if self.test_sparql_feature(service, "SELECT ?s WHERE { ?s ?p ?o . FILTER NOT EXISTS { ?s a ?type } }").await {
+                    detected_capabilities.insert(ServiceCapability::SparqlNegation);
+                }
+                
+                if self.test_sparql_feature(service, "SELECT ?s ?o WHERE { ?s (<http://example.org/p1>|<http://example.org/p2>)+ ?o }").await {
+                    detected_capabilities.insert(ServiceCapability::SparqlPropertyPaths);
+                }
+                
+                if self.test_sparql_feature(service, "SELECT ?s ?p ?o WHERE { ?s ?p ?o } GROUP BY ?p").await {
+                    detected_capabilities.insert(ServiceCapability::SparqlGroupBy);
+                }
+                
+                // Test SPARQL 1.2 Features (if available)
+                if self.test_sparql_feature(service, "SELECT ?s WHERE { VALUES ?s { <http://example.org/1> <http://example.org/2> } ?s ?p ?o }").await {
+                    detected_capabilities.insert(ServiceCapability::SparqlValues);
+                }
+                
+                // Test RDF-star support
+                if self.test_sparql_feature(service, "SELECT ?s ?p ?o WHERE { << ?s ?p ?o >> ?m ?v }").await {
+                    detected_capabilities.insert(ServiceCapability::RDFStar);
+                }
+                
+                // Test reasoning capabilities
+                if self.test_sparql_feature(service, "SELECT ?s WHERE { ?s a ?class . ?class rdfs:subClassOf ?super }").await {
+                    // If this works without explicit subClassOf triples, reasoning is likely enabled
+                    detected_capabilities.insert(ServiceCapability::RDFSReasoning);
+                }
             }
             ServiceType::GraphQL => {
                 // Test GraphQL introspection and mutations
@@ -589,6 +705,155 @@ impl ServiceRegistry {
         }
 
         stats
+    }
+    
+    /// Collect vocabulary information for a SPARQL service
+    pub async fn collect_vocabulary_info(&mut self, service_id: &str) -> Result<()> {
+        let service = self
+            .services
+            .get(service_id)
+            .ok_or_else(|| anyhow!("Service {} not found", service_id))?
+            .clone();
+        
+        if service.service_type != ServiceType::Sparql && service.service_type != ServiceType::Hybrid {
+            return Err(anyhow!("Service {} does not support SPARQL", service_id));
+        }
+        
+        // Query to get vocabulary/ontology URIs
+        let vocab_query = r#"
+            SELECT DISTINCT ?vocab WHERE {
+                {
+                    ?s ?p ?o .
+                    BIND(REPLACE(STR(?p), "(#|/)[^#/]*$", "$1") AS ?vocab)
+                }
+                UNION
+                {
+                    ?s a ?class .
+                    BIND(REPLACE(STR(?class), "(#|/)[^#/]*$", "$1") AS ?vocab)
+                }
+                FILTER(REGEX(?vocab, "^https?://"))
+            }
+            LIMIT 100
+        "#;
+        
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/sparql-query"),
+        );
+        headers.insert(
+            ACCEPT,
+            HeaderValue::from_static("application/sparql-results+json"),
+        );
+        
+        if let Some(auth) = &service.auth {
+            self.add_auth_header(&mut headers, auth)?;
+        }
+        
+        let response = self
+            .http_client
+            .post(&service.endpoint)
+            .headers(headers.clone())
+            .body(vocab_query)
+            .send()
+            .await?;
+        
+        if response.status().is_success() {
+            let json: serde_json::Value = response.json().await?;
+            
+            if let Some(service) = self.services.get_mut(service_id) {
+                if let Some(ref mut extended) = service.extended_metadata {
+                    if let Some(results) = json.get("results")
+                        .and_then(|r| r.get("bindings"))
+                        .and_then(|b| b.as_array())
+                    {
+                        let vocabs: HashSet<String> = results.iter()
+                            .filter_map(|binding| {
+                                binding.get("vocab")
+                                    .and_then(|v| v.get("value"))
+                                    .and_then(|v| v.as_str())
+                                    .map(|s| s.to_string())
+                            })
+                            .collect();
+                        
+                        extended.dataset_stats.vocabularies = vocabs.into_iter().collect();
+                    }
+                }
+            }
+        }
+        
+        // Also collect language tags
+        let lang_query = r#"
+            SELECT DISTINCT (LANG(?o) AS ?lang) WHERE {
+                ?s ?p ?o .
+                FILTER(isLiteral(?o) && LANG(?o) != "")
+            }
+            LIMIT 50
+        "#;
+        
+        let lang_response = self
+            .http_client
+            .post(&service.endpoint)
+            .headers(headers)
+            .body(lang_query)
+            .send()
+            .await?;
+        
+        if lang_response.status().is_success() {
+            let json: serde_json::Value = lang_response.json().await?;
+            
+            if let Some(service) = self.services.get_mut(service_id) {
+                if let Some(ref mut extended) = service.extended_metadata {
+                    if let Some(results) = json.get("results")
+                        .and_then(|r| r.get("bindings"))
+                        .and_then(|b| b.as_array())
+                    {
+                        extended.dataset_stats.languages = results.iter()
+                            .filter_map(|binding| {
+                                binding.get("lang")
+                                    .and_then(|v| v.get("value"))
+                                    .and_then(|v| v.as_str())
+                                    .map(|s| s.to_string())
+                            })
+                            .collect();
+                    }
+                }
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Perform comprehensive service assessment including extended metadata
+    pub async fn assess_service_comprehensively(&mut self, service_id: &str) -> Result<()> {
+        info!("Performing comprehensive assessment for service: {}", service_id);
+        
+        // Enable extended metadata if not already enabled
+        self.enable_extended_metadata(service_id).await?;
+        
+        // Collect dataset statistics
+        if let Err(e) = self.collect_dataset_statistics(service_id).await {
+            warn!("Failed to collect dataset statistics: {}", e);
+        }
+        
+        // Collect vocabulary information
+        if let Err(e) = self.collect_vocabulary_info(service_id).await {
+            warn!("Failed to collect vocabulary info: {}", e);
+        }
+        
+        // Update capabilities with more detailed detection
+        let service = self.services.get(service_id)
+            .ok_or_else(|| anyhow!("Service {} not found", service_id))?
+            .clone();
+        
+        let detected_capabilities = self.detect_service_capabilities(&service).await?;
+        
+        if let Some(service) = self.services.get_mut(service_id) {
+            service.capabilities.extend(detected_capabilities);
+        }
+        
+        info!("Comprehensive assessment completed for service: {}", service_id);
+        Ok(())
     }
 
     /// Check rate limits for a service
@@ -746,12 +1011,34 @@ pub enum ServiceType {
 /// Service capabilities
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ServiceCapability {
+    // SPARQL 1.1 Core Features
     SparqlQuery,
     SparqlUpdate,
     SparqlService, // Can handle SERVICE clauses
+    
+    // SPARQL 1.1 Extended Features
+    SparqlAggregation,
+    SparqlSubqueries,
+    SparqlNegation,
+    SparqlPropertyPaths,
+    SparqlAssignment,
+    SparqlGroupBy,
+    SparqlFederatedExtensions,
+    
+    // SPARQL 1.2 Features (when available)
+    SparqlValues,
+    SparqlExistsNotExists,
+    SparqlLateralJoin,
+    SparqlWindowFunctions,
+    
+    // GraphQL Features
     GraphQLQuery,
     GraphQLMutation,
     GraphQLSubscription,
+    GraphQLFederation,
+    GraphQLDataLoader,
+    
+    // Advanced Features
     Federation, // Can participate in federation
     Caching,
     Authentication,
@@ -760,6 +1047,20 @@ pub enum ServiceCapability {
     Analytics,
     FullTextSearch,
     Geospatial,
+    VectorSearch,
+    TemporalQueries,
+    
+    // Reasoning & Validation
+    RDFSReasoning,
+    OWLReasoning,
+    SHACLValidation,
+    RuleProcessing,
+    
+    // Format Support
+    RDFStar,
+    NQuads,
+    JSONLDContext,
+    HDT,
 }
 
 /// Authentication configuration for services

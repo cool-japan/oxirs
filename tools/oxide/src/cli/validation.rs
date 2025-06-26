@@ -5,6 +5,7 @@
 use super::error::{CliError, CliResult};
 use regex::Regex;
 use std::path::Path;
+use std::collections::HashMap;
 use url::Url;
 
 /// Argument validator with chainable validation methods
@@ -262,7 +263,7 @@ impl MultiValidator {
     }
 
     /// Add a validator
-    pub fn add<'a>(&mut self, validator: ArgumentValidator<'a>) -> &mut Self {
+    pub fn add(&mut self, validator: ArgumentValidator<'_>) -> &mut Self {
         let errors = validator.errors();
         self.errors.extend(errors);
         self
@@ -358,5 +359,340 @@ mod tests {
         
         let result = validator.finish();
         assert!(result.is_err());
+    }
+}
+
+/// Advanced validation context for complex validation scenarios
+pub struct ValidationContext {
+    pub environment: HashMap<String, String>,
+    pub dependencies: HashMap<String, Vec<String>>,
+    pub mutually_exclusive: Vec<Vec<String>>,
+    pub required_together: Vec<Vec<String>>,
+}
+
+impl ValidationContext {
+    pub fn new() -> Self {
+        Self {
+            environment: std::env::vars().collect(),
+            dependencies: HashMap::new(),
+            mutually_exclusive: Vec::new(),
+            required_together: Vec::new(),
+        }
+    }
+
+    /// Add dependency: if arg1 is present, arg2 must also be present
+    pub fn add_dependency(&mut self, arg: &str, depends_on: &str) {
+        self.dependencies
+            .entry(arg.to_string())
+            .or_default()
+            .push(depends_on.to_string());
+    }
+
+    /// Add mutually exclusive group
+    pub fn add_mutually_exclusive(&mut self, args: Vec<&str>) {
+        self.mutually_exclusive.push(
+            args.into_iter().map(|s| s.to_string()).collect()
+        );
+    }
+
+    /// Add required together group
+    pub fn add_required_together(&mut self, args: Vec<&str>) {
+        self.required_together.push(
+            args.into_iter().map(|s| s.to_string()).collect()
+        );
+    }
+
+    /// Validate argument dependencies
+    pub fn validate_dependencies(&self, present_args: &[&str]) -> CliResult<()> {
+        let mut errors = Vec::new();
+
+        // Check dependencies
+        for arg in present_args {
+            if let Some(deps) = self.dependencies.get(*arg) {
+                for dep in deps {
+                    if !present_args.contains(&dep.as_str()) {
+                        errors.push(format!(
+                            "--{} requires --{} to be specified",
+                            arg, dep
+                        ));
+                    }
+                }
+            }
+        }
+
+        // Check mutually exclusive
+        for group in &self.mutually_exclusive {
+            let present_in_group: Vec<_> = group
+                .iter()
+                .filter(|arg| present_args.contains(&arg.as_str()))
+                .collect();
+            
+            if present_in_group.len() > 1 {
+                errors.push(format!(
+                    "The following arguments cannot be used together: {}",
+                    present_in_group.iter().map(|s| format!("--{}", s)).collect::<Vec<_>>().join(", ")
+                ));
+            }
+        }
+
+        // Check required together
+        for group in &self.required_together {
+            let present_in_group: Vec<_> = group
+                .iter()
+                .filter(|arg| present_args.contains(&arg.as_str()))
+                .collect();
+            
+            if !present_in_group.is_empty() && present_in_group.len() != group.len() {
+                let missing: Vec<_> = group
+                    .iter()
+                    .filter(|arg| !present_args.contains(&arg.as_str()))
+                    .collect();
+                
+                errors.push(format!(
+                    "When using --{}, you must also specify: {}",
+                    present_in_group[0],
+                    missing.iter().map(|s| format!("--{}", s)).collect::<Vec<_>>().join(", ")
+                ));
+            }
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(CliError::invalid_arguments(errors.join("\n")))
+        }
+    }
+}
+
+/// File system validation utilities
+pub mod fs_validation {
+    use super::*;
+    use std::fs;
+
+    /// Validate that a path is writable
+    pub fn validate_writable_path(path: &Path) -> CliResult<()> {
+        if path.exists() {
+            // Check if we can write to existing file/directory
+            let metadata = fs::metadata(path)
+                .map_err(|e| CliError::io_error(e)
+                    .with_context(format!("Cannot access path: {}", path.display())))?;
+            
+            if metadata.permissions().readonly() {
+                return Err(CliError::invalid_arguments(
+                    format!("Path is read-only: {}", path.display())
+                ));
+            }
+        } else {
+            // Check if we can create in parent directory
+            if let Some(parent) = path.parent() {
+                if parent.exists() && !parent.is_dir() {
+                    return Err(CliError::invalid_arguments(
+                        format!("Parent path is not a directory: {}", parent.display())
+                    ));
+                }
+                
+                if parent.exists() {
+                    let parent_metadata = fs::metadata(parent)
+                        .map_err(|e| CliError::io_error(e)
+                            .with_context(format!("Cannot access parent directory: {}", parent.display())))?;
+                    
+                    if parent_metadata.permissions().readonly() {
+                        return Err(CliError::invalid_arguments(
+                            format!("Parent directory is read-only: {}", parent.display())
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Validate that a file has expected extension
+    pub fn validate_file_extension(path: &Path, valid_extensions: &[&str]) -> CliResult<()> {
+        let extension = path.extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("");
+        
+        if !valid_extensions.iter().any(|&ext| ext == extension) {
+            return Err(CliError::invalid_arguments(
+                format!(
+                    "Invalid file extension '{}'. Expected one of: {}",
+                    extension,
+                    valid_extensions.join(", ")
+                )
+            ).with_suggestion(format!(
+                "Use a file with extension: {}",
+                valid_extensions.join(" or ")
+            )));
+        }
+        Ok(())
+    }
+
+    /// Validate file size constraints
+    pub fn validate_file_size(path: &Path, max_size: Option<u64>) -> CliResult<()> {
+        if let Some(max) = max_size {
+            let metadata = fs::metadata(path)
+                .map_err(|e| CliError::io_error(e)
+                    .with_context(format!("Cannot access file: {}", path.display())))?;
+            
+            if metadata.len() > max {
+                return Err(CliError::invalid_arguments(
+                    format!(
+                        "File too large: {} bytes (max: {} bytes)",
+                        metadata.len(),
+                        max
+                    )
+                ).with_suggestion("Use a smaller file or increase the limit"));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Dataset validation utilities
+pub mod dataset_validation {
+    use super::*;
+
+    /// Validate dataset name format
+    pub fn validate_dataset_name(name: &str) -> CliResult<()> {
+        if name.is_empty() {
+            return Err(CliError::invalid_arguments("Dataset name cannot be empty"));
+        }
+
+        // Check for valid characters
+        let valid_pattern = Regex::new(r"^[a-zA-Z0-9_-]+$").unwrap();
+        if !valid_pattern.is_match(name) {
+            return Err(CliError::invalid_arguments(
+                format!("Invalid dataset name: '{}'. Must contain only letters, numbers, underscores, and hyphens", name)
+            ));
+        }
+
+        // Check length
+        if name.len() > 255 {
+            return Err(CliError::invalid_arguments(
+                "Dataset name too long (max 255 characters)"
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Validate graph URI
+    pub fn validate_graph_uri(uri: &str) -> CliResult<()> {
+        if uri == "default" || uri.is_empty() {
+            return Ok(()); // Default graph is valid
+        }
+
+        validate_iri(uri).map_err(|e| {
+            CliError::invalid_arguments(format!("Invalid graph URI: {}", e))
+                .with_suggestion("Use 'default' for the default graph or a valid IRI")
+        })
+    }
+}
+
+/// Query validation utilities
+pub mod query_validation {
+    use super::*;
+
+    /// Basic SPARQL query syntax validation
+    pub fn validate_sparql_syntax(query: &str) -> CliResult<()> {
+        if query.trim().is_empty() {
+            return Err(CliError::invalid_arguments("Query cannot be empty"));
+        }
+
+        // Check for basic SPARQL keywords
+        let query_upper = query.to_uppercase();
+        let has_valid_keyword = ["SELECT", "CONSTRUCT", "DESCRIBE", "ASK"]
+            .iter()
+            .any(|&kw| query_upper.contains(kw));
+
+        if !has_valid_keyword {
+            return Err(CliError::invalid_arguments(
+                "Query must contain SELECT, CONSTRUCT, DESCRIBE, or ASK"
+            ).with_suggestion("Check your SPARQL query syntax"));
+        }
+
+        Ok(())
+    }
+
+    /// Basic SPARQL update syntax validation
+    pub fn validate_sparql_update_syntax(update: &str) -> CliResult<()> {
+        if update.trim().is_empty() {
+            return Err(CliError::invalid_arguments("Update cannot be empty"));
+        }
+
+        // Check for basic SPARQL Update keywords
+        let update_upper = update.to_uppercase();
+        let has_valid_keyword = [
+            "INSERT", "DELETE", "LOAD", "CLEAR", "CREATE", 
+            "DROP", "COPY", "MOVE", "ADD"
+        ]
+        .iter()
+        .any(|&kw| update_upper.contains(kw));
+
+        if !has_valid_keyword {
+            return Err(CliError::invalid_arguments(
+                "Update must contain valid SPARQL Update operation"
+            ).with_suggestion("Valid operations: INSERT, DELETE, LOAD, CLEAR, CREATE, DROP, COPY, MOVE, ADD"));
+        }
+
+        Ok(())
+    }
+}
+
+/// Environment-aware validation
+pub mod env_validation {
+    use super::*;
+
+    /// Validate based on environment variables
+    pub fn validate_with_env(name: &str, value: Option<&str>) -> Option<String> {
+        if value.is_some() {
+            return value.map(|s| s.to_string());
+        }
+
+        // Try to get from environment
+        std::env::var(format!("OXIDE_{}", name.to_uppercase())).ok()
+    }
+
+    /// Check if running in production mode
+    pub fn is_production() -> bool {
+        std::env::var("OXIDE_ENV")
+            .unwrap_or_else(|_| "development".to_string())
+            .to_lowercase() == "production"
+    }
+
+    /// Validate production requirements
+    pub fn validate_production_config() -> CliResult<()> {
+        if !is_production() {
+            return Ok(());
+        }
+
+        let mut errors = Vec::new();
+
+        // Check required production environment variables
+        let required_vars = ["OXIDE_SECRET_KEY", "OXIDE_DATABASE_URL"];
+        for var in &required_vars {
+            if std::env::var(var).is_err() {
+                errors.push(format!("{} must be set in production", var));
+            }
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(CliError::invalid_arguments(errors.join("\n"))
+                .with_context("Production configuration validation failed"))
+        }
+    }
+}
+impl Default for ValidationContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Default for MultiValidator {
+    fn default() -> Self {
+        Self::new()
     }
 }

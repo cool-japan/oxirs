@@ -523,6 +523,7 @@ impl StarSerializer {
 mod tests {
     use super::*;
     use crate::model::StarTerm;
+    use crate::parser::StarParser;
 
     #[test]
     fn test_simple_triple_serialization() {

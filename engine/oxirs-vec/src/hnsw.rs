@@ -353,6 +353,143 @@ impl VectorIndex for HnswIndex {
     }
 }
 
+impl HnswIndex {
+    /// Delete a node from the index by URI
+    pub fn delete(&mut self, uri: &str) -> Result<bool> {
+        // Find the node ID for the given URI
+        let node_id = match self.uri_to_id.get(uri) {
+            Some(&id) => id,
+            None => return Ok(false), // URI not found
+        };
+
+        // Remove from URI mapping
+        self.uri_to_id.remove(uri);
+
+        // Handle entry point update if we're deleting the entry point
+        if self.entry_point == Some(node_id) {
+            // Find a new entry point from remaining nodes
+            self.entry_point = self.nodes.iter().enumerate()
+                .filter(|(id, node)| *id != node_id && !node.connections.is_empty())
+                .map(|(id, _)| id)
+                .next();
+        }
+
+        // Remove all connections to this node from other nodes
+        for layer in 0..self.nodes[node_id].connections.len() {
+            let connections = self.nodes[node_id].connections[layer].clone();
+            for &connected_id in &connections {
+                if connected_id < self.nodes.len() && layer < self.nodes[connected_id].connections.len() {
+                    self.nodes[connected_id].connections[layer].remove(&node_id);
+                }
+            }
+        }
+
+        // Mark the node as deleted (we don't actually remove it to keep indices stable)
+        // Instead, we clear its connections and mark it with an empty URI
+        self.nodes[node_id].uri.clear();
+        for connections in &mut self.nodes[node_id].connections {
+            connections.clear();
+        }
+
+        // Update URI mappings for nodes with IDs greater than the deleted node
+        // (Not needed since we're not physically removing the node)
+
+        Ok(true)
+    }
+
+    /// Get the number of active (non-deleted) nodes in the index
+    pub fn active_nodes(&self) -> usize {
+        self.uri_to_id.len()
+    }
+
+    /// Optimize the index by removing deleted nodes and reindexing
+    pub fn optimize(&mut self) -> Result<()> {
+        // Create mapping from old indices to new indices
+        let mut old_to_new: HashMap<usize, usize> = HashMap::new();
+        let mut new_nodes = Vec::new();
+        let mut new_uri_to_id = HashMap::new();
+
+        // Copy active nodes and build mapping
+        for (old_id, node) in self.nodes.iter().enumerate() {
+            if !node.uri.is_empty() {
+                let new_id = new_nodes.len();
+                old_to_new.insert(old_id, new_id);
+                new_uri_to_id.insert(node.uri.clone(), new_id);
+                new_nodes.push(node.clone());
+            }
+        }
+
+        // Update connections with new indices
+        for node in &mut new_nodes {
+            for layer_connections in &mut node.connections {
+                let updated_connections: HashSet<usize> = layer_connections
+                    .iter()
+                    .filter_map(|&old_id| old_to_new.get(&old_id).copied())
+                    .collect();
+                *layer_connections = updated_connections;
+            }
+        }
+
+        // Update entry point
+        self.entry_point = self.entry_point.and_then(|old_ep| old_to_new.get(&old_ep).copied());
+
+        // Replace with optimized structures
+        self.nodes = new_nodes;
+        self.uri_to_id = new_uri_to_id;
+
+        Ok(())
+    }
+
+    /// Get statistics about the index
+    pub fn stats(&self) -> HnswStats {
+        let total_nodes = self.nodes.len();
+        let active_nodes = self.active_nodes();
+        let deleted_nodes = total_nodes - active_nodes;
+        
+        let mut total_connections = 0;
+        let mut max_level = 0;
+        
+        for node in &self.nodes {
+            if !node.uri.is_empty() {
+                for (level, connections) in node.connections.iter().enumerate() {
+                    total_connections += connections.len();
+                    if !connections.is_empty() && level > max_level {
+                        max_level = level;
+                    }
+                }
+            }
+        }
+        
+        let avg_connections = if active_nodes > 0 {
+            total_connections as f64 / active_nodes as f64
+        } else {
+            0.0
+        };
+        
+        HnswStats {
+            total_nodes,
+            active_nodes,
+            deleted_nodes,
+            total_connections,
+            avg_connections,
+            max_level,
+            entry_point: self.entry_point,
+        }
+    }
+}
+
+/// Statistics about the HNSW index
+#[derive(Debug, Clone)]
+pub struct HnswStats {
+    pub total_nodes: usize,
+    pub active_nodes: usize,
+    pub deleted_nodes: usize,
+    pub total_connections: usize,
+    pub avg_connections: f64,
+    pub max_level: usize,
+    pub entry_point: Option<usize>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

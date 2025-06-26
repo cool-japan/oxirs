@@ -3,7 +3,6 @@
 //! Validates RDF data against SHACL (Shapes Constraint Language) shapes.
 
 use super::{utils, ToolResult, ToolStats};
-use std::fs;
 use std::path::PathBuf;
 
 /// Run SHACL validation

@@ -39,6 +39,12 @@ regex = "1.10"      # Pattern matching for validation
 url = "2.5"         # URL parsing and validation
 dirs = "5.0"        # Platform-specific directories
 clap_complete = "4.5"  # Shell completion support
+textwrap = "0.16"   # Text wrapping for help
+unicode-width = "0.1"  # Unicode text width
+terminal_size = "0.3"  # Terminal dimensions
+shlex = "1.3"       # Shell-like parsing
+ring = "0.17"       # Cryptography for secrets
+chrono = { version = "0.4", features = ["serde"] }  # Date/time handling
 
 [dev-dependencies]
 criterion.workspace = true

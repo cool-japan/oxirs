@@ -1,7 +1,5 @@
 //! CLI command implementations
 
-use std::path::PathBuf;
-
 pub mod benchmark;
 pub mod config;
 pub mod export;

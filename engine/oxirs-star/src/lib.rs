@@ -39,17 +39,12 @@
 //! # }
 //! ```
 
-use std::collections::HashMap;
-use std::fmt;
-use std::hash::{Hash, Hasher};
-use std::str::FromStr;
-
-use anyhow::{Context, Result};
-use oxirs_core::{OxirsError, Result as CoreResult};
+use oxirs_core::OxirsError;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tracing::{debug, error, info, span, Level};
+use tracing::{debug, info, span, Level};
 
+pub mod functions;
 pub mod model;
 pub mod parser;
 pub mod query;

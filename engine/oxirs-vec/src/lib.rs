@@ -34,14 +34,24 @@
 
 use anyhow::Result;
 
+pub mod advanced_metrics;
+pub mod compression;
 pub mod embeddings;
+pub mod embedding_pipeline;
 pub mod hnsw;
 pub mod index;
 pub mod similarity;
+pub mod sparse;
 pub mod sparql_integration;
+pub mod structured_vectors;
 
 // Re-export commonly used types
+pub use compression::{CompressionMethod, VectorCompressor, create_compressor};
 pub use embeddings::{EmbeddableContent, EmbeddingConfig, EmbeddingManager, EmbeddingStrategy};
+pub use embedding_pipeline::{
+    EmbeddingPipeline, PreprocessingPipeline, PostprocessingPipeline,
+    TokenizerConfig, NormalizationConfig, VectorNormalization, DimensionalityReduction,
+};
 pub use hnsw::{HnswConfig, HnswIndex};
 pub use index::{AdvancedVectorIndex, DistanceMetric, IndexConfig, IndexType, SearchResult};
 pub use similarity::{AdaptiveSimilarity, SemanticSimilarity, SimilarityConfig, SimilarityMetric};
@@ -49,9 +59,14 @@ pub use sparql_integration::{
     HybridQuery, SparqlVectorService, VectorOperation, VectorQueryBuilder, VectorServiceConfig,
     VectorServiceRegistry,
 };
+pub use sparse::{SparseVector, CSRMatrix, COOMatrix};
+pub use structured_vectors::{
+    NamedDimensionVector, HierarchicalVector, TemporalVector, WeightedDimensionVector,
+    ConfidenceScoredVector,
+};
 
 /// Precision types for vectors
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum VectorPrecision {
     F32,
     F64,
@@ -61,7 +76,7 @@ pub enum VectorPrecision {
 }
 
 /// Multi-precision vector with enhanced functionality
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Vector {
     pub dimensions: usize,
     pub precision: VectorPrecision,
@@ -70,7 +85,7 @@ pub struct Vector {
 }
 
 /// Vector data storage supporting multiple precisions
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum VectorData {
     F32(Vec<f32>),
     F64(Vec<f64>),
@@ -289,6 +304,70 @@ impl Vector {
             .map(|(a, b)| (a - b).powi(2))
             .sum::<f32>()
             .sqrt();
+
+        Ok(distance)
+    }
+
+    /// Calculate Manhattan distance (L1 norm) to another vector
+    pub fn manhattan_distance(&self, other: &Vector) -> Result<f32> {
+        if self.dimensions != other.dimensions {
+            return Err(anyhow::anyhow!("Vector dimensions must match"));
+        }
+
+        let self_f32 = self.as_f32();
+        let other_f32 = other.as_f32();
+
+        let distance = self_f32
+            .iter()
+            .zip(&other_f32)
+            .map(|(a, b)| (a - b).abs())
+            .sum();
+
+        Ok(distance)
+    }
+
+    /// Calculate Minkowski distance (general Lp norm) to another vector
+    pub fn minkowski_distance(&self, other: &Vector, p: f32) -> Result<f32> {
+        if self.dimensions != other.dimensions {
+            return Err(anyhow::anyhow!("Vector dimensions must match"));
+        }
+
+        if p <= 0.0 {
+            return Err(anyhow::anyhow!("p must be positive"));
+        }
+
+        let self_f32 = self.as_f32();
+        let other_f32 = other.as_f32();
+
+        if p == f32::INFINITY {
+            // Special case: Chebyshev distance
+            return self.chebyshev_distance(other);
+        }
+
+        let distance = self_f32
+            .iter()
+            .zip(&other_f32)
+            .map(|(a, b)| (a - b).abs().powf(p))
+            .sum::<f32>()
+            .powf(1.0 / p);
+
+        Ok(distance)
+    }
+
+    /// Calculate Chebyshev distance (L∞ norm) to another vector
+    pub fn chebyshev_distance(&self, other: &Vector) -> Result<f32> {
+        if self.dimensions != other.dimensions {
+            return Err(anyhow::anyhow!("Vector dimensions must match"));
+        }
+
+        let self_f32 = self.as_f32();
+        let other_f32 = other.as_f32();
+
+        let distance = self_f32
+            .iter()
+            .zip(&other_f32)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, |max, val| max.max(val));
 
         Ok(distance)
     }
@@ -757,6 +836,21 @@ pub enum VectorError {
 
     #[error("SPARQL service error: {message}")]
     SparqlServiceError { message: String },
+
+    #[error("Compression error: {0}")]
+    CompressionError(String),
+
+    #[error("Invalid dimensions: {0}")]
+    InvalidDimensions(String),
+
+    #[error("Unsupported operation: {0}")]
+    UnsupportedOperation(String),
+
+    #[error("Invalid data: {0}")]
+    InvalidData(String),
+
+    #[error("IO error: {0}")]
+    IoError(#[from] std::io::Error),
 }
 
 /// Utility functions for vector operations

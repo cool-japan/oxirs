@@ -115,8 +115,8 @@ impl DeltaComputer {
                 StreamEvent::TransactionBegin { .. } |
                 StreamEvent::TransactionCommit { .. } |
                 StreamEvent::TransactionAbort { .. } |
-                StreamEvent::ConnectionError { .. } |
-                StreamEvent::ReaderMessage { .. } => {
+                StreamEvent::SchemaChanged { .. } |
+                StreamEvent::Heartbeat { .. } => {
                     // These events don't translate to basic patch operations
                     continue;
                 }

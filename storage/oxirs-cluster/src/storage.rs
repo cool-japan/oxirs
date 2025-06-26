@@ -582,9 +582,9 @@ pub mod mock {
             if let Some(shard) = shards.get(&shard_id) {
                 let results: Vec<Triple> = shard.iter()
                     .filter(|triple| {
-                        subject.map_or(true, |s| triple.subject.to_string() == s) &&
-                        predicate.map_or(true, |p| triple.predicate.to_string() == p) &&
-                        object.map_or(true, |o| triple.object.to_string() == o)
+                        subject.map_or(true, |s| triple.subject().to_string() == s) &&
+                        predicate.map_or(true, |p| triple.predicate().to_string() == p) &&
+                        object.map_or(true, |o| triple.object().to_string() == o)
                     })
                     .cloned()
                     .collect();

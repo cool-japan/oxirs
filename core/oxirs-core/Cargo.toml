@@ -34,6 +34,9 @@ lazy_static = "1.5"
 # Ultra performance dependencies
 rayon = "1.10"
 crossbeam = "0.8"
+crossbeam-epoch = "0.9"
+crossbeam-utils = "0.8"
+crossbeam-deque = "0.8"
 dashmap = "6.1"
 bumpalo = "3.16"
 memmap2 = "0.9"
@@ -42,6 +45,7 @@ ahash = "0.8"
 simd-json = "0.13"
 wide = "0.7"
 num_cpus = "1.16"
+sys-info = "0.9"
 tokio = { workspace = true, features = ["rt", "sync", "time", "macros", "io-util"] }
 async-trait = "0.1"
 futures = "0.3"
@@ -99,5 +103,13 @@ async-tokio = ["async"]
 
 [[bench]]
 name = "indexed_graph_bench"
+harness = false
+
+[[bench]]
+name = "concurrent_graph_bench"
+harness = false
+
+[[bench]]
+name = "parallel_batch_bench"
 harness = false
 

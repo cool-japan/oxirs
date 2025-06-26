@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use chrono::{DateTime, Utc};
 use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 
@@ -280,7 +281,7 @@ impl TransactionCoordinator {
                     self.lock_manager.acquire_write_lock(
                         tx_id,
                         *shard_id,
-                        &triple.subject.to_string(),
+                        &triple.subject().to_string(),
                     ).await?;
                 }
                 TransactionOp::Query { subject, .. } => {
@@ -536,7 +537,7 @@ struct TransactionLog {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct LogEntry {
-    timestamp: Instant,
+    timestamp: DateTime<Utc>,
     tx_id: String,
     entry_type: LogEntryType,
 }
@@ -559,7 +560,7 @@ impl TransactionLog {
 
     async fn log_begin(&mut self, tx_id: &str) -> Result<()> {
         self.entries.push(LogEntry {
-            timestamp: Instant::now(),
+            timestamp: Utc::now(),
             tx_id: tx_id.to_string(),
             entry_type: LogEntryType::Begin,
         });
@@ -568,7 +569,7 @@ impl TransactionLog {
 
     async fn log_prepare(&mut self, tx_id: &str) -> Result<()> {
         self.entries.push(LogEntry {
-            timestamp: Instant::now(),
+            timestamp: Utc::now(),
             tx_id: tx_id.to_string(),
             entry_type: LogEntryType::Prepare,
         });
@@ -577,7 +578,7 @@ impl TransactionLog {
 
     async fn log_commit(&mut self, tx_id: &str) -> Result<()> {
         self.entries.push(LogEntry {
-            timestamp: Instant::now(),
+            timestamp: Utc::now(),
             tx_id: tx_id.to_string(),
             entry_type: LogEntryType::Commit,
         });
@@ -586,7 +587,7 @@ impl TransactionLog {
 
     async fn log_abort(&mut self, tx_id: &str) -> Result<()> {
         self.entries.push(LogEntry {
-            timestamp: Instant::now(),
+            timestamp: Utc::now(),
             tx_id: tx_id.to_string(),
             entry_type: LogEntryType::Abort,
         });
@@ -595,7 +596,7 @@ impl TransactionLog {
 
     async fn log_complete(&mut self, tx_id: &str, committed: bool) -> Result<()> {
         self.entries.push(LogEntry {
-            timestamp: Instant::now(),
+            timestamp: Utc::now(),
             tx_id: tx_id.to_string(),
             entry_type: LogEntryType::Complete { committed },
         });

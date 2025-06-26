@@ -170,28 +170,28 @@ impl ShardRouter {
         
         let shard_id = match &self.strategy {
             ShardingStrategy::Hash { num_shards } => {
-                self.hash_route(&triple.subject.to_string(), *num_shards)
+                self.hash_route(&triple.subject().to_string(), *num_shards)
             }
             
             ShardingStrategy::Subject { num_shards } => {
-                self.hash_route(&triple.subject.to_string(), *num_shards)
+                self.hash_route(&triple.subject().to_string(), *num_shards)
             }
             
             ShardingStrategy::Predicate { predicate_groups } => {
-                let predicate_str = triple.predicate.to_string();
+                let predicate_str = triple.predicate().to_string();
                 predicate_groups.get(&predicate_str)
                     .copied()
                     .unwrap_or_else(|| self.hash_route(&predicate_str, predicate_groups.len() as u32))
             }
             
             ShardingStrategy::Namespace { namespace_mapping } => {
-                self.route_by_namespace(&triple.subject.to_string(), namespace_mapping)?
+                self.route_by_namespace(&triple.subject().to_string(), namespace_mapping)?
             }
             
             ShardingStrategy::Graph { graph_mapping } => {
                 // For now, default to subject-based routing
                 // In a full implementation, this would check the graph context
-                self.hash_route(&triple.subject.to_string(), graph_mapping.len() as u32)
+                self.hash_route(&triple.subject().to_string(), graph_mapping.len() as u32)
             }
             
             ShardingStrategy::Semantic { concept_clusters, similarity_threshold } => {
@@ -255,7 +255,7 @@ impl ShardRouter {
     fn semantic_route(&self, triple: &Triple, clusters: &[ConceptCluster], threshold: f64) -> Result<ShardId> {
         if let Some(similarity_calc) = &self.similarity_calc {
             // Extract concept from subject
-            let concept = triple.subject.to_string();
+            let concept = triple.subject().to_string();
             
             // Find best matching cluster
             if let Some(cluster_id) = similarity_calc.find_cluster(&concept, clusters) {
@@ -264,7 +264,7 @@ impl ShardRouter {
         }
         
         // Fall back to hash-based routing
-        Ok(self.hash_route(&triple.subject.to_string(), clusters.len() as u32))
+        Ok(self.hash_route(&triple.subject().to_string(), clusters.len() as u32))
     }
     
     /// Get shard for a query pattern

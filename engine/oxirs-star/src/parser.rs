@@ -1624,7 +1624,7 @@ mod tests {
         
         let result = parser.parse_str(nquads_with_quoted, StarFormat::NQuadsStar).unwrap();
         assert_eq!(result.quad_len(), 1);
-        assert!(result.has_quoted_triples());
+        assert!(result.count_quoted_triples() > 0);
     }
 
     #[test]
@@ -1661,7 +1661,7 @@ ex:graph1 {
 
     #[test]
     fn test_trig_star_error_recovery() {
-        let mut config = ParserConfig::default();
+        let mut config = StarConfig::default();
         config.strict_mode = false; // Enable error recovery
         let parser = StarParser::with_config(config);
         

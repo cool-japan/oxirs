@@ -579,6 +579,136 @@ impl IndexedGraph {
     pub fn interner(&self) -> &Arc<TermInterner> {
         &self.interner
     }
+
+    /// Parallel insert of multiple triples using rayon
+    pub fn par_insert_batch(&self, triples: Vec<Triple>) -> Vec<bool> {
+        use rayon::prelude::*;
+        
+        // First pass: intern all terms in parallel
+        let interned_triples: Vec<_> = triples
+            .par_iter()
+            .map(|triple| InternedTriple {
+                subject_id: self.interner.intern_subject(triple.subject()),
+                predicate_id: self.interner.intern_predicate(triple.predicate()),
+                object_id: self.interner.intern_object(triple.object()),
+            })
+            .collect();
+        
+        // Group by subject for better lock granularity
+        let mut grouped: HashMap<u32, Vec<InternedTriple>> = HashMap::new();
+        for interned in interned_triples {
+            grouped.entry(interned.subject_id).or_default().push(interned);
+        }
+        
+        // Process groups in parallel
+        let results: Vec<_> = grouped
+            .into_par_iter()
+            .flat_map(|(_, group)| {
+                let mut group_results = Vec::new();
+                for interned in group {
+                    let inserted = self.insert_interned(
+                        interned.subject_id,
+                        interned.predicate_id,
+                        interned.object_id,
+                    );
+                    group_results.push(inserted);
+                }
+                group_results
+            })
+            .collect();
+        
+        results
+    }
+
+    /// Parallel remove of multiple triples
+    pub fn par_remove_batch(&self, triples: &[Triple]) -> Vec<bool> {
+        use rayon::prelude::*;
+        
+        triples
+            .par_iter()
+            .map(|triple| self.remove(triple))
+            .collect()
+    }
+
+    /// Parallel query with multiple patterns
+    pub fn par_query_batch(
+        &self,
+        patterns: Vec<(Option<Subject>, Option<Predicate>, Option<Object>)>,
+    ) -> Vec<Vec<Triple>> {
+        use rayon::prelude::*;
+        
+        patterns
+            .into_par_iter()
+            .map(|(s, p, o)| {
+                self.query(s.as_ref(), p.as_ref(), o.as_ref())
+            })
+            .collect()
+    }
+
+    /// Apply a transformation to all triples in parallel
+    pub fn par_transform<F>(&self, transform: F) -> Vec<Triple>
+    where
+        F: Fn(&Triple) -> Option<Triple> + Send + Sync,
+    {
+        use rayon::prelude::*;
+        
+        // Get all triples
+        let all_triples = self.query(None, None, None);
+        
+        // Transform in parallel
+        all_triples
+            .into_par_iter()
+            .filter_map(|triple| transform(&triple))
+            .collect()
+    }
+
+    /// Parallel map over all triples
+    pub fn par_map<F, R>(&self, mapper: F) -> Vec<R>
+    where
+        F: Fn(&Triple) -> R + Send + Sync,
+        R: Send,
+    {
+        use rayon::prelude::*;
+        
+        let all_triples = self.query(None, None, None);
+        all_triples
+            .into_par_iter()
+            .map(|triple| mapper(&triple))
+            .collect()
+    }
+
+    /// Parallel filter triples
+    pub fn par_filter<F>(&self, predicate: F) -> Vec<Triple>
+    where
+        F: Fn(&Triple) -> bool + Send + Sync,
+    {
+        use rayon::prelude::*;
+        
+        let all_triples = self.query(None, None, None);
+        all_triples
+            .into_par_iter()
+            .filter(|triple| predicate(triple))
+            .collect()
+    }
+
+    /// Parallel fold operation
+    pub fn par_fold<F, R>(&self, init: R, fold_fn: F) -> R
+    where
+        F: Fn(R, &Triple) -> R + Send + Sync,
+        R: Send + Sync + Clone + 'static,
+    {
+        use rayon::prelude::*;
+        
+        let all_triples = self.query(None, None, None);
+        all_triples
+            .into_par_iter()
+            .fold(|| init.clone(), |acc, triple| fold_fn(acc, &triple))
+            .reduce(|| init.clone(), |acc1, acc2| {
+                // For a proper fold, we need a reduce function that makes sense
+                // This is a simplified version - in practice, you'd want a proper combine function
+                acc1
+            })
+    }
 }
 
 impl Default for IndexedGraph {

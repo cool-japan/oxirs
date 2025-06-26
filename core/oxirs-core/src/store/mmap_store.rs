@@ -20,6 +20,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::collections::HashMap;
 use blake3::Hasher;
+use std::marker::PhantomData;
 
 /// Magic number for file format identification
 const MAGIC: &[u8; 8] = b"OXIRSMM\0";
@@ -447,59 +448,185 @@ impl MmapStore {
         predicate: Option<&Predicate>,
         object: Option<&Object>,
         graph_name: Option<&GraphName>,
-    ) -> Result<impl Iterator<Item = Result<Quad>>> {
+    ) -> Result<QuadIterator> {
         // Ensure buffer is flushed
         self.flush()?;
         
-        let interner = self.term_interner.read();
-        let indexes = self.indexes.read();
-        let data_mmap = self.data_mmap.read();
-        
         // Convert terms to IDs
         let subject_id = subject.and_then(|s| match s {
-            Subject::NamedNode(n) => interner.get_named_node_id(n),
-            Subject::BlankNode(b) => interner.get_blank_node_id(b),
+            Subject::NamedNode(n) => self.term_interner.read().get_named_node_id(n),
+            Subject::BlankNode(b) => self.term_interner.read().get_blank_node_id(b),
             Subject::Variable(_) | Subject::QuotedTriple(_) => None,
         });
         
         let predicate_id = predicate.and_then(|p| match p {
-            Predicate::NamedNode(n) => interner.get_named_node_id(n),
+            Predicate::NamedNode(n) => self.term_interner.read().get_named_node_id(n),
             Predicate::Variable(_) => None,
         });
         
         let object_id = object.and_then(|o| match o {
-            Object::NamedNode(n) => interner.get_named_node_id(n),
-            Object::BlankNode(b) => interner.get_blank_node_id(b),
-            Object::Literal(l) => interner.get_literal_id(l),
+            Object::NamedNode(n) => self.term_interner.read().get_named_node_id(n),
+            Object::BlankNode(b) => self.term_interner.read().get_blank_node_id(b),
+            Object::Literal(l) => self.term_interner.read().get_literal_id(l),
             Object::Variable(_) | Object::QuotedTriple(_) => None,
         });
         
         let graph_id = graph_name.and_then(|g| match g {
-            GraphName::NamedNode(n) => interner.get_named_node_id(n),
-            GraphName::BlankNode(b) => interner.get_blank_node_id(b),
+            GraphName::NamedNode(n) => self.term_interner.read().get_named_node_id(n),
+            GraphName::BlankNode(b) => self.term_interner.read().get_blank_node_id(b),
             GraphName::DefaultGraph => Some(0),
             GraphName::Variable(_) => None,
         });
         
-        // Choose best index based on pattern
-        let results = match (subject_id, predicate_id, object_id, graph_id) {
-            (Some(s), Some(p), Some(o), _) => {
+        // Choose best index and collect matching offsets
+        let mut offsets = Vec::new();
+        
+        match (subject_id, predicate_id, object_id, graph_id) {
+            (Some(s), Some(p), Some(o), g) => {
                 // Use SPO index for exact match
                 let key = format!("{:016x}{:016x}{:016x}", s, p, o);
-                vec![] // TODO: Implement index lookup
+                if let Some(spo_index) = self.indexes.read().get("spo") {
+                    let results = spo_index.search_prefix(&key)?;
+                    for (_, entry) in results {
+                        // Check graph if specified
+                        if g.is_none() || self.check_graph_match(entry.offset, g.unwrap())? {
+                            offsets.push(entry.offset);
+                        }
+                    }
+                }
             }
-            (Some(s), Some(p), None, _) => {
+            (Some(s), Some(p), None, g) => {
                 // Use SPO index with prefix
                 let prefix = format!("{:016x}{:016x}", s, p);
-                vec![] // TODO: Implement prefix scan
+                if let Some(spo_index) = self.indexes.read().get("spo") {
+                    let results = spo_index.search_prefix(&prefix)?;
+                    for (_, entry) in results {
+                        if g.is_none() || self.check_graph_match(entry.offset, g.unwrap())? {
+                            offsets.push(entry.offset);
+                        }
+                    }
+                }
+            }
+            (Some(s), None, None, g) => {
+                // Use SPO index with subject prefix
+                let prefix = format!("{:016x}", s);
+                if let Some(spo_index) = self.indexes.read().get("spo") {
+                    let results = spo_index.search_prefix(&prefix)?;
+                    for (_, entry) in results {
+                        if g.is_none() || self.check_graph_match(entry.offset, g.unwrap())? {
+                            offsets.push(entry.offset);
+                        }
+                    }
+                }
+            }
+            (None, Some(p), Some(o), g) => {
+                // Use POS index
+                let key = format!("{:016x}{:016x}", p, o);
+                if let Some(pos_index) = self.indexes.read().get("pos") {
+                    let results = pos_index.search_prefix(&key)?;
+                    for (_, entry) in results {
+                        if g.is_none() || self.check_graph_match(entry.offset, g.unwrap())? {
+                            offsets.push(entry.offset);
+                        }
+                    }
+                }
+            }
+            (None, None, Some(o), g) => {
+                // Use OSP index
+                let prefix = format!("{:016x}", o);
+                if let Some(osp_index) = self.indexes.read().get("osp") {
+                    let results = osp_index.search_prefix(&prefix)?;
+                    for (_, entry) in results {
+                        if g.is_none() || self.check_graph_match(entry.offset, g.unwrap())? {
+                            offsets.push(entry.offset);
+                        }
+                    }
+                }
+            }
+            (None, None, None, Some(g)) => {
+                // Use GSPO index
+                let prefix = format!("{:016x}", g);
+                if let Some(gspo_index) = self.indexes.read().get("gspo") {
+                    let results = gspo_index.search_prefix(&prefix)?;
+                    for (_, entry) in results {
+                        offsets.push(entry.offset);
+                    }
+                }
             }
             _ => {
-                // Full scan
-                vec![] // TODO: Implement full scan
+                // Full scan - scan all quads
+                let quad_count = self.header.read().quad_count;
+                let quad_size = std::mem::size_of::<DiskQuad>() as u64;
+                for i in 0..quad_count {
+                    let offset = HEADER_SIZE as u64 + i * quad_size;
+                    if self.check_pattern_match(offset, subject_id, predicate_id, object_id, graph_id)? {
+                        offsets.push(offset);
+                    }
+                }
             }
-        };
+        }
         
-        Ok(results.into_iter().map(|_: ()| bail!("Not implemented")))
+        Ok(QuadIterator {
+            store: self,
+            offsets,
+            current: 0,
+        })
+    }
+    
+    /// Check if a quad at the given offset matches the graph ID
+    fn check_graph_match(&self, offset: u64, graph_id: u64) -> Result<bool> {
+        let mmap = self.data_mmap.read();
+        if let Some(mmap) = mmap.as_ref() {
+            if offset + std::mem::size_of::<DiskQuad>() as u64 <= HEADER_SIZE as u64 + mmap.len() as u64 {
+                let disk_quad = unsafe {
+                    &*((mmap.as_ptr() as usize + (offset - HEADER_SIZE as u64) as usize) as *const DiskQuad)
+                };
+                return Ok(disk_quad.graph_id == graph_id);
+            }
+        }
+        Ok(false)
+    }
+    
+    /// Check if a quad at the given offset matches the pattern
+    fn check_pattern_match(
+        &self,
+        offset: u64,
+        subject_id: Option<u64>,
+        predicate_id: Option<u64>,
+        object_id: Option<u64>,
+        graph_id: Option<u64>,
+    ) -> Result<bool> {
+        let mmap = self.data_mmap.read();
+        if let Some(mmap) = mmap.as_ref() {
+            if offset >= HEADER_SIZE as u64 && offset + std::mem::size_of::<DiskQuad>() as u64 <= HEADER_SIZE as u64 + mmap.len() as u64 {
+                let disk_quad = unsafe {
+                    &*((mmap.as_ptr() as usize + (offset - HEADER_SIZE as u64) as usize) as *const DiskQuad)
+                };
+                
+                if let Some(s) = subject_id {
+                    if disk_quad.subject_id != s {
+                        return Ok(false);
+                    }
+                }
+                if let Some(p) = predicate_id {
+                    if disk_quad.predicate_id != p {
+                        return Ok(false);
+                    }
+                }
+                if let Some(o) = object_id {
+                    if disk_quad.object_id != o {
+                        return Ok(false);
+                    }
+                }
+                if let Some(g) = graph_id {
+                    if disk_quad.graph_id != g {
+                        return Ok(false);
+                    }
+                }
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
     
     /// Compact the store to reclaim space
@@ -538,6 +665,76 @@ pub struct StoreStats {
     pub data_size: u64,
     pub index_size: u64,
     pub term_size: u64,
+}
+
+/// Iterator over quads in the store
+pub struct QuadIterator<'a> {
+    store: &'a MmapStore,
+    offsets: Vec<u64>,
+    current: usize,
+}
+
+impl<'a> Iterator for QuadIterator<'a> {
+    type Item = Result<Quad>;
+    
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current >= self.offsets.len() {
+            return None;
+        }
+        
+        let offset = self.offsets[self.current];
+        self.current += 1;
+        
+        // Read the disk quad
+        let mmap = self.store.data_mmap.read();
+        let mmap = match mmap.as_ref() {
+            Some(m) => m,
+            None => return Some(Err(anyhow::anyhow!("No memory map available"))),
+        };
+        
+        if offset < HEADER_SIZE as u64 || offset + std::mem::size_of::<DiskQuad>() as u64 > HEADER_SIZE as u64 + mmap.len() as u64 {
+            return Some(Err(anyhow::anyhow!("Invalid quad offset")));
+        }
+        
+        let disk_quad = unsafe {
+            &*((mmap.as_ptr() as usize + (offset - HEADER_SIZE as u64) as usize) as *const DiskQuad)
+        };
+        
+        // Convert IDs back to terms
+        let interner = self.store.term_interner.read();
+        
+        let subject = match interner.get_subject(disk_quad.subject_id as u32) {
+            Some(s) => s,
+            None => return Some(Err(anyhow::anyhow!("Invalid subject ID: {}", disk_quad.subject_id))),
+        };
+        
+        let predicate = match interner.get_predicate(disk_quad.predicate_id as u32) {
+            Some(p) => p,
+            None => return Some(Err(anyhow::anyhow!("Invalid predicate ID: {}", disk_quad.predicate_id))),
+        };
+        
+        let object = match interner.get_object(disk_quad.object_id as u32) {
+            Some(o) => o,
+            None => return Some(Err(anyhow::anyhow!("Invalid object ID: {}", disk_quad.object_id))),
+        };
+        
+        let graph_name = if disk_quad.graph_id == 0 {
+            GraphName::DefaultGraph
+        } else {
+            match interner.get_subject(disk_quad.graph_id as u32) {
+                Some(Subject::NamedNode(n)) => GraphName::NamedNode(n),
+                Some(Subject::BlankNode(b)) => GraphName::BlankNode(b),
+                _ => return Some(Err(anyhow::anyhow!("Invalid graph ID: {}", disk_quad.graph_id))),
+            }
+        };
+        
+        Some(Ok(Quad::new(subject, predicate, object, graph_name)))
+    }
+    
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.offsets.len() - self.current;
+        (remaining, Some(remaining))
+    }
 }
 
 #[cfg(test)]
@@ -600,6 +797,266 @@ mod tests {
             let store = MmapStore::open(path)?;
             assert_eq!(store.len(), 100);
         }
+        
+        Ok(())
+    }
+    
+    #[test]
+    fn test_pattern_matching() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let store = MmapStore::new(temp_dir.path())?;
+        
+        // Add test data with different patterns
+        let subjects = vec!["s1", "s2", "s3"];
+        let predicates = vec!["p1", "p2"];
+        let objects = vec!["o1", "o2", "o3", "o4"];
+        
+        for s in &subjects {
+            for p in &predicates {
+                for o in &objects {
+                    let quad = Quad::new(
+                        Subject::NamedNode(NamedNode::new(&format!("http://example.org/{}", s))?),
+                        Predicate::NamedNode(NamedNode::new(&format!("http://example.org/{}", p))?),
+                        Object::NamedNode(NamedNode::new(&format!("http://example.org/{}", o))?),
+                        GraphName::DefaultGraph,
+                    );
+                    store.add(&quad)?;
+                }
+            }
+        }
+        
+        store.flush()?;
+        assert_eq!(store.len(), 24); // 3 * 2 * 4
+        
+        // Test subject pattern
+        let s1 = Subject::NamedNode(NamedNode::new("http://example.org/s1")?);
+        let results: Vec<_> = store.quads_matching(
+            Some(&s1),
+            None,
+            None,
+            None,
+        )?.collect::<Result<Vec<_>>>()?;
+        assert_eq!(results.len(), 8); // 2 predicates * 4 objects
+        
+        // Test subject-predicate pattern
+        let p1 = Predicate::NamedNode(NamedNode::new("http://example.org/p1")?);
+        let results: Vec<_> = store.quads_matching(
+            Some(&s1),
+            Some(&p1),
+            None,
+            None,
+        )?.collect::<Result<Vec<_>>>()?;
+        assert_eq!(results.len(), 4); // 4 objects
+        
+        // Test exact match
+        let o1 = Object::NamedNode(NamedNode::new("http://example.org/o1")?);
+        let results: Vec<_> = store.quads_matching(
+            Some(&s1),
+            Some(&p1),
+            Some(&o1),
+            None,
+        )?.collect::<Result<Vec<_>>>()?;
+        assert_eq!(results.len(), 1);
+        
+        // Test no match
+        let s_none = Subject::NamedNode(NamedNode::new("http://example.org/nonexistent")?);
+        let results: Vec<_> = store.quads_matching(
+            Some(&s_none),
+            None,
+            None,
+            None,
+        )?.collect::<Result<Vec<_>>>()?;
+        assert_eq!(results.len(), 0);
+        
+        Ok(())
+    }
+    
+    #[test]
+    fn test_graph_support() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let store = MmapStore::new(temp_dir.path())?;
+        
+        let s = Subject::NamedNode(NamedNode::new("http://example.org/subject")?);
+        let p = Predicate::NamedNode(NamedNode::new("http://example.org/predicate")?);
+        let o = Object::Literal(Literal::new_simple_literal("value"));
+        
+        // Add to default graph
+        store.add(&Quad::new(s.clone(), p.clone(), o.clone(), GraphName::DefaultGraph))?;
+        
+        // Add to named graph
+        let g1 = GraphName::NamedNode(NamedNode::new("http://example.org/graph1")?);
+        store.add(&Quad::new(s.clone(), p.clone(), o.clone(), g1.clone()))?;
+        
+        // Add to another named graph
+        let g2 = GraphName::NamedNode(NamedNode::new("http://example.org/graph2")?);
+        store.add(&Quad::new(s.clone(), p.clone(), o.clone(), g2.clone()))?;
+        
+        store.flush()?;
+        assert_eq!(store.len(), 3);
+        
+        // Query default graph
+        let results: Vec<_> = store.quads_matching(
+            None,
+            None,
+            None,
+            Some(&GraphName::DefaultGraph),
+        )?.collect::<Result<Vec<_>>>()?;
+        assert_eq!(results.len(), 1);
+        
+        // Query named graph
+        let results: Vec<_> = store.quads_matching(
+            None,
+            None,
+            None,
+            Some(&g1),
+        )?.collect::<Result<Vec<_>>>()?;
+        assert_eq!(results.len(), 1);
+        
+        // Query all graphs
+        let results: Vec<_> = store.quads_matching(
+            None,
+            None,
+            None,
+            None,
+        )?.collect::<Result<Vec<_>>>()?;
+        assert_eq!(results.len(), 3);
+        
+        Ok(())
+    }
+    
+    #[test]
+    fn test_literal_types() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let store = MmapStore::new(temp_dir.path())?;
+        
+        let s = Subject::NamedNode(NamedNode::new("http://example.org/subject")?);
+        let p = Predicate::NamedNode(NamedNode::new("http://example.org/predicate")?);
+        
+        // Simple literal
+        let simple = Object::Literal(Literal::new_simple_literal("simple"));
+        store.add(&Quad::new(s.clone(), p.clone(), simple.clone(), GraphName::DefaultGraph))?;
+        
+        // Language-tagged literal
+        let lang = Object::Literal(Literal::new_language_tagged_literal("hello", "en")?);
+        store.add(&Quad::new(s.clone(), p.clone(), lang.clone(), GraphName::DefaultGraph))?;
+        
+        // Typed literal
+        let xsd_int = NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")?;
+        let typed = Object::Literal(Literal::new_typed("42", xsd_int));
+        store.add(&Quad::new(s.clone(), p.clone(), typed.clone(), GraphName::DefaultGraph))?;
+        
+        store.flush()?;
+        
+        // Verify all literals are preserved correctly
+        let results: Vec<_> = store.quads_matching(
+            Some(&s),
+            Some(&p),
+            None,
+            None,
+        )?.collect::<Result<Vec<_>>>()?;
+        
+        assert_eq!(results.len(), 3);
+        
+        // Check that literals are preserved correctly
+        let objects: Vec<_> = results.iter().map(|q| q.object()).collect();
+        assert!(objects.contains(&&simple));
+        assert!(objects.contains(&&lang));
+        assert!(objects.contains(&&typed));
+        
+        Ok(())
+    }
+    
+    #[test]
+    fn test_large_dataset() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let store = MmapStore::new(temp_dir.path())?;
+        
+        // Add 10,000 quads
+        for i in 0..10_000 {
+            let quad = Quad::new(
+                Subject::NamedNode(NamedNode::new(&format!("http://example.org/subject/{}", i / 100))?),
+                Predicate::NamedNode(NamedNode::new(&format!("http://example.org/predicate/{}", i % 10))?),
+                Object::Literal(Literal::new_simple_literal(&format!("value{}", i))),
+                GraphName::DefaultGraph,
+            );
+            store.add(&quad)?;
+        }
+        
+        store.flush()?;
+        assert_eq!(store.len(), 10_000);
+        
+        // Test query performance
+        let s = Subject::NamedNode(NamedNode::new("http://example.org/subject/50")?);
+        let results: Vec<_> = store.quads_matching(
+            Some(&s),
+            None,
+            None,
+            None,
+        )?.collect::<Result<Vec<_>>>()?;
+        assert_eq!(results.len(), 100); // Each subject has 100 quads
+        
+        // Get statistics
+        let stats = store.stats();
+        assert_eq!(stats.quad_count, 10_000);
+        assert!(stats.data_size > 0);
+        
+        Ok(())
+    }
+    
+    #[test]
+    fn test_blank_nodes() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let store = MmapStore::new(temp_dir.path())?;
+        
+        // Test blank nodes in all positions
+        let b1 = BlankNode::new("b1")?;
+        let b2 = BlankNode::new("b2")?;
+        let p = Predicate::NamedNode(NamedNode::new("http://example.org/p")?);
+        
+        // Blank node as subject
+        store.add(&Quad::new(
+            Subject::BlankNode(b1.clone()),
+            p.clone(),
+            Object::Literal(Literal::new_simple_literal("value1")),
+            GraphName::DefaultGraph,
+        ))?;
+        
+        // Blank node as object
+        store.add(&Quad::new(
+            Subject::NamedNode(NamedNode::new("http://example.org/s")?),
+            p.clone(),
+            Object::BlankNode(b2.clone()),
+            GraphName::DefaultGraph,
+        ))?;
+        
+        // Blank node as graph
+        store.add(&Quad::new(
+            Subject::NamedNode(NamedNode::new("http://example.org/s2")?),
+            p.clone(),
+            Object::Literal(Literal::new_simple_literal("value2")),
+            GraphName::BlankNode(b1.clone()),
+        ))?;
+        
+        store.flush()?;
+        assert_eq!(store.len(), 3);
+        
+        // Query by blank node subject
+        let results: Vec<_> = store.quads_matching(
+            Some(&Subject::BlankNode(b1.clone())),
+            None,
+            None,
+            None,
+        )?.collect::<Result<Vec<_>>>()?;
+        assert_eq!(results.len(), 1);
+        
+        // Query by blank node graph
+        let results: Vec<_> = store.quads_matching(
+            None,
+            None,
+            None,
+            Some(&GraphName::BlankNode(b1)),
+        )?.collect::<Result<Vec<_>>>()?;
+        assert_eq!(results.len(), 1);
         
         Ok(())
     }

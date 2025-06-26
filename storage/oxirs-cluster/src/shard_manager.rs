@@ -324,6 +324,15 @@ impl ShardManager {
         Ok(all_results)
     }
     
+    /// Get the primary node for a shard
+    pub async fn get_primary_node(&self, shard_id: ShardId) -> Result<OxirsNodeId> {
+        if let Some(metadata) = self.router.get_shard_metadata(shard_id).await {
+            Ok(metadata.primary_node as OxirsNodeId)
+        } else {
+            Err(ClusterError::ShardNotFound(shard_id).into())
+        }
+    }
+    
     /// Check if a shard needs splitting
     async fn check_shard_split(&self, shard_id: ShardId) -> Result<bool> {
         if let Some(metadata) = self.router.get_shard_metadata(shard_id).await {

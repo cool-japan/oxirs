@@ -8,13 +8,18 @@ use rustyline::completion::{Completer, FilenameCompleter, Pair};
 use rustyline::highlight::{Highlighter, MatchingBracketHighlighter};
 use rustyline::hint::HistoryHinter;
 use rustyline::validate::{self, MatchingBracketValidator, Validator};
-use rustyline_derive::{Completer, Helper, Highlighter, Hinter, Validator};
+use rustyline_derive::{Helper, Hinter};
 use std::borrow::Cow;
+use std::collections::HashMap;
 
 /// Interactive mode handler
 pub struct InteractiveMode {
     editor: Editor<OxideHelper, rustyline::history::DefaultHistory>,
     history_file: String,
+    current_dataset: Option<String>,
+    environment: HashMap<String, String>,
+    multi_line_mode: bool,
+    multi_line_buffer: Vec<String>,
 }
 
 impl InteractiveMode {
@@ -51,38 +56,69 @@ impl InteractiveMode {
         Ok(Self {
             editor,
             history_file,
+            current_dataset: None,
+            environment: HashMap::new(),
+            multi_line_mode: false,
+            multi_line_buffer: Vec::new(),
         })
     }
 
     /// Run the interactive REPL
     pub async fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         println!("Welcome to Oxide Interactive Mode!");
-        println!("Type 'help' for available commands, 'exit' to quit.\n");
+        println!("Type 'help' for available commands, 'exit' to quit.");
+        println!("Use '\\' at the end of a line for multi-line input.\n");
 
         loop {
-            let readline = self.editor.readline("oxide> ");
+            let prompt = self.get_prompt();
+            let readline = self.editor.readline(&prompt);
+            
             match readline {
                 Ok(line) => {
+                    // Handle multi-line mode
+                    if self.multi_line_mode {
+                        if line.trim().ends_with('\\') {
+                            self.multi_line_buffer.push(line.trim_end_matches('\\').to_string());
+                            continue;
+                        } else {
+                            self.multi_line_buffer.push(line);
+                            let full_command = self.multi_line_buffer.join(" ");
+                            self.multi_line_buffer.clear();
+                            self.multi_line_mode = false;
+                            
+                            let _ = self.editor.add_history_entry(&full_command);
+                            if let Err(e) = self.process_command(&full_command).await {
+                                eprintln!("Error: {}", e);
+                            }
+                            continue;
+                        }
+                    }
+                    
+                    // Check for multi-line start
+                    if line.trim().ends_with('\\') {
+                        self.multi_line_mode = true;
+                        self.multi_line_buffer.push(line.trim_end_matches('\\').to_string());
+                        continue;
+                    }
+                    
                     if line.trim().is_empty() {
                         continue;
                     }
 
-                    self.editor.add_history_entry(line.as_str());
+                    let _ = self.editor.add_history_entry(line.as_str());
 
-                    let trimmed = line.trim();
-                    match trimmed {
-                        "exit" | "quit" => break,
-                        "help" => self.show_help(),
-                        "clear" => self.clear_screen(),
-                        _ => {
-                            if let Err(e) = self.execute_command(trimmed).await {
-                                eprintln!("Error: {}", e);
-                            }
-                        }
+                    if let Err(e) = self.process_command(&line).await {
+                        eprintln!("Error: {}", e);
                     }
                 }
                 Err(ReadlineError::Interrupted) => {
-                    println!("^C");
+                    if self.multi_line_mode {
+                        println!("^C (multi-line input cancelled)");
+                        self.multi_line_mode = false;
+                        self.multi_line_buffer.clear();
+                    } else {
+                        println!("^C (Use Ctrl-D or 'exit' to quit)");
+                    }
                     continue;
                 }
                 Err(ReadlineError::Eof) => {
@@ -102,10 +138,68 @@ impl InteractiveMode {
 
         Ok(())
     }
+    
+    /// Get the appropriate prompt
+    fn get_prompt(&self) -> String {
+        if self.multi_line_mode {
+            format!("{:>6}> ", "...")
+        } else if let Some(ref dataset) = self.current_dataset {
+            format!("oxide:{}> ", dataset)
+        } else {
+            "oxide> ".to_string()
+        }
+    }
+    
+    /// Process a command
+    async fn process_command(&mut self, command: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let trimmed = command.trim();
+        
+        // Built-in commands
+        match trimmed {
+            "exit" | "quit" => std::process::exit(0),
+            "help" | "?" => {
+                self.show_help();
+                return Ok(());
+            }
+            "clear" | "cls" => {
+                self.clear_screen();
+                return Ok(());
+            }
+            _ => {}
+        }
+        
+        // Check for special commands
+        if trimmed.starts_with("use ") {
+            let dataset = trimmed.strip_prefix("use ").unwrap().trim();
+            self.use_dataset(dataset);
+            return Ok(());
+        }
+        
+        if trimmed.starts_with("set ") {
+            let parts: Vec<&str> = trimmed.strip_prefix("set ").unwrap().splitn(2, '=').collect();
+            if parts.len() == 2 {
+                self.set_variable(parts[0].trim(), parts[1].trim());
+            } else {
+                println!("Usage: set VARIABLE=value");
+            }
+            return Ok(());
+        }
+        
+        if trimmed == "env" {
+            self.show_environment();
+            return Ok(());
+        }
+        
+        // Execute regular commands
+        self.execute_command(trimmed).await
+    }
 
     /// Execute a command in interactive mode
-    async fn execute_command(&self, command: &str) -> Result<(), Box<dyn std::error::Error>> {
-        let parts: Vec<&str> = command.split_whitespace().collect();
+    async fn execute_command(&mut self, command: &str) -> Result<(), Box<dyn std::error::Error>> {
+        // Expand environment variables
+        let expanded = self.expand_variables(command);
+        let parts: Vec<&str> = expanded.split_whitespace().collect();
+        
         if parts.is_empty() {
             return Ok(());
         }
@@ -113,34 +207,105 @@ impl InteractiveMode {
         let cmd = parts[0];
         let args = &parts[1..];
 
+        // Use current dataset if not specified
+        let adjusted_args = self.adjust_args_with_dataset(cmd, args);
+        let adjusted_args_refs: Vec<&str> = adjusted_args.iter().map(|s| s.as_str()).collect();
+
         match cmd {
-            "query" => self.handle_query(args).await,
-            "import" => self.handle_import(args).await,
-            "export" => self.handle_export(args).await,
-            "validate" => self.handle_validate(args).await,
-            "stats" => self.handle_stats(args).await,
+            "query" => self.handle_query(&adjusted_args_refs).await,
+            "import" => self.handle_import(&adjusted_args_refs).await,
+            "export" => self.handle_export(&adjusted_args_refs).await,
+            "validate" => self.handle_validate(&adjusted_args_refs).await,
+            "stats" => self.handle_stats(&adjusted_args_refs).await,
+            "riot" => self.handle_riot(&adjusted_args_refs).await,
+            "shacl" => self.handle_shacl(&adjusted_args_refs).await,
+            "tdbloader" => self.handle_tdbloader(&adjusted_args_refs).await,
+            "tdbdump" => self.handle_tdbdump(&adjusted_args_refs).await,
             _ => {
-                println!("Unknown command: {}. Type 'help' for available commands.", cmd);
+                // Try to suggest similar commands
+                let suggestions = crate::cli::suggestions::suggest_command(cmd, &get_command_list().iter().map(|s| s.as_str()).collect::<Vec<_>>());
+                if let Some(suggestion) = suggestions {
+                    println!("Unknown command: {}. {}", cmd, suggestion);
+                } else {
+                    println!("Unknown command: {}. Type 'help' for available commands.", cmd);
+                }
                 Ok(())
             }
         }
+    }
+    
+    /// Expand environment variables in command
+    fn expand_variables(&self, command: &str) -> String {
+        let mut result = command.to_string();
+        for (key, value) in &self.environment {
+            result = result.replace(&format!("${}", key), value);
+            result = result.replace(&format!("${{{}}}", key), value);
+        }
+        result
+    }
+    
+    /// Adjust arguments to include current dataset if needed
+    fn adjust_args_with_dataset(&self, cmd: &str, args: &[&str]) -> Vec<String> {
+        // Commands that can use current dataset as first argument
+        let dataset_commands = ["query", "import", "export", "stats", "tdbloader", "tdbdump"];
+        
+        if dataset_commands.contains(&cmd) && !args.is_empty() {
+            // Check if first arg looks like a dataset name or if we should inject current dataset
+            if let Some(ref dataset) = self.current_dataset {
+                // If no args or first arg doesn't look like a dataset path
+                if args.is_empty() || !args[0].contains('/') && !args[0].ends_with(".tdb") {
+                    // For query, check if it starts with SELECT/CONSTRUCT/etc
+                    if cmd == "query" && !args.is_empty() {
+                        let first_upper = args[0].to_uppercase();
+                        if first_upper.starts_with("SELECT") || first_upper.starts_with("CONSTRUCT") 
+                            || first_upper.starts_with("DESCRIBE") || first_upper.starts_with("ASK") {
+                            // This is a query, inject dataset
+                            let mut new_args = vec![dataset.clone()];
+                            new_args.extend(args.iter().map(|s| s.to_string()));
+                            return new_args;
+                        }
+                    }
+                }
+            }
+        }
+        
+        args.iter().map(|s| s.to_string()).collect()
     }
 
     /// Show help message
     fn show_help(&self) {
         println!("Available commands:");
-        println!("  query <dataset> <sparql>  - Execute a SPARQL query");
-        println!("  import <dataset> <file>   - Import RDF data");
-        println!("  export <dataset> <file>   - Export RDF data");
-        println!("  validate <file>           - Validate RDF syntax");
-        println!("  stats <dataset>           - Show dataset statistics");
-        println!("  clear                     - Clear the screen");
-        println!("  help                      - Show this help message");
-        println!("  exit/quit                 - Exit interactive mode");
-        println!("\nTips:");
+        println!("\n  Dataset Commands:");
+        println!("    use <dataset>             - Set the current dataset");
+        println!("    query <dataset> <sparql>  - Execute a SPARQL query");
+        println!("    import <dataset> <file>   - Import RDF data");
+        println!("    export <dataset> <file>   - Export RDF data");
+        println!("    stats <dataset>           - Show dataset statistics");
+        
+        println!("\n  Data Processing:");
+        println!("    validate <file>           - Validate RDF syntax");
+        println!("    riot <files...>           - Parse and serialize RDF");
+        println!("    shacl <data> <shapes>     - Run SHACL validation");
+        
+        println!("\n  Environment:");
+        println!("    set VAR=value             - Set an environment variable");
+        println!("    env                       - Show environment variables");
+        println!("    clear                     - Clear the screen");
+        
+        println!("\n  System:");
+        println!("    help, ?                   - Show this help message");
+        println!("    exit, quit                - Exit interactive mode");
+        
+        println!("\nInteractive Features:");
         println!("  - Use Tab for command and file completion");
         println!("  - Use Up/Down arrows for command history");
         println!("  - Use Ctrl+R for reverse history search");
+        println!("  - Use '\\' at line end for multi-line input");
+        println!("  - Variables: $VAR expands to environment value");
+        
+        if let Some(ref dataset) = self.current_dataset {
+            println!("\nCurrent dataset: {}", dataset);
+        }
     }
 
     /// Clear the screen
@@ -236,6 +401,86 @@ impl InteractiveMode {
 
         Ok(())
     }
+    
+    /// Use a dataset
+    fn use_dataset(&mut self, dataset: &str) {
+        self.current_dataset = Some(dataset.to_string());
+        println!("Now using dataset: {}", dataset);
+    }
+    
+    /// Set an environment variable
+    fn set_variable(&mut self, key: &str, value: &str) {
+        self.environment.insert(key.to_string(), value.to_string());
+        println!("Set {} = {}", key, value);
+    }
+    
+    /// Show environment variables
+    fn show_environment(&self) {
+        if self.environment.is_empty() {
+            println!("No variables set");
+        } else {
+            println!("Environment variables:");
+            for (key, value) in &self.environment {
+                println!("  {} = {}", key, value);
+            }
+        }
+        
+        if let Some(ref dataset) = self.current_dataset {
+            println!("\nCurrent dataset: {}", dataset);
+        }
+    }
+    
+    /// Handle riot command
+    async fn handle_riot(&self, args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
+        if args.is_empty() {
+            println!("Usage: riot <input_files...> [--output <format>]");
+            return Ok(());
+        }
+        
+        println!("Running riot with args: {}", args.join(" "));
+        // TODO: Integrate with actual riot command
+        println!("Riot command not yet fully integrated in interactive mode");
+        Ok(())
+    }
+    
+    /// Handle shacl command  
+    async fn handle_shacl(&self, args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
+        if args.len() < 2 {
+            println!("Usage: shacl <data_file> <shapes_file>");
+            return Ok(());
+        }
+        
+        println!("Running SHACL validation...");
+        // TODO: Integrate with actual shacl command
+        println!("SHACL command not yet fully integrated in interactive mode");
+        Ok(())
+    }
+    
+    /// Handle tdbloader command
+    async fn handle_tdbloader(&self, args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
+        if args.len() < 2 {
+            println!("Usage: tdbloader <dataset> <files...>");
+            return Ok(());
+        }
+        
+        println!("Loading data into TDB...");
+        // TODO: Integrate with actual tdbloader command
+        println!("TDB loader not yet fully integrated in interactive mode");
+        Ok(())
+    }
+    
+    /// Handle tdbdump command
+    async fn handle_tdbdump(&self, args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
+        if args.is_empty() {
+            println!("Usage: tdbdump <dataset> [--output <file>]");
+            return Ok(());
+        }
+        
+        println!("Dumping TDB dataset...");
+        // TODO: Integrate with actual tdbdump command
+        println!("TDB dump not yet fully integrated in interactive mode");
+        Ok(())
+    }
 }
 
 impl Default for InteractiveMode {
@@ -272,7 +517,7 @@ impl Completer for OxideHelper {
         
         if words.len() <= 1 {
             // Complete commands
-            let prefix = words.get(0).unwrap_or(&"");
+            let prefix = words.first().unwrap_or(&"");
             for cmd in &self.commands {
                 if cmd.starts_with(prefix) {
                     candidates.push(Pair {
@@ -318,12 +563,42 @@ impl Validator for OxideHelper {
 /// Get list of available commands for completion
 fn get_command_list() -> Vec<String> {
     vec![
+        // Core commands
         "query".to_string(),
         "import".to_string(),
         "export".to_string(),
         "validate".to_string(),
         "stats".to_string(),
+        
+        // Data processing
+        "riot".to_string(),
+        "rdfcat".to_string(),
+        "rdfcopy".to_string(),
+        "rdfdiff".to_string(),
+        "rdfparse".to_string(),
+        
+        // Validation
+        "shacl".to_string(),
+        "shex".to_string(),
+        "infer".to_string(),
+        
+        // TDB commands
+        "tdbloader".to_string(),
+        "tdbdump".to_string(),
+        "tdbquery".to_string(),
+        "tdbupdate".to_string(),
+        "tdbstats".to_string(),
+        "tdbbackup".to_string(),
+        "tdbcompact".to_string(),
+        
+        // Environment
+        "use".to_string(),
+        "set".to_string(),
+        "env".to_string(),
+        
+        // System
         "clear".to_string(),
+        "cls".to_string(),
         "help".to_string(),
         "exit".to_string(),
         "quit".to_string(),

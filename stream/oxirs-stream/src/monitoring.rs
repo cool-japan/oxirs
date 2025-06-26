@@ -156,7 +156,7 @@ pub struct Profiler {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceTrace {
     pub operation: String,
-    pub start_time: Instant,
+    pub start_time: DateTime<Utc>,
     pub duration: Duration,
     pub metadata: HashMap<String, String>,
     pub call_stack: Vec<String>,
@@ -508,6 +508,7 @@ impl Profiler {
         Some(TraceHandle {
             operation,
             start_time: Instant::now(),
+            timestamp: Utc::now(),
             traces: self.traces.clone(),
         })
     }
@@ -517,6 +518,7 @@ impl Profiler {
 pub struct TraceHandle {
     operation: String,
     start_time: Instant,
+    timestamp: DateTime<Utc>,
     traces: Arc<RwLock<Vec<PerformanceTrace>>>,
 }
 
@@ -525,7 +527,7 @@ impl Drop for TraceHandle {
         let duration = self.start_time.elapsed();
         let trace = PerformanceTrace {
             operation: self.operation.clone(),
-            start_time: self.start_time,
+            start_time: self.timestamp,
             duration,
             metadata: HashMap::new(),
             call_stack: Vec::new(), // Would be populated with actual call stack

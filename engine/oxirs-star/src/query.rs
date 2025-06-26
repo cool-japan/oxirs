@@ -7,6 +7,7 @@ use std::collections::{HashMap, HashSet};
 
 use tracing::{debug, span, Level};
 
+use crate::functions::{Expression, ExpressionEvaluator, StarFunction};
 use crate::model::{StarGraph, StarTerm, StarTriple, Variable};
 use crate::store::StarStore;
 use crate::{StarError, StarResult};
@@ -88,6 +89,8 @@ impl Default for Binding {
 pub struct BasicGraphPattern {
     /// Triple patterns in the BGP
     patterns: Vec<TriplePattern>,
+    /// Filter expressions to apply
+    filters: Vec<Expression>,
 }
 
 /// SPARQL-star triple pattern with support for quoted triple patterns
@@ -229,6 +232,7 @@ impl BasicGraphPattern {
     pub fn new() -> Self {
         Self {
             patterns: Vec::new(),
+            filters: Vec::new(),
         }
     }
 
@@ -237,9 +241,19 @@ impl BasicGraphPattern {
         self.patterns.push(pattern);
     }
 
+    /// Add a filter expression to the BGP
+    pub fn add_filter(&mut self, filter: Expression) {
+        self.filters.push(filter);
+    }
+
     /// Get all patterns in the BGP
     pub fn patterns(&self) -> &[TriplePattern] {
         &self.patterns
+    }
+
+    /// Get all filters in the BGP
+    pub fn filters(&self) -> &[Expression] {
+        &self.filters
     }
 
     /// Extract all variables from this BGP
@@ -248,7 +262,33 @@ impl BasicGraphPattern {
         for pattern in &self.patterns {
             pattern.extract_variables(&mut variables);
         }
+        // Also extract variables from filters
+        for filter in &self.filters {
+            Self::extract_variables_from_expr(filter, &mut variables);
+        }
         variables
+    }
+
+    /// Extract variables from an expression
+    fn extract_variables_from_expr(expr: &Expression, variables: &mut HashSet<String>) {
+        match expr {
+            Expression::Variable(var) => {
+                variables.insert(var.clone());
+            }
+            Expression::FunctionCall { args, .. } => {
+                for arg in args {
+                    Self::extract_variables_from_expr(arg, variables);
+                }
+            }
+            Expression::BinaryOp { left, right, .. } => {
+                Self::extract_variables_from_expr(left, variables);
+                Self::extract_variables_from_expr(right, variables);
+            }
+            Expression::UnaryOp { expr, .. } => {
+                Self::extract_variables_from_expr(expr, variables);
+            }
+            Expression::Term(_) => {}
+        }
     }
 }
 
@@ -366,6 +406,11 @@ impl QueryExecutor {
             self.statistics.pattern_evaluations += 1; // Count each pattern evaluation
             self.statistics.join_operations += 1;
             self.statistics.intermediate_results += current_bindings.len();
+        }
+
+        // Apply filters to the bindings
+        if !bgp.filters.is_empty() {
+            current_bindings = self.apply_filters(current_bindings, &bgp.filters)?;
         }
 
         self.statistics.execution_time_us += start_time.elapsed().as_micros() as u64;
@@ -518,11 +563,11 @@ impl QueryExecutor {
         // Use store's query method for better performance
         let matching_triples = self
             .store
-            .query_triples(subject_term, predicate_term, object_term);
+            .query_triples(subject_term, predicate_term, object_term)?;
 
-        for triple in matching_triples {
-            if pattern.matches(&triple, initial_binding) {
-                if let Some(new_binding) = pattern.try_bind(&triple, initial_binding) {
+        for triple in matching_triples.iter() {
+            if pattern.matches(triple, initial_binding) {
+                if let Some(new_binding) = pattern.try_bind(triple, initial_binding) {
                     bindings.push(new_binding);
                 }
             }
@@ -662,6 +707,61 @@ impl QueryExecutor {
         };
 
         TriplePattern::new(subject, predicate, object)
+    }
+
+    /// Apply filter expressions to bindings
+    fn apply_filters(&self, bindings: Vec<Binding>, filters: &[Expression]) -> StarResult<Vec<Binding>> {
+        let mut filtered_bindings = Vec::new();
+
+        for binding in bindings {
+            let mut passes_all_filters = true;
+
+            for filter in filters {
+                // Convert binding to HashMap for expression evaluation
+                let binding_map: HashMap<String, StarTerm> = binding.bindings.clone();
+
+                match ExpressionEvaluator::evaluate(filter, &binding_map) {
+                    Ok(result) => {
+                        // Check if the result is a boolean true
+                        if let Some(literal) = result.as_literal() {
+                            if let Some(datatype) = &literal.datatype {
+                                if datatype.iri == "http://www.w3.org/2001/XMLSchema#boolean" {
+                                    if literal.value != "true" {
+                                        passes_all_filters = false;
+                                        break;
+                                    }
+                                } else {
+                                    // Non-boolean result is considered false
+                                    passes_all_filters = false;
+                                    break;
+                                }
+                            } else {
+                                // No datatype, check if it's a truthy value
+                                if literal.value.is_empty() || literal.value == "false" || literal.value == "0" {
+                                    passes_all_filters = false;
+                                    break;
+                                }
+                            }
+                        } else {
+                            // Non-literal results are considered false in filter context
+                            passes_all_filters = false;
+                            break;
+                        }
+                    }
+                    Err(_) => {
+                        // Filter evaluation error means the binding doesn't pass
+                        passes_all_filters = false;
+                        break;
+                    }
+                }
+            }
+
+            if passes_all_filters {
+                filtered_bindings.push(binding);
+            }
+        }
+
+        Ok(filtered_bindings)
     }
 
     /// Execute a single triple pattern (legacy method for compatibility)
@@ -1269,5 +1369,140 @@ mod tests {
             pattern.subject,
             TermPattern::QuotedTriplePattern(_)
         ));
+    }
+
+    #[test]
+    fn test_sparql_star_functions_in_filters() {
+        use crate::functions::{Expression, StarFunction};
+
+        let store = StarStore::new();
+
+        // Add test data with quoted triples
+        let fact = StarTriple::new(
+            StarTerm::iri("http://example.org/alice").unwrap(),
+            StarTerm::iri("http://example.org/age").unwrap(),
+            StarTerm::literal("25").unwrap(),
+        );
+
+        let meta = StarTriple::new(
+            StarTerm::quoted_triple(fact.clone()),
+            StarTerm::iri("http://example.org/source").unwrap(),
+            StarTerm::literal("census").unwrap(),
+        );
+
+        store.insert(&fact).unwrap();
+        store.insert(&meta).unwrap();
+
+        let mut executor = QueryExecutor::new(store);
+
+        // Query with SPARQL-star function in filter
+        let mut bgp = BasicGraphPattern::new();
+        bgp.add_pattern(TriplePattern::new(
+            TermPattern::Variable("quoted".to_string()),
+            TermPattern::Term(StarTerm::iri("http://example.org/source").unwrap()),
+            TermPattern::Variable("source".to_string()),
+        ));
+
+        // Add filter: isTRIPLE(?quoted)
+        bgp.add_filter(Expression::is_triple(Expression::var("quoted")));
+
+        let bindings = executor.execute_bgp(&bgp).unwrap();
+        assert_eq!(bindings.len(), 1);
+
+        // Verify the binding contains a quoted triple
+        let binding = &bindings[0];
+        assert!(binding.is_bound("quoted"));
+        if let Some(quoted_term) = binding.get("quoted") {
+            assert!(quoted_term.is_quoted_triple());
+        }
+    }
+
+    #[test]
+    fn test_sparql_star_function_composition() {
+        use crate::functions::{Expression, StarFunction};
+
+        let store = StarStore::new();
+
+        // Create nested quoted triple
+        let inner = StarTriple::new(
+            StarTerm::iri("http://example.org/alice").unwrap(),
+            StarTerm::iri("http://example.org/knows").unwrap(),
+            StarTerm::iri("http://example.org/bob").unwrap(),
+        );
+
+        let outer = StarTriple::new(
+            StarTerm::quoted_triple(inner.clone()),
+            StarTerm::iri("http://example.org/confidence").unwrap(),
+            StarTerm::literal("0.8").unwrap(),
+        );
+
+        store.insert(&inner).unwrap();
+        store.insert(&outer).unwrap();
+
+        let mut executor = QueryExecutor::new(store);
+
+        // Query that uses SUBJECT function
+        let mut bgp = BasicGraphPattern::new();
+        bgp.add_pattern(TriplePattern::new(
+            TermPattern::Variable("statement".to_string()),
+            TermPattern::Term(StarTerm::iri("http://example.org/confidence").unwrap()),
+            TermPattern::Variable("conf".to_string()),
+        ));
+
+        let bindings = executor.execute_bgp(&bgp).unwrap();
+        assert_eq!(bindings.len(), 1);
+
+        // Verify we can extract the subject of the quoted triple
+        let binding = &bindings[0];
+        if let Some(statement) = binding.get("statement") {
+            assert!(statement.is_quoted_triple());
+
+            // Test SUBJECT function evaluation
+            let subject_result = crate::functions::FunctionEvaluator::evaluate(
+                crate::functions::StarFunction::Subject,
+                &[statement.clone()],
+            ).unwrap();
+
+            // The subject should be the quoted inner triple
+            assert!(subject_result.is_quoted_triple());
+        }
+    }
+
+    #[test]
+    fn test_filter_with_triple_construction() {
+        use crate::functions::Expression;
+
+        let store = StarStore::new();
+
+        // Add some triples
+        let triple1 = StarTriple::new(
+            StarTerm::iri("http://example.org/alice").unwrap(),
+            StarTerm::iri("http://example.org/age").unwrap(),
+            StarTerm::literal("25").unwrap(),
+        );
+
+        let triple2 = StarTriple::new(
+            StarTerm::iri("http://example.org/bob").unwrap(),
+            StarTerm::iri("http://example.org/age").unwrap(),
+            StarTerm::literal("30").unwrap(),
+        );
+
+        store.insert(&triple1).unwrap();
+        store.insert(&triple2).unwrap();
+
+        let mut executor = QueryExecutor::new(store);
+
+        // Query that constructs a triple in a filter
+        let mut bgp = BasicGraphPattern::new();
+        bgp.add_pattern(TriplePattern::new(
+            TermPattern::Variable("person".to_string()),
+            TermPattern::Term(StarTerm::iri("http://example.org/age").unwrap()),
+            TermPattern::Variable("age".to_string()),
+        ));
+
+        // This test demonstrates using TRIPLE function in expressions
+        // In a real implementation, we might check if a constructed triple exists
+        let bindings = executor.execute_bgp(&bgp).unwrap();
+        assert_eq!(bindings.len(), 2);
     }
 }

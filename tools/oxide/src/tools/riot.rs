@@ -94,15 +94,13 @@ pub async fn run(
 
                 println!("  Triples/Quads: {}", result.triple_count);
 
-                if !validate && !count {
-                    if !result.output.is_empty() {
-                        if input.len() > 1 {
-                            // Multiple files - add separator comment
-                            all_output.push_str(&format!("# File: {}\n", input_file.display()));
-                        }
-                        all_output.push_str(&result.output);
-                        all_output.push('\n');
+                if !validate && !count && !result.output.is_empty() {
+                    if input.len() > 1 {
+                        // Multiple files - add separator comment
+                        all_output.push_str(&format!("# File: {}\n", input_file.display()));
                     }
+                    all_output.push_str(&result.output);
+                    all_output.push('\n');
                 }
             }
             Err(e) => {

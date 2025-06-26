@@ -2,8 +2,8 @@
 
 use super::ToolResult;
 use std::fs;
-use std::io::{self, BufRead, BufReader, Write};
-use std::path::{Path, PathBuf};
+use std::io::{self, BufRead, Write};
+use std::path::Path;
 
 /// Detect RDF format from file extension
 pub fn detect_rdf_format(file: &Path) -> String {

@@ -43,15 +43,13 @@ pub mod consumer;
 pub mod delta;
 pub mod error;
 pub mod event;
-pub mod kafka;
-pub mod kinesis;
+pub mod failover;
+pub mod health_monitor;
 pub mod monitoring;
-pub mod nats;
 pub mod patch;
 pub mod processing;
 pub mod producer;
-pub mod pulsar;
-pub mod redis;
+pub mod reconnect;
 pub mod types;
 
 /// Enhanced stream configuration with advanced features
@@ -402,15 +400,15 @@ pub struct StreamProducer {
 /// Backend-agnostic producer wrapper
 enum BackendProducer {
     #[cfg(feature = "kafka")]
-    Kafka(kafka::KafkaProducer),
+    Kafka(backend::kafka::KafkaProducer),
     #[cfg(feature = "nats")]
-    Nats(nats::NatsProducer),
+    Nats(backend::nats::NatsProducer),
     #[cfg(feature = "redis")]
-    Redis(redis::RedisProducer),
+    Redis(backend::redis::RedisProducer),
     #[cfg(feature = "kinesis")]
-    Kinesis(kinesis::KinesisProducer),
+    Kinesis(backend::kinesis::KinesisProducer),
     #[cfg(feature = "pulsar")]
-    Pulsar(pulsar::PulsarProducer),
+    Pulsar(backend::pulsar::PulsarProducer),
     Memory(MemoryProducer),
 }
 
@@ -538,7 +536,7 @@ impl StreamProducer {
                     monitoring: config.monitoring.clone(),
                 };
 
-                let mut producer = kafka::KafkaProducer::new(stream_config)?;
+                let mut producer = backend::kafka::KafkaProducer::new(stream_config)?;
                 producer.connect().await?;
                 BackendProducer::Kafka(producer)
             }
@@ -568,7 +566,7 @@ impl StreamProducer {
                     monitoring: config.monitoring.clone(),
                 };
 
-                let mut producer = nats::NatsProducer::new(stream_config)?;
+                let mut producer = backend::nats::NatsProducer::new(stream_config)?;
                 producer.connect().await?;
                 BackendProducer::Nats(producer)
             }
@@ -598,7 +596,7 @@ impl StreamProducer {
                     monitoring: config.monitoring.clone(),
                 };
 
-                let mut producer = redis::RedisProducer::new(stream_config)?;
+                let mut producer = backend::redis::RedisProducer::new(stream_config)?;
                 producer.connect().await?;
                 BackendProducer::Redis(producer)
             }
@@ -628,7 +626,7 @@ impl StreamProducer {
                     monitoring: config.monitoring.clone(),
                 };
 
-                let mut producer = kinesis::KinesisProducer::new(stream_config)?;
+                let mut producer = backend::kinesis::KinesisProducer::new(stream_config)?;
                 producer.connect().await?;
                 BackendProducer::Kinesis(producer)
             }
@@ -656,7 +654,7 @@ impl StreamProducer {
                     monitoring: config.monitoring.clone(),
                 };
 
-                let mut producer = pulsar::PulsarProducer::new(stream_config)?;
+                let mut producer = backend::pulsar::PulsarProducer::new(stream_config)?;
                 producer.connect().await?;
                 BackendProducer::Pulsar(producer)
             }
@@ -969,11 +967,11 @@ pub struct StreamConsumer {
 /// Backend-agnostic consumer wrapper
 enum BackendConsumer {
     #[cfg(feature = "redis")]
-    Redis(redis::RedisConsumer),
+    Redis(backend::redis::RedisConsumer),
     #[cfg(feature = "kinesis")]
-    Kinesis(kinesis::KinesisConsumer),
+    Kinesis(backend::kinesis::KinesisConsumer),
     #[cfg(feature = "pulsar")]
-    Pulsar(pulsar::PulsarConsumer),
+    Pulsar(backend::pulsar::PulsarConsumer),
     Memory(MemoryConsumer),
 }
 
@@ -1111,7 +1109,7 @@ impl StreamConsumer {
                     monitoring: config.monitoring.clone(),
                 };
 
-                let mut consumer = redis::RedisConsumer::new(stream_config)?;
+                let mut consumer = backend::redis::RedisConsumer::new(stream_config)?;
                 consumer.connect().await?;
                 BackendConsumer::Redis(consumer)
             }
@@ -1141,7 +1139,7 @@ impl StreamConsumer {
                     monitoring: config.monitoring.clone(),
                 };
 
-                let mut consumer = kinesis::KinesisConsumer::new(stream_config)?;
+                let mut consumer = backend::kinesis::KinesisConsumer::new(stream_config)?;
                 consumer.connect().await?;
                 BackendConsumer::Kinesis(consumer)
             }
@@ -1169,7 +1167,7 @@ impl StreamConsumer {
                     monitoring: config.monitoring.clone(),
                 };
 
-                let mut consumer = pulsar::PulsarConsumer::new(stream_config)?;
+                let mut consumer = backend::pulsar::PulsarConsumer::new(stream_config)?;
                 consumer.connect().await?;
                 BackendConsumer::Pulsar(consumer)
             }

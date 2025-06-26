@@ -660,24 +660,35 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     // Create CLI context
     let ctx = CliContext::from_cli(cli.verbose, cli.quiet, cli.no_color);
 
-    // Initialize logging with context
-    let level = if ctx.verbose {
-        tracing::Level::DEBUG
-    } else if ctx.quiet {
-        tracing::Level::ERROR
+    // Initialize structured logging
+    let log_format = if std::env::var("OXIDE_LOG_FORMAT").as_deref() == Ok("json") {
+        cli::LogFormat::Json
+    } else if ctx.verbose {
+        cli::LogFormat::Pretty
     } else {
-        tracing::Level::INFO
+        cli::LogFormat::Text
     };
-
-    let subscriber = tracing_subscriber::fmt()
-        .with_max_level(level)
-        .with_ansi(!ctx.no_color);
     
-    if ctx.quiet {
-        subscriber.without_time().init();
-    } else {
-        subscriber.init();
-    }
+    let log_config = cli::LogConfig {
+        level: if ctx.verbose {
+            "debug".to_string()
+        } else if ctx.quiet {
+            "error".to_string()
+        } else {
+            std::env::var("OXIDE_LOG_LEVEL").unwrap_or_else(|_| "info".to_string())
+        },
+        format: log_format,
+        timestamps: !ctx.quiet,
+        source_location: ctx.verbose,
+        thread_ids: false,
+        perf_threshold_ms: std::env::var("OXIDE_PERF_THRESHOLD")
+            .ok()
+            .and_then(|s| s.parse().ok()),
+        file: std::env::var("OXIDE_LOG_FILE").ok(),
+    };
+    
+    cli::init_logging(&log_config)
+        .expect("Failed to initialize logging");
 
     // Show startup message if not quiet
     if ctx.should_show_output() {
@@ -900,7 +911,7 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             output_format,
             output,
         } => tools::rset::run(input, input_format, output_format, output).await,
-        Commands::Interactive { dataset, history } => {
+        Commands::Interactive { dataset: _, history: _ } => {
             use cli::InteractiveMode;
             
             ctx.info("Starting interactive mode...");

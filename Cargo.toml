@@ -60,7 +60,7 @@ toml = "0.8"
 anyhow = "1.0"
 thiserror = "1.0"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"] }
 
 # Storage and persistence
 # rocksdb = "0.22"  # Commented out due to conflict with oxigraph

@@ -108,6 +108,11 @@ impl CliError {
         Self::new(CliErrorKind::ConfigError(message.into()))
     }
 
+    /// Create an IO error
+    pub fn io_error(error: io::Error) -> Self {
+        Self::new(CliErrorKind::IoError(error))
+    }
+
     /// Get user-friendly error message
     pub fn user_message(&self) -> String {
         match &self.kind {
@@ -259,6 +264,145 @@ pub mod helpers {
                 "Try increasing the timeout with --timeout".to_string(),
             ])
             .with_code("E004")
+    }
+    
+    /// Create an error for dataset not found
+    pub fn dataset_not_found_error(name: &str) -> CliError {
+        CliError::not_found(format!("Dataset '{}'", name))
+            .with_context("The specified dataset does not exist")
+            .with_suggestions(vec![
+                format!("Create the dataset with: oxide init {}", name),
+                "List available datasets with: oxide dataset list".to_string(),
+                "Check if the dataset name is spelled correctly".to_string(),
+            ])
+            .with_code("E005")
+    }
+    
+    /// Create an error for permission issues
+    pub fn permission_error(path: &Path, operation: &str) -> CliError {
+        CliError::permission_denied(path.display().to_string())
+            .with_context(format!("Cannot {} file/directory", operation))
+            .with_suggestions(vec![
+                format!("Check permissions: ls -la {}", path.display()),
+                "Run with appropriate permissions (sudo if necessary)".to_string(),
+                "Ensure the parent directory is writable".to_string(),
+            ])
+            .with_code("E006")
+    }
+    
+    /// Create an error for timeout
+    pub fn timeout_error(operation: &str, timeout_secs: u64) -> CliError {
+        CliError::new(CliErrorKind::Other(format!("Operation timed out after {}s", timeout_secs)))
+            .with_context(format!("Timeout while: {}", operation))
+            .with_suggestions(vec![
+                format!("Increase timeout with: --timeout {}", timeout_secs * 2),
+                "Check if the server is responding".to_string(),
+                "Try with a smaller dataset or query".to_string(),
+                "Check server logs for issues".to_string(),
+            ])
+            .with_code("E007")
+    }
+    
+    /// Create an error for incompatible versions
+    pub fn version_mismatch_error(expected: &str, found: &str) -> CliError {
+        CliError::new(CliErrorKind::Other(format!("Version mismatch: expected {}, found {}", expected, found)))
+            .with_context("Incompatible dataset or file version")
+            .with_suggestions(vec![
+                format!("Migrate the dataset with: oxide migrate --from {} --to {}", found, expected),
+                "Use a compatible version of oxide".to_string(),
+                "Check the migration guide in the documentation".to_string(),
+            ])
+            .with_code("E008")
+    }
+    
+    /// Create an error for missing dependencies
+    pub fn missing_dependency_error(dependency: &str, feature: &str) -> CliError {
+        CliError::new(CliErrorKind::Other(format!("Missing dependency: {}", dependency)))
+            .with_context(format!("Required for: {}", feature))
+            .with_suggestions(vec![
+                format!("Install {} to enable this feature", dependency),
+                "Check the documentation for installation instructions".to_string(),
+                format!("This feature requires the '{}' feature flag", feature),
+            ])
+            .with_code("E009")
+    }
+    
+    /// Create an error for configuration issues with specific field
+    pub fn config_field_error(field: &str, value: &str, expected: &str) -> CliError {
+        CliError::config_error(format!("Invalid value '{}' for field '{}'", value, field))
+            .with_context("Configuration validation failed")
+            .with_suggestions(vec![
+                format!("Expected: {}", expected),
+                format!("Check your config file for the '{}' field", field),
+                "Run 'oxide config validate' to check all settings".to_string(),
+                "Use 'oxide config init' to generate a valid config".to_string(),
+            ])
+            .with_code("E010")
+    }
+}
+
+/// Error recovery suggestions based on error type
+pub mod recovery {
+    use super::*;
+    
+    /// Suggest recovery actions for IO errors
+    pub fn suggest_io_recovery(error: &io::Error) -> Vec<String> {
+        use io::ErrorKind::*;
+        
+        match error.kind() {
+            NotFound => vec![
+                "Check if the file or directory exists".to_string(),
+                "Verify the path is correct".to_string(),
+                "Use an absolute path instead of relative".to_string(),
+            ],
+            PermissionDenied => vec![
+                "Check file permissions".to_string(),
+                "Run with appropriate privileges".to_string(),
+                "Ensure parent directory is accessible".to_string(),
+            ],
+            AlreadyExists => vec![
+                "Use a different name".to_string(),
+                "Delete the existing file/directory first".to_string(),
+                "Use --force to overwrite".to_string(),
+            ],
+            WouldBlock => vec![
+                "The resource is temporarily unavailable".to_string(),
+                "Try again in a moment".to_string(),
+                "Check if another process is using the resource".to_string(),
+            ],
+            InvalidInput => vec![
+                "Check the input format".to_string(),
+                "Verify the file encoding (UTF-8 expected)".to_string(),
+                "Remove any invalid characters".to_string(),
+            ],
+            _ => vec![
+                "Check system resources (disk space, memory)".to_string(),
+                "Verify file system integrity".to_string(),
+                "Check system logs for more details".to_string(),
+            ],
+        }
+    }
+    
+    /// Suggest fixes for common SPARQL errors
+    pub fn suggest_sparql_fixes(error_msg: &str) -> Vec<String> {
+        let mut suggestions = Vec::new();
+        
+        if error_msg.contains("Undefined prefix") {
+            suggestions.push("Define the prefix at the beginning of your query".to_string());
+            suggestions.push("Example: PREFIX foaf: <http://xmlns.com/foaf/0.1/>".to_string());
+        }
+        
+        if error_msg.contains("Expected") && error_msg.contains("found") {
+            suggestions.push("Check for syntax errors around the indicated position".to_string());
+            suggestions.push("Verify brackets, quotes, and punctuation".to_string());
+        }
+        
+        if error_msg.contains("Variable") && error_msg.contains("not in scope") {
+            suggestions.push("Ensure all variables in SELECT are defined in WHERE".to_string());
+            suggestions.push("Check for typos in variable names".to_string());
+        }
+        
+        suggestions
     }
 }
 

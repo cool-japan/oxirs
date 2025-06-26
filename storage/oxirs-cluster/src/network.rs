@@ -523,7 +523,8 @@ impl NetworkService {
     pub async fn send_to(&self, peer_id: &str, message: RpcMessage) -> Result<()> {
         let peer_id: OxirsNodeId = peer_id.parse()
             .map_err(|_| anyhow::anyhow!("Invalid peer ID"))?;
-        self.manager.send_message(peer_id, message).await?;
+        // Use send_message method from NetworkService instead
+        self.send_message(peer_id, message).await?;
         Ok(())
     }
     
@@ -531,7 +532,7 @@ impl NetworkService {
     pub async fn broadcast(&self, message: RpcMessage) -> Result<()> {
         let connections = self.manager.connections.read().await;
         for peer_id in connections.keys() {
-            let _ = self.manager.send_message(*peer_id, message.clone()).await;
+            let _ = self.send_message(*peer_id, message.clone()).await;
         }
         Ok(())
     }

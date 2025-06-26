@@ -12,12 +12,18 @@ pub mod validation;
 pub mod interactive;
 pub mod progress;
 pub mod output;
+pub mod completion;
+pub mod help;
+pub mod logging;
 
 pub use error::{CliError, CliResult};
 pub use validation::ArgumentValidator;
 pub use interactive::InteractiveMode;
 pub use progress::{ProgressTracker, ProgressType};
 pub use output::{OutputFormatter, ColorScheme};
+pub use completion::{CompletionContext, CompletionProvider, CommandCompletionProvider};
+pub use help::{HelpProvider, HelpCategory};
+pub use logging::{LogConfig, LogFormat, init_logging, CommandLogger, QueryLogger, DataLogger, PerfLogger};
 
 /// CLI Context for managing global state
 pub struct CliContext {
@@ -164,22 +170,6 @@ impl Default for CliContext {
     }
 }
 
-/// Auto-completion support
-pub mod completion {
-    use clap::Command;
-    use clap_complete::{generate, Generator, Shell};
-    use std::io;
-
-    /// Generate shell completion scripts
-    pub fn generate_completion<G: Generator>(gen: G, app: &mut Command, name: &str, out: &mut dyn io::Write) {
-        generate(gen, app, name, out);
-    }
-
-    /// Print completions for specified shell
-    pub fn print_completions(shell: Shell, app: &mut Command) {
-        generate_completion(shell, app, "oxide", &mut io::stdout());
-    }
-}
 
 /// Command suggestions
 pub mod suggestions {

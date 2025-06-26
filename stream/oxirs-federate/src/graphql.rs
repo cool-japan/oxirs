@@ -696,6 +696,213 @@ impl GraphQLFederation {
             extensions: None,
         })
     }
+    
+    /// Introspect a GraphQL service for Apollo Federation support
+    pub async fn introspect_federation_support(&self, service_endpoint: &str) -> Result<FederationServiceInfo> {
+        debug!("Introspecting GraphQL service for federation support: {}", service_endpoint);
+        
+        // Query for federation support
+        let federation_query = r#"
+            query FederationIntrospection {
+                _service {
+                    sdl
+                }
+                __schema {
+                    types {
+                        name
+                        fields {
+                            name
+                            type {
+                                name
+                                kind
+                            }
+                        }
+                    }
+                }
+            }
+        "#;
+        
+        // In a real implementation, this would make an HTTP request to the service
+        // For now, return mock data
+        let mock_sdl = r#"
+            extend type Query {
+                me: User
+            }
+            
+            type User @key(fields: "id") {
+                id: ID!
+                username: String!
+                email: String! @external
+            }
+        "#;
+        
+        Ok(FederationServiceInfo {
+            sdl: mock_sdl.to_string(),
+            capabilities: FederationCapabilities {
+                federation_version: "2.0".to_string(),
+                supports_entities: true,
+                supports_entity_interfaces: true,
+                supports_progressive_override: false,
+            },
+            entity_types: vec!["User".to_string()],
+        })
+    }
+    
+    /// Resolve entity references across federated services
+    pub async fn resolve_entities(
+        &self,
+        representations: Vec<EntityRepresentation>,
+    ) -> Result<Vec<serde_json::Value>> {
+        debug!("Resolving {} entity representations", representations.len());
+        
+        // Group representations by type
+        let mut by_type: HashMap<String, Vec<&EntityRepresentation>> = HashMap::new();
+        for repr in &representations {
+            by_type.entry(repr.typename.clone())
+                .or_default()
+                .push(repr);
+        }
+        
+        // Resolve entities by type across appropriate services
+        let mut resolved_entities = Vec::new();
+        
+        for (typename, reprs) in by_type {
+            // Find which service owns this entity type
+            let service_id = self.find_service_for_entity(&typename).await?;
+            
+            // Build _entities query for this service
+            let entities_query = self.build_entities_query(&typename, reprs)?;
+            
+            // Execute query (mock for now)
+            let mock_entity = serde_json::json!({
+                "__typename": typename,
+                "id": "123",
+                "username": "john_doe",
+                "email": "john@example.com"
+            });
+            
+            resolved_entities.push(mock_entity);
+        }
+        
+        Ok(resolved_entities)
+    }
+    
+    /// Find which service owns an entity type
+    async fn find_service_for_entity(&self, typename: &str) -> Result<String> {
+        let schemas = self.schemas.read().await;
+        
+        for (service_id, schema) in schemas.iter() {
+            if schema.types.contains_key(typename) {
+                return Ok(service_id.clone());
+            }
+        }
+        
+        Err(anyhow!("No service found for entity type: {}", typename))
+    }
+    
+    /// Build an _entities query for resolving entity references
+    fn build_entities_query(
+        &self,
+        typename: &str,
+        representations: &[&EntityRepresentation],
+    ) -> Result<String> {
+        let repr_json: Vec<serde_json::Value> = representations
+            .iter()
+            .map(|r| {
+                let mut obj = serde_json::Map::new();
+                obj.insert("__typename".to_string(), serde_json::Value::String(typename.to_string()));
+                if let serde_json::Value::Object(fields) = &r.fields {
+                    for (k, v) in fields {
+                        obj.insert(k.clone(), v.clone());
+                    }
+                }
+                serde_json::Value::Object(obj)
+            })
+            .collect();
+        
+        Ok(format!(
+            r#"
+            query GetEntities($representations: [_Any!]!) {{
+                _entities(representations: $representations) {{
+                    ... on {} {{
+                        # Fields would be added based on the query requirements
+                        id
+                    }}
+                }}
+            }}
+            "#,
+            typename
+        ))
+    }
+    
+    /// Parse Apollo Federation directives from a type definition
+    pub fn parse_federation_directives(&self, type_def: &TypeDefinition) -> FederationDirectives {
+        let mut fed_directives = FederationDirectives {
+            key: None,
+            external: false,
+            requires: None,
+            provides: None,
+            extends: false,
+            shareable: false,
+            override_from: None,
+            inaccessible: false,
+            tags: Vec::new(),
+        };
+        
+        for directive in &type_def.directives {
+            match directive.name.as_str() {
+                "key" => {
+                    if let Some(fields_arg) = directive.arguments.get("fields") {
+                        if let serde_json::Value::String(fields) = fields_arg {
+                            let resolvable = directive.arguments.get("resolvable")
+                                .and_then(|v| v.as_bool())
+                                .unwrap_or(true);
+                            
+                            fed_directives.key = Some(KeyDirective {
+                                fields: fields.clone(),
+                                resolvable,
+                            });
+                        }
+                    }
+                }
+                "external" => fed_directives.external = true,
+                "requires" => {
+                    if let Some(fields_arg) = directive.arguments.get("fields") {
+                        if let serde_json::Value::String(fields) = fields_arg {
+                            fed_directives.requires = Some(fields.clone());
+                        }
+                    }
+                }
+                "provides" => {
+                    if let Some(fields_arg) = directive.arguments.get("fields") {
+                        if let serde_json::Value::String(fields) = fields_arg {
+                            fed_directives.provides = Some(fields.clone());
+                        }
+                    }
+                }
+                "extends" => fed_directives.extends = true,
+                "shareable" => fed_directives.shareable = true,
+                "override" => {
+                    if let Some(from_arg) = directive.arguments.get("from") {
+                        if let serde_json::Value::String(from) = from_arg {
+                            fed_directives.override_from = Some(from.clone());
+                        }
+                    }
+                }
+                "inaccessible" => fed_directives.inaccessible = true,
+                "tag" => {
+                    if let Some(name_arg) = directive.arguments.get("name") {
+                        if let serde_json::Value::String(tag) = name_arg {
+                            fed_directives.tags.push(tag.clone());
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        
+        fed_directives
+    }
 }
 
 impl Default for GraphQLFederation {
@@ -874,6 +1081,98 @@ pub struct ServiceQuery {
 pub struct ServiceResult {
     pub service_id: String,
     pub response: GraphQLResponse,
+}
+
+/// GraphQL operation type
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GraphQLOperationType {
+    Query,
+    Mutation,
+    Subscription,
+}
+
+/// Parsed GraphQL query
+#[derive(Debug, Clone)]
+pub struct ParsedQuery {
+    pub operation_type: GraphQLOperationType,
+    pub operation_name: Option<String>,
+    pub selection_set: Vec<Selection>,
+    pub variables: HashMap<String, serde_json::Value>,
+}
+
+/// GraphQL selection (field)
+#[derive(Debug, Clone)]
+pub struct Selection {
+    pub name: String,
+    pub alias: Option<String>,
+    pub arguments: HashMap<String, serde_json::Value>,
+    pub selection_set: Vec<Selection>,
+}
+
+/// Field ownership mapping
+#[derive(Debug, Clone)]
+pub struct FieldOwnership {
+    pub field_to_service: HashMap<String, String>,
+    pub service_to_fields: HashMap<String, Vec<String>>,
+}
+
+/// Apollo Federation directives
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederationDirectives {
+    /// @key directive for entity identification
+    pub key: Option<KeyDirective>,
+    /// @external directive for fields owned by other services
+    pub external: bool,
+    /// @requires directive for field dependencies
+    pub requires: Option<String>,
+    /// @provides directive for field guarantees
+    pub provides: Option<String>,
+    /// @extends directive for extending types
+    pub extends: bool,
+    /// @shareable directive for fields that can be resolved by multiple services
+    pub shareable: bool,
+    /// @override directive for taking ownership of fields
+    pub override_from: Option<String>,
+    /// @inaccessible directive for hiding fields
+    pub inaccessible: bool,
+    /// @tag directive for metadata
+    pub tags: Vec<String>,
+}
+
+/// Apollo Federation @key directive
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KeyDirective {
+    pub fields: String,
+    pub resolvable: bool,
+}
+
+/// Entity representation for Apollo Federation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntityRepresentation {
+    #[serde(rename = "__typename")]
+    pub typename: String,
+    #[serde(flatten)]
+    pub fields: serde_json::Value,
+}
+
+/// Apollo Federation service info
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederationServiceInfo {
+    /// Service SDL (Schema Definition Language)
+    pub sdl: String,
+    /// Service capabilities
+    pub capabilities: FederationCapabilities,
+    /// Entity types this service can resolve
+    pub entity_types: Vec<String>,
+}
+
+/// Apollo Federation capabilities
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederationCapabilities {
+    pub federation_version: String,
+    pub supports_entities: bool,
+    pub supports_entity_interfaces: bool,
+    pub supports_progressive_override: bool,
 }
 
 #[cfg(test)]

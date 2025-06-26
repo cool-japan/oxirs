@@ -5,7 +5,6 @@
 use colored::*;
 use prettytable::{Table, Row, Cell, format};
 use serde::Serialize;
-use std::fmt;
 
 /// Output formatter with color and style management
 pub struct OutputFormatter {
@@ -161,7 +160,7 @@ impl OutputFormatter {
         if self.no_color {
             Row::new(cells.into_iter().map(Cell::new).collect())
         } else {
-            Row::new(cells.into_iter().map(|c| Cell::new(c)).collect())
+            Row::new(cells.into_iter().map(Cell::new).collect())
         }
     }
 

@@ -4,7 +4,7 @@
 //! capabilities for all supported RDF serialization formats.
 
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, Read};
 use std::path::Path;
 
 use super::ToolResult;
