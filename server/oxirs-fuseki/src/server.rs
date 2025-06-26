@@ -4,11 +4,12 @@ use crate::{
     auth::{AuthService, AuthUser},
     config::{MonitoringConfig, SecurityConfig, ServerConfig},
     error::{FusekiError, FusekiResult},
-    handlers::{self, SubscriptionManager},
+    handlers,
     metrics::{MetricsService, RequestMetrics},
     optimization::QueryOptimizer,
     performance::PerformanceService,
     store::Store,
+    websocket::{SubscriptionManager, WebSocketConfig},
 };
 use axum::{
     extract::{MatchedPath, Request, State},
@@ -111,7 +112,17 @@ impl Runtime {
 
         // Initialize subscription manager for WebSocket support
         info!("Initializing WebSocket subscription manager");
-        let subscription_manager = SubscriptionManager::new();
+        let ws_config = WebSocketConfig::default();
+        let store = Arc::new(self.store.clone());
+        let metrics = self.metrics_service.clone().unwrap_or_else(|| Arc::new(MetricsService::new(self.config.monitoring.clone()).unwrap()));
+        let subscription_manager = SubscriptionManager::new(store, metrics, ws_config);
+        
+        // Start the subscription manager
+        let manager_clone = subscription_manager.clone();
+        tokio::spawn(async move {
+            manager_clone.start().await;
+        });
+        
         self.subscription_manager = Some(Arc::new(subscription_manager));
 
         // Initialize rate limiter
@@ -349,8 +360,9 @@ impl Runtime {
         }
 
         // WebSocket routes for live query subscriptions
-        app = app.route("/ws", get(handlers::websocket::websocket_handler));
-        app = app.route("/subscribe", get(handlers::websocket::websocket_handler));
+        // WebSocket support for live query subscriptions
+        app = app.route("/ws", get(crate::websocket::websocket_handler));
+        app = app.route("/subscribe", get(crate::websocket::websocket_handler));
 
         // Admin UI route (if enabled)
         if self.config.server.admin_ui {

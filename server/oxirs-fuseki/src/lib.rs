@@ -36,8 +36,10 @@ use std::net::SocketAddr;
 
 pub mod aggregation;
 pub mod auth;
+pub mod bind_values_enhanced;
 pub mod config;
 pub mod error;
+pub mod federated_query_optimizer;
 pub mod federation;
 pub mod handlers;
 pub mod metrics;
@@ -48,6 +50,7 @@ pub mod server;
 pub mod store;
 pub mod subquery_optimizer;
 pub mod vector_search;
+pub mod websocket;
 
 use store::Store;
 

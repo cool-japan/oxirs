@@ -15,6 +15,8 @@ pub mod optimizer;
 pub mod path;
 pub use builtin_fixed as builtin;
 pub mod query;
+pub mod term;
+pub mod expression;
 
 // Re-export main types for convenience
 pub use algebra::*;
@@ -23,6 +25,8 @@ pub use extensions::*;
 pub use optimizer::*;
 pub use path::*;
 pub use query::*;
+pub use term::*;
+pub use expression::*;
 
 /// SPARQL Query Engine - High-level interface
 pub struct SparqlEngine {

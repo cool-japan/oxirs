@@ -18,8 +18,10 @@
 use crate::{
     aggregation::{AggregationFactory, EnhancedAggregationProcessor},
     auth::{AuthUser, Permission},
+    bind_values_enhanced::{EnhancedBindProcessor, EnhancedValuesProcessor},
     config::ServerConfig,
     error::{FusekiError, FusekiResult},
+    federated_query_optimizer::FederatedQueryOptimizer,
     metrics::MetricsService,
     server::AppState,
     store::Store,
@@ -1637,7 +1639,49 @@ async fn execute_federated_query(
     default_graphs: &[String],
     named_graphs: &[String],
 ) -> FusekiResult<QueryResult> {
-    debug!("Processing federated query with SERVICE clauses");
+    debug!("Processing federated query with advanced optimization");
+
+    // Create federated query optimizer
+    let metrics = Arc::new(MetricsService::new());
+    let optimizer = FederatedQueryOptimizer::new(metrics.clone());
+
+    // Set timeout based on query complexity
+    let timeout_ms = if query.len() > 1000 { 60000 } else { 30000 };
+
+    // Process federated query with advanced optimization
+    let start = std::time::Instant::now();
+    
+    match optimizer.process_federated_query(query, timeout_ms).await {
+        Ok(results) => {
+            let execution_time = start.elapsed();
+            
+            Ok(QueryResult {
+                query_type: determine_query_type(query),
+                execution_time_ms: execution_time.as_millis() as u64,
+                result_count: Some(results.bindings.len()),
+                bindings: Some(results.bindings),
+                boolean: None,
+                construct_graph: None,
+                describe_graph: None,
+            })
+        }
+        Err(e) => {
+            warn!("Advanced federated query optimization failed: {}, falling back to simple execution", e);
+            
+            // Fall back to simple federated execution
+            execute_simple_federated_query(store, query, default_graphs, named_graphs).await
+        }
+    }
+}
+
+/// Simple federated query execution as fallback
+async fn execute_simple_federated_query(
+    store: &Store,
+    query: &str,
+    default_graphs: &[String],
+    named_graphs: &[String],
+) -> FusekiResult<QueryResult> {
+    debug!("Falling back to simple federated query execution");
 
     // Parse SERVICE clauses
     let service_endpoints = extract_service_endpoints(query)?;
@@ -2092,32 +2136,15 @@ async fn process_bind_clauses(
     query: &str,
     bindings: &mut Vec<HashMap<String, serde_json::Value>>,
 ) -> FusekiResult<()> {
-    debug!("Processing BIND clauses in query");
+    debug!("Processing BIND clauses with enhanced SPARQL 1.2 processor");
 
-    // Simple BIND processing simulation
-    // In a full implementation, this would parse and evaluate BIND expressions
-
-    for binding in bindings.iter_mut() {
-        // Example: BIND(?price * 1.1 AS ?priceWithTax)
-        if query.to_lowercase().contains("bind(") {
-            // Simulate adding computed values
-            if let Some(price_val) = binding.get("price") {
-                if let Some(price_num) = price_val.as_f64() {
-                    binding.insert(
-                        "priceWithTax".to_string(),
-                        serde_json::json!(price_num * 1.1),
-                    );
-                }
-            }
-
-            // Add timestamp binding
-            binding.insert(
-                "timestamp".to_string(),
-                serde_json::json!(chrono::Utc::now().to_rfc3339()),
-            );
-        }
-    }
-
+    // Use enhanced BIND processor
+    let bind_processor = EnhancedBindProcessor::new();
+    
+    // Process BIND clauses with optimization
+    bind_processor.process_bind_clauses(query, bindings).await?;
+    
+    info!("Successfully processed BIND clauses with enhanced features");
     Ok(())
 }
 
@@ -2126,33 +2153,15 @@ async fn process_values_clauses(
     query: &str,
     bindings: &mut Vec<HashMap<String, serde_json::Value>>,
 ) -> FusekiResult<()> {
-    debug!("Processing VALUES clauses in query");
+    debug!("Processing VALUES clauses with enhanced SPARQL 1.2 processor");
 
-    // Simple VALUES processing simulation
-    // In a full implementation, this would parse VALUES clauses and apply constraints
-
-    if query.to_lowercase().contains("values ") {
-        // Simulate VALUES constraint application
-        // Example: VALUES ?type { :Person :Organization }
-
-        // Filter bindings based on VALUES constraints
-        let allowed_types = vec!["Person", "Organization", "Place"];
-
-        *bindings = bindings
-            .iter()
-            .filter_map(|binding| {
-                if let Some(type_val) = binding.get("type") {
-                    if let Some(type_str) = type_val.as_str() {
-                        if allowed_types.iter().any(|&t| type_str.contains(t)) {
-                            return Some(binding.clone());
-                        }
-                    }
-                }
-                Some(binding.clone()) // Keep binding if no type constraint
-            })
-            .collect();
-    }
-
+    // Use enhanced VALUES processor
+    let values_processor = EnhancedValuesProcessor::new();
+    
+    // Process VALUES clauses with optimization
+    values_processor.process_values_clauses(query, bindings).await?;
+    
+    info!("Successfully processed VALUES clauses with enhanced features");
     Ok(())
 }
 

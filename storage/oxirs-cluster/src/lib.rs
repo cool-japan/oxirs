@@ -44,7 +44,6 @@
 //! # }
 //! ```
 
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::net::SocketAddr;
@@ -53,13 +52,27 @@ use tokio::sync::RwLock;
 
 pub mod consensus;
 pub mod discovery;
+pub mod error;
 pub mod network;
 pub mod raft;
 pub mod replication;
 pub mod storage;
+pub mod shard;
+pub mod shard_manager;
+pub mod shard_routing;
+pub mod transaction;
+pub mod transaction_optimizer;
+pub mod mvcc;
+pub mod mvcc_storage;
 
 #[cfg(feature = "bft")]
 pub mod bft;
+#[cfg(feature = "bft")]
+pub mod bft_network;
+#[cfg(feature = "bft")]
+pub mod bft_consensus;
+
+pub use error::{ClusterError, Result};
 
 use consensus::{ConsensusManager, ConsensusStatus};
 use discovery::{DiscoveryConfig, DiscoveryService, NodeInfo};
@@ -81,6 +94,9 @@ pub struct NodeConfig {
     pub discovery: Option<DiscoveryConfig>,
     /// Replication strategy
     pub replication_strategy: Option<ReplicationStrategy>,
+    /// Use Byzantine fault tolerance instead of Raft
+    #[cfg(feature = "bft")]
+    pub use_bft: bool,
 }
 
 impl NodeConfig {
@@ -93,6 +109,8 @@ impl NodeConfig {
             peers: Vec::new(),
             discovery: Some(DiscoveryConfig::default()),
             replication_strategy: Some(ReplicationStrategy::default()),
+            #[cfg(feature = "bft")]
+            use_bft: false,
         }
     }
 
@@ -115,6 +133,13 @@ impl NodeConfig {
         self.replication_strategy = Some(strategy);
         self
     }
+    
+    /// Enable Byzantine fault tolerance
+    #[cfg(feature = "bft")]
+    pub fn with_bft(mut self, enable: bool) -> Self {
+        self.use_bft = enable;
+        self
+    }
 }
 
 /// Cluster node implementation
@@ -132,13 +157,13 @@ impl ClusterNode {
     pub async fn new(config: NodeConfig) -> Result<Self> {
         // Validate configuration
         if config.data_dir.is_empty() {
-            return Err(anyhow::anyhow!("Data directory cannot be empty"));
+            return Err(ClusterError::Config("Data directory cannot be empty".to_string()));
         }
 
         // Create data directory if it doesn't exist
         tokio::fs::create_dir_all(&config.data_dir)
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to create data directory: {}", e))?;
+            .map_err(|e| ClusterError::Other(format!("Failed to create data directory: {}", e)))?;
 
         // Initialize consensus manager
         let consensus = ConsensusManager::new(config.node_id, config.peers.clone());
@@ -181,14 +206,14 @@ impl ClusterNode {
         self.discovery
             .start()
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to start discovery service: {}", e))?;
+            .map_err(|e| ClusterError::Other(format!("Failed to start discovery service: {}", e)))?;
 
         // Discover initial nodes
         let discovered_nodes = self
             .discovery
             .discover_nodes()
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to discover nodes: {}", e))?;
+            .map_err(|e| ClusterError::Other(format!("Failed to discover nodes: {}", e)))?;
 
         // Add discovered nodes to replication manager
         for node in discovered_nodes {
@@ -202,7 +227,7 @@ impl ClusterNode {
         self.consensus
             .init()
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to initialize consensus: {}", e))?;
+            .map_err(|e| ClusterError::Other(format!("Failed to initialize consensus: {}", e)))?;
 
         tracing::info!("Cluster node {} started successfully", self.config.node_id);
 
@@ -225,7 +250,7 @@ impl ClusterNode {
         self.discovery
             .stop()
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to stop discovery service: {}", e))?;
+            .map_err(|e| ClusterError::Other(format!("Failed to stop discovery service: {}", e)))?;
 
         *running = false;
 
@@ -252,9 +277,7 @@ impl ClusterNode {
         object: &str,
     ) -> Result<RdfResponse> {
         if !self.is_leader().await {
-            return Err(anyhow::anyhow!(
-                "Not the leader - cannot accept write operations"
-            ));
+            return Err(ClusterError::NotLeader);
         }
 
         let response = self
@@ -277,9 +300,7 @@ impl ClusterNode {
         object: &str,
     ) -> Result<RdfResponse> {
         if !self.is_leader().await {
-            return Err(anyhow::anyhow!(
-                "Not the leader - cannot accept write operations"
-            ));
+            return Err(ClusterError::NotLeader);
         }
 
         let response = self
@@ -297,9 +318,7 @@ impl ClusterNode {
     /// Clear all triples through distributed consensus
     pub async fn clear_store(&self) -> Result<RdfResponse> {
         if !self.is_leader().await {
-            return Err(anyhow::anyhow!(
-                "Not the leader - cannot accept write operations"
-            ));
+            return Err(ClusterError::NotLeader);
         }
 
         let response = self.consensus.clear_store().await?;
@@ -309,9 +328,7 @@ impl ClusterNode {
     /// Begin a distributed transaction
     pub async fn begin_transaction(&self) -> Result<String> {
         if !self.is_leader().await {
-            return Err(anyhow::anyhow!(
-                "Not the leader - cannot begin transactions"
-            ));
+            return Err(ClusterError::NotLeader);
         }
 
         let tx_id = uuid::Uuid::new_v4().to_string();
@@ -323,9 +340,7 @@ impl ClusterNode {
     /// Commit a distributed transaction
     pub async fn commit_transaction(&self, tx_id: &str) -> Result<RdfResponse> {
         if !self.is_leader().await {
-            return Err(anyhow::anyhow!(
-                "Not the leader - cannot commit transactions"
-            ));
+            return Err(ClusterError::NotLeader);
         }
 
         let response = self.consensus.commit_transaction(tx_id.to_string()).await?;
@@ -335,9 +350,7 @@ impl ClusterNode {
     /// Rollback a distributed transaction
     pub async fn rollback_transaction(&self, tx_id: &str) -> Result<RdfResponse> {
         if !self.is_leader().await {
-            return Err(anyhow::anyhow!(
-                "Not the leader - cannot rollback transactions"
-            ));
+            return Err(ClusterError::NotLeader);
         }
 
         let response = self
@@ -386,7 +399,7 @@ impl ClusterNode {
         address: SocketAddr,
     ) -> Result<()> {
         if node_id == self.config.node_id {
-            return Err(anyhow::anyhow!("Cannot add self to cluster"));
+            return Err(ClusterError::Config("Cannot add self to cluster".to_string()));
         }
 
         // Add to configuration
@@ -410,7 +423,7 @@ impl ClusterNode {
     /// Remove a node from the cluster
     pub async fn remove_cluster_node(&mut self, node_id: OxirsNodeId) -> Result<()> {
         if node_id == self.config.node_id {
-            return Err(anyhow::anyhow!("Cannot remove self from cluster"));
+            return Err(ClusterError::Config("Cannot remove self from cluster".to_string()));
         }
 
         // Remove from configuration
@@ -560,34 +573,6 @@ pub use consensus::ConsensusError;
 pub use discovery::DiscoveryError;
 pub use replication::ReplicationError;
 
-/// Cluster-specific error types
-#[derive(Debug, thiserror::Error)]
-pub enum ClusterError {
-    #[error("Configuration error: {0}")]
-    Configuration(String),
-
-    #[error("Consensus error: {0}")]
-    Consensus(#[from] ConsensusError),
-
-    #[error("Discovery error: {0}")]
-    Discovery(#[from] DiscoveryError),
-
-    #[error("Replication error: {0}")]
-    Replication(#[from] ReplicationError),
-
-    #[error("Not the leader")]
-    NotLeader,
-
-    #[error("Node not found: {node_id}")]
-    NodeNotFound { node_id: OxirsNodeId },
-
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
-
-    #[error("Network error: {0}")]
-    Network(String),
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -663,14 +648,11 @@ mod tests {
 
     #[test]
     fn test_cluster_error_types() {
-        let err = ClusterError::Configuration("test error".to_string());
+        let err = ClusterError::Config("test error".to_string());
         assert!(err.to_string().contains("Configuration error: test error"));
 
         let err = ClusterError::NotLeader;
-        assert_eq!(err.to_string(), "Not the leader");
-
-        let err = ClusterError::NodeNotFound { node_id: 42 };
-        assert!(err.to_string().contains("Node not found: 42"));
+        assert_eq!(err.to_string(), "Not the leader node");
 
         let err = ClusterError::Network("connection failed".to_string());
         assert!(err.to_string().contains("Network error: connection failed"));

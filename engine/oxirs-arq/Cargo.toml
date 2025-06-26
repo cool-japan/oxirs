@@ -20,7 +20,7 @@ thiserror.workspace = true
 tracing.workspace = true
 chrono = { version = "0.4", features = ["serde"] }
 rayon = { version = "1.9", optional = true }
-rand = "0.9"
+rand.workspace = true
 regex = "1.11"
 md5 = "0.7"
 sha1 = "0.10"
@@ -29,6 +29,11 @@ urlencoding = "2.1"
 uuid = { version = "1.10", features = ["v4", "serde"] }
 dashmap = "6.1"
 parking_lot = "0.12"
+ordered-float = "4.5"
+rust_decimal = "1.37"
+hex = "0.4"
+base64 = "0.22"
+lazy_static = "1.5"
 
 [dev-dependencies]
 criterion.workspace = true

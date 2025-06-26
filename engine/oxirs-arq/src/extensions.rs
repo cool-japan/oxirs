@@ -11,6 +11,7 @@ use std::fmt::Debug;
 use std::sync::{Arc, RwLock};
 
 /// Extension registry for managing custom functions and operators
+#[derive(Debug)]
 pub struct ExtensionRegistry {
     /// Custom function registry
     pub functions: Arc<RwLock<HashMap<String, Box<dyn CustomFunction>>>>,

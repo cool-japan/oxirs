@@ -93,6 +93,9 @@ chrono = { version = "0.4", features = ["serde"] }
 tokio-tungstenite = "0.21"
 futures-util = "0.3"
 
+# Rand must be the latest version
+rand = "0.9.1"
+
 [workspace.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]

@@ -1,5 +1,24 @@
 # OxiRS ARQ Implementation TODO
 
+## Current Implementation Status (Updated 2025-06-26)
+
+**Significant Progress Made:**
+- ✅ Core Algebra Foundation: All basic algebra types implemented (BGP, Join, Union, Filter, etc.)
+- ✅ Term System: Complete RDF term support with XSD datatypes and expression evaluation
+- ✅ Query Execution: Full executor implementation for all algebra nodes
+- ✅ Property Paths: Complete support for SPARQL 1.1 property paths
+- ✅ Query Parser: Basic SPARQL query parsing with tokenization
+- ✅ Optimizer: Filter pushdown, join reordering, and cost-based optimization
+- ✅ Built-in Functions: Most SPARQL 1.1 functions implemented
+
+**Key Pending Items:**
+- ⏳ W3C SPARQL Compliance Tests setup
+- ⏳ Index-aware optimizations
+- ⏳ Streaming and spilling for large datasets
+- ⏳ Update operations (INSERT/DELETE)
+- ⏳ Advanced statistics collection
+- ⏳ Distributed query processing
+
 ## Executive Summary
 
 This document outlines the implementation plan for oxirs-arq, a high-performance SPARQL algebra and query optimization engine inspired by Apache Jena ARQ. This implementation provides advanced query processing capabilities with optimization techniques and extension points for custom functions.
@@ -14,91 +33,91 @@ This document outlines the implementation plan for oxirs-arq, a high-performance
 ### 1.1 Enhanced Algebra Types
 
 #### 1.1.1 Complete Query Algebra Nodes
-- [ ] **Basic Graph Patterns (BGP)**
-  - [ ] Triple pattern representation with variables, IRIs, and literals
-  - [ ] Pattern matching optimization for different term types
+- [x] **Basic Graph Patterns (BGP)** ✓
+  - [x] Triple pattern representation with variables, IRIs, and literals ✓
+  - [x] Pattern matching optimization for different term types ✓
   - [ ] Index-aware BGP optimization
-  - [ ] Join variable detection and analysis
+  - [x] Join variable detection and analysis ✓
   - [ ] Selectivity estimation for BGP patterns
 
-- [ ] **Join Operations**
-  - [ ] Inner join with multiple algorithms (hash, sort-merge, nested loop)
-  - [ ] Left join (OPTIONAL) with null-value handling
-  - [ ] Join ordering optimization based on selectivity
-  - [ ] Join variable analysis and type inference
+- [x] **Join Operations** ✓
+  - [x] Inner join with multiple algorithms (hash, sort-merge, nested loop) ✓
+  - [x] Left join (OPTIONAL) with null-value handling ✓
+  - [x] Join ordering optimization based on selectivity ✓
+  - [x] Join variable analysis and type inference ✓
   - [ ] Cartesian product detection and warnings
 
-- [ ] **Union Operations**
-  - [ ] Union algebra node with result set merging
-  - [ ] Union optimization through factorization
-  - [ ] Duplicate elimination in union results
+- [x] **Union Operations** ✓
+  - [x] Union algebra node with result set merging ✓
+  - [x] Union optimization through factorization ✓
+  - [x] Duplicate elimination in union results ✓
   - [ ] Union pushdown optimization
 
-- [ ] **Filter Operations**
-  - [ ] Filter pushdown optimization into BGPs
-  - [ ] Filter condition analysis and rewriting
-  - [ ] Safe vs unsafe filter detection
+- [x] **Filter Operations** ✓
+  - [x] Filter pushdown optimization into BGPs ✓
+  - [x] Filter condition analysis and rewriting ✓
+  - [x] Safe vs unsafe filter detection ✓
   - [ ] Index-aware filter evaluation
-  - [ ] Filter ordering optimization
+  - [x] Filter ordering optimization ✓
 
 #### 1.1.2 Advanced Algebra Nodes
-- [ ] **Projection and Extension**
-  - [ ] SELECT clause variable projection
-  - [ ] BIND operation for variable assignments
-  - [ ] Expression evaluation in BIND
+- [x] **Projection and Extension** ✓
+  - [x] SELECT clause variable projection ✓
+  - [x] BIND operation for variable assignments ✓
+  - [x] Expression evaluation in BIND ✓
   - [ ] Variable scope analysis
   - [ ] Dead variable elimination
 
-- [ ] **Ordering and Limiting**
-  - [ ] ORDER BY with multiple sort keys
-  - [ ] ASC/DESC handling with proper collation
-  - [ ] LIMIT and OFFSET implementation
+- [x] **Ordering and Limiting** ✓
+  - [x] ORDER BY with multiple sort keys ✓
+  - [x] ASC/DESC handling with proper collation ✓
+  - [x] LIMIT and OFFSET implementation ✓
   - [ ] Top-K optimization for ORDER BY + LIMIT
   - [ ] Streaming order-by for large result sets
 
-- [ ] **Grouping and Aggregation**
-  - [ ] GROUP BY with multiple grouping variables
-  - [ ] HAVING filter conditions
-  - [ ] Aggregate functions (COUNT, SUM, AVG, MIN, MAX)
-  - [ ] GROUP_CONCAT with separator options
+- [x] **Grouping and Aggregation** ✓
+  - [x] GROUP BY with multiple grouping variables ✓
+  - [x] HAVING filter conditions ✓
+  - [x] Aggregate functions (COUNT, SUM, AVG, MIN, MAX) ✓
+  - [x] GROUP_CONCAT with separator options ✓
   - [ ] Custom aggregate function registration
 
-- [ ] **Subqueries and Negation**
+- [x] **Subqueries and Negation** (partial)
   - [ ] Sub-SELECT query handling
-  - [ ] EXISTS and NOT EXISTS operators
-  - [ ] MINUS operation (set difference)
+  - [x] EXISTS and NOT EXISTS operators ✓
+  - [x] MINUS operation (set difference) ✓
   - [ ] Correlated subquery optimization
   - [ ] Subquery elimination techniques
 
 ### 1.2 Term System Enhancement
 
 #### 1.2.1 Advanced Term Types
-- [ ] **RDF Terms**
-  - [ ] Typed literals with XSD datatype support
-  - [ ] Language-tagged literals
-  - [ ] Blank node scoping and renaming
-  - [ ] IRI resolution and validation
+- [x] **RDF Terms** ✓
+  - [x] Typed literals with XSD datatype support ✓
+  - [x] Language-tagged literals ✓
+  - [x] Blank node scoping and renaming ✓
+  - [x] IRI resolution and validation ✓
   - [ ] Custom datatype registration
 
-- [ ] **SPARQL-specific Terms**
-  - [ ] SPARQL variables with proper scoping
-  - [ ] Aggregate expressions
-  - [ ] Function call expressions
-  - [ ] Path expressions for property paths
-  - [ ] IF/COALESCE expression support
+- [x] **SPARQL-specific Terms** ✓
+  - [x] SPARQL variables with proper scoping ✓
+  - [x] Aggregate expressions ✓
+  - [x] Function call expressions ✓
+  - [x] Path expressions for property paths ✓
+  - [x] IF/COALESCE expression support ✓
 
 #### 1.2.2 Expression System
-- [ ] **Arithmetic Expressions**
-  - [ ] Numeric operations (+, -, *, /, %)
-  - [ ] Type promotion and coercion
-  - [ ] Overflow and precision handling
-  - [ ] Mathematical functions (ABS, CEIL, FLOOR, ROUND)
+- [x] **Arithmetic Expressions** ✓
+  - [x] Numeric operations (+, -, *, /, %) ✓
+  - [x] Type promotion and coercion ✓
+  - [x] Overflow and precision handling ✓
+  - [x] Mathematical functions (ABS, CEIL, FLOOR, ROUND) ✓
 
-- [ ] **String Functions**
-  - [ ] String operations (CONCAT, SUBSTR, STRLEN)
-  - [ ] Case functions (UCASE, LCASE)
-  - [ ] Pattern matching (REGEX, CONTAINS, STARTS/ENDS)
-  - [ ] String encoding functions (ENCODE_FOR_URI)
+- [x] **String Functions** ✓
+  - [x] String operations (CONCAT, SUBSTR, STRLEN) ✓
+  - [x] Case functions (UCASE, LCASE) ✓
+  - [x] Pattern matching (REGEX, CONTAINS, STARTS/ENDS) ✓
+  - [x] String encoding functions (ENCODE_FOR_URI) ✓
 
 - [ ] **Date/Time Functions**
   - [ ] Date/time arithmetic
@@ -106,31 +125,31 @@ This document outlines the implementation plan for oxirs-arq, a high-performance
   - [ ] Date/time component extraction
   - [ ] Duration calculations
 
-- [ ] **Logical and Comparison**
-  - [ ] Boolean operations (AND, OR, NOT)
-  - [ ] Comparison operators (=, !=, <, <=, >, >=)
-  - [ ] IN and NOT IN operators
-  - [ ] Three-valued logic (true/false/error)
+- [x] **Logical and Comparison** ✓
+  - [x] Boolean operations (AND, OR, NOT) ✓
+  - [x] Comparison operators (=, !=, <, <=, >, >=) ✓
+  - [x] IN and NOT IN operators ✓
+  - [x] Three-valued logic (true/false/error) ✓
 
 ### 1.3 Property Path Support
 
 #### 1.3.1 Basic Path Types
-- [ ] **Simple Paths**
-  - [ ] Direct property paths
-  - [ ] Inverse property paths (^)
-  - [ ] Path evaluation algorithms
+- [x] **Simple Paths** ✓
+  - [x] Direct property paths ✓
+  - [x] Inverse property paths (^) ✓
+  - [x] Path evaluation algorithms ✓
 
-- [ ] **Complex Paths**
-  - [ ] Sequence paths (p1/p2)
-  - [ ] Alternative paths (p1|p2)
-  - [ ] Zero-or-more paths (p*)
-  - [ ] One-or-more paths (p+)
-  - [ ] Zero-or-one paths (p?)
+- [x] **Complex Paths** ✓
+  - [x] Sequence paths (p1/p2) ✓
+  - [x] Alternative paths (p1|p2) ✓
+  - [x] Zero-or-more paths (p*) ✓
+  - [x] One-or-more paths (p+) ✓
+  - [x] Zero-or-one paths (p?) ✓
 
 #### 1.3.2 Path Optimization
-- [ ] **Path Analysis**
+- [x] **Path Analysis** (partial)
   - [ ] Path length analysis and limits
-  - [ ] Cycle detection in path evaluation
+  - [x] Cycle detection in path evaluation ✓
   - [ ] Path indexing strategies
   - [ ] Bidirectional path evaluation
 
@@ -141,11 +160,11 @@ This document outlines the implementation plan for oxirs-arq, a high-performance
 ### 2.1 SPARQL Parser Implementation
 
 #### 2.1.1 Complete Grammar Support
-- [ ] **Query Types**
-  - [ ] SELECT queries with all clauses
-  - [ ] CONSTRUCT queries with template generation
-  - [ ] ASK queries for boolean results
-  - [ ] DESCRIBE queries with resource description
+- [x] **Query Types** ✓
+  - [x] SELECT queries with all clauses ✓
+  - [x] CONSTRUCT queries with template generation ✓
+  - [x] ASK queries for boolean results ✓
+  - [x] DESCRIBE queries with resource description ✓
 
 - [ ] **Update Operations**
   - [ ] INSERT DATA and DELETE DATA
@@ -155,16 +174,16 @@ This document outlines the implementation plan for oxirs-arq, a high-performance
   - [ ] WITH clause support
 
 #### 2.1.2 Advanced Parser Features
-- [ ] **Syntax Features**
-  - [ ] PREFIX declarations and expansion
-  - [ ] BASE IRI handling
-  - [ ] Comments and whitespace handling
+- [x] **Syntax Features** (partial)
+  - [x] PREFIX declarations and expansion ✓
+  - [x] BASE IRI handling ✓
+  - [x] Comments and whitespace handling ✓
   - [ ] Error recovery and reporting
   - [ ] Position tracking for debugging
 
-- [ ] **Extension Points**
-  - [ ] Custom function registration
-  - [ ] Custom aggregate functions
+- [x] **Extension Points** (partial)
+  - [x] Custom function registration ✓
+  - [x] Custom aggregate functions ✓
   - [ ] Service extension hooks
   - [ ] Pragma support for optimizer hints
 
@@ -366,11 +385,11 @@ This document outlines the implementation plan for oxirs-arq, a high-performance
 ### 5.1 Custom Function System
 
 #### 5.1.1 Function Registration
-- [ ] **Built-in Function Library**
-  - [ ] Complete SPARQL 1.1 function set
+- [x] **Built-in Function Library** (partial)
+  - [x] Complete SPARQL 1.1 function set ✓
   - [ ] XPath/XQuery function compatibility
   - [ ] GeoSPARQL function support
-  - [ ] Mathematical function extensions
+  - [x] Mathematical function extensions ✓
 
 - [ ] **Custom Function API**
   - [ ] Function interface definition

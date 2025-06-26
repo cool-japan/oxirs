@@ -55,11 +55,11 @@
 - [x] **Advanced query features**
   - [x] SPARQL 1.1 compliance testing framework
   - [x] Basic SPARQL query type support (SELECT, CONSTRUCT, ASK, DESCRIBE)
-  - [ ] SERVICE delegation support
-  - [ ] Property paths optimization
-  - [ ] Aggregation functions
-  - [ ] Subquery support
-  - [ ] BIND and VALUES clauses
+  - [x] SERVICE delegation support ✅
+  - [x] Property paths optimization ✅
+  - [x] Aggregation functions ✅
+  - [x] Subquery support ✅
+  - [x] BIND and VALUES clauses ✅
 
 #### Update Endpoint ✅
 - [x] **Update operations**
@@ -115,7 +115,7 @@
 
 - [x] **Advanced authentication**
   - [x] JWT token support (optional feature)
-  - [ ] OAuth2/OIDC integration
+  - [x] OAuth2/OIDC integration ✅
   - [x] API key authentication
   - [ ] Certificate-based auth
   - [ ] LDAP integration (configuration ready)
@@ -208,13 +208,13 @@
   - [x] Unified authentication
   - [x] Cross-protocol caching
 
-#### WebSocket Support
-- [ ] **Live query subscriptions**
-  - [ ] WebSocket connection handling
-  - [ ] SPARQL subscription syntax
-  - [ ] Change notification system
-  - [ ] Connection lifecycle management
-  - [ ] Subscription filtering
+#### WebSocket Support ✅ **COMPLETED**
+- [x] **Live query subscriptions**
+  - [x] WebSocket connection handling
+  - [x] SPARQL subscription syntax
+  - [x] Change notification system
+  - [x] Connection lifecycle management
+  - [x] Subscription filtering
 
 #### Clustering & Federation
 - [ ] **Multi-node deployment**
@@ -321,9 +321,9 @@
   - [x] SPARQL-star triple support ✅
   - [x] Advanced property path optimizations ✅
   - [x] Enhanced aggregation functions (GROUP_CONCAT, SAMPLE, etc.) ✅
-  - [ ] Subquery performance optimizations
-  - [ ] BIND and VALUES clause enhancements
-  - [ ] Federated query optimization
+  - [x] Subquery performance optimizations ✅
+  - [x] BIND and VALUES clause enhancements ✅
+  - [x] Federated query optimization ✅
 
 - [ ] **Advanced SERVICE delegation** (Q3 2025)
   - [ ] Remote endpoint discovery
@@ -333,13 +333,13 @@
   - [ ] Query planning across multiple services
 
 ### Priority 2: Real-time & Streaming Features
-- [ ] **WebSocket Support** (Q3 2025)
-  - [ ] SPARQL subscription syntax extension
-  - [ ] Change notification system with filters
-  - [ ] Connection lifecycle management
-  - [ ] Subscription multiplexing
-  - [ ] Real-time query result streaming
-  - [ ] Event-driven data updates
+- [x] **WebSocket Support** ✅ **COMPLETED** (Q3 2025)
+  - [x] SPARQL subscription syntax extension
+  - [x] Change notification system with filters
+  - [x] Connection lifecycle management
+  - [x] Subscription multiplexing
+  - [x] Real-time query result streaming
+  - [x] Event-driven data updates
 
 - [ ] **Event Streaming Integration** (Q4 2025)
   - [ ] Apache Kafka integration
@@ -349,8 +349,8 @@
   - [ ] Real-time analytics pipelines
 
 ### Priority 3: Enterprise Security & Auth
-- [ ] **Advanced Authentication** (Q3 2025)
-  - [ ] OAuth2/OIDC complete implementation
+- [x] **Advanced Authentication** (Q3 2025) ✅ **COMPLETED**
+  - [x] OAuth2/OIDC complete implementation ✅
   - [ ] SAML 2.0 support
   - [ ] Certificate-based authentication
   - [ ] Multi-factor authentication (MFA)

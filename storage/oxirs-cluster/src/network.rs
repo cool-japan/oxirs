@@ -61,6 +61,62 @@ pub enum RpcMessage {
     HeartbeatResponse {
         term: u64,
     },
+    /// Byzantine fault tolerance message
+    #[cfg(feature = "bft")]
+    Bft {
+        data: Vec<u8>,
+    },
+    /// Shard operation message
+    ShardOperation(crate::shard_manager::ShardOperation),
+    /// Store triple to shard
+    StoreTriple {
+        shard_id: crate::shard::ShardId,
+        triple: oxirs_core::model::Triple,
+    },
+    /// Replicate triple to shard
+    ReplicateTriple {
+        shard_id: crate::shard::ShardId,
+        triple: oxirs_core::model::Triple,
+    },
+    /// Query shard
+    QueryShard {
+        shard_id: crate::shard::ShardId,
+        subject: Option<String>,
+        predicate: Option<String>,
+        object: Option<String>,
+    },
+    /// Query shard response
+    QueryShardResponse {
+        shard_id: crate::shard::ShardId,
+        results: Vec<oxirs_core::model::Triple>,
+    },
+    /// Transaction prepare request
+    TransactionPrepare {
+        tx_id: String,
+        shard_id: crate::shard::ShardId,
+        operations: Vec<crate::transaction::TransactionOp>,
+    },
+    /// Transaction vote response
+    TransactionVote {
+        tx_id: String,
+        shard_id: crate::shard::ShardId,
+        vote: bool,
+    },
+    /// Transaction commit request
+    TransactionCommit {
+        tx_id: String,
+        shard_id: crate::shard::ShardId,
+    },
+    /// Transaction abort request
+    TransactionAbort {
+        tx_id: String,
+        shard_id: crate::shard::ShardId,
+    },
+    /// Transaction acknowledgment
+    TransactionAck {
+        tx_id: String,
+        shard_id: crate::shard::ShardId,
+    },
 }
 
 /// Log entry for Raft protocol
@@ -437,6 +493,72 @@ pub struct NetworkStats {
     pub active_connections: usize,
     pub local_address: SocketAddr,
     pub node_id: OxirsNodeId,
+}
+
+/// Network service for high-level network operations
+#[derive(Debug, Clone)]
+pub struct NetworkService {
+    manager: NetworkManager,
+}
+
+impl NetworkService {
+    /// Create a new network service
+    pub fn new(node_id: OxirsNodeId, config: NetworkConfig) -> Self {
+        Self {
+            manager: NetworkManager::new(node_id, config),
+        }
+    }
+    
+    /// Start the network service
+    pub async fn start(&mut self) -> Result<()> {
+        self.manager.start().await
+    }
+    
+    /// Stop the network service
+    pub async fn stop(&mut self) -> Result<()> {
+        self.manager.stop().await
+    }
+    
+    /// Send a message to a specific peer
+    pub async fn send_to(&self, peer_id: &str, message: RpcMessage) -> Result<()> {
+        let peer_id: OxirsNodeId = peer_id.parse()
+            .map_err(|_| anyhow::anyhow!("Invalid peer ID"))?;
+        self.manager.send_message(peer_id, message).await?;
+        Ok(())
+    }
+    
+    /// Broadcast a message to all peers
+    pub async fn broadcast(&self, message: RpcMessage) -> Result<()> {
+        let connections = self.manager.connections.read().await;
+        for peer_id in connections.keys() {
+            let _ = self.manager.send_message(*peer_id, message.clone()).await;
+        }
+        Ok(())
+    }
+    
+    /// Send a message to a specific node
+    pub async fn send_message(&self, node_id: OxirsNodeId, message: RpcMessage) -> Result<()> {
+        // In a real implementation, this would use the network manager to send the message
+        // For now, we'll just log it
+        tracing::debug!("Sending message to node {}: {:?}", node_id, message);
+        Ok(())
+    }
+    
+    /// Handle incoming RPC message
+    pub async fn handle_message(&self, message: RpcMessage) -> Result<RpcMessage> {
+        match message {
+            #[cfg(feature = "bft")]
+            RpcMessage::Bft { .. } => {
+                // BFT messages are handled separately
+                Err(anyhow::anyhow!("BFT messages should be handled by BFT network service"))
+            }
+            _ => {
+                // For now, just return an error
+                // In a real implementation, this would forward to the appropriate handler
+                Err(anyhow::anyhow!("Message handling not yet implemented"))
+            }
+        }
+    }
 }
 
 /// Network-related errors

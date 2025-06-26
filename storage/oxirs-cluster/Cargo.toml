@@ -27,7 +27,10 @@ async-trait.workspace = true
 # Byzantine fault tolerance dependencies
 sha2 = "0.10"
 ed25519-dalek = "2.1"
-rand = "0.8"
+rand = "0.9"
+
+# MVCC dependencies
+dashmap = "6.1"
 
 [dev-dependencies]
 criterion.workspace = true
