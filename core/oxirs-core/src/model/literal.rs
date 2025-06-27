@@ -11,7 +11,7 @@ use regex::Regex;
 use std::borrow::Cow;
 use std::fmt::{self, Write};
 use std::hash::{Hash, Hasher};
-use std::str::FromStr;
+// use std::str::FromStr; // Used for parsing but currently commented out
 
 /// Language tag validation error type
 #[derive(Debug, Clone, PartialEq, Eq)]

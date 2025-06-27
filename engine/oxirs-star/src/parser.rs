@@ -290,6 +290,11 @@ impl StarParser {
         Self { config }
     }
 
+    /// Set strict mode for parsing
+    pub fn set_strict_mode(&mut self, strict: bool) {
+        self.config.strict_mode = strict;
+    }
+
     /// Get parsing context configured for this parser
     fn create_parse_context(&self) -> ParseContext {
         ParseContext::with_config(self.config.strict_mode, true) // Enable error recovery by default

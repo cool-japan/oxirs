@@ -1,14 +1,12 @@
 //! RDF parsing utilities for various formats with ultra-performance streaming
 
-use rio_api::model::{Quad as RioQuad, Triple as RioTriple};
+use rio_api::model::Triple as RioTriple;
 use rio_api::parser::{QuadsParser, TriplesParser};
-use rio_turtle::{NQuadsParser, NTriplesParser, TriGParser, TurtleParser};
-use rio_xml::RdfXmlParser;
+// Parsers available but currently unused
 use std::collections::HashMap;
+use std::io::BufRead;
 use std::future::Future;
-use std::io::{BufRead, BufReader, Cursor};
 use std::pin::Pin;
-use std::task::{Context, Poll};
 // use oxrdf::{Quad as OxrdfQuad, Subject as OxrdfSubject, Term as OxrdfTerm}; // REMOVED: Native implementation
 use crate::model::*;
 use crate::{OxirsError, Result};
@@ -1178,8 +1176,7 @@ impl AsyncStreamingParser {
 
             let bytes_read = reader
                 .read(&mut buffer)
-                .await
-                .map_err(|e| OxirsError::Io(e))?;
+                .await?;
 
             if bytes_read == 0 {
                 break; // End of stream

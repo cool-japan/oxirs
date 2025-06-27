@@ -458,10 +458,12 @@ impl TermInterner {
         let next_object_id: u32 = bincode::deserialize_from(&mut reader)?;
         
         // Calculate stats
-        let mut stats = InternerStats::default();
-        stats.subject_count = subjects.len();
-        stats.predicate_count = predicates.len();
-        stats.object_count = objects.len();
+        let stats = InternerStats {
+            subject_count: subjects.len(),
+            predicate_count: predicates.len(),
+            object_count: objects.len(),
+            ..Default::default()
+        };
         
         Ok(TermInterner {
             subjects: Arc::new(RwLock::new(subjects)),
@@ -598,7 +600,7 @@ mod tests {
             let interner_clone = Arc::clone(&interner);
             let handle = thread::spawn(move || {
                 let subject = Subject::NamedNode(
-                    NamedNode::new(&format!("http://example.org/s{}", i % 3)).unwrap()
+                    NamedNode::new(format!("http://example.org/s{}", i % 3)).unwrap()
                 );
                 interner_clone.intern_subject(&subject)
             });

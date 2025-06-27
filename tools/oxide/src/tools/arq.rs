@@ -8,33 +8,36 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;
 
+/// Configuration for ARQ query execution
+pub struct ArqConfig {
+    pub query: Option<String>,
+    pub query_file: Option<PathBuf>,
+    pub data: Vec<PathBuf>,
+    pub namedgraph: Vec<String>,
+    pub results_format: String,
+    pub dataset: Option<PathBuf>,
+    pub explain: bool,
+    pub optimize: bool,
+    pub time: bool,
+}
+
 /// Run arq command - Advanced SPARQL query processor
-pub async fn run(
-    query: Option<String>,
-    query_file: Option<PathBuf>,
-    data: Vec<PathBuf>,
-    namedgraph: Vec<String>,
-    results_format: String,
-    dataset: Option<PathBuf>,
-    explain: bool,
-    optimize: bool,
-    time: bool,
-) -> ToolResult {
+pub async fn run(config: ArqConfig) -> ToolResult {
     let mut stats = ToolStats::new();
 
     println!("Advanced SPARQL Query Processor (arq)");
 
     // Validate results format
-    if !utils::is_supported_results_format(&results_format) {
+    if !utils::is_supported_results_format(&config.results_format) {
         return Err(format!(
             "Unsupported results format '{}'. Supported: table, csv, tsv, json, xml",
-            results_format
+            config.results_format
         )
         .into());
     }
 
     // Get query string
-    let query_string = match (query, query_file) {
+    let query_string = match (config.query, config.query_file) {
         (Some(q), None) => q,
         (None, Some(ref path)) => {
             utils::check_file_readable(path)?;
@@ -58,11 +61,11 @@ pub async fn run(
     println!("Query type: {}", query_info.query_type);
     println!("Variables: {:?}", query_info.variables);
 
-    if explain {
+    if config.explain {
         explain_query(&query_string, &query_info)?;
     }
 
-    if optimize {
+    if config.optimize {
         println!("Query optimization enabled");
         // TODO: Implement query optimization
     }
@@ -71,23 +74,23 @@ pub async fn run(
     let mut data_sources = Vec::new();
 
     // Add dataset if specified
-    if let Some(dataset_path) = dataset {
+    if let Some(dataset_path) = config.dataset {
         println!("Loading dataset: {}", dataset_path.display());
         data_sources.push(DataSource::Dataset(dataset_path));
     }
 
     // Add data files
-    for data_file in data {
+    for data_file in &config.data {
         println!("Loading data file: {}", data_file.display());
-        utils::check_file_readable(&data_file)?;
-        data_sources.push(DataSource::File(data_file));
+        utils::check_file_readable(data_file)?;
+        data_sources.push(DataSource::File(data_file.clone()));
     }
 
     // Add named graphs
-    for graph_uri in namedgraph {
+    for graph_uri in &config.namedgraph {
         println!("Named graph: {}", graph_uri);
-        utils::validate_iri(&graph_uri).map_err(|e| format!("Invalid named graph IRI: {}", e))?;
-        data_sources.push(DataSource::NamedGraph(graph_uri));
+        utils::validate_iri(graph_uri).map_err(|e| format!("Invalid named graph IRI: {}", e))?;
+        data_sources.push(DataSource::NamedGraph(graph_uri.clone()));
     }
 
     if data_sources.is_empty() {
@@ -96,7 +99,7 @@ pub async fn run(
 
     // Execute query
     println!("\nExecuting query...");
-    let execution_start = if time { Some(Instant::now()) } else { None };
+    let execution_start = if config.time { Some(Instant::now()) } else { None };
 
     let results = execute_sparql_query(&query_string, &query_info, &data_sources)?;
 
@@ -109,7 +112,7 @@ pub async fn run(
     }
 
     // Format and display results
-    format_query_results(&results, &results_format, &query_info)?;
+    format_query_results(&results, &config.results_format, &query_info)?;
 
     stats.items_processed = results.bindings.len();
     stats.finish();
@@ -381,17 +384,14 @@ fn format_query_results(
 ) -> ToolResult<()> {
     println!("\nResults ({}):", format.to_uppercase());
 
-    match &results.result_type {
-        QueryResultType::Ask(answer) => {
-            match format {
-                "table" => println!("ASK result: {}", answer),
-                "json" => println!("{{ \"boolean\": {} }}", answer),
-                "xml" => println!("<sparql><boolean>{}</boolean></sparql>", answer),
-                _ => println!("{}", answer),
-            }
-            return Ok(());
+    if let QueryResultType::Ask(answer) = &results.result_type {
+        match format {
+            "table" => println!("ASK result: {}", answer),
+            "json" => println!("{{ \"boolean\": {} }}", answer),
+            "xml" => println!("<sparql><boolean>{}</boolean></sparql>", answer),
+            _ => println!("{}", answer),
         }
-        _ => {}
+        return Ok(());
     }
 
     if results.bindings.is_empty() {

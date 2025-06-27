@@ -4,7 +4,7 @@
 
 use super::{utils, ToolResult, ToolStats};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 /// Run tdbloader command - bulk data loading
@@ -146,8 +146,8 @@ struct LoadResult {
 
 /// Load a single RDF file into the dataset
 fn load_file(
-    dataset_location: &PathBuf,
-    file_path: &PathBuf,
+    dataset_location: &Path,
+    file_path: &Path,
     format: &str,
     graph_uri: Option<&str>,
 ) -> ToolResult<LoadResult> {
@@ -168,6 +168,7 @@ fn load_file(
 
 /// Simple triple representation for loading
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct LoadTriple {
     subject: String,
     predicate: String,
@@ -304,8 +305,7 @@ fn parse_turtle_for_loading(content: &str) -> Result<Vec<LoadTriple>, String> {
             continue;
         }
 
-        if line.ends_with(" .") {
-            let line = &line[..line.len() - 2];
+        if let Some(line) = line.strip_suffix(" .") {
             let parts: Vec<&str> = line.split_whitespace().collect();
 
             if parts.len() >= 3 {
@@ -324,7 +324,7 @@ fn parse_turtle_for_loading(content: &str) -> Result<Vec<LoadTriple>, String> {
 
 /// Store triples in the TDB dataset
 fn store_triples_in_dataset(
-    _dataset_location: &PathBuf,
+    _dataset_location: &Path,
     triples: &[LoadTriple],
     default_graph: Option<&str>,
 ) -> ToolResult<usize> {

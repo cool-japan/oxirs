@@ -9,18 +9,19 @@ use crate::query::{Expression, OrderExpression, Query, QueryForm, SelectVariable
 use crate::OxirsError;
 
 /// Convert algebra TriplePattern to model TriplePattern
+/// This function bridges the gap between algebra and model pattern representations
 pub fn convert_triple_pattern(pattern: &algebra::TriplePattern) -> TriplePattern {
     let subject = match &pattern.subject {
         algebra::TermPattern::NamedNode(nn) => Some(SubjectPattern::NamedNode(nn.clone())),
         algebra::TermPattern::BlankNode(bn) => Some(SubjectPattern::BlankNode(bn.clone())),
         algebra::TermPattern::Variable(v) => Some(SubjectPattern::Variable(v.clone())),
-        algebra::TermPattern::Literal(_) => None, // Literals can't be subjects
+        algebra::TermPattern::Literal(_) => None, // Literals can't be subjects in RDF
     };
     
     let predicate = match &pattern.predicate {
         algebra::TermPattern::NamedNode(nn) => Some(PredicatePattern::NamedNode(nn.clone())),
         algebra::TermPattern::Variable(v) => Some(PredicatePattern::Variable(v.clone())),
-        _ => None, // Only named nodes and variables can be predicates
+        _ => None, // Only named nodes and variables can be predicates in RDF
     };
     
     let object = match &pattern.object {
@@ -31,6 +32,37 @@ pub fn convert_triple_pattern(pattern: &algebra::TriplePattern) -> TriplePattern
     };
     
     TriplePattern::new(subject, predicate, object)
+}
+
+/// Convert model TriplePattern to algebra TriplePattern
+/// This function provides the reverse conversion for compatibility
+pub fn convert_to_algebra_pattern(pattern: &TriplePattern) -> Result<algebra::TriplePattern, OxirsError> {
+    let subject = match pattern.subject() {
+        Some(SubjectPattern::NamedNode(nn)) => algebra::TermPattern::NamedNode(nn.clone()),
+        Some(SubjectPattern::BlankNode(bn)) => algebra::TermPattern::BlankNode(bn.clone()),
+        Some(SubjectPattern::Variable(v)) => algebra::TermPattern::Variable(v.clone()),
+        None => return Err(OxirsError::Query("Subject pattern is required in algebra representation".to_string())),
+    };
+    
+    let predicate = match pattern.predicate() {
+        Some(PredicatePattern::NamedNode(nn)) => algebra::TermPattern::NamedNode(nn.clone()),
+        Some(PredicatePattern::Variable(v)) => algebra::TermPattern::Variable(v.clone()),
+        None => return Err(OxirsError::Query("Predicate pattern is required in algebra representation".to_string())),
+    };
+    
+    let object = match pattern.object() {
+        Some(ObjectPattern::NamedNode(nn)) => algebra::TermPattern::NamedNode(nn.clone()),
+        Some(ObjectPattern::BlankNode(bn)) => algebra::TermPattern::BlankNode(bn.clone()),
+        Some(ObjectPattern::Literal(lit)) => algebra::TermPattern::Literal(lit.clone()),
+        Some(ObjectPattern::Variable(v)) => algebra::TermPattern::Variable(v.clone()),
+        None => return Err(OxirsError::Query("Object pattern is required in algebra representation".to_string())),
+    };
+    
+    Ok(algebra::TriplePattern {
+        subject,
+        predicate,
+        object,
+    })
 }
 
 /// A query execution plan

@@ -3,7 +3,7 @@
 //! This module provides various GNN architectures for knowledge graph embeddings
 //! including GCN, GraphSAGE, GAT, and Graph Transformers.
 
-use crate::{EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector};
+use crate::{EmbeddingError, EmbeddingModel, ModelConfig, ModelStats, NamedNode, TrainingStats, Triple, Vector};
 use anyhow::Result;
 use async_trait::async_trait;
 use chrono::Utc;
@@ -862,6 +862,7 @@ impl EmbeddingModel for GNNEmbedding {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::NamedNode;
 
     #[tokio::test]
     async fn test_gnn_embedding_basic() {

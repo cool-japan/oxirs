@@ -1,9 +1,8 @@
 //! Base functionality shared across embedding models
 
-use crate::{EmbeddingError, ModelConfig, ModelStats, TrainingStats, Triple, Vector};
+use crate::{ModelConfig, ModelStats, Triple};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use ndarray::{Array1, Array2};
 use rand::prelude::SliceRandom;
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;

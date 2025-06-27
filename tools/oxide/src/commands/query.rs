@@ -126,6 +126,7 @@ pub async fn run(dataset: String, query: String, file: bool, output: String) -> 
 }
 
 /// Check if output format is supported
+#[allow(dead_code)]
 fn is_supported_output_format(format: &str) -> bool {
     matches!(format, "json" | "csv" | "tsv" | "table" | "xml")
 }
@@ -144,6 +145,7 @@ fn load_dataset_from_config(dataset: &str) -> Result<PathBuf, Box<dyn std::error
 }
 
 /// Format and display query results
+#[allow(dead_code)]
 fn format_results(
     results: &super::stubs::OxirsQueryResults,
     format: &str,
@@ -173,6 +175,7 @@ fn format_results(
 }
 
 /// Format results as a table
+#[allow(dead_code)]
 fn format_table_results(
     _results: &super::stubs::OxirsQueryResults,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -185,6 +188,7 @@ fn format_table_results(
 }
 
 /// Format results as JSON
+#[allow(dead_code)]
 fn format_json_results(
     _results: &super::stubs::OxirsQueryResults,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -198,6 +202,7 @@ fn format_json_results(
 }
 
 /// Format results as CSV/TSV
+#[allow(dead_code)]
 fn format_csv_results(
     _results: &super::stubs::OxirsQueryResults,
     _separator: &str,
@@ -242,7 +247,7 @@ fn format_results_enhanced(
             for binding in &results.bindings {
                 let cells: Vec<prettytable::Cell> = binding.values.iter()
                     .map(|opt| opt.as_deref().unwrap_or(""))
-                    .map(|s| prettytable::Cell::new(s))
+                    .map(prettytable::Cell::new)
                     .collect();
                 table.add_row(prettytable::Row::new(cells));
             }

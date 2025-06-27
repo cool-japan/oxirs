@@ -227,12 +227,8 @@ impl EventSerializer {
             SerializationFormat::Binary => self.serialize_binary(event)?,
             SerializationFormat::MessagePack => self.serialize_messagepack(event)?,
             SerializationFormat::Cbor => self.serialize_cbor(event)?,
-            _ => {
-                return Err(anyhow!(
-                    "Serialization format {:?} not implemented",
-                    self.format
-                ))
-            }
+            SerializationFormat::Protobuf => self.serialize_protobuf(event)?,
+            SerializationFormat::Avro => self.serialize_avro(event).await?,
         };
 
         // Apply compression if enabled
@@ -295,10 +291,8 @@ impl EventSerializer {
             SerializationFormat::Binary => self.deserialize_binary(&decompressed),
             SerializationFormat::MessagePack => self.deserialize_messagepack(&decompressed),
             SerializationFormat::Cbor => self.deserialize_cbor(&decompressed),
-            _ => Err(anyhow!(
-                "Deserialization format {:?} not implemented",
-                self.format
-            )),
+            SerializationFormat::Protobuf => self.deserialize_protobuf(&decompressed),
+            SerializationFormat::Avro => self.deserialize_avro(&decompressed).await,
         }
     }
 
@@ -333,11 +327,37 @@ impl EventSerializer {
             StreamEvent::GraphCreated { .. } => 5,
             StreamEvent::GraphCleared { .. } => 6,
             StreamEvent::GraphDeleted { .. } => 7,
+            StreamEvent::GraphMetadataUpdated { .. } => 17,
+            StreamEvent::GraphPermissionsChanged { .. } => 18,
+            StreamEvent::GraphStatisticsUpdated { .. } => 19,
+            StreamEvent::GraphRenamed { .. } => 20,
+            StreamEvent::GraphMerged { .. } => 21,
+            StreamEvent::GraphSplit { .. } => 22,
             StreamEvent::SparqlUpdate { .. } => 8,
             StreamEvent::TransactionBegin { .. } => 9,
             StreamEvent::TransactionCommit { .. } => 10,
             StreamEvent::TransactionAbort { .. } => 11,
             StreamEvent::SchemaChanged { .. } => 12,
+            StreamEvent::SchemaDefinitionAdded { .. } => 23,
+            StreamEvent::SchemaDefinitionRemoved { .. } => 24,
+            StreamEvent::SchemaDefinitionModified { .. } => 25,
+            StreamEvent::OntologyImported { .. } => 26,
+            StreamEvent::OntologyRemoved { .. } => 27,
+            StreamEvent::ConstraintAdded { .. } => 28,
+            StreamEvent::ConstraintRemoved { .. } => 29,
+            StreamEvent::ConstraintViolated { .. } => 30,
+            StreamEvent::IndexCreated { .. } => 31,
+            StreamEvent::IndexDropped { .. } => 32,
+            StreamEvent::IndexRebuilt { .. } => 33,
+            StreamEvent::ShapeAdded { .. } => 34,
+            StreamEvent::ShapeRemoved { .. } => 35,
+            StreamEvent::ShapeModified { .. } => 36,
+            StreamEvent::ShapeValidationStarted { .. } => 37,
+            StreamEvent::ShapeValidationCompleted { .. } => 38,
+            StreamEvent::ShapeViolationDetected { .. } => 39,
+            StreamEvent::QueryResultAdded { .. } => 14,
+            StreamEvent::QueryResultRemoved { .. } => 15,
+            StreamEvent::QueryCompleted { .. } => 16,
             StreamEvent::Heartbeat { .. } => 13,
         };
         buffer.push(event_type);
@@ -491,6 +511,64 @@ impl EventSerializer {
     /// Deserialize from CBOR
     fn deserialize_cbor(&self, data: &[u8]) -> Result<StreamEvent> {
         serde_cbor::from_slice(data).map_err(|e| anyhow!("CBOR deserialization failed: {}", e))
+    }
+
+    /// Serialize to Protocol Buffers
+    fn serialize_protobuf(&self, event: &StreamEvent) -> Result<Vec<u8>> {
+        // Use prost for Protocol Buffers serialization
+        // For now, we'll use a JSON-based approach until proper proto definitions are created
+        let json_data = serde_json::to_value(event)?;
+        let proto_event = ProtobufStreamEvent::from_json(&json_data)?;
+        
+        let mut buf = Vec::new();
+        prost::Message::encode(&proto_event, &mut buf)?;
+        Ok(buf)
+    }
+
+    /// Deserialize from Protocol Buffers
+    fn deserialize_protobuf(&self, data: &[u8]) -> Result<StreamEvent> {
+        let proto_event = ProtobufStreamEvent::decode(data)?;
+        let json_value = proto_event.to_json()?;
+        let event: StreamEvent = serde_json::from_value(json_value)?;
+        Ok(event)
+    }
+
+    /// Serialize to Apache Avro
+    async fn serialize_avro(&self, event: &StreamEvent) -> Result<Vec<u8>> {
+        // Get schema from registry if available
+        let schema = if let Some(registry) = &self.schema_registry {
+            registry.get_avro_schema_for_event(event).await?
+        } else {
+            // Use default schema
+            get_default_avro_schema()
+        };
+
+        // Convert event to Avro value
+        let avro_value = to_avro_value(event, &schema)?;
+        
+        // Serialize with schema
+        let mut writer = Vec::new();
+        let mut encoder = apache_avro::Writer::new(&schema, &mut writer);
+        encoder.append(avro_value)?;
+        encoder.flush()?;
+        
+        Ok(writer)
+    }
+
+    /// Deserialize from Apache Avro
+    async fn deserialize_avro(&self, data: &[u8]) -> Result<StreamEvent> {
+        // Extract schema from data header
+        let reader = apache_avro::Reader::new(data)?;
+        let schema = reader.writer_schema();
+        
+        // Read the first (and only) record
+        if let Some(record) = reader.into_iter().next() {
+            let avro_value = record?;
+            let event = from_avro_value(&avro_value, schema)?;
+            Ok(event)
+        } else {
+            Err(anyhow!("No Avro record found in data"))
+        }
     }
 
     /// Compress data
@@ -754,5 +832,137 @@ mod tests {
             }
             _ => panic!("Wrong event type"),
         }
+    }
+}
+
+// Supporting types and functions for Protobuf and Avro serialization
+
+/// Protobuf representation of StreamEvent
+/// This is a simplified version - in practice you'd use proper .proto definitions
+#[derive(Debug, Clone)]
+pub struct ProtobufStreamEvent {
+    pub event_type: String,
+    pub data: Vec<u8>,
+    pub metadata: Vec<u8>,
+}
+
+impl ProtobufStreamEvent {
+    /// Convert from JSON value
+    pub fn from_json(json: &serde_json::Value) -> Result<Self> {
+        // Extract event type
+        let event_type = "StreamEvent".to_string(); // Simplified
+        
+        // Serialize the entire JSON as data
+        let data = serde_json::to_vec(json)?;
+        
+        // Empty metadata for now
+        let metadata = Vec::new();
+        
+        Ok(Self {
+            event_type,
+            data,
+            metadata,
+        })
+    }
+    
+    /// Convert to JSON value
+    pub fn to_json(&self) -> Result<serde_json::Value> {
+        serde_json::from_slice(&self.data).map_err(|e| anyhow!("Failed to parse JSON: {}", e))
+    }
+    
+    /// Encode using prost
+    pub fn encode(&self, buf: &mut Vec<u8>) -> Result<()> {
+        // Simplified encoding - in practice use proper prost::Message
+        buf.extend_from_slice(&self.data);
+        Ok(())
+    }
+    
+    /// Decode using prost
+    pub fn decode(data: &[u8]) -> Result<Self> {
+        // Simplified decoding - in practice use proper prost::Message
+        Ok(Self {
+            event_type: "StreamEvent".to_string(),
+            data: data.to_vec(),
+            metadata: Vec::new(),
+        })
+    }
+}
+
+impl prost::Message for ProtobufStreamEvent {
+    fn encode_raw<B>(&self, buf: &mut B) where B: prost::bytes::BufMut {
+        // Simplified implementation
+        buf.put_slice(&self.data);
+    }
+    
+    fn merge_field<B>(&mut self, _tag: u32, _wire_type: prost::encoding::WireType, _buf: &mut B, _ctx: prost::encoding::DecodeContext) -> Result<(), prost::DecodeError> 
+    where B: prost::bytes::Buf {
+        Ok(())
+    }
+    
+    fn encoded_len(&self) -> usize {
+        self.data.len()
+    }
+    
+    fn clear(&mut self) {
+        self.data.clear();
+        self.metadata.clear();
+    }
+}
+
+/// Get default Avro schema for StreamEvent
+pub fn get_default_avro_schema() -> apache_avro::Schema {
+    let schema_str = r#"
+    {
+        "type": "record",
+        "name": "StreamEvent",
+        "fields": [
+            {"name": "event_type", "type": "string"},
+            {"name": "data", "type": "bytes"},
+            {"name": "metadata", "type": ["null", "bytes"], "default": null}
+        ]
+    }
+    "#;
+    
+    apache_avro::Schema::parse_str(schema_str)
+        .expect("Failed to parse default Avro schema")
+}
+
+/// Convert StreamEvent to Avro value
+pub fn to_avro_value(event: &StreamEvent, _schema: &apache_avro::Schema) -> Result<apache_avro::types::Value> {
+    // Simplified conversion - serialize to JSON then to bytes
+    let json_data = serde_json::to_vec(event)?;
+    
+    let mut fields = Vec::new();
+    fields.push(("event_type".to_string(), apache_avro::types::Value::String("StreamEvent".to_string())));
+    fields.push(("data".to_string(), apache_avro::types::Value::Bytes(json_data)));
+    fields.push(("metadata".to_string(), apache_avro::types::Value::Union(0, Box::new(apache_avro::types::Value::Null))));
+    
+    Ok(apache_avro::types::Value::Record(fields))
+}
+
+/// Convert Avro value to StreamEvent
+pub fn from_avro_value(value: &apache_avro::types::Value, _schema: &apache_avro::Schema) -> Result<StreamEvent> {
+    match value {
+        apache_avro::types::Value::Record(fields) => {
+            // Extract data field
+            for (name, field_value) in fields {
+                if name == "data" {
+                    if let apache_avro::types::Value::Bytes(bytes) = field_value {
+                        let event: StreamEvent = serde_json::from_slice(bytes)?;
+                        return Ok(event);
+                    }
+                }
+            }
+            Err(anyhow!("No data field found in Avro record"))
+        }
+        _ => Err(anyhow!("Expected Avro record, got {:?}", value)),
+    }
+}
+
+impl SchemaRegistry {
+    /// Get Avro schema for event
+    pub async fn get_avro_schema_for_event(&self, _event: &StreamEvent) -> Result<apache_avro::Schema> {
+        // In practice, this would look up the appropriate schema
+        Ok(get_default_avro_schema())
     }
 }

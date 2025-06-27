@@ -639,7 +639,10 @@ impl ReteNetwork {
         join_condition: &JoinCondition,
     ) -> Result<Vec<Token>> {
         // Check if we have an enhanced beta node
-        if let Some(enhanced_node) = self.enhanced_beta_nodes.get_mut(&beta_id) {
+        if self.enhanced_beta_nodes.contains_key(&beta_id) {
+            // Determine which side the token came from before borrowing mutably
+            let from_left = self.is_left_token(&token, beta_id)?;
+            
             // Convert Token to EnhancedToken
             let mut enhanced_token = EnhancedToken::new();
             enhanced_token.bindings = token.bindings.clone();
@@ -647,11 +650,10 @@ impl ReteNetwork {
             enhanced_token.priority = 0; // Default priority
             enhanced_token.specificity = token.facts.len();
             
-            // Determine which side the token came from
-            let from_left = self.is_left_token(&token, beta_id)?;
-            
             // Use enhanced join
-            let enhanced_results = enhanced_node.join(enhanced_token, from_left)?;
+            let enhanced_results = self.enhanced_beta_nodes.get_mut(&beta_id)
+                .unwrap()
+                .join(enhanced_token, from_left)?;
             
             // Convert back to regular tokens
             let mut joined_tokens = Vec::new();
@@ -673,27 +675,43 @@ impl ReteNetwork {
             Ok(joined_tokens)
         } else {
             // Fall back to old implementation for compatibility
+            // Check which side the token is from before borrowing memory
+            let is_left_token = self.is_left_token(&token, beta_id)?;
+            
             let (left_memory, right_memory) = self.beta_memory.get_mut(&beta_id)
                 .ok_or_else(|| anyhow::anyhow!("Beta memory not found for node {}", beta_id))?;
 
             let mut joined_tokens = Vec::new();
-            let is_left_token = self.is_left_token(&token, beta_id)?;
 
             if is_left_token {
+                // Store copies for iteration to avoid borrowing conflicts
+                let right_tokens: Vec<_> = right_memory.iter().cloned().collect();
                 left_memory.push(token.clone());
                 
-                for right_token in right_memory.iter() {
-                    if self.satisfies_join_condition(&token, right_token, join_condition)? {
-                        let joined = self.join_tokens(&token, right_token)?;
+                for right_token in right_tokens {
+                    // Now we can safely call methods that borrow self immutably
+                    let (left_mem, _) = self.beta_memory.get(&beta_id)
+                        .ok_or_else(|| anyhow::anyhow!("Beta memory not found"))?;
+                    let current_token = left_mem.last().unwrap(); // The token we just added
+                    
+                    if self.satisfies_join_condition(current_token, &right_token, join_condition)? {
+                        let joined = self.join_tokens(current_token, &right_token)?;
                         joined_tokens.push(joined);
                     }
                 }
             } else {
+                // Store copies for iteration to avoid borrowing conflicts  
+                let left_tokens: Vec<_> = left_memory.iter().cloned().collect();
                 right_memory.push(token.clone());
                 
-                for left_token in left_memory.iter() {
-                    if self.satisfies_join_condition(left_token, &token, join_condition)? {
-                        let joined = self.join_tokens(left_token, &token)?;
+                for left_token in left_tokens {
+                    // Now we can safely call methods that borrow self immutably
+                    let (_, right_mem) = self.beta_memory.get(&beta_id)
+                        .ok_or_else(|| anyhow::anyhow!("Beta memory not found"))?;
+                    let current_token = right_mem.last().unwrap(); // The token we just added
+                    
+                    if self.satisfies_join_condition(&left_token, current_token, join_condition)? {
+                        let joined = self.join_tokens(&left_token, current_token)?;
                         joined_tokens.push(joined);
                     }
                 }

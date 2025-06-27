@@ -185,7 +185,7 @@ pub struct Recommendation {
 pub struct DiagnosticAnalyzer {
     metrics_collector: Arc<RwLock<MetricsCollector>>,
     health_checker: Arc<RwLock<HealthChecker>>,
-    health_monitors: HashMap<String, Arc<RwLock<HealthMonitor>>>,
+    health_monitors: HashMap<String, Arc<RwLock<HealthMonitor<Box<dyn crate::connection_pool::PooledConnection>>>>>,
     event_buffer: Arc<RwLock<VecDeque<(StreamEvent, DateTime<Utc>)>>>,
     error_tracker: Arc<RwLock<ErrorTracker>>,
 }

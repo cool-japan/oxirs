@@ -103,6 +103,7 @@ pub struct CommandCompletionProvider {
 }
 
 /// Information about a command for completion
+#[allow(dead_code)]
 struct CommandInfo {
     description: String,
     subcommands: Vec<String>,
@@ -111,6 +112,7 @@ struct CommandInfo {
 }
 
 /// Information about an option
+#[allow(dead_code)]
 struct OptionInfo {
     short: Option<char>,
     long: String,
@@ -120,6 +122,7 @@ struct OptionInfo {
 }
 
 /// Information about a positional argument
+#[allow(dead_code)]
 struct ArgInfo {
     name: String,
     description: String,
@@ -128,6 +131,7 @@ struct ArgInfo {
 
 /// Hints for argument completion
 #[derive(Clone)]
+#[allow(dead_code)]
 enum CompletionHint {
     File { extensions: Vec<String> },
     Directory,
@@ -564,6 +568,12 @@ pub mod shell {
     }
 }
 
+impl Default for CommandCompletionProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -589,10 +599,5 @@ mod tests {
         
         let completions = provider.get_completions(&ctx);
         assert!(completions.iter().any(|c| c.replacement == "query"));
-    }
-}
-impl Default for CommandCompletionProvider {
-    fn default() -> Self {
-        Self::new()
     }
 }

@@ -10,6 +10,7 @@
 //! - Real-time analytics and metrics computation
 
 use crate::{StreamEvent, EventMetadata};
+use crate::event::StreamEventType;
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
@@ -265,11 +266,37 @@ impl EventProcessor {
             | StreamEvent::GraphCreated { metadata, .. }
             | StreamEvent::GraphCleared { metadata, .. }
             | StreamEvent::GraphDeleted { metadata, .. }
+            | StreamEvent::GraphMetadataUpdated { metadata, .. }
+            | StreamEvent::GraphPermissionsChanged { metadata, .. }
+            | StreamEvent::GraphStatisticsUpdated { metadata, .. }
+            | StreamEvent::GraphRenamed { metadata, .. }
+            | StreamEvent::GraphMerged { metadata, .. }
+            | StreamEvent::GraphSplit { metadata, .. }
             | StreamEvent::SparqlUpdate { metadata, .. }
             | StreamEvent::TransactionBegin { metadata, .. }
             | StreamEvent::TransactionCommit { metadata, .. }
             | StreamEvent::TransactionAbort { metadata, .. }
-            | StreamEvent::SchemaChanged { metadata, .. } => metadata.timestamp,
+            | StreamEvent::SchemaChanged { metadata, .. }
+            | StreamEvent::SchemaDefinitionAdded { metadata, .. }
+            | StreamEvent::SchemaDefinitionRemoved { metadata, .. }
+            | StreamEvent::SchemaDefinitionModified { metadata, .. }
+            | StreamEvent::OntologyImported { metadata, .. }
+            | StreamEvent::OntologyRemoved { metadata, .. }
+            | StreamEvent::ConstraintAdded { metadata, .. }
+            | StreamEvent::ConstraintRemoved { metadata, .. }
+            | StreamEvent::ConstraintViolated { metadata, .. }
+            | StreamEvent::IndexCreated { metadata, .. }
+            | StreamEvent::IndexDropped { metadata, .. }
+            | StreamEvent::IndexRebuilt { metadata, .. }
+            | StreamEvent::ShapeAdded { metadata, .. }
+            | StreamEvent::ShapeRemoved { metadata, .. }
+            | StreamEvent::ShapeModified { metadata, .. }
+            | StreamEvent::ShapeValidationStarted { metadata, .. }
+            | StreamEvent::ShapeValidationCompleted { metadata, .. }
+            | StreamEvent::ShapeViolationDetected { metadata, .. }
+            | StreamEvent::QueryResultAdded { metadata, .. }
+            | StreamEvent::QueryResultRemoved { metadata, .. }
+            | StreamEvent::QueryCompleted { metadata, .. } => metadata.timestamp,
             StreamEvent::Heartbeat { timestamp, .. } => *timestamp,
         }
     }
@@ -538,11 +565,37 @@ impl EventWindow {
             StreamEvent::GraphCreated { .. } => "graph_created".to_string(),
             StreamEvent::GraphCleared { .. } => "graph_cleared".to_string(),
             StreamEvent::GraphDeleted { .. } => "graph_deleted".to_string(),
+            StreamEvent::GraphMetadataUpdated { .. } => "graph_metadata_updated".to_string(),
+            StreamEvent::GraphPermissionsChanged { .. } => "graph_permissions_changed".to_string(),
+            StreamEvent::GraphStatisticsUpdated { .. } => "graph_statistics_updated".to_string(),
+            StreamEvent::GraphRenamed { .. } => "graph_renamed".to_string(),
+            StreamEvent::GraphMerged { .. } => "graph_merged".to_string(),
+            StreamEvent::GraphSplit { .. } => "graph_split".to_string(),
             StreamEvent::SparqlUpdate { .. } => "sparql_update".to_string(),
             StreamEvent::TransactionBegin { .. } => "transaction_begin".to_string(),
             StreamEvent::TransactionCommit { .. } => "transaction_commit".to_string(),
             StreamEvent::TransactionAbort { .. } => "transaction_abort".to_string(),
             StreamEvent::SchemaChanged { .. } => "schema_changed".to_string(),
+            StreamEvent::SchemaDefinitionAdded { .. } => "schema_definition_added".to_string(),
+            StreamEvent::SchemaDefinitionRemoved { .. } => "schema_definition_removed".to_string(),
+            StreamEvent::SchemaDefinitionModified { .. } => "schema_definition_modified".to_string(),
+            StreamEvent::OntologyImported { .. } => "ontology_imported".to_string(),
+            StreamEvent::OntologyRemoved { .. } => "ontology_removed".to_string(),
+            StreamEvent::ConstraintAdded { .. } => "constraint_added".to_string(),
+            StreamEvent::ConstraintRemoved { .. } => "constraint_removed".to_string(),
+            StreamEvent::ConstraintViolated { .. } => "constraint_violated".to_string(),
+            StreamEvent::IndexCreated { .. } => "index_created".to_string(),
+            StreamEvent::IndexDropped { .. } => "index_dropped".to_string(),
+            StreamEvent::IndexRebuilt { .. } => "index_rebuilt".to_string(),
+            StreamEvent::ShapeAdded { .. } => "shape_added".to_string(),
+            StreamEvent::ShapeRemoved { .. } => "shape_removed".to_string(),
+            StreamEvent::ShapeModified { .. } => "shape_modified".to_string(),
+            StreamEvent::ShapeValidationStarted { .. } => "shape_validation_started".to_string(),
+            StreamEvent::ShapeValidationCompleted { .. } => "shape_validation_completed".to_string(),
+            StreamEvent::ShapeViolationDetected { .. } => "shape_violation_detected".to_string(),
+            StreamEvent::QueryResultAdded { .. } => "query_result_added".to_string(),
+            StreamEvent::QueryResultRemoved { .. } => "query_result_removed".to_string(),
+            StreamEvent::QueryCompleted { .. } => "query_completed".to_string(),
             StreamEvent::Heartbeat { .. } => "heartbeat".to_string(),
         }
     }
@@ -556,11 +609,37 @@ impl EventWindow {
             | StreamEvent::GraphCreated { metadata, .. }
             | StreamEvent::GraphCleared { metadata, .. }
             | StreamEvent::GraphDeleted { metadata, .. }
+            | StreamEvent::GraphMetadataUpdated { metadata, .. }
+            | StreamEvent::GraphPermissionsChanged { metadata, .. }
+            | StreamEvent::GraphStatisticsUpdated { metadata, .. }
+            | StreamEvent::GraphRenamed { metadata, .. }
+            | StreamEvent::GraphMerged { metadata, .. }
+            | StreamEvent::GraphSplit { metadata, .. }
             | StreamEvent::SparqlUpdate { metadata, .. }
             | StreamEvent::TransactionBegin { metadata, .. }
             | StreamEvent::TransactionCommit { metadata, .. }
             | StreamEvent::TransactionAbort { metadata, .. }
-            | StreamEvent::SchemaChanged { metadata, .. } => metadata.source.clone(),
+            | StreamEvent::SchemaChanged { metadata, .. }
+            | StreamEvent::SchemaDefinitionAdded { metadata, .. }
+            | StreamEvent::SchemaDefinitionRemoved { metadata, .. }
+            | StreamEvent::SchemaDefinitionModified { metadata, .. }
+            | StreamEvent::OntologyImported { metadata, .. }
+            | StreamEvent::OntologyRemoved { metadata, .. }
+            | StreamEvent::ConstraintAdded { metadata, .. }
+            | StreamEvent::ConstraintRemoved { metadata, .. }
+            | StreamEvent::ConstraintViolated { metadata, .. }
+            | StreamEvent::IndexCreated { metadata, .. }
+            | StreamEvent::IndexDropped { metadata, .. }
+            | StreamEvent::IndexRebuilt { metadata, .. }
+            | StreamEvent::ShapeAdded { metadata, .. }
+            | StreamEvent::ShapeRemoved { metadata, .. }
+            | StreamEvent::ShapeModified { metadata, .. }
+            | StreamEvent::ShapeValidationStarted { metadata, .. }
+            | StreamEvent::ShapeValidationCompleted { metadata, .. }
+            | StreamEvent::ShapeViolationDetected { metadata, .. }
+            | StreamEvent::QueryResultAdded { metadata, .. }
+            | StreamEvent::QueryResultRemoved { metadata, .. }
+            | StreamEvent::QueryCompleted { metadata, .. } => metadata.source.clone(),
             StreamEvent::Heartbeat { source, .. } => source.clone(),
         }
     }
@@ -769,8 +848,13 @@ impl ComplexEventProcessor {
             | StreamEvent::TransactionBegin { metadata, .. }
             | StreamEvent::TransactionCommit { metadata, .. }
             | StreamEvent::TransactionAbort { metadata, .. }
-            | StreamEvent::SchemaChanged { metadata, .. } => metadata.timestamp,
+            | StreamEvent::SchemaChanged { metadata, .. }
+            | StreamEvent::QueryResultAdded { metadata, .. }
+            | StreamEvent::QueryResultRemoved { metadata, .. }
+            | StreamEvent::QueryCompleted { metadata, .. } => metadata.timestamp,
             StreamEvent::Heartbeat { timestamp, .. } => *timestamp,
+            // For variants without metadata, use current time as fallback
+            _ => Utc::now(),
         }
     }
 
@@ -947,11 +1031,37 @@ impl ComplexEventProcessor {
             StreamEvent::GraphCreated { .. } => "graph_created",
             StreamEvent::GraphCleared { .. } => "graph_cleared",
             StreamEvent::GraphDeleted { .. } => "graph_deleted",
+            StreamEvent::GraphMetadataUpdated { .. } => "graph_metadata_updated",
+            StreamEvent::GraphPermissionsChanged { .. } => "graph_permissions_changed",
+            StreamEvent::GraphStatisticsUpdated { .. } => "graph_statistics_updated",
+            StreamEvent::GraphRenamed { .. } => "graph_renamed",
+            StreamEvent::GraphMerged { .. } => "graph_merged",
+            StreamEvent::GraphSplit { .. } => "graph_split",
             StreamEvent::SparqlUpdate { .. } => "sparql_update",
             StreamEvent::TransactionBegin { .. } => "transaction_begin",
             StreamEvent::TransactionCommit { .. } => "transaction_commit",
             StreamEvent::TransactionAbort { .. } => "transaction_abort",
             StreamEvent::SchemaChanged { .. } => "schema_changed",
+            StreamEvent::SchemaDefinitionAdded { .. } => "schema_definition_added",
+            StreamEvent::SchemaDefinitionRemoved { .. } => "schema_definition_removed",
+            StreamEvent::SchemaDefinitionModified { .. } => "schema_definition_modified",
+            StreamEvent::OntologyImported { .. } => "ontology_imported",
+            StreamEvent::OntologyRemoved { .. } => "ontology_removed",
+            StreamEvent::ConstraintAdded { .. } => "constraint_added",
+            StreamEvent::ConstraintRemoved { .. } => "constraint_removed",
+            StreamEvent::ConstraintViolated { .. } => "constraint_violated",
+            StreamEvent::IndexCreated { .. } => "index_created",
+            StreamEvent::IndexDropped { .. } => "index_dropped",
+            StreamEvent::IndexRebuilt { .. } => "index_rebuilt",
+            StreamEvent::ShapeAdded { .. } => "shape_added",
+            StreamEvent::ShapeRemoved { .. } => "shape_removed",
+            StreamEvent::ShapeModified { .. } => "shape_modified",
+            StreamEvent::ShapeValidationStarted { .. } => "shape_validation_started",
+            StreamEvent::ShapeValidationCompleted { .. } => "shape_validation_completed",
+            StreamEvent::ShapeViolationDetected { .. } => "shape_violation_detected",
+            StreamEvent::QueryResultAdded { .. } => "query_result_added",
+            StreamEvent::QueryResultRemoved { .. } => "query_result_removed",
+            StreamEvent::QueryCompleted { .. } => "query_completed",
             StreamEvent::Heartbeat { .. } => "heartbeat",
         };
         event_type == expected_type
@@ -962,29 +1072,37 @@ impl ComplexEventProcessor {
         match field {
             "subject" => match event {
                 StreamEvent::TripleAdded { subject, .. } |
-                StreamEvent::TripleRemoved { subject, .. } => subject == expected_value,
+                StreamEvent::TripleRemoved { subject, .. } |
+                StreamEvent::QuadAdded { subject, .. } |
+                StreamEvent::QuadRemoved { subject, .. } => subject == expected_value,
                 _ => false,
             },
             "predicate" => match event {
                 StreamEvent::TripleAdded { predicate, .. } |
-                StreamEvent::TripleRemoved { predicate, .. } => predicate == expected_value,
+                StreamEvent::TripleRemoved { predicate, .. } |
+                StreamEvent::QuadAdded { predicate, .. } |
+                StreamEvent::QuadRemoved { predicate, .. } => predicate == expected_value,
                 _ => false,
             },
             "object" => match event {
                 StreamEvent::TripleAdded { object, .. } |
-                StreamEvent::TripleRemoved { object, .. } => object == expected_value,
+                StreamEvent::TripleRemoved { object, .. } |
+                StreamEvent::QuadAdded { object, .. } |
+                StreamEvent::QuadRemoved { object, .. } => object == expected_value,
                 _ => false,
             },
             "graph" => match event {
                 StreamEvent::TripleAdded { graph, .. } |
-                StreamEvent::TripleRemoved { graph, .. } |
-                StreamEvent::QuadAdded { graph, .. } |
-                StreamEvent::QuadRemoved { graph, .. } => {
+                StreamEvent::TripleRemoved { graph, .. } => {
                     graph.as_ref().map(|g| g == expected_value).unwrap_or(false)
                 }
-                StreamEvent::GraphCreated { graph_uri, .. } |
-                StreamEvent::GraphCleared { graph_uri, .. } |
-                StreamEvent::GraphDeleted { graph_uri, .. } => graph_uri == expected_value,
+                StreamEvent::QuadAdded { graph, .. } |
+                StreamEvent::QuadRemoved { graph, .. } => graph == expected_value,
+                StreamEvent::GraphCreated { graph, .. } |
+                StreamEvent::GraphDeleted { graph, .. } => graph == expected_value,
+                StreamEvent::GraphCleared { graph, .. } => {
+                    graph.as_ref().map(|g| g == expected_value).unwrap_or(false)
+                }
                 _ => false,
             },
             _ => {
@@ -1127,10 +1245,15 @@ impl ComplexEventProcessor {
             StreamEvent::TransactionBegin { metadata, .. } |
             StreamEvent::TransactionCommit { metadata, .. } |
             StreamEvent::TransactionAbort { metadata, .. } |
-            StreamEvent::SchemaChanged { metadata, .. } => {
+            StreamEvent::SchemaChanged { metadata, .. }
+            | StreamEvent::QueryResultAdded { metadata, .. }
+            | StreamEvent::QueryResultRemoved { metadata, .. }
+            | StreamEvent::QueryCompleted { metadata, .. } => {
                 metadata.properties.get(property).cloned()
             }
             StreamEvent::Heartbeat { .. } => None,
+            // For events without metadata, return None
+            _ => None,
         }
     }
 

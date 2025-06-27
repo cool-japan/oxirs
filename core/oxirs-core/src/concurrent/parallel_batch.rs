@@ -492,9 +492,11 @@ mod tests {
     #[test]
     #[cfg(feature = "parallel")]
     fn test_work_stealing() {
-        let mut config = BatchConfig::default();
-        config.num_threads = Some(4);
-        config.batch_size = 10;
+        let config = BatchConfig {
+            num_threads: Some(4),
+            batch_size: 10,
+            ..Default::default()
+        };
         
         let processor = ParallelBatchProcessor::new(config);
         

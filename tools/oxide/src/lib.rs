@@ -784,9 +784,17 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             optimize,
             time,
         } => {
-            tools::arq::run(
-                query, query_file, data, namedgraph, results, dataset, explain, optimize, time,
-            )
+            tools::arq::run(tools::arq::ArqConfig {
+                query,
+                query_file,
+                data,
+                namedgraph,
+                results_format: results,
+                dataset,
+                explain,
+                optimize,
+                time,
+            })
             .await
         }
         Commands::RSparql {

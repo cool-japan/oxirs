@@ -189,6 +189,10 @@ impl DeltaComputer {
                     // These events don't translate to patch operations
                     continue;
                 }
+                // Catch-all for remaining variants that don't translate to patch operations
+                _ => {
+                    continue;
+                }
             };
 
             patch.add_operation(operation);

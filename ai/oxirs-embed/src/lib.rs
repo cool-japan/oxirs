@@ -3,9 +3,13 @@
 //! This crate provides state-of-the-art knowledge graph embedding methods
 //! including TransE, DistMult, ComplEx, and RotatE models.
 
+#[cfg(feature = "api-server")]
+pub mod api;
+pub mod caching;
 pub mod evaluation;
 pub mod inference;
 pub mod integration;
+pub mod model_registry;
 pub mod models;
 pub mod persistence;
 pub mod training;
@@ -201,9 +205,15 @@ pub trait EmbeddingModel: Send + Sync {
     fn is_trained(&self) -> bool;
 }
 
-// Re-export main model types
+// Re-export main types
+#[cfg(feature = "api-server")]
+pub use api::{ApiState, ApiConfig, start_server};
+pub use caching::{CacheManager, CacheConfig, CachedEmbeddingModel};
 pub use models::{
     ComplEx, DistMult, RotatE, TransE,
     TransformerEmbedding, TransformerType, TransformerConfig,
     GNNEmbedding, GNNType, GNNConfig, AggregationType
 };
+
+// Re-export model registry types
+pub use crate::model_registry::{ModelRegistry, ModelVersion, ResourceAllocation};

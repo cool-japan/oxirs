@@ -348,18 +348,18 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Temporarily disabled due to thread safety issues with bumpalo::Bump
     fn test_concurrent_arena() {
-        let arena = ConcurrentArena::new(1024);
+        let arena = Arc::new(ConcurrentArena::new(1024));
         
         // Test concurrent allocation
         thread::scope(|s| {
             let handles: Vec<_> = (0..4)
                 .map(|i| {
+                    let arena_clone = Arc::clone(&arena);
                     s.spawn(move |_| {
                         for j in 0..100 {
                             let string = format!("thread_{}_item_{}", i, j);
-                            let allocated = arena.alloc_str(&string);
+                            let allocated = arena_clone.alloc_str(&string);
                             assert_eq!(allocated, string);
                         }
                     })

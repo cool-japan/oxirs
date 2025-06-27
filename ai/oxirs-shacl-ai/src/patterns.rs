@@ -9,7 +9,7 @@ use std::time::Instant;
 
 use oxirs_core::{
     model::{Literal, NamedNode, Term, Triple},
-    store::Store,
+    Store,
 };
 
 use oxirs_shacl::{constraints::*, Constraint, PropertyPath, Shape, ShapeId, Target};
@@ -156,9 +156,19 @@ impl PatternAnalyzer {
         Self {
             config,
             pattern_cache: HashMap::new(),
-            model_state: PatternModelState::new(),
+            model_state: PatternModelState::default(),
             stats: PatternStatistics::default(),
         }
+    }
+
+    /// Get the current configuration
+    pub fn config(&self) -> &PatternConfig {
+        &self.config
+    }
+
+    /// Get statistics
+    pub fn get_statistics(&self) -> &PatternStatistics {
+        &self.stats
     }
 
     /// Analyze patterns in an RDF graph
@@ -468,7 +478,7 @@ impl PatternAnalyzer {
                 .filter_map(|binding| binding.get("count"))
                 .filter_map(|count| {
                     if let Term::Literal(literal) = count {
-                        literal.as_str().parse::<u32>().ok()
+                        literal.value().parse::<u32>().ok()
                     } else {
                         None
                     }
@@ -482,7 +492,7 @@ impl PatternAnalyzer {
                     if let (Term::NamedNode(class_node), Term::Literal(count_literal)) =
                         (class_term, count_term)
                     {
-                        if let Ok(count) = count_literal.as_str().parse::<u32>() {
+                        if let Ok(count) = count_literal.value().parse::<u32>() {
                             let support = count as f64 / total_instances as f64;
                             let confidence = if total_instances > 0 {
                                 count as f64 / total_instances as f64
@@ -557,7 +567,7 @@ impl PatternAnalyzer {
                 .filter_map(|binding| binding.get("count"))
                 .filter_map(|count| {
                     if let Term::Literal(literal) = count {
-                        literal.as_str().parse::<u32>().ok()
+                        literal.value().parse::<u32>().ok()
                     } else {
                         None
                     }
@@ -571,7 +581,7 @@ impl PatternAnalyzer {
                     if let (Term::NamedNode(property_node), Term::Literal(count_literal)) =
                         (property_term, count_term)
                     {
-                        if let Ok(count) = count_literal.as_str().parse::<u32>() {
+                        if let Ok(count) = count_literal.value().parse::<u32>() {
                             let support = count as f64 / total_properties as f64;
                             let confidence = if total_properties > 0 {
                                 count as f64 / total_properties as f64
@@ -699,16 +709,17 @@ impl PatternAnalyzer {
             bindings,
         } = result
         {
+            let bindings_len = bindings.len();
             let mut property_cardinalities: HashMap<NamedNode, Vec<u32>> = HashMap::new();
 
-            for binding in bindings {
+            for binding in &bindings {
                 if let (Some(property_term), Some(count_term)) =
                     (binding.get("property"), binding.get("count"))
                 {
                     if let (Term::NamedNode(property), Term::Literal(count_literal)) =
                         (property_term, count_term)
                     {
-                        if let Ok(count) = count_literal.as_str().parse::<u32>() {
+                        if let Ok(count) = count_literal.value().parse::<u32>() {
                             property_cardinalities
                                 .entry(property.clone())
                                 .or_insert_with(Vec::new)
@@ -733,7 +744,7 @@ impl PatternAnalyzer {
                         min_count: Some(min_cardinality),
                         max_count: Some(max_cardinality),
                         avg_count: avg_cardinality,
-                        support: cardinalities.len() as f64 / bindings.len() as f64,
+                        support: cardinalities.len() as f64 / bindings_len as f64,
                         confidence: 1.0, // All instances have cardinality 1
                         pattern_type: PatternType::Usage,
                     });
@@ -747,7 +758,7 @@ impl PatternAnalyzer {
                         min_count: Some(min_cardinality),
                         max_count: Some(max_cardinality),
                         avg_count: avg_cardinality,
-                        support: cardinalities.len() as f64 / bindings.len() as f64,
+                        support: cardinalities.len() as f64 / bindings_len as f64,
                         confidence: 1.0,
                         pattern_type: PatternType::Usage,
                     });
@@ -815,7 +826,7 @@ impl PatternAnalyzer {
                         Term::Literal(count_literal),
                     ) = (property_term, datatype_term, count_term)
                     {
-                        if let Ok(count) = count_literal.as_str().parse::<u32>() {
+                        if let Ok(count) = count_literal.value().parse::<u32>() {
                             property_datatypes
                                 .entry(property.clone())
                                 .or_insert_with(HashMap::new)
@@ -901,7 +912,7 @@ impl PatternAnalyzer {
         let mut subject_predicates: HashMap<String, HashSet<String>> = HashMap::new();
 
         for quad in &quads {
-            let subject_str = quad.subject().as_str().to_string();
+            let subject_str = quad.subject().to_string();
             if let oxirs_core::model::Predicate::NamedNode(predicate) = quad.predicate() {
                 subject_predicates
                     .entry(subject_str)
@@ -949,13 +960,79 @@ impl PatternAnalyzer {
     /// Analyze association rules
     fn analyze_association_rules(
         &self,
-        _store: &Store,
-        _graph_name: Option<&str>,
-        _existing_patterns: &[Pattern],
+        store: &Store,
+        graph_name: Option<&str>,
+        existing_patterns: &[Pattern],
     ) -> Result<Vec<Pattern>> {
-        // Implement association rule mining
-        // For now, return empty patterns
-        Ok(Vec::new())
+        let mut rules = Vec::new();
+
+        // Extract frequent itemsets from existing patterns
+        let mut frequent_predicates = HashSet::new();
+        let mut frequent_classes = HashSet::new();
+
+        for pattern in existing_patterns {
+            match pattern {
+                Pattern::PropertyUsage {
+                    property, support, ..
+                } => {
+                    if *support >= self.config.min_support_threshold {
+                        frequent_predicates.insert(property.as_str().to_string());
+                    }
+                }
+                Pattern::ClassUsage { class, support, .. } => {
+                    if *support >= self.config.min_support_threshold {
+                        frequent_classes.insert(class.as_str().to_string());
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Mine association rules: Class -> Property patterns
+        for class_iri in &frequent_classes {
+            for property_iri in &frequent_predicates {
+                let rule_pattern =
+                    self.mine_class_property_rule(store, class_iri, property_iri, graph_name)?;
+                if let Some(pattern) = rule_pattern {
+                    rules.push(pattern);
+                }
+            }
+        }
+
+        // Mine association rules: Property -> Property patterns
+        let frequent_props: Vec<_> = frequent_predicates.iter().collect();
+        for i in 0..frequent_props.len() {
+            for j in (i + 1)..frequent_props.len() {
+                let rule1 = self.mine_property_property_rule(
+                    store,
+                    frequent_props[i],
+                    frequent_props[j],
+                    graph_name,
+                )?;
+                if let Some(pattern) = rule1 {
+                    rules.push(pattern);
+                }
+
+                let rule2 = self.mine_property_property_rule(
+                    store,
+                    frequent_props[j],
+                    frequent_props[i],
+                    graph_name,
+                )?;
+                if let Some(pattern) = rule2 {
+                    rules.push(pattern);
+                }
+            }
+        }
+
+        // Mine cardinality rules: Class -> Property cardinality patterns
+        for class_iri in &frequent_classes {
+            let cardinality_rules = self.mine_cardinality_rules(store, class_iri, graph_name)?;
+            rules.extend(cardinality_rules);
+        }
+
+        tracing::debug!("Found {} association rule patterns", rules.len());
+        Ok(rules)
     }
 
     /// Analyze graph structure patterns
@@ -988,7 +1065,7 @@ impl PatternAnalyzer {
 
         // Count constraint usage
         for shape in shapes {
-            for (constraint_id, _constraint) in shape.get_constraints() {
+            for (constraint_id, _constraint) in &shape.constraints {
                 let constraint_type = constraint_id.as_str();
                 *constraint_counts
                     .entry(constraint_type.to_string())
@@ -1023,13 +1100,14 @@ impl PatternAnalyzer {
 
         // Count target usage
         for shape in shapes {
-            for target in shape.get_targets() {
+            for target in &shape.targets {
                 let target_type = match target {
                     Target::Class(_) => "TargetClass",
                     Target::Node(_) => "TargetNode",
                     Target::ObjectsOf(_) => "TargetObjectsOf",
                     Target::SubjectsOf(_) => "TargetSubjectsOf",
                     Target::Sparql(_) => "SPARQLTarget",
+                    Target::Implicit(_) => "ImplicitTarget",
                 };
                 *target_counts.entry(target_type.to_string()).or_insert(0) += 1;
             }
@@ -1062,7 +1140,7 @@ impl PatternAnalyzer {
 
         // Analyze path complexity distribution
         for shape in shapes {
-            if let Some(path) = shape.get_path() {
+            if let Some(path) = &shape.path {
                 let complexity = path.complexity();
                 *path_complexity_counts.entry(complexity).or_insert(0) += 1;
             }
@@ -1096,7 +1174,7 @@ impl PatternAnalyzer {
         let mut constraint_count_distribution: HashMap<usize, u32> = HashMap::new();
 
         for shape in shapes {
-            let constraint_count = shape.get_constraints().len();
+            let constraint_count = shape.constraints.len();
             *constraint_count_distribution
                 .entry(constraint_count)
                 .or_insert(0) += 1;
@@ -1259,6 +1337,305 @@ impl PatternAnalyzer {
 
         Ok(result)
     }
+
+    /// Mine Class -> Property association rules
+    fn mine_class_property_rule(
+        &self,
+        store: &Store,
+        class_iri: &str,
+        property_iri: &str,
+        graph_name: Option<&str>,
+    ) -> Result<Option<Pattern>> {
+        // Query to find instances of the class that have the property
+        let query = if let Some(graph) = graph_name {
+            format!(
+                r#"
+                SELECT (COUNT(DISTINCT ?instance) as ?with_property) WHERE {{
+                    GRAPH <{}> {{
+                        ?instance a <{}> .
+                        ?instance <{}> ?value .
+                    }}
+                }}
+                "#,
+                graph, class_iri, property_iri
+            )
+        } else {
+            format!(
+                r#"
+                SELECT (COUNT(DISTINCT ?instance) as ?with_property) WHERE {{
+                    ?instance a <{}> .
+                    ?instance <{}> ?value .
+                }}
+                "#,
+                class_iri, property_iri
+            )
+        };
+
+        let result_with_property = self.execute_pattern_query(store, &query)?;
+
+        // Query to find total instances of the class
+        let total_query = if let Some(graph) = graph_name {
+            format!(
+                r#"
+                SELECT (COUNT(DISTINCT ?instance) as ?total) WHERE {{
+                    GRAPH <{}> {{
+                        ?instance a <{}> .
+                    }}
+                }}
+                "#,
+                graph, class_iri
+            )
+        } else {
+            format!(
+                r#"
+                SELECT (COUNT(DISTINCT ?instance) as ?total) WHERE {{
+                    ?instance a <{}> .
+                }}
+                "#,
+                class_iri
+            )
+        };
+
+        let result_total = self.execute_pattern_query(store, &total_query)?;
+
+        // Extract counts
+        let with_property_count = self.extract_count_from_result(&result_with_property)?;
+        let total_count = self.extract_count_from_result(&result_total)?;
+
+        if total_count > 0 {
+            let confidence = with_property_count as f64 / total_count as f64;
+
+            if confidence >= self.config.min_confidence_threshold {
+                return Ok(Some(Pattern::AssociationRule {
+                    antecedent: class_iri.to_string(),
+                    consequent: property_iri.to_string(),
+                    support: with_property_count as f64 / total_count as f64,
+                    confidence,
+                    lift: confidence, // Simplified lift calculation
+                    pattern_type: PatternType::Association,
+                }));
+            }
+        }
+
+        Ok(None)
+    }
+
+    /// Mine Property -> Property association rules
+    fn mine_property_property_rule(
+        &self,
+        store: &Store,
+        antecedent_property: &str,
+        consequent_property: &str,
+        graph_name: Option<&str>,
+    ) -> Result<Option<Pattern>> {
+        // Query to find entities that have both properties
+        let query = if let Some(graph) = graph_name {
+            format!(
+                r#"
+                SELECT (COUNT(DISTINCT ?entity) as ?both_properties) WHERE {{
+                    GRAPH <{}> {{
+                        ?entity <{}> ?value1 .
+                        ?entity <{}> ?value2 .
+                    }}
+                }}
+                "#,
+                graph, antecedent_property, consequent_property
+            )
+        } else {
+            format!(
+                r#"
+                SELECT (COUNT(DISTINCT ?entity) as ?both_properties) WHERE {{
+                    ?entity <{}> ?value1 .
+                    ?entity <{}> ?value2 .
+                }}
+                "#,
+                antecedent_property, consequent_property
+            )
+        };
+
+        let result_both = self.execute_pattern_query(store, &query)?;
+
+        // Query to find entities that have the antecedent property
+        let antecedent_query = if let Some(graph) = graph_name {
+            format!(
+                r#"
+                SELECT (COUNT(DISTINCT ?entity) as ?with_antecedent) WHERE {{
+                    GRAPH <{}> {{
+                        ?entity <{}> ?value .
+                    }}
+                }}
+                "#,
+                graph, antecedent_property
+            )
+        } else {
+            format!(
+                r#"
+                SELECT (COUNT(DISTINCT ?entity) as ?with_antecedent) WHERE {{
+                    ?entity <{}> ?value .
+                }}
+                "#,
+                antecedent_property
+            )
+        };
+
+        let result_antecedent = self.execute_pattern_query(store, &antecedent_query)?;
+
+        // Extract counts
+        let both_count = self.extract_count_from_result(&result_both)?;
+        let antecedent_count = self.extract_count_from_result(&result_antecedent)?;
+
+        if antecedent_count > 0 {
+            let confidence = both_count as f64 / antecedent_count as f64;
+
+            if confidence >= self.config.min_confidence_threshold {
+                return Ok(Some(Pattern::AssociationRule {
+                    antecedent: antecedent_property.to_string(),
+                    consequent: consequent_property.to_string(),
+                    support: both_count as f64 / antecedent_count as f64,
+                    confidence,
+                    lift: confidence, // Simplified lift calculation
+                    pattern_type: PatternType::Association,
+                }));
+            }
+        }
+
+        Ok(None)
+    }
+
+    /// Mine cardinality constraint rules
+    fn mine_cardinality_rules(
+        &self,
+        store: &Store,
+        class_iri: &str,
+        graph_name: Option<&str>,
+    ) -> Result<Vec<Pattern>> {
+        let mut patterns = Vec::new();
+
+        // Query to find properties used by this class and their cardinalities
+        let query = if let Some(graph) = graph_name {
+            format!(
+                r#"
+                SELECT ?property (COUNT(?value) as ?count) WHERE {{
+                    GRAPH <{}> {{
+                        ?instance a <{}> .
+                        ?instance ?property ?value .
+                        FILTER(isIRI(?property))
+                    }}
+                }}
+                GROUP BY ?instance ?property
+                "#,
+                graph, class_iri
+            )
+        } else {
+            format!(
+                r#"
+                SELECT ?property (COUNT(?value) as ?count) WHERE {{
+                    ?instance a <{}> .
+                    ?instance ?property ?value .
+                    FILTER(isIRI(?property))
+                }}
+                GROUP BY ?instance ?property
+                "#,
+                class_iri
+            )
+        };
+
+        let result = self.execute_pattern_query(store, &query)?;
+
+        if let oxirs_core::query::QueryResult::Select {
+            variables: _,
+            bindings,
+        } = result
+        {
+            let mut property_cardinalities: HashMap<String, Vec<u32>> = HashMap::new();
+
+            // Collect cardinality data
+            for binding in bindings {
+                if let (Some(property), Some(count)) =
+                    (binding.get("property"), binding.get("count"))
+                {
+                    if let (Term::NamedNode(prop_node), Term::Literal(count_literal)) =
+                        (property, count)
+                    {
+                        if let Ok(count_val) = count_literal.value().parse::<u32>() {
+                            property_cardinalities
+                                .entry(prop_node.as_str().to_string())
+                                .or_insert_with(Vec::new)
+                                .push(count_val);
+                        }
+                    }
+                }
+            }
+
+            // Analyze cardinality patterns
+            for (property, cardinalities) in property_cardinalities {
+                let min_card = *cardinalities.iter().min().unwrap_or(&0);
+                let max_card = *cardinalities.iter().max().unwrap_or(&0);
+                let avg_card =
+                    cardinalities.iter().sum::<u32>() as f64 / cardinalities.len() as f64;
+
+                // Create min cardinality pattern
+                if min_card > 0 {
+                    patterns.push(Pattern::CardinalityRule {
+                        property: NamedNode::new(property.as_str()).unwrap(),
+                        rule_type: format!("min_cardinality_{}", min_card),
+                        min_count: Some(min_card),
+                        max_count: None,
+                        confidence: 0.9, // High confidence for observed minimums
+                        support: cardinalities.len() as f64 / cardinalities.len() as f64,
+                        pattern_type: PatternType::Constraint,
+                    });
+                }
+
+                // Create max cardinality pattern if there's a clear upper bound
+                if max_card > 0 && max_card == min_card {
+                    // Exact cardinality
+                    patterns.push(Pattern::CardinalityRule {
+                        property: NamedNode::new(property.as_str()).unwrap(),
+                        rule_type: format!("exact_cardinality_{}", min_card),
+                        min_count: Some(min_card),
+                        max_count: Some(max_card),
+                        confidence: 0.95,
+                        support: cardinalities.len() as f64 / cardinalities.len() as f64,
+                        pattern_type: PatternType::Constraint,
+                    });
+                } else if max_card <= 5 {
+                    // Reasonable upper bound
+                    patterns.push(Pattern::CardinalityRule {
+                        property: NamedNode::new(property.as_str()).unwrap(),
+                        rule_type: format!("max_cardinality_{}", max_card),
+                        min_count: None,
+                        max_count: Some(max_card),
+                        confidence: 0.8,
+                        support: cardinalities.len() as f64 / cardinalities.len() as f64,
+                        pattern_type: PatternType::Constraint,
+                    });
+                }
+            }
+        }
+
+        Ok(patterns)
+    }
+
+    /// Extract count from SPARQL query result
+    fn extract_count_from_result(&self, result: &oxirs_core::query::QueryResult) -> Result<u32> {
+        if let oxirs_core::query::QueryResult::Select {
+            variables: _,
+            bindings,
+        } = result
+        {
+            if let Some(binding) = bindings.first() {
+                for (_, value) in binding.iter() {
+                    if let Term::Literal(literal) = value {
+                        if let Ok(count) = literal.value().parse::<u32>() {
+                            return Ok(count);
+                        }
+                    }
+                }
+            }
+        }
+        Ok(0)
+    }
 }
 
 impl Default for PatternAnalyzer {
@@ -1356,6 +1733,27 @@ pub enum Pattern {
         confidence: f64,
         pattern_type: PatternType,
     },
+
+    /// Association rule pattern
+    AssociationRule {
+        antecedent: String,
+        consequent: String,
+        support: f64,
+        confidence: f64,
+        lift: f64,
+        pattern_type: PatternType,
+    },
+
+    /// Cardinality rule pattern
+    CardinalityRule {
+        property: NamedNode,
+        rule_type: String,
+        min_count: Option<u32>,
+        max_count: Option<u32>,
+        support: f64,
+        confidence: f64,
+        pattern_type: PatternType,
+    },
 }
 
 impl Pattern {
@@ -1371,6 +1769,8 @@ impl Pattern {
             Pattern::TargetUsage { support, .. } => *support,
             Pattern::PathComplexity { support, .. } => *support,
             Pattern::ShapeComplexity { support, .. } => *support,
+            Pattern::AssociationRule { support, .. } => *support,
+            Pattern::CardinalityRule { support, .. } => *support,
         }
     }
 
@@ -1386,6 +1786,8 @@ impl Pattern {
             Pattern::TargetUsage { confidence, .. } => *confidence,
             Pattern::PathComplexity { confidence, .. } => *confidence,
             Pattern::ShapeComplexity { confidence, .. } => *confidence,
+            Pattern::AssociationRule { confidence, .. } => *confidence,
+            Pattern::CardinalityRule { confidence, .. } => *confidence,
         }
     }
 
@@ -1401,6 +1803,8 @@ impl Pattern {
             Pattern::TargetUsage { pattern_type, .. } => pattern_type,
             Pattern::PathComplexity { pattern_type, .. } => pattern_type,
             Pattern::ShapeComplexity { pattern_type, .. } => pattern_type,
+            Pattern::AssociationRule { pattern_type, .. } => pattern_type,
+            Pattern::CardinalityRule { pattern_type, .. } => pattern_type,
         }
     }
 }
@@ -1413,6 +1817,8 @@ pub enum PatternType {
     ShapeComposition,
     Temporal,
     Anomalous,
+    Association,
+    Constraint,
 }
 
 /// Cardinality pattern types
@@ -1595,7 +2001,7 @@ mod tests {
         let cached = CachedPatternResult {
             patterns,
             timestamp: chrono::Utc::now() - chrono::Duration::hours(2),
-            ttl: std::time::Duration::from_hours(1),
+            ttl: std::time::Duration::from_secs(3600), // 1 hour
         };
 
         assert!(cached.is_expired());

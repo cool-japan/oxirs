@@ -420,12 +420,19 @@ impl EncodedTerm {
         }
     }
 
+    /// Encodes a variable (currently not supported in storage context)
+    pub fn encode_variable(_variable: &crate::model::Variable) -> Self {
+        panic!("Variables cannot be encoded for storage - they are only used in queries")
+    }
+
     /// Encodes any term
     pub fn encode_term(term: &Term) -> Self {
         match term {
             Term::NamedNode(n) => Self::encode_named_node(n),
             Term::BlankNode(b) => Self::encode_blank_node(b),
             Term::Literal(l) => Self::encode_literal(l),
+            Term::Variable(_) => panic!("Cannot encode variable in this context"),
+            Term::QuotedTriple(_) => panic!("RDF-star encoding not yet implemented"),
             #[cfg(feature = "rdf-star")]
             Term::Triple(_) => todo!("RDF-star encoding not yet implemented"),
         }
@@ -437,6 +444,7 @@ impl EncodedTerm {
             TermRef::NamedNode(n) => Self::encode_named_node_ref(n),
             TermRef::BlankNode(b) => Self::encode_blank_node_ref(b),
             TermRef::Literal(l) => Self::encode_literal_ref(l),
+            TermRef::Variable(v) => Self::encode_variable(v),
             #[cfg(feature = "rdf-star")]
             TermRef::Triple(_) => todo!("RDF-star encoding not yet implemented"),
         }

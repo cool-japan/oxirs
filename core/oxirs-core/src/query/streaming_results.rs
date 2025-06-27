@@ -1,9 +1,9 @@
 //! Streaming result sets for large query results with minimal memory overhead
 
-use crate::model::{Term, Variable, Triple, Quad, NamedNode, BlankNode, Literal};
+use crate::model::{Term, Variable, Triple, NamedNode, Literal};
 use crate::OxirsError;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::mpsc;
 use futures::stream::{Stream, StreamExt};
 use std::pin::Pin;
@@ -585,7 +585,7 @@ mod tests {
         // Send some solutions
         for i in 0..5 {
             let mut bindings = HashMap::new();
-            let term = Term::Literal(Literal::new(&i.to_string()));
+            let term = Term::Literal(Literal::new(i.to_string()));
             bindings.insert(variables[0].clone(), Some(term));
             sender.send(Ok(Solution::new(bindings))).unwrap();
         }
@@ -610,7 +610,7 @@ mod tests {
         // Send 20 solutions
         for i in 0..20 {
             let mut bindings = HashMap::new();
-            let term = Term::Literal(Literal::new(&i.to_string()));
+            let term = Term::Literal(Literal::new(i.to_string()));
             bindings.insert(variables[0].clone(), Some(term));
             sender.send(Ok(Solution::new(bindings))).unwrap();
         }

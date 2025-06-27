@@ -23,6 +23,7 @@
 //! # }
 //! ```
 
+pub mod ai;
 pub mod concurrent;
 pub mod distributed;
 pub mod graph;

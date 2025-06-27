@@ -829,9 +829,9 @@ mod tests {
 
         // Insert some data
         for i in 0..5 {
-            let subject = NamedNode::new(&format!("http://example.org/subject{}", i)).unwrap();
+            let subject = NamedNode::new(format!("http://example.org/subject{}", i)).unwrap();
             let predicate = NamedNode::new("http://example.org/predicate").unwrap();
-            let object = Literal::new(&format!("object{}", i));
+            let object = Literal::new(format!("object{}", i));
 
             let triple = Triple::new(subject, predicate, object);
             store.insert_triple(triple).unwrap();
@@ -851,9 +851,9 @@ mod tests {
 
         let mut quads = Vec::new();
         for i in 0..100 {
-            let subject = NamedNode::new(&format!("http://example.org/subject{}", i)).unwrap();
+            let subject = NamedNode::new(format!("http://example.org/subject{}", i)).unwrap();
             let predicate = NamedNode::new("http://example.org/predicate").unwrap();
-            let object = Literal::new(&format!("object{}", i));
+            let object = Literal::new(format!("object{}", i));
             let graph = NamedNode::new("http://example.org/graph").unwrap();
 
             quads.push(Quad::new(subject, predicate, object, graph));

@@ -22,7 +22,7 @@ pub struct ConfigManager {
 }
 
 /// Main configuration structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct OxideConfig {
     /// General settings
     #[serde(default)]
@@ -373,17 +373,6 @@ impl ConfigManager {
     }
 }
 
-impl Default for OxideConfig {
-    fn default() -> Self {
-        Self {
-            general: GeneralConfig::default(),
-            server: ServerConfig::default(),
-            datasets: HashMap::new(),
-            tools: ToolsConfig::default(),
-            env: HashMap::new(),
-        }
-    }
-}
 
 impl Default for GeneralConfig {
     fn default() -> Self {

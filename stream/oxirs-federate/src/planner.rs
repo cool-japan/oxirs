@@ -338,20 +338,13 @@ impl QueryPlanner {
                 if let Some(close_brace) = where_clause.rfind('}') {
                     let pattern_content = &where_clause[open_brace + 1..close_brace];
 
-                    for line in pattern_content.split('.') {
-                        let line = line.trim();
-                        if line.is_empty() || line.starts_with("#") {
-                            continue;
-                        }
+                    // Enhanced parsing with better SPARQL support
+                    let cleaned = self.remove_comments_and_normalize(pattern_content);
+                    let statements = self.split_sparql_statements(&cleaned);
 
-                        let parts: Vec<&str> = line.split_whitespace().collect();
-                        if parts.len() >= 3 {
-                            patterns.push(TriplePattern {
-                                subject: parts[0].to_string(),
-                                predicate: parts[1].to_string(),
-                                object: parts[2..].join(" "),
-                                pattern_string: line.to_string(),
-                            });
+                    for statement in statements {
+                        if let Some(pattern) = self.parse_triple_pattern(&statement)? {
+                            patterns.push(pattern);
                         }
                     }
                 }
@@ -359,6 +352,231 @@ impl QueryPlanner {
         }
 
         Ok(patterns)
+    }
+
+    /// Remove comments and normalize whitespace in SPARQL content
+    fn remove_comments_and_normalize(&self, content: &str) -> String {
+        content
+            .lines()
+            .map(|line| {
+                // Remove comments (anything after # that's not in a string)
+                let mut in_string = false;
+                let mut escaped = false;
+                let mut result = String::new();
+                
+                for ch in line.chars() {
+                    match ch {
+                        '"' if !escaped => in_string = !in_string,
+                        '#' if !in_string => break,
+                        '\\' if in_string => escaped = !escaped,
+                        _ => escaped = false,
+                    }
+                    result.push(ch);
+                }
+                result.trim().to_string()
+            })
+            .filter(|line| !line.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    /// Split SPARQL content into individual statements
+    fn split_sparql_statements(&self, content: &str) -> Vec<String> {
+        let mut statements = Vec::new();
+        let mut current = String::new();
+        let mut in_string = false;
+        let mut escaped = false;
+        let mut paren_depth = 0;
+        let mut brace_depth = 0;
+
+        for ch in content.chars() {
+            match ch {
+                '"' if !escaped => {
+                    in_string = !in_string;
+                    current.push(ch);
+                }
+                '(' if !in_string => {
+                    paren_depth += 1;
+                    current.push(ch);
+                }
+                ')' if !in_string => {
+                    paren_depth -= 1;
+                    current.push(ch);
+                }
+                '{' if !in_string => {
+                    brace_depth += 1;
+                    current.push(ch);
+                }
+                '}' if !in_string => {
+                    brace_depth -= 1;
+                    current.push(ch);
+                }
+                '.' if !in_string && paren_depth == 0 && brace_depth == 0 => {
+                    // End of statement
+                    if !current.trim().is_empty() {
+                        statements.push(current.trim().to_string());
+                        current.clear();
+                    }
+                }
+                ';' if !in_string && paren_depth == 0 && brace_depth == 0 => {
+                    // Alternative statement separator
+                    if !current.trim().is_empty() {
+                        statements.push(current.trim().to_string());
+                        current.clear();
+                    }
+                }
+                '\\' if in_string => {
+                    escaped = !escaped;
+                    current.push(ch);
+                }
+                _ => {
+                    escaped = false;
+                    current.push(ch);
+                }
+            }
+        }
+
+        if !current.trim().is_empty() {
+            statements.push(current.trim().to_string());
+        }
+
+        statements
+    }
+
+    /// Parse a single triple pattern from a SPARQL statement
+    fn parse_triple_pattern(&self, statement: &str) -> Result<Option<TriplePattern>> {
+        let statement = statement.trim();
+        
+        // Skip FILTER, OPTIONAL, UNION, etc. - these aren't triple patterns
+        let upper = statement.to_uppercase();
+        if upper.starts_with("FILTER") || upper.starts_with("OPTIONAL") || 
+           upper.starts_with("UNION") || upper.starts_with("SERVICE") ||
+           upper.starts_with("GRAPH") || upper.starts_with("BIND") {
+            return Ok(None);
+        }
+
+        // Handle different SPARQL syntaxes
+        if let Some(pattern) = self.parse_basic_triple(statement)? {
+            return Ok(Some(pattern));
+        }
+
+        if let Some(pattern) = self.parse_property_path(statement)? {
+            return Ok(Some(pattern));
+        }
+
+        if let Some(pattern) = self.parse_blank_node_pattern(statement)? {
+            return Ok(Some(pattern));
+        }
+
+        Ok(None)
+    }
+
+    /// Parse basic triple pattern: subject predicate object
+    fn parse_basic_triple(&self, statement: &str) -> Result<Option<TriplePattern>> {
+        let tokens = self.tokenize_sparql(statement);
+        
+        if tokens.len() >= 3 {
+            // Handle abbreviated syntax like "?s rdf:type ?type"
+            let subject = tokens[0].clone();
+            let predicate = tokens[1].clone();
+            let object = if tokens.len() == 3 {
+                tokens[2].clone()
+            } else {
+                // Handle complex objects like "\"literal\"@en" or "\"value\"^^<type>"
+                tokens[2..].join(" ")
+            };
+
+            Ok(Some(TriplePattern {
+                subject,
+                predicate,
+                object,
+                pattern_string: statement.to_string(),
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Parse property path expressions
+    fn parse_property_path(&self, statement: &str) -> Result<Option<TriplePattern>> {
+        // Handle property paths like "?s foaf:knows+ ?friend"
+        if statement.contains('/') || statement.contains('+') || 
+           statement.contains('*') || statement.contains('?') ||
+           statement.contains('|') {
+            let tokens = self.tokenize_sparql(statement);
+            if tokens.len() >= 3 {
+                return Ok(Some(TriplePattern {
+                    subject: tokens[0].clone(),
+                    predicate: tokens[1].clone(), // Property path as predicate
+                    object: tokens[2..].join(" "),
+                    pattern_string: format!("[PropertyPath] {}", statement),
+                }));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Parse patterns with blank nodes
+    fn parse_blank_node_pattern(&self, statement: &str) -> Result<Option<TriplePattern>> {
+        // Handle blank node syntax like "[ a foaf:Person ; foaf:name ?name ]"
+        if statement.contains('[') && statement.contains(']') {
+            // Simplified blank node handling - could be enhanced further
+            let simplified = statement.replace('[', "_:bnode").replace(']', "");
+            return self.parse_basic_triple(&simplified);
+        }
+        Ok(None)
+    }
+
+    /// Tokenize SPARQL while respecting strings and URIs
+    fn tokenize_sparql(&self, statement: &str) -> Vec<String> {
+        let mut tokens = Vec::new();
+        let mut current = String::new();
+        let mut in_string = false;
+        let mut in_uri = false;
+        let mut escaped = false;
+
+        for ch in statement.chars() {
+            match ch {
+                '"' if !escaped && !in_uri => {
+                    in_string = !in_string;
+                    current.push(ch);
+                }
+                '<' if !in_string && !escaped => {
+                    if !current.trim().is_empty() {
+                        tokens.push(current.trim().to_string());
+                        current.clear();
+                    }
+                    in_uri = true;
+                    current.push(ch);
+                }
+                '>' if in_uri && !escaped => {
+                    current.push(ch);
+                    tokens.push(current.trim().to_string());
+                    current.clear();
+                    in_uri = false;
+                }
+                ' ' | '\t' | '\n' if !in_string && !in_uri => {
+                    if !current.trim().is_empty() {
+                        tokens.push(current.trim().to_string());
+                        current.clear();
+                    }
+                }
+                '\\' if in_string => {
+                    escaped = !escaped;
+                    current.push(ch);
+                }
+                _ => {
+                    escaped = false;
+                    current.push(ch);
+                }
+            }
+        }
+
+        if !current.trim().is_empty() {
+            tokens.push(current.trim().to_string());
+        }
+
+        tokens
     }
 
     fn extract_service_clauses(&self, query: &str) -> Result<Vec<ServiceClause>> {
@@ -478,12 +696,68 @@ impl QueryPlanner {
         variables
     }
 
-    fn extract_graphql_selections(&self, _query: &str) -> Result<Vec<GraphQLSelection>> {
-        Ok(vec![GraphQLSelection {
-            name: "placeholder".to_string(),
-            arguments: HashMap::new(),
-            selections: Vec::new(),
-        }])
+    fn extract_graphql_selections(&self, query: &str) -> Result<Vec<GraphQLSelection>> {
+        // Basic GraphQL parsing - could be enhanced with a proper parser
+        let mut selections = Vec::new();
+        
+        // Remove query/mutation wrapper
+        let content = if let Some(start) = query.find('{') {
+            &query[start + 1..]
+        } else {
+            query
+        };
+        
+        // Find the last closing brace
+        let content = if let Some(end) = content.rfind('}') {
+            &content[..end]
+        } else {
+            content
+        };
+        
+        // Parse field selections
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            
+            // Basic field parsing
+            if let Some(field_name) = line.split_whitespace().next() {
+                let mut arguments = HashMap::new();
+                
+                // Parse arguments if present
+                if let Some(args_start) = line.find('(') {
+                    if let Some(args_end) = line.find(')') {
+                        let args_str = &line[args_start + 1..args_end];
+                        for arg in args_str.split(',') {
+                            let arg = arg.trim();
+                            if let Some(colon_pos) = arg.find(':') {
+                                let key = arg[..colon_pos].trim().to_string();
+                                let value = arg[colon_pos + 1..].trim().to_string();
+                                arguments.insert(key, value);
+                            }
+                        }
+                    }
+                }
+                
+                selections.push(GraphQLSelection {
+                    name: field_name.to_string(),
+                    arguments,
+                    selections: Vec::new(), // Nested selections would need recursive parsing
+                });
+            }
+        }
+        
+        if selections.is_empty() {
+            // Fallback for complex queries
+            selections.push(GraphQLSelection {
+                name: "unknown".to_string(),
+                arguments: HashMap::new(),
+                selections: Vec::new(),
+            });
+        }
+        
+        Ok(selections)
     }
 
     fn graphql_to_patterns(&self, _selections: &[GraphQLSelection]) -> Result<Vec<TriplePattern>> {
@@ -496,7 +770,52 @@ impl QueryPlanner {
         filters: &[FilterExpression],
         services: &[ServiceClause],
     ) -> QueryComplexity {
-        let base_complexity = patterns.len() + filters.len() * 2 + services.len() * 3;
+        let mut complexity_score = 0;
+        
+        // Base pattern complexity
+        complexity_score += patterns.len();
+        
+        // Pattern complexity based on variables and literals
+        for pattern in patterns {
+            if pattern.subject.starts_with('?') {
+                complexity_score += 1;
+            }
+            if pattern.predicate.starts_with('?') {
+                complexity_score += 2; // Predicate variables are more complex
+            }
+            if pattern.object.starts_with('?') {
+                complexity_score += 1;
+            }
+            if pattern.pattern_string.contains('[') || pattern.pattern_string.contains('+') ||
+               pattern.pattern_string.contains('*') || pattern.pattern_string.contains('/') {
+                complexity_score += 3; // Property paths are complex
+            }
+        }
+        
+        // Filter complexity
+        for filter in filters {
+            complexity_score += 2;
+            // More complex filters
+            if filter.expression.to_uppercase().contains("REGEX") ||
+               filter.expression.to_uppercase().contains("EXISTS") ||
+               filter.expression.to_uppercase().contains("NOT EXISTS") {
+                complexity_score += 3;
+            }
+        }
+        
+        // Service complexity
+        for service in services {
+            complexity_score += 3;
+            if service.silent {
+                complexity_score += 1; // SILENT adds complexity
+            }
+            // Nested SERVICE clauses are more complex
+            if service.subquery.to_uppercase().contains("SERVICE") {
+                complexity_score += 5;
+            }
+        }
+        
+        let base_complexity = complexity_score;
 
         if base_complexity < 5 {
             QueryComplexity::Low
@@ -1075,7 +1394,7 @@ pub enum QueryType {
 }
 
 /// RDF triple pattern
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TriplePattern {
     pub subject: String,
     pub predicate: String,
@@ -1092,7 +1411,7 @@ pub struct ServiceClause {
 }
 
 /// SPARQL FILTER expression
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FilterExpression {
     pub expression: String,
     pub variables: HashSet<String>,

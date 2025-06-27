@@ -2,6 +2,7 @@
 
 use oxirs_core::model::*;
 use oxirs_core::store::{LocalArena, ConcurrentArena, GraphArena, ScopedArena};
+use std::sync::Arc;
 use std::time::Instant;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -18,7 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn example_local_arena() -> Result<(), Box<dyn std::error::Error>> {
     println!("Example 1: Local Arena Allocation");
-    println!("-" * 40);
+    println!("{}", "-".repeat(40));
 
     let arena = LocalArena::with_capacity(4096);
 
@@ -63,14 +64,14 @@ fn example_local_arena() -> Result<(), Box<dyn std::error::Error>> {
 
 fn example_concurrent_arena() -> Result<(), Box<dyn std::error::Error>> {
     println!("Example 2: Concurrent Arena Allocation");
-    println!("-" * 40);
+    println!("{}", "-".repeat(40));
 
-    let arena = ConcurrentArena::new(1024);
+    let arena = Arc::new(ConcurrentArena::new(1024));
 
     // Simulate concurrent allocation
     let handles: Vec<_> = (0..4)
         .map(|thread_id| {
-            let arena = &arena;
+            let arena = Arc::clone(&arena);
             std::thread::spawn(move || {
                 for i in 0..10 {
                     let uri = format!("http://example.org/thread{}/resource{}", thread_id, i);
@@ -96,7 +97,7 @@ fn example_concurrent_arena() -> Result<(), Box<dyn std::error::Error>> {
 
 fn example_graph_arena() -> Result<(), Box<dyn std::error::Error>> {
     println!("Example 3: Graph Arena with Term Caching");
-    println!("-" * 40);
+    println!("{}", "-".repeat(40));
 
     let arena = GraphArena::with_capacity(8192);
 
@@ -148,7 +149,7 @@ fn example_graph_arena() -> Result<(), Box<dyn std::error::Error>> {
 
 fn example_scoped_arena() -> Result<(), Box<dyn std::error::Error>> {
     println!("Example 4: Scoped Arena for Temporary Allocations");
-    println!("-" * 40);
+    println!("{}", "-".repeat(40));
 
     let parent_arena = LocalArena::new();
     
@@ -177,7 +178,7 @@ fn example_scoped_arena() -> Result<(), Box<dyn std::error::Error>> {
 
 fn benchmark_arena_vs_heap() -> Result<(), Box<dyn std::error::Error>> {
     println!("Example 5: Arena vs Heap Allocation Performance");
-    println!("-" * 40);
+    println!("{}", "-".repeat(40));
 
     const NUM_ALLOCATIONS: usize = 10_000;
 

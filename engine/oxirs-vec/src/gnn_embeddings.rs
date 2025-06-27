@@ -332,6 +332,7 @@ pub struct GraphSAGE {
     aggregator_type: AggregatorType,
     num_layers: usize,
     sample_size: usize,
+    sampling_strategy: SamplingStrategy,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -339,6 +340,15 @@ pub enum AggregatorType {
     Mean,
     LSTM,
     Pool,
+    Attention,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum SamplingStrategy {
+    Uniform,     // Uniform random sampling
+    Degree,      // Degree-based sampling (prefer high-degree neighbors)
+    PageRank,    // PageRank-based sampling (prefer important neighbors)
+    Recent,      // Sample recently added neighbors (for temporal graphs)
 }
 
 impl GraphSAGE {
@@ -353,11 +363,22 @@ impl GraphSAGE {
             aggregator_type: AggregatorType::Mean,
             num_layers: 2,
             sample_size: 10, // Number of neighbors to sample
+            sampling_strategy: SamplingStrategy::Uniform,
         }
     }
     
     pub fn with_aggregator(mut self, aggregator: AggregatorType) -> Self {
         self.aggregator_type = aggregator;
+        self
+    }
+    
+    pub fn with_sampling_strategy(mut self, strategy: SamplingStrategy) -> Self {
+        self.sampling_strategy = strategy;
+        self
+    }
+    
+    pub fn with_sample_size(mut self, size: usize) -> Self {
+        self.sample_size = size;
         self
     }
     
@@ -418,18 +439,67 @@ impl GraphSAGE {
         }
     }
     
-    /// Sample neighbors for a node
+    /// Sample neighbors for a node using different strategies
     fn sample_neighbors(&self, node: &str, rng: &mut impl Rng) -> Vec<String> {
         if let Some(neighbors) = self.graph.get(node) {
             if neighbors.len() <= self.sample_size {
                 neighbors.clone()
             } else {
-                use rand::seq::SliceRandom;
-                neighbors.choose_multiple(rng, self.sample_size).cloned().collect()
+                match self.sampling_strategy {
+                    SamplingStrategy::Uniform => {
+                        use rand::seq::SliceRandom;
+                        neighbors.choose_multiple(rng, self.sample_size).cloned().collect()
+                    }
+                    SamplingStrategy::Degree => {
+                        self.degree_based_sampling(neighbors, rng)
+                    }
+                    SamplingStrategy::PageRank => {
+                        // Simplified PageRank-based sampling (use degree as approximation)
+                        self.degree_based_sampling(neighbors, rng)
+                    }
+                    SamplingStrategy::Recent => {
+                        // For recent sampling, take the last added neighbors
+                        neighbors.iter()
+                            .rev()
+                            .take(self.sample_size)
+                            .cloned()
+                            .collect()
+                    }
+                }
             }
         } else {
             Vec::new()
         }
+    }
+    
+    /// Degree-based sampling: prefer neighbors with higher degree
+    fn degree_based_sampling(&self, neighbors: &[String], rng: &mut impl Rng) -> Vec<String> {
+        let mut neighbor_degrees: Vec<(String, usize)> = neighbors.iter()
+            .map(|neighbor| {
+                let degree = self.graph.get(neighbor).map(|n| n.len()).unwrap_or(0);
+                (neighbor.clone(), degree)
+            })
+            .collect();
+        
+        // Sort by degree (descending) and add some randomization
+        neighbor_degrees.sort_by(|a, b| {
+            let degree_cmp = b.1.cmp(&a.1);
+            if degree_cmp == std::cmp::Ordering::Equal {
+                // Add randomization for ties
+                if rng.gen_bool(0.5) {
+                    std::cmp::Ordering::Greater
+                } else {
+                    std::cmp::Ordering::Less
+                }
+            } else {
+                degree_cmp
+            }
+        });
+        
+        neighbor_degrees.into_iter()
+            .take(self.sample_size)
+            .map(|(neighbor, _)| neighbor)
+            .collect()
     }
     
     /// Aggregate neighbor embeddings
@@ -478,10 +548,85 @@ impl GraphSAGE {
                 Ok(max_embedding)
             }
             AggregatorType::LSTM => {
-                // Simplified LSTM aggregator (just mean for now)
-                self.aggregate_neighbors(neighbors)
+                // LSTM-based aggregator
+                self.lstm_aggregate(neighbors)
+            }
+            AggregatorType::Attention => {
+                // Attention-based aggregator
+                self.attention_aggregate(neighbors)
             }
         }
+    }
+    
+    /// LSTM-based aggregator (simplified implementation)
+    fn lstm_aggregate(&self, neighbors: &[String]) -> Result<DVector<f32>> {
+        if neighbors.is_empty() {
+            return Ok(DVector::zeros(self.config.dimensions));
+        }
+        
+        // Simplified LSTM: process neighbors sequentially with forget/input gates
+        let mut cell_state = DVector::zeros(self.config.dimensions);
+        let mut hidden_state = DVector::zeros(self.config.dimensions);
+        
+        for neighbor in neighbors {
+            if let Some(embedding) = self.entity_embeddings.get(neighbor) {
+                // Simplified LSTM gates (using tanh and sigmoid approximations)
+                let forget_gate = embedding.map(|x| 1.0 / (1.0 + (-x).exp())); // sigmoid
+                let input_gate = embedding.map(|x| 1.0 / (1.0 + (-x).exp())); 
+                let candidate = embedding.map(|x| x.tanh()); // tanh
+                
+                // Update cell state
+                cell_state = cell_state.component_mul(&forget_gate) + input_gate.component_mul(&candidate);
+                
+                // Update hidden state
+                let output_gate = embedding.map(|x| 1.0 / (1.0 + (-x).exp()));
+                hidden_state = output_gate.component_mul(&cell_state.map(|x| x.tanh()));
+            }
+        }
+        
+        Ok(hidden_state)
+    }
+    
+    /// Attention-based aggregator
+    fn attention_aggregate(&self, neighbors: &[String]) -> Result<DVector<f32>> {
+        if neighbors.is_empty() {
+            return Ok(DVector::zeros(self.config.dimensions));
+        }
+        
+        let neighbor_embeddings: Vec<&DVector<f32>> = neighbors.iter()
+            .filter_map(|neighbor| self.entity_embeddings.get(neighbor))
+            .collect();
+        
+        if neighbor_embeddings.is_empty() {
+            return Ok(DVector::zeros(self.config.dimensions));
+        }
+        
+        // Simple attention mechanism using dot-product attention
+        let mut attention_scores = Vec::new();
+        let mut weighted_sum = DVector::zeros(self.config.dimensions);
+        
+        // Calculate attention scores (simplified: using magnitude as query)
+        let query = DVector::from_element(self.config.dimensions, 1.0); // Simple uniform query
+        
+        for embedding in &neighbor_embeddings {
+            let score = query.dot(embedding).exp(); // Softmax will normalize
+            attention_scores.push(score);
+        }
+        
+        // Normalize attention scores (softmax)
+        let total_score: f32 = attention_scores.iter().sum();
+        if total_score > 0.0 {
+            for score in &mut attention_scores {
+                *score /= total_score;
+            }
+        }
+        
+        // Calculate weighted sum
+        for (embedding, &score) in neighbor_embeddings.iter().zip(attention_scores.iter()) {
+            weighted_sum += *embedding * score;
+        }
+        
+        Ok(weighted_sum)
     }
     
     /// Forward pass for a single node

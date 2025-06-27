@@ -120,9 +120,9 @@ fn normalize_scheme_and_host(iri: &str) -> ToolResult<String> {
         let scheme = &iri[..scheme_end].to_lowercase();
         let rest = &iri[scheme_end..];
 
-        if rest.starts_with("://") {
+        if let Some(stripped) = rest.strip_prefix("://") {
             // Has authority component
-            if let Some(authority_end) = rest[3..].find('/') {
+            if let Some(authority_end) = stripped.find('/') {
                 let authority = &rest[3..authority_end + 3].to_lowercase();
                 let path_and_rest = &rest[authority_end + 3..];
                 Ok(format!(
@@ -132,7 +132,7 @@ fn normalize_scheme_and_host(iri: &str) -> ToolResult<String> {
                     authority,
                     path_and_rest
                 ))
-            } else if let Some(query_start) = rest[3..].find('?') {
+            } else if let Some(query_start) = stripped.find('?') {
                 let authority = &rest[3..query_start + 3].to_lowercase();
                 let query_and_rest = &rest[query_start + 3..];
                 Ok(format!(
@@ -142,7 +142,7 @@ fn normalize_scheme_and_host(iri: &str) -> ToolResult<String> {
                     authority,
                     query_and_rest
                 ))
-            } else if let Some(fragment_start) = rest[3..].find('#') {
+            } else if let Some(fragment_start) = stripped.find('#') {
                 let authority = &rest[3..fragment_start + 3].to_lowercase();
                 let fragment = &rest[fragment_start + 3..];
                 Ok(format!(
@@ -153,7 +153,7 @@ fn normalize_scheme_and_host(iri: &str) -> ToolResult<String> {
                     fragment
                 ))
             } else {
-                let authority = &rest[3..].to_lowercase();
+                let authority = &stripped.to_lowercase();
                 Ok(format!("{}:{}//{}", scheme, &rest[..3], authority))
             }
         } else {

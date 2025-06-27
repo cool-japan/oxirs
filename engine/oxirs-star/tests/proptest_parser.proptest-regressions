@@ -7,3 +7,4 @@
 cc 004d0785f8ab66763393a75761a0f97bf7784eac22214bd5a7d120c8ed3115e5 # shrinks to triples = [("http://example\torg/a", "http://example¡org/a", "http://example¡org/a")]
 cc 55881010930c9f7fbfbbba99ff3376def6cd50337469b110ba6579db4b5e1b10 # shrinks to content = ["<http://0/-> <http://0/-> \"\n\" ."]
 cc 73aec1f362e546796c2ebebe03c6b5614a335526cf10207d8c8f50f3db4520d6 # shrinks to format = TurtleStar, triple_line = "<http://a/a> <http://-/-> \"\n\" .", ws_before = "", ws_after = ""
+cc e4113a05db0da461a46768219209f94f5714a0773fc65eece88854aa0e5c694a # shrinks to format = TurtleStar, comment_text = "", triple_line = "<http://0/0> <http://0/-> \"\n\" ."

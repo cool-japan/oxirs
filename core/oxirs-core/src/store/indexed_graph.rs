@@ -547,15 +547,15 @@ impl IndexedGraph {
         let pos = self.pos_index.read().unwrap();
         let osp = self.osp_index.read().unwrap();
 
-        let spo_entries = count_index_entries(&*spo);
-        let pos_entries = count_index_entries(&*pos);
-        let osp_entries = count_index_entries(&*osp);
+        let spo_entries = count_index_entries(&spo);
+        let pos_entries = count_index_entries(&pos);
+        let osp_entries = count_index_entries(&osp);
 
         MemoryUsage {
             term_interner_bytes: self.interner.memory_usage(),
-            spo_index_bytes: estimate_index_memory(&*spo),
-            pos_index_bytes: estimate_index_memory(&*pos),
-            osp_index_bytes: estimate_index_memory(&*osp),
+            spo_index_bytes: estimate_index_memory(&spo),
+            pos_index_bytes: estimate_index_memory(&pos),
+            osp_index_bytes: estimate_index_memory(&osp),
             total_triple_count: self.len(),
             index_entry_count: spo_entries + pos_entries + osp_entries,
         }
@@ -711,6 +711,21 @@ impl IndexedGraph {
                 // This is a simplified version - in practice, you'd want a proper combine function
                 acc1
             })
+    }
+
+    /// Iterator over all triples in the graph
+    pub fn iter(&self) -> impl Iterator<Item = Triple> {
+        self.query(None, None, None).into_iter()
+    }
+
+    /// Match a pattern and return matching triples
+    pub fn match_pattern(
+        &self,
+        subject: Option<&Subject>,
+        predicate: Option<&Predicate>,
+        object: Option<&Object>,
+    ) -> Vec<Triple> {
+        self.query(subject, predicate, object)
     }
 }
 

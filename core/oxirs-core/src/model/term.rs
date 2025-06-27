@@ -1,11 +1,11 @@
 //! Core RDF term types and implementations
 
-use crate::model::{Literal, NamedNode, ObjectTerm, RdfTerm, SubjectTerm};
+use crate::model::{Literal, LiteralRef, NamedNode, NamedNodeRef, ObjectTerm, RdfTerm, SubjectTerm};
 use crate::OxirsError;
 use lazy_static::lazy_static;
 use rand::random;
 use regex::Regex;
-use serde::{Deserialize, Serialize};
+// use serde::{Deserialize, Serialize}; // Available for serialization features
 use std::collections::HashSet;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -865,6 +865,102 @@ impl TryFrom<Term> for Predicate {
 
 // Note: We already have From<Term> for Object above, so TryFrom is not needed
 // The From implementation handles all cases infallibly
+
+/// A reference to an RDF term
+///
+/// This enum provides a lightweight way to work with term references without ownership.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TermRef<'a> {
+    /// Named node reference
+    NamedNode(NamedNodeRef<'a>),
+    /// Blank node reference
+    BlankNode(BlankNodeRef<'a>),
+    /// Literal reference
+    Literal(LiteralRef<'a>),
+    /// Variable reference
+    Variable(&'a Variable),
+    /// Quoted triple reference (RDF-star)
+    #[cfg(feature = "rdf-star")]
+    Triple(&'a crate::model::star::QuotedTriple),
+}
+
+impl<'a> TermRef<'a> {
+    /// Returns true if this is a named node
+    pub fn is_named_node(&self) -> bool {
+        matches!(self, TermRef::NamedNode(_))
+    }
+
+    /// Returns true if this is a blank node
+    pub fn is_blank_node(&self) -> bool {
+        matches!(self, TermRef::BlankNode(_))
+    }
+
+    /// Returns true if this is a literal
+    pub fn is_literal(&self) -> bool {
+        matches!(self, TermRef::Literal(_))
+    }
+
+    /// Returns true if this is a variable
+    pub fn is_variable(&self) -> bool {
+        matches!(self, TermRef::Variable(_))
+    }
+
+    /// Returns true if this is a quoted triple
+    #[cfg(feature = "rdf-star")]
+    pub fn is_triple(&self) -> bool {
+        matches!(self, TermRef::Triple(_))
+    }
+}
+
+impl<'a> From<&'a Term> for TermRef<'a> {
+    fn from(term: &'a Term) -> Self {
+        match term {
+            Term::NamedNode(n) => TermRef::NamedNode(n.as_ref()),
+            Term::BlankNode(b) => TermRef::BlankNode(b.as_ref()),
+            Term::Literal(l) => TermRef::Literal(l.as_ref()),
+            Term::Variable(v) => TermRef::Variable(v),
+            Term::QuotedTriple(t) => {
+                #[cfg(feature = "rdf-star")]
+                {
+                    TermRef::Triple(t.as_ref())
+                }
+                #[cfg(not(feature = "rdf-star"))]
+                {
+                    panic!("RDF-star feature not enabled")
+                }
+            }
+        }
+    }
+}
+
+impl<'a> RdfTerm for TermRef<'a> {
+    fn as_str(&self) -> &str {
+        match self {
+            TermRef::NamedNode(n) => n.as_str(),
+            TermRef::BlankNode(b) => b.as_str(),
+            TermRef::Literal(l) => l.value(),
+            TermRef::Variable(v) => v.name(),
+            #[cfg(feature = "rdf-star")]
+            TermRef::Triple(_) => "<<quoted triple>>", // Placeholder
+        }
+    }
+
+    fn is_named_node(&self) -> bool {
+        self.is_named_node()
+    }
+
+    fn is_blank_node(&self) -> bool {
+        self.is_blank_node()
+    }
+
+    fn is_literal(&self) -> bool {
+        self.is_literal()
+    }
+
+    fn is_variable(&self) -> bool {
+        self.is_variable()
+    }
+}
 
 #[cfg(test)]
 mod tests {

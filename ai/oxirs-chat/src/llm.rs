@@ -266,6 +266,14 @@ pub struct Usage {
     pub cost: f64,
 }
 
+/// Routing candidate for model selection
+#[derive(Debug, Clone)]
+struct RoutingCandidate {
+    provider: String,
+    model: String,
+    score: f32,
+}
+
 /// Main LLM manager
 pub struct LLMManager {
     config: LLMConfig,
@@ -395,96 +403,244 @@ impl LLMManager {
         }
     }
 
+    /// Enhanced provider and model selection with sophisticated routing
     fn select_provider_and_model(&self, request: &LLMRequest) -> Result<(String, String)> {
-        // Use routing strategy from configuration
-        match self.config.routing.strategy {
-            RoutingStrategy::CostOptimized => {
-                // Prefer cheaper models for simple tasks
-                match request.use_case {
-                    UseCase::SimpleQuery | UseCase::Conversation => {
-                        if self.providers.contains_key("anthropic") {
-                            return Ok(("anthropic".to_string(), "claude-3-haiku-20240307".to_string()));
-                        } else if self.providers.contains_key("openai") {
-                            return Ok(("openai".to_string(), "gpt-3.5-turbo".to_string()));
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            RoutingStrategy::QualityFirst => {
-                // Always use best available models
-                if self.providers.contains_key("anthropic") {
-                    return Ok(("anthropic".to_string(), "claude-3-opus-20240229".to_string()));
-                } else if self.providers.contains_key("openai") {
-                    return Ok(("openai".to_string(), "gpt-4".to_string()));
-                }
-            }
-            RoutingStrategy::LatencyOptimized => {
-                // Prefer fast models
-                if self.providers.contains_key("local") {
-                    return Ok(("local".to_string(), "mistral-7b".to_string()));
-                } else if self.providers.contains_key("openai") {
-                    return Ok(("openai".to_string(), "gpt-3.5-turbo".to_string()));
-                }
-            }
-            RoutingStrategy::Balanced => {
-                // Balance between quality, cost, and latency
-            }
-            RoutingStrategy::RoundRobin => {
-                // Round-robin selection - simple rotation through available providers
-                // For now, fallback to use case based selection
+        // Calculate routing scores for all available providers/models
+        let mut routing_candidates = Vec::new();
+        
+        for (provider_name, provider) in &self.providers {
+            for model_name in provider.get_available_models() {
+                let score = self.calculate_routing_score(provider_name, &model_name, request)?;
+                routing_candidates.push(RoutingCandidate {
+                    provider: provider_name.clone(),
+                    model: model_name,
+                    score,
+                });
             }
         }
         
-        // Fallback to intelligent routing based on use case
-        match request.use_case {
-            UseCase::SimpleQuery | UseCase::Conversation => {
-                // Use fast, cost-effective model
-                if self.providers.contains_key("anthropic") && request.priority != Priority::Low {
-                    Ok(("anthropic".to_string(), "claude-3-haiku-20240307".to_string()))
-                } else if self.providers.contains_key("openai") {
-                    Ok(("openai".to_string(), "gpt-3.5-turbo".to_string()))
-                } else if self.providers.contains_key("local") {
-                    Ok(("local".to_string(), "mistral-7b".to_string()))
-                } else {
-                    Err(anyhow!("No suitable provider found"))
-                }
+        // Sort by score and select the best candidate
+        routing_candidates.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        
+        if let Some(best_candidate) = routing_candidates.first() {
+            debug!("Selected provider: {}, model: {}, score: {}", 
+                   best_candidate.provider, best_candidate.model, best_candidate.score);
+            Ok((best_candidate.provider.clone(), best_candidate.model.clone()))
+        } else {
+            Err(anyhow!("No suitable provider/model combination found"))
+        }
+    }
+    
+    /// Calculate comprehensive routing score for a provider/model combination
+    fn calculate_routing_score(&self, provider_name: &str, model_name: &str, request: &LLMRequest) -> Result<f32> {
+        let mut score = 0.0f32;
+        
+        // Get base scores from different factors
+        let quality_score = self.get_quality_score(provider_name, model_name, &request.use_case);
+        let cost_score = self.get_cost_efficiency_score(provider_name, model_name, request);
+        let latency_score = self.get_latency_score(provider_name, model_name);
+        let availability_score = self.get_availability_score(provider_name);
+        let use_case_fit_score = self.get_use_case_fit_score(provider_name, model_name, &request.use_case);
+        let priority_score = self.get_priority_score(&request.priority);
+        
+        // Apply routing strategy weights
+        match self.config.routing.strategy {
+            RoutingStrategy::QualityFirst => {
+                score = quality_score * 0.6 + use_case_fit_score * 0.2 + availability_score * 0.1 + latency_score * 0.1;
             }
+            RoutingStrategy::CostOptimized => {
+                score = cost_score * 0.5 + quality_score * 0.2 + use_case_fit_score * 0.2 + availability_score * 0.1;
+            }
+            RoutingStrategy::LatencyOptimized => {
+                score = latency_score * 0.5 + availability_score * 0.2 + quality_score * 0.2 + cost_score * 0.1;
+            }
+            RoutingStrategy::Balanced => {
+                score = quality_score * 0.3 + cost_score * 0.25 + latency_score * 0.25 + use_case_fit_score * 0.15 + availability_score * 0.05;
+            }
+            RoutingStrategy::RoundRobin => {
+                // For round-robin, use a base score and add randomness
+                score = (quality_score + cost_score + latency_score) / 3.0;
+                score += (fastrand::f32() - 0.5) * 0.2; // Add some randomness
+            }
+        }
+        
+        // Apply priority multiplier
+        score *= priority_score;
+        
+        // Apply threshold filters
+        if quality_score < self.config.routing.quality_threshold {
+            score *= 0.1; // Heavily penalize low-quality options
+        }
+        
+        Ok(score.max(0.0).min(1.0))
+    }
+    
+    /// Get quality score for provider/model combination
+    fn get_quality_score(&self, provider_name: &str, model_name: &str, use_case: &UseCase) -> f32 {
+        let base_quality = match (provider_name, model_name) {
+            ("openai", "gpt-4") | ("openai", "gpt-4-turbo") => 0.95f32,
+            ("anthropic", "claude-3-opus-20240229") => 0.95f32,
+            ("anthropic", "claude-3-sonnet-20240229") => 0.85f32,
+            ("openai", "gpt-3.5-turbo") => 0.80f32,
+            ("anthropic", "claude-3-haiku-20240307") => 0.75f32,
+            ("local", "llama-2-13b") => 0.70f32,
+            ("local", "mistral-7b") => 0.65f32,
+            ("local", "codellama-7b") => 0.75f32, // Better for code
+            _ => 0.50f32, // Default for unknown models
+        };
+        
+        // Adjust for use case specific quality
+        let use_case_adjustment = match use_case {
             UseCase::ComplexReasoning | UseCase::Analysis => {
-                // Use high-quality model
-                if self.providers.contains_key("anthropic") {
-                    Ok(("anthropic".to_string(), "claude-3-opus-20240229".to_string()))
-                } else if self.providers.contains_key("openai") {
-                    Ok(("openai".to_string(), "gpt-4".to_string()))
-                } else if self.providers.contains_key("local") {
-                    Ok(("local".to_string(), "llama-2-13b".to_string()))
+                if model_name.contains("gpt-4") || model_name.contains("opus") {
+                    1.1f32
+                } else if model_name.contains("3.5") || model_name.contains("haiku") {
+                    0.9f32
                 } else {
-                    Err(anyhow!("No suitable provider found"))
+                    1.0f32
                 }
             }
             UseCase::SparqlGeneration | UseCase::CodeGeneration => {
-                // Use code-specialized model
-                if self.providers.contains_key("openai") {
-                    Ok(("openai".to_string(), "gpt-4-turbo".to_string()))
-                } else if self.providers.contains_key("anthropic") {
-                    Ok(("anthropic".to_string(), "claude-3-sonnet-20240229".to_string()))
-                } else if self.providers.contains_key("local") {
-                    Ok(("local".to_string(), "codellama-7b".to_string()))
+                if model_name.contains("gpt-4") || model_name.contains("codellama") {
+                    1.1f32
+                } else if model_name.contains("sonnet") {
+                    1.05f32
                 } else {
-                    Err(anyhow!("No suitable provider found"))
+                    1.0f32
+                }
+            }
+            UseCase::SimpleQuery | UseCase::Conversation => {
+                if model_name.contains("haiku") || model_name.contains("3.5") {
+                    1.05f32 // These are optimized for fast, simple queries
+                } else {
+                    1.0f32
+                }
+            }
+            _ => 1.0f32,
+        };
+        
+        (base_quality * use_case_adjustment).min(1.0f32)
+    }
+    
+    /// Get cost efficiency score (higher score = better cost efficiency)
+    fn get_cost_efficiency_score(&self, provider_name: &str, model_name: &str, request: &LLMRequest) -> f32 {
+        let estimated_input_tokens = self.estimate_input_tokens(request);
+        let estimated_output_tokens = 500; // Rough estimate
+        
+        if let Some(provider) = self.providers.get(provider_name) {
+            let estimated_cost = provider.estimate_cost(model_name, estimated_input_tokens, estimated_output_tokens);
+            
+            // Convert cost to efficiency score (lower cost = higher score)
+            if estimated_cost <= 0.0 {
+                return 1.0; // Free models get perfect efficiency score
+            }
+            
+            // Normalize cost to 0-1 scale, where $0.10 = 0.0 score and $0.001 = 1.0 score
+            let max_acceptable_cost = 0.10;
+            let min_cost = 0.001;
+            
+            if estimated_cost >= max_acceptable_cost {
+                0.0
+            } else if estimated_cost <= min_cost {
+                1.0
+            } else {
+                1.0 - ((estimated_cost - min_cost) / (max_acceptable_cost - min_cost)) as f32
+            }
+        } else {
+            0.5 // Default score if provider not found
+        }
+    }
+    
+    /// Get latency score (higher score = lower expected latency)
+    fn get_latency_score(&self, provider_name: &str, model_name: &str) -> f32 {
+        match (provider_name, model_name) {
+            ("local", _) => 0.95, // Local models are typically fastest
+            ("openai", "gpt-3.5-turbo") => 0.85,
+            ("anthropic", "claude-3-haiku-20240307") => 0.85,
+            ("openai", "gpt-4-turbo") => 0.75,
+            ("anthropic", "claude-3-sonnet-20240229") => 0.70,
+            ("openai", "gpt-4") => 0.60,
+            ("anthropic", "claude-3-opus-20240229") => 0.55,
+            _ => 0.50,
+        }
+    }
+    
+    /// Get availability score based on current provider status
+    fn get_availability_score(&self, provider_name: &str) -> f32 {
+        // In a production system, this would check actual provider health/status
+        // For now, assume all providers are available with different reliability scores
+        match provider_name {
+            "local" => 0.99, // Local is most reliable
+            "openai" => 0.95,
+            "anthropic" => 0.95,
+            _ => 0.80,
+        }
+    }
+    
+    /// Get use case fit score
+    fn get_use_case_fit_score(&self, provider_name: &str, model_name: &str, use_case: &UseCase) -> f32 {
+        match use_case {
+            UseCase::SparqlGeneration | UseCase::CodeGeneration => {
+                if model_name.contains("gpt-4") || model_name.contains("codellama") {
+                    0.95
+                } else if model_name.contains("sonnet") {
+                    0.85
+                } else {
+                    0.70
+                }
+            }
+            UseCase::ComplexReasoning | UseCase::Analysis => {
+                if model_name.contains("opus") || model_name.contains("gpt-4") {
+                    0.95
+                } else if model_name.contains("sonnet") {
+                    0.85
+                } else {
+                    0.70
+                }
+            }
+            UseCase::SimpleQuery | UseCase::Conversation => {
+                if model_name.contains("haiku") || model_name.contains("3.5") {
+                    0.95
+                } else if provider_name == "local" {
+                    0.90
+                } else {
+                    0.80
                 }
             }
             UseCase::KnowledgeExtraction => {
-                // Use reasoning-optimized model
-                if self.providers.contains_key("anthropic") {
-                    Ok(("anthropic".to_string(), "claude-3-sonnet-20240229".to_string()))
-                } else if self.providers.contains_key("openai") {
-                    Ok(("openai".to_string(), "gpt-4".to_string()))
+                if model_name.contains("sonnet") || model_name.contains("gpt-4") {
+                    0.90
                 } else {
-                    Err(anyhow!("No suitable provider found"))
+                    0.75
                 }
             }
         }
+    }
+    
+    /// Get priority score multiplier
+    fn get_priority_score(&self, priority: &Priority) -> f32 {
+        match priority {
+            Priority::Critical => 1.2,
+            Priority::High => 1.1,
+            Priority::Normal => 1.0,
+            Priority::Low => 0.9,
+        }
+    }
+    
+    /// Estimate input tokens from request
+    fn estimate_input_tokens(&self, request: &LLMRequest) -> usize {
+        let mut total_chars = 0;
+        
+        if let Some(ref system_prompt) = request.system_prompt {
+            total_chars += system_prompt.len();
+        }
+        
+        for message in &request.messages {
+            total_chars += message.content.len();
+        }
+        
+        // Rough approximation: 1 token ≈ 4 characters
+        (total_chars / 4).max(10)
     }
 
     fn select_fallback_provider(
@@ -694,6 +850,7 @@ pub struct AnthropicProvider {
     api_key: String,
     config: ProviderConfig,
     client: reqwest::Client,
+    base_url: String,
 }
 
 impl AnthropicProvider {
@@ -702,14 +859,23 @@ impl AnthropicProvider {
             .ok_or_else(|| anyhow!("Anthropic API key not provided"))?
             .clone();
         
+        let base_url = config.base_url.clone()
+            .unwrap_or_else(|| "https://api.anthropic.com".to_string());
+        
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert("anthropic-version", "2023-06-01".parse().unwrap());
+        headers.insert("content-type", "application/json".parse().unwrap());
+        
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(120))
+            .default_headers(headers)
             .build()?;
             
         Ok(Self {
             api_key,
             config,
             client,
+            base_url,
         })
     }
 }
@@ -718,77 +884,128 @@ impl AnthropicProvider {
 impl LLMProvider for AnthropicProvider {
     async fn generate(&self, model: &str, request: &LLMRequest) -> Result<LLMResponse> {
         let mut messages = Vec::new();
+        let mut system_messages = Vec::new();
         
-        // Convert messages to Anthropic format
+        // Separate system messages from conversation messages
         for msg in &request.messages {
-            let role = match msg.role {
-                ChatRole::System => "system",
-                ChatRole::User => "user",
-                ChatRole::Assistant => "assistant",
-            };
-            
-            messages.push(serde_json::json!({
-                "role": role,
-                "content": msg.content
-            }));
+            match msg.role {
+                ChatRole::System => {
+                    system_messages.push(msg.content.clone());
+                },
+                ChatRole::User => {
+                    messages.push(serde_json::json!({
+                        "role": "user",
+                        "content": msg.content
+                    }));
+                },
+                ChatRole::Assistant => {
+                    messages.push(serde_json::json!({
+                        "role": "assistant", 
+                        "content": msg.content
+                    }));
+                },
+            }
         }
         
-        // Add system prompt if provided
-        let system_prompt = request.system_prompt.clone();
+        // Combine system messages
+        let mut system_content = Vec::new();
+        if let Some(ref system_prompt) = request.system_prompt {
+            system_content.push(system_prompt.clone());
+        }
+        system_content.extend(system_messages);
+        let combined_system = if system_content.is_empty() {
+            None
+        } else {
+            Some(system_content.join("\n\n"))
+        };
         
-        let body = serde_json::json!({
+        // Prepare request body
+        let mut body = serde_json::json!({
             "model": model,
             "messages": messages,
-            "system": system_prompt,
             "max_tokens": request.max_tokens.unwrap_or(4096),
             "temperature": request.temperature,
         });
         
+        if let Some(system) = combined_system {
+            body["system"] = serde_json::Value::String(system);
+        }
+        
+        // Add metadata if present
+        let mut metadata = HashMap::new();
+        metadata.insert("user_id".to_string(), serde_json::Value::String("oxirs-chat".to_string()));
+        body["metadata"] = serde_json::to_value(&metadata)?;
+        
+        debug!("Sending request to Anthropic API: {}", serde_json::to_string_pretty(&body)?);
+        
         let response = self.client
-            .post("https://api.anthropic.com/v1/messages")
+            .post(&format!("{}/v1/messages", self.base_url))
             .header("x-api-key", &self.api_key)
-            .header("anthropic-version", "2023-06-01")
-            .header("content-type", "application/json")
             .json(&body)
             .send()
             .await?;
             
         let status = response.status();
-        let text = response.text().await?;
+        let response_text = response.text().await?;
         
         if !status.is_success() {
-            return Err(anyhow!("Anthropic API error: {} - {}", status, text));
+            error!("Anthropic API error: {} - {}", status, response_text);
+            return Err(anyhow!("Anthropic API error: {} - {}", status, response_text));
         }
         
-        let response_json: serde_json::Value = serde_json::from_str(&text)?;
-        let content = response_json["content"][0]["text"]
-            .as_str()
-            .unwrap_or("No content")
+        debug!("Anthropic API response: {}", response_text);
+        
+        let response_json: serde_json::Value = serde_json::from_str(&response_text)
+            .map_err(|e| anyhow!("Failed to parse Anthropic response: {} - Response: {}", e, response_text))?;
+        
+        // Extract content with better error handling
+        let content = response_json
+            .get("content")
+            .and_then(|c| c.get(0))
+            .and_then(|c| c.get("text"))
+            .and_then(|t| t.as_str())
+            .unwrap_or_else(|| {
+                warn!("Unexpected response format from Anthropic: {}", response_json);
+                "No content available"
+            })
             .to_string();
             
-        let usage = Usage {
-            prompt_tokens: response_json["usage"]["input_tokens"].as_u64().unwrap_or(0) as usize,
-            completion_tokens: response_json["usage"]["output_tokens"].as_u64().unwrap_or(0) as usize,
-            total_tokens: 0, // Will be calculated
-            cost: 0.0, // Will be calculated
-        };
+        // Extract usage statistics
+        let usage_data = response_json.get("usage");
+        let input_tokens = usage_data
+            .and_then(|u| u.get("input_tokens"))
+            .and_then(|t| t.as_u64())
+            .unwrap_or(0) as usize;
+        let output_tokens = usage_data
+            .and_then(|u| u.get("output_tokens"))
+            .and_then(|t| t.as_u64())
+            .unwrap_or(0) as usize;
         
-        let total_tokens = usage.prompt_tokens + usage.completion_tokens;
-        let cost = self.estimate_cost(model, usage.prompt_tokens, usage.completion_tokens);
+        let total_tokens = input_tokens + output_tokens;
+        let cost = self.estimate_cost(model, input_tokens, output_tokens);
+        
+        // Create response metadata
+        let mut response_metadata = HashMap::new();
+        if let Some(id) = response_json.get("id") {
+            response_metadata.insert("anthropic_id".to_string(), id.clone());
+        }
+        if let Some(stop_reason) = response_json.get("stop_reason") {
+            response_metadata.insert("stop_reason".to_string(), stop_reason.clone());
+        }
         
         Ok(LLMResponse {
             content,
             model_used: model.to_string(),
             provider_used: "anthropic".to_string(),
             usage: Usage {
-                prompt_tokens: usage.prompt_tokens,
-                completion_tokens: usage.completion_tokens,
+                prompt_tokens: input_tokens,
+                completion_tokens: output_tokens,
                 total_tokens,
                 cost,
             },
             latency: Duration::from_secs(0), // Will be set by caller
-            quality_score: None,
-            metadata: HashMap::new(),
+            quality_score: Some(0.85), // Anthropic generally provides high quality
+            metadata: response_metadata,
         })
     }
     

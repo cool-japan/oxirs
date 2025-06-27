@@ -9,7 +9,7 @@ use super::{
 };
 
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, BTreeMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::hash::Hash;
 
 /// Association rule learner for shape discovery
@@ -117,7 +117,7 @@ impl AssociationRuleLearner {
         min_support_count: usize,
     ) -> Result<(), ModelError> {
         let n_transactions = transactions.len() as f64;
-        
+
         // Find frequent 1-itemsets
         let mut item_counts: HashMap<usize, usize> = HashMap::new();
         for transaction in transactions {
@@ -144,7 +144,7 @@ impl AssociationRuleLearner {
         let mut k = 2;
         while !current_itemsets.is_empty() && k <= self.config.max_itemset_size {
             let candidate_itemsets = self.generate_candidates(&current_itemsets, k);
-            
+
             // Count support for candidates
             let mut candidate_counts: HashMap<Vec<usize>, usize> = HashMap::new();
             for transaction in transactions {
@@ -186,10 +186,10 @@ impl AssociationRuleLearner {
     ) -> Result<(), ModelError> {
         // Build FP-Tree
         let fp_tree = self.build_fp_tree(transactions, min_support_count)?;
-        
+
         // Mine patterns from FP-Tree
         let patterns = self.mine_fp_tree(&fp_tree, min_support_count);
-        
+
         let n_transactions = transactions.len() as f64;
         for (itemset, count) in patterns {
             self.frequent_itemsets.push(FrequentItemset {
@@ -238,12 +238,14 @@ impl AssociationRuleLearner {
         // Insert transactions
         for transaction in transactions {
             // Sort items by frequency
-            let mut sorted_items: Vec<usize> = transaction.items
+            let mut sorted_items: Vec<usize> = transaction
+                .items
                 .iter()
                 .filter(|item| frequent_items.contains(item))
                 .cloned()
                 .collect();
-            sorted_items.sort_by_key(|&item| std::cmp::Reverse(item_counts.get(&item).unwrap_or(&0)));
+            sorted_items
+                .sort_by_key(|&item| std::cmp::Reverse(item_counts.get(&item).unwrap_or(&0)));
 
             // Insert into tree
             let mut current_node = tree.root;
@@ -260,9 +262,12 @@ impl AssociationRuleLearner {
                         parent: Some(current_node),
                         children: HashMap::new(),
                     });
-                    
+
                     tree.nodes[current_node].children.insert(item, new_idx);
-                    tree.header_table.entry(item).or_insert_with(Vec::new).push(new_idx);
+                    tree.header_table
+                        .entry(item)
+                        .or_insert_with(Vec::new)
+                        .push(new_idx);
                     current_node = new_idx;
                 }
             }
@@ -272,7 +277,11 @@ impl AssociationRuleLearner {
     }
 
     /// Mine patterns from FP-Tree
-    fn mine_fp_tree(&self, _tree: &FPTree, _min_support_count: usize) -> Vec<(HashSet<usize>, usize)> {
+    fn mine_fp_tree(
+        &self,
+        _tree: &FPTree,
+        _min_support_count: usize,
+    ) -> Vec<(HashSet<usize>, usize)> {
         // Simplified implementation - would need full FP-Growth mining
         Vec::new()
     }
@@ -285,10 +294,13 @@ impl AssociationRuleLearner {
     ) -> Result<(), ModelError> {
         // Build vertical representation
         let mut vertical_db: HashMap<usize, HashSet<usize>> = HashMap::new();
-        
+
         for (tid, transaction) in transactions.iter().enumerate() {
             for &item in &transaction.items {
-                vertical_db.entry(item).or_insert_with(HashSet::new).insert(tid);
+                vertical_db
+                    .entry(item)
+                    .or_insert_with(HashSet::new)
+                    .insert(tid);
             }
         }
 
@@ -307,20 +319,21 @@ impl AssociationRuleLearner {
         }
 
         // Would need to implement full Eclat DFS here
-        
+
         Ok(())
     }
 
     /// Generate candidate itemsets
     fn generate_candidates(&self, itemsets: &[HashSet<usize>], k: usize) -> Vec<HashSet<usize>> {
         let mut candidates = Vec::new();
-        
+
         for i in 0..itemsets.len() {
             for j in i + 1..itemsets.len() {
                 let union: HashSet<usize> = itemsets[i].union(&itemsets[j]).cloned().collect();
                 if union.len() == k {
                     // Check if all subsets are frequent (pruning)
-                    if !self.config.pruning_enabled || self.all_subsets_frequent(&union, &itemsets) {
+                    if !self.config.pruning_enabled || self.all_subsets_frequent(&union, &itemsets)
+                    {
                         candidates.push(union);
                     }
                 }
@@ -339,7 +352,11 @@ impl AssociationRuleLearner {
     }
 
     /// Check if all subsets of an itemset are frequent
-    fn all_subsets_frequent(&self, itemset: &HashSet<usize>, frequent_itemsets: &[HashSet<usize>]) -> bool {
+    fn all_subsets_frequent(
+        &self,
+        itemset: &HashSet<usize>,
+        frequent_itemsets: &[HashSet<usize>],
+    ) -> bool {
         for item in itemset {
             let mut subset = itemset.clone();
             subset.remove(item);
@@ -353,7 +370,7 @@ impl AssociationRuleLearner {
     /// Generate association rules from frequent itemsets
     fn generate_association_rules(&mut self) {
         self.association_rules.clear();
-        
+
         for itemset in &self.frequent_itemsets {
             if itemset.items.len() < 2 {
                 continue;
@@ -361,22 +378,21 @@ impl AssociationRuleLearner {
 
             // Generate all non-empty subsets
             let subsets = self.generate_subsets(&itemset.items);
-            
+
             for antecedent in subsets {
                 if antecedent.is_empty() || antecedent.len() == itemset.items.len() {
                     continue;
                 }
 
-                let consequent: HashSet<usize> = itemset.items
-                    .difference(&antecedent)
-                    .cloned()
-                    .collect();
+                let consequent: HashSet<usize> =
+                    itemset.items.difference(&antecedent).cloned().collect();
 
                 // Calculate metrics
                 let support = itemset.support;
-                
+
                 // Find support of antecedent
-                let antecedent_support = self.frequent_itemsets
+                let antecedent_support = self
+                    .frequent_itemsets
                     .iter()
                     .find(|fi| fi.items == antecedent)
                     .map(|fi| fi.support)
@@ -384,15 +400,16 @@ impl AssociationRuleLearner {
 
                 if antecedent_support > 0.0 {
                     let confidence = support / antecedent_support;
-                    
+
                     if confidence >= self.config.min_confidence {
                         // Calculate lift
-                        let consequent_support = self.frequent_itemsets
+                        let consequent_support = self
+                            .frequent_itemsets
                             .iter()
                             .find(|fi| fi.items == consequent)
                             .map(|fi| fi.support)
                             .unwrap_or(0.0);
-                        
+
                         let lift = if consequent_support > 0.0 {
                             confidence / consequent_support
                         } else {
@@ -428,10 +445,10 @@ impl AssociationRuleLearner {
     fn generate_subsets(&self, itemset: &HashSet<usize>) -> Vec<HashSet<usize>> {
         let items: Vec<_> = itemset.iter().cloned().collect();
         let mut subsets = Vec::new();
-        
+
         let n = items.len();
         let num_subsets = 1 << n;
-        
+
         for i in 0..num_subsets {
             let mut subset = HashSet::new();
             for j in 0..n {
@@ -441,31 +458,31 @@ impl AssociationRuleLearner {
             }
             subsets.push(subset);
         }
-        
+
         subsets
     }
 
     /// Convert graph data to transactions
     fn graph_to_transactions(&mut self, graph_data: &GraphData) -> Vec<Transaction> {
         let mut transactions = Vec::new();
-        
+
         // Transaction per node with its properties and relationships
         for node in &graph_data.nodes {
             let mut items = HashSet::new();
-            
+
             // Add node type as item
             if let Some(node_type) = &node.node_type {
                 let item_id = self.get_or_create_item_id(&format!("type:{}", node_type));
                 items.insert(item_id);
             }
-            
+
             // Add node properties
             for (prop, value) in &node.properties {
                 let item_str = format!("prop:{}={:.2}", prop, value);
                 let item_id = self.get_or_create_item_id(&item_str);
                 items.insert(item_id);
             }
-            
+
             // Add edges from this node
             for edge in &graph_data.edges {
                 if edge.source_id == node.node_id {
@@ -474,12 +491,12 @@ impl AssociationRuleLearner {
                     items.insert(item_id);
                 }
             }
-            
+
             if !items.is_empty() {
                 transactions.push(Transaction { items });
             }
         }
-        
+
         transactions
     }
 
@@ -498,25 +515,27 @@ impl AssociationRuleLearner {
     /// Convert association rules to learned constraints
     fn rules_to_constraints(&self) -> Vec<LearnedConstraint> {
         let mut constraints = Vec::new();
-        
+
         for rule in &self.association_rules {
             // Interpret rule as constraint
-            let antecedent_items: Vec<String> = rule.antecedent
+            let antecedent_items: Vec<String> = rule
+                .antecedent
                 .iter()
                 .filter_map(|&id| self.reverse_index.get(&id))
                 .cloned()
                 .collect();
-                
-            let consequent_items: Vec<String> = rule.consequent
+
+            let consequent_items: Vec<String> = rule
+                .consequent
                 .iter()
                 .filter_map(|&id| self.reverse_index.get(&id))
                 .cloned()
                 .collect();
-            
+
             // Create constraint based on rule pattern
             let constraint_type = self.infer_constraint_type(&antecedent_items, &consequent_items);
             let parameters = self.infer_constraint_parameters(&antecedent_items, &consequent_items);
-            
+
             if !constraint_type.is_empty() {
                 constraints.push(LearnedConstraint {
                     constraint_type,
@@ -526,7 +545,7 @@ impl AssociationRuleLearner {
                 });
             }
         }
-        
+
         constraints
     }
 
@@ -540,25 +559,29 @@ impl AssociationRuleLearner {
                 return "relationship".to_string();
             }
         }
-        
+
         if antecedent.iter().any(|s| s.starts_with("edge:")) {
             return "path".to_string();
         }
-        
+
         "general".to_string()
     }
 
     /// Infer constraint parameters from rule items
-    fn infer_constraint_parameters(&self, antecedent: &[String], consequent: &[String]) -> HashMap<String, serde_json::Value> {
+    fn infer_constraint_parameters(
+        &self,
+        antecedent: &[String],
+        consequent: &[String],
+    ) -> HashMap<String, serde_json::Value> {
         let mut parameters = HashMap::new();
-        
+
         // Extract types from antecedent
         for item in antecedent {
             if let Some(type_name) = item.strip_prefix("type:") {
                 parameters.insert("sourceType".to_string(), serde_json::json!(type_name));
             }
         }
-        
+
         // Extract properties and edges from consequent
         for item in consequent {
             if let Some(prop_spec) = item.strip_prefix("prop:") {
@@ -569,48 +592,54 @@ impl AssociationRuleLearner {
                 parameters.insert("edgeType".to_string(), serde_json::json!(edge_type));
             }
         }
-        
+
         parameters
     }
 }
 
 impl ShapeLearningModel for AssociationRuleLearner {
     fn train(&mut self, data: &ShapeTrainingData) -> Result<ModelMetrics, ModelError> {
-        tracing::info!("Training association rule learner on {} graphs", data.graph_features.len());
-        
+        tracing::info!(
+            "Training association rule learner on {} graphs",
+            data.graph_features.len()
+        );
+
         let start_time = std::time::Instant::now();
-        
+
         // Convert all graphs to transactions
         let mut all_transactions = Vec::new();
-        
+
         for graph_features in &data.graph_features {
             let graph_data = GraphData {
                 nodes: graph_features.node_features.clone(),
                 edges: graph_features.edge_features.clone(),
                 global_features: graph_features.global_features.clone(),
             };
-            
+
             let transactions = self.graph_to_transactions(&graph_data);
             all_transactions.extend(transactions);
         }
-        
+
         // Mine frequent itemsets
         self.mine_frequent_itemsets(&all_transactions)?;
-        
+
         // Generate association rules
         self.generate_association_rules();
-        
+
         tracing::info!(
             "Found {} frequent itemsets and {} association rules",
             self.frequent_itemsets.len(),
             self.association_rules.len()
         );
-        
+
         Ok(ModelMetrics {
             accuracy: 0.0, // Not applicable for unsupervised learning
-            precision: self.association_rules.iter()
+            precision: self
+                .association_rules
+                .iter()
                 .map(|r| r.confidence)
-                .sum::<f64>() / self.association_rules.len().max(1) as f64,
+                .sum::<f64>()
+                / self.association_rules.len().max(1) as f64,
             recall: 0.0,
             f1_score: 0.0,
             auc_roc: 0.0,
@@ -619,20 +648,20 @@ impl ShapeLearningModel for AssociationRuleLearner {
             training_time: start_time.elapsed(),
         })
     }
-    
+
     fn predict(&self, graph_data: &GraphData) -> Result<Vec<LearnedShape>, ModelError> {
         let constraints = self.rules_to_constraints();
-        
+
         let shape = LearnedShape {
             shape_id: "association_rule_shape".to_string(),
             constraints,
             confidence: 0.8,
             feature_importance: HashMap::new(),
         };
-        
+
         Ok(vec![shape])
     }
-    
+
     fn evaluate(&self, _test_data: &ShapeTrainingData) -> Result<ModelMetrics, ModelError> {
         Ok(ModelMetrics {
             accuracy: 0.0,
@@ -645,20 +674,20 @@ impl ShapeLearningModel for AssociationRuleLearner {
             training_time: std::time::Duration::default(),
         })
     }
-    
+
     fn get_params(&self) -> ModelParams {
         ModelParams::default()
     }
-    
+
     fn set_params(&mut self, _params: ModelParams) -> Result<(), ModelError> {
         Ok(())
     }
-    
+
     fn save(&self, path: &str) -> Result<(), ModelError> {
         std::fs::create_dir_all(path)?;
         Ok(())
     }
-    
+
     fn load(&mut self, _path: &str) -> Result<(), ModelError> {
         Ok(())
     }
@@ -686,7 +715,7 @@ impl Default for AssociationRuleConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_association_rule_learner_creation() {
         let config = AssociationRuleConfig::default();
@@ -694,7 +723,7 @@ mod tests {
         assert!(learner.frequent_itemsets.is_empty());
         assert!(learner.association_rules.is_empty());
     }
-    
+
     #[test]
     fn test_subset_generation() {
         let learner = AssociationRuleLearner::new(AssociationRuleConfig::default());

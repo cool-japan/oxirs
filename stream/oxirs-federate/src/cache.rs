@@ -255,6 +255,29 @@ impl FederationCache {
         self.put_entry(&cache_key, entry).await;
     }
 
+    /// Get cached service result 
+    pub async fn get_service_result(&self, cache_key: &str) -> Option<SparqlResults> {
+        if let Some(result) = self.get_query_result(cache_key).await {
+            match result {
+                QueryResultCache::Sparql(sparql_results) => Some(sparql_results),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Cache service result
+    pub async fn put_service_result(
+        &self,
+        cache_key: &str,
+        result: &SparqlResults,
+        ttl: Option<Duration>,
+    ) {
+        let query_result = QueryResultCache::Sparql(result.clone());
+        self.put_query_result(cache_key, query_result, ttl).await;
+    }
+
     /// Invalidate all cache entries for a service
     pub async fn invalidate_service(&self, service_id: &str) {
         let prefixes = vec![

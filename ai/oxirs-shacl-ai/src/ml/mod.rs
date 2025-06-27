@@ -3,12 +3,12 @@
 //! This module provides advanced ML capabilities including Graph Neural Networks,
 //! decision trees, association rule learning, and reinforcement learning.
 
-pub mod gnn;
-pub mod decision_tree;
 pub mod association_rules;
-pub mod reinforcement;
+pub mod decision_tree;
 pub mod feature_extraction;
+pub mod gnn;
 pub mod model_selection;
+pub mod reinforcement;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -17,22 +17,22 @@ use std::collections::HashMap;
 pub trait ShapeLearningModel: Send + Sync + std::fmt::Debug {
     /// Train the model on shape learning data
     fn train(&mut self, data: &ShapeTrainingData) -> Result<ModelMetrics, ModelError>;
-    
+
     /// Predict shapes from graph data
     fn predict(&self, graph_data: &GraphData) -> Result<Vec<LearnedShape>, ModelError>;
-    
+
     /// Evaluate model performance
     fn evaluate(&self, test_data: &ShapeTrainingData) -> Result<ModelMetrics, ModelError>;
-    
+
     /// Get model parameters
     fn get_params(&self) -> ModelParams;
-    
+
     /// Set model parameters
     fn set_params(&mut self, params: ModelParams) -> Result<(), ModelError>;
-    
+
     /// Save model to disk
     fn save(&self, path: &str) -> Result<(), ModelError>;
-    
+
     /// Load model from disk
     fn load(&mut self, path: &str) -> Result<(), ModelError>;
 }
@@ -225,16 +225,16 @@ pub struct ClassMetrics {
 pub enum ModelError {
     #[error("Training error: {0}")]
     TrainingError(String),
-    
+
     #[error("Prediction error: {0}")]
     PredictionError(String),
-    
+
     #[error("Invalid parameters: {0}")]
     InvalidParams(String),
-    
+
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
-    
+
     #[error("Serialization error: {0}")]
     SerializationError(#[from] serde_json::Error),
 }
@@ -266,22 +266,25 @@ impl ModelEnsemble {
             voting_strategy,
         }
     }
-    
+
     /// Add a model to the ensemble
     pub fn add_model(&mut self, model: Box<dyn ShapeLearningModel>, weight: f64) {
         self.models.push(model);
         self.weights.push(weight);
     }
-    
+
     /// Predict using ensemble
-    pub fn predict_ensemble(&self, graph_data: &GraphData) -> Result<Vec<LearnedShape>, ModelError> {
+    pub fn predict_ensemble(
+        &self,
+        graph_data: &GraphData,
+    ) -> Result<Vec<LearnedShape>, ModelError> {
         let mut all_predictions = Vec::new();
-        
+
         for (model, weight) in self.models.iter().zip(&self.weights) {
             let predictions = model.predict(graph_data)?;
             all_predictions.push((predictions, *weight));
         }
-        
+
         match &self.voting_strategy {
             VotingStrategy::Majority => self.majority_vote(all_predictions),
             VotingStrategy::Weighted => self.weighted_vote(all_predictions),
@@ -292,23 +295,31 @@ impl ModelEnsemble {
             }
         }
     }
-    
-    fn majority_vote(&self, predictions: Vec<(Vec<LearnedShape>, f64)>) -> Result<Vec<LearnedShape>, ModelError> {
+
+    fn majority_vote(
+        &self,
+        predictions: Vec<(Vec<LearnedShape>, f64)>,
+    ) -> Result<Vec<LearnedShape>, ModelError> {
         // Implement majority voting logic
         // For now, return first prediction
-        Ok(predictions.first()
+        Ok(predictions
+            .first()
             .map(|(shapes, _)| shapes.clone())
             .unwrap_or_default())
     }
-    
-    fn weighted_vote(&self, predictions: Vec<(Vec<LearnedShape>, f64)>) -> Result<Vec<LearnedShape>, ModelError> {
+
+    fn weighted_vote(
+        &self,
+        predictions: Vec<(Vec<LearnedShape>, f64)>,
+    ) -> Result<Vec<LearnedShape>, ModelError> {
         // Implement weighted voting logic
         // For now, return first prediction
-        Ok(predictions.first()
+        Ok(predictions
+            .first()
             .map(|(shapes, _)| shapes.clone())
             .unwrap_or_default())
     }
-    
+
     fn stacking_vote(
         &self,
         predictions: Vec<(Vec<LearnedShape>, f64)>,

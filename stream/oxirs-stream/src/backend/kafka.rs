@@ -410,6 +410,23 @@ impl From<StreamEvent> for KafkaEvent {
                 },
                 Some(source),
             ),
+            // Catch-all for remaining variants
+            _ => (
+                "unknown_event".to_string(),
+                serde_json::json!({}),
+                EventMetadata {
+                    event_id: Uuid::new_v4().to_string(),
+                    timestamp: Utc::now(),
+                    source: "system".to_string(),
+                    user: None,
+                    context: None,
+                    caused_by: None,
+                    version: "1.0".to_string(),
+                    properties: HashMap::new(),
+                    checksum: None,
+                },
+                None,
+            ),
         };
 
         Self {

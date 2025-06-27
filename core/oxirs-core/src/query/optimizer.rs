@@ -4,8 +4,8 @@
 //! techniques to improve query performance based on historical patterns.
 
 use crate::indexing::IndexStats;
-use crate::model::{Variable, Term, NamedNode, BlankNode, Literal};
-use crate::query::algebra::{GraphPattern, TriplePattern, TermPattern, Query, QueryForm, SelectVariables, Expression, OrderExpression};
+use crate::model::Variable;
+use crate::query::algebra::{GraphPattern, TriplePattern, TermPattern, Query, QueryForm};
 use crate::query::plan::{ExecutionPlan, QueryPlanner};
 use crate::OxirsError;
 use std::collections::{HashMap, VecDeque};
@@ -740,7 +740,7 @@ mod tests {
         let stats = Arc::new(IndexStats::new());
         let optimizer = AIQueryOptimizer::new(stats);
 
-        assert_eq!(optimizer.hardware_info.cpu_cores > 0, true);
+        assert!(optimizer.hardware_info.cpu_cores > 0);
     }
 
     #[test]

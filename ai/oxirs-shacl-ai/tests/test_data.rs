@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 /// Sample RDF graph for testing
 pub fn create_sample_graph() -> Store {
-    let mut store = Store::new();
+    let mut store = Store::new().expect("Failed to create store");
 
     // Add some sample triples
     let person = NamedNode::new("http://example.org/Person").unwrap();
@@ -23,66 +23,66 @@ pub fn create_sample_graph() -> Store {
     let bob = NamedNode::new("http://example.org/bob").unwrap();
 
     // John's data
-    store.insert(Triple::new(
+    store.insert(&Triple::new(
         john.clone().into(),
         NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
             .unwrap()
             .into(),
         person.clone().into(),
-    ));
-    store.insert(Triple::new(
+    ).into()).expect("Failed to insert triple");
+    store.insert(&Triple::new(
         john.clone().into(),
         name.clone().into(),
         Literal::new_simple_literal("John Doe").into(),
-    ));
-    store.insert(Triple::new(
+    ).into()).expect("Failed to insert triple");
+    store.insert(&Triple::new(
         john.clone().into(),
         age.clone().into(),
         Literal::new_typed_literal("30", oxirs_core::vocab::xsd::INTEGER).into(),
-    ));
-    store.insert(Triple::new(
+    ).into()).expect("Failed to insert triple");
+    store.insert(&Triple::new(
         john.clone().into(),
         email.clone().into(),
         Literal::new_simple_literal("john@example.org").into(),
-    ));
+    ).into()).expect("Failed to insert triple");
 
     // Jane's data
-    store.insert(Triple::new(
+    store.insert(&Triple::new(
         jane.clone().into(),
         NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
             .unwrap()
             .into(),
         person.clone().into(),
-    ));
-    store.insert(Triple::new(
+    ).into()).expect("Failed to insert triple");
+    store.insert(&Triple::new(
         jane.clone().into(),
         name.clone().into(),
         Literal::new_simple_literal("Jane Smith").into(),
-    ));
-    store.insert(Triple::new(
+    ).into()).expect("Failed to insert triple");
+    store.insert(&Triple::new(
         jane.clone().into(),
         age.clone().into(),
         Literal::new_typed_literal("25", oxirs_core::vocab::xsd::INTEGER).into(),
-    ));
-    store.insert(Triple::new(
+    ).into()).expect("Failed to insert triple");
+    store.insert(&Triple::new(
         jane.clone().into(),
         email.clone().into(),
         Literal::new_simple_literal("jane@example.org").into(),
-    ));
+    ).into()).expect("Failed to insert triple");
 
     // Bob's data (incomplete for testing)
-    store.insert(Triple::new(
+    store.insert(&Triple::new(
         bob.clone().into(),
         NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
             .unwrap()
             .into(),
         person.clone().into(),
-    ));
-    store.insert(Triple::new(
+    ).into()).expect("Failed to insert triple");
+    store.insert(&Triple::new(
         bob.clone().into(),
         name.clone().into(),
         Literal::new_simple_literal("Bob Johnson").into(),
-    ));
+    ).into()).expect("Failed to insert triple");
     // Note: Bob is missing age and email for testing validation
 
     store
@@ -131,28 +131,28 @@ pub fn create_complex_graph() -> Store {
     let employee_count = NamedNode::new("http://example.org/employeeCount").unwrap();
 
     let acme = NamedNode::new("http://example.org/acme").unwrap();
-    store.insert(Triple::new(
+    store.insert(&Triple::new(
         acme.clone().into(),
         NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
             .unwrap()
             .into(),
         org.clone().into(),
-    ));
-    store.insert(Triple::new(
+    ).into()).expect("Failed to insert triple");
+    store.insert(&Triple::new(
         acme.clone().into(),
         org_name.clone().into(),
         Literal::new_simple_literal("ACME Corporation").into(),
-    ));
-    store.insert(Triple::new(
+    ).into()).expect("Failed to insert triple");
+    store.insert(&Triple::new(
         acme.clone().into(),
         founded.clone().into(),
         Literal::new_typed_literal("1990", oxirs_core::vocab::xsd::INTEGER).into(),
-    ));
-    store.insert(Triple::new(
+    ).into()).expect("Failed to insert triple");
+    store.insert(&Triple::new(
         acme.clone().into(),
         employee_count.clone().into(),
         Literal::new_typed_literal("1000", oxirs_core::vocab::xsd::INTEGER).into(),
-    ));
+    ).into()).expect("Failed to insert triple");
 
     // Add employees with relationships
     let works_for = NamedNode::new("http://example.org/worksFor").unwrap();
@@ -161,23 +161,23 @@ pub fn create_complex_graph() -> Store {
 
     for i in 1..=20 {
         let employee = NamedNode::new(&format!("http://example.org/employee{}", i)).unwrap();
-        store.insert(Triple::new(
+        store.insert(&Triple::new(
             employee.clone().into(),
             NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
                 .unwrap()
                 .into(),
             person.clone().into(),
-        ));
-        store.insert(Triple::new(
+        ).into()).expect("Failed to insert triple");
+        store.insert(&Triple::new(
             employee.clone().into(),
             name.clone().into(),
             Literal::new_simple_literal(&format!("Employee {}", i)).into(),
-        ));
-        store.insert(Triple::new(
+        ).into()).expect("Failed to insert triple");
+        store.insert(&Triple::new(
             employee.clone().into(),
             works_for.clone().into(),
             acme.clone().into(),
-        ));
+        ).into()).expect("Failed to insert triple");
     }
 
     store

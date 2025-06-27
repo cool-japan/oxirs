@@ -3,7 +3,7 @@
 //! This module provides columnar storage optimized for analytical queries,
 //! supporting efficient aggregations, range scans, and OLAP operations.
 
-use crate::model::{BlankNode, Literal, NamedNode, Term, Triple, TriplePattern};
+use crate::model::{BlankNode, Literal, NamedNode, Triple};
 use crate::OxirsError;
 use arrow::{
     array::{ArrayBuilder, StringArray, StringBuilder, UInt64Array, UInt64Builder},
@@ -13,7 +13,7 @@ use arrow::{
 use datafusion::prelude::*;
 use parquet::{arrow::ArrowWriter, file::properties::WriterProperties};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -702,7 +702,7 @@ mod tests {
         {
             let mut writer_guard = storage.writer.write().await;
             storage
-                .flush_batch(&mut *writer_guard)
+                .flush_batch(&mut writer_guard)
                 .await
                 .unwrap();
         }
@@ -735,9 +735,9 @@ mod tests {
         let predicates = ["p1", "p1", "p2", "p1", "p3"];
         for (i, pred) in predicates.iter().enumerate() {
             let triple = Triple::new(
-                NamedNode::new(&format!("http://example.org/s{}", i)).unwrap(),
-                NamedNode::new(&format!("http://example.org/{}", pred)).unwrap(),
-                crate::model::Object::Literal(Literal::new(&format!("value{}", i))),
+                NamedNode::new(format!("http://example.org/s{}", i)).unwrap(),
+                NamedNode::new(format!("http://example.org/{}", pred)).unwrap(),
+                crate::model::Object::Literal(Literal::new(format!("value{}", i))),
             );
             storage.store_triple(&triple).await.unwrap();
         }
@@ -746,7 +746,7 @@ mod tests {
         {
             let mut writer_guard = storage.writer.write().await;
             storage
-                .flush_batch(&mut *writer_guard)
+                .flush_batch(&mut writer_guard)
                 .await
                 .unwrap();
         }

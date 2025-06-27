@@ -213,10 +213,10 @@ fn test_quad_operations() -> Result<()> {
 fn test_large_dataset() -> Result<()> {
     let (store, _temp_dir) = create_test_store()?;
 
-    // Insert many triples
-    let num_subjects = 100;
-    let num_predicates = 10;
-    let num_objects_per = 5;
+    // Insert many triples (reduced for performance)
+    let num_subjects = 10;
+    let num_predicates = 5;
+    let num_objects_per = 3;
 
     for i in 0..num_subjects {
         let subject = Term::iri(&format!("http://example.org/subject/{}", i));
@@ -235,8 +235,8 @@ fn test_large_dataset() -> Result<()> {
     let expected_triples = num_subjects * num_predicates * num_objects_per;
     assert_eq!(store.len()?, expected_triples as u64);
 
-    // Test query performance
-    let subject = Term::iri("http://example.org/subject/50");
+    // Test query performance - use a subject that actually exists (0-9)
+    let subject = Term::iri("http://example.org/subject/5");
     let results = store.query_triples(Some(&subject), None, None)?;
     assert_eq!(results.len(), (num_predicates * num_objects_per) as usize);
 

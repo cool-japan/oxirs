@@ -978,8 +978,10 @@ mod tests {
 
     #[test]
     fn test_auto_index_creation() {
-        let mut config = IndexConfig::default();
-        config.min_query_frequency = 2;
+        let config = IndexConfig {
+            min_query_frequency: 2,
+            ..Default::default()
+        };
 
         let mut manager = IndexManager::new(config);
         let subject = Subject::NamedNode(NamedNode::new("http://example.org/s").unwrap());

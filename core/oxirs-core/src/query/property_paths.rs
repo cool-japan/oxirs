@@ -435,7 +435,7 @@ mod tests {
             PropertyPath::zero_or_more(PropertyPath::predicate(p2.clone())),
         );
 
-        let expected = format!("{}/{}", p1, format!("{}*", p2));
+        let expected = format!("{}/{}*", p1, p2);
         assert_eq!(format!("{}", path), expected);
     }
 

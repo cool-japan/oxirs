@@ -4,7 +4,6 @@
 //! a generic interface that can work with CUDA, OpenCL, or WebGPU backends.
 
 use crate::model::*;
-use crate::query::algebra;
 use crate::query::plan::ExecutionPlan;
 use crate::OxirsError;
 use std::sync::Arc;
@@ -482,6 +481,6 @@ mod tests {
 
         let block = pool.allocate(1024).unwrap();
         assert_eq!(block.size, 1024);
-        assert_eq!(block.allocated, true);
+        assert!(block.allocated);
     }
 }

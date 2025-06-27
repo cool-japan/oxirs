@@ -82,6 +82,40 @@ impl Target {
 pub struct TargetSelector {
     /// Cache for target results to improve performance
     cache: std::collections::HashMap<String, Vec<Term>>,
+    
+    /// Optimization settings
+    optimization_config: TargetOptimizationConfig,
+}
+
+/// Configuration for target selection optimization
+#[derive(Debug, Clone)]
+pub struct TargetOptimizationConfig {
+    /// Maximum number of results to return per target (0 = unlimited)
+    pub max_results_per_target: usize,
+    
+    /// Enable query batching for multiple targets
+    pub enable_batching: bool,
+    
+    /// Batch size for paginated queries
+    pub batch_size: usize,
+    
+    /// Enable index-aware query optimization
+    pub use_indexes: bool,
+    
+    /// Timeout for target queries in milliseconds
+    pub query_timeout_ms: Option<u64>,
+}
+
+impl Default for TargetOptimizationConfig {
+    fn default() -> Self {
+        Self {
+            max_results_per_target: 0, // unlimited
+            enable_batching: true,
+            batch_size: 10000,
+            use_indexes: true,
+            query_timeout_ms: Some(30000), // 30 seconds
+        }
+    }
 }
 
 impl TargetSelector {
@@ -89,7 +123,21 @@ impl TargetSelector {
     pub fn new() -> Self {
         Self {
             cache: std::collections::HashMap::new(),
+            optimization_config: TargetOptimizationConfig::default(),
         }
+    }
+    
+    /// Create a new target selector with custom optimization config
+    pub fn with_config(config: TargetOptimizationConfig) -> Self {
+        Self {
+            cache: std::collections::HashMap::new(),
+            optimization_config: config,
+        }
+    }
+    
+    /// Update optimization configuration
+    pub fn set_optimization_config(&mut self, config: TargetOptimizationConfig) {
+        self.optimization_config = config;
     }
 
     /// Select all target nodes for a given target definition
@@ -121,6 +169,20 @@ impl TargetSelector {
         targets: &[Target],
         graph_name: Option<&str>,
     ) -> Result<Vec<Term>> {
+        if targets.is_empty() {
+            return Ok(Vec::new());
+        }
+        
+        if targets.len() == 1 {
+            return self.select_targets(store, &targets[0], graph_name);
+        }
+        
+        // Use optimized UNION query if batching is enabled and targets support it
+        if self.optimization_config.enable_batching && self.can_use_union_query(targets) {
+            return self.select_targets_with_union_query(store, targets, graph_name);
+        }
+        
+        // Fallback to individual target selection
         let mut all_targets = HashSet::new();
 
         for target in targets {
@@ -129,6 +191,115 @@ impl TargetSelector {
         }
 
         Ok(all_targets.into_iter().collect())
+    }
+    
+    /// Check if targets can be combined into a UNION query
+    fn can_use_union_query(&self, targets: &[Target]) -> bool {
+        // Only combine Class and Implicit targets for now
+        targets.iter().all(|target| {
+            matches!(target, Target::Class(_) | Target::Implicit(_))
+        })
+    }
+    
+    /// Select targets using optimized UNION query
+    fn select_targets_with_union_query(
+        &mut self,
+        store: &Store,
+        targets: &[Target],
+        graph_name: Option<&str>,
+    ) -> Result<Vec<Term>> {
+        let cache_key = format!("union_{}", 
+            targets.iter()
+                .map(|t| format!("{:?}", t))
+                .collect::<Vec<_>>()
+                .join(","));
+        
+        // Check cache first
+        if let Some(cached_result) = self.cache.get(&cache_key) {
+            return Ok(cached_result.clone());
+        }
+        
+        let query = self.build_union_query(targets, graph_name)?;
+        
+        let mut results = Vec::new();
+        
+        match self.execute_target_query(store, &query) {
+            Ok(query_result) => {
+                if let oxirs_core::query::QueryResult::Select {
+                    variables: _,
+                    bindings,
+                } = query_result
+                {
+                    for binding in bindings {
+                        if let Some(instance) = binding.get("instance") {
+                            results.push(instance.clone());
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Union query failed, falling back to individual queries: {}", e);
+                // Fallback to individual target selection
+                let mut all_targets = HashSet::new();
+                for target in targets {
+                    let target_nodes = self.select_targets_impl(store, target, graph_name)?;
+                    all_targets.extend(target_nodes);
+                }
+                results = all_targets.into_iter().collect();
+            }
+        }
+        
+        // Cache the result
+        self.cache.insert(cache_key, results.clone());
+        
+        tracing::debug!("Union query found {} total targets", results.len());
+        Ok(results)
+    }
+    
+    /// Build a UNION query for multiple class targets
+    fn build_union_query(&self, targets: &[Target], graph_name: Option<&str>) -> Result<String> {
+        let rdf_type = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+        
+        let mut union_parts = Vec::new();
+        
+        for target in targets {
+            let class_iri = match target {
+                Target::Class(class) => class.as_str(),
+                Target::Implicit(class) => class.as_str(),
+                _ => continue, // Skip non-class targets
+            };
+            
+            let pattern = if let Some(graph) = graph_name {
+                format!(
+                    "{{ GRAPH <{}> {{ ?instance <{}> <{}> . }} }}",
+                    graph, rdf_type, class_iri
+                )
+            } else {
+                format!("{{ ?instance <{}> <{}> . }}", rdf_type, class_iri)
+            };
+            
+            union_parts.push(pattern);
+        }
+        
+        if union_parts.is_empty() {
+            return Err(ShaclError::TargetSelection(
+                "No valid class targets for UNION query".to_string()
+            ));
+        }
+        
+        let limit_clause = if self.optimization_config.max_results_per_target > 0 {
+            format!(" LIMIT {}", self.optimization_config.max_results_per_target * targets.len())
+        } else {
+            String::new()
+        };
+        
+        let query = format!(
+            "SELECT DISTINCT ?instance WHERE {{\n  {}\n}}{}",
+            union_parts.join("\n  UNION\n  "),
+            limit_clause
+        );
+        
+        Ok(query)
     }
 
     /// Implementation of target selection without caching
@@ -168,7 +339,13 @@ impl TargetSelector {
 
         let mut instances = Vec::new();
 
-        // Create a SPARQL query to find all instances of the class
+        // Create an optimized SPARQL query to find all instances of the class
+        let limit_clause = if self.optimization_config.max_results_per_target > 0 {
+            format!(" LIMIT {}", self.optimization_config.max_results_per_target)
+        } else {
+            String::new()
+        };
+        
         let query = if let Some(graph) = graph_name {
             format!(
                 r#"
@@ -177,10 +354,12 @@ impl TargetSelector {
                         ?instance <{}> <{}> .
                     }}
                 }}
+                ORDER BY ?instance{}
             "#,
                 graph,
                 rdf_type.as_str(),
-                class_iri.as_str()
+                class_iri.as_str(),
+                limit_clause
             )
         } else {
             format!(
@@ -188,9 +367,11 @@ impl TargetSelector {
                 SELECT DISTINCT ?instance WHERE {{
                     ?instance <{}> <{}> .
                 }}
+                ORDER BY ?instance{}
             "#,
                 rdf_type.as_str(),
-                class_iri.as_str()
+                class_iri.as_str(),
+                limit_clause
             )
         };
 
@@ -233,7 +414,13 @@ impl TargetSelector {
     ) -> Result<Vec<Term>> {
         let mut objects = Vec::new();
 
-        // Create a SPARQL query to find all objects of the property
+        // Create an optimized SPARQL query to find all objects of the property
+        let limit_clause = if self.optimization_config.max_results_per_target > 0 {
+            format!(" LIMIT {}", self.optimization_config.max_results_per_target)
+        } else {
+            String::new()
+        };
+        
         let query = if let Some(graph) = graph_name {
             format!(
                 r#"
@@ -242,9 +429,11 @@ impl TargetSelector {
                         ?subject <{}> ?object .
                     }}
                 }}
+                ORDER BY ?object{}
             "#,
                 graph,
-                property.as_str()
+                property.as_str(),
+                limit_clause
             )
         } else {
             format!(
@@ -252,8 +441,10 @@ impl TargetSelector {
                 SELECT DISTINCT ?object WHERE {{
                     ?subject <{}> ?object .
                 }}
+                ORDER BY ?object{}
             "#,
-                property.as_str()
+                property.as_str(),
+                limit_clause
             )
         };
 
@@ -296,7 +487,13 @@ impl TargetSelector {
     ) -> Result<Vec<Term>> {
         let mut subjects = Vec::new();
 
-        // Create a SPARQL query to find all subjects of the property
+        // Create an optimized SPARQL query to find all subjects of the property
+        let limit_clause = if self.optimization_config.max_results_per_target > 0 {
+            format!(" LIMIT {}", self.optimization_config.max_results_per_target)
+        } else {
+            String::new()
+        };
+        
         let query = if let Some(graph) = graph_name {
             format!(
                 r#"
@@ -305,9 +502,11 @@ impl TargetSelector {
                         ?subject <{}> ?object .
                     }}
                 }}
+                ORDER BY ?subject{}
             "#,
                 graph,
-                property.as_str()
+                property.as_str(),
+                limit_clause
             )
         } else {
             format!(
@@ -315,8 +514,10 @@ impl TargetSelector {
                 SELECT DISTINCT ?subject WHERE {{
                     ?subject <{}> ?object .
                 }}
+                ORDER BY ?subject{}
             "#,
-                property.as_str()
+                property.as_str(),
+                limit_clause
             )
         };
 
@@ -598,97 +799,33 @@ impl Default for TargetSelector {
     }
 }
 
-/// Statistics about target cache
+/// Statistics about target cache performance
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TargetCacheStats {
+    /// Number of cache entries
     pub entries: usize,
+    
+    /// Total number of cached targets across all entries
     pub total_targets: usize,
 }
 
-/// Target validation context for optimization
-#[derive(Debug, Clone)]
-pub struct TargetContext {
-    /// Previously computed target sets for reuse
-    pub target_sets: std::collections::HashMap<String, Vec<Term>>,
-
-    /// Performance statistics
-    pub stats: TargetStats,
-}
-
-impl TargetContext {
-    pub fn new() -> Self {
-        Self {
-            target_sets: std::collections::HashMap::new(),
-            stats: TargetStats::default(),
-        }
-    }
-}
-
-impl Default for TargetContext {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Target selection performance statistics
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct TargetStats {
-    pub total_selections: usize,
-    pub cache_hits: usize,
-    pub cache_misses: usize,
-    pub total_targets_found: usize,
-    pub avg_targets_per_selection: f64,
-}
-
-impl TargetStats {
-    pub fn record_selection(&mut self, targets_found: usize, cache_hit: bool) {
-        self.total_selections += 1;
-        self.total_targets_found += targets_found;
-
-        if cache_hit {
-            self.cache_hits += 1;
-        } else {
-            self.cache_misses += 1;
-        }
-
-        self.avg_targets_per_selection =
-            self.total_targets_found as f64 / self.total_selections as f64;
-    }
-
-    pub fn cache_hit_rate(&self) -> f64 {
-        if self.total_selections == 0 {
-            0.0
-        } else {
-            self.cache_hits as f64 / self.total_selections as f64
-        }
-    }
-}
-
-/// Target optimization hints for performance tuning
+/// Performance statistics for target selection
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TargetOptimizationHints {
-    /// Prefer index-based lookups for class targets
-    pub use_class_index: bool,
-
-    /// Cache property-based target results
-    pub cache_property_targets: bool,
-
-    /// Maximum cache size for target results
-    pub max_cache_size: usize,
-
-    /// Parallel target selection threshold
-    pub parallel_threshold: usize,
-}
-
-impl Default for TargetOptimizationHints {
-    fn default() -> Self {
-        Self {
-            use_class_index: true,
-            cache_property_targets: true,
-            max_cache_size: 10000,
-            parallel_threshold: 1000,
-        }
-    }
+pub struct TargetSelectionStats {
+    /// Cache statistics
+    pub cache: TargetCacheStats,
+    
+    /// Number of queries executed
+    pub queries_executed: usize,
+    
+    /// Number of cache hits
+    pub cache_hits: usize,
+    
+    /// Number of fallback operations
+    pub fallback_operations: usize,
+    
+    /// Number of union queries used
+    pub union_queries_used: usize,
 }
 
 #[cfg(test)]
@@ -747,18 +884,24 @@ mod tests {
     }
 
     #[test]
-    fn test_target_stats() {
-        let mut stats = TargetStats::default();
-
-        stats.record_selection(5, false); // cache miss
-        stats.record_selection(3, true); // cache hit
-        stats.record_selection(7, false); // cache miss
-
-        assert_eq!(stats.total_selections, 3);
-        assert_eq!(stats.cache_hits, 1);
-        assert_eq!(stats.cache_misses, 2);
-        assert_eq!(stats.total_targets_found, 15);
-        assert_eq!(stats.avg_targets_per_selection, 5.0);
-        assert_eq!(stats.cache_hit_rate(), 1.0 / 3.0);
+    fn test_target_optimization_config() {
+        let config = TargetOptimizationConfig::default();
+        
+        assert_eq!(config.max_results_per_target, 0); // unlimited
+        assert!(config.enable_batching);
+        assert_eq!(config.batch_size, 10000);
+        assert!(config.use_indexes);
+        assert_eq!(config.query_timeout_ms, Some(30000));
+    }
+    
+    #[test]
+    fn test_target_selector_with_config() {
+        let mut config = TargetOptimizationConfig::default();
+        config.max_results_per_target = 100;
+        config.enable_batching = false;
+        
+        let selector = TargetSelector::with_config(config.clone());
+        assert_eq!(selector.optimization_config.max_results_per_target, 100);
+        assert!(!selector.optimization_config.enable_batching);
     }
 }

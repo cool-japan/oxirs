@@ -4,9 +4,9 @@
 //! including new string functions, math functions, and advanced features.
 
 use crate::model::{Literal, NamedNode, Term};
-use crate::query::algebra::Expression;
+// use crate::query::algebra::Expression; // For future expression evaluation
 use crate::OxirsError;
-use chrono::{DateTime, Datelike, Duration, Timelike, Utc};
+use chrono::{DateTime, Datelike, Timelike, Utc};
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::Arc;

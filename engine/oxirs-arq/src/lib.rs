@@ -10,9 +10,18 @@ use anyhow::Result;
 pub mod algebra;
 pub mod bgp_optimizer;
 pub mod builtin_fixed;
-pub mod executor;
+// pub mod executor;  // Temporarily commented to avoid module conflict
 pub mod extensions;
 pub mod optimizer;
+
+// Use executor from subdirectory
+pub use self::executor_impl as executor;
+pub mod executor_impl {
+    pub use super::executor_submodule::*;
+}
+
+#[path = "executor/mod.rs"]
+pub mod executor_submodule;
 #[cfg(feature = "parallel")]
 pub mod parallel;
 pub mod path;

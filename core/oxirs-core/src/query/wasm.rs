@@ -3,8 +3,7 @@
 //! This module provides WASM compilation of SPARQL queries for efficient
 //! client-side execution in web browsers and edge environments.
 
-use crate::model::*;
-use crate::query::algebra::*;
+use crate::model::Variable;
 use crate::query::plan::ExecutionPlan;
 use crate::OxirsError;
 use std::collections::HashMap;
@@ -419,7 +418,7 @@ impl WasmQueryCompiler {
     fn generate_triple_scan(
         &self,
         builder: &mut WasmModuleBuilder,
-        pattern: &TriplePattern,
+        pattern: &crate::model::pattern::TriplePattern,
     ) -> Result<(), OxirsError> {
         builder.add_function(
             "query_exec",
@@ -845,7 +844,7 @@ mod tests {
             .unwrap();
 
         let wasm = builder.build().unwrap();
-        assert!(wasm.len() > 0);
+        assert!(!wasm.is_empty());
     }
 
     #[test]

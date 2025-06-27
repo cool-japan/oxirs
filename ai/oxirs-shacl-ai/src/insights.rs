@@ -268,17 +268,17 @@ impl PerformanceInsight {
 
     /// Get performance status
     pub fn performance_status(&self) -> PerformanceStatus {
-        match (&self.trend_direction, self.severity) {
+        match (&self.trend_direction, &self.severity) {
             (TrendDirection::Increasing, _) if self.metric_name == "throughput" => {
                 PerformanceStatus::Improving
             }
             (TrendDirection::Decreasing, _) if self.metric_name != "throughput" => {
                 PerformanceStatus::Improving
             }
-            (TrendDirection::Stable, InsightSeverity::Low | InsightSeverity::Info) => {
+            (TrendDirection::Stable, &InsightSeverity::Low | &InsightSeverity::Info) => {
                 PerformanceStatus::Stable
             }
-            (_, InsightSeverity::Critical | InsightSeverity::High) => PerformanceStatus::Critical,
+            (_, &InsightSeverity::Critical | &InsightSeverity::High) => PerformanceStatus::Critical,
             _ => PerformanceStatus::Degrading,
         }
     }

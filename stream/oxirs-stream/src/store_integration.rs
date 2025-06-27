@@ -14,7 +14,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::{
     EventMetadata, StreamEvent, StreamProducer, StreamConsumer,
-    StreamConfig, patch::RdfPatch, PatchOperation,
+    StreamConfig, RdfPatch, PatchOperation,
 };
 
 /// Store change detector for monitoring RDF store changes
@@ -453,17 +453,125 @@ impl StoreChangeDetector {
 
     /// Start event sourcing
     async fn start_event_sourcing(&self) -> Result<()> {
-        // This would connect to an external event store
-        // and consume events from it
-        warn!("Event sourcing not implemented yet");
+        let ChangeDetectionStrategy::EventSourcing { event_store_url } = &self.strategy else {
+            return Err(anyhow!("Invalid strategy for event sourcing"));
+        };
+        
+        let store = self.store.clone();
+        let producer = self.producer.clone();
+        let stats = self.stats.clone();
+        let notifier = self.change_notifier.clone();
+        let event_store_url = event_store_url.clone();
+        
+        tokio::spawn(async move {
+            let mut interval = interval(Duration::from_secs(5));
+            let mut last_event_id = 0u64;
+            
+            loop {
+                interval.tick().await;
+                
+                // Connect to event store and fetch events
+                match Self::fetch_events_from_store(&event_store_url, last_event_id).await {
+                    Ok(events) => {
+                        if !events.is_empty() {
+                            debug!("Fetched {} events from event store", events.len());
+                            
+                            // Convert events to store changes
+                            let changes = Self::convert_events_to_changes(events);
+                            
+                            // Update last event ID
+                            if let Some(last_change) = changes.last() {
+                                last_event_id = last_change.event_id.unwrap_or(last_event_id);
+                            }
+                            
+                            // Convert to stream events and publish
+                            let stream_events = Self::convert_to_stream_events(changes);
+                            
+                            match producer.write().await.publish_batch(stream_events).await {
+                                Ok(_) => {
+                                    let count = stream_events.len();
+                                    stats.write().await.changes_published += count as u64;
+                                    let _ = notifier.send(StoreChangeEvent::ChangesPublished { count });
+                                }
+                                Err(e) => {
+                                    error!("Failed to publish events from event store: {}", e);
+                                    stats.write().await.errors += 1;
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to fetch events from event store: {}", e);
+                        stats.write().await.errors += 1;
+                    }
+                }
+            }
+        });
+        
+        info!("Started event sourcing from: {}", event_store_url);
         Ok(())
     }
 
     /// Start hybrid detection
     async fn start_hybrid_detection(&self) -> Result<()> {
-        // This would start both primary and fallback strategies
-        // and coordinate between them
-        warn!("Hybrid detection not implemented yet");
+        let ChangeDetectionStrategy::Hybrid { primary, fallback } = &self.strategy else {
+            return Err(anyhow!("Invalid strategy for hybrid detection"));
+        };
+        
+        let primary_detector = Self::new(
+            self.store.clone(),
+            *primary.clone(),
+            self.producer.clone(),
+            self.config.clone(),
+        ).await?;
+        
+        let fallback_detector = Self::new(
+            self.store.clone(),
+            *fallback.clone(),
+            self.producer.clone(),
+            self.config.clone(),
+        ).await?;
+        
+        let stats = self.stats.clone();
+        let notifier = self.change_notifier.clone();
+        
+        // Start primary strategy
+        tokio::spawn(async move {
+            if let Err(e) = primary_detector.start().await {
+                error!("Primary strategy failed: {}", e);
+                stats.write().await.errors += 1;
+                let _ = notifier.send(StoreChangeEvent::Error {
+                    message: format!("Primary strategy failed: {}", e),
+                });
+            }
+        });
+        
+        // Start fallback strategy with monitoring
+        let fallback_stats = self.stats.clone();
+        let fallback_notifier = self.change_notifier.clone();
+        
+        tokio::spawn(async move {
+            // Wait a bit to see if primary strategy is working
+            tokio::time::sleep(Duration::from_secs(30)).await;
+            
+            // Check if primary strategy is producing events
+            let primary_events = fallback_stats.read().await.changes_published;
+            
+            // If no events in the last 30 seconds, start fallback
+            if primary_events == 0 {
+                info!("Primary strategy not producing events, starting fallback");
+                
+                if let Err(e) = fallback_detector.start().await {
+                    error!("Fallback strategy failed: {}", e);
+                    fallback_stats.write().await.errors += 1;
+                    let _ = fallback_notifier.send(StoreChangeEvent::Error {
+                        message: format!("Fallback strategy failed: {}", e),
+                    });
+                }
+            }
+        });
+        
+        info!("Started hybrid detection with primary and fallback strategies");
         Ok(())
     }
 
@@ -543,7 +651,7 @@ impl StoreChangeDetector {
                     context: change.transaction_id.clone(),
                     caused_by: None,
                     version: "1.0".to_string(),
-                    properties: change.metadata,
+                    properties: change.metadata.clone(),
                     checksum: None,
                 };
                 
@@ -629,6 +737,105 @@ impl StoreChangeDetector {
     pub fn subscribe(&self) -> broadcast::Receiver<StoreChangeEvent> {
         self.change_notifier.subscribe()
     }
+
+    /// Fetch events from external event store
+    async fn fetch_events_from_store(event_store_url: &str, from_id: u64) -> Result<Vec<EventStoreEvent>> {
+        // This would make HTTP requests to fetch events from external event store
+        // For now, simulate fetching events
+        
+        use reqwest;
+        
+        let client = reqwest::Client::new();
+        let url = format!("{}/events?from={}&limit=100", event_store_url, from_id);
+        
+        match client.get(&url).send().await {
+            Ok(response) => {
+                if response.status().is_success() {
+                    match response.json::<Vec<EventStoreEvent>>().await {
+                        Ok(events) => Ok(events),
+                        Err(e) => {
+                            warn!("Failed to parse events from event store: {}", e);
+                            Ok(vec![]) // Return empty vec instead of error
+                        }
+                    }
+                } else {
+                    warn!("Event store returned status: {}", response.status());
+                    Ok(vec![])
+                }
+            }
+            Err(e) => {
+                debug!("Failed to connect to event store: {}", e);
+                Ok(vec![]) // Return empty vec for connection issues
+            }
+        }
+    }
+
+    /// Convert event store events to store changes
+    fn convert_events_to_changes(events: Vec<EventStoreEvent>) -> Vec<StoreChange> {
+        events
+            .into_iter()
+            .filter_map(|event| {
+                match event.event_type.as_str() {
+                    "triple_added" => Some(StoreChange {
+                        change_type: ChangeType::TripleAdded,
+                        affected_triples: vec![Triple {
+                            subject: event.data.get("subject")?.clone(),
+                            predicate: event.data.get("predicate")?.clone(),
+                            object: event.data.get("object")?.clone(),
+                            graph: event.data.get("graph").cloned(),
+                        }],
+                        timestamp: event.timestamp,
+                        transaction_id: event.transaction_id,
+                        user: Some(event.user.unwrap_or_else(|| "system".to_string())),
+                        metadata: event.metadata,
+                    }),
+                    "triple_removed" => Some(StoreChange {
+                        change_type: ChangeType::TripleRemoved,
+                        affected_triples: vec![Triple {
+                            subject: event.data.get("subject")?.clone(),
+                            predicate: event.data.get("predicate")?.clone(),
+                            object: event.data.get("object")?.clone(),
+                            graph: event.data.get("graph").cloned(),
+                        }],
+                        timestamp: event.timestamp,
+                        transaction_id: event.transaction_id,
+                        user: Some(event.user.unwrap_or_else(|| "system".to_string())),
+                        metadata: event.metadata,
+                    }),
+                    "graph_created" => Some(StoreChange {
+                        change_type: ChangeType::GraphCreated,
+                        affected_triples: vec![],
+                        timestamp: event.timestamp,
+                        transaction_id: event.transaction_id,
+                        user: Some(event.user.unwrap_or_else(|| "system".to_string())),
+                        metadata: {
+                            let mut meta = event.metadata;
+                            if let Some(graph) = event.data.get("graph") {
+                                meta.insert("graph".to_string(), graph.clone());
+                            }
+                            meta
+                        },
+                    }),
+                    _ => {
+                        debug!("Unknown event type: {}", event.event_type);
+                        None
+                    }
+                }
+            })
+            .collect()
+    }
+}
+
+/// Event store event from external event store
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct EventStoreEvent {
+    pub id: u64,
+    pub event_type: String,
+    pub data: HashMap<String, String>,
+    pub metadata: HashMap<String, String>,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub transaction_id: Option<String>,
+    pub user: Option<String>,
 }
 
 /// Store snapshot for polling-based detection

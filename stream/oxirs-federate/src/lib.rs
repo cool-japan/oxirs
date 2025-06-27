@@ -326,9 +326,9 @@ impl FederationEngine {
                                             crate::executor::SparqlValue {
                                                 value_type: "literal".to_string(),
                                                 value: literal.value().to_string(),
-                                                datatype: literal
+                                                datatype: Some(literal
                                                     .datatype()
-                                                    .map(|dt| dt.to_string()),
+                                                    .to_string()),
                                                 lang: None,
                                             }
                                         }

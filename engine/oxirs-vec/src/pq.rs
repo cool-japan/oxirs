@@ -15,6 +15,8 @@ pub struct PQConfig {
     pub n_subquantizers: usize,
     /// Number of centroids per subquantizer (typically 256 for 8-bit codes)
     pub n_centroids: usize,
+    /// Number of bits per subquantizer (determines n_centroids: 2^n_bits)
+    pub n_bits: usize,
     /// Number of iterations for k-means training
     pub max_iterations: usize,
     /// Convergence threshold for k-means
@@ -28,10 +30,43 @@ impl Default for PQConfig {
         Self {
             n_subquantizers: 8,
             n_centroids: 256,
+            n_bits: 8, // 2^8 = 256 centroids
             max_iterations: 50,
             convergence_threshold: 1e-4,
             seed: None,
         }
+    }
+}
+
+impl PQConfig {
+    /// Create a new PQConfig with specified bits per subquantizer
+    pub fn with_bits(n_subquantizers: usize, n_bits: usize) -> Self {
+        Self {
+            n_subquantizers,
+            n_centroids: 1 << n_bits, // 2^n_bits
+            n_bits,
+            max_iterations: 50,
+            convergence_threshold: 1e-4,
+            seed: None,
+        }
+    }
+    
+    /// Validate the configuration
+    pub fn validate(&self) -> Result<()> {
+        if self.n_centroids != (1 << self.n_bits) {
+            return Err(anyhow!(
+                "n_centroids {} doesn't match 2^n_bits ({})", 
+                self.n_centroids, 
+                1 << self.n_bits
+            ));
+        }
+        if self.n_subquantizers == 0 {
+            return Err(anyhow!("n_subquantizers must be greater than 0"));
+        }
+        if self.n_bits == 0 || self.n_bits > 16 {
+            return Err(anyhow!("n_bits must be between 1 and 16"));
+        }
+        Ok(())
     }
 }
 
@@ -413,6 +448,21 @@ impl PQIndex {
         let codes_size = self.codes.len() * self.config.n_subquantizers;
         
         codebook_size + codes_size
+    }
+    
+    /// Check if the index is trained
+    pub fn is_trained(&self) -> bool {
+        self.is_trained
+    }
+    
+    /// Compute distance between query and encoded vector (for IVF compatibility)
+    pub fn compute_distance(&self, query: &Vector, codes: &[u8]) -> Result<f32> {
+        self.asymmetric_distance(query, codes)
+    }
+    
+    /// Decode codes to vector (for IVF compatibility)
+    pub fn decode_vector(&self, codes: &[u8]) -> Result<Vector> {
+        self.decode_codes(codes)
     }
 }
 

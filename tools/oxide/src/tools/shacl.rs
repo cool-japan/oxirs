@@ -3,7 +3,7 @@
 //! Validates RDF data against SHACL (Shapes Constraint Language) shapes.
 
 use super::{utils, ToolResult, ToolStats};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Run SHACL validation
 pub async fn run(
@@ -175,6 +175,7 @@ struct ShaclShape {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 struct PropertyShape {
     path: String,
     min_count: Option<usize>,
@@ -211,7 +212,7 @@ enum Severity {
 }
 
 /// Load SHACL shapes from file
-fn load_shapes_file(shapes_path: &PathBuf, format: &str) -> ToolResult<ShaclShapesGraph> {
+fn load_shapes_file(shapes_path: &Path, format: &str) -> ToolResult<ShaclShapesGraph> {
     let content = utils::read_input(shapes_path)?;
 
     // Parse shapes (simplified implementation)
@@ -337,8 +338,7 @@ fn parse_rdf_data(content: &str, format: &str) -> ToolResult<Vec<RdfTriple>> {
                     continue;
                 }
 
-                if line.ends_with(" .") {
-                    let line = &line[..line.len() - 2];
+                if let Some(line) = line.strip_suffix(" .") {
                     let parts: Vec<&str> = line.split_whitespace().collect();
 
                     if parts.len() >= 3 {

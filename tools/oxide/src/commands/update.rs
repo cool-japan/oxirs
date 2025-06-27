@@ -52,7 +52,7 @@ pub async fn run(dataset: String, update: String, file: bool) -> CommandResult {
 
     // TODO: Implement actual SPARQL update execution
     // For now, just simulate success
-    let _result = execute_update(&mut store, &sparql_update)?;
+    execute_update(&mut store, &sparql_update)?;
 
     let duration = start_time.elapsed();
 

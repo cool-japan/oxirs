@@ -5,14 +5,14 @@
 
 use crate::model::*;
 use crate::query::algebra::{self, *};
-use crate::query::plan::ExecutionPlan;
+// use crate::query::plan::ExecutionPlan; // For future distributed execution
 use crate::OxirsError;
 use async_trait::async_trait;
 use std::collections::{HashMap, HashSet};
-#[cfg(not(feature = "async"))]
-use std::sync::mpsc;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
+#[cfg(not(feature = "async"))]
+use std::sync::mpsc; // For future message passing
 #[cfg(feature = "async")]
 use tokio::sync::mpsc;
 
@@ -151,10 +151,10 @@ struct CachedPlan {
     avg_exec_time: Duration,
 }
 
-/// Query pattern for analysis
+/// Query pattern for analysis - using unified pattern representation
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct QueryPattern {
-    /// Triple patterns
+    /// Triple patterns (using algebra representation for consistency)
     patterns: Vec<algebra::TriplePattern>,
     /// Join structure
     joins: Vec<JoinType>,
@@ -291,8 +291,8 @@ pub struct QueryRoute {
 pub struct QueryFragment {
     /// Original query
     pub query: Query,
-    /// Assigned patterns
-    pub patterns: Vec<crate::model::pattern::TriplePattern>,
+    /// Assigned patterns (using algebra representation for performance)
+    pub patterns: Vec<algebra::TriplePattern>,
     /// Required variables
     pub required_vars: HashSet<Variable>,
     /// Output variables
@@ -748,8 +748,8 @@ impl QueryRouter {
         self.route_load_balanced(query, endpoints)
     }
 
-    /// Extract triple patterns from query
-    fn extract_patterns(&self, query: &Query) -> Result<Vec<crate::model::pattern::TriplePattern>, OxirsError> {
+    /// Extract triple patterns from query (returning algebra patterns for consistency)
+    fn extract_patterns(&self, query: &Query) -> Result<Vec<algebra::TriplePattern>, OxirsError> {
         match &query.form {
             QueryForm::Select { where_clause, .. } => {
                 self.extract_patterns_from_graph_pattern(where_clause)
@@ -758,20 +758,59 @@ impl QueryRouter {
         }
     }
 
-    /// Extract patterns from graph pattern
+    /// Extract patterns from graph pattern (returning algebra patterns)
     fn extract_patterns_from_graph_pattern(
         &self,
         pattern: &GraphPattern,
-    ) -> Result<Vec<crate::model::pattern::TriplePattern>, OxirsError> {
+    ) -> Result<Vec<algebra::TriplePattern>, OxirsError> {
         match pattern {
             GraphPattern::Bgp(patterns) => {
-                let converted_patterns = patterns.iter()
-                    .map(|p| crate::query::plan::convert_triple_pattern(p))
-                    .collect();
-                Ok(converted_patterns)
+                // Use algebra patterns directly for better performance
+                Ok(patterns.clone())
+            }
+            GraphPattern::Join(left, right) => {
+                let mut left_patterns = self.extract_patterns_from_graph_pattern(left)?;
+                let mut right_patterns = self.extract_patterns_from_graph_pattern(right)?;
+                left_patterns.append(&mut right_patterns);
+                Ok(left_patterns)
+            }
+            GraphPattern::Filter { inner, .. } => {
+                self.extract_patterns_from_graph_pattern(inner)
+            }
+            GraphPattern::Union(left, right) => {
+                let mut left_patterns = self.extract_patterns_from_graph_pattern(left)?;
+                let mut right_patterns = self.extract_patterns_from_graph_pattern(right)?;
+                left_patterns.append(&mut right_patterns);
+                Ok(left_patterns)
             }
             _ => Ok(Vec::new()),
         }
+    }
+
+    /// Convert model pattern to algebra pattern
+    fn convert_to_algebra_pattern(&self, pattern: &crate::model::pattern::TriplePattern) -> Result<algebra::TriplePattern, OxirsError> {
+        let subject = match &pattern.subject {
+            Some(crate::model::pattern::SubjectPattern::NamedNode(n)) => algebra::TermPattern::NamedNode(n.clone()),
+            Some(crate::model::pattern::SubjectPattern::BlankNode(b)) => algebra::TermPattern::BlankNode(b.clone()),
+            Some(crate::model::pattern::SubjectPattern::Variable(v)) => algebra::TermPattern::Variable(v.clone()),
+            None => return Err(OxirsError::Query("Subject pattern cannot be None in basic graph pattern".to_string())),
+        };
+
+        let predicate = match &pattern.predicate {
+            Some(crate::model::pattern::PredicatePattern::NamedNode(n)) => algebra::TermPattern::NamedNode(n.clone()),
+            Some(crate::model::pattern::PredicatePattern::Variable(v)) => algebra::TermPattern::Variable(v.clone()),
+            None => return Err(OxirsError::Query("Predicate pattern cannot be None in basic graph pattern".to_string())),
+        };
+
+        let object = match &pattern.object {
+            Some(crate::model::pattern::ObjectPattern::NamedNode(n)) => algebra::TermPattern::NamedNode(n.clone()),
+            Some(crate::model::pattern::ObjectPattern::BlankNode(b)) => algebra::TermPattern::BlankNode(b.clone()),
+            Some(crate::model::pattern::ObjectPattern::Literal(l)) => algebra::TermPattern::Literal(l.clone()),
+            Some(crate::model::pattern::ObjectPattern::Variable(v)) => algebra::TermPattern::Variable(v.clone()),
+            None => return Err(OxirsError::Query("Object pattern cannot be None in basic graph pattern".to_string())),
+        };
+
+        Ok(algebra::TriplePattern { subject, predicate, object })
     }
 
     /// Extract variables from query

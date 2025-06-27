@@ -235,7 +235,7 @@ impl<'a> IntoIterator for &'a Graph {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{BlankNode, Literal, NamedNode};
+    use crate::model::{Literal, NamedNode};
 
     fn create_test_triple() -> Triple {
         let subject = NamedNode::new("http://example.org/subject").unwrap();

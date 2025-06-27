@@ -3,8 +3,8 @@
 //! This is a placeholder implementation that will be enhanced with full
 //! SPARQL 1.1 parsing capabilities in future iterations.
 
-use crate::model::{Variable, Term, NamedNode, BlankNode, Literal, Quad};
-use crate::query::algebra::{GraphPattern, TriplePattern, TermPattern, Query, QueryForm, SelectVariables, Expression, OrderExpression, Dataset, Update, UpdateOperation};
+use crate::model::{Variable, NamedNode, BlankNode, Literal};
+use crate::query::algebra::{GraphPattern, TriplePattern, TermPattern, Query, QueryForm, SelectVariables, Dataset, Update, UpdateOperation};
 use crate::OxirsError;
 use std::collections::HashMap;
 

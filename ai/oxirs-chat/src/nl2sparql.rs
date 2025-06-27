@@ -17,6 +17,7 @@ use crate::{
     llm::{ChatMessage, ChatRole, LLMManager, LLMRequest, Priority, UseCase},
     rag::{ExtractedEntity, ExtractedRelationship, QueryContext, QueryIntent},
 };
+use oxirs_core::{Store, query::QueryResult};
 
 /// NL2SPARQL system configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -325,6 +326,27 @@ pub struct GenerationMetadata {
     pub fallback_used: bool,
 }
 
+/// SPARQL execution result
+#[derive(Debug, Clone)]
+pub struct SPARQLExecutionResult {
+    pub bindings: Vec<HashMap<String, String>>,
+    pub result_count: usize,
+    pub execution_time_ms: u64,
+    pub query_type: SPARQLQueryType,
+    pub errors: Vec<String>,
+}
+
+/// SPARQL query type
+#[derive(Debug, Clone)]
+pub enum SPARQLQueryType {
+    Select,
+    Construct,
+    Ask,
+    Describe,
+    Update,
+    Unknown,
+}
+
 /// SPARQL query template
 #[derive(Debug, Clone)]
 pub struct SPARQLTemplate {
@@ -380,6 +402,7 @@ pub struct NL2SPARQLSystem {
     templates: HashMap<String, SPARQLTemplate>,
     validator: SPARQLValidator,
     optimizer: SPARQLOptimizer,
+    store: Option<Arc<Store>>,
 }
 
 impl NL2SPARQLSystem {
@@ -391,6 +414,26 @@ impl NL2SPARQLSystem {
             templates: HashMap::new(),
             validator: SPARQLValidator::new(),
             optimizer: SPARQLOptimizer::new(),
+            store: None,
+        };
+
+        system.initialize_templates()?;
+        Ok(system)
+    }
+    
+    pub fn with_store(
+        config: NL2SPARQLConfig, 
+        llm_manager: Option<Arc<LLMManager>>,
+        store: Arc<Store>
+    ) -> Result<Self> {
+        let mut system = Self {
+            config,
+            llm_manager,
+            template_engine: Handlebars::new(),
+            templates: HashMap::new(),
+            validator: SPARQLValidator::new(),
+            optimizer: SPARQLOptimizer::new(),
+            store: Some(store),
         };
 
         system.initialize_templates()?;
@@ -435,6 +478,53 @@ impl NL2SPARQLSystem {
             result.metadata.generation_time_ms
         );
         Ok(result)
+    }
+
+    /// Execute a SPARQL query against the store and return results
+    pub async fn execute_sparql_query(&self, query: &str) -> Result<SPARQLExecutionResult> {
+        if let Some(ref store) = self.store {
+            let start_time = std::time::Instant::now();
+            
+            info!("Executing SPARQL query: {}", query);
+            
+            match store.query(query) {
+                Ok(results) => {
+                    let execution_time = start_time.elapsed();
+                    
+                    let mut bindings = Vec::new();
+                    let mut result_count = 0;
+                    
+                    // Process query results
+                    // Note: OxirsQueryResults is currently a placeholder
+                    // TODO: Implement proper SPARQL result processing when Store.query() returns actual results
+                    let _results = results; // Currently just a placeholder
+                    result_count = 0; // No real results from placeholder implementation
+                    
+                    info!("Query executed successfully: {} results in {}ms", 
+                          result_count, execution_time.as_millis());
+                    
+                    Ok(SPARQLExecutionResult {
+                        bindings,
+                        result_count,
+                        execution_time_ms: execution_time.as_millis() as u64,
+                        query_type: determine_query_type(query),
+                        errors: Vec::new(),
+                    })
+                }
+                Err(e) => {
+                    error!("SPARQL query execution failed: {}", e);
+                    Ok(SPARQLExecutionResult {
+                        bindings: Vec::new(),
+                        result_count: 0,
+                        execution_time_ms: start_time.elapsed().as_millis() as u64,
+                        query_type: determine_query_type(query),
+                        errors: vec![format!("Query execution error: {}", e)],
+                    })
+                }
+            }
+        } else {
+            Err(anyhow!("No store available for query execution"))
+        }
     }
 
     fn initialize_templates(&mut self) -> Result<()> {
@@ -1306,5 +1396,27 @@ impl SPARQLOptimizer {
         }
 
         Ok(recommendations)
+    }
+}
+
+/// Determine the type of SPARQL query
+fn determine_query_type(query: &str) -> SPARQLQueryType {
+    let query_upper = query.trim().to_uppercase();
+    
+    if query_upper.starts_with("SELECT") {
+        SPARQLQueryType::Select
+    } else if query_upper.starts_with("CONSTRUCT") {
+        SPARQLQueryType::Construct
+    } else if query_upper.starts_with("ASK") {
+        SPARQLQueryType::Ask
+    } else if query_upper.starts_with("DESCRIBE") {
+        SPARQLQueryType::Describe
+    } else if query_upper.starts_with("INSERT") || 
+              query_upper.starts_with("DELETE") || 
+              query_upper.starts_with("LOAD") ||
+              query_upper.starts_with("CLEAR") {
+        SPARQLQueryType::Update
+    } else {
+        SPARQLQueryType::Unknown
     }
 }

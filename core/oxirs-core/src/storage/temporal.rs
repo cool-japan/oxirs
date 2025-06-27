@@ -726,7 +726,7 @@ mod tests {
             let triple = Triple::new(
                 NamedNode::new(entity).unwrap(),
                 NamedNode::new("http://example.org/age").unwrap(),
-                crate::model::Object::Literal(Literal::new(&age.to_string())),
+                crate::model::Object::Literal(Literal::new(age.to_string())),
             );
 
             let valid_from = Utc::now() - Duration::days((26 - age) as i64 * 365);

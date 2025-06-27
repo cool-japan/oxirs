@@ -7,7 +7,7 @@ use crate::model::*;
 use crate::query::algebra::{Expression, TermPattern};
 use crate::OxirsError;
 use smallvec::SmallVec;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 /// Optimized binding set for variable management

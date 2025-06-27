@@ -29,7 +29,7 @@ parking_lot = "0.12"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.11", features = ["v4", "serde"] }
 url = "2.5"
-backoff = "0.4"
+backoff = { version = "0.4", features = ["tokio"] }
 governor = "0.6"
 tower = { version = "0.5", features = ["full"] }
 tower-http = { version = "0.6", features = ["cors", "trace", "timeout", "compression-gzip"] }
@@ -56,6 +56,7 @@ redis = { version = "0.27", features = ["aio", "tokio-comp"], optional = true }
 lru = { version = "0.12", optional = true }
 moka = { version = "0.12", features = ["future"], optional = true }
 bloom = { version = "0.3", optional = true }
+petgraph = "0.6"
 regex = "1.11"
 
 [dev-dependencies]

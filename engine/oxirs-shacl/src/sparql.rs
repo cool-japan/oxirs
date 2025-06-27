@@ -166,7 +166,48 @@ impl ConstraintValidator for SparqlConstraint {
             ));
         }
 
-        // TODO: More thorough SPARQL syntax validation
+        // Additional SPARQL syntax validation
+        let query_text = self.query.trim().to_lowercase();
+        
+        // Check for basic query structure (relaxed validation)
+        if self.is_select_query() {
+            if !query_text.contains("select") {
+                return Err(ShaclError::ConstraintValidation(
+                    "SELECT query must contain SELECT clause".to_string(),
+                ));
+            }
+        } else if self.is_ask_query() {
+            if !query_text.contains("ask") {
+                return Err(ShaclError::ConstraintValidation(
+                    "ASK query must contain ASK clause".to_string(),
+                ));
+            }
+        } else if self.is_construct_query() {
+            if !query_text.contains("construct") {
+                return Err(ShaclError::ConstraintValidation(
+                    "CONSTRUCT query must contain CONSTRUCT clause".to_string(),
+                ));
+            }
+        }
+        
+        // Check for balanced braces
+        let open_braces = query_text.matches('{').count();
+        let close_braces = query_text.matches('}').count();
+        if open_braces != close_braces {
+            return Err(ShaclError::ConstraintValidation(
+                "Query has unbalanced braces".to_string(),
+            ));
+        }
+        
+        // Check for dangerous operations (basic security check)
+        let dangerous_keywords = ["drop", "clear", "insert", "delete", "load", "create"];
+        for keyword in &dangerous_keywords {
+            if query_text.contains(keyword) {
+                return Err(ShaclError::ConstraintValidation(
+                    format!("Query contains potentially dangerous keyword: {}", keyword),
+                ));
+            }
+        }
 
         Ok(())
     }
@@ -204,12 +245,15 @@ impl ConstraintEvaluator for SparqlConstraint {
             Term::NamedNode(NamedNode::new(context.shape_id.as_str()).unwrap())
         );
         
+        // Note: Graph name would need to be passed separately as it's not in ConstraintContext
+        let graph_name: Option<&str> = None;
+        
         // Execute the constraint
         let result = executor.execute_constraint(
             store,
             self,
             &bindings,
-            None, // TODO: Support graph name from context
+            graph_name,
         )?;
         
         // Convert SPARQL result to constraint evaluation result
@@ -462,47 +506,81 @@ impl SparqlConstraintExecutor {
 
     /// Wrap a query in a GRAPH clause if needed
     fn wrap_query_in_graph(&self, query: &str, graph_name: &str) -> Result<String> {
-        // Simple graph wrapping for now
-        // TODO: Implement more sophisticated query rewriting
+        let query_trimmed = query.trim();
+        let query_upper = query_trimmed.to_uppercase();
 
-        let query_upper = query.trim().to_uppercase();
-
+        // More sophisticated query rewriting
         if query_upper.starts_with("ASK") {
-            // For ASK queries, wrap the WHERE clause
-            if let Some(where_pos) = query_upper.find("WHERE") {
-                let prefix = &query[..where_pos + 5];
-                let where_clause = &query[where_pos + 5..].trim();
+            self.wrap_ask_query_in_graph(query_trimmed, graph_name)
+        } else if query_upper.starts_with("SELECT") {
+            self.wrap_select_query_in_graph(query_trimmed, graph_name)
+        } else if query_upper.starts_with("CONSTRUCT") {
+            self.wrap_construct_query_in_graph(query_trimmed, graph_name)
+        } else {
+            Err(ShaclError::SparqlExecution(
+                "Unsupported query type for graph wrapping".to_string()
+            ))
+        }
+    }
+    
+    /// Wrap ASK query in GRAPH clause
+    fn wrap_ask_query_in_graph(&self, query: &str, graph_name: &str) -> Result<String> {
+        if let Some(where_pos) = query.to_uppercase().find("WHERE") {
+            let prefix = &query[..where_pos + 5];
+            let where_clause = query[where_pos + 5..].trim();
 
-                if where_clause.starts_with('{') && where_clause.ends_with('}') {
-                    let inner = &where_clause[1..where_clause.len() - 1];
-                    return Ok(format!(
-                        "{} {{ GRAPH <{}> {{ {} }} }}",
+            if where_clause.starts_with('{') && where_clause.ends_with('}') {
+                let inner = &where_clause[1..where_clause.len() - 1];
+                return Ok(format!(
+                    "{} {{ GRAPH <{}> {{ {} }} }}",
                         prefix, graph_name, inner
                     ));
                 }
             }
-        } else if query_upper.starts_with("SELECT") {
-            // For SELECT queries, wrap the WHERE clause
-            if let Some(where_pos) = query_upper.find("WHERE") {
-                let prefix = &query[..where_pos + 5];
-                let where_clause = &query[where_pos + 5..].trim();
+        
+        Err(ShaclError::SparqlExecution(
+            "Invalid ASK query structure for graph wrapping".to_string()
+        ))
+    }
+    
+    /// Wrap SELECT query in GRAPH clause
+    fn wrap_select_query_in_graph(&self, query: &str, graph_name: &str) -> Result<String> {
+        if let Some(where_pos) = query.to_uppercase().find("WHERE") {
+            let prefix = &query[..where_pos + 5];
+            let where_clause = query[where_pos + 5..].trim();
 
-                if where_clause.starts_with('{') && where_clause.ends_with('}') {
-                    let inner = &where_clause[1..where_clause.len() - 1];
-                    return Ok(format!(
-                        "{} {{ GRAPH <{}> {{ {} }} }}",
-                        prefix, graph_name, inner
-                    ));
-                }
+            if where_clause.starts_with('{') && where_clause.ends_with('}') {
+                let inner = &where_clause[1..where_clause.len() - 1];
+                return Ok(format!(
+                    "{} {{ GRAPH <{}> {{ {} }} }}",
+                    prefix, graph_name, inner
+                ));
             }
         }
+        
+        Err(ShaclError::SparqlExecution(
+            "Invalid SELECT query structure for graph wrapping".to_string()
+        ))
+    }
+    
+    /// Wrap CONSTRUCT query in GRAPH clause
+    fn wrap_construct_query_in_graph(&self, query: &str, graph_name: &str) -> Result<String> {
+        if let Some(where_pos) = query.to_uppercase().find("WHERE") {
+            let prefix = &query[..where_pos + 5];
+            let where_clause = query[where_pos + 5..].trim();
 
-        // Fallback: return original query if we can't parse it
-        tracing::warn!(
-            "Could not wrap query in GRAPH clause, using original: {}",
-            query
-        );
-        Ok(query.to_string())
+            if where_clause.starts_with('{') && where_clause.ends_with('}') {
+                let inner = &where_clause[1..where_clause.len() - 1];
+                return Ok(format!(
+                    "{} {{ GRAPH <{}> {{ {} }} }}",
+                    prefix, graph_name, inner
+                ));
+            }
+        }
+        
+        Err(ShaclError::SparqlExecution(
+            "Invalid CONSTRUCT query structure for graph wrapping".to_string()
+        ))
     }
 }
 
@@ -559,8 +637,25 @@ fn format_term_for_sparql(term: &Term) -> Result<String> {
         Term::NamedNode(node) => Ok(format!("<{}>", node.as_str())),
         Term::BlankNode(node) => Ok(node.as_str().to_string()),
         Term::Literal(literal) => {
-            // TODO: Proper literal formatting with datatype and language
-            Ok(format!("\"{}\"", literal.as_str()))
+            let value = literal.as_str();
+            let escaped_value = value.replace("\\", "\\\\").replace("\"", "\\\"");
+            
+            // Check for language tag
+            if let Some(language) = literal.language() {
+                Ok(format!("\"{}\"@{}", escaped_value, language))
+            } 
+            // Check for datatype
+            else if let datatype = literal.datatype() {
+                let datatype_iri = datatype.as_str();
+                // Only add datatype if it's not xsd:string (which is the default)
+                if datatype_iri != "http://www.w3.org/2001/XMLSchema#string" {
+                    Ok(format!("\"{}\"^^<{}>", escaped_value, datatype_iri))
+                } else {
+                    Ok(format!("\"{}\"", escaped_value))
+                }
+            } else {
+                Ok(format!("\"{}\"", escaped_value))
+            }
         }
         Term::Variable(var) => Ok(format!("?{}", var.name())),
         Term::QuotedTriple(_) => Err(ShaclError::SparqlExecution(

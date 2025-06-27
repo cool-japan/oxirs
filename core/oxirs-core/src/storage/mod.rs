@@ -7,13 +7,17 @@
 //! - Immutable storage with content-addressable blocks
 //! - Advanced compression (LZ4, ZSTD, custom RDF codecs)
 //! - Storage virtualization with transparent migration
+//! - Multi-Version Concurrency Control (MVCC) for high-concurrency operations
 
 pub mod columnar;
 pub mod compression;
 pub mod immutable;
+pub mod mvcc;
 pub mod temporal;
 pub mod tiered;
 pub mod virtualization;
+
+pub use mvcc::{MvccStore, MvccConfig, TransactionId as MvccTransactionId, IsolationLevel};
 
 use crate::OxirsError;
 use std::path::Path;

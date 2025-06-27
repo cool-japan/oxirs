@@ -8,9 +8,9 @@ use super::{
     ShapeLearningModel, ShapeTrainingData,
 };
 
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
-use rand::Rng;
 
 /// Reinforcement learning agent for validation optimization
 #[derive(Debug)]
@@ -137,7 +137,7 @@ impl ReinforcementLearner {
     /// Create a new reinforcement learner
     pub fn new(config: RLConfig) -> Self {
         let policy = Policy::EpsilonGreedy(config.epsilon);
-        
+
         Self {
             config: config.clone(),
             q_table: HashMap::new(),
@@ -189,9 +189,7 @@ impl ReinforcementLearner {
             Policy::Softmax(temperature) => {
                 self.softmax_action_selection(state, available_actions, *temperature)
             }
-            Policy::UCB(c) => {
-                self.ucb_action_selection(state, available_actions, *c)
-            }
+            Policy::UCB(c) => self.ucb_action_selection(state, available_actions, *c),
         }
     }
 
@@ -209,32 +207,37 @@ impl ReinforcementLearner {
     }
 
     /// Softmax action selection
-    fn softmax_action_selection(&self, state: &State, actions: &[Action], temperature: f64) -> Action {
+    fn softmax_action_selection(
+        &self,
+        state: &State,
+        actions: &[Action],
+        temperature: f64,
+    ) -> Action {
         let mut rng = rand::thread_rng();
-        
+
         // Calculate softmax probabilities
         let q_values: Vec<f64> = actions
             .iter()
             .map(|a| self.get_q_value(state, a) / temperature)
             .collect();
-        
+
         let max_q = q_values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         let exp_values: Vec<f64> = q_values.iter().map(|&q| (q - max_q).exp()).collect();
         let sum_exp: f64 = exp_values.iter().sum();
-        
+
         let probabilities: Vec<f64> = exp_values.iter().map(|&e| e / sum_exp).collect();
-        
+
         // Sample action based on probabilities
         let mut cumsum = 0.0;
         let sample = rng.gen::<f64>();
-        
+
         for (i, &prob) in probabilities.iter().enumerate() {
             cumsum += prob;
             if sample < cumsum {
                 return actions[i].clone();
             }
         }
-        
+
         actions.last().cloned().unwrap_or(Action::EarlyTermination)
     }
 
@@ -247,7 +250,7 @@ impl ReinforcementLearner {
     /// Q-Learning update
     fn q_learning_update(&mut self, experience: &Experience) {
         let current_q = self.get_q_value(&experience.state, &experience.action);
-        
+
         let next_max_q = if experience.done {
             0.0
         } else {
@@ -257,26 +260,26 @@ impl ReinforcementLearner {
                 .map(|a| self.get_q_value(&experience.next_state, a))
                 .fold(f64::NEG_INFINITY, f64::max)
         };
-        
+
         let target = experience.reward + self.config.discount_factor * next_max_q;
         let new_q = current_q + self.config.learning_rate * (target - current_q);
-        
+
         self.update_q_value(experience.state.clone(), experience.action.clone(), new_q);
     }
 
     /// SARSA update
     fn sarsa_update(&mut self, experience: &Experience, next_action: &Action) {
         let current_q = self.get_q_value(&experience.state, &experience.action);
-        
+
         let next_q = if experience.done {
             0.0
         } else {
             self.get_q_value(&experience.next_state, next_action)
         };
-        
+
         let target = experience.reward + self.config.discount_factor * next_q;
         let new_q = current_q + self.config.learning_rate * (target - current_q);
-        
+
         self.update_q_value(experience.state.clone(), experience.action.clone(), new_q);
     }
 
@@ -296,30 +299,34 @@ impl ReinforcementLearner {
     }
 
     /// Convert graph data to state
-    fn graph_to_state(&self, graph_data: &GraphData, progress: Option<&ValidationProgress>) -> State {
+    fn graph_to_state(
+        &self,
+        graph_data: &GraphData,
+        progress: Option<&ValidationProgress>,
+    ) -> State {
         let num_nodes = graph_data.nodes.len();
         let num_edges = graph_data.edges.len();
-        
+
         let density = if num_nodes > 1 {
             2.0 * num_edges as f64 / (num_nodes * (num_nodes - 1)) as f64
         } else {
             0.0
         };
-        
+
         let density_class = match density {
             d if d < 0.1 => 0,
             d if d < 0.3 => 1,
             d if d < 0.5 => 2,
             _ => 3,
         };
-        
+
         let complexity_class = match num_nodes + num_edges {
             n if n < 100 => 0,
             n if n < 1000 => 1,
             n if n < 10000 => 2,
             _ => 3,
         };
-        
+
         State {
             graph_features: StateFeatures {
                 num_nodes: (num_nodes / 100) * 100, // Discretize
@@ -342,20 +349,20 @@ impl ReinforcementLearner {
     /// Calculate reward for validation action
     fn calculate_reward(&self, action: &Action, validation_result: &ValidationResult) -> f64 {
         let mut reward = 0.0;
-        
+
         // Base reward for successful validation
         if validation_result.success {
             reward += 1.0;
         }
-        
+
         // Penalty for time taken
         reward -= validation_result.time_taken.as_secs_f64() * 0.1;
-        
+
         // Bonus for finding violations early
         if validation_result.violations_found > 0 {
             reward += 2.0 * (1.0 / validation_result.constraints_checked as f64);
         }
-        
+
         // Action-specific rewards
         match action {
             Action::EnableCaching => {
@@ -376,7 +383,7 @@ impl ReinforcementLearner {
             }
             _ => {}
         }
-        
+
         reward
     }
 
@@ -387,24 +394,25 @@ impl ReinforcementLearner {
         let mut state = self.graph_to_state(graph_data, None);
         let mut steps = 0;
         let max_steps = 100;
-        
+
         while steps < max_steps {
             let available_actions = self.get_available_actions(&state);
             let action = self.select_action(&state, &available_actions);
-            
+
             // Simulate action execution
             let validation_result = self.simulate_action(&action, graph_data, &state);
             let reward = self.calculate_reward(&action, &validation_result);
-            
+
             let next_progress = ValidationProgress {
                 constraints_validated: state.validation_progress.constraints_validated + 1,
-                violations_found: state.validation_progress.violations_found + validation_result.violations_found,
+                violations_found: state.validation_progress.violations_found
+                    + validation_result.violations_found,
                 coverage_percentage: ((steps + 1) * 100 / max_steps) as u8,
             };
-            
+
             let next_state = self.graph_to_state(graph_data, Some(&next_progress));
             let done = validation_result.complete || matches!(action, Action::EarlyTermination);
-            
+
             let experience = Experience {
                 state: state.clone(),
                 action: action.clone(),
@@ -412,29 +420,29 @@ impl ReinforcementLearner {
                 next_state: next_state.clone(),
                 done,
             };
-            
+
             experiences.push(experience.clone());
             self.replay_buffer.add(experience);
-            
+
             total_reward += reward;
             state = next_state;
             steps += 1;
-            
+
             if done {
                 break;
             }
-            
+
             // Update Q-values
             if steps % self.config.update_frequency == 0 {
                 self.update_from_replay_buffer();
             }
         }
-        
+
         // Decay epsilon
         if let Policy::EpsilonGreedy(ref mut epsilon) = self.policy {
             *epsilon = (*epsilon * self.config.epsilon_decay).max(self.config.epsilon_min);
         }
-        
+
         Episode {
             experiences,
             total_reward,
@@ -445,7 +453,7 @@ impl ReinforcementLearner {
     /// Update from replay buffer
     fn update_from_replay_buffer(&mut self) {
         let batch = self.replay_buffer.sample(self.config.batch_size);
-        
+
         for experience in batch {
             match self.config.algorithm {
                 RLAlgorithm::QLearning => self.q_learning_update(&experience),
@@ -460,17 +468,34 @@ impl ReinforcementLearner {
     }
 
     /// Simulate action execution
-    fn simulate_action(&self, action: &Action, _graph_data: &GraphData, _state: &State) -> ValidationResult {
+    fn simulate_action(
+        &self,
+        action: &Action,
+        _graph_data: &GraphData,
+        _state: &State,
+    ) -> ValidationResult {
         // Simplified simulation - in real implementation would execute actual validation
         let mut rng = rand::thread_rng();
-        
+
         ValidationResult {
             success: rng.gen_bool(0.9),
-            violations_found: if rng.gen_bool(0.3) { rng.gen_range(1..5) } else { 0 },
+            violations_found: if rng.gen_bool(0.3) {
+                rng.gen_range(1..5)
+            } else {
+                0
+            },
             constraints_checked: 1,
             time_taken: std::time::Duration::from_millis(rng.gen_range(10..100)),
-            cache_hits: if matches!(action, Action::EnableCaching) { rng.gen_range(0..10) } else { 0 },
-            speedup_factor: if matches!(action, Action::ParallelValidation(_)) { rng.gen_range(1.5..3.0) } else { 1.0 },
+            cache_hits: if matches!(action, Action::EnableCaching) {
+                rng.gen_range(0..10)
+            } else {
+                0
+            },
+            speedup_factor: if matches!(action, Action::ParallelValidation(_)) {
+                rng.gen_range(1.5..3.0)
+            } else {
+                1.0
+            },
             complete: matches!(action, Action::EarlyTermination),
         }
     }
@@ -480,17 +505,23 @@ impl ReinforcementLearner {
         // Analyze Q-table to extract optimal strategy
         let mut constraint_order = Vec::new();
         let mut optimization_settings = OptimizationSettings::default();
-        
+
         // Find most valuable constraint validation order
         let constraint_actions = vec![
-            "minCount", "maxCount", "datatype", "pattern", 
-            "minLength", "maxLength", "class", "nodeKind"
+            "minCount",
+            "maxCount",
+            "datatype",
+            "pattern",
+            "minLength",
+            "maxLength",
+            "class",
+            "nodeKind",
         ];
-        
+
         for constraint in constraint_actions {
             constraint_order.push(constraint.to_string());
         }
-        
+
         // Check if caching is beneficial
         let cache_state = State {
             graph_features: StateFeatures {
@@ -509,12 +540,12 @@ impl ReinforcementLearner {
                 time_elapsed_class: 1,
             },
         };
-        
+
         let enable_cache_value = self.get_q_value(&cache_state, &Action::EnableCaching);
         if enable_cache_value > 0.5 {
             optimization_settings.enable_caching = true;
         }
-        
+
         ValidationStrategy {
             constraint_order,
             optimization_settings,
@@ -526,10 +557,10 @@ impl ReinforcementLearner {
 impl ShapeLearningModel for ReinforcementLearner {
     fn train(&mut self, data: &ShapeTrainingData) -> Result<ModelMetrics, ModelError> {
         tracing::info!("Training RL agent on {} graphs", data.graph_features.len());
-        
+
         let start_time = std::time::Instant::now();
         let num_episodes = 100;
-        
+
         for episode_idx in 0..num_episodes {
             // Sample a graph from training data
             let graph_idx = episode_idx % data.graph_features.len();
@@ -538,22 +569,24 @@ impl ShapeLearningModel for ReinforcementLearner {
                 edges: data.graph_features[graph_idx].edge_features.clone(),
                 global_features: data.graph_features[graph_idx].global_features.clone(),
             };
-            
+
             let episode = self.run_episode(&graph_data);
             self.episode_history.push(episode.clone());
-            
+
             if episode_idx % 10 == 0 {
-                let avg_reward = self.episode_history
+                let avg_reward = self
+                    .episode_history
                     .iter()
                     .rev()
                     .take(10)
                     .map(|e| e.total_reward)
-                    .sum::<f64>() / 10.0;
-                    
+                    .sum::<f64>()
+                    / 10.0;
+
                 tracing::debug!("Episode {}: avg reward = {:.2}", episode_idx, avg_reward);
             }
         }
-        
+
         Ok(ModelMetrics {
             accuracy: 0.0, // Not applicable
             precision: 0.0,
@@ -565,13 +598,13 @@ impl ShapeLearningModel for ReinforcementLearner {
             training_time: start_time.elapsed(),
         })
     }
-    
+
     fn predict(&self, graph_data: &GraphData) -> Result<Vec<LearnedShape>, ModelError> {
         let strategy = self.policy_to_strategy();
-        
+
         // Convert strategy to learned constraints
         let mut constraints = Vec::new();
-        
+
         for (i, constraint_type) in strategy.constraint_order.iter().enumerate() {
             constraints.push(LearnedConstraint {
                 constraint_type: constraint_type.clone(),
@@ -583,17 +616,17 @@ impl ShapeLearningModel for ReinforcementLearner {
                 support: 0.8,
             });
         }
-        
+
         let shape = LearnedShape {
             shape_id: "rl_optimized_shape".to_string(),
             constraints,
             confidence: 0.85,
             feature_importance: HashMap::new(),
         };
-        
+
         Ok(vec![shape])
     }
-    
+
     fn evaluate(&self, _test_data: &ShapeTrainingData) -> Result<ModelMetrics, ModelError> {
         Ok(ModelMetrics {
             accuracy: 0.0,
@@ -606,20 +639,20 @@ impl ShapeLearningModel for ReinforcementLearner {
             training_time: std::time::Duration::default(),
         })
     }
-    
+
     fn get_params(&self) -> ModelParams {
         ModelParams::default()
     }
-    
+
     fn set_params(&mut self, _params: ModelParams) -> Result<(), ModelError> {
         Ok(())
     }
-    
+
     fn save(&self, path: &str) -> Result<(), ModelError> {
         std::fs::create_dir_all(path)?;
         Ok(())
     }
-    
+
     fn load(&mut self, _path: &str) -> Result<(), ModelError> {
         Ok(())
     }
@@ -632,18 +665,18 @@ impl ReplayBuffer {
             max_size,
         }
     }
-    
+
     fn add(&mut self, experience: Experience) {
         if self.buffer.len() >= self.max_size {
             self.buffer.pop_front();
         }
         self.buffer.push_back(experience);
     }
-    
+
     fn sample(&self, batch_size: usize) -> Vec<Experience> {
         let mut rng = rand::thread_rng();
         let sample_size = batch_size.min(self.buffer.len());
-        
+
         (0..sample_size)
             .map(|_| {
                 let idx = rng.gen_range(0..self.buffer.len());
@@ -711,7 +744,7 @@ impl Default for RLConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_rl_learner_creation() {
         let config = RLConfig::default();

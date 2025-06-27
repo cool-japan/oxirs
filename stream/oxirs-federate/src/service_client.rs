@@ -5,7 +5,7 @@
 
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use backoff::{ExponentialBackoff, future::retry};
+use backoff::{ExponentialBackoff, backoff::Backoff, retry};
 use bytes::Bytes;
 use governor::{Quota, RateLimiter, state::{InMemoryState, NotKeyed}, clock::DefaultClock};
 use reqwest::{

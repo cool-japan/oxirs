@@ -10,7 +10,7 @@ use reqwest::{
     Client,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::time::timeout;
@@ -20,7 +20,7 @@ use crate::{
     ExecutionPlan, ExecutionStep, FederatedService, FederationError, ServiceRegistry, StepType,
     service_executor::{ServiceExecutor, JoinExecutor, ServiceExecutorConfig},
     service_optimizer::{OptimizedServiceClause, ServiceExecutionStrategy},
-    cache::FederationCache,
+    cache::{FederationCache, CacheConfig},
 };
 
 /// Federated query executor
@@ -299,7 +299,7 @@ impl FederatedExecutor {
         Ok(QueryResultData::GraphQL(graphql_response))
     }
 
-    /// Execute a join operation
+    /// Execute a join operation with enhanced parallel processing
     async fn execute_join(
         &self,
         step: &ExecutionStep,
@@ -321,18 +321,8 @@ impl FederatedExecutor {
             return Err(anyhow!("Join requires at least 2 input results"));
         }
 
-        // Perform join operation (simplified)
-        match (&input_results[0], &input_results[1]) {
-            (QueryResultData::Sparql(left), QueryResultData::Sparql(right)) => {
-                let joined = self.join_sparql_results(left, right)?;
-                Ok(QueryResultData::Sparql(joined))
-            }
-            (QueryResultData::GraphQL(left), QueryResultData::GraphQL(right)) => {
-                let joined = self.join_graphql_results(left, right)?;
-                Ok(QueryResultData::GraphQL(joined))
-            }
-            _ => Err(anyhow!("Cannot join results of different types")),
-        }
+        // Use the advanced join executor for optimized joins
+        self.join_executor.execute_advanced_join(&input_results).await
     }
 
     /// Execute a union operation

@@ -37,7 +37,7 @@ impl TransformerType {
             TransformerType::BioBERT => "dmis-lab/biobert-v1.1",
             TransformerType::CodeBERT => "microsoft/codebert-base",
             TransformerType::LegalBERT => "nlpaueb/legal-bert-base-uncased",
-            TransformerType::mBERT => "bert-base-multilingual-cased",
+            TransformerType::MBert => "bert-base-multilingual-cased",
             TransformerType::XLMR => "xlm-roberta-base",
         }
     }
@@ -564,6 +564,7 @@ impl EmbeddingModel for TransformerEmbedding {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::NamedNode;
 
     #[tokio::test]
     async fn test_transformer_embedding_basic() {

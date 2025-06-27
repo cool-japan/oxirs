@@ -57,6 +57,9 @@ pub enum FusekiError {
 
     #[error("Request timeout")]
     Timeout,
+    
+    #[error("Timeout: {0}")]
+    TimeoutWithMessage(String),
 
     #[error("Service unavailable: {message}")]
     ServiceUnavailable { message: String },

@@ -12,6 +12,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
+use chrono;
 
 use crate::types::{Schema, GraphQLType, ObjectType, FieldType};
 use crate::ast::{Document, OperationDefinition, OperationType, SelectionSet};
@@ -30,6 +31,29 @@ pub struct RemoteEndpoint {
     pub namespace: Option<String>,
     /// Timeout in seconds
     pub timeout_secs: u64,
+    /// Maximum retry attempts for failed requests
+    pub max_retries: u32,
+    /// Retry backoff strategy
+    pub retry_strategy: RetryStrategy,
+    /// Health check endpoint (optional)
+    pub health_check_url: Option<String>,
+    /// Service priority (higher priority services are preferred)
+    pub priority: i32,
+}
+
+/// Retry strategy for failed requests
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum RetryStrategy {
+    /// No retries
+    None,
+    /// Fixed delay between retries
+    FixedDelay { delay_ms: u64 },
+    /// Exponential backoff with jitter
+    ExponentialBackoff { 
+        initial_delay_ms: u64, 
+        max_delay_ms: u64, 
+        multiplier: f64 
+    },
 }
 
 /// Federation configuration
@@ -97,18 +121,131 @@ impl SchemaStitcher {
         }
     }
 
-    /// Introspect a remote GraphQL endpoint
+    /// Introspect a remote GraphQL endpoint with retry logic
     pub async fn introspect_remote(&self, endpoint: &RemoteEndpoint) -> Result<Schema> {
         // Check cache first
         {
             let cache = self.remote_schemas.read().await;
             if let Some(cached) = cache.get(&endpoint.id) {
                 if !cached.is_expired() {
+                    tracing::debug!("Using cached schema for endpoint: {}", endpoint.id);
                     return Ok(cached.schema.clone());
                 }
             }
         }
 
+        // Check endpoint health before attempting introspection
+        if let Some(health_url) = &endpoint.health_check_url {
+            self.check_endpoint_health(health_url, endpoint).await?;
+        }
+
+        // Perform introspection with retry logic
+        let schema = self.introspect_with_retry(endpoint).await?;
+
+        // Cache the schema
+        {
+            let mut cache = self.remote_schemas.write().await;
+            cache.insert(
+                endpoint.id.clone(),
+                CachedSchema {
+                    schema: schema.clone(),
+                    cached_at: std::time::Instant::now(),
+                    ttl: std::time::Duration::from_secs(3600), // 1 hour cache
+                },
+            );
+        }
+
+        tracing::info!("Successfully introspected and cached schema for endpoint: {}", endpoint.id);
+        Ok(schema)
+    }
+    
+    /// Check endpoint health
+    async fn check_endpoint_health(&self, health_url: &str, endpoint: &RemoteEndpoint) -> Result<()> {
+        let response = self.http_client
+            .get(health_url)
+            .timeout(std::time::Duration::from_secs(5))
+            .send()
+            .await
+            .context("Health check request failed")?;
+            
+        if !response.status().is_success() {
+            return Err(anyhow::anyhow!(
+                "Endpoint {} health check failed with status: {}",
+                endpoint.id,
+                response.status()
+            ));
+        }
+        
+        tracing::debug!("Health check passed for endpoint: {}", endpoint.id);
+        Ok(())
+    }
+    
+    /// Perform introspection with retry logic
+    async fn introspect_with_retry(&self, endpoint: &RemoteEndpoint) -> Result<Schema> {
+        let mut last_error = None;
+        
+        for attempt in 0..=endpoint.max_retries {
+            if attempt > 0 {
+                // Apply retry strategy
+                let delay = self.calculate_retry_delay(&endpoint.retry_strategy, attempt);
+                tracing::warn!(
+                    "Retrying introspection for endpoint {} (attempt {}/{})",
+                    endpoint.id, attempt + 1, endpoint.max_retries + 1
+                );
+                tokio::time::sleep(delay).await;
+            }
+            
+            match self.perform_introspection(endpoint).await {
+                Ok(schema) => {
+                    if attempt > 0 {
+                        tracing::info!(
+                            "Introspection succeeded for endpoint {} after {} retries",
+                            endpoint.id, attempt
+                        );
+                    }
+                    return Ok(schema);
+                }
+                Err(e) => {
+                    last_error = Some(e);
+                    tracing::warn!(
+                        "Introspection attempt {} failed for endpoint {}: {}",
+                        attempt + 1, endpoint.id, last_error.as_ref().unwrap()
+                    );
+                }
+            }
+        }
+        
+        Err(last_error.unwrap_or_else(|| {
+            anyhow::anyhow!("All introspection attempts failed for endpoint: {}", endpoint.id)
+        }))
+    }
+    
+    /// Calculate retry delay based on strategy
+    fn calculate_retry_delay(&self, strategy: &RetryStrategy, attempt: u32) -> std::time::Duration {
+        match strategy {
+            RetryStrategy::None => std::time::Duration::from_millis(0),
+            RetryStrategy::FixedDelay { delay_ms } => {
+                std::time::Duration::from_millis(*delay_ms)
+            }
+            RetryStrategy::ExponentialBackoff { 
+                initial_delay_ms, 
+                max_delay_ms, 
+                multiplier 
+            } => {
+                let delay = (*initial_delay_ms as f64) * multiplier.powi(attempt as i32);
+                let delay = delay.min(*max_delay_ms as f64);
+                
+                // Add jitter (±25%)
+                let jitter = fastrand::f64() * 0.5 - 0.25; // -25% to +25%
+                let final_delay = delay * (1.0 + jitter);
+                
+                std::time::Duration::from_millis(final_delay.max(0.0) as u64)
+            }
+        }
+    }
+    
+    /// Perform the actual introspection request
+    async fn perform_introspection(&self, endpoint: &RemoteEndpoint) -> Result<Schema> {
         // Build introspection query
         let introspection_query = IntrospectionQuery::full_query();
         
@@ -132,9 +269,13 @@ impl SchemaStitcher {
             .context("Failed to send introspection request")?;
 
         if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await
+                .unwrap_or_else(|_| "Unknown error".to_string());
             return Err(anyhow::anyhow!(
-                "Remote introspection failed with status: {}",
-                response.status()
+                "Remote introspection failed with status {}: {}",
+                status,
+                error_text
             ));
         }
 
@@ -143,23 +284,22 @@ impl SchemaStitcher {
             .await
             .context("Failed to parse introspection response")?;
 
-        // Parse introspection result into Schema
-        let schema = self.parse_introspection_result(introspection_result, endpoint)?;
-
-        // Cache the schema
-        {
-            let mut cache = self.remote_schemas.write().await;
-            cache.insert(
-                endpoint.id.clone(),
-                CachedSchema {
-                    schema: schema.clone(),
-                    cached_at: std::time::Instant::now(),
-                    ttl: std::time::Duration::from_secs(3600), // 1 hour cache
-                },
-            );
+        // Check for GraphQL errors in response
+        if let Some(errors) = introspection_result.get("errors").and_then(|e| e.as_array()) {
+            if !errors.is_empty() {
+                let error_messages: Vec<String> = errors.iter()
+                    .filter_map(|e| e.get("message").and_then(|m| m.as_str()))
+                    .map(|s| s.to_string())
+                    .collect();
+                return Err(anyhow::anyhow!(
+                    "GraphQL errors in introspection response: {}",
+                    error_messages.join(", ")
+                ));
+            }
         }
 
-        Ok(schema)
+        // Parse introspection result into Schema
+        self.parse_introspection_result(introspection_result, endpoint)
     }
 
     /// Parse introspection result into a Schema
@@ -627,10 +767,173 @@ impl SchemaStitcher {
                 conflicting_services
             );
             
-            // Strategy: Keep local type, rename remote types with service prefix
-            // TODO: Implement more sophisticated conflict resolution strategies
+            // Strategy 1: Keep local type, rename remote types with service prefix
+            if let Some(local_type) = schema.types.get(&type_name).cloned() {
+                // Rename conflicting remote types
+                for service_id in &conflicting_services {
+                    let namespaced_name = format!("{}_{}", service_id, type_name);
+                    
+                    // Find the conflicting type and rename it
+                    if let Some(conflicting_type) = schema.types.remove(&type_name) {
+                        let renamed_type = self.rename_type_references(conflicting_type, &type_name, &namespaced_name)?;
+                        schema.types.insert(namespaced_name.clone(), renamed_type);
+                    }
+                }
+                
+                // Keep the local type with original name
+                schema.types.insert(type_name, local_type);
+            } else {
+                // Strategy 2: No local type exists, use first service's type and rename others
+                if let Some(primary_service) = conflicting_services.first() {
+                    for (i, service_id) in conflicting_services.iter().enumerate() {
+                        if i == 0 {
+                            // Keep first service's type with original name
+                            continue;
+                        }
+                        
+                        let namespaced_name = format!("{}_{}", service_id, type_name);
+                        if let Some(conflicting_type) = schema.types.remove(&type_name) {
+                            let renamed_type = self.rename_type_references(conflicting_type, &type_name, &namespaced_name)?;
+                            schema.types.insert(namespaced_name, renamed_type);
+                        }
+                    }
+                }
+            }
         }
         Ok(())
+    }
+    
+    /// Rename type references within a GraphQL type
+    fn rename_type_references(
+        &self,
+        gql_type: GraphQLType,
+        old_name: &str,
+        new_name: &str,
+    ) -> Result<GraphQLType> {
+        match gql_type {
+            GraphQLType::Object(mut obj_type) => {
+                // Update type name if it matches
+                if obj_type.name == old_name {
+                    obj_type.name = new_name.to_string();
+                }
+                
+                // Update field type references
+                for field in obj_type.fields.values_mut() {
+                    field.field_type = self.rename_type_in_field_type(field.field_type.clone(), old_name, new_name)?;
+                    
+                    // Update argument type references
+                    for arg in field.arguments.values_mut() {
+                        arg.arg_type = self.rename_type_in_field_type(arg.arg_type.clone(), old_name, new_name)?;
+                    }
+                }
+                
+                // Update interface references
+                obj_type.interfaces = obj_type.interfaces.iter()
+                    .map(|interface| {
+                        if interface == old_name {
+                            new_name.to_string()
+                        } else {
+                            interface.clone()
+                        }
+                    })
+                    .collect();
+                
+                Ok(GraphQLType::Object(obj_type))
+            }
+            GraphQLType::Interface(mut interface_type) => {
+                if interface_type.name == old_name {
+                    interface_type.name = new_name.to_string();
+                }
+                
+                // Update field type references
+                for field in interface_type.fields.values_mut() {
+                    field.field_type = self.rename_type_in_field_type(field.field_type.clone(), old_name, new_name)?;
+                }
+                
+                Ok(GraphQLType::Interface(interface_type))
+            }
+            GraphQLType::Union(mut union_type) => {
+                if union_type.name == old_name {
+                    union_type.name = new_name.to_string();
+                }
+                
+                // Update possible type references
+                union_type.possible_types = union_type.possible_types.iter()
+                    .map(|type_name| {
+                        if type_name == old_name {
+                            new_name.to_string()
+                        } else {
+                            type_name.clone()
+                        }
+                    })
+                    .collect();
+                
+                Ok(GraphQLType::Union(union_type))
+            }
+            GraphQLType::Enum(mut enum_type) => {
+                if enum_type.name == old_name {
+                    enum_type.name = new_name.to_string();
+                }
+                Ok(GraphQLType::Enum(enum_type))
+            }
+            GraphQLType::InputObject(mut input_type) => {
+                if input_type.name == old_name {
+                    input_type.name = new_name.to_string();
+                }
+                
+                // Update input field type references
+                for field in input_type.fields.values_mut() {
+                    field.field_type = self.rename_type_in_field_type(field.field_type.clone(), old_name, new_name)?;
+                }
+                
+                Ok(GraphQLType::InputObject(input_type))
+            }
+            GraphQLType::Scalar(mut scalar_type) => {
+                if scalar_type.name == old_name {
+                    scalar_type.name = new_name.to_string();
+                }
+                Ok(GraphQLType::Scalar(scalar_type))
+            }
+            other => Ok(other), // List, NonNull types handled recursively
+        }
+    }
+    
+    /// Rename type references within a field type
+    fn rename_type_in_field_type(
+        &self,
+        field_type: GraphQLType,
+        old_name: &str,
+        new_name: &str,
+    ) -> Result<GraphQLType> {
+        match field_type {
+            GraphQLType::Object(ref obj) if obj.name == old_name => {
+                Ok(GraphQLType::Object(ObjectType::new(new_name.to_string())))
+            }
+            GraphQLType::Interface(ref interface) if interface.name == old_name => {
+                Ok(GraphQLType::Interface(crate::types::InterfaceType::new(new_name.to_string())))
+            }
+            GraphQLType::Union(ref union) if union.name == old_name => {
+                Ok(GraphQLType::Union(crate::types::UnionType::new(new_name.to_string())))
+            }
+            GraphQLType::Enum(ref enum_type) if enum_type.name == old_name => {
+                Ok(GraphQLType::Enum(crate::types::EnumType::new(new_name.to_string())))
+            }
+            GraphQLType::InputObject(ref input) if input.name == old_name => {
+                Ok(GraphQLType::InputObject(crate::types::InputObjectType::new(new_name.to_string())))
+            }
+            GraphQLType::Scalar(ref scalar) if scalar.name == old_name => {
+                Ok(GraphQLType::Scalar(crate::types::ScalarType::new(new_name.to_string())))
+            }
+            GraphQLType::List(inner) => {
+                let renamed_inner = self.rename_type_in_field_type(*inner, old_name, new_name)?;
+                Ok(GraphQLType::List(Box::new(renamed_inner)))
+            }
+            GraphQLType::NonNull(inner) => {
+                let renamed_inner = self.rename_type_in_field_type(*inner, old_name, new_name)?;
+                Ok(GraphQLType::NonNull(Box::new(renamed_inner)))
+            }
+            other => Ok(other),
+        }
     }
 }
 
@@ -660,10 +963,10 @@ impl QueryPlanner {
                         self.plan_selection_set(&operation.selection_set, &mut plan, 0).await?;
                     }
                     OperationType::Mutation => {
-                        // TODO: Handle mutations
+                        self.plan_mutation(&operation.selection_set, &mut plan).await?;
                     }
                     OperationType::Subscription => {
-                        // TODO: Handle subscriptions
+                        self.plan_subscription(&operation.selection_set, &mut plan).await?;
                     }
                 }
             }
@@ -696,13 +999,40 @@ impl QueryPlanner {
                     Box::pin(self.plan_selection_set(&fragment.selection_set, plan, depth + 1)).await?;
                 }
                 crate::ast::Selection::FragmentSpread(spread) => {
-                    // Handle fragment spreads (requires fragment definition lookup)
-                    tracing::warn!("Fragment spread '{}' not fully implemented", spread.fragment_name);
+                    // Handle fragment spreads by resolving fragment definition
+                    if let Some(fragment_def) = self.find_fragment_definition(&spread.fragment_name, depth).await? {
+                        Box::pin(self.plan_selection_set(&fragment_def.selection_set, plan, depth + 1)).await?;
+                    } else {
+                        tracing::warn!("Fragment definition not found: {}", spread.fragment_name);
+                    }
                 }
             }
         }
         
         Ok(())
+    }
+    
+    /// Find fragment definition in the document or remote schemas
+    async fn find_fragment_definition(
+        &self,
+        fragment_name: &str,
+        _depth: usize,
+    ) -> Result<Option<crate::ast::FragmentDefinition>> {
+        // In a complete implementation, this would:
+        // 1. Look up fragment definitions in the current document
+        // 2. Query remote schemas for fragment definitions if not found locally
+        // 3. Cache fragment definitions for performance
+        
+        // For now, we'll create a stub implementation
+        // TODO: Implement proper fragment definition lookup
+        tracing::debug!("Looking up fragment definition: {}", fragment_name);
+        
+        // Return None for now - fragment not found
+        // In production, this would search through:
+        // - Local document fragment definitions
+        // - Cached remote fragment definitions
+        // - Query remote services for fragment definitions
+        Ok(None)
     }
     
     /// Plan execution for a single field selection
@@ -1750,32 +2080,288 @@ impl FederationManager {
         Ok(substituted)
     }
     
-    /// Merge results from multiple query steps
+    /// Merge results from multiple query steps with advanced cross-service coordination
     fn merge_step_results(
         &self,
         plan: &QueryPlan,
         results: &HashMap<String, serde_json::Value>,
     ) -> Result<serde_json::Value> {
         let mut merged = serde_json::Map::new();
+        let mut cross_service_joins = HashMap::new();
         
-        // Simple merging strategy - combine all results at top level
+        // Phase 1: Collect all results and identify cross-service joins
         for step in &plan.steps {
             if let Some(result) = results.get(&step.id) {
                 if let Some(obj) = result.as_object() {
+                    // Check for variables that might join with other services
+                    let join_candidates = self.identify_join_candidates(step, obj);
+                    
                     for (key, value) in obj {
-                        // Handle namespace conflicts by prefixing with service ID
                         let final_key = if step.service_id == "local" {
                             key.clone()
                         } else {
                             format!("{}_{}", step.service_id, key)
                         };
+                        
+                        // Store potential joins
+                        if join_candidates.contains(key) {
+                            cross_service_joins.entry(key.clone()).or_insert_with(Vec::new)
+                                .push((step.service_id.clone(), value.clone()));
+                        }
+                        
                         merged.insert(final_key, value.clone());
                     }
                 }
             }
         }
         
+        // Phase 2: Resolve cross-service joins
+        self.resolve_cross_service_joins(&mut merged, &cross_service_joins)?;
+        
+        // Phase 3: Apply result transformation and filtering
+        self.apply_result_transformations(&mut merged, plan)?;
+        
         Ok(serde_json::Value::Object(merged))
+    }
+    
+    /// Identify fields that might join with other services
+    fn identify_join_candidates(&self, step: &QueryStep, result: &serde_json::Map<String, serde_json::Value>) -> HashSet<String> {
+        let mut candidates = HashSet::new();
+        
+        // Look for fields that might be foreign keys or references
+        for (key, value) in result {
+            // Heuristics for identifying join candidates:
+            // 1. Fields ending with "Id" or "_id"
+            // 2. Fields containing URLs or IRIs
+            // 3. Fields with specific patterns
+            
+            if key.ends_with("Id") || key.ends_with("_id") || key.ends_with("URI") {
+                candidates.insert(key.clone());
+            }
+            
+            // Check if value looks like an IRI or reference
+            if let Some(str_value) = value.as_str() {
+                if str_value.starts_with("http://") || str_value.starts_with("https://") 
+                   || str_value.starts_with("urn:") {
+                    candidates.insert(key.clone());
+                }
+            }
+        }
+        
+        candidates
+    }
+    
+    /// Resolve cross-service joins by combining related data
+    fn resolve_cross_service_joins(
+        &self,
+        merged: &mut serde_json::Map<String, serde_json::Value>,
+        joins: &HashMap<String, Vec<(String, serde_json::Value)>>,
+    ) -> Result<()> {
+        for (join_field, service_values) in joins {
+            if service_values.len() > 1 {
+                // Multiple services have data for this field - resolve the join
+                let resolved_value = self.perform_cross_service_join(join_field, service_values)?;
+                merged.insert(format!("{}_resolved", join_field), resolved_value);
+            }
+        }
+        Ok(())
+    }
+    
+    /// Perform actual cross-service join resolution
+    fn perform_cross_service_join(
+        &self,
+        _join_field: &str,
+        service_values: &[(String, serde_json::Value)],
+    ) -> Result<serde_json::Value> {
+        // Strategy 1: Array of all values from different services
+        let combined_values: Vec<serde_json::Value> = service_values.iter()
+            .map(|(service_id, value)| {
+                serde_json::json!({
+                    "service": service_id,
+                    "value": value
+                })
+            })
+            .collect();
+        
+        // Strategy 2: Could implement more sophisticated join logic here
+        // - Merge objects by matching keys
+        // - Resolve conflicts based on service priority
+        // - Apply business logic for join resolution
+        
+        Ok(serde_json::Value::Array(combined_values))
+    }
+    
+    /// Apply result transformations and filtering
+    fn apply_result_transformations(
+        &self,
+        merged: &mut serde_json::Map<String, serde_json::Value>,
+        plan: &QueryPlan,
+    ) -> Result<()> {
+        // Apply service-specific transformations
+        for step in &plan.steps {
+            if step.service_id != "local" {
+                self.apply_service_transformations(merged, step)?;
+            }
+        }
+        
+        // Apply global result filtering
+        self.apply_global_filtering(merged)?;
+        
+        Ok(())
+    }
+    
+    /// Apply transformations specific to a service
+    fn apply_service_transformations(
+        &self,
+        merged: &mut serde_json::Map<String, serde_json::Value>,
+        step: &QueryStep,
+    ) -> Result<()> {
+        // Service-specific transformation logic
+        // This could include:
+        // - Data format normalization
+        // - Field renaming based on service conventions
+        // - Value transformation (e.g., date formats)
+        
+        let service_prefix = format!("{}_", step.service_id);
+        let mut transformations = Vec::new();
+        
+        for (key, value) in merged.iter() {
+            if key.starts_with(&service_prefix) {
+                // Apply service-specific transformations
+                let transformed_value = self.transform_service_value(&step.service_id, value)?;
+                if transformed_value != *value {
+                    transformations.push((key.clone(), transformed_value));
+                }
+            }
+        }
+        
+        // Apply transformations
+        for (key, transformed_value) in transformations {
+            merged.insert(key, transformed_value);
+        }
+        
+        Ok(())
+    }
+    
+    /// Transform a value based on service-specific rules
+    fn transform_service_value(
+        &self,
+        service_id: &str,
+        value: &serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        // Apply service-specific transformations
+        match service_id {
+            // Example transformations for different services
+            "legacy_service" => {
+                // Convert legacy date formats, etc.
+                if let Some(str_val) = value.as_str() {
+                    if str_val.contains("/Date(") {
+                        // Convert .NET date format to ISO 8601
+                        return Ok(serde_json::Value::String(
+                            self.convert_dotnet_date(str_val)?
+                        ));
+                    }
+                }
+            }
+            "external_api" => {
+                // Normalize external API responses
+                if let Some(obj) = value.as_object() {
+                    let mut normalized = obj.clone();
+                    // Convert snake_case to camelCase for consistency
+                    self.normalize_field_names(&mut normalized);
+                    return Ok(serde_json::Value::Object(normalized));
+                }
+            }
+            _ => {
+                // Default: no transformation
+            }
+        }
+        
+        Ok(value.clone())
+    }
+    
+    /// Convert .NET date format to ISO 8601
+    fn convert_dotnet_date(&self, dotnet_date: &str) -> Result<String> {
+        // Simple conversion - in production would use proper date parsing
+        if let Some(start) = dotnet_date.find("/Date(") {
+            if let Some(end) = dotnet_date.find(")/") {
+                let timestamp_str = &dotnet_date[start + 6..end];
+                if let Ok(timestamp) = timestamp_str.parse::<i64>() {
+                    let datetime = chrono::DateTime::from_timestamp(timestamp / 1000, 0)
+                        .unwrap_or_else(|| chrono::Utc::now());
+                    return Ok(datetime.to_rfc3339());
+                }
+            }
+        }
+        Ok(dotnet_date.to_string())
+    }
+    
+    /// Normalize field names from snake_case to camelCase
+    fn normalize_field_names(&self, obj: &mut serde_json::Map<String, serde_json::Value>) {
+        let mut transformations = Vec::new();
+        
+        for (key, _) in obj.iter() {
+            if key.contains('_') {
+                let camel_case = self.to_camel_case(key);
+                if camel_case != *key {
+                    transformations.push((key.clone(), camel_case));
+                }
+            }
+        }
+        
+        for (old_key, new_key) in transformations {
+            if let Some(value) = obj.remove(&old_key) {
+                obj.insert(new_key, value);
+            }
+        }
+    }
+    
+    /// Convert snake_case to camelCase
+    fn to_camel_case(&self, snake_case: &str) -> String {
+        let mut result = String::new();
+        let mut capitalize_next = false;
+        
+        for ch in snake_case.chars() {
+            if ch == '_' {
+                capitalize_next = true;
+            } else if capitalize_next {
+                result.push(ch.to_uppercase().next().unwrap_or(ch));
+                capitalize_next = false;
+            } else {
+                result.push(ch);
+            }
+        }
+        
+        result
+    }
+    
+    /// Apply global filtering to the merged results
+    fn apply_global_filtering(&self, merged: &mut serde_json::Map<String, serde_json::Value>) -> Result<()> {
+        // Remove null values and empty objects/arrays
+        let mut keys_to_remove = Vec::new();
+        
+        for (key, value) in merged.iter() {
+            if value.is_null() {
+                keys_to_remove.push(key.clone());
+                continue;
+            }
+            
+            if let Some(arr) = value.as_array() {
+                if arr.is_empty() {
+                    keys_to_remove.push(key.clone());
+                }
+            } else if let Some(obj) = value.as_object() {
+                if obj.is_empty() {
+                    keys_to_remove.push(key.clone());
+                }
+            }
+        }
+        
+        for key in keys_to_remove {
+            merged.remove(&key);
+        }
+        
+        Ok(())
     }
 
     /// Execute a federated SPARQL query

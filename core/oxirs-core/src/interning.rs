@@ -646,7 +646,7 @@ mod tests {
         assert_eq!(mappings.len(), 3);
 
         // Verify all mappings are present
-        let mut found_ids = vec![false; 3];
+        let mut found_ids = [false; 3];
         for (id, string) in mappings {
             match string.as_ref() {
                 "first" => {

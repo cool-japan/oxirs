@@ -295,6 +295,181 @@ impl RuleIntegration {
         })
     }
 
+    /// Enhanced dataset integration with named graphs
+    pub fn process_named_graph(&mut self, graph_name: &GraphName, triples: Vec<Triple>) -> Result<ProcessingStats> {
+        let start_time = std::time::Instant::now();
+        let mut processed = 0;
+        let mut derived = 0;
+
+        // Insert triples into named graph
+        for triple in triples {
+            let quad = Quad::new(
+                triple.subject().clone(),
+                triple.predicate().clone(), 
+                triple.object().clone(),
+                graph_name.clone(),
+            );
+            
+            if self.store.insert_quad(quad)? {
+                processed += 1;
+            }
+        }
+
+        // Apply rules to the named graph context
+        let before_rules = self.store.len()?;
+        self.apply_rules()?;
+        let after_rules = self.store.len()?;
+        derived = after_rules - before_rules;
+
+        info!("Processed {} triples in named graph, derived {} new facts", processed, derived);
+        
+        Ok(ProcessingStats {
+            processed_count: processed,
+            derived_count: derived,
+            processing_time: start_time.elapsed(),
+        })
+    }
+
+    /// Enhanced IRI validation and normalization
+    pub fn validate_and_normalize_iri(&self, iri_str: &str) -> Result<NamedNode> {
+        // Check for common IRI patterns and normalize
+        let normalized = if iri_str.starts_with('<') && iri_str.ends_with('>') {
+            // Remove angle brackets
+            &iri_str[1..iri_str.len()-1]
+        } else if iri_str.contains(':') && !iri_str.starts_with("http") {
+            // Might be a prefixed IRI
+            return self.expand_prefixed_iri(iri_str).and_then(|expanded| {
+                NamedNode::new(&expanded).map_err(|e| anyhow::anyhow!("IRI creation failed: {}", e))
+            });
+        } else {
+            iri_str
+        };
+
+        // Validate IRI format
+        if !normalized.starts_with("http://") && !normalized.starts_with("https://") && !normalized.starts_with("urn:") {
+            return Err(anyhow::anyhow!("Invalid IRI format: {}", iri_str));
+        }
+
+        NamedNode::new(normalized).map_err(|e| anyhow::anyhow!("IRI creation failed: {}", e))
+    }
+
+    /// Enhanced datatype validation and conversion
+    pub fn validate_and_convert_literal(&self, value: &str, datatype_iri: Option<&str>) -> Result<Literal> {
+        let literal = if let Some(dt_iri) = datatype_iri {
+            let datatype = NamedNode::new(dt_iri)?;
+            
+            // Validate value against datatype
+            match dt_iri {
+                "http://www.w3.org/2001/XMLSchema#integer" => {
+                    value.parse::<i64>()
+                        .map_err(|_| anyhow::anyhow!("Invalid integer value: {}", value))?;
+                }
+                "http://www.w3.org/2001/XMLSchema#decimal" => {
+                    value.parse::<f64>()
+                        .map_err(|_| anyhow::anyhow!("Invalid decimal value: {}", value))?;
+                }
+                "http://www.w3.org/2001/XMLSchema#boolean" => {
+                    match value {
+                        "true" | "false" | "1" | "0" => {},
+                        _ => return Err(anyhow::anyhow!("Invalid boolean value: {}", value)),
+                    }
+                }
+                "http://www.w3.org/2001/XMLSchema#dateTime" => {
+                    // Basic ISO 8601 validation
+                    if !value.contains('T') || (!value.contains('Z') && !value.contains('+') && !value.contains('-')) {
+                        return Err(anyhow::anyhow!("Invalid dateTime format: {}", value));
+                    }
+                }
+                _ => {
+                    // For unknown datatypes, just accept the value
+                    debug!("Unknown datatype {}, accepting value as-is", dt_iri);
+                }
+            }
+            
+            Literal::new_typed_literal(value, datatype)
+        } else {
+            Literal::new(value)
+        };
+
+        Ok(literal)
+    }
+
+    /// Enhanced bulk processing with transaction support
+    pub fn bulk_process_with_transactions(&mut self, triples: Vec<Triple>, batch_size: usize) -> Result<BulkProcessingStats> {
+        let start_time = std::time::Instant::now();
+        let mut total_processed = 0;
+        let mut total_derived = 0;
+        let mut batch_count = 0;
+
+        for triple_batch in triples.chunks(batch_size) {
+            // Begin transaction (conceptual - oxirs-core may not have transactions yet)
+            let batch_start = self.store.len()?;
+            
+            // Process batch
+            for triple in triple_batch {
+                if self.store.insert_triple(triple.clone())? {
+                    total_processed += 1;
+                }
+            }
+
+            // Apply rules to batch
+            let derived_count = self.apply_rules()?;
+            total_derived += derived_count;
+            batch_count += 1;
+
+            info!("Processed batch {}: {} triples, {} derived", batch_count, triple_batch.len(), derived_count);
+        }
+
+        Ok(BulkProcessingStats {
+            total_processed,
+            total_derived,
+            batch_count,
+            processing_time: start_time.elapsed(),
+        })
+    }
+
+    /// Enhanced error recovery and partial processing
+    pub fn process_with_error_recovery(&mut self, triples: Vec<Result<Triple, OxirsError>>) -> Result<ErrorRecoveryStats> {
+        let mut successful = 0;
+        let mut failed = 0;
+        let mut derived = 0;
+        let mut error_details = Vec::new();
+
+        for (index, triple_result) in triples.into_iter().enumerate() {
+            match triple_result {
+                Ok(triple) => {
+                    match self.store.insert_triple(triple) {
+                        Ok(inserted) => {
+                            if inserted {
+                                successful += 1;
+                            }
+                        }
+                        Err(e) => {
+                            failed += 1;
+                            error_details.push(format!("Triple {}: {}", index, e));
+                        }
+                    }
+                }
+                Err(e) => {
+                    failed += 1;
+                    error_details.push(format!("Parse error {}: {}", index, e));
+                }
+            }
+        }
+
+        // Apply rules on successfully processed data
+        if successful > 0 {
+            derived = self.apply_rules()?;
+        }
+
+        Ok(ErrorRecoveryStats {
+            successful_triples: successful,
+            failed_triples: failed,
+            derived_facts: derived,
+            error_details,
+        })
+    }
+
     /// Enhanced namespace management for better IRI handling
     pub fn add_namespace_prefix(&mut self, prefix: &str, namespace_iri: &str) -> Result<()> {
         // Store namespace mappings for efficient rule processing
@@ -472,6 +647,10 @@ impl RuleIntegration {
                 }
             }
             Object::Variable(var) => format!("?{}", var.as_str()),
+            Object::QuotedTriple(_) => {
+                // For N-Triples export, represent quoted triples as blank nodes
+                "_:quoted_triple".to_string()
+            }
         }
     }
 }
@@ -503,6 +682,32 @@ pub struct BatchProcessingStats {
     pub initial_fact_count: usize,
     pub final_fact_count: usize,
     pub processing_time: std::time::Duration,
+}
+
+/// Statistics for named graph processing
+#[derive(Debug, Clone)]
+pub struct ProcessingStats {
+    pub processed_count: usize,
+    pub derived_count: usize,
+    pub processing_time: std::time::Duration,
+}
+
+/// Statistics for bulk processing with transactions
+#[derive(Debug, Clone)]
+pub struct BulkProcessingStats {
+    pub total_processed: usize,
+    pub total_derived: usize,
+    pub batch_count: usize,
+    pub processing_time: std::time::Duration,
+}
+
+/// Statistics for error recovery processing
+#[derive(Debug, Clone)]
+pub struct ErrorRecoveryStats {
+    pub successful_triples: usize,
+    pub failed_triples: usize,
+    pub derived_facts: usize,
+    pub error_details: Vec<String>,
 }
 
 /// Analysis of reasoning coverage and effectiveness

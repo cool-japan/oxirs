@@ -410,7 +410,7 @@ impl ConcurrentGraph {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{NamedNode, Literal};
+    use crate::NamedNode;
 
     fn create_test_triple(s: &str, p: &str, o: &str) -> Triple {
         Triple::new(

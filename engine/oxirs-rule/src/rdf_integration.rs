@@ -343,7 +343,7 @@ impl RdfRuleEngine {
         let mut facts = Vec::new();
         
         // Iterate through all quads in the store
-        for quad in self.store.quads_for_pattern(None, None, None, None) {
+        for quad in self.store.query_quads(None, None, None, None)? {
             let subject = RdfTerm::from_term(quad.subject.into())?;
             let predicate = RdfTerm::from_term(quad.predicate.into())?;
             let object = RdfTerm::from_term(quad.object)?;

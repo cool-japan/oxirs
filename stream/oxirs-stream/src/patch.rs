@@ -539,6 +539,24 @@ fn validate_operation(operation: &PatchOperation) -> Result<()> {
                 return Err(anyhow!("Graph operation has empty graph URI"));
             }
         }
+        PatchOperation::AddPrefix { prefix: _, uri: _ } => {
+            // Prefix operations are always valid
+        }
+        PatchOperation::DeletePrefix { prefix: _ } => {
+            // Prefix operations are always valid
+        }
+        PatchOperation::TransactionBegin { .. } => {
+            // Transaction operations are always valid
+        }
+        PatchOperation::TransactionCommit => {
+            // Transaction operations are always valid
+        }
+        PatchOperation::TransactionAbort => {
+            // Transaction operations are always valid
+        }
+        PatchOperation::Header { .. } => {
+            // Header operations are always valid
+        }
     }
     Ok(())
 }
@@ -808,7 +826,6 @@ pub fn validate_patch(patch: &RdfPatch) -> Result<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{PatchOperation, RdfPatch};
 
     #[test]
     fn test_patch_serialization() {

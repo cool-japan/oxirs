@@ -622,7 +622,7 @@ impl MmapIndex {
         
         // Save header
         let header = self.header.read();
-        self.save_header(&*header)?;
+        self.save_header(&header)?;
         
         Ok(())
     }

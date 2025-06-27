@@ -7,8 +7,7 @@ use std::collections::{HashMap, HashSet};
 
 use oxirs_core::{
     model::{Literal, NamedNode, Term, Triple},
-    store::Store,
-    RdfTerm,
+    RdfTerm, Store,
 };
 
 use oxirs_shacl::{
@@ -93,6 +92,16 @@ impl ShapeLearner {
             pattern_cache: HashMap::new(),
             stats: LearningStatistics::default(),
         }
+    }
+
+    /// Get the current configuration
+    pub fn config(&self) -> &LearningConfig {
+        &self.config
+    }
+
+    /// Get statistics
+    pub fn get_statistics(&self) -> &LearningStatistics {
+        &self.stats
     }
 
     /// Learn shapes from RDF store
@@ -869,18 +878,17 @@ impl ShapeLearner {
         tracing::debug!("Executing learning query: {}", query);
 
         use oxirs_core::query::QueryEngine;
-        
+
         let query_engine = QueryEngine::new();
         match query_engine.query(query, store) {
-            Ok(oxirs_core::query::QueryResult::Select { variables, bindings }) => {
-                Ok(LearningQueryResult::Select {
-                    variables,
-                    bindings,
-                })
-            }
-            Ok(oxirs_core::query::QueryResult::Ask(result)) => {
-                Ok(LearningQueryResult::Ask(result))
-            }
+            Ok(oxirs_core::query::QueryResult::Select {
+                variables,
+                bindings,
+            }) => Ok(LearningQueryResult::Select {
+                variables,
+                bindings,
+            }),
+            Ok(oxirs_core::query::QueryResult::Ask(result)) => Ok(LearningQueryResult::Ask(result)),
             Ok(_) => Ok(LearningQueryResult::Empty),
             Err(e) => Err(ShaclAiError::ShapeLearning(format!(
                 "Query execution failed: {}",
@@ -912,6 +920,7 @@ pub struct LearningStatistics {
     pub total_shapes_learned: usize,
     pub failed_shapes: usize,
     pub total_constraints_discovered: usize,
+    pub classes_analyzed: usize,
     pub model_trained: bool,
     pub last_training_accuracy: f64,
 }
@@ -967,6 +976,7 @@ mod tests {
             total_shapes_learned: 5,
             failed_shapes: 1,
             total_constraints_discovered: 20,
+            classes_analyzed: 3,
             model_trained: true,
             last_training_accuracy: 0.95,
         };

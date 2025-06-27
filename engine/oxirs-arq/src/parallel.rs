@@ -8,7 +8,8 @@ use crate::algebra::{
     Algebra, Binding, Expression, Solution, Term as AlgebraTerm, TriplePattern, Variable,
     Aggregate, Iri, Literal, PropertyPath
 };
-use crate::executor::{Dataset, ExecutionStats, ExecutionContext, ParallelConfig};
+use crate::executor::{Dataset, ExecutionContext, ParallelConfig};
+use crate::executor::stats::ExecutionStats;
 use crate::term::{Term, BindingContext};
 use crate::expression::ExpressionEvaluator;
 use anyhow::{anyhow, Result};

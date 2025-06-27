@@ -15,9 +15,7 @@ use parking_lot::RwLock;
 use rayon::iter::IntoParallelRefIterator;
 #[cfg(feature = "parallel")]
 use rayon::iter::ParallelIterator;
-use std::collections::{BTreeMap, BTreeSet};
-use std::marker::PhantomData;
-use std::ptr::NonNull;
+use std::collections::BTreeSet;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use simd_json;

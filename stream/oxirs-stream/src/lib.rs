@@ -30,21 +30,32 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 /// Re-export commonly used types for convenience
+pub use bridge::{MessageBridgeManager, BridgeType, ExternalSystemConfig, ExternalSystemType, 
+                RoutingRule, MessageTransformer, ExternalMessage, BridgeInfo};
 pub use circuit_breaker::{CircuitBreakerError, FailureType, SharedCircuitBreakerExt};
 pub use connection_pool::{DetailedPoolMetrics, PoolConfig, PoolStatus};
+pub use event::{StreamEvent, EventMetadata, EventCategory, EventPriority, SparqlOperationType, 
+               IsolationLevel, SchemaType, SchemaChangeType, QueryResult};
+pub use sparql_streaming::{ContinuousQueryManager, QueryMetadata, QueryManagerConfig,
+                          QueryResultChannel, QueryResultUpdate, UpdateType};
+pub use store_integration::{StoreChangeDetector, ChangeDetectionStrategy, UpdateNotification,
+                           RealtimeUpdateManager, UpdateFilter, ChangeNotification};
+pub use webhook::{WebhookManager, WebhookConfig, HttpMethod, EventFilter as WebhookEventFilter,
+                 RetryConfig as WebhookRetryConfig, RateLimit, WebhookMetadata, WebhookInfo};
 
 #[cfg(test)]
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub mod backend;
+pub mod bridge;
 pub mod circuit_breaker;
 pub mod config;
+pub mod event;
 pub mod connection_pool;
 pub mod consumer;
 pub mod delta;
 pub mod diagnostics;
 pub mod error;
-pub mod event;
 pub mod failover;
 pub mod health_monitor;
 pub mod join;
@@ -58,6 +69,7 @@ pub mod sparql_streaming;
 pub mod state;
 pub mod store_integration;
 pub mod types;
+pub mod webhook;
 
 /// Enhanced stream configuration with advanced features
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -238,159 +250,6 @@ pub enum PulsarAuthMethod {
     Tls,
 }
 
-/// Enhanced RDF streaming events with metadata and provenance
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum StreamEvent {
-    TripleAdded {
-        subject: String,
-        predicate: String,
-        object: String,
-        graph: Option<String>,
-        metadata: EventMetadata,
-    },
-    TripleRemoved {
-        subject: String,
-        predicate: String,
-        object: String,
-        graph: Option<String>,
-        metadata: EventMetadata,
-    },
-    QuadAdded {
-        subject: String,
-        predicate: String,
-        object: String,
-        graph: String,
-        metadata: EventMetadata,
-    },
-    QuadRemoved {
-        subject: String,
-        predicate: String,
-        object: String,
-        graph: String,
-        metadata: EventMetadata,
-    },
-    GraphCreated {
-        graph: String,
-        metadata: EventMetadata,
-    },
-    GraphCleared {
-        graph: Option<String>,
-        metadata: EventMetadata,
-    },
-    GraphDeleted {
-        graph: String,
-        metadata: EventMetadata,
-    },
-    SparqlUpdate {
-        query: String,
-        operation_type: SparqlOperationType,
-        metadata: EventMetadata,
-    },
-    TransactionBegin {
-        transaction_id: String,
-        isolation_level: Option<IsolationLevel>,
-        metadata: EventMetadata,
-    },
-    TransactionCommit {
-        transaction_id: String,
-        metadata: EventMetadata,
-    },
-    TransactionAbort {
-        transaction_id: String,
-        metadata: EventMetadata,
-    },
-    SchemaChanged {
-        schema_type: SchemaType,
-        change_type: SchemaChangeType,
-        details: String,
-        metadata: EventMetadata,
-    },
-    Heartbeat {
-        timestamp: DateTime<Utc>,
-        source: String,
-    },
-}
-
-/// Event metadata for tracking and provenance
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EventMetadata {
-    /// Unique event identifier
-    pub event_id: String,
-    /// Event timestamp
-    pub timestamp: DateTime<Utc>,
-    /// Source identification
-    pub source: String,
-    /// User/session that triggered the event
-    pub user: Option<String>,
-    /// Operation context
-    pub context: Option<String>,
-    /// Causality tracking - event that caused this event
-    pub caused_by: Option<String>,
-    /// Event version for schema evolution
-    pub version: String,
-    /// Custom properties
-    pub properties: HashMap<String, String>,
-    /// Checksum for integrity
-    pub checksum: Option<String>,
-}
-
-impl Default for EventMetadata {
-    fn default() -> Self {
-        Self {
-            event_id: uuid::Uuid::new_v4().to_string(),
-            timestamp: chrono::Utc::now(),
-            source: "default".to_string(),
-            user: None,
-            context: None,
-            caused_by: None,
-            version: "1.0".to_string(),
-            properties: HashMap::new(),
-            checksum: None,
-        }
-    }
-}
-
-/// SPARQL operation types
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum SparqlOperationType {
-    Insert,
-    Delete,
-    Update,
-    Load,
-    Clear,
-    Create,
-    Drop,
-    Copy,
-    Move,
-    Add,
-}
-
-/// Transaction isolation levels
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum IsolationLevel {
-    ReadUncommitted,
-    ReadCommitted,
-    RepeatableRead,
-    Serializable,
-}
-
-/// Schema types
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum SchemaType {
-    Ontology,
-    Vocabulary,
-    Constraint,
-    Rule,
-}
-
-/// Schema change types
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum SchemaChangeType {
-    Added,
-    Modified,
-    Removed,
-    Versioned,
-}
 
 /// Enhanced stream producer for publishing RDF changes with backend support
 pub struct StreamProducer {
@@ -894,7 +753,7 @@ impl StreamProducer {
         let events: Vec<StreamEvent> = patch
             .operations
             .iter()
-            .map(|op| {
+            .filter_map(|op| {
                 let metadata = EventMetadata {
                     event_id: Uuid::new_v4().to_string(),
                     timestamp: patch.timestamp,
@@ -912,31 +771,56 @@ impl StreamProducer {
                         subject,
                         predicate,
                         object,
-                    } => StreamEvent::TripleAdded {
+                    } => Some(StreamEvent::TripleAdded {
                         subject: subject.clone(),
                         predicate: predicate.clone(),
                         object: object.clone(),
                         graph: None,
                         metadata,
-                    },
+                    }),
                     PatchOperation::Delete {
                         subject,
                         predicate,
                         object,
-                    } => StreamEvent::TripleRemoved {
+                    } => Some(StreamEvent::TripleRemoved {
                         subject: subject.clone(),
                         predicate: predicate.clone(),
                         object: object.clone(),
                         graph: None,
                         metadata,
-                    },
-                    PatchOperation::AddGraph { graph } => StreamEvent::GraphCreated {
+                    }),
+                    PatchOperation::AddGraph { graph } => Some(StreamEvent::GraphCreated {
                         graph: graph.clone(),
                         metadata,
-                    },
-                    PatchOperation::DeleteGraph { graph } => StreamEvent::GraphDeleted {
+                    }),
+                    PatchOperation::DeleteGraph { graph } => Some(StreamEvent::GraphDeleted {
                         graph: graph.clone(),
                         metadata,
+                    }),
+                    PatchOperation::AddPrefix { .. } => {
+                        // Skip prefix operations for now
+                        None
+                    },
+                    PatchOperation::DeletePrefix { .. } => {
+                        // Skip prefix operations for now
+                        None
+                    },
+                    PatchOperation::TransactionBegin { .. } => Some(StreamEvent::TransactionBegin {
+                        transaction_id: patch.transaction_id.clone().unwrap_or_else(|| Uuid::new_v4().to_string()),
+                        isolation_level: None,
+                        metadata,
+                    }),
+                    PatchOperation::TransactionCommit => Some(StreamEvent::TransactionCommit {
+                        transaction_id: patch.transaction_id.clone().unwrap_or_else(|| Uuid::new_v4().to_string()),
+                        metadata,
+                    }),
+                    PatchOperation::TransactionAbort => Some(StreamEvent::TransactionAbort {
+                        transaction_id: patch.transaction_id.clone().unwrap_or_else(|| Uuid::new_v4().to_string()),
+                        metadata,
+                    }),
+                    PatchOperation::Header { .. } => {
+                        // Skip header operations for now
+                        None
                     },
                 }
             })

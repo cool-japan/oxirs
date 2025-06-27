@@ -3,8 +3,9 @@
 //! This module provides JIT compilation of frequently executed SPARQL queries
 //! to native machine code for maximum performance.
 
-use crate::model::*;
-use crate::query::algebra::*;
+use crate::model::{Triple, Subject, Predicate, Object, Variable, Term};
+use crate::query::algebra::TermPattern;
+use crate::model::pattern::TriplePattern;
 use crate::query::plan::ExecutionPlan;
 use crate::OxirsError;
 use std::collections::HashMap;

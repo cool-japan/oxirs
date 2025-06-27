@@ -6,11 +6,14 @@
 use crate::{EmbeddingModel, ModelConfig, ModelStats};
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{broadcast, RwLock};
+use tokio::task::JoinHandle;
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 /// Model version information
@@ -402,23 +405,25 @@ impl ModelRegistry {
 
     /// Rollback deployment
     pub async fn rollback_deployment(&self, deployment_id: Uuid) -> Result<()> {
-        let deployments = self.deployments.read().await;
-        let deployment = deployments.get(&deployment_id)
-            .ok_or_else(|| anyhow!("Deployment not found: {}", deployment_id))?;
-        
-        if let Some(rollback_version) = deployment.rollback_version {
-            drop(deployments);
+        let (rollback_version, resource_allocation) = {
+            let deployments = self.deployments.read().await;
+            let deployment = deployments.get(&deployment_id)
+                .ok_or_else(|| anyhow!("Deployment not found: {}", deployment_id))?;
             
-            // Deploy the rollback version
-            self.deploy_version(rollback_version, deployment.resource_allocation.clone()).await?;
-            
-            // Mark current deployment as retired
-            let mut deployments = self.deployments.write().await;
-            if let Some(deployment) = deployments.get_mut(&deployment_id) {
-                deployment.status = DeploymentStatus::Retired;
+            if let Some(rollback_version) = deployment.rollback_version {
+                (rollback_version, deployment.resource_allocation.clone())
+            } else {
+                return Err(anyhow!("No rollback version configured"));
             }
-        } else {
-            return Err(anyhow!("No rollback version configured"));
+        };
+        
+        // Deploy the rollback version
+        self.deploy_version(rollback_version, resource_allocation).await?;
+        
+        // Mark current deployment as retired
+        let mut deployments = self.deployments.write().await;
+        if let Some(deployment) = deployments.get_mut(&deployment_id) {
+            deployment.status = DeploymentStatus::Retired;
         }
         
         Ok(())

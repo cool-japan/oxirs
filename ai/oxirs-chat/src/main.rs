@@ -5,9 +5,9 @@ use oxirs_chat::{
     server::{ChatServer, ServerConfig},
     ChatManager,
 };
-use oxirs_core::Store;
+use oxirs_core::{Store, parser::RdfFormat, NamedNode, Literal, Triple, Quad, GraphName};
 use std::{path::PathBuf, sync::Arc};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 #[derive(Parser)]
 #[command(name = "oxirs-chat")]
@@ -183,16 +183,111 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn initialize_store(
     dataset_path: Option<&PathBuf>,
 ) -> Result<Store, Box<dyn std::error::Error>> {
-    let store = Store::new()?;
+    let mut store = Store::new()?;
 
     if let Some(path) = dataset_path {
         info!("Loading dataset from: {:?}", path);
-        // TODO: Implement dataset loading
-        // store.load_from_file(path)?;
-        info!("Dataset loaded successfully");
+        
+        // Determine file format from extension
+        let format = if let Some(extension) = path.extension().and_then(|s| s.to_str()) {
+            match extension.to_lowercase().as_str() {
+                "nt" | "ntriples" => RdfFormat::NTriples,
+                "ttl" | "turtle" => RdfFormat::Turtle,
+                "rdf" | "xml" => RdfFormat::RdfXml,
+                "n3" => RdfFormat::Turtle, // N3 not supported, use Turtle
+                "jsonld" | "json-ld" => RdfFormat::JsonLd,
+                _ => {
+                    warn!("Unknown file extension '{}', defaulting to Turtle", extension);
+                    RdfFormat::Turtle
+                }
+            }
+        } else {
+            warn!("No file extension found, defaulting to Turtle");
+            RdfFormat::Turtle
+        };
+
+        // Load the dataset
+        match std::fs::read_to_string(path) {
+            Ok(_content) => {
+                info!("File read successfully, format: {:?}", format);
+                
+                // TODO: Implement parsing from string with format detection
+                // For now, we'll use the sample data below
+                warn!("Dataset parsing from file not yet implemented, using sample data");
+            }
+            Err(e) => {
+                error!("Failed to read dataset file: {}", e);
+                return Err(format!("Failed to read dataset file: {}", e).into());
+            }
+        }
     } else {
         info!("No dataset specified, starting with empty store");
+        
+        // Add some sample triples for demonstration
+        info!("Adding sample triples for demonstration...");
+        add_sample_data(&mut store)?;
     }
 
     Ok(store)
+}
+
+/// Add sample RDF data for demonstration when no dataset is provided
+fn add_sample_data(store: &mut Store) -> Result<(), Box<dyn std::error::Error>> {
+    
+    let sample_triples = vec![
+        // Person data
+        Triple::new(
+            NamedNode::new("http://example.org/person/alice")?,
+            NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+            NamedNode::new("http://xmlns.com/foaf/0.1/Person")?,
+        ),
+        Triple::new(
+            NamedNode::new("http://example.org/person/alice")?,
+            NamedNode::new("http://xmlns.com/foaf/0.1/name")?,
+            Literal::new_simple_literal("Alice Smith"),
+        ),
+        Triple::new(
+            NamedNode::new("http://example.org/person/alice")?,
+            NamedNode::new("http://example.org/age")?,
+            Literal::new_typed_literal("30", NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")?),
+        ),
+        
+        // Organization data
+        Triple::new(
+            NamedNode::new("http://example.org/org/acme")?,
+            NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
+            NamedNode::new("http://xmlns.com/foaf/0.1/Organization")?,
+        ),
+        Triple::new(
+            NamedNode::new("http://example.org/org/acme")?,
+            NamedNode::new("http://xmlns.com/foaf/0.1/name")?,
+            Literal::new_simple_literal("ACME Corporation"),
+        ),
+        
+        // Relationship data
+        Triple::new(
+            NamedNode::new("http://example.org/person/alice")?,
+            NamedNode::new("http://example.org/worksFor")?,
+            NamedNode::new("http://example.org/org/acme")?,
+        ),
+    ];
+    
+    let mut triples_added = 0;
+    for triple in sample_triples {
+        let quad = Quad::new(
+            triple.subject().clone(),
+            triple.predicate().clone(),
+            triple.object().clone(),
+            GraphName::DefaultGraph,
+        );
+        
+        if let Err(e) = store.insert_quad(quad) {
+            warn!("Failed to insert sample triple: {}", e);
+        } else {
+            triples_added += 1;
+        }
+    }
+    
+    info!("Added {} sample triples", triples_added);
+    Ok(())
 }

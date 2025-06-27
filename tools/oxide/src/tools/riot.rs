@@ -4,7 +4,7 @@
 //! between different RDF serialization formats.
 
 use super::{utils, ToolResult, ToolStats};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Run riot command - RDF parsing and serialization
 pub async fn run(
@@ -150,7 +150,7 @@ struct ProcessResult {
 
 /// Process a single RDF file
 fn process_rdf_file(
-    file_path: &PathBuf,
+    file_path: &Path,
     input_format: &str,
     output_format: &str,
     base_uri: Option<&str>,
@@ -390,8 +390,7 @@ fn parse_turtle_content(content: &str, _base_uri: Option<&str>) -> Result<Vec<Rd
         }
 
         // Very basic parsing - just handle simple subject predicate object . patterns
-        if line.ends_with(" .") {
-            let line = &line[..line.len() - 2];
+        if let Some(line) = line.strip_suffix(" .") {
             let parts: Vec<&str> = line.split_whitespace().collect();
 
             if parts.len() >= 3 {

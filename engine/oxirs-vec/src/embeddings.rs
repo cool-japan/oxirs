@@ -119,10 +119,33 @@ pub struct OpenAIConfig {
     pub batch_size: usize,
     /// Enable local caching
     pub enable_cache: bool,
+    /// Cache size (number of embeddings to cache)
+    pub cache_size: usize,
+    /// Cache TTL in seconds (0 for no expiration)
+    pub cache_ttl_seconds: u64,
     /// Maximum retries for failed requests
     pub max_retries: u32,
     /// Retry delay in milliseconds
     pub retry_delay_ms: u64,
+    /// Retry strategy
+    pub retry_strategy: RetryStrategy,
+    /// Enable cost tracking
+    pub track_costs: bool,
+    /// Enable detailed metrics
+    pub enable_metrics: bool,
+    /// User agent for requests
+    pub user_agent: String,
+}
+
+/// Retry strategy for failed requests
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum RetryStrategy {
+    /// Fixed delay between retries
+    Fixed,
+    /// Exponential backoff with jitter
+    ExponentialBackoff,
+    /// Linear backoff
+    LinearBackoff,
 }
 
 impl Default for OpenAIConfig {
@@ -135,9 +158,57 @@ impl Default for OpenAIConfig {
             requests_per_minute: 3000,
             batch_size: 100,
             enable_cache: true,
+            cache_size: 10000,
+            cache_ttl_seconds: 3600, // 1 hour
             max_retries: 3,
             retry_delay_ms: 1000,
+            retry_strategy: RetryStrategy::ExponentialBackoff,
+            track_costs: true,
+            enable_metrics: true,
+            user_agent: "oxirs-vec/0.1.0".to_string(),
         }
+    }
+}
+
+impl OpenAIConfig {
+    /// Create config for production use
+    pub fn production() -> Self {
+        Self {
+            requests_per_minute: 1000, // More conservative for production
+            cache_size: 50000,
+            cache_ttl_seconds: 7200, // 2 hours
+            max_retries: 5,
+            retry_strategy: RetryStrategy::ExponentialBackoff,
+            ..Default::default()
+        }
+    }
+    
+    /// Create config for development/testing
+    pub fn development() -> Self {
+        Self {
+            requests_per_minute: 100,
+            cache_size: 1000,
+            cache_ttl_seconds: 300, // 5 minutes
+            max_retries: 2,
+            ..Default::default()
+        }
+    }
+    
+    /// Validate configuration
+    pub fn validate(&self) -> Result<()> {
+        if self.api_key.is_empty() {
+            return Err(anyhow!("OpenAI API key is required"));
+        }
+        if self.requests_per_minute == 0 {
+            return Err(anyhow!("requests_per_minute must be greater than 0"));
+        }
+        if self.batch_size == 0 {
+            return Err(anyhow!("batch_size must be greater than 0"));
+        }
+        if self.timeout_seconds == 0 {
+            return Err(anyhow!("timeout_seconds must be greater than 0"));
+        }
+        Ok(())
     }
 }
 
@@ -601,7 +672,87 @@ pub struct OpenAIEmbeddingGenerator {
     openai_config: OpenAIConfig,
     client: reqwest::Client,
     rate_limiter: RateLimiter,
-    request_cache: HashMap<u64, Vector>,
+    request_cache: lru::LruCache<u64, CachedEmbedding>,
+    metrics: OpenAIMetrics,
+}
+
+/// Cached embedding with metadata
+#[derive(Debug, Clone)]
+pub struct CachedEmbedding {
+    pub vector: Vector,
+    pub cached_at: std::time::SystemTime,
+    pub model: String,
+    pub cost_usd: f64,
+}
+
+/// Metrics for OpenAI API usage
+#[derive(Debug, Clone, Default)]
+pub struct OpenAIMetrics {
+    pub total_requests: u64,
+    pub successful_requests: u64,
+    pub failed_requests: u64,
+    pub total_tokens_processed: u64,
+    pub cache_hits: u64,
+    pub cache_misses: u64,
+    pub total_cost_usd: f64,
+    pub retry_count: u64,
+    pub rate_limit_waits: u64,
+    pub average_response_time_ms: f64,
+    pub last_request_time: Option<std::time::SystemTime>,
+    pub requests_by_model: HashMap<String, u64>,
+    pub errors_by_type: HashMap<String, u64>,
+}
+
+impl OpenAIMetrics {
+    /// Calculate cache hit ratio
+    pub fn cache_hit_ratio(&self) -> f64 {
+        if self.cache_hits + self.cache_misses == 0 {
+            0.0
+        } else {
+            self.cache_hits as f64 / (self.cache_hits + self.cache_misses) as f64
+        }
+    }
+    
+    /// Calculate success rate
+    pub fn success_rate(&self) -> f64 {
+        if self.total_requests == 0 {
+            0.0
+        } else {
+            self.successful_requests as f64 / self.total_requests as f64
+        }
+    }
+    
+    /// Calculate average cost per request
+    pub fn average_cost_per_request(&self) -> f64 {
+        if self.successful_requests == 0 {
+            0.0
+        } else {
+            self.total_cost_usd / self.successful_requests as f64
+        }
+    }
+    
+    /// Get formatted metrics report
+    pub fn report(&self) -> String {
+        format!(
+            "OpenAI Metrics Report:\n\
+            Total Requests: {}\n\
+            Success Rate: {:.2}%\n\
+            Cache Hit Ratio: {:.2}%\n\
+            Total Cost: ${:.4}\n\
+            Avg Cost/Request: ${:.6}\n\
+            Avg Response Time: {:.2}ms\n\
+            Retries: {}\n\
+            Rate Limit Waits: {}",
+            self.total_requests,
+            self.success_rate() * 100.0,
+            self.cache_hit_ratio() * 100.0,
+            self.total_cost_usd,
+            self.average_cost_per_request(),
+            self.average_response_time_ms,
+            self.retry_count,
+            self.rate_limit_waits
+        )
+    }
 }
 
 /// Simple rate limiter implementation
@@ -647,25 +798,25 @@ impl RateLimiter {
 
 impl OpenAIEmbeddingGenerator {
     pub fn new(openai_config: OpenAIConfig) -> Result<Self> {
-        if openai_config.api_key.is_empty() {
-            return Err(anyhow!("OpenAI API key is required. Set OPENAI_API_KEY environment variable."));
-        }
+        openai_config.validate()?;
 
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(openai_config.timeout_seconds))
+            .user_agent(&openai_config.user_agent)
             .build()
             .map_err(|e| anyhow!("Failed to create HTTP client: {}", e))?;
 
         let embedding_config = EmbeddingConfig {
             model_name: openai_config.model.clone(),
-            dimensions: match openai_config.model.as_str() {
-                "text-embedding-ada-002" => 1536,
-                "text-embedding-3-small" => 1536,
-                "text-embedding-3-large" => 3072,
-                _ => 1536, // Default
-            },
+            dimensions: Self::get_model_dimensions(&openai_config.model),
             max_sequence_length: 8191, // OpenAI limit
             normalize: true,
+        };
+
+        let cache_size = if openai_config.enable_cache {
+            std::num::NonZeroUsize::new(openai_config.cache_size).unwrap_or(std::num::NonZeroUsize::new(1000).unwrap())
+        } else {
+            std::num::NonZeroUsize::new(1).unwrap()
         };
 
         Ok(Self {
@@ -673,31 +824,141 @@ impl OpenAIEmbeddingGenerator {
             openai_config: openai_config.clone(),
             client,
             rate_limiter: RateLimiter::new(openai_config.requests_per_minute),
-            request_cache: HashMap::new(),
+            request_cache: lru::LruCache::new(cache_size),
+            metrics: OpenAIMetrics::default(),
         })
+    }
+    
+    /// Get dimensions for different OpenAI models
+    fn get_model_dimensions(model: &str) -> usize {
+        match model {
+            "text-embedding-ada-002" => 1536,
+            "text-embedding-3-small" => 1536,
+            "text-embedding-3-large" => 3072,
+            "text-embedding-004" => 1536,
+            _ => 1536, // Default
+        }
+    }
+    
+    /// Get cost per 1k tokens for different models (in USD)
+    fn get_model_cost_per_1k_tokens(model: &str) -> f64 {
+        match model {
+            "text-embedding-ada-002" => 0.0001,
+            "text-embedding-3-small" => 0.00002,
+            "text-embedding-3-large" => 0.00013,
+            "text-embedding-004" => 0.00002,
+            _ => 0.0001, // Conservative default
+        }
+    }
+    
+    /// Calculate cost for processing texts
+    fn calculate_cost(&self, texts: &[String]) -> f64 {
+        if !self.openai_config.track_costs {
+            return 0.0;
+        }
+        
+        let total_tokens: usize = texts.iter().map(|t| t.len() / 4).sum(); // Rough token estimation
+        let cost_per_1k = Self::get_model_cost_per_1k_tokens(&self.openai_config.model);
+        (total_tokens as f64 / 1000.0) * cost_per_1k
+    }
+    
+    /// Check if cached embedding is still valid
+    fn is_cache_valid(&self, cached: &CachedEmbedding) -> bool {
+        if self.openai_config.cache_ttl_seconds == 0 {
+            return true; // No expiration
+        }
+        
+        let elapsed = cached.cached_at
+            .elapsed()
+            .unwrap_or(std::time::Duration::from_secs(u64::MAX));
+        
+        elapsed.as_secs() < self.openai_config.cache_ttl_seconds
     }
 
     /// Make API request to OpenAI with retry logic
     async fn make_request(&mut self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        let start_time = std::time::Instant::now();
         let mut attempts = 0;
         
         while attempts < self.openai_config.max_retries {
             match self.try_request(texts).await {
-                Ok(embeddings) => return Ok(embeddings),
+                Ok(embeddings) => {
+                    // Update metrics
+                    if self.openai_config.enable_metrics {
+                        let response_time = start_time.elapsed().as_millis() as f64;
+                        self.update_response_time(response_time);
+                        
+                        let cost = self.calculate_cost(texts);
+                        self.metrics.total_cost_usd += cost;
+                        
+                        *self.metrics.requests_by_model
+                            .entry(self.openai_config.model.clone())
+                            .or_insert(0) += 1;
+                    }
+                    
+                    return Ok(embeddings);
+                }
                 Err(e) => {
                     attempts += 1;
+                    self.metrics.retry_count += 1;
+                    
+                    // Track error types
+                    let error_type = if e.to_string().contains("rate_limit") {
+                        "rate_limit"
+                    } else if e.to_string().contains("timeout") {
+                        "timeout"
+                    } else if e.to_string().contains("401") {
+                        "unauthorized"
+                    } else if e.to_string().contains("400") {
+                        "bad_request"
+                    } else {
+                        "other"
+                    };
+                    
+                    *self.metrics.errors_by_type
+                        .entry(error_type.to_string())
+                        .or_insert(0) += 1;
+                    
                     if attempts >= self.openai_config.max_retries {
                         return Err(e);
                     }
                     
-                    // Exponential backoff
-                    let delay = self.openai_config.retry_delay_ms * (2_u64.pow(attempts - 1));
+                    // Calculate delay based on retry strategy
+                    let delay = self.calculate_retry_delay(attempts);
                     tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
                 }
             }
         }
 
         Err(anyhow!("Max retries exceeded"))
+    }
+    
+    /// Calculate retry delay based on strategy
+    fn calculate_retry_delay(&self, attempt: u32) -> u64 {
+        let base_delay = self.openai_config.retry_delay_ms;
+        
+        match self.openai_config.retry_strategy {
+            RetryStrategy::Fixed => base_delay,
+            RetryStrategy::LinearBackoff => base_delay * attempt as u64,
+            RetryStrategy::ExponentialBackoff => {
+                let delay = base_delay * (2_u64.pow(attempt - 1));
+                // Add jitter (±25%)
+                let jitter = (delay as f64 * 0.25 * (rand::random::<f64>() - 0.5)) as u64;
+                delay.saturating_add(jitter).min(30000) // Max 30 seconds
+            }
+        }
+    }
+    
+    /// Update response time metrics
+    fn update_response_time(&mut self, response_time_ms: f64) {
+        if self.metrics.successful_requests == 0 {
+            self.metrics.average_response_time_ms = response_time_ms;
+        } else {
+            // Running average
+            let total = self.metrics.average_response_time_ms * self.metrics.successful_requests as f64;
+            self.metrics.average_response_time_ms = 
+                (total + response_time_ms) / (self.metrics.successful_requests + 1) as f64;
+        }
     }
 
     async fn try_request(&mut self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
@@ -758,14 +1019,37 @@ impl OpenAIEmbeddingGenerator {
         // Check cache first
         if self.openai_config.enable_cache {
             let hash = content.content_hash();
-            if let Some(cached) = self.request_cache.get(&hash) {
-                return Ok(cached.clone());
+            let cached_result = self.request_cache.get(&hash).map(|cached| {
+                if self.is_cache_valid(cached) {
+                    Some(cached.vector.clone())
+                } else {
+                    None
+                }
+            }).flatten();
+            
+            if let Some(result) = cached_result {
+                self.update_cache_hit();
+                return Ok(result);
+            } else {
+                // Remove expired entry if it exists
+                self.request_cache.pop(&hash);
+                self.update_cache_miss();
             }
         }
 
-        let embeddings = self.make_request(&[text]).await?;
+        let embeddings = match self.make_request(&[text.clone()]).await {
+            Ok(embeddings) => {
+                self.update_metrics_success(&[text.clone()]);
+                embeddings
+            }
+            Err(e) => {
+                self.update_metrics_failure();
+                return Err(e);
+            }
+        };
         
         if embeddings.is_empty() {
+            self.update_metrics_failure();
             return Err(anyhow!("No embeddings returned from API"));
         }
 
@@ -774,7 +1058,14 @@ impl OpenAIEmbeddingGenerator {
         // Cache the result
         if self.openai_config.enable_cache {
             let hash = content.content_hash();
-            self.request_cache.insert(hash, vector.clone());
+            let cost = self.calculate_cost(&[text.clone()]);
+            let cached_embedding = CachedEmbedding {
+                vector: vector.clone(),
+                cached_at: std::time::SystemTime::now(),
+                model: self.openai_config.model.clone(),
+                cost_usd: cost,
+            };
+            self.request_cache.put(hash, cached_embedding);
         }
 
         Ok(vector)
@@ -791,19 +1082,38 @@ impl OpenAIEmbeddingGenerator {
 
         for chunk in contents.chunks(batch_size) {
             let texts: Vec<String> = chunk.iter().map(|c| c.to_text()).collect();
-            let embeddings = self.make_request(&texts).await?;
+            
+            let embeddings = match self.make_request(&texts).await {
+                Ok(embeddings) => {
+                    self.update_metrics_success(&texts);
+                    embeddings
+                }
+                Err(e) => {
+                    self.update_metrics_failure();
+                    return Err(e);
+                }
+            };
             
             if embeddings.len() != chunk.len() {
+                self.update_metrics_failure();
                 return Err(anyhow!("Mismatch between request and response sizes"));
             }
 
+            let batch_cost = self.calculate_cost(&texts) / chunk.len() as f64;
+            
             for (content, embedding) in chunk.iter().zip(embeddings) {
                 let vector = Vector::new(embedding);
                 
                 // Cache the result
                 if self.openai_config.enable_cache {
                     let hash = content.content_hash();
-                    self.request_cache.insert(hash, vector.clone());
+                    let cached_embedding = CachedEmbedding {
+                        vector: vector.clone(),
+                        cached_at: std::time::SystemTime::now(),
+                        model: self.openai_config.model.clone(),
+                        cost_usd: batch_cost,
+                    };
+                    self.request_cache.put(hash, cached_embedding);
                 }
                 
                 results.push(vector);
@@ -820,20 +1130,102 @@ impl OpenAIEmbeddingGenerator {
 
     /// Get cache statistics
     pub fn cache_stats(&self) -> (usize, Option<usize>) {
-        (self.request_cache.len(), None) // No max size limit for simplicity
+        (self.request_cache.len(), Some(self.request_cache.cap().into()))
+    }
+    
+    /// Get total cache cost
+    pub fn get_cache_cost(&self) -> f64 {
+        self.request_cache
+            .iter()
+            .map(|(_, cached)| cached.cost_usd)
+            .sum()
+    }
+    
+    /// Get API usage metrics
+    pub fn get_metrics(&self) -> &OpenAIMetrics {
+        &self.metrics
+    }
+    
+    /// Reset metrics
+    pub fn reset_metrics(&mut self) {
+        self.metrics = OpenAIMetrics::default();
+    }
+    
+    /// Estimate token count for text (approximate)
+    fn estimate_tokens(&self, text: &str) -> u64 {
+        // Rough estimation: ~4 characters per token on average
+        // This is an approximation - actual tokenization depends on the model
+        (text.len() / 4).max(1) as u64
+    }
+    
+    /// Calculate cost for embeddings request
+    fn calculate_cost_from_tokens(&self, total_tokens: u64) -> f64 {
+        // OpenAI pricing (as of 2024) - these should be configurable
+        let cost_per_1k_tokens = match self.openai_config.model.as_str() {
+            "text-embedding-ada-002" => 0.0001, // $0.0001 per 1K tokens
+            "text-embedding-3-small" => 0.00002, // $0.00002 per 1K tokens
+            "text-embedding-3-large" => 0.00013, // $0.00013 per 1K tokens
+            _ => 0.0001, // Default to ada-002 pricing
+        };
+        
+        (total_tokens as f64 / 1000.0) * cost_per_1k_tokens
+    }
+    
+    /// Update metrics after successful request
+    fn update_metrics_success(&mut self, texts: &[String]) {
+        self.metrics.total_requests += 1;
+        self.metrics.successful_requests += 1;
+        
+        let total_tokens: u64 = texts.iter()
+            .map(|text| self.estimate_tokens(text))
+            .sum();
+        
+        self.metrics.total_tokens_processed += total_tokens;
+        self.metrics.total_cost_usd += self.calculate_cost_from_tokens(total_tokens);
+    }
+    
+    /// Update metrics after failed request
+    fn update_metrics_failure(&mut self) {
+        self.metrics.total_requests += 1;
+        self.metrics.failed_requests += 1;
+    }
+    
+    /// Update cache metrics
+    fn update_cache_hit(&mut self) {
+        self.metrics.cache_hits += 1;
+    }
+    
+    fn update_cache_miss(&mut self) {
+        self.metrics.cache_misses += 1;
     }
 }
 
 impl EmbeddingGenerator for OpenAIEmbeddingGenerator {
     fn generate(&self, content: &EmbeddableContent) -> Result<Vector> {
-        // For synchronous interface, we use a runtime
+        // Check cache first (readonly access is fine)
+        if self.openai_config.enable_cache {
+            let hash = content.content_hash();
+            if let Some(cached) = self.request_cache.get(&hash) {
+                return Ok(cached.clone());
+            }
+        }
+        
+        // For synchronous interface with API calls, we need to use async runtime
+        // This is a workaround for the trait design limitation
         let rt = tokio::runtime::Runtime::new()
             .map_err(|e| anyhow!("Failed to create async runtime: {}", e))?;
         
-        // We need a mutable reference, but trait only provides immutable
-        // This is a limitation of the current trait design
-        // For now, return an error suggesting async usage
-        Err(anyhow!("OpenAI embeddings require async execution. Use generate_async() instead."))
+        // Create a temporary mutable copy for the async operation
+        let mut temp_generator = OpenAIEmbeddingGenerator {
+            config: self.config.clone(),
+            openai_config: self.openai_config.clone(),
+            client: self.client.clone(),
+            rate_limiter: RateLimiter::new(self.openai_config.requests_per_minute),
+            request_cache: self.request_cache.clone(),
+            metrics: self.metrics.clone(),
+        };
+        
+        rt.block_on(temp_generator.generate_async(content))
     }
 
     fn dimensions(&self) -> usize {

@@ -78,7 +78,7 @@ pub use embedding_pipeline::{
 };
 pub use hnsw::{HnswConfig, HnswIndex};
 pub use index::{AdvancedVectorIndex, DistanceMetric, IndexConfig, IndexType, SearchResult};
-pub use ivf::{IvfConfig, IvfIndex, IvfStats};
+pub use ivf::{IvfConfig, IvfIndex, IvfStats, QuantizationStrategy};
 pub use lsh::{LshConfig, LshIndex, LshFamily, LshStats};
 pub use mmap_index::{MemoryMappedVectorIndex, MemoryMappedIndexStats};
 pub use pq::{PQConfig, PQIndex, PQStats};

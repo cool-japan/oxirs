@@ -205,7 +205,7 @@ impl SecretManager {
                 if let Some(name) = path.file_stem().and_then(|n| n.to_str()) {
                     if path.extension().and_then(|e| e.to_str()) == Some("secret") && name != ".test" {
                         // Try to load metadata without decrypting value
-                        if let Ok(metadata) = self.load_secret_metadata(&name) {
+                        if let Ok(metadata) = self.load_secret_metadata(name) {
                             secrets.push(metadata);
                         }
                     }
@@ -401,7 +401,7 @@ pub mod credentials {
     
     /// Get credentials for a SPARQL endpoint
     pub fn get_endpoint_credentials(manager: &mut SecretManager, url: &str) -> CliResult<EndpointCredentials> {
-        let secret_name = format!("endpoint_{}", url.replace('/', "_").replace(':', "_"));
+        let secret_name = format!("endpoint_{}", url.replace(['/', ':'], "_"));
         
         if let Ok(creds_json) = manager.get_secret(&secret_name) {
             serde_json::from_str(&creds_json)
@@ -421,7 +421,7 @@ pub mod credentials {
         manager: &mut SecretManager,
         creds: &EndpointCredentials,
     ) -> CliResult<()> {
-        let secret_name = format!("endpoint_{}", creds.url.replace('/', "_").replace(':', "_"));
+        let secret_name = format!("endpoint_{}", creds.url.replace(['/', ':'], "_"));
         let creds_json = serde_json::to_string(creds)
             .map_err(|e| CliError::config_error(format!("Cannot serialize credentials: {}", e)))?;
         

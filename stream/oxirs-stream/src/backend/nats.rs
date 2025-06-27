@@ -237,6 +237,12 @@ impl From<StreamEvent> for NatsEventMessage {
                 }),
                 None,
             ),
+            // Catch-all for remaining variants
+            _ => (
+                "unknown_event".to_string(),
+                serde_json::json!({}),
+                None,
+            ),
         };
 
         Self {
@@ -449,7 +455,7 @@ impl NatsProducer {
             jetstream: None,
             #[cfg(not(feature = "nats"))]
             _phantom: std::marker::PhantomData,
-            stats: ProducerStats::default(),
+            stats: Arc::new(RwLock::new(ProducerStats::default())),
         })
     }
 

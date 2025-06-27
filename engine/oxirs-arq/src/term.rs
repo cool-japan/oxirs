@@ -149,59 +149,6 @@ impl Term {
         matches!(self, Term::Literal(_))
     }
     
-    /// Get effective boolean value (EBV) for SPARQL
-    pub fn effective_boolean_value(&self) -> Result<bool> {
-        match self {
-            Term::Literal(lit) => lit.effective_boolean_value(),
-            _ => Ok(true), // Non-literals are truthy
-        }
-    }
-    
-    /// Convert to numeric value if possible
-    pub fn to_numeric(&self) -> Result<NumericValue> {
-        match self {
-            Term::Literal(lit) => lit.to_numeric(),
-            _ => bail!("Cannot convert non-literal to numeric"),
-        }
-    }
-    
-    /// Convert from algebra term
-    pub fn from_algebra_term(term: &AlgebraTerm) -> Self {
-        match term {
-            AlgebraTerm::Iri(iri) => Term::Iri(iri.0.clone()),
-            AlgebraTerm::BlankNode(id) => Term::BlankNode(id.clone()),
-            AlgebraTerm::Variable(var) => Term::Variable(var.clone()),
-            AlgebraTerm::Literal(lit) => {
-                if let Some(lang) = &lit.language {
-                    Term::lang_literal(&lit.value, lang)
-                } else if let Some(dt) = &lit.datatype {
-                    Term::typed_literal(&lit.value, &dt.0).unwrap_or_else(|_| Term::literal(&lit.value))
-                } else {
-                    Term::literal(&lit.value)
-                }
-            }
-        }
-    }
-    
-    /// Convert to algebra term
-    pub fn to_algebra_term(&self) -> AlgebraTerm {
-        match self {
-            Term::Iri(iri) => AlgebraTerm::Iri(Iri(iri.clone())),
-            Term::BlankNode(id) => AlgebraTerm::BlankNode(id.clone()),
-            Term::Variable(var) => AlgebraTerm::Variable(var.clone()),
-            Term::Literal(lit) => AlgebraTerm::Literal(Literal {
-                value: lit.lexical_form.clone(),
-                language: lit.language_tag.clone(),
-                datatype: if lit.datatype == xsd::STRING && lit.language_tag.is_none() {
-                    None
-                } else if lit.language_tag.is_some() {
-                    None
-                } else {
-                    Some(Iri(lit.datatype.clone()))
-                },
-            }),
-        }
-    }
 }
 
 impl LiteralValue {
@@ -602,9 +549,9 @@ impl Term {
             AlgebraTerm::Iri(iri) => Term::iri(&iri.0),
             AlgebraTerm::Literal(lit) => {
                 if let Some(lang) = &lit.language {
-                    Term::literal_with_language(&lit.value, lang)
+                    Term::lang_literal(&lit.value, lang)
                 } else if let Some(datatype) = &lit.datatype {
-                    Term::literal_with_datatype(&lit.value, &datatype.0)
+                    Term::typed_literal(&lit.value, &datatype.0).unwrap_or_else(|_| Term::literal(&lit.value))
                 } else {
                     Term::literal(&lit.value)
                 }

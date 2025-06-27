@@ -533,20 +533,58 @@ impl<'a> UpdateExecutor<'a> {
     
     /// Evaluate a pattern to get variable bindings
     fn evaluate_pattern(&mut self, pattern: &Algebra) -> Result<Vec<HashMap<String, oxirs_core::model::Term>>, OxirsError> {
-        // This would use the query executor to evaluate the pattern
-        // For now, returning empty vec as placeholder
-        Ok(Vec::new())
+        use crate::executor::QueryExecutor;
+        
+        // Create execution context
+        let mut context = ExecutionContext::new();
+        
+        // Create query executor
+        let mut executor = QueryExecutor::new(&self.store);
+        
+        // Execute the pattern and collect bindings
+        let results = executor.execute_algebra(pattern, &mut context)?;
+        
+        // Convert results to the expected format
+        let mut bindings = Vec::new();
+        for result in results {
+            let mut binding = HashMap::new();
+            for (var, term) in result {
+                // Convert from arq::Term to oxirs_core::model::Term
+                let core_term = self.convert_term_to_core(&term)?;
+                binding.insert(var, core_term);
+            }
+            bindings.push(binding);
+        }
+        
+        Ok(bindings)
     }
     
     /// Apply bindings to pattern to get concrete quads
     fn apply_binding_to_pattern(
         &self,
-        _pattern: &Algebra,
-        _binding: &HashMap<String, oxirs_core::model::Term>,
+        pattern: &Algebra,
+        binding: &HashMap<String, oxirs_core::model::Term>,
     ) -> Result<Vec<Quad>, OxirsError> {
-        // This would instantiate the pattern with the binding
-        // For now, returning empty vec as placeholder
-        Ok(Vec::new())
+        let mut quads = Vec::new();
+        
+        // Extract triple patterns from the algebra
+        let triple_patterns = self.extract_triple_patterns(pattern);
+        
+        for triple_pattern in triple_patterns {
+            // Instantiate each term with the binding
+            let subject = self.instantiate_algebra_term(&triple_pattern.subject, binding)?;
+            let predicate = self.instantiate_algebra_term(&triple_pattern.predicate, binding)?;
+            let object = self.instantiate_algebra_term(&triple_pattern.object, binding)?;
+            
+            // Default graph unless specified otherwise
+            let graph_name = GraphName::DefaultGraph;
+            
+            // Create the quad
+            let quad = Quad::new(subject, predicate, object, graph_name);
+            quads.push(quad);
+        }
+        
+        Ok(quads)
     }
     
     /// Instantiate a template with bindings
@@ -616,6 +654,93 @@ impl<'a> UpdateExecutor<'a> {
             GraphTarget::Graph(graph_ref) => {
                 let graph = self.graph_ref_to_named_node(graph_ref)?;
                 self.store.graph_quads(Some(&graph))
+            }
+        }
+    }
+    
+    /// Convert a term from arq::Term to oxirs_core::model::Term
+    fn convert_term_to_core(&self, term: &crate::term::Term) -> Result<oxirs_core::model::Term, OxirsError> {
+        use oxirs_core::model::Term as CoreTerm;
+        
+        match term {
+            crate::term::Term::Iri(iri) => {
+                Ok(CoreTerm::NamedNode(NamedNode::new(iri)?))
+            }
+            crate::term::Term::BlankNode(id) => {
+                Ok(CoreTerm::BlankNode(BlankNode::new(id)?))
+            }
+            crate::term::Term::Literal(lit) => {
+                let core_literal = if let Some(lang) = &lit.language_tag {
+                    CoreLiteral::new_language_tagged_literal(&lit.lexical_form, lang)?
+                } else if lit.datatype != "http://www.w3.org/2001/XMLSchema#string" {
+                    CoreLiteral::new_typed_literal(&lit.lexical_form, NamedNode::new(&lit.datatype)?)?
+                } else {
+                    CoreLiteral::new_simple_literal(&lit.lexical_form)
+                };
+                Ok(CoreTerm::Literal(core_literal))
+            }
+            crate::term::Term::Variable(_) => {
+                Err(OxirsError::Query("Cannot convert variable to concrete term".to_string()))
+            }
+        }
+    }
+    
+    /// Extract triple patterns from algebra expression
+    fn extract_triple_patterns(&self, algebra: &Algebra) -> Vec<TriplePattern> {
+        let mut patterns = Vec::new();
+        
+        match algebra {
+            Algebra::Bgp { patterns: bgp_patterns } => {
+                patterns.extend(bgp_patterns.iter().cloned());
+            }
+            Algebra::Join { left, right } => {
+                patterns.extend(self.extract_triple_patterns(left));
+                patterns.extend(self.extract_triple_patterns(right));
+            }
+            Algebra::LeftJoin { left, right, .. } => {
+                patterns.extend(self.extract_triple_patterns(left));
+                patterns.extend(self.extract_triple_patterns(right));
+            }
+            Algebra::Union { left, right } => {
+                patterns.extend(self.extract_triple_patterns(left));
+                patterns.extend(self.extract_triple_patterns(right));
+            }
+            Algebra::Filter { inner, .. } => {
+                patterns.extend(self.extract_triple_patterns(inner));
+            }
+            Algebra::Extend { inner, .. } => {
+                patterns.extend(self.extract_triple_patterns(inner));
+            }
+            Algebra::Minus { left, right } => {
+                patterns.extend(self.extract_triple_patterns(left));
+                patterns.extend(self.extract_triple_patterns(right));
+            }
+            Algebra::Service { inner, .. } => {
+                patterns.extend(self.extract_triple_patterns(inner));
+            }
+            // For other algebra types, we don't extract patterns
+            _ => {}
+        }
+        
+        patterns
+    }
+    
+    /// Instantiate an algebra term with variable bindings
+    fn instantiate_algebra_term(
+        &self,
+        term: &Term,
+        binding: &HashMap<String, oxirs_core::model::Term>,
+    ) -> Result<oxirs_core::model::Term, OxirsError> {
+        match term {
+            Term::Variable(var) => {
+                binding.get(var)
+                    .cloned()
+                    .ok_or_else(|| OxirsError::Query(format!("Unbound variable: {}", var)))
+            }
+            _ => {
+                // Convert algebra term to arq term and then to core term
+                let arq_term = crate::term::Term::from_algebra_term(term);
+                self.convert_term_to_core(&arq_term)
             }
         }
     }

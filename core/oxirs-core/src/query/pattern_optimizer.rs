@@ -6,11 +6,10 @@
 use crate::indexing::IndexStats as BaseIndexStats;
 use crate::model::*;
 use crate::store::IndexedGraph;
-use crate::query::algebra::{GraphPattern, TriplePattern as AlgebraTriplePattern, TermPattern};
+use crate::query::algebra::{TriplePattern as AlgebraTriplePattern, TermPattern};
 use crate::OxirsError;
 use std::sync::Arc;
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Extended index statistics for pattern optimization
 #[derive(Debug, Default)]

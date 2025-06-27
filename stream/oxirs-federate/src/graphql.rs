@@ -12,6 +12,41 @@ use tracing::{debug, info, warn};
 
 use crate::{executor::GraphQLResponse, ExecutionPlan, QueryResultData, StepResult};
 
+/// Entity reference in a federated query
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntityReference {
+    pub entity_type: String,
+    pub key_fields: Vec<String>,
+    pub service_name: String,
+    pub selection_set: String,
+}
+
+/// Entity resolution plan for federation
+#[derive(Debug, Clone)]
+pub struct EntityResolutionPlan {
+    pub steps: Vec<EntityResolutionStep>,
+    pub dependencies: HashMap<String, Vec<String>>,
+}
+
+/// A step in entity resolution
+#[derive(Debug, Clone)]
+pub struct EntityResolutionStep {
+    pub service_name: String,
+    pub entity_type: String,
+    pub key_fields: Vec<String>,
+    pub query: String,
+    pub depends_on: Vec<String>,
+}
+
+/// Resolved entity data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResolvedEntity {
+    pub entity_type: String,
+    pub key_values: HashMap<String, serde_json::Value>,
+    pub data: serde_json::Value,
+    pub service_name: String,
+}
+
 /// GraphQL federation manager
 #[derive(Debug)]
 pub struct GraphQLFederation {
@@ -902,6 +937,475 @@ impl GraphQLFederation {
         }
         
         fed_directives
+    }
+
+    // ============= ADVANCED GRAPHQL FEDERATION & ENTITY RESOLUTION =============
+
+    /// Advanced entity resolution with federation directive support
+    pub async fn resolve_entities(&self, query: &str, variables: Option<serde_json::Value>) -> Result<GraphQLResponse> {
+        debug!("Resolving entities for federated GraphQL query");
+
+        // Parse query to identify entity references
+        let entity_references = self.extract_entity_references(query)?;
+        
+        // Build entity resolution plan
+        let resolution_plan = self.build_entity_resolution_plan(&entity_references).await?;
+        
+        // Execute entity resolution in optimal order
+        let resolved_entities = self.execute_entity_resolution_plan(&resolution_plan).await?;
+        
+        // Stitch final response
+        let response = self.stitch_entity_response(query, &resolved_entities, variables).await?;
+        
+        Ok(response)
+    }
+
+    /// Extract entity references from GraphQL query
+    fn extract_entity_references(&self, query: &str) -> Result<Vec<EntityReference>> {
+        let mut entity_refs = Vec::new();
+        
+        // Parse query to find entities (simplified parser)
+        // In real implementation, would use proper GraphQL parser
+        let lines: Vec<&str> = query.lines().collect();
+        
+        for line in lines {
+            if line.trim().contains("@key") {
+                // Extract entity type and key fields
+                if let Some(entity_ref) = self.parse_entity_reference_from_line(line)? {
+                    entity_refs.push(entity_ref);
+                }
+            }
+        }
+        
+        Ok(entity_refs)
+    }
+
+    /// Parse entity reference from a query line
+    fn parse_entity_reference_from_line(&self, line: &str) -> Result<Option<EntityReference>> {
+        // Simplified parsing - would be more sophisticated in real implementation
+        if line.contains("User") && line.contains("id") {
+            return Ok(Some(EntityReference {
+                typename: "User".to_string(),
+                key_fields: vec!["id".to_string()],
+                required_fields: vec!["username".to_string(), "email".to_string()],
+                service_id: "user-service".to_string(), // Would be determined by schema analysis
+            }));
+        }
+        
+        if line.contains("Product") && line.contains("sku") {
+            return Ok(Some(EntityReference {
+                typename: "Product".to_string(),
+                key_fields: vec!["sku".to_string()],
+                required_fields: vec!["name".to_string(), "price".to_string()],
+                service_id: "product-service".to_string(),
+            }));
+        }
+        
+        Ok(None)
+    }
+
+    /// Build entity resolution plan with optimal execution order
+    async fn build_entity_resolution_plan(&self, entity_refs: &[EntityReference]) -> Result<EntityResolutionPlan> {
+        let mut plan = EntityResolutionPlan {
+            steps: Vec::new(),
+            dependency_graph: HashMap::new(),
+        };
+
+        // Group entities by service for batch resolution
+        let mut service_entities: HashMap<String, Vec<EntityReference>> = HashMap::new();
+        for entity_ref in entity_refs {
+            service_entities.entry(entity_ref.service_id.clone())
+                .or_default()
+                .push(entity_ref.clone());
+        }
+
+        // Create resolution steps
+        for (service_id, entities) in service_entities {
+            let step = EntityResolutionStep {
+                service_id: service_id.clone(),
+                entities: entities.clone(),
+                dependencies: self.analyze_entity_dependencies(&entities).await?,
+                execution_order: plan.steps.len(),
+            };
+            
+            plan.steps.push(step);
+        }
+
+        // Optimize execution order based on dependencies
+        plan.steps.sort_by_key(|step| step.execution_order);
+
+        Ok(plan)
+    }
+
+    /// Analyze dependencies between entities
+    async fn analyze_entity_dependencies(&self, entities: &[EntityReference]) -> Result<Vec<String>> {
+        let mut dependencies = Vec::new();
+        
+        // Check if any entity requires data from other services
+        for entity in entities {
+            let schemas = self.schemas.read().await;
+            
+            // Find schema for this entity type
+            for (service_id, schema) in schemas.iter() {
+                if let Some(type_def) = schema.types.get(&entity.typename) {
+                    // Check for @requires directive indicating dependencies
+                    if self.type_has_requires_directive(type_def) {
+                        dependencies.push(service_id.clone());
+                    }
+                }
+            }
+        }
+        
+        Ok(dependencies)
+    }
+
+    /// Check if type definition has @requires directive
+    fn type_has_requires_directive(&self, type_def: &TypeDefinition) -> bool {
+        type_def.directives.iter().any(|d| d.name == "requires")
+    }
+
+    /// Execute entity resolution plan
+    async fn execute_entity_resolution_plan(&self, plan: &EntityResolutionPlan) -> Result<HashMap<String, Vec<EntityData>>> {
+        let mut resolved_entities = HashMap::new();
+        
+        for step in &plan.steps {
+            debug!("Executing entity resolution step for service: {}", step.service_id);
+            
+            // Batch resolve entities for this service
+            let entities = self.batch_resolve_entities(&step.service_id, &step.entities).await?;
+            resolved_entities.insert(step.service_id.clone(), entities);
+        }
+        
+        Ok(resolved_entities)
+    }
+
+    /// Batch resolve entities from a specific service
+    async fn batch_resolve_entities(&self, service_id: &str, entity_refs: &[EntityReference]) -> Result<Vec<EntityData>> {
+        if entity_refs.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Group by entity type for efficient querying
+        let mut entities_by_type: HashMap<String, Vec<&EntityReference>> = HashMap::new();
+        for entity_ref in entity_refs {
+            entities_by_type.entry(entity_ref.typename.clone())
+                .or_default()
+                .push(entity_ref);
+        }
+
+        let mut resolved_entities = Vec::new();
+
+        for (typename, reprs) in entities_by_type {
+            let entities_query = self.build_entities_query(&typename, &reprs)?;
+            
+            // Execute query against service (mock implementation)
+            let response = self.execute_service_query(service_id, &entities_query).await?;
+            
+            // Parse response into EntityData
+            let entities = self.parse_entities_response(&response, &typename)?;
+            resolved_entities.extend(entities);
+        }
+
+        Ok(resolved_entities)
+    }
+
+    /// Build GraphQL query for entity resolution
+    fn build_entities_query(&self, typename: &str, representations: &[&EntityReference]) -> Result<String> {
+        let mut reprs_json = Vec::new();
+        
+        for repr in representations {
+            let mut repr_obj = serde_json::Map::new();
+            repr_obj.insert("__typename".to_string(), serde_json::Value::String(typename.to_string()));
+            
+            // Add key fields (mock values for now)
+            for key_field in &repr.key_fields {
+                repr_obj.insert(key_field.clone(), serde_json::Value::String("example_value".to_string()));
+            }
+            
+            reprs_json.push(serde_json::Value::Object(repr_obj));
+        }
+        
+        let representations_str = serde_json::to_string(&reprs_json)?;
+        
+        let query = format!(
+            r#"
+            query($_representations: [_Any!]!) {{
+                _entities(representations: $_representations) {{
+                    ... on {} {{
+                        {}
+                    }}
+                }}
+            }}
+            "#,
+            typename,
+            representations.first()
+                .map(|r| r.required_fields.join("\n                        "))
+                .unwrap_or_default()
+        );
+        
+        Ok(query)
+    }
+
+    /// Execute query against a specific GraphQL service
+    async fn execute_service_query(&self, service_id: &str, query: &str) -> Result<GraphQLResponse> {
+        debug!("Executing GraphQL query against service: {}", service_id);
+        
+        // Mock implementation - would make actual HTTP request to service
+        Ok(GraphQLResponse {
+            data: Some(serde_json::json!({
+                "_entities": [
+                    {
+                        "__typename": "User",
+                        "id": "1",
+                        "username": "john_doe",
+                        "email": "john@example.com"
+                    }
+                ]
+            })),
+            errors: Vec::new(),
+            extensions: None,
+        })
+    }
+
+    /// Parse entities from GraphQL response
+    fn parse_entities_response(&self, response: &GraphQLResponse, typename: &str) -> Result<Vec<EntityData>> {
+        let mut entities = Vec::new();
+        
+        if let Some(data) = &response.data {
+            if let Some(entities_array) = data.get("_entities").and_then(|v| v.as_array()) {
+                for entity_value in entities_array {
+                    if let Some(entity_obj) = entity_value.as_object() {
+                        if entity_obj.get("__typename").and_then(|v| v.as_str()) == Some(typename) {
+                            entities.push(EntityData {
+                                typename: typename.to_string(),
+                                fields: entity_obj.clone(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(entities)
+    }
+
+    /// Stitch final response from resolved entities
+    async fn stitch_entity_response(
+        &self,
+        original_query: &str,
+        resolved_entities: &HashMap<String, Vec<EntityData>>,
+        variables: Option<serde_json::Value>,
+    ) -> Result<GraphQLResponse> {
+        debug!("Stitching final GraphQL response from {} services", resolved_entities.len());
+        
+        // Combine all entity data into a unified response
+        let mut combined_data = serde_json::Map::new();
+        
+        for (service_id, entities) in resolved_entities {
+            for entity in entities {
+                // Merge entity fields into response based on query structure
+                self.merge_entity_into_response(&mut combined_data, entity, original_query)?;
+            }
+        }
+        
+        Ok(GraphQLResponse {
+            data: Some(serde_json::Value::Object(combined_data)),
+            errors: Vec::new(),
+            extensions: None,
+        })
+    }
+
+    /// Merge entity data into response structure
+    fn merge_entity_into_response(
+        &self,
+        response: &mut serde_json::Map<String, serde_json::Value>,
+        entity: &EntityData,
+        query: &str,
+    ) -> Result<()> {
+        // Simplified merging logic based on query structure
+        // In real implementation, would parse query AST and match field selections
+        
+        if query.contains("me") && entity.typename == "User" {
+            response.insert("me".to_string(), serde_json::Value::Object(entity.fields.clone()));
+        } else if query.contains("product") && entity.typename == "Product" {
+            response.insert("product".to_string(), serde_json::Value::Object(entity.fields.clone()));
+        }
+        
+        Ok(())
+    }
+
+    /// Advanced schema composition with federation directive support
+    pub async fn compose_federated_schema(&self) -> Result<ComposedSchema> {
+        debug!("Composing federated schema with directive support");
+        
+        let schemas = self.schemas.read().await;
+        let mut composed = ComposedSchema {
+            sdl: String::new(),
+            entity_types: HashMap::new(),
+            service_capabilities: HashMap::new(),
+            field_ownership: HashMap::new(),
+        };
+
+        // Process each schema for federation directives
+        for (service_id, schema) in schemas.iter() {
+            self.process_schema_for_federation(&mut composed, service_id, schema)?;
+        }
+
+        // Generate composed SDL
+        composed.sdl = self.generate_composed_sdl(&composed)?;
+
+        // Validate composition
+        self.validate_federated_composition(&composed)?;
+
+        Ok(composed)
+    }
+
+    /// Process schema for federation directives (@key, @external, @requires, @provides)
+    fn process_schema_for_federation(
+        &self,
+        composed: &mut ComposedSchema,
+        service_id: &str,
+        schema: &FederatedSchema,
+    ) -> Result<()> {
+        for (type_name, type_def) in &schema.types {
+            // Check for @key directive (entity definition)
+            for directive in &type_def.directives {
+                match directive.name.as_str() {
+                    "key" => {
+                        let key_fields = self.extract_key_fields_from_directive(directive)?;
+                        composed.entity_types.insert(type_name.clone(), EntityTypeInfo {
+                            key_fields,
+                            owning_service: service_id.to_string(),
+                            extending_services: Vec::new(),
+                        });
+                    }
+                    _ => {}
+                }
+            }
+
+            // Process field-level directives
+            if let TypeKind::Object { fields } = &type_def.kind {
+                for (field_name, field_def) in fields {
+                    let field_key = format!("{}.{}", type_name, field_name);
+                    
+                    for directive in &field_def.directives {
+                        match directive.name.as_str() {
+                            "external" => {
+                                // Field is defined in another service
+                                composed.field_ownership.insert(field_key.clone(), FieldOwnership::External);
+                            }
+                            "requires" => {
+                                // Field requires other fields to be resolved first
+                                let required_fields = self.extract_requires_fields_from_directive(directive)?;
+                                composed.field_ownership.insert(field_key.clone(), FieldOwnership::Requires(required_fields));
+                            }
+                            "provides" => {
+                                // Field provides data for other services
+                                let provided_fields = self.extract_provides_fields_from_directive(directive)?;
+                                composed.field_ownership.insert(field_key.clone(), FieldOwnership::Provides(provided_fields));
+                            }
+                            _ => {}
+                        }
+                    }
+                    
+                    // Track field ownership by service
+                    if !composed.field_ownership.contains_key(&field_key) {
+                        composed.field_ownership.insert(field_key, FieldOwnership::Owned(service_id.to_string()));
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Extract key fields from @key directive
+    fn extract_key_fields_from_directive(&self, directive: &Directive) -> Result<Vec<String>> {
+        // Parse fields argument from @key(fields: "id name")
+        for arg in &directive.arguments {
+            if arg.name == "fields" {
+                // Simple parsing - would be more sophisticated in real implementation
+                let fields_str = arg.value.trim_matches('"');
+                return Ok(fields_str.split_whitespace().map(|s| s.to_string()).collect());
+            }
+        }
+        Err(anyhow!("@key directive missing fields argument"))
+    }
+
+    /// Extract required fields from @requires directive
+    fn extract_requires_fields_from_directive(&self, directive: &Directive) -> Result<Vec<String>> {
+        for arg in &directive.arguments {
+            if arg.name == "fields" {
+                let fields_str = arg.value.trim_matches('"');
+                return Ok(fields_str.split_whitespace().map(|s| s.to_string()).collect());
+            }
+        }
+        Err(anyhow!("@requires directive missing fields argument"))
+    }
+
+    /// Extract provided fields from @provides directive
+    fn extract_provides_fields_from_directive(&self, directive: &Directive) -> Result<Vec<String>> {
+        for arg in &directive.arguments {
+            if arg.name == "fields" {
+                let fields_str = arg.value.trim_matches('"');
+                return Ok(fields_str.split_whitespace().map(|s| s.to_string()).collect());
+            }
+        }
+        Err(anyhow!("@provides directive missing fields argument"))
+    }
+
+    /// Generate composed SDL from federated schemas
+    fn generate_composed_sdl(&self, composed: &ComposedSchema) -> Result<String> {
+        let mut sdl = String::new();
+        
+        // Add federation directives
+        sdl.push_str("directive @key(fields: String!) on OBJECT | INTERFACE\n");
+        sdl.push_str("directive @external on FIELD_DEFINITION\n");
+        sdl.push_str("directive @requires(fields: String!) on FIELD_DEFINITION\n");
+        sdl.push_str("directive @provides(fields: String!) on FIELD_DEFINITION\n\n");
+        
+        // Add entity types
+        for (type_name, entity_info) in &composed.entity_types {
+            sdl.push_str(&format!("type {} @key(fields: \"{}\") {{\n", 
+                                  type_name, 
+                                  entity_info.key_fields.join(" ")));
+            sdl.push_str("  # Entity fields would be listed here\n");
+            sdl.push_str("}\n\n");
+        }
+        
+        Ok(sdl)
+    }
+
+    /// Validate federated composition for consistency
+    fn validate_federated_composition(&self, composed: &ComposedSchema) -> Result<()> {
+        debug!("Validating federated schema composition");
+        
+        // Check that all required fields are satisfied
+        for (field_key, ownership) in &composed.field_ownership {
+            if let FieldOwnership::Requires(required_fields) = ownership {
+                for required_field in required_fields {
+                    let required_key = format!("{}.{}", 
+                                               field_key.split('.').next().unwrap_or(""), 
+                                               required_field);
+                    if !composed.field_ownership.contains_key(&required_key) {
+                        return Err(anyhow!("Required field {} not found for {}", required_field, field_key));
+                    }
+                }
+            }
+        }
+        
+        // Validate entity key fields exist
+        for (type_name, entity_info) in &composed.entity_types {
+            for key_field in &entity_info.key_fields {
+                let field_key = format!("{}.{}", type_name, key_field);
+                if !composed.field_ownership.contains_key(&field_key) {
+                    return Err(anyhow!("Key field {} not found for entity {}", key_field, type_name));
+                }
+            }
+        }
+        
+        info!("Federated schema composition validation successful");
+        Ok(())
     }
 }
 

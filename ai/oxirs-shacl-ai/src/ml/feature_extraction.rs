@@ -233,10 +233,9 @@ impl FeatureExtractor {
         let avg = degrees.iter().sum::<f64>() / degrees.len() as f64;
         let max = degrees.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         let min = degrees.iter().cloned().fold(f64::INFINITY, f64::min);
-        
-        let variance = degrees.iter()
-            .map(|&d| (d - avg).powi(2))
-            .sum::<f64>() / degrees.len() as f64;
+
+        let variance =
+            degrees.iter().map(|&d| (d - avg).powi(2)).sum::<f64>() / degrees.len() as f64;
 
         vec![avg, max, min, variance]
     }
@@ -245,28 +244,35 @@ impl FeatureExtractor {
     fn compute_centrality_features(&self, graph_data: &GraphData) -> Vec<f64> {
         // Simplified centrality calculation
         let n = graph_data.nodes.len() as f64;
-        
+
         // Approximate betweenness centrality
         let avg_betweenness = 0.5 / n.max(1.0);
         let max_betweenness = 1.0 / n.max(1.0);
-        
+
         // Approximate closeness centrality
         let avg_closeness = 0.7 / n.max(1.0);
         let max_closeness = 1.0 / n.max(1.0);
 
-        vec![avg_betweenness, max_betweenness, avg_closeness, max_closeness]
+        vec![
+            avg_betweenness,
+            max_betweenness,
+            avg_closeness,
+            max_closeness,
+        ]
     }
 
     /// Compute clustering features
     fn compute_clustering_features(&self, graph_data: &GraphData) -> Vec<f64> {
         // Build adjacency list
         let mut adj_list: HashMap<String, HashSet<String>> = HashMap::new();
-        
+
         for edge in &graph_data.edges {
-            adj_list.entry(edge.source_id.clone())
+            adj_list
+                .entry(edge.source_id.clone())
                 .or_insert_with(HashSet::new)
                 .insert(edge.target_id.clone());
-            adj_list.entry(edge.target_id.clone())
+            adj_list
+                .entry(edge.target_id.clone())
                 .or_insert_with(HashSet::new)
                 .insert(edge.source_id.clone());
         }
@@ -282,12 +288,14 @@ impl FeatureExtractor {
 
             let mut triangles = 0;
             let neighbor_vec: Vec<_> = neighbors.iter().collect();
-            
+
             for i in 0..neighbor_vec.len() {
                 for j in i + 1..neighbor_vec.len() {
-                    if adj_list.get(neighbor_vec[i])
+                    if adj_list
+                        .get(neighbor_vec[i])
                         .map(|n| n.contains(neighbor_vec[j]))
-                        .unwrap_or(false) {
+                        .unwrap_or(false)
+                    {
                         triangles += 1;
                     }
                 }
@@ -315,12 +323,14 @@ impl FeatureExtractor {
     fn compute_path_features(&self, graph_data: &GraphData) -> Vec<f64> {
         // Build adjacency list
         let mut adj_list: HashMap<String, Vec<String>> = HashMap::new();
-        
+
         for edge in &graph_data.edges {
-            adj_list.entry(edge.source_id.clone())
+            adj_list
+                .entry(edge.source_id.clone())
                 .or_insert_with(Vec::new)
                 .push(edge.target_id.clone());
-            adj_list.entry(edge.target_id.clone())
+            adj_list
+                .entry(edge.target_id.clone())
                 .or_insert_with(Vec::new)
                 .push(edge.source_id.clone());
         }
@@ -328,10 +338,14 @@ impl FeatureExtractor {
         // Sample paths using BFS
         let mut all_paths = Vec::new();
         let sample_size = 10.min(graph_data.nodes.len());
-        
+
         for i in 0..sample_size {
             let start_node = &graph_data.nodes[i].node_id;
-            let paths = self.bfs_shortest_paths(start_node, &adj_list, self.config.structural_features.max_path_length);
+            let paths = self.bfs_shortest_paths(
+                start_node,
+                &adj_list,
+                self.config.structural_features.max_path_length,
+            );
             all_paths.extend(paths);
         }
 
@@ -347,20 +361,25 @@ impl FeatureExtractor {
     }
 
     /// BFS for shortest paths
-    fn bfs_shortest_paths(&self, start: &str, adj_list: &HashMap<String, Vec<String>>, max_length: usize) -> Vec<usize> {
+    fn bfs_shortest_paths(
+        &self,
+        start: &str,
+        adj_list: &HashMap<String, Vec<String>>,
+        max_length: usize,
+    ) -> Vec<usize> {
         let mut distances = HashMap::new();
         let mut queue = VecDeque::new();
-        
+
         distances.insert(start.to_string(), 0);
         queue.push_back(start.to_string());
-        
+
         while let Some(node) = queue.pop_front() {
             let dist = distances[&node];
-            
+
             if dist >= max_length {
                 continue;
             }
-            
+
             if let Some(neighbors) = adj_list.get(&node) {
                 for neighbor in neighbors {
                     if !distances.contains_key(neighbor) {
@@ -370,19 +389,19 @@ impl FeatureExtractor {
                 }
             }
         }
-        
+
         distances.values().cloned().collect()
     }
 
     /// Compute motif features
     fn compute_motif_features(&self, graph_data: &GraphData) -> Vec<f64> {
         let mut motif_counts = Vec::new();
-        
+
         for &size in &self.config.structural_features.motif_sizes {
             let count = self.count_motifs_of_size(graph_data, size);
             motif_counts.push(count as f64);
         }
-        
+
         motif_counts
     }
 
@@ -401,7 +420,11 @@ impl FeatureExtractor {
         let mut features = Vec::new();
         let mut names = Vec::new();
 
-        if self.config.statistical_features.include_distribution_features {
+        if self
+            .config
+            .statistical_features
+            .include_distribution_features
+        {
             let dist_features = self.compute_distribution_features(graph_data);
             features.extend(&dist_features);
             names.extend(vec![
@@ -412,7 +435,11 @@ impl FeatureExtractor {
             ]);
         }
 
-        if self.config.statistical_features.include_correlation_features {
+        if self
+            .config
+            .statistical_features
+            .include_correlation_features
+        {
             let corr_features = self.compute_correlation_features(graph_data);
             features.extend(&corr_features);
             names.extend(vec![
@@ -449,42 +476,46 @@ impl FeatureExtractor {
         // Degree distribution statistics
         let mut degrees = Vec::new();
         let mut degree_map: HashMap<String, usize> = HashMap::new();
-        
+
         for edge in &graph_data.edges {
             *degree_map.entry(edge.source_id.clone()).or_insert(0) += 1;
             *degree_map.entry(edge.target_id.clone()).or_insert(0) += 1;
         }
-        
+
         for &degree in degree_map.values() {
             degrees.push(degree as f64);
         }
-        
+
         if degrees.is_empty() {
             return vec![0.0, 0.0, 0.0, 0.0];
         }
-        
+
         let mean = degrees.iter().sum::<f64>() / degrees.len() as f64;
-        let variance = degrees.iter()
-            .map(|&d| (d - mean).powi(2))
-            .sum::<f64>() / degrees.len() as f64;
+        let variance =
+            degrees.iter().map(|&d| (d - mean).powi(2)).sum::<f64>() / degrees.len() as f64;
         let std = variance.sqrt();
-        
+
         let skewness = if std > 0.0 {
-            degrees.iter()
+            degrees
+                .iter()
                 .map(|&d| ((d - mean) / std).powi(3))
-                .sum::<f64>() / degrees.len() as f64
+                .sum::<f64>()
+                / degrees.len() as f64
         } else {
             0.0
         };
-        
+
         let kurtosis = if std > 0.0 {
-            degrees.iter()
+            degrees
+                .iter()
                 .map(|&d| ((d - mean) / std).powi(4))
-                .sum::<f64>() / degrees.len() as f64 - 3.0
+                .sum::<f64>()
+                / degrees.len() as f64
+                - 3.0
         } else {
             0.0
         };
-        
+
         vec![mean, std, skewness, kurtosis]
     }
 
@@ -493,7 +524,7 @@ impl FeatureExtractor {
         // Simplified degree correlation and assortativity
         let degree_correlation = 0.3; // Placeholder
         let assortativity = 0.1; // Placeholder
-        
+
         vec![degree_correlation, assortativity]
     }
 
@@ -502,24 +533,29 @@ impl FeatureExtractor {
         // Degree entropy
         let mut degree_counts: HashMap<usize, usize> = HashMap::new();
         let mut degree_map: HashMap<String, usize> = HashMap::new();
-        
+
         for edge in &graph_data.edges {
             *degree_map.entry(edge.source_id.clone()).or_insert(0) += 1;
             *degree_map.entry(edge.target_id.clone()).or_insert(0) += 1;
         }
-        
+
         for &degree in degree_map.values() {
             *degree_counts.entry(degree).or_insert(0) += 1;
         }
-        
+
         let total = degree_map.len() as f64;
-        let degree_entropy = degree_counts.values()
+        let degree_entropy = degree_counts
+            .values()
             .map(|&count| {
                 let p = count as f64 / total;
-                if p > 0.0 { -p * p.log2() } else { 0.0 }
+                if p > 0.0 {
+                    -p * p.log2()
+                } else {
+                    0.0
+                }
             })
             .sum();
-        
+
         // Type entropy
         let mut type_counts: HashMap<String, usize> = HashMap::new();
         for node in &graph_data.nodes {
@@ -527,49 +563,60 @@ impl FeatureExtractor {
                 *type_counts.entry(node_type.clone()).or_insert(0) += 1;
             }
         }
-        
+
         let type_total = graph_data.nodes.len() as f64;
-        let type_entropy = type_counts.values()
+        let type_entropy = type_counts
+            .values()
             .map(|&count| {
                 let p = count as f64 / type_total;
-                if p > 0.0 { -p * p.log2() } else { 0.0 }
+                if p > 0.0 {
+                    -p * p.log2()
+                } else {
+                    0.0
+                }
             })
             .sum();
-        
+
         // Property entropy
         let mut prop_counts: HashMap<String, usize> = HashMap::new();
         for edge in &graph_data.edges {
             *prop_counts.entry(edge.edge_type.clone()).or_insert(0) += 1;
         }
-        
+
         let prop_total = graph_data.edges.len() as f64;
-        let property_entropy = prop_counts.values()
+        let property_entropy = prop_counts
+            .values()
             .map(|&count| {
                 let p = count as f64 / prop_total;
-                if p > 0.0 { -p * p.log2() } else { 0.0 }
+                if p > 0.0 {
+                    -p * p.log2()
+                } else {
+                    0.0
+                }
             })
             .sum();
-        
+
         vec![degree_entropy, type_entropy, property_entropy]
     }
 
     /// Compute diversity features
     fn compute_diversity_features(&self, graph_data: &GraphData) -> Vec<f64> {
         // Type diversity (number of unique types / total nodes)
-        let unique_types: HashSet<_> = graph_data.nodes.iter()
+        let unique_types: HashSet<_> = graph_data
+            .nodes
+            .iter()
             .filter_map(|n| n.node_type.as_ref())
             .collect();
         let type_diversity = unique_types.len() as f64 / graph_data.nodes.len().max(1) as f64;
-        
+
         // Property diversity
-        let unique_properties: HashSet<_> = graph_data.edges.iter()
-            .map(|e| &e.edge_type)
-            .collect();
-        let property_diversity = unique_properties.len() as f64 / graph_data.edges.len().max(1) as f64;
-        
+        let unique_properties: HashSet<_> = graph_data.edges.iter().map(|e| &e.edge_type).collect();
+        let property_diversity =
+            unique_properties.len() as f64 / graph_data.edges.len().max(1) as f64;
+
         // Namespace diversity (simplified)
         let namespace_diversity = 0.5; // Placeholder
-        
+
         vec![type_diversity, property_diversity, namespace_diversity]
     }
 
@@ -714,40 +761,42 @@ impl FeatureExtractor {
     /// Compute type-based features
     fn compute_type_features(&self, graph_data: &GraphData) -> Vec<f64> {
         let mut type_counts: HashMap<String, usize> = HashMap::new();
-        
+
         for node in &graph_data.nodes {
             if let Some(node_type) = &node.node_type {
                 *type_counts.entry(node_type.clone()).or_insert(0) += 1;
             }
         }
-        
+
         let num_types = type_counts.len() as f64;
         let type_ratio = num_types / graph_data.nodes.len().max(1) as f64;
-        
-        let dominant_type_freq = type_counts.values()
+
+        let dominant_type_freq = type_counts
+            .values()
             .max()
             .map(|&c| c as f64 / graph_data.nodes.len().max(1) as f64)
             .unwrap_or(0.0);
-        
+
         vec![num_types, type_ratio, dominant_type_freq]
     }
 
     /// Compute property-based features
     fn compute_property_features(&self, graph_data: &GraphData) -> Vec<f64> {
         let mut property_counts: HashMap<String, usize> = HashMap::new();
-        
+
         for edge in &graph_data.edges {
             *property_counts.entry(edge.edge_type.clone()).or_insert(0) += 1;
         }
-        
+
         let num_properties = property_counts.len() as f64;
         let property_ratio = num_properties / graph_data.edges.len().max(1) as f64;
-        
-        let dominant_property_freq = property_counts.values()
+
+        let dominant_property_freq = property_counts
+            .values()
             .max()
             .map(|&c| c as f64 / graph_data.edges.len().max(1) as f64)
             .unwrap_or(0.0);
-        
+
         vec![num_properties, property_ratio, dominant_property_freq]
     }
 
@@ -792,10 +841,7 @@ impl Default for FeatureExtractionConfig {
             temporal_features: TemporalFeatureConfig {
                 include_temporal_features: false,
                 time_window_sizes: vec![1, 7, 30],
-                temporal_aggregations: vec![
-                    TemporalAggregation::Mean,
-                    TemporalAggregation::Trend,
-                ],
+                temporal_aggregations: vec![TemporalAggregation::Mean, TemporalAggregation::Trend],
             },
             semantic_features: SemanticFeatureConfig {
                 include_type_features: true,
@@ -810,7 +856,7 @@ impl Default for FeatureExtractionConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_feature_extractor_creation() {
         let config = FeatureExtractionConfig::default();

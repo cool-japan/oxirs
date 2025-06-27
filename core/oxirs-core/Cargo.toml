@@ -59,7 +59,7 @@ md5 = "0.7"
 # Additional dependencies for SPARQL functions
 chrono = { version = "0.4", features = ["serde"] }
 rand.workspace = true
-uuid = { version = "1.6", features = ["v4"] }
+uuid = { version = "1.6", features = ["v4", "serde"] }
 urlencoding = "2.1"
 
 # Storage engine dependencies
@@ -87,6 +87,9 @@ bimap = "0.6"
 # Zero-copy serialization
 bytes = "1.5"
 
+# AI and ML dependencies
+ndarray = { version = "0.15", features = ["rayon"] }
+
 # Dependencies for Unicode normalization (replacing oxiri/oxilangtag)
 icu = "1.5"
 icu_normalizer = "1.5"
@@ -109,6 +112,7 @@ simd = ["wide"]
 gpu = []
 blas = []
 rdf-12 = []
+rdf-star = []
 
 [[bench]]
 name = "indexed_graph_bench"

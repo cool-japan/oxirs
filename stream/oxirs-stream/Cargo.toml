@@ -45,6 +45,13 @@ serde_cbor = "0.11"
 flate2 = "1.0"
 zstd = "0.13"
 reqwest = { version = "0.12", features = ["json"] }
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+rand = "0.8"
+prost = "0.12"
+prost-types = "0.12"
+apache-avro = "0.16"
 
 [dev-dependencies]
 criterion.workspace = true

@@ -20,10 +20,117 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
-use crate::{
-    metadata::{ExtendedServiceMetadata, HealthCheckResult},
-    HealthStatus, ServiceStatus,
-};
+use crate::metadata::{ExtendedServiceMetadata, HealthCheckResult};
+
+/// Type of federated service
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ServiceType {
+    /// SPARQL endpoint
+    Sparql,
+    /// GraphQL service
+    GraphQL,
+    /// Hybrid service supporting both SPARQL and GraphQL
+    Hybrid,
+    /// REST API with RDF support
+    RestRdf,
+    /// Custom service type
+    Custom(String),
+}
+
+/// Service capabilities for federation
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ServiceCapability {
+    /// Basic SPARQL 1.0 query support
+    SparqlQuery,
+    /// SPARQL 1.1 query support
+    Sparql11Query,
+    /// SPARQL 1.2 query support
+    Sparql12Query,
+    /// SPARQL UPDATE support
+    SparqlUpdate,
+    /// Graph Store Protocol support
+    GraphStore,
+    /// RDF-star support
+    RdfStar,
+    /// Full-text search capabilities
+    FullTextSearch,
+    /// Geospatial query support
+    Geospatial,
+    /// GraphQL query support
+    GraphQLQuery,
+    /// GraphQL mutation support
+    GraphQLMutation,
+    /// GraphQL subscription support
+    GraphQLSubscription,
+    /// Federation directives support
+    GraphQLFederation,
+    /// Custom extensions
+    CustomExtension(String),
+    /// Service can participate in transactions
+    Transactional,
+    /// Service supports versioning
+    Versioning,
+    /// Service supports real-time updates
+    RealTimeUpdates,
+    /// Service supports caching hints
+    CacheHints,
+    /// Service supports authentication
+    Authentication,
+    /// Service supports authorization
+    Authorization,
+    /// Service provides statistics
+    Statistics,
+    /// Service supports batch operations
+    BatchOperations,
+}
+
+/// Authentication configuration for services
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AuthConfig {
+    /// No authentication required
+    None,
+    /// Basic HTTP authentication
+    Basic { username: String, password: String },
+    /// Bearer token authentication
+    Bearer { token: String },
+    /// API key authentication
+    ApiKey { key: String, header: String },
+    /// OAuth 2.0 authentication
+    OAuth2 {
+        token_url: String,
+        client_id: String,
+        client_secret: String,
+        scope: Option<String>,
+    },
+    /// Custom authentication headers
+    Custom { headers: HashMap<String, String> },
+}
+
+/// Service health status
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ServiceStatus {
+    /// Service is healthy and available
+    Healthy,
+    /// Service is partially available (degraded performance)
+    Degraded,
+    /// Service is temporarily unavailable
+    Unavailable,
+    /// Service status is unknown
+    Unknown,
+}
+
+/// Overall health status for collections of services
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum HealthStatus {
+    /// All services are healthy
+    Healthy,
+    /// Some services have issues but system is functional
+    Degraded,
+    /// Critical issues affecting functionality
+    Critical,
+    /// Unable to determine health status
+    Unknown,
+}
 
 /// Registry for managing federated services
 #[derive(Debug)]
@@ -679,8 +786,23 @@ impl ServiceRegistry {
                 }
             }
             AuthType::OAuth2 => {
-                // TODO: Implement OAuth2 flow
-                warn!("OAuth2 authentication not yet implemented");
+                // Implement OAuth2 client credentials flow
+                if let Some(oauth_config) = &auth.oauth2_config {
+                    match self.perform_oauth2_flow(oauth_config).await {
+                        Ok(token) => {
+                            headers.insert(
+                                AUTHORIZATION,
+                                HeaderValue::from_str(&format!("Bearer {}", token))?,
+                            );
+                        }
+                        Err(e) => {
+                            warn!("OAuth2 authentication failed: {}", e);
+                            return Err(anyhow!("OAuth2 authentication failed: {}", e));
+                        }
+                    }
+                } else {
+                    return Err(anyhow!("OAuth2 configuration missing"));
+                }
             }
             AuthType::None => {}
         }
@@ -863,6 +985,42 @@ impl ServiceRegistry {
         } else {
             true // No rate limit configured
         }
+    }
+
+    /// Perform OAuth2 client credentials flow
+    async fn perform_oauth2_flow(&self, oauth_config: &OAuth2Config) -> Result<String> {
+        let params = [
+            ("grant_type", "client_credentials"),
+            ("client_id", &oauth_config.client_id),
+            ("client_secret", &oauth_config.client_secret),
+        ];
+        
+        let mut form_params = Vec::new();
+        form_params.extend_from_slice(&params);
+        
+        // Add scope if provided
+        if let Some(scope) = &oauth_config.scope {
+            form_params.push(("scope", scope));
+        }
+        
+        let response = self
+            .http_client
+            .post(&oauth_config.token_url)
+            .form(&form_params)
+            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .send()
+            .await?;
+        
+        if !response.status().is_success() {
+            return Err(anyhow!("OAuth2 token request failed with status: {}", response.status()));
+        }
+        
+        let token_response: OAuth2TokenResponse = response.json().await?;
+        
+        // TODO: Cache token with expiration
+        debug!("Successfully obtained OAuth2 token");
+        
+        Ok(token_response.access_token)
     }
 }
 
@@ -1164,6 +1322,16 @@ pub struct ServiceRegistryStats {
     pub capabilities_distribution: HashMap<ServiceCapability, usize>,
     #[serde(skip)]
     pub last_health_check: Option<Instant>,
+}
+
+
+/// OAuth2 token response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct OAuth2TokenResponse {
+    pub access_token: String,
+    pub token_type: String,
+    pub expires_in: Option<u64>,
+    pub scope: Option<String>,
 }
 
 #[derive(Debug)]

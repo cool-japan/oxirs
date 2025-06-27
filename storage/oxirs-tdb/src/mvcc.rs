@@ -551,6 +551,46 @@ where
             .collect())
     }
 
+    /// Get all keys visible to a transaction
+    pub fn get_all_keys_tx(&self, tx_id: TransactionId) -> Result<Vec<K>> {
+        let active_txs = self
+            .active_transactions
+            .read()
+            .map_err(|_| anyhow!("Failed to acquire active transactions lock"))?;
+
+        let transaction = active_txs
+            .get(&tx_id)
+            .ok_or_else(|| anyhow!("Transaction {} not found", tx_id))?;
+
+        let data = self
+            .data
+            .read()
+            .map_err(|_| anyhow!("Failed to acquire data lock"))?;
+
+        let mut result = Vec::new();
+
+        for (key, versions) in data.iter() {
+            // Check if there's a visible version of this key for this transaction
+            for versioned_value in versions.iter().rev() {
+                if versioned_value.version == 0 {
+                    // Uncommitted value - only visible if it's from the same transaction
+                    if versioned_value.transaction_id == tx_id && !versioned_value.is_deleted {
+                        result.push(key.clone());
+                        break;
+                    }
+                } else if versioned_value.version <= transaction.start_version {
+                    // Committed value visible to this transaction
+                    if !versioned_value.is_deleted {
+                        result.push(key.clone());
+                    }
+                    break;
+                }
+            }
+        }
+
+        Ok(result)
+    }
+
     // Private helper methods
 
     fn validate_transaction(&self, transaction: &Transaction) -> Result<()> {

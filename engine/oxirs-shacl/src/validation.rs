@@ -1532,9 +1532,21 @@ impl<'a> ValidationEngine<'a> {
         // If qualified_value_shapes_disjoint is true, we need additional validation
         // This means that each value can conform to at most one qualified value shape
         if constraint.qualified_value_shapes_disjoint {
-            // This would require checking against other qualified value shapes in the same property shape
-            // For now, we'll log this requirement but not implement the full disjoint logic
-            tracing::debug!("QualifiedValueShapesDisjoint=true requires additional validation across sibling constraints");
+            // Validate disjoint constraint by checking against other qualified value shapes
+            // in the same property shape context
+            let disjoint_violation = self.validate_qualified_value_shapes_disjoint(
+                store, 
+                context, 
+                &constraint.qualified_value_shape,
+                graph_name
+            )?;
+            
+            if let Some(violation_message) = disjoint_violation {
+                return Ok(ConstraintEvaluationResult::violated(
+                    None,
+                    Some(violation_message)
+                ));
+            }
         }
 
         tracing::debug!(
@@ -1543,6 +1555,88 @@ impl<'a> ValidationEngine<'a> {
             constraint.qualified_value_shape.as_str()
         );
         Ok(ConstraintEvaluationResult::satisfied())
+    }
+
+    /// Validate qualified value shapes disjoint constraint
+    /// This checks that each value conforms to at most one qualified value shape
+    fn validate_qualified_value_shapes_disjoint(
+        &mut self,
+        store: &Store,
+        context: &ConstraintContext,
+        current_qualified_shape: &ShapeId,
+        graph_name: Option<&str>,
+    ) -> Result<Option<String>> {
+        // Find the property shape that contains this qualified value shape constraint
+        let property_shape = self.shapes.get(&context.shape_id).ok_or_else(|| {
+            ShaclError::ValidationEngine(format!("Shape not found: {}", context.shape_id))
+        })?;
+
+        // Get all qualified value shape constraints from this property shape
+        let mut qualified_constraints = Vec::new();
+        for (component_id, constraint) in &property_shape.constraints {
+            if let Constraint::QualifiedValueShape(qvs_constraint) = constraint {
+                if qvs_constraint.qualified_value_shapes_disjoint {
+                    qualified_constraints.push(qvs_constraint);
+                }
+            }
+        }
+
+        // If there's only one qualified value shape constraint, no disjoint validation needed
+        if qualified_constraints.len() <= 1 {
+            return Ok(None);
+        }
+
+        // For each value, check conformance to all qualified value shapes
+        for value in &context.values {
+            let mut conforming_shapes = Vec::new();
+
+            for qvs_constraint in &qualified_constraints {
+                let shape = self.shapes.get(&qvs_constraint.qualified_value_shape).ok_or_else(|| {
+                    ShaclError::ValidationEngine(format!(
+                        "Shape not found for qualified value shape constraint: {}",
+                        qvs_constraint.qualified_value_shape.as_str()
+                    ))
+                })?;
+
+                let validation_result = self.validate_node_against_shape(store, shape, value, graph_name)?;
+                if validation_result.conforms() {
+                    conforming_shapes.push(&qvs_constraint.qualified_value_shape);
+                }
+            }
+
+            // Check if the value conforms to more than one qualified value shape
+            if conforming_shapes.len() > 1 {
+                let shape_names: Vec<String> = conforming_shapes
+                    .iter()
+                    .map(|s| s.as_str().to_string())
+                    .collect();
+                
+                return Ok(Some(format!(
+                    "Qualified value shapes disjoint constraint violated: value {} conforms to multiple qualified value shapes: {}",
+                    self.format_term_for_message(value),
+                    shape_names.join(", ")
+                )));
+            }
+        }
+
+        Ok(None)
+    }
+
+    /// Format a term for display in error messages
+    fn format_term_for_message(&self, term: &Term) -> String {
+        match term {
+            Term::NamedNode(node) => node.as_str().to_string(),
+            Term::BlankNode(node) => node.as_str().to_string(),
+            Term::Literal(literal) => {
+                if let Some(lang) = literal.language() {
+                    format!("\"{}\"@{}", literal.value(), lang)
+                } else {
+                    format!("\"{}\"", literal.value())
+                }
+            }
+            Term::Variable(var) => format!("?{}", var.name()),
+            Term::QuotedTriple(_) => "<<quoted_triple>>".to_string(),
+        }
     }
 
     // Closed Shape Constraints (placeholder implementation)

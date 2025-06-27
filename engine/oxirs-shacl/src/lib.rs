@@ -70,12 +70,18 @@ pub use shapes::*;
 pub use targets::*;
 pub use validation::*;
 
+// Re-export optimization types
+pub use targets::{TargetOptimizationConfig, TargetCacheStats, TargetSelectionStats};
+
 /// SHACL namespace IRI
 pub static SHACL_NS: &str = "http://www.w3.org/ns/shacl#";
 
 /// SHACL vocabulary terms
 pub static SHACL_VOCAB: Lazy<vocabulary::ShaclVocabulary> =
     Lazy::new(vocabulary::ShaclVocabulary::new);
+
+/// IRI resolver for validation and expansion
+pub use vocabulary::IriResolver;
 
 /// Core error type for SHACL operations
 #[derive(Debug, thiserror::Error)]
