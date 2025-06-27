@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use oxirs_core::{
     model::{BlankNode, Literal, NamedNode, RdfTerm, Term, Triple},
-    store::Store,
+    Store,
     OxirsError,
 };
 
@@ -18,6 +18,15 @@ use crate::{
     PropertyPath, Result, Severity, ShaclError, Shape, ShapeId, Target, ValidationConfig,
     ValidationReport,
 };
+
+/// Cache key for constraint results
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct ConstraintCacheKey {
+    focus_node: Term,
+    shape_id: ShapeId,
+    constraint_component_id: ConstraintComponentId,
+    property_path: Option<PropertyPath>,
+}
 
 /// Core SHACL validation engine
 #[derive(Debug)]
@@ -39,6 +48,9 @@ pub struct ValidationEngine<'a> {
 
     /// Validation statistics
     stats: ValidationStats,
+    
+    /// Cache for constraint evaluation results
+    constraint_cache: std::cell::RefCell<HashMap<ConstraintCacheKey, ConstraintEvaluationResult>>,
 }
 
 impl<'a> ValidationEngine<'a> {
@@ -51,6 +63,7 @@ impl<'a> ValidationEngine<'a> {
             path_evaluator: PropertyPathEvaluator::new(),
             sparql_executor: SparqlConstraintExecutor::new(),
             stats: ValidationStats::default(),
+            constraint_cache: std::cell::RefCell::new(HashMap::new()),
         }
     }
 
@@ -304,7 +317,25 @@ impl<'a> ValidationEngine<'a> {
         path: Option<&PropertyPath>,
         graph_name: Option<&str>,
     ) -> Result<ConstraintEvaluationResult> {
-        match constraint {
+        // Check cache first if caching is enabled
+        if self.config.max_violations == 0 || !self.config.fail_fast {
+            let cache_key = ConstraintCacheKey {
+                focus_node: context.focus_node.clone(),
+                shape_id: context.shape_id.clone(),
+                constraint_component_id: constraint.component_id(),
+                property_path: path.cloned(),
+            };
+            
+            // Check if we have a cached result
+            if let Some(cached_result) = self.constraint_cache.borrow().get(&cache_key) {
+                self.stats.cache_hits += 1;
+                return Ok(cached_result.clone());
+            }
+            self.stats.cache_misses += 1;
+        }
+        
+        let start_time = std::time::Instant::now();
+        let result = match constraint {
             // Core Value Constraints
             Constraint::Class(c) => self.validate_class_constraint(store, c, context, graph_name),
             Constraint::Datatype(c) => self.validate_datatype_constraint(c, context),
@@ -358,7 +389,25 @@ impl<'a> ValidationEngine<'a> {
 
             // SPARQL Constraints
             Constraint::Sparql(c) => self.validate_sparql_constraint(store, c, context, graph_name),
+        }?;
+        
+        // Cache the result if caching is enabled
+        if self.config.max_violations == 0 || !self.config.fail_fast {
+            let cache_key = ConstraintCacheKey {
+                focus_node: context.focus_node.clone(),
+                shape_id: context.shape_id.clone(),
+                constraint_component_id: constraint.component_id(),
+                property_path: path.cloned(),
+            };
+            
+            self.constraint_cache.borrow_mut().insert(cache_key, result.clone());
         }
+        
+        // Record constraint evaluation time
+        let duration = start_time.elapsed();
+        self.stats.record_constraint_evaluation(constraint.component_id().as_str().to_string(), duration);
+        
+        Ok(result)
     }
 
     /// Validate class constraint
@@ -1066,7 +1115,7 @@ impl<'a> ValidationEngine<'a> {
             if let Term::Literal(value_literal) = value {
                 for comparison_value in &comparison_values {
                     if let Term::Literal(comparison_literal) = comparison_value {
-                        match self.compare_literals(value_literal, comparison_literal)? {
+                        match self.compare_literals(value_literal, &comparison_literal)? {
                             std::cmp::Ordering::Greater | std::cmp::Ordering::Equal => {
                                 return Ok(ConstraintEvaluationResult::violated(
                                     Some(value.clone()),
@@ -1122,7 +1171,7 @@ impl<'a> ValidationEngine<'a> {
             if let Term::Literal(value_literal) = value {
                 for comparison_value in &comparison_values {
                     if let Term::Literal(comparison_literal) = comparison_value {
-                        match self.compare_literals(value_literal, comparison_literal)? {
+                        match self.compare_literals(value_literal, &comparison_literal)? {
                             std::cmp::Ordering::Greater => {
                                 return Ok(ConstraintEvaluationResult::violated(
                                     Some(value.clone()),
@@ -1687,29 +1736,123 @@ impl<'a> ValidationEngine<'a> {
     pub fn get_statistics(&self) -> &ValidationStats {
         &self.stats
     }
+    
+    /// Get cache hit rate
+    pub fn get_cache_hit_rate(&self) -> f64 {
+        let total = self.stats.cache_hits + self.stats.cache_misses;
+        if total == 0 {
+            0.0
+        } else {
+            self.stats.cache_hits as f64 / total as f64
+        }
+    }
 
     /// Clear internal caches
     pub fn clear_caches(&mut self) {
         self.target_selector.clear_cache();
         self.path_evaluator.clear_cache();
+        self.constraint_cache.borrow_mut().clear();
     }
 
     /// Compare two literals for ordering (supports numeric and string comparison)
     fn compare_literals(&self, left: &Literal, right: &Literal) -> Result<std::cmp::Ordering> {
-        // Try to parse as numbers first
-        if let (Ok(left_num), Ok(right_num)) =
-            (left.as_str().parse::<f64>(), right.as_str().parse::<f64>())
-        {
-            Ok(left_num
-                .partial_cmp(&right_num)
-                .unwrap_or(std::cmp::Ordering::Equal))
-        } else if let (Ok(left_int), Ok(right_int)) =
-            (left.as_str().parse::<i64>(), right.as_str().parse::<i64>())
-        {
-            Ok(left_int.cmp(&right_int))
-        } else {
-            // Fall back to string comparison
-            Ok(left.as_str().cmp(right.as_str()))
+        
+        // First check if they have the same datatype
+        let left_datatype = left.datatype();
+        let right_datatype = right.datatype();
+        
+        // If datatypes don't match, we can't compare (except for numeric types)
+        if left_datatype != right_datatype {
+            // Special case: allow comparison between different numeric types
+            if self.is_numeric_datatype(left_datatype.as_str()) && self.is_numeric_datatype(right_datatype.as_str()) {
+                return self.compare_numeric_literals(left, right);
+            }
+            return Err(ShaclError::ConstraintValidation(
+                format!("Cannot compare literals with different datatypes: {} and {}", 
+                    left_datatype.as_str(), right_datatype.as_str())
+            ));
+        }
+        
+        // Compare based on datatype
+        match left_datatype.as_str() {
+            // Numeric types
+            "http://www.w3.org/2001/XMLSchema#integer" |
+            "http://www.w3.org/2001/XMLSchema#int" |
+            "http://www.w3.org/2001/XMLSchema#long" |
+            "http://www.w3.org/2001/XMLSchema#short" |
+            "http://www.w3.org/2001/XMLSchema#byte" |
+            "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" |
+            "http://www.w3.org/2001/XMLSchema#positiveInteger" |
+            "http://www.w3.org/2001/XMLSchema#nonPositiveInteger" |
+            "http://www.w3.org/2001/XMLSchema#negativeInteger" => {
+                match (left.as_str().parse::<i64>(), right.as_str().parse::<i64>()) {
+                    (Ok(l), Ok(r)) => Ok(l.cmp(&r)),
+                    _ => Err(ShaclError::ConstraintValidation(
+                        format!("Invalid integer values: {} or {}", left.as_str(), right.as_str())
+                    ))
+                }
+            }
+            "http://www.w3.org/2001/XMLSchema#decimal" |
+            "http://www.w3.org/2001/XMLSchema#float" |
+            "http://www.w3.org/2001/XMLSchema#double" => {
+                match (left.as_str().parse::<f64>(), right.as_str().parse::<f64>()) {
+                    (Ok(l), Ok(r)) => Ok(l.partial_cmp(&r).unwrap_or(std::cmp::Ordering::Equal)),
+                    _ => Err(ShaclError::ConstraintValidation(
+                        format!("Invalid numeric values: {} or {}", left.as_str(), right.as_str())
+                    ))
+                }
+            }
+            // Date/DateTime types
+            "http://www.w3.org/2001/XMLSchema#date" => {
+                // TODO: Implement proper date parsing and comparison
+                // For now, use lexical comparison which works for ISO dates
+                Ok(left.as_str().cmp(right.as_str()))
+            }
+            "http://www.w3.org/2001/XMLSchema#dateTime" => {
+                // TODO: Implement proper dateTime parsing and comparison
+                // For now, use lexical comparison which works for ISO dateTime
+                Ok(left.as_str().cmp(right.as_str()))
+            }
+            "http://www.w3.org/2001/XMLSchema#time" => {
+                // TODO: Implement proper time parsing and comparison
+                Ok(left.as_str().cmp(right.as_str()))
+            }
+            // String types and default
+            "http://www.w3.org/2001/XMLSchema#string" |
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString" |
+            _ => {
+                // String comparison
+                Ok(left.as_str().cmp(right.as_str()))
+            }
+        }
+    }
+    
+    /// Check if a datatype is numeric
+    fn is_numeric_datatype(&self, datatype: &str) -> bool {
+        matches!(datatype,
+            "http://www.w3.org/2001/XMLSchema#integer" |
+            "http://www.w3.org/2001/XMLSchema#int" |
+            "http://www.w3.org/2001/XMLSchema#long" |
+            "http://www.w3.org/2001/XMLSchema#short" |
+            "http://www.w3.org/2001/XMLSchema#byte" |
+            "http://www.w3.org/2001/XMLSchema#decimal" |
+            "http://www.w3.org/2001/XMLSchema#float" |
+            "http://www.w3.org/2001/XMLSchema#double" |
+            "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" |
+            "http://www.w3.org/2001/XMLSchema#positiveInteger" |
+            "http://www.w3.org/2001/XMLSchema#nonPositiveInteger" |
+            "http://www.w3.org/2001/XMLSchema#negativeInteger"
+        )
+    }
+    
+    /// Compare numeric literals of possibly different types
+    fn compare_numeric_literals(&self, left: &Literal, right: &Literal) -> Result<std::cmp::Ordering> {
+        // Convert both to f64 for comparison
+        match (left.as_str().parse::<f64>(), right.as_str().parse::<f64>()) {
+            (Ok(l), Ok(r)) => Ok(l.partial_cmp(&r).unwrap_or(std::cmp::Ordering::Equal)),
+            _ => Err(ShaclError::ConstraintValidation(
+                format!("Invalid numeric values for comparison: {} or {}", left.as_str(), right.as_str())
+            ))
         }
     }
 }
@@ -1724,6 +1867,8 @@ pub struct ValidationStats {
     pub last_validation_time: Option<Duration>,
     pub avg_validation_time: Duration,
     pub constraint_evaluation_times: HashMap<String, Duration>,
+    pub cache_hits: usize,
+    pub cache_misses: usize,
 }
 
 impl ValidationStats {
@@ -2029,6 +2174,108 @@ mod tests {
         let shapes = Box::leak(Box::new(IndexMap::new()));
         let config = ValidationConfig::default();
         ValidationEngine::new(shapes, config)
+    }
+    
+    #[test]
+    fn test_constraint_caching() {
+        let mut shapes = IndexMap::new();
+        let shape = Shape::new(ShapeId::new("test_shape"), ShapeType::NodeShape);
+        shapes.insert(shape.id.clone(), shape);
+        
+        let config = ValidationConfig::default();
+        let mut engine = ValidationEngine::new(&shapes, config);
+        
+        // Create a constraint and context
+        let constraint = Constraint::NodeKind(NodeKindConstraint {
+            node_kind: NodeKind::Iri,
+        });
+        let context = ConstraintContext::new(
+            Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()),
+            ShapeId::new("test_shape"),
+        )
+        .with_values(vec![Term::NamedNode(
+            NamedNode::new("http://example.org/value").unwrap(),
+        )]);
+        
+        // First evaluation - should miss cache
+        let store = Store::new().unwrap();
+        let result1 = engine.validate_constraint(&store, &constraint, &context, None, None).unwrap();
+        assert_eq!(engine.stats.cache_misses, 1);
+        assert_eq!(engine.stats.cache_hits, 0);
+        
+        // Second evaluation with same constraint - should hit cache
+        let result2 = engine.validate_constraint(&store, &constraint, &context, None, None).unwrap();
+        assert_eq!(engine.stats.cache_misses, 1);
+        assert_eq!(engine.stats.cache_hits, 1);
+        
+        // Results should be the same
+        assert!(matches!(result1, ConstraintEvaluationResult::Satisfied));
+        assert!(matches!(result2, ConstraintEvaluationResult::Satisfied));
+        
+        // Check cache hit rate
+        assert_eq!(engine.get_cache_hit_rate(), 0.5);
+    }
+    
+    #[test]
+    fn test_literal_comparison_numeric() {
+        let engine = create_test_engine();
+        
+        // Test integer comparison
+        let int_literal1 = Literal::new_typed(
+            "42",
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+        );
+        let int_literal2 = Literal::new_typed(
+            "100",
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+        );
+        
+        let result = engine.compare_literals(&int_literal1, &int_literal2).unwrap();
+        assert_eq!(result, std::cmp::Ordering::Less);
+        
+        // Test decimal comparison
+        let dec_literal1 = Literal::new_typed(
+            "42.5",
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#decimal").unwrap(),
+        );
+        let dec_literal2 = Literal::new_typed(
+            "42.3",
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#decimal").unwrap(),
+        );
+        
+        let result = engine.compare_literals(&dec_literal1, &dec_literal2).unwrap();
+        assert_eq!(result, std::cmp::Ordering::Greater);
+        
+        // Test mixed numeric comparison (integer vs decimal)
+        let int_literal = Literal::new_typed(
+            "42",
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+        );
+        let dec_literal = Literal::new_typed(
+            "42.0",
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#decimal").unwrap(),
+        );
+        
+        let result = engine.compare_literals(&int_literal, &dec_literal).unwrap();
+        assert_eq!(result, std::cmp::Ordering::Equal);
+    }
+    
+    #[test]
+    fn test_literal_comparison_string() {
+        let engine = create_test_engine();
+        
+        // Test string comparison
+        let str_literal1 = Literal::new_typed(
+            "apple",
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#string").unwrap(),
+        );
+        let str_literal2 = Literal::new_typed(
+            "banana",
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#string").unwrap(),
+        );
+        
+        let result = engine.compare_literals(&str_literal1, &str_literal2).unwrap();
+        assert_eq!(result, std::cmp::Ordering::Less);
     }
 }
 

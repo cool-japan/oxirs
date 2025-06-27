@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 
 use oxirs_core::{
     model::{BlankNode, Literal, NamedNode, Term, Triple},
-    store::Store,
+    Store,
     OxirsError,
 };
 
@@ -1575,7 +1575,6 @@ impl ConstraintEvaluator for ClosedConstraint {
         // Query all triples with focus node as subject
         let triples = store.query_triples(
             Some(&focus_subject),
-            None,
             None,
             None
         ).map_err(|e| ShaclError::ConstraintValidation(

@@ -5,9 +5,8 @@
 
 use crate::model::{Triple, TriplePattern};
 use crate::OxirsError;
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};

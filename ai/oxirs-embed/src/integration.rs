@@ -1,7 +1,6 @@
 //! Integration utilities with other OxiRS components
 
-use crate::Vector;
-use crate::{EmbeddingModel, ModelStats};
+use crate::{EmbeddingModel, Vector};
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use tracing::{debug, info, warn};

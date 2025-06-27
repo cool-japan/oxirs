@@ -442,8 +442,8 @@ impl NL2SPARQLSystem {
         self.add_built_in_templates()?;
 
         // Load custom templates if configured
-        if let Some(ref template_dir) = self.config.templates.template_dir {
-            self.load_templates_from_directory(template_dir)?;
+        if let Some(template_dir) = self.config.templates.template_dir.clone() {
+            self.load_templates_from_directory(&template_dir)?;
         }
 
         Ok(())
@@ -646,8 +646,9 @@ LIMIT {{limit}}
         &mut self,
         query_context: &QueryContext,
     ) -> Result<SPARQLGenerationResult> {
-        if let Some(ref mut llm_manager) = self.llm_manager {
-            let system_prompt = self.create_sparql_generation_prompt();
+        let system_prompt = self.create_sparql_generation_prompt();
+        
+        if let Some(ref llm_manager) = self.llm_manager {
             let user_message = format!(
                 "Convert this natural language query to SPARQL: {}",
                 query_context.query
@@ -674,7 +675,7 @@ LIMIT {{limit}}
                     Ok(SPARQLGenerationResult {
                         query: sparql_query,
                         confidence: 0.7, // TODO: Calculate based on LLM confidence
-                        generation_method: GenerationMethod::LLM(response.model_used),
+                        generation_method: GenerationMethod::LLM(response.model_used.clone()),
                         parameters: HashMap::new(),
                         explanation: None,
                         validation_result: ValidationResult {

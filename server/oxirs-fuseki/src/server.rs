@@ -4,11 +4,13 @@ use crate::{
     auth::{AuthService, AuthUser},
     config::{MonitoringConfig, SecurityConfig, ServerConfig},
     error::{FusekiError, FusekiResult},
+    federation::{FederationConfig, FederationManager},
     handlers,
     metrics::{MetricsService, RequestMetrics},
     optimization::QueryOptimizer,
     performance::PerformanceService,
     store::Store,
+    streaming::{StreamingConfig, StreamingManager},
     websocket::{SubscriptionManager, WebSocketConfig},
 };
 use axum::{
@@ -54,6 +56,8 @@ pub struct Runtime {
     performance_service: Option<Arc<PerformanceService>>,
     query_optimizer: Option<Arc<QueryOptimizer>>,
     subscription_manager: Option<Arc<SubscriptionManager>>,
+    federation_manager: Option<Arc<FederationManager>>,
+    streaming_manager: Option<Arc<StreamingManager>>,
     #[cfg(feature = "rate-limit")]
     rate_limiter: Option<
         Arc<RateLimiter<String, governor::DefaultDirectRateLimiter, governor::clock::DefaultClock>>,
@@ -74,6 +78,8 @@ impl Runtime {
             performance_service: None,
             query_optimizer: None,
             subscription_manager: None,
+            federation_manager: None,
+            streaming_manager: None,
             #[cfg(feature = "rate-limit")]
             rate_limiter: None,
             #[cfg(feature = "hot-reload")]
@@ -125,6 +131,20 @@ impl Runtime {
         
         self.subscription_manager = Some(Arc::new(subscription_manager));
 
+        // Initialize federation manager
+        info!("Initializing federation manager");
+        let federation_config = FederationConfig::default(); // TODO: Load from server config
+        let federation_manager = FederationManager::new(federation_config);
+        federation_manager.start().await?;
+        self.federation_manager = Some(Arc::new(federation_manager));
+
+        // Initialize streaming manager
+        info!("Initializing streaming manager");
+        let streaming_config = StreamingConfig::default(); // TODO: Load from server config
+        let streaming_manager = StreamingManager::new(streaming_config);
+        streaming_manager.initialize().await?;
+        self.streaming_manager = Some(Arc::new(streaming_manager));
+
         // Initialize rate limiter
         #[cfg(feature = "rate-limit")]
         {
@@ -171,6 +191,8 @@ impl Runtime {
             performance_service: self.performance_service.clone(),
             query_optimizer: self.query_optimizer.clone(),
             subscription_manager: self.subscription_manager.clone(),
+            federation_manager: self.federation_manager.clone(),
+            streaming_manager: self.streaming_manager.clone(),
             #[cfg(feature = "rate-limit")]
             rate_limiter: self.rate_limiter.clone(),
         };
@@ -520,6 +542,8 @@ pub struct AppState {
     pub performance_service: Option<Arc<PerformanceService>>,
     pub query_optimizer: Option<Arc<QueryOptimizer>>,
     pub subscription_manager: Option<Arc<SubscriptionManager>>,
+    pub federation_manager: Option<Arc<FederationManager>>,
+    pub streaming_manager: Option<Arc<StreamingManager>>,
     #[cfg(feature = "rate-limit")]
     pub rate_limiter: Option<
         Arc<RateLimiter<String, governor::DefaultDirectRateLimiter, governor::clock::DefaultClock>>,

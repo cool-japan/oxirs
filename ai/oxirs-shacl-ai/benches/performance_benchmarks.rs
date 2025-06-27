@@ -5,7 +5,7 @@
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use oxirs_core::model::{Literal, NamedNode, Term, Triple};
-use oxirs_core::store::Store;
+use oxirs_core::Store;
 use oxirs_shacl_ai::*;
 use std::time::Duration;
 

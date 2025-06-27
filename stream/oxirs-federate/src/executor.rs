@@ -18,6 +18,9 @@ use tracing::{debug, error, info, instrument, warn};
 
 use crate::{
     ExecutionPlan, ExecutionStep, FederatedService, FederationError, ServiceRegistry, StepType,
+    service_executor::{ServiceExecutor, JoinExecutor, ServiceExecutorConfig},
+    service_optimizer::{OptimizedServiceClause, ServiceExecutionStrategy},
+    cache::FederationCache,
 };
 
 /// Federated query executor
@@ -25,6 +28,9 @@ use crate::{
 pub struct FederatedExecutor {
     client: Client,
     config: FederatedExecutorConfig,
+    service_executor: Arc<ServiceExecutor>,
+    join_executor: Arc<JoinExecutor>,
+    cache: Arc<FederationCache>,
 }
 
 impl FederatedExecutor {
@@ -36,9 +42,16 @@ impl FederatedExecutor {
             .build()
             .expect("Failed to create HTTP client");
 
+        let cache = Arc::new(FederationCache::new());
+        let service_executor = Arc::new(ServiceExecutor::new(cache.clone()));
+        let join_executor = Arc::new(JoinExecutor::new());
+
         Self {
             client,
             config: FederatedExecutorConfig::default(),
+            service_executor,
+            join_executor,
+            cache,
         }
     }
 
@@ -50,7 +63,20 @@ impl FederatedExecutor {
             .build()
             .expect("Failed to create HTTP client");
 
-        Self { client, config }
+        let cache = Arc::new(FederationCache::with_config(config.cache_config.clone()));
+        let service_executor = Arc::new(ServiceExecutor::with_config(
+            config.service_executor_config.clone(),
+            cache.clone(),
+        ));
+        let join_executor = Arc::new(JoinExecutor::new());
+
+        Self { 
+            client, 
+            config,
+            service_executor,
+            join_executor,
+            cache,
+        }
     }
 
     /// Execute a federated query plan

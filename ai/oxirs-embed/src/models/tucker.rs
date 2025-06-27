@@ -3,8 +3,7 @@
 //! TuckER is a tensor factorization model that performs link prediction
 //! using Tucker decomposition on the binary tensor representation of knowledge graphs.
 
-use super::base::{EmbeddingModel, ModelConfig};
-use crate::Error;
+use crate::{EmbeddingModel, ModelConfig, EmbeddingError};
 use ndarray::{Array2, Array3};
 use serde::{Deserialize, Serialize};
 

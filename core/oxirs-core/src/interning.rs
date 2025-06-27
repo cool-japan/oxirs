@@ -208,8 +208,8 @@ impl Default for StringInterner {
     }
 }
 
-/// Global interner instances for common string types
 lazy_static::lazy_static! {
+    // Global interner instances for common string types
     /// Global interner for IRI strings
     pub static ref IRI_INTERNER: StringInterner = StringInterner::new();
 

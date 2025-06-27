@@ -4,6 +4,7 @@ use oxirs_cluster::mvcc::{HLCTimestamp, HybridLogicalClock, MVCCConfig, MVCCMana
 use oxirs_cluster::mvcc_storage::{CompactionStrategy, MVCCStorage};
 use oxirs_cluster::transaction::IsolationLevel;
 use oxirs_core::model::{Literal, NamedNode, Triple};
+use oxirs_core::vocab::xsd;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Barrier;
@@ -11,15 +12,11 @@ use tokio::time::sleep;
 
 /// Helper function to create a test triple
 fn create_test_triple(subject: &str, predicate: &str, object: &str) -> Triple {
-    Triple {
-        subject: NamedNode::new(subject).unwrap().into(),
-        predicate: NamedNode::new(predicate).unwrap().into(),
-        object: Literal::new_typed_literal(
-            object,
-            NamedNode::new("http://www.w3.org/2001/XMLSchema#string").unwrap(),
-        )
-        .into(),
-    }
+    Triple::new(
+        NamedNode::new(subject).unwrap(),
+        NamedNode::new(predicate).unwrap(),
+        Literal::new_typed_literal(object, xsd::STRING.clone()),
+    )
 }
 
 #[tokio::test]

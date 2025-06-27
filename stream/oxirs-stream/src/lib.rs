@@ -38,6 +38,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub mod backend;
 pub mod circuit_breaker;
+pub mod config;
 pub mod connection_pool;
 pub mod consumer;
 pub mod delta;
@@ -52,7 +53,10 @@ pub mod patch;
 pub mod processing;
 pub mod producer;
 pub mod reconnect;
+pub mod serialization;
+pub mod sparql_streaming;
 pub mod state;
+pub mod store_integration;
 pub mod types;
 
 /// Enhanced stream configuration with advanced features

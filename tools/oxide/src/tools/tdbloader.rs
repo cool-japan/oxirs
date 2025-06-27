@@ -324,7 +324,7 @@ fn parse_turtle_for_loading(content: &str) -> Result<Vec<LoadTriple>, String> {
 
 /// Store triples in the TDB dataset
 fn store_triples_in_dataset(
-    dataset_location: &PathBuf,
+    _dataset_location: &PathBuf,
     triples: &[LoadTriple],
     default_graph: Option<&str>,
 ) -> ToolResult<usize> {

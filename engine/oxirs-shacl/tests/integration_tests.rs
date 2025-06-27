@@ -1,6 +1,6 @@
 use oxirs_core::{
     model::{Literal, NamedNode, Term},
-    store::Store,
+    Store,
 };
 use oxirs_shacl::{
     constraints::*, shapes::ShapeFactory, Constraint, ConstraintComponentId, PropertyPath,

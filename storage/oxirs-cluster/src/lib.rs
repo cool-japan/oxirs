@@ -55,6 +55,7 @@ pub mod discovery;
 pub mod error;
 pub mod network;
 pub mod raft;
+pub mod raft_state;
 pub mod replication;
 pub mod storage;
 pub mod shard;

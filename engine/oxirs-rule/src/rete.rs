@@ -5,7 +5,7 @@
 
 use crate::forward::Substitution;
 use crate::rete_enhanced::{
-    BetaJoinNode, ConflictResolution, EnhancedToken, JoinCondition, 
+    BetaJoinNode, ConflictResolution, EnhancedToken,
     MemoryStrategy, ComparisonOp, JoinArg
 };
 use crate::{Rule, RuleAtom, Term};
@@ -37,6 +37,34 @@ impl fmt::Display for ReteStats {
             self.beta_nodes,
             self.production_nodes,
             self.total_tokens
+        )
+    }
+}
+
+/// Enhanced RETE statistics with beta join performance metrics
+#[derive(Debug, Clone)]
+pub struct EnhancedReteStats {
+    pub basic: ReteStats,
+    pub total_beta_joins: usize,
+    pub successful_beta_joins: usize,
+    pub join_success_rate: f64,
+    pub memory_evictions: usize,
+    pub peak_memory_usage: usize,
+    pub enhanced_nodes: usize,
+}
+
+impl fmt::Display for EnhancedReteStats {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} | Beta joins: {}/{} ({:.1}% success), Evictions: {}, Peak mem: {}, Enhanced: {}",
+            self.basic,
+            self.successful_beta_joins,
+            self.total_beta_joins,
+            self.join_success_rate * 100.0,
+            self.memory_evictions,
+            self.peak_memory_usage,
+            self.enhanced_nodes
         )
     }
 }
@@ -316,14 +344,14 @@ impl ReteNetwork {
             match filter.as_str() {
                 "type_constraint" => {
                     // Add type checking condition
-                    enhanced_node.conditions.push(JoinCondition::Builtin {
+                    enhanced_node.conditions.push(crate::rete_enhanced::JoinCondition::Builtin {
                         predicate: "type_check".to_string(),
                         args: vec![],
                     });
                 }
                 "domain_range_constraint" => {
                     // Add domain/range checking
-                    enhanced_node.conditions.push(JoinCondition::Builtin {
+                    enhanced_node.conditions.push(crate::rete_enhanced::JoinCondition::Builtin {
                         predicate: "domain_range_check".to_string(),
                         args: vec![],
                     });
@@ -1029,7 +1057,7 @@ impl ReteNetwork {
         self.memory_strategy = strategy;
         // Update existing nodes
         for node in self.enhanced_beta_nodes.values_mut() {
-            node.memory.memory_strategy = strategy;
+            node.memory.set_memory_strategy(strategy);
         }
     }
 
@@ -1046,6 +1074,7 @@ impl ReteNetwork {
     pub fn clear(&mut self) {
         self.alpha_memory.clear();
         self.beta_memory.clear();
+        self.enhanced_beta_nodes.clear();
         for tokens in self.token_memory.values_mut() {
             tokens.clear();
         }
@@ -1237,5 +1266,147 @@ mod tests {
 
         assert!(all_facts.contains(&expected1));
         assert!(all_facts.contains(&expected2));
+    }
+
+    #[test]
+    fn test_enhanced_beta_join() {
+        let mut network = ReteNetwork::with_strategies(
+            MemoryStrategy::LimitCount(100),
+            ConflictResolution::Specificity
+        );
+
+        // Create a rule with multiple conditions requiring joins
+        let rule = Rule {
+            name: "parent_grandparent".to_string(),
+            body: vec![
+                RuleAtom::Triple {
+                    subject: Term::Variable("X".to_string()),
+                    predicate: Term::Constant("parent".to_string()),
+                    object: Term::Variable("Y".to_string()),
+                },
+                RuleAtom::Triple {
+                    subject: Term::Variable("Y".to_string()),
+                    predicate: Term::Constant("parent".to_string()),
+                    object: Term::Variable("Z".to_string()),
+                },
+            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("grandparent".to_string()),
+                object: Term::Variable("Z".to_string()),
+            }],
+        };
+
+        network.add_rule(&rule).unwrap();
+
+        // Add facts
+        let facts = vec![
+            RuleAtom::Triple {
+                subject: Term::Constant("john".to_string()),
+                predicate: Term::Constant("parent".to_string()),
+                object: Term::Constant("mary".to_string()),
+            },
+            RuleAtom::Triple {
+                subject: Term::Constant("mary".to_string()),
+                predicate: Term::Constant("parent".to_string()),
+                object: Term::Constant("alice".to_string()),
+            },
+        ];
+
+        let results = network.forward_chain(facts).unwrap();
+
+        // Should derive john grandparent alice
+        let expected = RuleAtom::Triple {
+            subject: Term::Constant("john".to_string()),
+            predicate: Term::Constant("grandparent".to_string()),
+            object: Term::Constant("alice".to_string()),
+        };
+
+        assert!(results.contains(&expected));
+
+        // Check enhanced stats
+        let stats = network.get_enhanced_stats();
+        assert!(stats.total_beta_joins > 0);
+        assert!(stats.successful_beta_joins > 0);
+        assert!(stats.enhanced_nodes > 0);
+    }
+
+    #[test]
+    fn test_memory_management() {
+        let mut network = ReteNetwork::with_strategies(
+            MemoryStrategy::LimitCount(10), // Very low limit to test eviction
+            ConflictResolution::Recency
+        );
+
+        let rule = Rule {
+            name: "test_rule".to_string(),
+            body: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("type".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("has_type".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+        };
+
+        network.add_rule(&rule).unwrap();
+
+        // Add many facts to trigger memory eviction
+        let mut facts = Vec::new();
+        for i in 0..50 {
+            facts.push(RuleAtom::Triple {
+                subject: Term::Constant(format!("entity_{}", i)),
+                predicate: Term::Constant("type".to_string()),
+                object: Term::Constant(format!("type_{}", i % 5)),
+            });
+        }
+
+        network.forward_chain(facts).unwrap();
+
+        // Check that evictions occurred
+        let stats = network.get_enhanced_stats();
+        assert!(stats.memory_evictions > 0);
+        assert!(stats.peak_memory_usage <= 10);
+    }
+
+    #[test]
+    fn test_conflict_resolution() {
+        let mut network = ReteNetwork::with_strategies(
+            MemoryStrategy::Unlimited,
+            ConflictResolution::Priority
+        );
+
+        // Test that conflict resolution selects the right match
+        // This is a simplified test - full testing would require
+        // more complex scenarios with actual conflicts
+        network.set_debug_mode(true);
+
+        let rule = Rule {
+            name: "priority_rule".to_string(),
+            body: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("p".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("q".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+        };
+
+        network.add_rule(&rule).unwrap();
+
+        let fact = RuleAtom::Triple {
+            subject: Term::Constant("a".to_string()),
+            predicate: Term::Constant("p".to_string()),
+            object: Term::Constant("b".to_string()),
+        };
+
+        let results = network.add_fact(fact).unwrap();
+        assert!(!results.is_empty());
     }
 }

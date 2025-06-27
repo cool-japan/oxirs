@@ -6,7 +6,7 @@
 use anyhow::{anyhow, Result};
 use oxirs_core::{
     model::{quad::Quad, term::Term, triple::Triple},
-    store::Store,
+    Store,
 };
 // Vector search integration (temporarily disabled)
 // use oxirs_vec::{
@@ -23,11 +23,11 @@ use std::{
 use tracing::{debug, error, info, warn};
 
 // Placeholder types for vector search integration
-pub trait EmbeddingModel {
+pub trait EmbeddingModel: Send + Sync {
     fn encode(
         &self,
         texts: &[String],
-    ) -> impl std::future::Future<Output = Result<Vec<Vec<f32>>, anyhow::Error>> + Send;
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<Vec<f32>>, anyhow::Error>> + Send + '_>>;
 }
 
 pub struct VectorIndex;
@@ -382,8 +382,8 @@ impl RAGSystem {
         let retrieval_time = start_time.elapsed();
         let metadata = RetrievalMetadata {
             retrieval_time_ms: retrieval_time.as_millis() as u64,
-            total_candidates: filtered_results.len(),
-            filtered_results: filtered_results.len(),
+            total_candidates: filtered_results.triples.len(),
+            filtered_results: filtered_results.triples.len(),
             search_strategy: "hybrid".to_string(),
             quality_score: 0.8, // TODO: Calculate actual quality score
         };
@@ -479,7 +479,7 @@ impl RAGSystem {
 
                     // Add object to queue for further traversal
                     if current_depth + 1 < depth {
-                        let object_str = format!("{}", triple.object);
+                        let object_str = format!("{}", triple.object());
                         if !visited.contains(&object_str) {
                             queue.push((object_str, current_depth + 1));
                         }
@@ -494,7 +494,7 @@ impl RAGSystem {
 
                     // Add subject to queue for further traversal
                     if current_depth + 1 < depth {
-                        let subject_str = format!("{}", triple.subject);
+                        let subject_str = format!("{}", triple.subject());
                         if !visited.contains(&subject_str) {
                             queue.push((subject_str, current_depth + 1));
                         }
@@ -505,12 +505,12 @@ impl RAGSystem {
 
         // Remove duplicates
         result_triples.sort_by(|a, b| {
-            format!("{} {} {}", a.subject, a.predicate, a.object)
-                .cmp(&format!("{} {} {}", b.subject, b.predicate, b.object))
+            format!("{} {} {}", a.subject(), a.predicate(), a.object())
+                .cmp(&format!("{} {} {}", b.subject(), b.predicate(), b.object()))
         });
         result_triples.dedup_by(|a, b| {
-            format!("{} {} {}", a.subject, a.predicate, a.object)
-                == format!("{} {} {}", b.subject, b.predicate, b.object)
+            format!("{} {} {}", a.subject(), a.predicate(), a.object())
+                == format!("{} {} {}", b.subject(), b.predicate(), b.object())
         });
 
         Ok(result_triples)
@@ -854,14 +854,14 @@ impl ContextAssembler {
         let relationships: Vec<String> = knowledge
             .triples
             .iter()
-            .map(|t| format!("{} {} {}", t.subject, t.predicate, t.object))
+            .map(|t| format!("{} {} {}", t.subject(), t.predicate(), t.object()))
             .collect();
 
         let facts: Vec<String> = knowledge
             .triples
             .iter()
             .take(self.config.max_triples)
-            .map(|t| format!("{} {} {}", t.subject, t.predicate, t.object))
+            .map(|t| format!("{} {} {}", t.subject(), t.predicate(), t.object()))
             .collect();
 
         let schema: Vec<String> = if self.config.include_schema {

@@ -1,7 +1,7 @@
 //! Tests for shape learning functionality
 
 use oxirs_core::model::{Literal, NamedNode, Triple};
-use oxirs_core::store::Store;
+use oxirs_core::Store;
 use oxirs_shacl_ai::learning::*;
 
 #[test]

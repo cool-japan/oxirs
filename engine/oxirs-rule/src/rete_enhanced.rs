@@ -257,6 +257,16 @@ impl BetaMemory {
         matches
     }
 
+    /// Get the memory strategy
+    pub fn memory_strategy(&self) -> &MemoryStrategy {
+        &self.memory_strategy
+    }
+
+    /// Set the memory strategy
+    pub fn set_memory_strategy(&mut self, strategy: MemoryStrategy) {
+        self.memory_strategy = strategy;
+    }
+
     /// Apply memory management strategy
     fn apply_memory_management(&mut self) {
         match self.memory_strategy {
@@ -837,5 +847,21 @@ mod tests {
         ];
         
         assert!(evaluate_builtin("contains", &args, &left, &right).unwrap());
+    }
+
+    #[test]
+    fn test_memory_strategy_getter_setter() {
+        let mut memory = BetaMemory::new(MemoryStrategy::Unlimited);
+        
+        // Test getter
+        assert!(matches!(memory.memory_strategy(), &MemoryStrategy::Unlimited));
+        
+        // Test setter
+        memory.set_memory_strategy(MemoryStrategy::LimitCount(100));
+        assert!(matches!(memory.memory_strategy(), &MemoryStrategy::LimitCount(100)));
+        
+        // Test with other strategies
+        memory.set_memory_strategy(MemoryStrategy::LRU(50));
+        assert!(matches!(memory.memory_strategy(), &MemoryStrategy::LRU(50)));
     }
 }

@@ -236,17 +236,19 @@ impl BindingSet {
             Term::NamedNode(_) => TermType::NamedNode,
             Term::BlankNode(_) => TermType::BlankNode,
             Term::Literal(lit) => {
-                if lit.datatype() == &NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap()
-                    || lit.datatype() == &NamedNode::new("http://www.w3.org/2001/XMLSchema#decimal").unwrap()
-                    || lit.datatype() == &NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap()
+                let datatype = lit.datatype();
+                let datatype_str = datatype.as_str();
+                if datatype_str == "http://www.w3.org/2001/XMLSchema#integer"
+                    || datatype_str == "http://www.w3.org/2001/XMLSchema#decimal"
+                    || datatype_str == "http://www.w3.org/2001/XMLSchema#double"
                 {
                     TermType::NumericLiteral
-                } else if lit.datatype() == &NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap() {
+                } else if datatype_str == "http://www.w3.org/2001/XMLSchema#boolean" {
                     TermType::BooleanLiteral
-                } else if lit.datatype() == &NamedNode::new("http://www.w3.org/2001/XMLSchema#dateTime").unwrap() {
+                } else if datatype_str == "http://www.w3.org/2001/XMLSchema#dateTime" {
                     TermType::DateTimeLiteral
-                } else if lit.datatype() == &NamedNode::new("http://www.w3.org/2001/XMLSchema#string").unwrap()
-                    || lit.datatype() == &NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString").unwrap()
+                } else if datatype_str == "http://www.w3.org/2001/XMLSchema#string"
+                    || datatype_str == "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
                 {
                     TermType::StringLiteral
                 } else {
@@ -414,41 +416,41 @@ impl BindingOptimizer {
 
     /// Propagate constraints to find additional restrictions
     fn propagate_constraints(&self, binding_set: &mut BindingSet) {
-        // Build constraint graph
-        let mut constraint_graph: HashMap<Variable, Vec<&Constraint>> = HashMap::new();
-
-        for constraint in &binding_set.constraints {
+        // Build constraint graph with indices instead of references
+        let mut constraint_graph: HashMap<Variable, Vec<usize>> = HashMap::new();
+        
+        for (idx, constraint) in binding_set.constraints.iter().enumerate() {
             match constraint {
                 Constraint::TypeConstraint { variable, .. }
                 | Constraint::ValueConstraint { variable, .. } => {
                     constraint_graph
                         .entry(variable.clone())
                         .or_insert_with(Vec::new)
-                        .push(constraint);
+                        .push(idx);
                 }
                 Constraint::RelationshipConstraint { left, right, .. } => {
                     constraint_graph
                         .entry(left.clone())
                         .or_insert_with(Vec::new)
-                        .push(constraint);
+                        .push(idx);
                     constraint_graph
                         .entry(right.clone())
                         .or_insert_with(Vec::new)
-                        .push(constraint);
+                        .push(idx);
                 }
                 _ => {}
             }
         }
-
+        
         // Propagate equality constraints
-        self.propagate_equality_constraints(binding_set, &constraint_graph);
+        self.propagate_equality_constraints(binding_set, constraint_graph);
     }
 
     /// Propagate equality constraints
     fn propagate_equality_constraints(
         &self,
         binding_set: &mut BindingSet,
-        constraint_graph: &HashMap<Variable, Vec<&Constraint>>,
+        constraint_graph: HashMap<Variable, Vec<usize>>,
     ) {
         // Find equality relationships
         let mut equiv_classes: HashMap<Variable, Variable> = HashMap::new();

@@ -4,7 +4,7 @@
 //! capabilities for all supported RDF serialization formats.
 
 use std::fs::File;
-use std::io::{BufRead, Read};
+use std::io::Read;
 use std::path::Path;
 
 use super::ToolResult;
@@ -296,7 +296,7 @@ pub trait FormatConverter {
 pub struct BasicFormatConverter;
 
 impl FormatConverter for BasicFormatConverter {
-    fn convert(&self, input: &str, from: RdfFormat, to: RdfFormat) -> ToolResult<String> {
+    fn convert(&self, _input: &str, from: RdfFormat, to: RdfFormat) -> ToolResult<String> {
         // For now, return a placeholder - actual implementation would use RDF parsing/serialization
         Err(format!(
             "Conversion from {} to {} not yet implemented", 

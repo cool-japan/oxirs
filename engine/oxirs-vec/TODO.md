@@ -68,8 +68,8 @@ This document outlines the comprehensive implementation plan for oxirs-vec, a hi
   - [x] Linear search implementation
   - [x] Optimized linear search with SIMD (via oxirs-core)
   - [x] Parallel search with thread pool (via oxirs-core)
-  - [ ] Memory mapping for large datasets
-  - [ ] Cache-friendly data layouts
+  - [x] Memory mapping for large datasets
+  - [x] Cache-friendly data layouts
 
 - [x] **Hierarchical Navigable Small World (HNSW)**
   - [x] Core HNSW implementation
@@ -81,31 +81,31 @@ This document outlines the comprehensive implementation plan for oxirs-vec, a hi
 - [x] **Inverted File Index (IVF)**
   - [x] K-means clustering for quantization
   - [x] Product quantization (PQ)
-  - [ ] Optimized product quantization (OPQ)
+  - [x] Optimized product quantization (OPQ)
   - [ ] Residual quantization
   - [ ] Multi-codebook quantization
 
 #### 1.2.2 Specialized Index Types
-- [ ] **LSH (Locality Sensitive Hashing)**
-  - [ ] Random projection LSH
-  - [ ] MinHash for Jaccard similarity
-  - [ ] SimHash for cosine similarity
-  - [ ] Multi-probe LSH
-  - [ ] Data-dependent LSH
+- [x] **LSH (Locality Sensitive Hashing)**
+  - [x] Random projection LSH
+  - [x] MinHash for Jaccard similarity
+  - [x] SimHash for cosine similarity
+  - [x] Multi-probe LSH
+  - [x] Data-dependent LSH
 
-- [ ] **Tree-based Indices**
-  - [ ] Ball tree for high-dimensional data
-  - [ ] KD-tree with dimension reduction
-  - [ ] VP-tree (Vantage Point tree)
-  - [ ] Cover tree for metric spaces
-  - [ ] Random projection trees
+- [x] **Tree-based Indices**
+  - [x] Ball tree for high-dimensional data
+  - [x] KD-tree with dimension reduction
+  - [x] VP-tree (Vantage Point tree)
+  - [x] Cover tree for metric spaces
+  - [x] Random projection trees
 
-- [ ] **Graph-based Indices**
-  - [ ] NSW (Navigable Small World)
-  - [ ] ONNG (Optimized Nearest Neighbor Graph)
-  - [ ] PANNG (Pruned Approximate Nearest Neighbor Graph)
-  - [ ] Delaunay graph approximation
-  - [ ] Relative neighborhood graph
+- [x] **Graph-based Indices**
+  - [x] NSW (Navigable Small World)
+  - [x] ONNG (Optimized Nearest Neighbor Graph)
+  - [x] PANNG (Pruned Approximate Nearest Neighbor Graph)
+  - [x] Delaunay graph approximation
+  - [x] Relative neighborhood graph
 
 ### 1.3 Embedding Generation Framework
 
@@ -118,12 +118,12 @@ This document outlines the comprehensive implementation plan for oxirs-vec, a hi
     - [x] Sparse vector optimization
     - [x] N-gram support
 
-  - [ ] **Word2Vec Integration**
-    - [ ] Pre-trained model loading
-    - [ ] Document embedding aggregation
-    - [ ] Subword handling
-    - [ ] Out-of-vocabulary management
-    - [ ] Hierarchical softmax support
+  - [x] **Word2Vec Integration**
+    - [x] Pre-trained model loading
+    - [x] Document embedding aggregation
+    - [x] Subword handling
+    - [x] Out-of-vocabulary management
+    - [x] Hierarchical softmax support
 
 - [x] **Transformer-based Embeddings**
   - [x] **Sentence Transformers**
@@ -141,27 +141,27 @@ This document outlines the comprehensive implementation plan for oxirs-vec, a hi
     - [ ] Local caching
 
 #### 1.3.2 RDF-specific Embeddings
-- [ ] **Knowledge Graph Embeddings**
-  - [ ] **TransE Implementation**
-    - [ ] Translation-based embeddings
-    - [ ] Entity and relation vectors
-    - [ ] Loss function optimization
-    - [ ] Negative sampling
-    - [ ] Batch training
+- [x] **Knowledge Graph Embeddings**
+  - [x] **TransE Implementation**
+    - [x] Translation-based embeddings
+    - [x] Entity and relation vectors
+    - [x] Loss function optimization
+    - [x] Negative sampling
+    - [x] Batch training
 
-  - [ ] **ComplEx Implementation**
-    - [ ] Complex number embeddings
-    - [ ] Hermitian dot product
-    - [ ] Regularization techniques
-    - [ ] Anti-symmetric relations
-    - [ ] Multiple relation types
+  - [x] **ComplEx Implementation**
+    - [x] Complex number embeddings
+    - [x] Hermitian dot product
+    - [x] Regularization techniques
+    - [x] Anti-symmetric relations
+    - [x] Multiple relation types
 
-  - [ ] **RotatE Implementation**
-    - [ ] Rotation-based embeddings
-    - [ ] Euler's formula application
-    - [ ] Hierarchical relation modeling
-    - [ ] Inverse relation handling
-    - [ ] Composition patterns
+  - [x] **RotatE Implementation**
+    - [x] Rotation-based embeddings
+    - [x] Euler's formula application
+    - [x] Hierarchical relation modeling
+    - [x] Inverse relation handling
+    - [x] Composition patterns
 
 - [ ] **Graph Neural Network Embeddings**
   - [ ] **Graph Convolutional Networks (GCN)**
@@ -517,12 +517,19 @@ This document outlines the comprehensive implementation plan for oxirs-vec, a hi
     - [x] Lossy compression (PCA, scalar quantization)
     - [ ] Adaptive compression
 
-  - [ ] **Memory Mapping**
-    - [ ] Large dataset handling
-    - [ ] Lazy loading strategies
-    - [ ] Memory-mapped indices
-    - [ ] Swapping policies
-    - [ ] NUMA optimization
+- [x] **CORE_USAGE_POLICY Compliance**
+  - [x] All SIMD operations via oxirs-core::simd
+  - [x] All parallel operations via oxirs-core::parallel
+  - [x] No direct rayon usage in module
+  - [x] No direct SIMD intrinsics in module
+  - [x] Platform detection via oxirs-core::platform
+
+  - [x] **Memory Mapping**
+    - [x] Large dataset handling
+    - [x] Lazy loading strategies
+    - [x] Memory-mapped indices
+    - [x] Swapping policies
+    - [x] NUMA optimization
 
 #### 6.1.2 I/O Optimization
 - [ ] **Storage Optimization**
@@ -755,3 +762,38 @@ This document outlines the comprehensive implementation plan for oxirs-vec, a hi
 **Total Estimated Timeline: 24 weeks (6 months) for full implementation**
 **Priority Focus: Core vector operations first, then advanced AI integration**
 **Success Metric: Production-ready vector search with SPARQL integration**
+
+## ✅ Key Achievements (Following CORE_USAGE_POLICY)
+
+### Completed Optimizations
+1. **SIMD Operations**: All distance calculations now use oxirs-core::simd
+   - Cosine distance with AVX2 acceleration
+   - Euclidean distance with SIMD
+   - Manhattan distance optimized
+   - Vector operations (add, mul, dot, norm) via core
+
+2. **Parallel Processing**: All parallel operations via oxirs-core::parallel
+   - Parallel search in MemoryVectorIndex
+   - Work-stealing with automatic load balancing
+   - Configurable parallel vs sequential execution
+   - No direct rayon dependencies
+
+3. **Code Compliance**: 100% compliant with CORE_USAGE_POLICY
+   - No custom SIMD implementations
+   - No direct platform detection
+   - All optimizations through oxirs-core abstractions
+   - Clean module boundaries
+
+4. **Advanced Memory Mapping**: Implemented comprehensive mmap features
+   - Lazy page loading with LRU cache
+   - Smart eviction policies (LRU, LFU, ARC)
+   - NUMA-aware memory allocation
+   - Memory pressure monitoring
+   - Predictive prefetching
+
+5. **Optimized Product Quantization (OPQ)**: Advanced compression with rotation
+   - Learned optimal rotation matrix using SVD
+   - Alternating optimization algorithm
+   - Data centering and regularization
+   - Integration with standard PQ index
+   - Significant compression quality improvement

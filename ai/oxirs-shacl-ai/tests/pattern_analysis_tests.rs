@@ -1,7 +1,7 @@
 //! Tests for pattern analysis functionality
 
 use oxirs_core::model::{Literal, NamedNode, Triple};
-use oxirs_core::store::Store;
+use oxirs_core::Store;
 use oxirs_shacl_ai::patterns::*;
 
 #[test]

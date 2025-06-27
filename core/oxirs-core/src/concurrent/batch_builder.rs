@@ -6,7 +6,7 @@
 use crate::model::{Triple, Subject, Predicate, Object};
 use crate::concurrent::parallel_batch::{BatchOperation, BatchConfig};
 use crate::OxirsError;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 use parking_lot::Mutex;
 

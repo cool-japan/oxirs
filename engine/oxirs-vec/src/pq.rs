@@ -341,6 +341,22 @@ impl PQIndex {
 
         Ok(Vector::new(reconstructed))
     }
+    
+    /// Public method to encode a vector (for OPQ)
+    pub fn encode(&self, vector: &Vector) -> Result<Vec<u8>> {
+        self.encode_vector(vector)
+    }
+    
+    /// Public method to decode codes (for OPQ)
+    pub fn decode(&self, codes: &[u8]) -> Result<Vector> {
+        self.decode_codes(codes)
+    }
+    
+    /// Reconstruct a vector by encoding and then decoding (for OPQ)
+    pub fn reconstruct(&self, vector: &Vector) -> Result<Vector> {
+        let codes = self.encode_vector(vector)?;
+        self.decode_codes(&codes)
+    }
 
     /// Compute asymmetric distance between a query vector and PQ codes
     fn asymmetric_distance(&self, query: &Vector, codes: &[u8]) -> Result<f32> {
@@ -479,6 +495,13 @@ impl VectorIndex for PQIndex {
         // PQ doesn't store original vectors, only codes
         // Would need to decode, but that returns an approximation
         None
+    }
+}
+
+impl PQIndex {
+    /// Public search method for use by OPQ and other modules
+    pub fn search(&self, query: &Vector, k: usize) -> Result<Vec<(String, f32)>> {
+        self.search_knn(query, k)
     }
 }
 

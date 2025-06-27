@@ -53,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let args = Args::parse();
 
-    let store = if let Some(dataset_path) = args.dataset {
+    let mut store = if let Some(dataset_path) = args.dataset {
         RdfStore::open(dataset_path)?
     } else {
         RdfStore::new()?

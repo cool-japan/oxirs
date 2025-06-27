@@ -3,8 +3,7 @@
 //! QuatD extends complex embeddings to use quaternions for modeling
 //! both symmetry and anti-symmetry in knowledge graphs.
 
-use super::base::{EmbeddingModel, ModelConfig};
-use crate::Error;
+use crate::{EmbeddingModel, ModelConfig, EmbeddingError};
 use ndarray::{Array2, Array3};
 use serde::{Deserialize, Serialize};
 

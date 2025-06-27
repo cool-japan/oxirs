@@ -6,7 +6,7 @@ use super::{utils, ToolResult};
 use std::path::PathBuf;
 
 /// Run rdfcat command
-pub async fn run(files: Vec<PathBuf>, format: String, output: Option<PathBuf>) -> ToolResult {
+pub async fn run(files: Vec<PathBuf>, format: String, _output: Option<PathBuf>) -> ToolResult {
     println!("RDF Concatenation Tool");
     println!("Input files: {}", files.len());
     println!("Output format: {}", format);

@@ -26,6 +26,7 @@ use quick_xml::{
     events::{Event, BytesStart, BytesEnd, BytesText, attributes::Attributes},
     Reader as XmlReader,
 };
+#[cfg(feature = "parallel")]
 use rayon::prelude::*;
 use parking_lot::Mutex as ParkingLotMutex;
 use bumpalo::Bump;

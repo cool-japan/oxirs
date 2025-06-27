@@ -4,6 +4,7 @@ use crate::Vector;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use oxirs_core::simd::SimdOps;
 
 /// Similarity measurement configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -380,29 +381,19 @@ impl TemporalSimilarity {
 // Individual similarity function implementations
 
 fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    let dot_product: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
-    let magnitude_a = vector_magnitude(a);
-    let magnitude_b = vector_magnitude(b);
-
-    if magnitude_a == 0.0 || magnitude_b == 0.0 {
-        0.0
-    } else {
-        dot_product / (magnitude_a * magnitude_b)
-    }
+    // Use oxirs-core SIMD operations
+    1.0 - f32::cosine_distance(a, b)
 }
 
 fn euclidean_similarity(a: &[f32], b: &[f32]) -> f32 {
-    let distance: f32 = a
-        .iter()
-        .zip(b)
-        .map(|(x, y)| (x - y).powi(2))
-        .sum::<f32>()
-        .sqrt();
+    // Use oxirs-core SIMD operations
+    let distance = f32::euclidean_distance(a, b);
     1.0 / (1.0 + distance)
 }
 
 fn manhattan_similarity(a: &[f32], b: &[f32]) -> f32 {
-    let distance: f32 = a.iter().zip(b).map(|(x, y)| (x - y).abs()).sum();
+    // Use oxirs-core SIMD operations
+    let distance = f32::manhattan_distance(a, b);
     1.0 / (1.0 + distance)
 }
 
@@ -436,8 +427,9 @@ fn pearson_correlation(a: &[f32], b: &[f32]) -> Result<f32> {
         return Ok(0.0);
     }
 
-    let mean_a = a.iter().sum::<f32>() / n;
-    let mean_b = b.iter().sum::<f32>() / n;
+    // Use oxirs-core SIMD operations for mean calculation
+    let mean_a = f32::mean(a);
+    let mean_b = f32::mean(b);
 
     let numerator: f32 = a
         .iter()
@@ -604,7 +596,8 @@ fn angular_similarity(a: &[f32], b: &[f32]) -> f32 {
 }
 
 fn vector_magnitude(vector: &[f32]) -> f32 {
-    vector.iter().map(|x| x * x).sum::<f32>().sqrt()
+    // Use oxirs-core SIMD operations
+    f32::norm(vector)
 }
 
 /// Similarity search result with metadata

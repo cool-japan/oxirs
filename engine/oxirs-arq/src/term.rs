@@ -595,6 +595,72 @@ impl fmt::Display for LiteralValue {
     }
 }
 
+impl Term {
+    /// Convert from algebra::Term to term::Term
+    pub fn from_algebra_term(algebra_term: &AlgebraTerm) -> Self {
+        match algebra_term {
+            AlgebraTerm::Iri(iri) => Term::iri(&iri.0),
+            AlgebraTerm::Literal(lit) => {
+                if let Some(lang) = &lit.language {
+                    Term::literal_with_language(&lit.value, lang)
+                } else if let Some(datatype) = &lit.datatype {
+                    Term::literal_with_datatype(&lit.value, &datatype.0)
+                } else {
+                    Term::literal(&lit.value)
+                }
+            }
+            AlgebraTerm::BlankNode(bn) => Term::blank_node(bn),
+            AlgebraTerm::Variable(var) => Term::variable(var),
+        }
+    }
+
+    /// Convert from term::Term to algebra::Term
+    pub fn to_algebra_term(&self) -> AlgebraTerm {
+        match self {
+            Term::Iri(iri) => AlgebraTerm::Iri(Iri(iri.clone())),
+            Term::BlankNode(bn) => AlgebraTerm::BlankNode(bn.clone()),
+            Term::Literal(lit_val) => {
+                AlgebraTerm::Literal(Literal {
+                    value: lit_val.lexical_form.clone(),
+                    language: lit_val.language_tag.clone(),
+                    datatype: if lit_val.datatype != xsd::STRING {
+                        Some(Iri(lit_val.datatype.clone()))
+                    } else {
+                        None
+                    },
+                })
+            }
+            Term::Variable(var) => AlgebraTerm::Variable(var.clone()),
+        }
+    }
+
+    /// Check if this term represents a truthy value for SPARQL evaluation
+    pub fn effective_boolean_value(&self) -> Result<bool> {
+        match self {
+            Term::Literal(lit_val) => {
+                match lit_val.datatype.as_str() {
+                    xsd::BOOLEAN => {
+                        Ok(lit_val.lexical_form == "true" || lit_val.lexical_form == "1")
+                    }
+                    xsd::STRING => {
+                        Ok(!lit_val.lexical_form.is_empty())
+                    }
+                    dt if dt.starts_with(XSD_NS) && (
+                        dt.ends_with("integer") || dt.ends_with("decimal") || 
+                        dt.ends_with("double") || dt.ends_with("float")
+                    ) => {
+                        let val = lit_val.lexical_form.parse::<f64>().unwrap_or(0.0);
+                        Ok(val != 0.0 && !val.is_nan())
+                    }
+                    _ => Ok(!lit_val.lexical_form.is_empty())
+                }
+            }
+            Term::Iri(_) | Term::BlankNode(_) => Ok(true),
+            Term::Variable(_) => bail!("Cannot evaluate variable as boolean"),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

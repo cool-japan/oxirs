@@ -39,12 +39,15 @@ pub mod discovery;
 pub mod executor;
 pub mod graphql;
 pub mod integration;
+pub mod k8s_discovery;
 pub mod metadata;
 pub mod monitoring;
 pub mod planner;
 pub mod query_decomposition;
 pub mod service;
 pub mod service_client;
+pub mod service_executor;
+pub mod service_optimizer;
 
 pub use auto_discovery::*;
 pub use cache::*;
@@ -53,12 +56,15 @@ pub use discovery::*;
 pub use executor::*;
 pub use graphql::*;
 pub use integration::*;
+pub use k8s_discovery::*;
 pub use metadata::*;
 pub use monitoring::*;
 pub use planner::*;
 pub use query_decomposition::*;
 pub use service::*;
 pub use service_client::*;
+pub use service_executor::*;
+pub use service_optimizer::*;
 
 /// Main federation engine that coordinates all federated query processing
 #[derive(Debug, Clone)]

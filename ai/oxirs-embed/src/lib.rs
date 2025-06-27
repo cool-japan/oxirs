@@ -120,6 +120,11 @@ impl ModelConfig {
         self.seed = Some(seed);
         self
     }
+
+    pub fn with_batch_size(mut self, batch_size: usize) -> Self {
+        self.batch_size = batch_size;
+        self
+    }
 }
 
 /// Training statistics
@@ -197,4 +202,8 @@ pub trait EmbeddingModel: Send + Sync {
 }
 
 // Re-export main model types
-pub use models::{ComplEx, DistMult, RotatE, TransE};
+pub use models::{
+    ComplEx, DistMult, RotatE, TransE,
+    TransformerEmbedding, TransformerType, TransformerConfig,
+    GNNEmbedding, GNNType, GNNConfig, AggregationType
+};

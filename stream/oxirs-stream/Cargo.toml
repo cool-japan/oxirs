@@ -39,6 +39,12 @@ aws-smithy-types = { version = "1.1", optional = true }
 redis = { version = "0.24", features = ["tokio-comp", "connection-manager", "cluster-async", "streams"], optional = true }
 pulsar = { version = "6.0", optional = true }
 time = { version = "0.3", optional = true }
+toml = "0.8"
+rmp-serde = "1.1"
+serde_cbor = "0.11"
+flate2 = "1.0"
+zstd = "0.13"
+reqwest = { version = "0.12", features = ["json"] }
 
 [dev-dependencies]
 criterion.workspace = true

@@ -138,9 +138,11 @@ impl ModelRepository {
         model.save(&model_file)?;
 
         // Save metadata
-        let mut metadata = ModelMetadata::default();
-        metadata.description = description;
-        metadata.trained_at = Some(chrono::Utc::now());
+        let metadata = ModelMetadata {
+            description,
+            trained_at: Some(chrono::Utc::now()),
+            ..Default::default()
+        };
 
         let metadata_file = format!("{}/metadata.json", model_path);
         let metadata_content = serde_json::to_string_pretty(&metadata)?;

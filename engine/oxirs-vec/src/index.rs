@@ -5,14 +5,14 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
-use std::sync::{Arc, Mutex};
-use rayon::prelude::*;
+use std::sync::Arc;
+use oxirs_core::parallel::*;
 
 #[cfg(feature = "hnsw")]
 use hnsw_rs::prelude::*;
 
 /// Configuration for vector index
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct IndexConfig {
     /// Index type to use
     pub index_type: IndexType,
@@ -70,21 +70,13 @@ pub enum DistanceMetric {
 impl DistanceMetric {
     /// Calculate distance between two vectors
     pub fn distance(&self, a: &[f32], b: &[f32]) -> f32 {
-        #[cfg(feature = "simd")]
-        unsafe {
-            match self {
-                DistanceMetric::Cosine => crate::simd::cosine_distance_simd(a, b),
-                DistanceMetric::Euclidean => crate::simd::euclidean_distance_simd(a, b),
-                DistanceMetric::Manhattan => crate::simd::manhattan_distance_simd(a, b),
-                DistanceMetric::DotProduct => -crate::simd::dot_product_simd(a, b),
-            }
-        }
-        #[cfg(not(feature = "simd"))]
+        use oxirs_core::simd::SimdOps;
+        
         match self {
-            DistanceMetric::Cosine => 1.0 - cosine_similarity(a, b),
-            DistanceMetric::Euclidean => euclidean_distance(a, b),
-            DistanceMetric::Manhattan => manhattan_distance(a, b),
-            DistanceMetric::DotProduct => -dot_product(a, b), // Negative for max-heap
+            DistanceMetric::Cosine => f32::cosine_distance(a, b),
+            DistanceMetric::Euclidean => f32::euclidean_distance(a, b),
+            DistanceMetric::Manhattan => f32::manhattan_distance(a, b),
+            DistanceMetric::DotProduct => -f32::dot(a, b), // Negative for max-heap
         }
     }
 
@@ -126,7 +118,7 @@ pub struct AdvancedVectorIndex {
     vectors: Vec<(String, Vector)>,
     uri_to_id: HashMap<String, usize>,
     #[cfg(feature = "hnsw")]
-    hnsw_index: Option<Hnsw<f32, DistCosine>>,
+    hnsw_index: Option<Hnsw<'static, f32, DistCosine>>,
     dimensions: Option<usize>,
 }
 
@@ -182,7 +174,8 @@ impl AdvancedVectorIndex {
             );
 
             for (id, (_, vector)) in self.vectors.iter().enumerate() {
-                hnsw.insert((&vector.values, id));
+                let vector_f32 = vector.as_f32();
+                hnsw.insert((&vector_f32, id));
             }
 
             self.hnsw_index = Some(hnsw);
@@ -230,7 +223,8 @@ impl AdvancedVectorIndex {
     ) -> Result<Vec<SearchResult>> {
         if let Some(ref hnsw) = self.hnsw_index {
             let search_ef = ef.unwrap_or(self.config.ef_search);
-            let results = hnsw.search(&query.values, k, search_ef);
+            let query_f32 = query.as_f32();
+            let results = hnsw.search(&query_f32, k, search_ef);
 
             Ok(results
                 .into_iter()
@@ -246,6 +240,25 @@ impl AdvancedVectorIndex {
     }
 
     fn search_flat(
+        &self,
+        query: &Vector,
+        k: usize,
+        filter: Option<Box<dyn Fn(&str) -> bool>>,
+    ) -> Result<Vec<SearchResult>> {
+        if self.config.parallel && self.vectors.len() > 1000 {
+            // For parallel search, we need Send + Sync filter
+            if filter.is_some() {
+                // Fall back to sequential if filter is present but not Send + Sync
+                self.search_flat_sequential(query, k, filter)
+            } else {
+                self.search_flat_parallel(query, k, None)
+            }
+        } else {
+            self.search_flat_sequential(query, k, filter)
+        }
+    }
+
+    fn search_flat_sequential(
         &self,
         query: &Vector,
         k: usize,
@@ -286,6 +299,80 @@ impl AdvancedVectorIndex {
         let mut results: Vec<SearchResult> = heap.into_iter().map(|r| r.0).collect();
         results.sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap());
 
+        Ok(results)
+    }
+
+    fn search_flat_parallel(
+        &self,
+        query: &Vector,
+        k: usize,
+        filter: Option<Box<dyn Fn(&str) -> bool + Send + Sync>>,
+    ) -> Result<Vec<SearchResult>> {
+        // Split vectors into chunks for parallel processing
+        let chunk_size = (self.vectors.len() / num_threads()).max(100);
+        
+        // Use Arc for thread-safe sharing of the filter
+        let filter_arc = filter.map(Arc::new);
+        
+        // Process chunks in parallel and collect top-k from each
+        let partial_results: Vec<Vec<SearchResult>> = self.vectors
+            .par_chunks(chunk_size)
+            .map(|chunk| {
+                let mut local_heap = BinaryHeap::new();
+                let filter_ref = filter_arc.as_ref();
+                
+                for (uri, vector) in chunk {
+                    if let Some(filter_fn) = filter_ref {
+                        if !filter_fn(uri) {
+                            continue;
+                        }
+                    }
+                    
+                    let distance = self
+                        .config
+                        .distance_metric
+                        .distance_vectors(query, vector);
+                    
+                    if local_heap.len() < k {
+                        local_heap.push(std::cmp::Reverse(SearchResult {
+                            uri: uri.clone(),
+                            distance,
+                            metadata: None,
+                        }));
+                    } else if let Some(std::cmp::Reverse(worst)) = local_heap.peek() {
+                        if distance < worst.distance {
+                            local_heap.pop();
+                            local_heap.push(std::cmp::Reverse(SearchResult {
+                                uri: uri.clone(),
+                                distance,
+                                metadata: None,
+                            }));
+                        }
+                    }
+                }
+                
+                local_heap.into_sorted_vec().into_iter().map(|r| r.0).collect()
+            })
+            .collect();
+        
+        // Merge results from all chunks
+        let mut final_heap = BinaryHeap::new();
+        for partial in partial_results {
+            for result in partial {
+                if final_heap.len() < k {
+                    final_heap.push(std::cmp::Reverse(result));
+                } else if let Some(std::cmp::Reverse(worst)) = final_heap.peek() {
+                    if result.distance < worst.distance {
+                        final_heap.pop();
+                        final_heap.push(std::cmp::Reverse(result));
+                    }
+                }
+            }
+        }
+        
+        let mut results: Vec<SearchResult> = final_heap.into_iter().map(|r| r.0).collect();
+        results.sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap());
+        
         Ok(results)
     }
 
@@ -421,7 +508,8 @@ impl QuantizedVectorIndex {
             for (i, centroid) in self.centroids.iter().enumerate() {
                 let centroid_f32 = centroid.as_f32();
                 let centroid_chunk = &centroid_f32[0..chunk.len().min(centroid.dimensions)];
-                let distance = euclidean_distance(chunk, centroid_chunk);
+                use oxirs_core::simd::SimdOps;
+                let distance = f32::euclidean_distance(chunk, centroid_chunk);
                 if distance < best_distance {
                     best_distance = distance;
                     best_centroid = i as u8;
@@ -489,35 +577,7 @@ impl VectorIndex for QuantizedVectorIndex {
     }
 }
 
-// Distance calculation functions
-
-fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    let dot: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
-    let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
-    let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-
-    if norm_a == 0.0 || norm_b == 0.0 {
-        0.0
-    } else {
-        dot / (norm_a * norm_b)
-    }
-}
-
-fn euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
-    a.iter()
-        .zip(b)
-        .map(|(x, y)| (x - y).powi(2))
-        .sum::<f32>()
-        .sqrt()
-}
-
-fn manhattan_distance(a: &[f32], b: &[f32]) -> f32 {
-    a.iter().zip(b).map(|(x, y)| (x - y).abs()).sum()
-}
-
-fn dot_product(a: &[f32], b: &[f32]) -> f32 {
-    a.iter().zip(b).map(|(x, y)| x * y).sum()
-}
+// Helper functions that don't have SIMD equivalents
 
 fn hamming_distance(a: &[u8], b: &[u8]) -> f32 {
     a.iter().zip(b).filter(|(x, y)| x != y).count() as f32
@@ -550,7 +610,8 @@ fn kmeans_clustering(vectors: &[Vector], k: usize) -> Result<Vec<Vector>> {
             for (i, centroid) in centroids.iter().enumerate() {
                 let vector_f32 = vector.as_f32();
                 let centroid_f32 = centroid.as_f32();
-                let distance = euclidean_distance(&vector_f32, &centroid_f32);
+                use oxirs_core::simd::SimdOps;
+                let distance = f32::euclidean_distance(&vector_f32, &centroid_f32);
                 if distance < best_distance {
                     best_distance = distance;
                     best_centroid = i;

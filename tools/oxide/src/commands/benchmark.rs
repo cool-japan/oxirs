@@ -1,7 +1,7 @@
 //! Benchmark command
 
 use super::CommandResult;
-// use oxirs_core::store::Store;
+// use oxirs_core::Store;
 use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -103,7 +103,7 @@ struct BenchmarkResults {
 #[derive(Debug)]
 struct QueryBenchmarkResult {
     query_name: String,
-    execution_times: Vec<Duration>,
+    _execution_times: Vec<Duration>,
     avg_time: Duration,
     min_time: Duration,
     max_time: Duration,
@@ -171,7 +171,7 @@ fn run_benchmark_suite(
 
         query_results.push(QueryBenchmarkResult {
             query_name: query_name.clone(),
-            execution_times,
+            _execution_times: execution_times,
             avg_time,
             min_time,
             max_time,

@@ -51,7 +51,7 @@ pub enum SecretBackend {
 
 impl SecretManager {
     /// Create a new secret manager
-    pub fn new(backend: SecretBackend) -> CliResult<Self> {
+    pub fn new(_backend: SecretBackend) -> CliResult<Self> {
         let secrets_dir = Self::get_secrets_dir()?;
         
         // Ensure secrets directory exists with restricted permissions
@@ -362,7 +362,7 @@ pub mod keyring {
     use super::*;
     
     /// Store a secret in the system keyring
-    pub fn store_in_keyring(service: &str, name: &str, value: &str) -> CliResult<()> {
+    pub fn store_in_keyring(_service: &str, _name: &str, _value: &str) -> CliResult<()> {
         // This would use platform-specific APIs:
         // - macOS: Security framework
         // - Windows: Windows Credential Manager
@@ -373,7 +373,7 @@ pub mod keyring {
     }
     
     /// Retrieve a secret from the system keyring
-    pub fn get_from_keyring(service: &str, name: &str) -> CliResult<String> {
+    pub fn get_from_keyring(_service: &str, _name: &str) -> CliResult<String> {
         Err(CliError::config_error("System keyring not yet implemented"))
     }
 }

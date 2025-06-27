@@ -7,6 +7,7 @@ use crate::model::{Triple, Subject, Predicate, Object};
 use crate::OxirsError;
 use crossbeam_deque::Injector;
 use parking_lot::{Mutex, RwLock};
+#[cfg(feature = "parallel")]
 use rayon::prelude::*;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Barrier};
@@ -342,6 +343,7 @@ impl ParallelBatchProcessor {
     }
 
     /// Process operations in parallel using rayon
+    #[cfg(feature = "parallel")]
     pub fn process_rayon<E, R>(&self, executor: E) -> Result<Vec<R>, OxirsError>
     where
         E: Fn(BatchOperation) -> Result<R, OxirsError> + Send + Sync,
@@ -488,6 +490,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "parallel")]
     fn test_work_stealing() {
         let mut config = BatchConfig::default();
         config.num_threads = Some(4);

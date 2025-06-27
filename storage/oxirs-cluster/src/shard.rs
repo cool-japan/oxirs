@@ -200,9 +200,9 @@ impl ShardRouter {
             
             ShardingStrategy::Hybrid { primary, secondary } => {
                 // Try primary strategy first, fall back to secondary
-                match self.route_with_strategy(triple, primary).await {
+                match self.route_with_strategy(triple, primary) {
                     Ok(shard) => shard,
-                    Err(_) => self.route_with_strategy(triple, secondary).await?,
+                    Err(_) => self.route_with_strategy(triple, secondary)?,
                 }
             }
         };
@@ -214,15 +214,41 @@ impl ShardRouter {
     }
     
     /// Route using a specific strategy
-    async fn route_with_strategy(&self, triple: &Triple, strategy: &ShardingStrategy) -> Result<ShardId> {
-        // Create a temporary router with the given strategy
-        let temp_router = ShardRouter {
-            strategy: strategy.clone(),
-            shards: self.shards.clone(),
-            similarity_calc: self.similarity_calc.clone(),
-            routing_cache: Arc::new(RwLock::new(HashMap::new())),
-        };
-        temp_router.route_triple(triple).await
+    fn route_with_strategy(&self, triple: &Triple, strategy: &ShardingStrategy) -> Result<ShardId> {
+        // Direct routing logic without recursion
+        match strategy {
+            ShardingStrategy::Hash { num_shards } => {
+                Ok(self.hash_route(&triple.subject().to_string(), *num_shards))
+            }
+            
+            ShardingStrategy::Subject { num_shards } => {
+                Ok(self.hash_route(&triple.subject().to_string(), *num_shards))
+            }
+            
+            ShardingStrategy::Predicate { predicate_groups } => {
+                let predicate_str = triple.predicate().to_string();
+                Ok(predicate_groups.get(&predicate_str)
+                    .copied()
+                    .unwrap_or_else(|| self.hash_route(&predicate_str, predicate_groups.len() as u32)))
+            }
+            
+            ShardingStrategy::Namespace { namespace_mapping } => {
+                self.route_by_namespace(&triple.subject().to_string(), namespace_mapping)
+            }
+            
+            ShardingStrategy::Graph { graph_mapping } => {
+                Ok(self.hash_route(&triple.subject().to_string(), graph_mapping.len() as u32))
+            }
+            
+            ShardingStrategy::Semantic { concept_clusters, similarity_threshold } => {
+                self.semantic_route(triple, concept_clusters, *similarity_threshold)
+            }
+            
+            ShardingStrategy::Hybrid { .. } => {
+                // For hybrid, just use hash routing to avoid recursion
+                Ok(self.hash_route(&triple.subject().to_string(), 10))
+            }
+        }
     }
     
     /// Hash-based routing
@@ -439,11 +465,11 @@ mod tests {
         let router = ShardRouter::new(strategy);
         router.init_shards(4, 3).await.unwrap();
         
-        let triple = Triple {
-            subject: NamedNode::new("http://example.org/subject1").unwrap().into(),
-            predicate: NamedNode::new("http://example.org/predicate1").unwrap().into(),
-            object: NamedNode::new("http://example.org/object1").unwrap().into(),
-        };
+        let triple = Triple::new(
+            NamedNode::new("http://example.org/subject1").unwrap(),
+            NamedNode::new("http://example.org/predicate1").unwrap(),
+            NamedNode::new("http://example.org/object1").unwrap(),
+        );
         
         let shard_id = router.route_triple(&triple).await.unwrap();
         assert!(shard_id < 4);
@@ -462,17 +488,17 @@ mod tests {
         let strategy = ShardingStrategy::Namespace { namespace_mapping };
         let router = ShardRouter::new(strategy);
         
-        let triple1 = Triple {
-            subject: NamedNode::new("http://example.org/subject1").unwrap().into(),
-            predicate: NamedNode::new("http://example.org/predicate1").unwrap().into(),
-            object: NamedNode::new("http://example.org/object1").unwrap().into(),
-        };
+        let triple1 = Triple::new(
+            NamedNode::new("http://example.org/subject1").unwrap(),
+            NamedNode::new("http://example.org/predicate1").unwrap(),
+            NamedNode::new("http://example.org/object1").unwrap(),
+        );
         
-        let triple2 = Triple {
-            subject: NamedNode::new("http://schema.org/Person").unwrap().into(),
-            predicate: NamedNode::new("http://schema.org/name").unwrap().into(),
-            object: NamedNode::new("http://example.org/john").unwrap().into(),
-        };
+        let triple2 = Triple::new(
+            NamedNode::new("http://schema.org/Person").unwrap(),
+            NamedNode::new("http://schema.org/name").unwrap(),
+            NamedNode::new("http://example.org/john").unwrap(),
+        );
         
         assert_eq!(router.route_triple(&triple1).await.unwrap(), 0);
         assert_eq!(router.route_triple(&triple2).await.unwrap(), 1);
@@ -505,11 +531,11 @@ mod tests {
         let router = ShardRouter::new(strategy)
             .with_similarity_calculator(Arc::new(DefaultConceptSimilarity));
         
-        let triple = Triple {
-            subject: NamedNode::new("http://schema.org/Person/123").unwrap().into(),
-            predicate: NamedNode::new("http://schema.org/name").unwrap().into(),
-            object: NamedNode::new("John Doe").unwrap().into(),
-        };
+        let triple = Triple::new(
+            NamedNode::new("http://schema.org/Person/123").unwrap(),
+            NamedNode::new("http://schema.org/name").unwrap(),
+            NamedNode::new("John Doe").unwrap(),
+        );
         
         let shard_id = router.route_triple(&triple).await.unwrap();
         assert_eq!(shard_id, 0); // Should route to schema.org cluster

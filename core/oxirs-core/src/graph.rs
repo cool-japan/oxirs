@@ -2,7 +2,8 @@
 
 use crate::model::*;
 use crate::concurrent::{ParallelBatchProcessor, BatchOperation, BatchConfig};
-use crate::{OxirsError, Result};
+use crate::Result;
+#[cfg(feature = "parallel")]
 use rayon::prelude::*;
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -166,6 +167,7 @@ impl Graph {
     /// This method uses parallel processing to insert a large collection of triples
     /// efficiently. It automatically batches the triples and processes them across
     /// multiple CPU cores.
+    #[cfg(feature = "parallel")]
     pub fn par_insert_batch(&mut self, triples: Vec<Triple>) -> Result<usize> {
         if triples.is_empty() {
             return Ok(0);
@@ -214,6 +216,7 @@ impl Graph {
     /// This method uses parallel processing to remove a large collection of triples
     /// efficiently. It automatically batches the triples and processes them across
     /// multiple CPU cores.
+    #[cfg(feature = "parallel")]
     pub fn par_remove_batch(&mut self, triples: Vec<Triple>) -> Result<usize> {
         if triples.is_empty() {
             return Ok(0);
@@ -261,6 +264,7 @@ impl Graph {
     ///
     /// This method performs multiple queries in parallel, returning all matching triples.
     /// Each query pattern is processed concurrently for improved performance.
+    #[cfg(feature = "parallel")]
     pub fn par_query_batch(
         &self,
         queries: Vec<(Option<Subject>, Option<Predicate>, Option<Object>)>,
@@ -312,6 +316,7 @@ impl Graph {
     /// This method applies a transformation function to each triple in the graph
     /// in parallel. The function can return None to remove a triple or Some(triple)
     /// to replace it.
+    #[cfg(feature = "parallel")]
     pub fn par_transform<F>(&mut self, transform_fn: F) -> Result<(usize, usize)>
     where
         F: Fn(&Triple) -> Option<Triple> + Send + Sync + 'static,
@@ -357,6 +362,7 @@ impl Graph {
     /// Create a parallel iterator over the graph's triples
     ///
     /// This allows for parallel processing of triples using rayon's parallel iterator traits.
+    #[cfg(feature = "parallel")]
     pub fn par_iter(&self) -> impl ParallelIterator<Item = &Triple> {
         self.triples.par_iter()
     }
@@ -364,6 +370,7 @@ impl Graph {
     /// Count triples matching patterns in parallel
     ///
     /// This method counts the number of triples matching each pattern in parallel.
+    #[cfg(feature = "parallel")]
     pub fn par_count_patterns(
         &self,
         patterns: Vec<(Option<Subject>, Option<Predicate>, Option<Object>)>,
@@ -388,6 +395,7 @@ impl Graph {
     /// Find unique values for a given position in parallel
     ///
     /// This method finds all unique subjects, predicates, or objects in parallel.
+    #[cfg(feature = "parallel")]
     pub fn par_unique_terms(&self) -> (BTreeSet<Subject>, BTreeSet<Predicate>, BTreeSet<Object>) {
         let terms: Vec<(Subject, Predicate, Object)> = self
             .triples

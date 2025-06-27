@@ -10,7 +10,6 @@ use tracing::Level;
 use tracing_subscriber::{
     fmt::{self, format::FmtSpan},
     layer::SubscriberExt,
-    registry::LookupSpan,
     Layer, Registry,
 };
 use chrono::{DateTime, Utc};
@@ -443,8 +442,6 @@ pub mod analysis {
 
 /// Development mode logging helpers
 pub mod dev {
-    use super::*;
-    
     /// Enable debug logging for specific modules
     pub fn enable_debug_for_modules(modules: &[&str]) {
         // This would be implemented with tracing's dynamic filtering

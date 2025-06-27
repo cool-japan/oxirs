@@ -37,30 +37,30 @@ This document outlines the comprehensive implementation plan for oxirs-cluster, 
 ### 1.1 Core Raft Implementation
 
 #### 1.1.1 Raft State Machine
-- [ ] **Node States**
-  - [ ] **Follower State**
-    - [ ] Heartbeat timeout handling
-    - [ ] Vote request processing
-    - [ ] Append entries handling
-    - [ ] State transition logic
-    - [ ] Term tracking
-    - [ ] Leader acknowledgment
+- [x] **Node States**
+  - [x] **Follower State**
+    - [x] Heartbeat timeout handling
+    - [x] Vote request processing
+    - [x] Append entries handling
+    - [x] State transition logic
+    - [x] Term tracking
+    - [x] Leader acknowledgment
 
-  - [ ] **Candidate State**
-    - [ ] Election timeout handling
-    - [ ] Vote request broadcasting
-    - [ ] Vote response collection
-    - [ ] Majority vote detection
-    - [ ] Split vote handling
-    - [ ] Election restart logic
+  - [x] **Candidate State**
+    - [x] Election timeout handling
+    - [x] Vote request broadcasting
+    - [x] Vote response collection
+    - [x] Majority vote detection
+    - [x] Split vote handling
+    - [x] Election restart logic
 
-  - [ ] **Leader State**
-    - [ ] Heartbeat generation
-    - [ ] Log replication
-    - [ ] Client request handling
-    - [ ] Progress tracking
-    - [ ] Commit index updates
-    - [ ] Safety checks
+  - [x] **Leader State**
+    - [x] Heartbeat generation
+    - [x] Log replication
+    - [x] Client request handling
+    - [x] Progress tracking
+    - [x] Commit index updates
+    - [x] Safety checks
 
 #### 1.1.2 Log Management
 - [ ] **Log Structure**

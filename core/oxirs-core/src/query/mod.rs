@@ -12,6 +12,7 @@ pub mod parser;
 pub mod pattern_optimizer;
 pub mod plan;
 pub mod property_paths;
+pub mod streaming_results;
 pub mod wasm;
 
 pub use algebra::*;
@@ -22,6 +23,10 @@ pub use jit::{JitCompiler, JitConfig};
 pub use optimizer::{AIQueryOptimizer, MultiQueryOptimizer};
 pub use parser::*;
 pub use pattern_optimizer::{PatternOptimizer, PatternExecutor, OptimizedPatternPlan, IndexType};
+pub use streaming_results::{
+    StreamingQueryResults, SelectResults, ConstructResults, Solution as StreamingSolution, SolutionMetadata,
+    StreamingConfig, StreamingProgress, StreamingResultBuilder,
+};
 pub use wasm::{OptimizationLevel, WasmQueryCompiler, WasmTarget};
 
 // TODO: Temporary compatibility layer for SHACL module

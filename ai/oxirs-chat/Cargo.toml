@@ -13,7 +13,7 @@ rust-version.workspace = true
 
 [dependencies]
 oxirs-core = { path = "../../core/oxirs-core" }
-oxirs-vec = { path = "../../engine/oxirs-vec" }
+# oxirs-vec = { path = "../../engine/oxirs-vec" } # Temporarily disabled due to compilation issues
 # oxirs-embed = { path = "../oxirs-embed" } # Temporarily disabled due to compilation issues
 tokio = { workspace = true, features = ["full"] }
 hyper = { workspace = true, features = ["full"] }

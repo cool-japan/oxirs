@@ -280,7 +280,7 @@ fn parse_ntriples_line(line: &str, _base_uri: Option<&str>) -> Result<Option<Rdf
 }
 
 /// Parse a single N-Quads line
-fn parse_nquads_line(line: &str, base_uri: Option<&str>) -> Result<Option<RdfTriple>, String> {
+fn parse_nquads_line(line: &str, _base_uri: Option<&str>) -> Result<Option<RdfTriple>, String> {
     if !line.ends_with(" .") {
         return Err("N-Quads line must end with ' .'".to_string());
     }
@@ -307,7 +307,7 @@ fn parse_nquads_line(line: &str, base_uri: Option<&str>) -> Result<Option<RdfTri
             object_parts.push(*part);
         } else if part.ends_with('"') && in_literal {
             object_parts.push(*part);
-            in_literal = false;
+            // in_literal = false; // Not needed as we break
 
             // Check if there's a graph component after the object
             if i + 3 < parts.len() - 2 {
@@ -380,8 +380,8 @@ fn parse_ntriples_term(term: &str) -> Result<String, String> {
 fn parse_turtle_content(content: &str, _base_uri: Option<&str>) -> Result<Vec<RdfTriple>, String> {
     // This is a very basic Turtle parser - a real implementation would be much more complex
     let mut triples = Vec::new();
-    let mut current_subject: Option<String> = None;
-    let mut current_predicate: Option<String> = None;
+    let _current_subject: Option<String> = None;
+    let _current_predicate: Option<String> = None;
 
     for line in content.lines() {
         let line = line.trim();

@@ -180,6 +180,22 @@ pub struct ExecutionStats {
     pub warnings: Vec<String>,
 }
 
+impl ExecutionStats {
+    /// Merge statistics from another ExecutionStats instance
+    pub fn merge_from(&mut self, other: &ExecutionStats) {
+        self.execution_time += other.execution_time;
+        self.intermediate_results += other.intermediate_results;
+        self.final_results += other.final_results;
+        self.memory_used += other.memory_used;
+        self.operations += other.operations;
+        self.property_path_evaluations += other.property_path_evaluations;
+        self.time_spent_on_paths += other.time_spent_on_paths;
+        self.service_calls += other.service_calls;
+        self.time_spent_on_services += other.time_spent_on_services;
+        self.warnings.extend(other.warnings.clone());
+    }
+}
+
 /// Dataset abstraction for query execution
 pub trait Dataset: Send + Sync {
     /// Find all triples matching the given pattern
@@ -417,9 +433,7 @@ pub struct CachedResult {
 
 impl QueryExecutor {
     pub fn new() -> Self {
-        let mut context = ExecutionContext::default();
-        // TODO: Parallel execution is not yet implemented
-        context.parallel = false;
+        let context = ExecutionContext::default();
         
         let parallel_executor = if context.parallel {
             Some(Arc::new(ParallelExecutor::new(
@@ -2354,7 +2368,7 @@ impl Default for FunctionRegistry {
     }
 }
 
-/// Parallel executor implementation placeholders
+/// Parallel executor implementation
 impl ParallelExecutor {
     pub fn new(config: ParallelConfig) -> Self {
         Self {
@@ -2368,12 +2382,39 @@ impl ParallelExecutor {
 
     pub fn execute(
         &self,
-        _algebra: &Algebra,
-        _dataset: &dyn Dataset,
-        _stats: &mut ExecutionStats,
+        algebra: &Algebra,
+        dataset: &dyn Dataset,
+        stats: &mut ExecutionStats,
     ) -> Result<Solution> {
-        // TODO: Implement parallel execution
-        Ok(vec![])
+        #[cfg(feature = "parallel")]
+        {
+            use crate::parallel::ParallelQueryExecutor;
+            
+            // Create parallel executor with current config
+            let parallel_executor = ParallelQueryExecutor::new(self.config.clone())?;
+            
+            // Create execution context from the config
+            let context = ExecutionContext {
+                timeout: None,
+                memory_limit: None,
+                parallel: true,
+                parallel_config: self.config.clone(),
+                streaming: StreamingConfig::default(),
+                collect_stats: true,
+                parallel_threshold: self.config.parallel_threshold,
+                enable_caching: false,
+                extension_registry: FUNCTION_REGISTRY.clone(),
+            };
+            
+            // Execute using parallel executor
+            parallel_executor.execute(algebra, dataset, &context, stats)
+        }
+        
+        #[cfg(not(feature = "parallel"))]
+        {
+            // Fallback when parallel feature is not enabled
+            Err(anyhow!("Parallel execution requested but 'parallel' feature is not enabled"))
+        }
     }
 }
 

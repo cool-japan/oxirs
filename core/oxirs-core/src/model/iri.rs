@@ -4,7 +4,6 @@ use crate::model::{GraphNameTerm, ObjectTerm, PredicateTerm, RdfTerm, SubjectTer
 use crate::OxirsError;
 use lazy_static::lazy_static;
 use regex::Regex;
-use std::borrow::Cow;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;

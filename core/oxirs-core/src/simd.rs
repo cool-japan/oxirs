@@ -62,8 +62,9 @@ pub trait SimdOps {
 #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd"))]
 mod x86_simd;
 
-#[cfg(all(target_arch = "aarch64", feature = "simd"))]
-mod arm_simd;
+// ARM SIMD support will be added later
+// #[cfg(all(target_arch = "aarch64", feature = "simd"))]
+// mod arm_simd;
 
 // Generic scalar fallback implementation
 mod scalar;
@@ -72,8 +73,8 @@ mod scalar;
 #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd"))]
 pub use x86_simd::*;
 
-#[cfg(all(target_arch = "aarch64", feature = "simd"))]
-pub use arm_simd::*;
+// #[cfg(all(target_arch = "aarch64", feature = "simd"))]
+// pub use arm_simd::*;
 
 #[cfg(not(feature = "simd"))]
 pub use scalar::*;

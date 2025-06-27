@@ -3,19 +3,16 @@
 //! This module provides a wait-free reader, lock-free writer graph structure
 //! using epoch-based memory reclamation and atomic operations.
 
-use super::epoch::{EpochManager, HazardPointer, VersionedPointer};
-use crate::model::{BlankNode, Literal, NamedNode, Object, Predicate, Subject, Term, Triple};
+use super::epoch::{EpochManager, HazardPointer};
+use crate::model::{Object, Predicate, Subject, Triple};
 use crate::OxirsError;
-use ahash::AHashMap;
-use crossbeam_epoch::{self as epoch, Atomic, Guard, Owned, Shared};
-use crossbeam_utils::atomic::AtomicCell;
+use crossbeam_epoch::Owned;
 use dashmap::DashMap;
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 /// Index type for fast triple lookups
-
 /// A lock-free graph node containing triples
 struct GraphNode {
     /// The triples stored in this node
@@ -413,6 +410,7 @@ impl ConcurrentGraph {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{NamedNode, Literal};
 
     fn create_test_triple(s: &str, p: &str, o: &str) -> Triple {
         Triple::new(

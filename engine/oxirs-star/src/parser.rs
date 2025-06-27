@@ -57,14 +57,15 @@ impl TrigParserState {
         self.graph_name_buffer.clear();
         self.parsing_graph_name = false;
     }
-
-    fn enter_graph_block(&mut self, graph_term: Option<StarTerm>) {
-        self.current_graph = graph_term;
+    
+    fn enter_graph_block(&mut self, graph: Option<StarTerm>) {
+        self.current_graph = graph;
         self.in_graph_block = true;
-        self.brace_depth = 1;
+        self.brace_depth += 1;
         self.parsing_graph_name = false;
+        self.graph_name_buffer.clear();
     }
-
+    
     fn exit_graph_block(&mut self) -> bool {
         if self.brace_depth > 0 {
             self.brace_depth -= 1;
@@ -1286,12 +1287,25 @@ impl StarParser {
 
     /// Check if a TriG statement is complete (enhanced version)
     fn is_complete_trig_statement(&self, statement: &str, state: &mut TrigParserState) -> bool {
+        let trimmed = statement.trim();
+        
+        // Handle directives (always complete on one line)
+        if trimmed.starts_with("@prefix") || trimmed.starts_with("@base") {
+            return trimmed.ends_with('.');
+        }
+        
+        // Handle graph block closing
+        if trimmed == "}" {
+            return true;
+        }
+        
         let mut brace_count: i32 = 0;
         let mut in_string = false;
         let mut escape_next = false;
         let mut quoted_triple_depth: i32 = 0;
+        let mut chars = statement.chars().peekable();
 
-        for ch in statement.chars() {
+        while let Some(ch) = chars.next() {
             if escape_next {
                 escape_next = false;
                 continue;
@@ -1301,28 +1315,27 @@ impl StarParser {
                 '\\' if in_string => escape_next = true,
                 '"' => in_string = !in_string,
                 '<' if !in_string => {
-                    // Could be start of quoted triple or IRI
-                    let remaining: String = statement.chars().skip_while(|&c| c != ch).collect();
-                    if remaining.starts_with("<<") {
+                    // Check for quoted triple start
+                    if chars.peek() == Some(&'<') {
+                        chars.next(); // consume second '<'
                         quoted_triple_depth += 1;
                     }
                 }
-                '>' if !in_string => {
-                    // Could be end of quoted triple or IRI
-                    let remaining: String = statement.chars().skip_while(|&c| c != ch).collect();
-                    if remaining.starts_with(">>") {
+                '>' if !in_string && quoted_triple_depth > 0 => {
+                    // Check for quoted triple end
+                    if chars.peek() == Some(&'>') {
+                        chars.next(); // consume second '>'
                         quoted_triple_depth = quoted_triple_depth.saturating_sub(1);
                     }
                 }
                 '{' if !in_string && quoted_triple_depth == 0 => {
                     brace_count += 1;
-                    state.brace_depth += 1;
+                    if !state.in_graph_block {
+                        state.parsing_graph_name = false;
+                    }
                 }
                 '}' if !in_string && quoted_triple_depth == 0 => {
                     brace_count = brace_count.saturating_sub(1);
-                    if state.brace_depth > 0 {
-                        state.brace_depth -= 1;
-                    }
                 }
                 '.' if !in_string && quoted_triple_depth == 0 && brace_count == 0 => {
                     // Statement ends with a dot and we're not in any nested structure
@@ -1332,8 +1345,14 @@ impl StarParser {
             }
         }
 
-        // Check for graph block closing
-        if brace_count == 0 && state.brace_depth == 0 && state.in_graph_block {
+        // Special handling for graph declarations
+        if brace_count > 0 && !state.in_graph_block {
+            // We have an opening brace - this is a complete graph declaration start
+            return true;
+        }
+        
+        // Check for complete graph block
+        if brace_count == 0 && state.in_graph_block && trimmed.ends_with('}') {
             return true;
         }
 
@@ -1394,6 +1413,34 @@ impl StarParser {
     }
 
     /// Parse a graph block declaration (enhanced version)
+    /// Parse graph name with error recovery
+    fn parse_graph_name_with_recovery(
+        &self,
+        graph_name: &str,
+        context: &mut ParseContext,
+    ) -> StarResult<StarTerm> {
+        let graph_name = graph_name.trim();
+        
+        // Try different graph name formats with recovery
+        
+        // Check for quoted graph names (common mistake)
+        if graph_name.starts_with('"') && graph_name.ends_with('"') {
+            let inner = &graph_name[1..graph_name.len() - 1];
+            context.add_error(
+                format!("Graph names should not be quoted strings. Converting '{}' to IRI", inner),
+                graph_name.to_string(),
+                ErrorSeverity::Warning,
+            );
+            // Try to convert to IRI
+            if inner.contains(':') || inner.starts_with("http") {
+                return StarTerm::iri(inner);
+            }
+        }
+        
+        // Parse normally
+        self.parse_term_safe(graph_name, context)
+    }
+
     fn parse_graph_block(
         &self,
         statement: &str,
@@ -1410,16 +1457,26 @@ impl StarParser {
             let graph_term = if graph_part.is_empty() {
                 None // Default graph
             } else {
-                match self.parse_term_safe(graph_part, context) {
+                // Enhanced graph name parsing with better error handling
+                match self.parse_graph_name_with_recovery(graph_part, context) {
                     Ok(term) => {
                         // Validate that the graph name is appropriate (IRI or blank node)
                         match &term {
                             StarTerm::NamedNode(_) | StarTerm::BlankNode(_) => Some(term),
                             _ => {
-                                return Err(anyhow::anyhow!(
+                                let error_msg = format!(
                                     "Graph name must be an IRI or blank node, found: {:?}",
                                     term
-                                ));
+                                );
+                                context.add_error(
+                                    error_msg.clone(),
+                                    statement.to_string(),
+                                    ErrorSeverity::Error,
+                                );
+                                if context.strict_mode {
+                                    return Err(anyhow::anyhow!(error_msg));
+                                }
+                                None // Continue with default graph in non-strict mode
                             }
                         }
                     }

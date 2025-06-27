@@ -12,6 +12,7 @@ use tracing::{debug, info, warn};
 use crate::{
     FederatedService, ServiceCapability, ServiceRegistry,
     query_decomposition::{QueryDecomposer, DecompositionResult, DecomposerConfig},
+    service_optimizer::{ServiceOptimizer, ServiceOptimizerConfig},
 };
 
 /// Query planner for federated queries
@@ -19,6 +20,7 @@ use crate::{
 pub struct QueryPlanner {
     config: QueryPlannerConfig,
     decomposer: QueryDecomposer,
+    service_optimizer: ServiceOptimizer,
 }
 
 impl QueryPlanner {
@@ -27,6 +29,7 @@ impl QueryPlanner {
         Self {
             config: QueryPlannerConfig::default(),
             decomposer: QueryDecomposer::new(),
+            service_optimizer: ServiceOptimizer::new(),
         }
     }
 
@@ -44,9 +47,17 @@ impl QueryPlanner {
             enable_advanced_algorithms: config.optimization_level != OptimizationLevel::None,
         };
         
+        let optimizer_config = ServiceOptimizerConfig {
+            enable_pattern_grouping: config.optimization_level != OptimizationLevel::None,
+            enable_service_merging: config.optimization_level == OptimizationLevel::Aggressive,
+            enable_statistics: config.optimization_level != OptimizationLevel::None,
+            ..Default::default()
+        };
+        
         Self {
             config,
             decomposer: QueryDecomposer::with_config(decomposer_config),
+            service_optimizer: ServiceOptimizer::with_config(optimizer_config),
         }
     }
 
@@ -122,10 +133,48 @@ impl QueryPlanner {
             dependencies: HashMap::new(),
         };
 
-        // Handle explicit SERVICE clauses first
-        for service_clause in &query_info.service_clauses {
-            let step = self.create_service_step(service_clause, registry)?;
-            plan.steps.push(step);
+        // Handle explicit SERVICE clauses with optimization
+        if !query_info.service_clauses.is_empty() {
+            debug!("Optimizing {} SERVICE clauses", query_info.service_clauses.len());
+            
+            // Optimize SERVICE clauses
+            let optimized = self.service_optimizer.optimize_query(query_info, registry).await?;
+            
+            // Create steps from optimized services
+            for opt_service in optimized.services {
+                let step = ExecutionStep {
+                    step_id: uuid::Uuid::new_v4().to_string(),
+                    step_type: StepType::ServiceQuery,
+                    service_id: Some(opt_service.service_id),
+                    query_fragment: self.build_optimized_service_query(&opt_service),
+                    expected_variables: self.extract_service_variables(&opt_service),
+                    estimated_duration: Duration::from_millis(opt_service.estimated_cost as u64),
+                    dependencies: Vec::new(),
+                    parallel_group: if opt_service.strategy.stream_results { None } else { Some(0) },
+                };
+                plan.steps.push(step);
+            }
+            
+            // Handle remaining global filters after optimization
+            for filter in optimized.global_filters {
+                let filter_step = ExecutionStep {
+                    step_id: uuid::Uuid::new_v4().to_string(),
+                    step_type: StepType::Filter,
+                    service_id: None,
+                    query_fragment: format!("FILTER({})", filter.expression),
+                    expected_variables: filter.variables,
+                    estimated_duration: Duration::from_millis(10),
+                    dependencies: plan.steps.iter().map(|s| s.step_id.clone()).collect(),
+                    parallel_group: None,
+                };
+                plan.steps.push(filter_step);
+            }
+        } else {
+            // Handle queries without explicit SERVICE clauses
+            for service_clause in &query_info.service_clauses {
+                let step = self.create_service_step(service_clause, registry)?;
+                plan.steps.push(step);
+            }
         }
 
         // Group remaining patterns by compatible services
@@ -848,6 +897,57 @@ impl QueryPlanner {
         }
 
         variables
+    }
+    
+    /// Build query from optimized service clause
+    fn build_optimized_service_query(&self, service: &crate::service_optimizer::OptimizedServiceClause) -> String {
+        let mut query = String::from("SELECT * WHERE {\n");
+        
+        // Add patterns
+        for pattern in &service.patterns {
+            query.push_str("  ");
+            query.push_str(&pattern.pattern_string);
+            query.push_str(" .\n");
+        }
+        
+        // Add filters (both local and pushed)
+        for filter in &service.filters {
+            query.push_str("  FILTER(");
+            query.push_str(&filter.expression);
+            query.push_str(")\n");
+        }
+        
+        query.push_str("}");
+        
+        // Add LIMIT if using batch processing
+        if service.strategy.use_values_binding && service.strategy.batch_size > 0 {
+            query.push_str(&format!(" LIMIT {}", service.strategy.batch_size));
+        }
+        
+        query
+    }
+    
+    /// Extract variables from optimized service clause
+    fn extract_service_variables(&self, service: &crate::service_optimizer::OptimizedServiceClause) -> HashSet<String> {
+        let mut vars = HashSet::new();
+        
+        for pattern in &service.patterns {
+            if pattern.subject.starts_with('?') {
+                vars.insert(pattern.subject.clone());
+            }
+            if pattern.predicate.starts_with('?') {
+                vars.insert(pattern.predicate.clone());
+            }
+            if pattern.object.starts_with('?') {
+                vars.insert(pattern.object.clone());
+            }
+        }
+        
+        for filter in &service.filters {
+            vars.extend(filter.variables.iter().cloned());
+        }
+        
+        vars
     }
 
     fn optimize_plan(&self, plan: &mut ExecutionPlan) {

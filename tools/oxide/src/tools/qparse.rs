@@ -2,7 +2,7 @@
 
 use super::ToolResult;
 
-pub async fn run(query: String, file: bool, print_ast: bool, print_algebra: bool) -> ToolResult {
+pub async fn run(_query: String, _file: bool, _print_ast: bool, _print_algebra: bool) -> ToolResult {
     println!("SPARQL Query Parse tool not yet implemented");
     Ok(())
 }

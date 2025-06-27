@@ -3,13 +3,12 @@
 //! This module provides lock-free, SIMD-optimized indexing structures
 //! for maximum throughput in concurrent environments.
 
-use crate::interning::InternedString;
 use crate::model::*;
-use ahash::{AHasher, RandomState};
+use ahash::RandomState;
 use bumpalo::Bump;
-use crossbeam::queue::SegQueue;
 use dashmap::DashMap;
 use parking_lot::RwLock;
+#[cfg(feature = "parallel")]
 use rayon::prelude::*;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};

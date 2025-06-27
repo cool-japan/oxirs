@@ -32,21 +32,21 @@ mod shard_integration_tests {
         
         // Store some triples
         let triples = vec![
-            Triple {
-                subject: NamedNode::new("http://example.org/alice").unwrap().into(),
-                predicate: NamedNode::new("http://example.org/knows").unwrap().into(),
-                object: NamedNode::new("http://example.org/bob").unwrap().into(),
-            },
-            Triple {
-                subject: NamedNode::new("http://example.org/bob").unwrap().into(),
-                predicate: NamedNode::new("http://example.org/knows").unwrap().into(),
-                object: NamedNode::new("http://example.org/charlie").unwrap().into(),
-            },
-            Triple {
-                subject: NamedNode::new("http://example.org/charlie").unwrap().into(),
-                predicate: NamedNode::new("http://example.org/age").unwrap().into(),
-                object: NamedNode::new("25").unwrap().into(),
-            },
+            Triple::new(
+                NamedNode::new("http://example.org/alice").unwrap(),
+                NamedNode::new("http://example.org/knows").unwrap(),
+                NamedNode::new("http://example.org/bob").unwrap(),
+            ),
+            Triple::new(
+                NamedNode::new("http://example.org/bob").unwrap(),
+                NamedNode::new("http://example.org/knows").unwrap(),
+                NamedNode::new("http://example.org/charlie").unwrap(),
+            ),
+            Triple::new(
+                NamedNode::new("http://example.org/charlie").unwrap(),
+                NamedNode::new("http://example.org/age").unwrap(),
+                NamedNode::new("25").unwrap(),
+            ),
         ];
         
         for triple in &triples {
@@ -76,11 +76,11 @@ mod shard_integration_tests {
         ];
         
         for (iri, expected_shard) in test_cases {
-            let triple = Triple {
-                subject: NamedNode::new(iri).unwrap().into(),
-                predicate: NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap().into(),
-                object: NamedNode::new("http://schema.org/Thing").unwrap().into(),
-            };
+            let triple = Triple::new(
+                NamedNode::new(iri).unwrap(),
+                NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap(),
+                NamedNode::new("http://schema.org/Thing").unwrap(),
+            );
             
             let shard_id = router.route_triple(&triple).await.unwrap();
             assert_eq!(shard_id, expected_shard, "IRI {} should route to shard {}", iri, expected_shard);
@@ -127,17 +127,17 @@ mod shard_integration_tests {
             .with_similarity_calculator(Arc::new(DefaultConceptSimilarity));
         
         // Test semantic routing
-        let person_triple = Triple {
-            subject: NamedNode::new("http://schema.org/PersonInstance").unwrap().into(),
-            predicate: NamedNode::new("http://schema.org/name").unwrap().into(),
-            object: NamedNode::new("John Doe").unwrap().into(),
-        };
+        let person_triple = Triple::new(
+            NamedNode::new("http://schema.org/PersonInstance").unwrap(),
+            NamedNode::new("http://schema.org/name").unwrap(),
+            NamedNode::new("John Doe").unwrap(),
+        );
         
-        let doc_triple = Triple {
-            subject: NamedNode::new("http://example.org/doc/123").unwrap().into(),
-            predicate: NamedNode::new("http://example.org/title").unwrap().into(),
-            object: NamedNode::new("My Document").unwrap().into(),
-        };
+        let doc_triple = Triple::new(
+            NamedNode::new("http://example.org/doc/123").unwrap(),
+            NamedNode::new("http://example.org/title").unwrap(),
+            NamedNode::new("My Document").unwrap(),
+        );
         
         assert_eq!(router.route_triple(&person_triple).await.unwrap(), 0);
         assert_eq!(router.route_triple(&doc_triple).await.unwrap(), 1);
@@ -197,8 +197,8 @@ mod shard_integration_tests {
         // Update shard metadata
         for i in 0..3 {
             let mut metadata = router.get_shard_metadata(i).await.unwrap();
-            metadata.triple_count = (i + 1) * 1000;
-            metadata.size_bytes = (i + 1) * 1_000_000;
+            metadata.triple_count = ((i + 1) * 1000) as usize;
+            metadata.size_bytes = ((i + 1) * 1_000_000) as u64;
             router.update_shard_metadata(metadata).await.unwrap();
         }
         
@@ -249,19 +249,19 @@ mod shard_integration_tests {
         let router = ShardRouter::new(strategy);
         
         // Important namespace should go to shard 0
-        let triple1 = Triple {
-            subject: NamedNode::new("http://important.org/data").unwrap().into(),
-            predicate: NamedNode::new("http://example.org/type").unwrap().into(),
-            object: NamedNode::new("Important").unwrap().into(),
-        };
+        let triple1 = Triple::new(
+            NamedNode::new("http://important.org/data").unwrap(),
+            NamedNode::new("http://example.org/type").unwrap(),
+            NamedNode::new("Important").unwrap(),
+        );
         assert_eq!(router.route_triple(&triple1).await.unwrap(), 0);
         
         // Other namespaces should use hash routing
-        let triple2 = Triple {
-            subject: NamedNode::new("http://other.org/data").unwrap().into(),
-            predicate: NamedNode::new("http://example.org/type").unwrap().into(),
-            object: NamedNode::new("Other").unwrap().into(),
-        };
+        let triple2 = Triple::new(
+            NamedNode::new("http://other.org/data").unwrap(),
+            NamedNode::new("http://example.org/type").unwrap(),
+            NamedNode::new("Other").unwrap(),
+        );
         let shard_id = router.route_triple(&triple2).await.unwrap();
         assert!(shard_id < 4);
     }

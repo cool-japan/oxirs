@@ -41,7 +41,7 @@ pub fn num_threads() -> usize {
 pub fn par_chunks<T, F, R>(slice: &[T], chunk_size: usize, f: F) -> Vec<R>
 where
     T: Sync,
-    F: Fn(&[T]) -> R + Sync,
+    F: Fn(&[T]) -> R + Sync + Send,
     R: Send,
 {
     #[cfg(feature = "parallel")]

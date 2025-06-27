@@ -298,8 +298,29 @@ impl AutoDiscovery {
         #[cfg(feature = "kubernetes")]
         {
             info!("Starting Kubernetes service discovery");
-            // TODO: Implement Kubernetes service discovery using kube-rs
-            // This would watch for services with specific labels/annotations
+            
+            use crate::k8s_discovery::{K8sDiscoveryConfig, K8sServiceDiscovery};
+            
+            let k8s_config = K8sDiscoveryConfig {
+                namespace: self.config.k8s_namespace.clone(),
+                label_selectors: self.config.k8s_label_selectors.clone(),
+                use_cluster_dns: self.config.k8s_use_cluster_dns,
+                external_domain: self.config.k8s_external_domain.clone(),
+                ..Default::default()
+            };
+            
+            let mut k8s_discovery = K8sServiceDiscovery::new(k8s_config).await?;
+            let mut k8s_rx = k8s_discovery.start().await?;
+            
+            // Spawn task to forward Kubernetes discoveries
+            tokio::spawn(async move {
+                while let Some(discovered) = k8s_rx.recv().await {
+                    if let Err(e) = tx.send(discovered).await {
+                        error!("Failed to forward Kubernetes discovery: {}", e);
+                        break;
+                    }
+                }
+            });
         }
 
         #[cfg(not(feature = "kubernetes"))]
@@ -377,10 +398,25 @@ pub struct AutoDiscoveryConfig {
 
     /// Maximum concurrent discovery operations
     pub max_concurrent_discoveries: usize,
+
+    /// Kubernetes namespace to watch (None for all namespaces)
+    pub k8s_namespace: Option<String>,
+
+    /// Kubernetes label selectors
+    pub k8s_label_selectors: HashMap<String, String>,
+
+    /// Use Kubernetes cluster DNS names
+    pub k8s_use_cluster_dns: bool,
+
+    /// External domain for Kubernetes services
+    pub k8s_external_domain: Option<String>,
 }
 
 impl Default for AutoDiscoveryConfig {
     fn default() -> Self {
+        let mut k8s_label_selectors = HashMap::new();
+        k8s_label_selectors.insert("federation".to_string(), "enabled".to_string());
+        
         Self {
             enable_mdns: true,
             enable_dns_discovery: true,
@@ -397,6 +433,10 @@ impl Default for AutoDiscoveryConfig {
             ],
             discovery_interval: Duration::from_secs(300),
             max_concurrent_discoveries: 10,
+            k8s_namespace: None,
+            k8s_label_selectors,
+            k8s_use_cluster_dns: true,
+            k8s_external_domain: None,
         }
     }
 }

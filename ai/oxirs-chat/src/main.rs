@@ -5,7 +5,7 @@ use oxirs_chat::{
     server::{ChatServer, ServerConfig},
     ChatManager,
 };
-use oxirs_core::store::Store;
+use oxirs_core::Store;
 use std::{path::PathBuf, sync::Arc};
 use tracing::{error, info};
 
@@ -44,6 +44,10 @@ struct Args {
     /// Logging level
     #[arg(long, default_value = "info")]
     log_level: String,
+
+    /// Session persistence path
+    #[arg(long)]
+    persistence_path: Option<PathBuf>,
 }
 
 #[tokio::main]
@@ -76,8 +80,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Knowledge graph store initialized");
 
     // Initialize the chat manager
-    let chat_manager = ChatManager::new(store.clone());
+    let chat_manager = match &args.persistence_path {
+        Some(path) => {
+            info!("Enabling session persistence at: {:?}", path);
+            match ChatManager::with_persistence(store.clone(), path).await {
+                Ok(manager) => Arc::new(manager),
+                Err(e) => {
+                    error!("Failed to initialize chat manager with persistence: {}", e);
+                    return Err(format!("Failed to initialize chat manager with persistence: {}", e).into());
+                }
+            }
+        }
+        None => {
+            info!("Session persistence disabled");
+            match ChatManager::new(store.clone()).await {
+                Ok(manager) => Arc::new(manager),
+                Err(e) => {
+                    error!("Failed to initialize chat manager: {}", e);
+                    return Err(format!("Failed to initialize chat manager: {}", e).into());
+                }
+            }
+        }
+    };
 
+    // Store host and port for later use
+    let host = args.host.clone();
+    let port = args.port;
+    
     // Configure the server
     let server_config = ServerConfig {
         host: args.host,
@@ -95,29 +124,48 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // TODO: Load and apply model configuration
     }
 
+    // Clone chat_manager before moving it
+    let chat_manager_clone = chat_manager.clone();
+    
     // Create and start the server
     let server = ChatServer::new(chat_manager, server_config);
 
     info!("🚀 OxiRS Chat server starting...");
     info!(
         "📡 HTTP API available at: http://{}:{}/api",
-        args.host, args.port
+        host, port
     );
     info!(
         "🔄 WebSocket endpoint: ws://{}:{}/api/sessions/{{session_id}}/ws",
-        args.host, args.port
+        host, port
     );
     info!(
         "❤️  Health check: http://{}:{}/health",
-        args.host, args.port
+        host, port
     );
 
     if args.enable_metrics {
         info!(
             "📊 Metrics endpoint: http://{}:{}/metrics",
-            args.host, args.port
+            host, port
         );
     }
+
+    if args.persistence_path.is_some() {
+        info!("💾 Session persistence enabled");
+    }
+
+    // Set up graceful shutdown
+    let chat_manager_for_shutdown = chat_manager_clone.clone();
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");
+        info!("Received shutdown signal, saving sessions...");
+        if let Err(e) = chat_manager_for_shutdown.save_all_sessions().await {
+            error!("Failed to save sessions on shutdown: {}", e);
+        }
+        info!("Sessions saved, shutting down...");
+        std::process::exit(0);
+    });
 
     // Start the server
     match server.serve().await {

@@ -170,8 +170,7 @@ fn remove_default_port(iri: &str) -> String {
     let default_ports = [("http://", ":80"), ("https://", ":443"), ("ftp://", ":21")];
 
     for (scheme, default_port) in &default_ports {
-        if iri.starts_with(scheme) {
-            let after_scheme = &iri[scheme.len()..];
+        if let Some(after_scheme) = iri.strip_prefix(scheme) {
             if let Some(port_pos) = after_scheme.find(default_port) {
                 // Check if this is actually the port (not part of path)
                 let before_port = &after_scheme[..port_pos];
@@ -202,9 +201,9 @@ fn normalize_path(iri: &str) -> String {
         let scheme_and_colon = &iri[..scheme_end + 1];
         let rest = &iri[scheme_end + 1..];
 
-        if rest.starts_with("//") {
+        if let Some(after_slashes) = rest.strip_prefix("//") {
             // Has authority
-            if let Some(path_start) = rest[2..].find('/') {
+            if let Some(path_start) = after_slashes.find('/') {
                 let authority = &rest[..path_start + 2];
                 let path_and_rest = &rest[path_start + 2..];
 
@@ -412,9 +411,8 @@ fn analyze_iri(iri: &str) -> ToolResult<()> {
 
         let rest = &iri[scheme_end + 1..];
 
-        if rest.starts_with("//") {
+        if let Some(authority_part) = rest.strip_prefix("//") {
             // Has authority component
-            let authority_part = &rest[2..];
 
             // Find end of authority
             let authority_end = authority_part

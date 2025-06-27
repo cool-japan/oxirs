@@ -6,7 +6,7 @@ use oxirs_core::model::*;
 use oxirs_core::parser::{Parser, RdfFormat as CoreRdfFormat};
 use oxirs_core::query::{QueryEngine, QueryResult as CoreQueryResult};
 use oxirs_core::serializer::Serializer;
-use oxirs_core::store::Store as CoreStore;
+use oxirs_core::Store as CoreStore;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

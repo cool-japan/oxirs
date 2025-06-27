@@ -421,11 +421,20 @@ impl StorageEngine for TieredStorageEngine {
 
     async fn store_triples(&self, triples: &[Triple]) -> Result<(), OxirsError> {
         // Use parallel processing for batch inserts
-        use rayon::prelude::*;
-
-        triples
-            .par_iter()
-            .try_for_each(|triple| futures::executor::block_on(self.store_triple(triple)))
+        #[cfg(feature = "parallel")]
+        {
+            use rayon::prelude::*;
+            triples
+                .par_iter()
+                .try_for_each(|triple| futures::executor::block_on(self.store_triple(triple)))
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            for triple in triples {
+                self.store_triple(triple).await?;
+            }
+            Ok(())
+        }
     }
 
     async fn query_triples(&self, pattern: &TriplePattern) -> Result<Vec<Triple>, OxirsError> {

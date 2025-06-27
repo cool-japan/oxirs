@@ -11,9 +11,7 @@ use juniper::{
 use crate::RdfStore;
 use std::sync::Arc;
 use anyhow::Result;
-// use oxigraph::sparql::QueryResults;
-// use oxigraph::model::{Term, NamedNode as OxiNamedNode, Literal as OxiLiteral, BlankNode as OxiBlankNode};
-use oxirs_core::sparql::QueryResults;
+use oxirs_core::query::QueryResults;
 use oxirs_core::model::{Term, NamedNode as OxiNamedNode, Literal as OxiLiteral, BlankNode as OxiBlankNode};
 use serde::{Deserialize, Serialize};
 
@@ -484,7 +482,7 @@ fn convert_term_to_rdf_term(term: Term) -> RdfTerm {
             let rdf_literal = RdfLiteral {
                 value: literal.value().to_string(),
                 language: literal.language().map(|l| l.to_string()),
-                datatype: if literal.datatype() != &oxigraph::model::vocab::xsd::STRING {
+                datatype: if literal.datatype().as_str() != "http://www.w3.org/2001/XMLSchema#string" {
                     Some(literal.datatype().to_string())
                 } else {
                     None

@@ -4,7 +4,7 @@
 //! used across various integration tests for the AI-powered SHACL system.
 
 use oxirs_core::model::{Literal, NamedNode, Term, Triple};
-use oxirs_core::store::Store;
+use oxirs_core::Store;
 use oxirs_shacl_ai::*;
 use std::collections::HashMap;
 

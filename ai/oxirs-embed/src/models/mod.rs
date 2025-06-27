@@ -6,11 +6,15 @@
 //! - DistMult: Bilinear diagonal model
 //! - RotatE: Rotation-based embeddings
 //! - TuckER: Tucker decomposition based embeddings (optional)
+//! - TransformerEmbedding: Transformer-based embeddings (BERT, RoBERTa, etc.)
+//! - GNNEmbedding: Graph Neural Network embeddings (GCN, GraphSAGE, GAT, etc.)
 
 pub mod complex;
 pub mod distmult;
 pub mod rotate;
 pub mod transe;
+pub mod transformer;
+pub mod gnn;
 
 #[cfg(feature = "tucker")]
 pub mod tucker;
@@ -26,6 +30,8 @@ pub use complex::ComplEx;
 pub use distmult::DistMult;
 pub use rotate::RotatE;
 pub use transe::TransE;
+pub use transformer::{TransformerEmbedding, TransformerType, TransformerConfig};
+pub use gnn::{GNNEmbedding, GNNType, GNNConfig, AggregationType};
 
 #[cfg(feature = "tucker")]
 pub use tucker::TuckER;

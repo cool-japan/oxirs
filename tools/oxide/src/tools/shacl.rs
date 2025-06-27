@@ -203,6 +203,7 @@ struct ValidationResult {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 enum Severity {
     Violation,
     Warning,
@@ -305,7 +306,7 @@ fn load_data_source(data_source: &DataSource) -> ToolResult<RdfGraph> {
             let content = utils::read_input(path)?;
             triples = parse_rdf_data(&content, format)?;
         }
-        DataSource::Dataset(path) => {
+        DataSource::Dataset(_path) => {
             // In a real implementation, this would load from TDB dataset
             // For now, simulate loading some data
             triples.push(RdfTriple {
@@ -616,9 +617,9 @@ fn format_json_report(report: &ValidationReport) -> ToolResult<String> {
         ));
         output.push_str("    }");
         if i < report.results.len() - 1 {
-            output.push_str(",");
+            output.push(',');
         }
-        output.push_str("\n");
+        output.push('\n');
     }
 
     output.push_str("  ]\n");

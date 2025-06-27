@@ -7,16 +7,21 @@ use anyhow::{anyhow, Result};
 use async_openai::{
     types::{
         ChatCompletionRequestMessage, CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
-        Role,
+        Role, ChatCompletionRequestSystemMessageContent, ChatCompletionRequestUserMessageContent,
+        ChatCompletionRequestAssistantMessageContent, ChatCompletionRequestSystemMessage,
+        ChatCompletionRequestUserMessage, ChatCompletionRequestAssistantMessage,
     },
     Client as OpenAIClient,
+    config::OpenAIConfig,
 };
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
+    path::PathBuf,
     time::{Duration, Instant},
 };
 use tokio::time::timeout;
+use tokio::sync::Mutex as TokioMutex;
 use tracing::{debug, error, info, warn};
 
 /// LLM Provider configuration
@@ -264,9 +269,9 @@ pub struct Usage {
 /// Main LLM manager
 pub struct LLMManager {
     config: LLMConfig,
-    openai_client: Option<OpenAIClient>,
+    openai_client: Option<OpenAIClient<OpenAIConfig>>,
     providers: HashMap<String, Box<dyn LLMProvider + Send + Sync>>,
-    usage_tracker: UsageTracker,
+    usage_tracker: TokioMutex<UsageTracker>,
 }
 
 impl LLMManager {
@@ -274,7 +279,7 @@ impl LLMManager {
         let mut manager = Self {
             openai_client: Self::create_openai_client(&config)?,
             providers: HashMap::new(),
-            usage_tracker: UsageTracker::new(),
+            usage_tracker: TokioMutex::new(UsageTracker::new()),
             config,
         };
 
@@ -282,7 +287,7 @@ impl LLMManager {
         Ok(manager)
     }
 
-    fn create_openai_client(config: &LLMConfig) -> Result<Option<OpenAIClient>> {
+    fn create_openai_client(config: &LLMConfig) -> Result<Option<OpenAIClient<OpenAIConfig>>> {
         if let Some(openai_config) = config.providers.get("openai") {
             if openai_config.enabled && openai_config.api_key.is_some() {
                 let client = OpenAIClient::new();
@@ -309,13 +314,19 @@ impl LLMManager {
             }
         }
 
-        // TODO: Initialize local model providers
+        // Initialize local model provider
+        if let Some(config) = self.config.providers.get("local") {
+            if config.enabled {
+                let provider = Box::new(LocalModelProvider::new(config.clone())?);
+                self.providers.insert("local".to_string(), provider);
+            }
+        }
 
         Ok(())
     }
 
     /// Generate response using intelligent routing
-    pub async fn generate_response(&mut self, request: LLMRequest) -> Result<LLMResponse> {
+    pub async fn generate_response(&self, request: LLMRequest) -> Result<LLMResponse> {
         let start_time = Instant::now();
 
         // Select the best provider and model
@@ -337,7 +348,7 @@ impl LLMManager {
             {
                 Ok(mut response) => {
                     response.latency = start_time.elapsed();
-                    self.usage_tracker.record_usage(&response);
+                    self.usage_tracker.lock().await.record_usage(&response);
                     return Ok(response);
                 }
                 Err(e) => {
@@ -385,22 +396,68 @@ impl LLMManager {
     }
 
     fn select_provider_and_model(&self, request: &LLMRequest) -> Result<(String, String)> {
-        // Implement intelligent routing based on use case and configuration
+        // Use routing strategy from configuration
+        match self.config.routing.strategy {
+            RoutingStrategy::CostOptimized => {
+                // Prefer cheaper models for simple tasks
+                match request.use_case {
+                    UseCase::SimpleQuery | UseCase::Conversation => {
+                        if self.providers.contains_key("anthropic") {
+                            return Ok(("anthropic".to_string(), "claude-3-haiku-20240307".to_string()));
+                        } else if self.providers.contains_key("openai") {
+                            return Ok(("openai".to_string(), "gpt-3.5-turbo".to_string()));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            RoutingStrategy::QualityFirst => {
+                // Always use best available models
+                if self.providers.contains_key("anthropic") {
+                    return Ok(("anthropic".to_string(), "claude-3-opus-20240229".to_string()));
+                } else if self.providers.contains_key("openai") {
+                    return Ok(("openai".to_string(), "gpt-4".to_string()));
+                }
+            }
+            RoutingStrategy::LatencyOptimized => {
+                // Prefer fast models
+                if self.providers.contains_key("local") {
+                    return Ok(("local".to_string(), "mistral-7b".to_string()));
+                } else if self.providers.contains_key("openai") {
+                    return Ok(("openai".to_string(), "gpt-3.5-turbo".to_string()));
+                }
+            }
+            RoutingStrategy::Balanced => {
+                // Balance between quality, cost, and latency
+            }
+            RoutingStrategy::RoundRobin => {
+                // Round-robin selection - simple rotation through available providers
+                // For now, fallback to use case based selection
+            }
+        }
+        
+        // Fallback to intelligent routing based on use case
         match request.use_case {
             UseCase::SimpleQuery | UseCase::Conversation => {
                 // Use fast, cost-effective model
-                if self.providers.contains_key("openai") {
+                if self.providers.contains_key("anthropic") && request.priority != Priority::Low {
+                    Ok(("anthropic".to_string(), "claude-3-haiku-20240307".to_string()))
+                } else if self.providers.contains_key("openai") {
                     Ok(("openai".to_string(), "gpt-3.5-turbo".to_string()))
+                } else if self.providers.contains_key("local") {
+                    Ok(("local".to_string(), "mistral-7b".to_string()))
                 } else {
                     Err(anyhow!("No suitable provider found"))
                 }
             }
             UseCase::ComplexReasoning | UseCase::Analysis => {
                 // Use high-quality model
-                if self.providers.contains_key("openai") {
+                if self.providers.contains_key("anthropic") {
+                    Ok(("anthropic".to_string(), "claude-3-opus-20240229".to_string()))
+                } else if self.providers.contains_key("openai") {
                     Ok(("openai".to_string(), "gpt-4".to_string()))
-                } else if self.providers.contains_key("anthropic") {
-                    Ok(("anthropic".to_string(), "claude-3-opus".to_string()))
+                } else if self.providers.contains_key("local") {
+                    Ok(("local".to_string(), "llama-2-13b".to_string()))
                 } else {
                     Err(anyhow!("No suitable provider found"))
                 }
@@ -408,7 +465,11 @@ impl LLMManager {
             UseCase::SparqlGeneration | UseCase::CodeGeneration => {
                 // Use code-specialized model
                 if self.providers.contains_key("openai") {
-                    Ok(("openai".to_string(), "gpt-4".to_string()))
+                    Ok(("openai".to_string(), "gpt-4-turbo".to_string()))
+                } else if self.providers.contains_key("anthropic") {
+                    Ok(("anthropic".to_string(), "claude-3-sonnet-20240229".to_string()))
+                } else if self.providers.contains_key("local") {
+                    Ok(("local".to_string(), "codellama-7b".to_string()))
                 } else {
                     Err(anyhow!("No suitable provider found"))
                 }
@@ -416,7 +477,7 @@ impl LLMManager {
             UseCase::KnowledgeExtraction => {
                 // Use reasoning-optimized model
                 if self.providers.contains_key("anthropic") {
-                    Ok(("anthropic".to_string(), "claude-3-sonnet".to_string()))
+                    Ok(("anthropic".to_string(), "claude-3-sonnet-20240229".to_string()))
                 } else if self.providers.contains_key("openai") {
                     Ok(("openai".to_string(), "gpt-4".to_string()))
                 } else {
@@ -429,39 +490,73 @@ impl LLMManager {
     fn select_fallback_provider(
         &self,
         failed_provider: &str,
-        _failed_model: &str,
+        failed_model: &str,
     ) -> Result<(String, String)> {
-        // Simple fallback logic - use different provider
-        for (provider_name, _) in &self.providers {
-            if provider_name != failed_provider {
-                // Return first available alternative
-                if provider_name == "openai" {
-                    return Ok((provider_name.clone(), "gpt-3.5-turbo".to_string()));
-                } else if provider_name == "anthropic" {
-                    return Ok((provider_name.clone(), "claude-3-sonnet".to_string()));
-                }
+        // Sophisticated fallback logic based on model capabilities
+        let fallback_order = match failed_provider {
+            "openai" => vec!["anthropic", "local"],
+            "anthropic" => vec!["openai", "local"],
+            "local" => vec!["openai", "anthropic"],
+            _ => vec!["openai", "anthropic", "local"],
+        };
+        
+        for provider_name in fallback_order {
+            if let Some(provider) = self.providers.get(provider_name) {
+                // Select appropriate fallback model based on the failed model's capability
+                // Select appropriate fallback model based on the failed model's capability
+                let fallback_model = match (provider_name, failed_model) {
+                    // OpenAI fallbacks
+                    ("openai", model) if model.contains("gpt-4") => "gpt-4".to_string(),
+                    ("openai", model) if model.contains("claude-3-opus") => "gpt-4".to_string(),
+                    ("openai", _) => "gpt-3.5-turbo".to_string(),
+                    
+                    // Anthropic fallbacks
+                    ("anthropic", model) if model.contains("gpt-4") => "claude-3-opus-20240229".to_string(),
+                    ("anthropic", model) if model.contains("opus") => "claude-3-opus-20240229".to_string(),
+                    ("anthropic", model) if model.contains("turbo") => "claude-3-haiku-20240307".to_string(),
+                    ("anthropic", _) => "claude-3-sonnet-20240229".to_string(),
+                    
+                    // Local fallbacks
+                    ("local", model) if model.contains("code") => "codellama-7b".to_string(),
+                    ("local", model) if model.contains("13b") => "llama-2-13b".to_string(),
+                    ("local", _) => "mistral-7b".to_string(),
+                    
+                    _ => {
+                        let models = provider.get_available_models();
+                        if models.is_empty() {
+                            continue;
+                        } else {
+                            models[0].clone()
+                        }
+                    }
+                };
+                
+                return Ok((provider_name.to_string(), fallback_model));
             }
         }
+        
         Err(anyhow!("No fallback provider available"))
     }
 
     /// Get usage statistics
-    pub fn get_usage_stats(&self) -> UsageStats {
-        self.usage_tracker.get_stats()
+    pub async fn get_usage_stats(&self) -> UsageStats {
+        self.usage_tracker.lock().await.get_stats()
     }
 }
 
 /// Provider trait for implementing different LLM providers
 #[async_trait::async_trait]
-pub trait LLMProvider {
+pub trait LLMProvider: Send + Sync {
     async fn generate(&self, model: &str, request: &LLMRequest) -> Result<LLMResponse>;
     fn get_available_models(&self) -> Vec<String>;
     fn supports_streaming(&self) -> bool;
+    fn get_provider_name(&self) -> &str;
+    fn estimate_cost(&self, model: &str, input_tokens: usize, output_tokens: usize) -> f64;
 }
 
 /// OpenAI provider implementation
 pub struct OpenAIProvider {
-    client: OpenAIClient,
+    client: OpenAIClient<OpenAIConfig>,
     config: ProviderConfig,
 }
 
@@ -485,7 +580,7 @@ impl LLMProvider for OpenAIProvider {
         if let Some(system_prompt) = &request.system_prompt {
             messages.push(ChatCompletionRequestMessage::System(
                 ChatCompletionRequestSystemMessage {
-                    content: system_prompt.clone(),
+                    content: ChatCompletionRequestSystemMessageContent::Text(system_prompt.clone()),
                     name: None,
                 },
             ));
@@ -497,7 +592,7 @@ impl LLMProvider for OpenAIProvider {
                 ChatRole::System => {
                     messages.push(ChatCompletionRequestMessage::System(
                         ChatCompletionRequestSystemMessage {
-                            content: msg.content.clone(),
+                            content: ChatCompletionRequestSystemMessageContent::Text(msg.content.clone()),
                             name: None,
                         },
                     ));
@@ -527,7 +622,6 @@ impl LLMProvider for OpenAIProvider {
         let response = self
             .client
             .chat()
-            .completions()
             .create(openai_request)
             .await?;
 
@@ -575,6 +669,248 @@ impl LLMProvider for OpenAIProvider {
     fn supports_streaming(&self) -> bool {
         true
     }
+    
+    fn get_provider_name(&self) -> &str {
+        "openai"
+    }
+    
+    fn estimate_cost(&self, model: &str, input_tokens: usize, output_tokens: usize) -> f64 {
+        // Pricing as of 2024 (per 1K tokens)
+        let (input_price, output_price) = match model {
+            "gpt-4" | "gpt-4-0314" => (0.03, 0.06),
+            "gpt-4-32k" | "gpt-4-32k-0314" => (0.06, 0.12),
+            "gpt-4-turbo" | "gpt-4-1106-preview" => (0.01, 0.03),
+            "gpt-3.5-turbo" | "gpt-3.5-turbo-0301" => (0.0015, 0.002),
+            "gpt-3.5-turbo-16k" => (0.003, 0.004),
+            _ => (0.002, 0.002), // Default pricing
+        };
+        
+        (input_tokens as f64 * input_price / 1000.0) + (output_tokens as f64 * output_price / 1000.0)
+    }
+}
+
+/// Anthropic Claude provider implementation
+pub struct AnthropicProvider {
+    api_key: String,
+    config: ProviderConfig,
+    client: reqwest::Client,
+}
+
+impl AnthropicProvider {
+    pub fn new(config: ProviderConfig) -> Result<Self> {
+        let api_key = config.api_key.as_ref()
+            .ok_or_else(|| anyhow!("Anthropic API key not provided"))?
+            .clone();
+        
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(120))
+            .build()?;
+            
+        Ok(Self {
+            api_key,
+            config,
+            client,
+        })
+    }
+}
+
+#[async_trait::async_trait]
+impl LLMProvider for AnthropicProvider {
+    async fn generate(&self, model: &str, request: &LLMRequest) -> Result<LLMResponse> {
+        let mut messages = Vec::new();
+        
+        // Convert messages to Anthropic format
+        for msg in &request.messages {
+            let role = match msg.role {
+                ChatRole::System => "system",
+                ChatRole::User => "user",
+                ChatRole::Assistant => "assistant",
+            };
+            
+            messages.push(serde_json::json!({
+                "role": role,
+                "content": msg.content
+            }));
+        }
+        
+        // Add system prompt if provided
+        let system_prompt = request.system_prompt.clone();
+        
+        let body = serde_json::json!({
+            "model": model,
+            "messages": messages,
+            "system": system_prompt,
+            "max_tokens": request.max_tokens.unwrap_or(4096),
+            "temperature": request.temperature,
+        });
+        
+        let response = self.client
+            .post("https://api.anthropic.com/v1/messages")
+            .header("x-api-key", &self.api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("content-type", "application/json")
+            .json(&body)
+            .send()
+            .await?;
+            
+        let status = response.status();
+        let text = response.text().await?;
+        
+        if !status.is_success() {
+            return Err(anyhow!("Anthropic API error: {} - {}", status, text));
+        }
+        
+        let response_json: serde_json::Value = serde_json::from_str(&text)?;
+        let content = response_json["content"][0]["text"]
+            .as_str()
+            .unwrap_or("No content")
+            .to_string();
+            
+        let usage = Usage {
+            prompt_tokens: response_json["usage"]["input_tokens"].as_u64().unwrap_or(0) as usize,
+            completion_tokens: response_json["usage"]["output_tokens"].as_u64().unwrap_or(0) as usize,
+            total_tokens: 0, // Will be calculated
+            cost: 0.0, // Will be calculated
+        };
+        
+        let total_tokens = usage.prompt_tokens + usage.completion_tokens;
+        let cost = self.estimate_cost(model, usage.prompt_tokens, usage.completion_tokens);
+        
+        Ok(LLMResponse {
+            content,
+            model_used: model.to_string(),
+            provider_used: "anthropic".to_string(),
+            usage: Usage {
+                prompt_tokens: usage.prompt_tokens,
+                completion_tokens: usage.completion_tokens,
+                total_tokens,
+                cost,
+            },
+            latency: Duration::from_secs(0), // Will be set by caller
+            quality_score: None,
+            metadata: HashMap::new(),
+        })
+    }
+    
+    fn get_available_models(&self) -> Vec<String> {
+        vec![
+            "claude-3-opus-20240229".to_string(),
+            "claude-3-sonnet-20240229".to_string(),
+            "claude-3-haiku-20240307".to_string(),
+            "claude-2.1".to_string(),
+            "claude-2.0".to_string(),
+            "claude-instant-1.2".to_string(),
+        ]
+    }
+    
+    fn supports_streaming(&self) -> bool {
+        true
+    }
+    
+    fn get_provider_name(&self) -> &str {
+        "anthropic"
+    }
+    
+    fn estimate_cost(&self, model: &str, input_tokens: usize, output_tokens: usize) -> f64 {
+        // Pricing as of 2024 (per 1K tokens)
+        let (input_price, output_price) = match model {
+            "claude-3-opus-20240229" => (0.015, 0.075),
+            "claude-3-sonnet-20240229" => (0.003, 0.015),
+            "claude-3-haiku-20240307" => (0.00025, 0.00125),
+            "claude-2.1" | "claude-2.0" => (0.008, 0.024),
+            "claude-instant-1.2" => (0.0008, 0.0024),
+            _ => (0.001, 0.003), // Default pricing
+        };
+        
+        (input_tokens as f64 * input_price / 1000.0) + (output_tokens as f64 * output_price / 1000.0)
+    }
+}
+
+/// Local model provider implementation (using llama.cpp or similar)
+pub struct LocalModelProvider {
+    config: ProviderConfig,
+    model_path: PathBuf,
+}
+
+impl LocalModelProvider {
+    pub fn new(config: ProviderConfig) -> Result<Self> {
+        let model_path = PathBuf::from(
+            config.base_url.as_ref()
+                .ok_or_else(|| anyhow!("Model path not specified for local provider"))?
+        );
+        
+        if !model_path.exists() {
+            return Err(anyhow!("Model file does not exist: {:?}", model_path));
+        }
+        
+        Ok(Self {
+            config,
+            model_path,
+        })
+    }
+}
+
+#[async_trait::async_trait]
+impl LLMProvider for LocalModelProvider {
+    async fn generate(&self, model: &str, request: &LLMRequest) -> Result<LLMResponse> {
+        // This is a placeholder implementation
+        // In production, this would interface with llama.cpp, candle, or another local inference engine
+        
+        let prompt = format!(
+            "{}\n\n{}",
+            request.system_prompt.as_deref().unwrap_or(""),
+            request.messages.iter()
+                .map(|m| format!("{:?}: {}", m.role, m.content))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+        
+        // Simulate local model response
+        let content = format!(
+            "Local model response to: {}... (Model: {})",
+            &prompt.chars().take(50).collect::<String>(),
+            model
+        );
+        
+        let prompt_tokens = prompt.split_whitespace().count();
+        let completion_tokens = content.split_whitespace().count();
+        
+        Ok(LLMResponse {
+            content,
+            model_used: model.to_string(),
+            provider_used: "local".to_string(),
+            usage: Usage {
+                prompt_tokens,
+                completion_tokens,
+                total_tokens: prompt_tokens + completion_tokens,
+                cost: 0.0, // Local models are free
+            },
+            latency: Duration::from_millis(100),
+            quality_score: Some(0.7),
+            metadata: HashMap::new(),
+        })
+    }
+    
+    fn get_available_models(&self) -> Vec<String> {
+        vec![
+            "llama-2-7b".to_string(),
+            "llama-2-13b".to_string(),
+            "mistral-7b".to_string(),
+            "codellama-7b".to_string(),
+        ]
+    }
+    
+    fn supports_streaming(&self) -> bool {
+        true
+    }
+    
+    fn get_provider_name(&self) -> &str {
+        "local"
+    }
+    
+    fn estimate_cost(&self, _model: &str, _input_tokens: usize, _output_tokens: usize) -> f64 {
+        0.0 // Local models are free
+    }
 }
 
 /// Usage tracking
@@ -614,142 +950,6 @@ pub struct UsageStats {
     pub success_rate: f32,
 }
 
-/// Anthropic Claude provider implementation
-pub struct AnthropicProvider {
-    client: reqwest::Client,
-    config: ProviderConfig,
-}
-
-impl AnthropicProvider {
-    pub fn new(config: ProviderConfig) -> Result<Self> {
-        let client = reqwest::Client::builder().timeout(config.timeout).build()?;
-        Ok(Self { client, config })
-    }
-
-    /// Build Anthropic API request
-    fn build_anthropic_request(
-        &self,
-        model: &str,
-        request: &LLMRequest,
-    ) -> Result<serde_json::Value> {
-        let mut messages = Vec::new();
-
-        // Add system message if provided
-        if let Some(ref system_prompt) = request.system_prompt {
-            messages.push(serde_json::json!({
-                "role": "system",
-                "content": system_prompt
-            }));
-        }
-
-        // Add conversation messages
-        for msg in &request.messages {
-            let role = match msg.role {
-                ChatRole::System => "system",
-                ChatRole::User => "user",
-                ChatRole::Assistant => "assistant",
-            };
-            messages.push(serde_json::json!({
-                "role": role,
-                "content": msg.content
-            }));
-        }
-
-        let anthropic_request = serde_json::json!({
-            "model": model,
-            "messages": messages,
-            "max_tokens": request.max_tokens.unwrap_or(1000),
-            "temperature": request.temperature,
-        });
-
-        Ok(anthropic_request)
-    }
-}
-
-#[async_trait::async_trait]
-impl LLMProvider for AnthropicProvider {
-    async fn generate(&self, model: &str, request: &LLMRequest) -> Result<LLMResponse> {
-        let api_key = self
-            .config
-            .api_key
-            .as_ref()
-            .ok_or_else(|| anyhow!("Anthropic API key not configured"))?;
-
-        let request_body = self.build_anthropic_request(model, request)?;
-
-        let base_url = self
-            .config
-            .base_url
-            .as_ref()
-            .map(|url| url.as_str())
-            .unwrap_or("https://api.anthropic.com");
-
-        let response = self
-            .client
-            .post(&format!("{}/v1/messages", base_url))
-            .header("Authorization", format!("Bearer {}", api_key))
-            .header("Content-Type", "application/json")
-            .header("anthropic-version", "2023-06-01")
-            .json(&request_body)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let error_text = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(anyhow!("Anthropic API error: {}", error_text));
-        }
-
-        let response_data: serde_json::Value = response.json().await?;
-
-        // Extract content from Anthropic response format
-        let content = response_data["content"]
-            .as_array()
-            .and_then(|arr| arr.first())
-            .and_then(|content| content["text"].as_str())
-            .unwrap_or("No response content")
-            .to_string();
-
-        // Extract usage information if available
-        let usage = if let Some(usage_data) = response_data.get("usage") {
-            Usage {
-                prompt_tokens: usage_data["input_tokens"].as_u64().unwrap_or(0) as usize,
-                completion_tokens: usage_data["output_tokens"].as_u64().unwrap_or(0) as usize,
-                total_tokens: (usage_data["input_tokens"].as_u64().unwrap_or(0)
-                    + usage_data["output_tokens"].as_u64().unwrap_or(0))
-                    as usize,
-                cost: 0.0, // TODO: Calculate actual cost based on model
-            }
-        } else {
-            Usage {
-                prompt_tokens: 0,
-                completion_tokens: 0,
-                total_tokens: 0,
-                cost: 0.0,
-            }
-        };
-
-        Ok(LLMResponse {
-            content,
-            model_used: model.to_string(),
-            provider_used: "anthropic".to_string(),
-            usage,
-            latency: Duration::from_secs(0), // Will be set by caller
-            quality_score: None,
-            metadata: HashMap::new(),
-        })
-    }
-
-    fn get_available_models(&self) -> Vec<String> {
-        self.config.models.iter().map(|m| m.name.clone()).collect()
-    }
-
-    fn supports_streaming(&self) -> bool {
-        true // Anthropic supports streaming
-    }
-}
 
 /// Rate limiter for LLM providers
 pub struct RateLimiter {

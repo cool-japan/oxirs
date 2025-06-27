@@ -9,7 +9,7 @@ use serde::Serialize;
 /// Output formatter with color and style management
 pub struct OutputFormatter {
     no_color: bool,
-    color_scheme: ColorScheme,
+    _color_scheme: ColorScheme,
 }
 
 /// Color scheme for different output types
@@ -50,7 +50,7 @@ impl OutputFormatter {
 
         Self {
             no_color,
-            color_scheme: ColorScheme::default(),
+            _color_scheme: ColorScheme::default(),
         }
     }
 
@@ -157,11 +157,7 @@ impl OutputFormatter {
 
     /// Format a table row with colors
     pub fn table_row(&self, cells: Vec<&str>) -> Row {
-        if self.no_color {
-            Row::new(cells.into_iter().map(Cell::new).collect())
-        } else {
-            Row::new(cells.into_iter().map(Cell::new).collect())
-        }
+        Row::new(cells.into_iter().map(Cell::new).collect())
     }
 
     /// Print JSON output (pretty-printed)

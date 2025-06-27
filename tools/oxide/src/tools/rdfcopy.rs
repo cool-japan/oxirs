@@ -7,8 +7,8 @@ use std::path::PathBuf;
 pub async fn run(
     source: PathBuf,
     target: PathBuf,
-    source_format: Option<String>,
-    target_format: Option<String>,
+    _source_format: Option<String>,
+    _target_format: Option<String>,
 ) -> ToolResult {
     println!("RDF Copy tool not yet implemented");
     println!("Source: {}", source.display());

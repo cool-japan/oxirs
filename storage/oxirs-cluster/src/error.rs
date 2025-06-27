@@ -48,6 +48,10 @@ pub enum ClusterError {
     #[error("Byzantine fault detected: {0}")]
     Byzantine(String),
     
+    /// Shard not found
+    #[error("Shard not found: {0}")]
+    ShardNotFound(crate::shard::ShardId),
+    
     /// Generic error
     #[error("{0}")]
     Other(String),

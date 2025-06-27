@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use oxirs_core::{
     model::{BlankNode, Literal, NamedNode, RdfTerm, Term, Triple, Variable},
-    store::Store,
+    Store,
     OxirsError,
 };
 

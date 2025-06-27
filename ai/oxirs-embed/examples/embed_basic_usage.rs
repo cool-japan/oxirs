@@ -2,7 +2,7 @@
 //!
 //! This example demonstrates the core functionality of the embedding system.
 
-use oxirs_embed::{EmbeddingModel, ModelConfig, TrainingStats, Triple, Vector};
+use oxirs_embed::{EmbeddingModel, ModelConfig, TrainingStats, Triple, Vector, ModelStats};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -160,9 +160,9 @@ impl EmbeddingModel for SimpleTransE {
     }
 
     fn add_triple(&mut self, triple: Triple) -> anyhow::Result<()> {
-        let subject_id = self.get_or_create_entity_id(triple.subject);
-        let predicate_id = self.get_or_create_relation_id(triple.predicate);
-        let object_id = self.get_or_create_entity_id(triple.object);
+        let subject_id = self.get_or_create_entity_id(triple.subject.iri);
+        let predicate_id = self.get_or_create_relation_id(triple.predicate.iri);
+        let object_id = self.get_or_create_entity_id(triple.object.iri);
 
         self.triples.push((subject_id, predicate_id, object_id));
         Ok(())
@@ -260,6 +260,80 @@ impl EmbeddingModel for SimpleTransE {
     fn is_trained(&self) -> bool {
         self.is_trained
     }
+
+    fn predict_objects(&self, subject: &str, predicate: &str, k: usize) -> anyhow::Result<Vec<(String, f64)>> {
+        let subject_id = self.entity_to_id.get(subject)
+            .ok_or_else(|| anyhow::anyhow!("Subject not found: {}", subject))?;
+        let predicate_id = self.relation_to_id.get(predicate)
+            .ok_or_else(|| anyhow::anyhow!("Predicate not found: {}", predicate))?;
+
+        let mut scores = Vec::new();
+        for (entity, &entity_id) in &self.entity_to_id {
+            let score = self.score_triple_ids(*subject_id, *predicate_id, entity_id);
+            scores.push((entity.clone(), score));
+        }
+
+        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scores.truncate(k);
+        Ok(scores)
+    }
+
+    fn predict_subjects(&self, predicate: &str, object: &str, k: usize) -> anyhow::Result<Vec<(String, f64)>> {
+        let predicate_id = self.relation_to_id.get(predicate)
+            .ok_or_else(|| anyhow::anyhow!("Predicate not found: {}", predicate))?;
+        let object_id = self.entity_to_id.get(object)
+            .ok_or_else(|| anyhow::anyhow!("Object not found: {}", object))?;
+
+        let mut scores = Vec::new();
+        for (entity, &entity_id) in &self.entity_to_id {
+            let score = self.score_triple_ids(entity_id, *predicate_id, *object_id);
+            scores.push((entity.clone(), score));
+        }
+
+        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scores.truncate(k);
+        Ok(scores)
+    }
+
+    fn predict_relations(&self, subject: &str, object: &str, k: usize) -> anyhow::Result<Vec<(String, f64)>> {
+        let subject_id = self.entity_to_id.get(subject)
+            .ok_or_else(|| anyhow::anyhow!("Subject not found: {}", subject))?;
+        let object_id = self.entity_to_id.get(object)
+            .ok_or_else(|| anyhow::anyhow!("Object not found: {}", object))?;
+
+        let mut scores = Vec::new();
+        for (relation, &relation_id) in &self.relation_to_id {
+            let score = self.score_triple_ids(*subject_id, relation_id, *object_id);
+            scores.push((relation.clone(), score));
+        }
+
+        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scores.truncate(k);
+        Ok(scores)
+    }
+
+    fn get_stats(&self) -> ModelStats {
+        ModelStats {
+            num_entities: self.entity_to_id.len(),
+            num_relations: self.relation_to_id.len(),
+            num_triples: self.triples.len(),
+            dimensions: self.config.dimensions,
+            is_trained: self.is_trained,
+            model_type: "SimpleTransE".to_string(),
+            creation_time: chrono::Utc::now(),
+            last_training_time: if self.is_trained { Some(chrono::Utc::now()) } else { None },
+        }
+    }
+
+    fn save(&self, _path: &str) -> anyhow::Result<()> {
+        // Simplified save implementation
+        Ok(())
+    }
+
+    fn load(&mut self, _path: &str) -> anyhow::Result<()> {
+        // Simplified load implementation
+        Ok(())
+    }
 }
 
 #[tokio::main]
@@ -280,27 +354,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Add some simple triples
     model.add_triple(Triple::new(
-        "alice".to_string(),
-        "knows".to_string(),
-        "bob".to_string(),
+        oxirs_embed::NamedNode { iri: "alice".to_string() },
+        oxirs_embed::NamedNode { iri: "knows".to_string() },
+        oxirs_embed::NamedNode { iri: "bob".to_string() },
     ))?;
 
     model.add_triple(Triple::new(
-        "bob".to_string(),
-        "knows".to_string(),
-        "charlie".to_string(),
+        oxirs_embed::NamedNode { iri: "bob".to_string() },
+        oxirs_embed::NamedNode { iri: "knows".to_string() },
+        oxirs_embed::NamedNode { iri: "charlie".to_string() },
     ))?;
 
     model.add_triple(Triple::new(
-        "alice".to_string(),
-        "likes".to_string(),
-        "charlie".to_string(),
+        oxirs_embed::NamedNode { iri: "alice".to_string() },
+        oxirs_embed::NamedNode { iri: "likes".to_string() },
+        oxirs_embed::NamedNode { iri: "charlie".to_string() },
     ))?;
 
     model.add_triple(Triple::new(
-        "charlie".to_string(),
-        "works_at".to_string(),
-        "company".to_string(),
+        oxirs_embed::NamedNode { iri: "charlie".to_string() },
+        oxirs_embed::NamedNode { iri: "works_at".to_string() },
+        oxirs_embed::NamedNode { iri: "company".to_string() },
     ))?;
 
     println!("✅ Added {} triples", model.triples.len());

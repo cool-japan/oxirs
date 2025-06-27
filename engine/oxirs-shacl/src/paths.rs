@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use oxirs_core::{
     model::{BlankNode, NamedNode, RdfTerm, Term, Triple},
-    store::Store,
+    Store,
     OxirsError,
 };
 

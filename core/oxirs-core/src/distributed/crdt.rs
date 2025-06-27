@@ -3,10 +3,10 @@
 //! This module implements Conflict-free Replicated Data Types (CRDTs) optimized
 //! for RDF data, enabling eventual consistency without coordination.
 
-use crate::model::{Literal, NamedNode, Term, Triple, TriplePattern};
+use crate::model::{Triple, TriplePattern};
 use crate::OxirsError;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -217,22 +217,18 @@ impl<T: Clone + Ord + Send + Sync + Serialize + for<'de> Deserialize<'de>> TwoPh
 
     /// Add element
     pub fn add(&mut self, element: T) {
-        if !self.removed.contains(&element) {
-            if self.added.insert(element.clone()) {
-                if let Some(ref mut delta) = self.delta_added {
-                    delta.insert(element);
-                }
+        if !self.removed.contains(&element) && self.added.insert(element.clone()) {
+            if let Some(ref mut delta) = self.delta_added {
+                delta.insert(element);
             }
         }
     }
 
     /// Remove element
     pub fn remove(&mut self, element: T) {
-        if self.added.contains(&element) {
-            if self.removed.insert(element.clone()) {
-                if let Some(ref mut delta) = self.delta_removed {
-                    delta.insert(element);
-                }
+        if self.added.contains(&element) && self.removed.insert(element.clone()) {
+            if let Some(ref mut delta) = self.delta_removed {
+                delta.insert(element);
             }
         }
     }
@@ -757,7 +753,7 @@ pub struct CrdtStatsReport {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::Object;
+    use crate::model::{Object, NamedNode, Literal};
 
     #[tokio::test]
     async fn test_grow_set() {

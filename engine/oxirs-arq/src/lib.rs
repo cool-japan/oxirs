@@ -13,6 +13,8 @@ pub mod builtin_fixed;
 pub mod executor;
 pub mod extensions;
 pub mod optimizer;
+#[cfg(feature = "parallel")]
+pub mod parallel;
 pub mod path;
 pub use builtin_fixed as builtin;
 pub mod query;

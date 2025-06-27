@@ -11,6 +11,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use dashmap::DashMap;
 use oxirs_core::model::{Triple, Subject, Predicate, Object, NamedNode, BlankNode, Literal, Variable, QuotedTriple};
+use oxirs_core::vocab::xsd;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
@@ -616,12 +617,11 @@ mod tests {
         let storage = MVCCStorage::new(1, "/tmp/mvcc_test".to_string(), CompactionStrategy::None);
         storage.start().await.unwrap();
         
-        let triple = Triple {
-            subject: oxirs_core::model::NamedNode::new("http://example.org/s").unwrap().into(),
-            predicate: oxirs_core::model::NamedNode::new("http://example.org/p").unwrap().into(),
-            object: oxirs_core::model::Literal::new_typed_literal("value", 
-                oxirs_core::model::NamedNode::new("http://www.w3.org/2001/XMLSchema#string").unwrap()).into(),
-        };
+        let triple = Triple::new(
+            NamedNode::new("http://example.org/s").unwrap(),
+            NamedNode::new("http://example.org/p").unwrap(),
+            Literal::new_typed_literal("value", xsd::STRING.clone()),
+        );
         
         // Insert triple using StorageBackend trait
         storage.insert_triple_to_shard(0, triple.clone()).await.unwrap();
@@ -646,12 +646,11 @@ mod tests {
         let tx_id = "test_tx".to_string();
         storage.begin_transaction(tx_id.clone(), IsolationLevel::ReadCommitted).await.unwrap();
         
-        let triple = Triple {
-            subject: oxirs_core::model::NamedNode::new("http://example.org/s").unwrap().into(),
-            predicate: oxirs_core::model::NamedNode::new("http://example.org/p").unwrap().into(),
-            object: oxirs_core::model::Literal::new_typed_literal("value", 
-                oxirs_core::model::NamedNode::new("http://www.w3.org/2001/XMLSchema#string").unwrap()).into(),
-        };
+        let triple = Triple::new(
+            NamedNode::new("http://example.org/s").unwrap(),
+            NamedNode::new("http://example.org/p").unwrap(),
+            Literal::new_typed_literal("value", xsd::STRING.clone()),
+        );
         
         // Insert within transaction
         storage.insert_triple(&tx_id, triple.clone()).await.unwrap();

@@ -40,6 +40,35 @@ impl fmt::Display for Literal {
     }
 }
 
+impl Literal {
+    /// Create a simple string literal
+    pub fn string(value: String) -> Self {
+        Self {
+            value,
+            language: None,
+            datatype: None,
+        }
+    }
+
+    /// Create a typed literal
+    pub fn typed(value: String, datatype: Iri) -> Self {
+        Self {
+            value,
+            language: None,
+            datatype: Some(datatype),
+        }
+    }
+
+    /// Create a language-tagged literal
+    pub fn with_language(value: String, language: String) -> Self {
+        Self {
+            value,
+            language: Some(language),
+            datatype: None,
+        }
+    }
+}
+
 /// RDF term (subject, predicate, or object)
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Term {

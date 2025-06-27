@@ -7,7 +7,7 @@ use std::collections::HashSet;
 
 use oxirs_core::{
     model::{BlankNode, NamedNode, RdfTerm, Term, Triple},
-    store::Store,
+    Store,
     OxirsError,
 };
 

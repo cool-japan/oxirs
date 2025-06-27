@@ -34,6 +34,15 @@ pub enum WindowType {
     Custom { name: String },
 }
 
+/// Watermark for tracking event time progress
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Watermark {
+    /// Current watermark timestamp
+    pub timestamp: DateTime<Utc>,
+    /// Allowed lateness after watermark
+    pub allowed_lateness: ChronoDuration,
+}
+
 /// Aggregation functions for window processing
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AggregateFunction {

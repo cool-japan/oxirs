@@ -5,6 +5,7 @@
 
 use crate::{Rule, RuleAtom, RuleEngine, Term};
 use anyhow::Result;
+use regex::{Regex, RegexBuilder};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use tracing::{debug, info, trace, warn};
@@ -536,6 +537,106 @@ impl SwrlEngine {
             min_args: 3,
             max_args: Some(3),
             implementation: builtin_interval_duration,
+        });
+
+        // Additional mathematical functions
+        self.register_builtin(BuiltinFunction {
+            name: "abs".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_abs,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "floor".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_floor,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "ceil".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_ceil,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "round".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_round,
+        });
+
+        // Additional list operations
+        self.register_builtin(BuiltinFunction {
+            name: "first".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_list_first,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "rest".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_list_rest,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "nth".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 3,
+            max_args: Some(3),
+            implementation: builtin_list_nth,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "append".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 3,
+            max_args: Some(3),
+            implementation: builtin_list_append,
+        });
+
+        // Enhanced string operations with regex
+        self.register_builtin(BuiltinFunction {
+            name: "stringMatchesRegex".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(3),
+            implementation: builtin_string_matches_regex,
+        });
+
+        // Additional geographic operations
+        self.register_builtin(BuiltinFunction {
+            name: "contains".to_string(),
+            namespace: vocabulary::SWRLX_NS.to_string(),
+            min_args: 9,
+            max_args: Some(9),
+            implementation: builtin_geo_contains,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "intersects".to_string(),
+            namespace: vocabulary::SWRLX_NS.to_string(),
+            min_args: 8,
+            max_args: Some(8),
+            implementation: builtin_geo_intersects,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "area".to_string(),
+            namespace: vocabulary::SWRLX_NS.to_string(),
+            min_args: 5,
+            max_args: Some(5),
+            implementation: builtin_geo_area,
         });
 
         info!(
@@ -1357,7 +1458,7 @@ fn builtin_string_matches(args: &[SwrlArgument]) -> Result<bool> {
     // Basic wildcard matching (* and ?)
     let regex_pattern = pattern.replace("*", ".*").replace("?", ".");
 
-    match regex::Regex::new(&regex_pattern) {
+    match Regex::new(&regex_pattern) {
         Ok(re) => Ok(re.is_match(&input)),
         Err(_) => Ok(false),
     }
@@ -1682,6 +1783,230 @@ fn builtin_interval_duration(args: &[SwrlArgument]) -> Result<bool> {
 
     let actual_duration = (end - start).abs();
     Ok((actual_duration - expected_duration).abs() < f64::EPSILON)
+}
+
+// Additional mathematical built-in functions
+
+fn builtin_abs(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("abs requires exactly 2 arguments"));
+    }
+
+    let input = extract_numeric_value(&args[0])?;
+    let result = extract_numeric_value(&args[1])?;
+
+    Ok((input.abs() - result).abs() < f64::EPSILON)
+}
+
+fn builtin_floor(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("floor requires exactly 2 arguments"));
+    }
+
+    let input = extract_numeric_value(&args[0])?;
+    let result = extract_numeric_value(&args[1])?;
+
+    Ok((input.floor() - result).abs() < f64::EPSILON)
+}
+
+fn builtin_ceil(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("ceil requires exactly 2 arguments"));
+    }
+
+    let input = extract_numeric_value(&args[0])?;
+    let result = extract_numeric_value(&args[1])?;
+
+    Ok((input.ceil() - result).abs() < f64::EPSILON)
+}
+
+fn builtin_round(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("round requires exactly 2 arguments"));
+    }
+
+    let input = extract_numeric_value(&args[0])?;
+    let result = extract_numeric_value(&args[1])?;
+
+    Ok((input.round() - result).abs() < f64::EPSILON)
+}
+
+// Additional list operations
+
+fn builtin_list_first(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("first requires exactly 2 arguments"));
+    }
+
+    let list_str = extract_string_value(&args[0])?;
+    let expected = extract_string_value(&args[1])?;
+
+    // Simple implementation: get first item from comma-separated list
+    let items: Vec<&str> = list_str.split(',').collect();
+    if items.is_empty() {
+        Ok(expected.is_empty())
+    } else {
+        Ok(items[0] == expected)
+    }
+}
+
+fn builtin_list_rest(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("rest requires exactly 2 arguments"));
+    }
+
+    let list_str = extract_string_value(&args[0])?;
+    let expected = extract_string_value(&args[1])?;
+
+    // Simple implementation: get all but first item from comma-separated list
+    let items: Vec<&str> = list_str.split(',').collect();
+    if items.len() <= 1 {
+        Ok(expected.is_empty())
+    } else {
+        let rest = items[1..].join(",");
+        Ok(rest == expected)
+    }
+}
+
+fn builtin_list_nth(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 3 {
+        return Err(anyhow::anyhow!("nth requires exactly 3 arguments"));
+    }
+
+    let list_str = extract_string_value(&args[0])?;
+    let index = extract_numeric_value(&args[1])? as usize;
+    let expected = extract_string_value(&args[2])?;
+
+    // Simple implementation: get nth item from comma-separated list (0-indexed)
+    let items: Vec<&str> = list_str.split(',').collect();
+    if index >= items.len() {
+        return Err(anyhow::anyhow!("Index {} out of bounds for list of length {}", index, items.len()));
+    }
+    Ok(items[index] == expected)
+}
+
+fn builtin_list_append(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 3 {
+        return Err(anyhow::anyhow!("append requires exactly 3 arguments"));
+    }
+
+    let list_str = extract_string_value(&args[0])?;
+    let item = extract_string_value(&args[1])?;
+    let expected = extract_string_value(&args[2])?;
+
+    // Simple implementation: append item to comma-separated list
+    let result = if list_str.is_empty() {
+        item
+    } else {
+        format!("{},{}", list_str, item)
+    };
+    Ok(result == expected)
+}
+
+// Enhanced string operations with full regex support
+
+fn builtin_string_matches_regex(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() < 2 || args.len() > 3 {
+        return Err(anyhow::anyhow!("stringMatchesRegex requires 2 or 3 arguments"));
+    }
+
+    let input = extract_string_value(&args[0])?;
+    let pattern = extract_string_value(&args[1])?;
+
+    // Full regex support with optional flags
+    let regex_builder = if args.len() == 3 {
+        let flags = extract_string_value(&args[2])?;
+        let mut builder = RegexBuilder::new(&pattern);
+        
+        for flag in flags.chars() {
+            match flag {
+                'i' => { builder.case_insensitive(true); }
+                'm' => { builder.multi_line(true); }
+                's' => { builder.dot_matches_new_line(true); }
+                'x' => { builder.ignore_whitespace(true); }
+                _ => return Err(anyhow::anyhow!("Unknown regex flag: {}", flag)),
+            }
+        }
+        builder
+    } else {
+        RegexBuilder::new(&pattern)
+    };
+
+    match regex_builder.build() {
+        Ok(re) => Ok(re.is_match(&input)),
+        Err(e) => Err(anyhow::anyhow!("Invalid regex pattern: {}", e)),
+    }
+}
+
+// Additional geographic operations
+
+fn builtin_geo_contains(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 9 {
+        return Err(anyhow::anyhow!("contains requires exactly 9 arguments: poly_min_lat, poly_min_lon, poly_max_lat, poly_max_lon, point_lat, point_lon, result"));
+    }
+
+    // Simple bounding box containment check
+    let min_lat = extract_numeric_value(&args[0])?;
+    let min_lon = extract_numeric_value(&args[1])?;
+    let max_lat = extract_numeric_value(&args[2])?;
+    let max_lon = extract_numeric_value(&args[3])?;
+    let point_lat = extract_numeric_value(&args[4])?;
+    let point_lon = extract_numeric_value(&args[5])?;
+    let expected_result = extract_string_value(&args[6])? == "true";
+
+    let contains = point_lat >= min_lat && point_lat <= max_lat &&
+                  point_lon >= min_lon && point_lon <= max_lon;
+
+    Ok(contains == expected_result)
+}
+
+fn builtin_geo_intersects(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 8 {
+        return Err(anyhow::anyhow!("intersects requires exactly 8 arguments: box1_min_lat, box1_min_lon, box1_max_lat, box1_max_lon, box2_min_lat, box2_min_lon, box2_max_lat, box2_max_lon"));
+    }
+
+    // Check if two bounding boxes intersect
+    let box1_min_lat = extract_numeric_value(&args[0])?;
+    let box1_min_lon = extract_numeric_value(&args[1])?;
+    let box1_max_lat = extract_numeric_value(&args[2])?;
+    let box1_max_lon = extract_numeric_value(&args[3])?;
+    let box2_min_lat = extract_numeric_value(&args[4])?;
+    let box2_min_lon = extract_numeric_value(&args[5])?;
+    let box2_max_lat = extract_numeric_value(&args[6])?;
+    let box2_max_lon = extract_numeric_value(&args[7])?;
+
+    // Two boxes intersect if they overlap in both dimensions
+    let intersects = !(box1_max_lat < box2_min_lat || box2_max_lat < box1_min_lat ||
+                      box1_max_lon < box2_min_lon || box2_max_lon < box1_min_lon);
+
+    Ok(intersects)
+}
+
+fn builtin_geo_area(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 5 {
+        return Err(anyhow::anyhow!("area requires exactly 5 arguments: min_lat, min_lon, max_lat, max_lon, result"));
+    }
+
+    // Calculate approximate area of a bounding box in square kilometers
+    let min_lat = extract_numeric_value(&args[0])?;
+    let min_lon = extract_numeric_value(&args[1])?;
+    let max_lat = extract_numeric_value(&args[2])?;
+    let max_lon = extract_numeric_value(&args[3])?;
+    let expected_area = extract_numeric_value(&args[4])?;
+
+    // Simple approximation: treat Earth as sphere
+    const EARTH_RADIUS_KM: f64 = 6371.0;
+    
+    // Convert to radians
+    let lat1_rad = min_lat.to_radians();
+    let lat2_rad = max_lat.to_radians();
+    let lon_diff_rad = (max_lon - min_lon).to_radians();
+    
+    // Approximate area calculation
+    let area = EARTH_RADIUS_KM * EARTH_RADIUS_KM * lon_diff_rad * (lat2_rad.sin() - lat1_rad.sin());
+    
+    // Allow some tolerance for floating point comparison
+    Ok((area.abs() - expected_area).abs() < 0.1)
 }
 
 /// Temporal interval representation

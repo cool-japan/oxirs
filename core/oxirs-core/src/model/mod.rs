@@ -26,9 +26,6 @@ pub use star::*;
 pub use term::*;
 pub use triple::*;
 
-use std::fmt;
-use std::hash::{Hash, Hasher};
-use std::str::FromStr;
 
 /// A trait for all RDF terms
 pub trait RdfTerm {

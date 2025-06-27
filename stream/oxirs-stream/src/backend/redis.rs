@@ -6,24 +6,25 @@
 //! consumer groups, persistence, and real-time message processing capabilities.
 //! Optimized for ultra-low latency and high throughput scenarios.
 
-use crate::kafka::KafkaEvent;
 use crate::{EventMetadata, PatchOperation, RdfPatch, StreamBackend, StreamConfig, StreamEvent};
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
 use tokio::time;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 #[cfg(feature = "redis")]
 use redis::{
-    aio::ConnectionManager as AsyncConnectionManager,
+    aio::ConnectionManager,
     cluster::ClusterClient,
     cluster_async::ClusterConnection,
     streams::{StreamReadOptions, StreamReadReply},
-    AsyncCommands, Client, ConnectionManager, RedisResult,
+    AsyncCommands, Client, RedisResult,
 };
 
 /// Redis Streams configuration with clustering and performance tuning

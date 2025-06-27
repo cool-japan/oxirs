@@ -49,7 +49,7 @@ use thiserror::Error;
 use oxirs_core::{
     graph::Graph,
     model::{BlankNode, Literal, NamedNode, Quad, Term, Triple},
-    store::Store,
+    Store,
     OxirsError,
 };
 
@@ -61,6 +61,7 @@ use oxirs_shacl::{
 pub mod analytics;
 pub mod insights;
 pub mod learning;
+pub mod ml;
 pub mod optimization;
 pub mod patterns;
 pub mod prediction;
@@ -70,6 +71,7 @@ pub mod quality;
 pub use analytics::*;
 pub use insights::*;
 pub use learning::*;
+pub use ml::*;
 pub use optimization::*;
 pub use patterns::*;
 pub use prediction::*;

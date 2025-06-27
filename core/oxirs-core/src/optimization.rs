@@ -7,13 +7,14 @@
 use crate::interning::{InternedString, StringInterner};
 use crate::model::*;
 use bumpalo::Bump;
-use crossbeam::epoch::{self, Atomic, Owned, Shared};
+use crossbeam::epoch::{self, Atomic, Owned};
 use crossbeam::queue::SegQueue;
 use dashmap::DashMap;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::RwLock;
+#[cfg(feature = "parallel")]
 use rayon::iter::IntoParallelRefIterator;
+#[cfg(feature = "parallel")]
 use rayon::iter::ParallelIterator;
-use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::marker::PhantomData;
 use std::ptr::NonNull;
@@ -716,6 +717,7 @@ impl Default for OptimizedGraph {
 }
 
 /// Lock-free queue for batch processing operations
+#[cfg(feature = "parallel")]
 #[derive(Debug)]
 pub struct BatchProcessor {
     /// Queue for pending operations
@@ -744,6 +746,7 @@ pub struct BatchStats {
     pub throughput_ops_per_sec: f64,
 }
 
+#[cfg(feature = "parallel")]
 impl BatchProcessor {
     /// Create a new batch processor with specified thread count
     pub fn new(num_threads: usize) -> Self {
@@ -834,6 +837,7 @@ impl BatchProcessor {
     }
 }
 
+#[cfg(feature = "parallel")]
 impl Default for BatchProcessor {
     fn default() -> Self {
         Self::new(num_cpus::get())
@@ -842,9 +846,11 @@ impl Default for BatchProcessor {
 
 /// SIMD-accelerated string operations for RDF processing
 pub mod simd {
+    #[cfg(feature = "simd")]
     use wide::{u8x32, CmpEq};
 
     /// Fast IRI validation using SIMD operations
+    #[cfg(feature = "simd")]
     pub fn validate_iri_fast(iri: &str) -> bool {
         if iri.is_empty() {
             return false;
@@ -893,6 +899,25 @@ pub mod simd {
         for &byte in &bytes[chunks * 32..] {
             if matches!(byte,
                 0..=31 | 127..=159 | // Control characters
+                b'<' | b'>' | b'"' | b'{' | b'}' | b'|' | b'\\' | b'^' | b'`' | b' ' // Forbidden
+            ) {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// Fast IRI validation (non-SIMD fallback)
+    #[cfg(not(feature = "simd"))]
+    pub fn validate_iri_fast(iri: &str) -> bool {
+        if iri.is_empty() {
+            return false;
+        }
+
+        for byte in iri.bytes() {
+            if matches!(
+                byte,
                 b'<' | b'>' | b'"' | b'{' | b'}' | b'|' | b'\\' | b'^' | b'`' | b' ' // Forbidden
             ) {
                 return false;

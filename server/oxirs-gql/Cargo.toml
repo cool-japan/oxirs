@@ -31,6 +31,8 @@ async-trait.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 urlencoding = "2.1"
+reqwest = { version = "0.12.11", features = ["json"] }
+regex = "1.11.1"
 
 # WebSocket support for subscriptions
 tokio-tungstenite.workspace = true

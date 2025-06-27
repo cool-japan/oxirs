@@ -9,6 +9,7 @@ use crate::transaction::{TransactionId, IsolationLevel};
 use anyhow::Result;
 use dashmap::DashMap;
 use oxirs_core::model::Triple;
+use oxirs_core::vocab::xsd;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -629,12 +630,11 @@ mod tests {
         let snapshot = mvcc.begin_transaction(tx_id.clone(), IsolationLevel::ReadCommitted).await.unwrap();
         
         // Write a value
-        let triple = Triple {
-            subject: oxirs_core::model::NamedNode::new("http://example.org/s").unwrap().into(),
-            predicate: oxirs_core::model::NamedNode::new("http://example.org/p").unwrap().into(),
-            object: oxirs_core::model::Literal::new_typed_literal("value", 
-                oxirs_core::model::NamedNode::new("http://www.w3.org/2001/XMLSchema#string").unwrap()).into(),
-        };
+        let triple = Triple::new(
+            oxirs_core::model::NamedNode::new("http://example.org/s").unwrap(),
+            oxirs_core::model::NamedNode::new("http://example.org/p").unwrap(),
+            oxirs_core::model::Literal::new_typed_literal("value", xsd::STRING.clone()),
+        );
         
         mvcc.write(&tx_id, "key1", Some(triple.clone())).await.unwrap();
         
@@ -662,12 +662,11 @@ mod tests {
         let tx1 = "tx1".to_string();
         mvcc.begin_transaction(tx1.clone(), IsolationLevel::ReadCommitted).await.unwrap();
         
-        let triple = Triple {
-            subject: oxirs_core::model::NamedNode::new("http://example.org/s").unwrap().into(),
-            predicate: oxirs_core::model::NamedNode::new("http://example.org/p").unwrap().into(),
-            object: oxirs_core::model::Literal::new_typed_literal("value1", 
-                oxirs_core::model::NamedNode::new("http://www.w3.org/2001/XMLSchema#string").unwrap()).into(),
-        };
+        let triple = Triple::new(
+            oxirs_core::model::NamedNode::new("http://example.org/s").unwrap(),
+            oxirs_core::model::NamedNode::new("http://example.org/p").unwrap(),
+            oxirs_core::model::Literal::new_typed_literal("value1", xsd::STRING.clone()),
+        );
         
         mvcc.write(&tx1, "key1", Some(triple.clone())).await.unwrap();
         mvcc.commit_transaction(&tx1).await.unwrap();
@@ -684,12 +683,11 @@ mod tests {
         let tx3 = "tx3".to_string();
         mvcc.begin_transaction(tx3.clone(), IsolationLevel::ReadCommitted).await.unwrap();
         
-        let triple2 = Triple {
-            subject: oxirs_core::model::NamedNode::new("http://example.org/s").unwrap().into(),
-            predicate: oxirs_core::model::NamedNode::new("http://example.org/p").unwrap().into(),
-            object: oxirs_core::model::Literal::new_typed_literal("value2", 
-                oxirs_core::model::NamedNode::new("http://www.w3.org/2001/XMLSchema#string").unwrap()).into(),
-        };
+        let triple2 = Triple::new(
+            oxirs_core::model::NamedNode::new("http://example.org/s").unwrap(),
+            oxirs_core::model::NamedNode::new("http://example.org/p").unwrap(),
+            oxirs_core::model::Literal::new_typed_literal("value2", xsd::STRING.clone()),
+        );
         
         mvcc.write(&tx3, "key1", Some(triple2)).await.unwrap();
         mvcc.commit_transaction(&tx3).await.unwrap();
@@ -718,12 +716,11 @@ mod tests {
         mvcc.begin_transaction(tx1.clone(), IsolationLevel::Serializable).await.unwrap();
         mvcc.begin_transaction(tx2.clone(), IsolationLevel::Serializable).await.unwrap();
         
-        let triple = Triple {
-            subject: oxirs_core::model::NamedNode::new("http://example.org/s").unwrap().into(),
-            predicate: oxirs_core::model::NamedNode::new("http://example.org/p").unwrap().into(),
-            object: oxirs_core::model::Literal::new_typed_literal("value", 
-                oxirs_core::model::NamedNode::new("http://www.w3.org/2001/XMLSchema#string").unwrap()).into(),
-        };
+        let triple = Triple::new(
+            oxirs_core::model::NamedNode::new("http://example.org/s").unwrap(),
+            oxirs_core::model::NamedNode::new("http://example.org/p").unwrap(),
+            oxirs_core::model::Literal::new_typed_literal("value", xsd::STRING.clone()),
+        );
         
         // Both read the same key
         mvcc.read(&tx1, "key1").await.unwrap();
@@ -751,12 +748,11 @@ mod tests {
         let tx_id = "tx1".to_string();
         mvcc.begin_transaction(tx_id.clone(), IsolationLevel::ReadCommitted).await.unwrap();
         
-        let triple = Triple {
-            subject: oxirs_core::model::NamedNode::new("http://example.org/s").unwrap().into(),
-            predicate: oxirs_core::model::NamedNode::new("http://example.org/p").unwrap().into(),
-            object: oxirs_core::model::Literal::new_typed_literal("value", 
-                oxirs_core::model::NamedNode::new("http://www.w3.org/2001/XMLSchema#string").unwrap()).into(),
-        };
+        let triple = Triple::new(
+            oxirs_core::model::NamedNode::new("http://example.org/s").unwrap(),
+            oxirs_core::model::NamedNode::new("http://example.org/p").unwrap(),
+            oxirs_core::model::Literal::new_typed_literal("value", xsd::STRING.clone()),
+        );
         
         mvcc.write(&tx_id, "key1", Some(triple)).await.unwrap();
         

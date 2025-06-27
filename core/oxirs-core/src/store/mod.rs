@@ -11,11 +11,16 @@ pub mod indexed_graph;
 pub mod term_interner;
 pub mod mmap_store;
 pub mod mmap_index;
+pub mod arena;
 
 pub use indexed_graph::{IndexedGraph, IndexStats, MemoryUsage, IndexType};
 pub use term_interner::{TermInterner, InternerStats};
 pub use mmap_store::{MmapStore, StoreStats};
 pub use mmap_index::{MmapIndex, IndexEntry};
+pub use arena::{
+    LocalArena, ConcurrentArena, GraphArena, ScopedArena,
+    ArenaStr, ArenaTerm, ArenaTriple,
+};
 
 /// Re-export commonly used types
 pub use indexed_graph::InternedTriple;

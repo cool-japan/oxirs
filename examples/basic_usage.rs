@@ -1,6 +1,6 @@
 //! Basic usage example for OxiRS
 
-use oxirs_core::store::Store;
+use oxirs_core::Store;
 use oxirs_core::parser::{Parser, RdfFormat};
 use anyhow::Result;
 

@@ -10,18 +10,19 @@ use crate::extensions::{ExtensionRegistry, ExecutionContext as ExtContext};
 use crate::term::{BindingContext, NumericValue, Term, xsd};
 use anyhow::{anyhow, bail, Result};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Expression evaluator with full SPARQL 1.1 support
 pub struct ExpressionEvaluator {
     /// Extension registry for custom functions
-    extension_registry: ExtensionRegistry,
+    extension_registry: Arc<ExtensionRegistry>,
     /// Current binding context
     binding_context: BindingContext,
 }
 
 impl ExpressionEvaluator {
     /// Create new expression evaluator
-    pub fn new(extension_registry: ExtensionRegistry) -> Self {
+    pub fn new(extension_registry: Arc<ExtensionRegistry>) -> Self {
         Self {
             extension_registry,
             binding_context: BindingContext::new(),
@@ -29,7 +30,7 @@ impl ExpressionEvaluator {
     }
     
     /// Create with existing binding context
-    pub fn with_context(extension_registry: ExtensionRegistry, context: BindingContext) -> Self {
+    pub fn with_context(extension_registry: Arc<ExtensionRegistry>, context: BindingContext) -> Self {
         Self {
             extension_registry,
             binding_context: context,
@@ -684,7 +685,7 @@ mod tests {
     #[test]
     fn test_expression_evaluation() {
         let registry = ExtensionRegistry::new();
-        let mut evaluator = ExpressionEvaluator::new(registry);
+        let mut evaluator = ExpressionEvaluator::new(Arc::new(registry));
         
         // Bind some variables
         evaluator.binding_context_mut().bind("x", Term::typed_literal("42", xsd::INTEGER).unwrap());
@@ -713,7 +714,7 @@ mod tests {
     #[test]
     fn test_builtin_functions() {
         let registry = ExtensionRegistry::new();
-        let evaluator = ExpressionEvaluator::new(registry);
+        let evaluator = ExpressionEvaluator::new(Arc::new(registry));
         
         // Test STR function
         let iri_term = Term::iri("http://example.org/foo");

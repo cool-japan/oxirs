@@ -11,7 +11,7 @@ mod transaction_tests {
     use oxirs_cluster::shard_manager::{ShardManager, ShardManagerConfig};
     use oxirs_cluster::storage::mock::MockStorageBackend;
     use oxirs_cluster::network::{NetworkService, NetworkConfig};
-    use oxirs_core::model::{NamedNode, Triple};
+    use oxirs_core::model::{NamedNode, Triple, Subject};
     use std::sync::Arc;
     use std::time::Duration;
     
@@ -49,11 +49,11 @@ mod transaction_tests {
         let tx_id = coordinator.begin_transaction(IsolationLevel::ReadCommitted).await.unwrap();
         
         // Add operations
-        let triple = Triple {
-            subject: NamedNode::new("http://example.org/alice").unwrap().into(),
-            predicate: NamedNode::new("http://example.org/knows").unwrap().into(),
-            object: NamedNode::new("http://example.org/bob").unwrap().into(),
-        };
+        let triple = Triple::new(
+            NamedNode::new("http://example.org/alice").unwrap(),
+            NamedNode::new("http://example.org/knows").unwrap(),
+            NamedNode::new("http://example.org/bob").unwrap(),
+        );
         
         coordinator.add_operation(&tx_id, TransactionOp::Insert { triple: triple.clone() }).await.unwrap();
         coordinator.add_operation(&tx_id, TransactionOp::Query {
@@ -86,11 +86,11 @@ mod transaction_tests {
             let tx_id = coordinator.begin_transaction(level).await.unwrap();
             
             // Add a simple operation
-            let triple = Triple {
-                subject: NamedNode::new("http://example.org/test").unwrap().into(),
-                predicate: NamedNode::new("http://example.org/level").unwrap().into(),
-                object: NamedNode::new(format!("{:?}", level)).unwrap().into(),
-            };
+            let triple = Triple::new(
+                NamedNode::new("http://example.org/test").unwrap(),
+                NamedNode::new("http://example.org/level").unwrap(),
+                NamedNode::new(format!("{:?}", level)).unwrap(),
+            );
             
             coordinator.add_operation(&tx_id, TransactionOp::Insert { triple }).await.unwrap();
             coordinator.commit_transaction(&tx_id).await.unwrap();
@@ -135,22 +135,22 @@ mod transaction_tests {
         let tx_id = coordinator.begin_transaction(IsolationLevel::ReadCommitted).await.unwrap();
         
         // All operations on same subject (should route to same shard)
-        let subject = NamedNode::new("http://example.org/single").unwrap().into();
+        let subject: oxirs_core::model::Subject = NamedNode::new("http://example.org/single").unwrap().into();
         
         coordinator.add_operation(&tx_id, TransactionOp::Insert {
-            triple: Triple {
-                subject: subject.clone(),
-                predicate: NamedNode::new("http://example.org/name").unwrap().into(),
-                object: NamedNode::new("Single Shard").unwrap().into(),
-            },
+            triple: Triple::new(
+                subject.clone(),
+                NamedNode::new("http://example.org/name").unwrap(),
+                NamedNode::new("Single Shard").unwrap(),
+            ),
         }).await.unwrap();
         
         coordinator.add_operation(&tx_id, TransactionOp::Insert {
-            triple: Triple {
-                subject: subject.clone(),
-                predicate: NamedNode::new("http://example.org/age").unwrap().into(),
-                object: NamedNode::new("25").unwrap().into(),
-            },
+            triple: Triple::new(
+                subject.clone(),
+                NamedNode::new("http://example.org/age").unwrap(),
+                NamedNode::new("25").unwrap(),
+            ),
         }).await.unwrap();
         
         coordinator.commit_transaction(&tx_id).await.unwrap();
@@ -175,11 +175,11 @@ mod transaction_tests {
         ];
         
         for subject in subjects {
-            let triple = Triple {
-                subject: NamedNode::new(subject).unwrap().into(),
-                predicate: NamedNode::new("http://example.org/updated").unwrap().into(),
-                object: NamedNode::new("true").unwrap().into(),
-            };
+            let triple = Triple::new(
+                NamedNode::new(subject).unwrap(),
+                NamedNode::new("http://example.org/updated").unwrap(),
+                NamedNode::new("true").unwrap(),
+            );
             coordinator.add_operation(&tx_id, TransactionOp::Insert { triple }).await.unwrap();
         }
         
@@ -197,11 +197,11 @@ mod transaction_tests {
         let tx_id = coordinator.begin_transaction(IsolationLevel::ReadCommitted).await.unwrap();
         
         // Add some operations
-        let triple = Triple {
-            subject: NamedNode::new("http://example.org/aborted").unwrap().into(),
-            predicate: NamedNode::new("http://example.org/status").unwrap().into(),
-            object: NamedNode::new("pending").unwrap().into(),
-        };
+        let triple = Triple::new(
+            NamedNode::new("http://example.org/aborted").unwrap(),
+            NamedNode::new("http://example.org/status").unwrap(),
+            NamedNode::new("pending").unwrap(),
+        );
         coordinator.add_operation(&tx_id, TransactionOp::Insert { triple }).await.unwrap();
         
         // Manually abort the transaction
@@ -244,11 +244,11 @@ mod transaction_tests {
             let handle = tokio::spawn(async move {
                 let tx_id = coord.begin_transaction(IsolationLevel::ReadCommitted).await.unwrap();
                 
-                let triple = Triple {
-                    subject: NamedNode::new(format!("http://example.org/concurrent{}", i)).unwrap().into(),
-                    predicate: NamedNode::new("http://example.org/index").unwrap().into(),
-                    object: NamedNode::new(i.to_string()).unwrap().into(),
-                };
+                let triple = Triple::new(
+                    NamedNode::new(format!("http://example.org/concurrent{}", i)).unwrap(),
+                    NamedNode::new("http://example.org/index").unwrap(),
+                    NamedNode::new(i.to_string()).unwrap(),
+                );
                 
                 coord.add_operation(&tx_id, TransactionOp::Insert { triple }).await.unwrap();
                 coord.commit_transaction(&tx_id).await.unwrap();
@@ -313,11 +313,11 @@ mod transaction_tests {
         
         // Add many operations for batching
         for i in 0..200 {
-            let triple = Triple {
-                subject: NamedNode::new(format!("http://example.org/batch{}", i)).unwrap().into(),
-                predicate: NamedNode::new("http://example.org/batch").unwrap().into(),
-                object: NamedNode::new(i.to_string()).unwrap().into(),
-            };
+            let triple = Triple::new(
+                NamedNode::new(format!("http://example.org/batch{}", i)).unwrap(),
+                NamedNode::new("http://example.org/batch").unwrap(),
+                NamedNode::new(i.to_string()).unwrap(),
+            );
             coordinator.add_operation(&tx_id, TransactionOp::Insert { triple }).await.unwrap();
         }
         

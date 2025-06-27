@@ -71,6 +71,7 @@ pub type CoreResult<T> = Result<T, CoreError>;
 /// Validation functions for common parameter checks
 pub mod validation {
     use super::{CoreError, CoreResult};
+    use std::fmt;
     
     /// Check that a value is positive
     pub fn check_positive<T>(value: T, name: &str) -> CoreResult<T>
@@ -172,5 +173,3 @@ pub mod validation {
         }
     }
 }
-
-use std::fmt;

@@ -581,6 +581,7 @@ impl IndexedGraph {
     }
 
     /// Parallel insert of multiple triples using rayon
+    #[cfg(feature = "parallel")]
     pub fn par_insert_batch(&self, triples: Vec<Triple>) -> Vec<bool> {
         use rayon::prelude::*;
         
@@ -617,6 +618,7 @@ impl IndexedGraph {
     }
 
     /// Parallel remove of multiple triples
+    #[cfg(feature = "parallel")]
     pub fn par_remove_batch(&self, triples: &[Triple]) -> Vec<bool> {
         use rayon::prelude::*;
         
@@ -627,6 +629,7 @@ impl IndexedGraph {
     }
 
     /// Parallel query with multiple patterns
+    #[cfg(feature = "parallel")]
     pub fn par_query_batch(
         &self,
         patterns: Vec<(Option<Subject>, Option<Predicate>, Option<Object>)>,
@@ -642,6 +645,7 @@ impl IndexedGraph {
     }
 
     /// Apply a transformation to all triples in parallel
+    #[cfg(feature = "parallel")]
     pub fn par_transform<F>(&self, transform: F) -> Vec<Triple>
     where
         F: Fn(&Triple) -> Option<Triple> + Send + Sync,
@@ -659,6 +663,7 @@ impl IndexedGraph {
     }
 
     /// Parallel map over all triples
+    #[cfg(feature = "parallel")]
     pub fn par_map<F, R>(&self, mapper: F) -> Vec<R>
     where
         F: Fn(&Triple) -> R + Send + Sync,
@@ -674,6 +679,7 @@ impl IndexedGraph {
     }
 
     /// Parallel filter triples
+    #[cfg(feature = "parallel")]
     pub fn par_filter<F>(&self, predicate: F) -> Vec<Triple>
     where
         F: Fn(&Triple) -> bool + Send + Sync,
@@ -688,6 +694,7 @@ impl IndexedGraph {
     }
 
     /// Parallel fold operation
+    #[cfg(feature = "parallel")]
     pub fn par_fold<F, R>(&self, init: R, fold_fn: F) -> R
     where
         F: Fn(R, &Triple) -> R + Send + Sync,

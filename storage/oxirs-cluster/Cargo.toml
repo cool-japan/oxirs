@@ -31,6 +31,8 @@ rand = "0.9"
 
 # MVCC dependencies
 dashmap = "6.1"
+chrono = { version = "0.4", features = ["serde"] }
+parking_lot = "0.12"
 
 [dev-dependencies]
 criterion.workspace = true

@@ -4,10 +4,10 @@ use super::ToolResult;
 use std::path::PathBuf;
 
 pub async fn run(
-    input: PathBuf,
-    input_format: Option<String>,
-    output_format: String,
-    output: Option<PathBuf>,
+    _input: PathBuf,
+    _input_format: Option<String>,
+    _output_format: String,
+    _output: Option<PathBuf>,
 ) -> ToolResult {
     println!("Result set processing tool not yet implemented");
     Ok(())

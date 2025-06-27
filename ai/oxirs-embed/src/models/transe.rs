@@ -7,11 +7,11 @@
 
 use crate::models::{common::*, BaseModel};
 use crate::{
-    EmbeddingError, EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector,
+    EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector,
 };
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use ndarray::{Array1, Array2, Axis};
+use ndarray::{Array1, Array2};
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::ops::{AddAssign, SubAssign};

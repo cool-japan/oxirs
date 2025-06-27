@@ -868,9 +868,25 @@ impl ShapeLearner {
     fn execute_learning_query(&self, store: &Store, query: &str) -> Result<LearningQueryResult> {
         tracing::debug!("Executing learning query: {}", query);
 
-        // For now, return mock data since the actual query API needs integration
-        // In a real implementation, this would parse and execute SPARQL queries
-        Ok(LearningQueryResult::Empty)
+        use oxirs_core::query::QueryEngine;
+        
+        let query_engine = QueryEngine::new();
+        match query_engine.query(query, store) {
+            Ok(oxirs_core::query::QueryResult::Select { variables, bindings }) => {
+                Ok(LearningQueryResult::Select {
+                    variables,
+                    bindings,
+                })
+            }
+            Ok(oxirs_core::query::QueryResult::Ask(result)) => {
+                Ok(LearningQueryResult::Ask(result))
+            }
+            Ok(_) => Ok(LearningQueryResult::Empty),
+            Err(e) => Err(ShaclAiError::ShapeLearning(format!(
+                "Query execution failed: {}",
+                e
+            ))),
+        }
     }
 
     /// Get learning statistics

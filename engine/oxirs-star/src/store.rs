@@ -916,8 +916,81 @@ impl StarStore {
     pub fn iter(&self) -> impl Iterator<Item = StarTriple> {
         // Clone all triples to avoid holding the lock
         // This is safe but potentially memory-intensive for large stores
-        // TODO: Implement a more sophisticated lock-free iterator for production use
+        // For production use, consider using the streaming_iter method
         self.all_triples().into_iter()
+    }
+
+    /// Get a streaming iterator that processes triples in chunks
+    /// This is more memory-efficient for large stores
+    pub fn streaming_iter(&self, chunk_size: usize) -> StreamingTripleIterator {
+        StreamingTripleIterator::new(self, chunk_size)
+    }
+}
+
+/// A memory-efficient streaming iterator for large triple stores
+pub struct StreamingTripleIterator<'a> {
+    store: &'a StarStore,
+    chunk_size: usize,
+    current_chunk: Vec<StarTriple>,
+    current_index: usize,
+    total_processed: usize,
+}
+
+impl<'a> StreamingTripleIterator<'a> {
+    fn new(store: &'a StarStore, chunk_size: usize) -> Self {
+        Self {
+            store,
+            chunk_size: chunk_size.max(1),
+            current_chunk: Vec::new(),
+            current_index: 0,
+            total_processed: 0,
+        }
+    }
+
+    fn load_next_chunk(&mut self) -> bool {
+        let star_triples = self.store.star_triples.read().unwrap();
+        
+        // Calculate the range for the next chunk
+        let start = self.total_processed;
+        let end = (start + self.chunk_size).min(star_triples.len());
+        
+        if start >= star_triples.len() {
+            return false;
+        }
+        
+        // Load the chunk
+        self.current_chunk.clear();
+        self.current_chunk.extend(
+            star_triples
+                .iter()
+                .skip(start)
+                .take(end - start)
+                .cloned()
+        );
+        
+        self.current_index = 0;
+        !self.current_chunk.is_empty()
+    }
+}
+
+impl<'a> Iterator for StreamingTripleIterator<'a> {
+    type Item = StarTriple;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // If we've exhausted the current chunk, load the next one
+        if self.current_index >= self.current_chunk.len() {
+            if !self.load_next_chunk() {
+                return None;
+            }
+        }
+        
+        // Return the next triple from the current chunk
+        let triple = self.current_chunk.get(self.current_index).cloned();
+        if triple.is_some() {
+            self.current_index += 1;
+            self.total_processed += 1;
+        }
+        triple
     }
 }
 
@@ -1073,5 +1146,42 @@ mod tests {
         let exported = store.to_graph();
         assert_eq!(exported.len(), 1);
         assert!(exported.contains(&triple));
+    }
+
+    #[test]
+    fn test_streaming_iterator() {
+        let store = StarStore::new();
+        
+        // Insert multiple triples
+        for i in 0..100 {
+            let triple = StarTriple::new(
+                StarTerm::iri(&format!("http://example.org/s{}", i)).unwrap(),
+                StarTerm::iri("http://example.org/p").unwrap(),
+                StarTerm::iri(&format!("http://example.org/o{}", i)).unwrap(),
+            );
+            store.insert(&triple).unwrap();
+        }
+        
+        // Test streaming iterator with different chunk sizes
+        let chunk_sizes = vec![1, 10, 50, 100, 200];
+        
+        for chunk_size in chunk_sizes {
+            let mut count = 0;
+            for _triple in store.streaming_iter(chunk_size) {
+                count += 1;
+            }
+            assert_eq!(count, 100, "Streaming iterator with chunk size {} should return all triples", chunk_size);
+        }
+        
+        // Test that streaming iterator returns the same triples as regular iterator
+        let regular_triples: Vec<_> = store.iter().collect();
+        let streaming_triples: Vec<_> = store.streaming_iter(25).collect();
+        
+        assert_eq!(regular_triples.len(), streaming_triples.len());
+        
+        // Both iterators should contain the same triples (though possibly in different order)
+        for triple in &regular_triples {
+            assert!(streaming_triples.contains(triple));
+        }
     }
 }

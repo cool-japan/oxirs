@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use oxirs_core::{
     graph::Graph,
     model::{BlankNode, Literal, NamedNode, RdfTerm, Term, Triple, Quad, GraphName},
-    store::Store,
+    Store,
     OxirsError,
 };
 
@@ -123,7 +123,7 @@ impl ShapeParser {
         for quad in quads {
             // Only use triples from the default graph for shapes
             if quad.is_default_graph() {
-                graph.insert(quad.to_triple());
+                graph.add_triple(quad.to_triple());
             }
         }
         

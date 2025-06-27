@@ -428,11 +428,11 @@ mod tests {
             state: TransactionState::Active,
             operations: vec![
                 (0, TransactionOp::Insert {
-                    triple: oxirs_core::model::Triple {
-                        subject: oxirs_core::model::NamedNode::new("http://example.org/s").unwrap().into(),
-                        predicate: oxirs_core::model::NamedNode::new("http://example.org/p").unwrap().into(),
-                        object: oxirs_core::model::NamedNode::new("http://example.org/o").unwrap().into(),
-                    },
+                    triple: oxirs_core::model::Triple::new(
+                        oxirs_core::model::NamedNode::new("http://example.org/s").unwrap(),
+                        oxirs_core::model::NamedNode::new("http://example.org/p").unwrap(),
+                        oxirs_core::model::NamedNode::new("http://example.org/o").unwrap(),
+                    ),
                 }),
             ],
             participants: HashMap::new(),

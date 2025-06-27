@@ -2,6 +2,7 @@
 
 use crate::auth::ldap::LdapService;
 use crate::auth::oauth::OAuth2Service;
+use crate::auth::saml::{SamlProvider, SamlConfig};
 use crate::config::{JwtConfig, LdapConfig, OAuthConfig, SecurityConfig, UserConfig};
 use crate::error::{FusekiError, FusekiResult};
 use argon2::password_hash::{rand_core::OsRng, SaltString};
@@ -25,6 +26,7 @@ use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, 
 
 pub mod ldap;
 pub mod oauth;
+pub mod saml;
 
 /// Authentication result
 #[derive(Debug, Clone)]
@@ -139,6 +141,7 @@ pub struct AuthService {
     sessions: Arc<RwLock<HashMap<String, UserSession>>>,
     oauth2_service: Option<OAuth2Service>,
     ldap_service: Option<LdapService>,
+    saml_provider: Option<Arc<SamlProvider>>,
 }
 
 /// Active user session
@@ -198,6 +201,7 @@ impl AuthService {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             oauth2_service,
             ldap_service,
+            saml_provider: None, // TODO: Initialize from config when SAML config is added
         }
     }
 

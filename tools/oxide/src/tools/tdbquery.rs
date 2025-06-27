@@ -3,7 +3,7 @@
 use super::ToolResult;
 use std::path::PathBuf;
 
-pub async fn run(location: PathBuf, query: String, file: bool, results: String) -> ToolResult {
+pub async fn run(_location: PathBuf, _query: String, _file: bool, _results: String) -> ToolResult {
     println!("TDB Query tool not yet implemented");
     Ok(())
 }

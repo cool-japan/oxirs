@@ -43,7 +43,7 @@ memmap2 = "0.9"
 parking_lot = "0.12"
 ahash = "0.8"
 simd-json = "0.13"
-wide = "0.7"
+wide = { version = "0.7", optional = true }
 num_cpus = "1.16"
 sys-info = "0.9"
 tokio = { workspace = true, features = ["rt", "sync", "time", "macros", "io-util"] }
@@ -84,6 +84,9 @@ hex = "0.4"
 # BiMap for term interning
 bimap = "0.6"
 
+# Zero-copy serialization
+bytes = "1.5"
+
 # Dependencies for Unicode normalization (replacing oxiri/oxilangtag)
 icu = "1.5"
 icu_normalizer = "1.5"
@@ -97,7 +100,7 @@ tokio = { workspace = true, features = ["test-util", "rt", "io-util", "macros"] 
 tempfile = "3.14"
 
 [features]
-default = ["serde"]
+default = ["serde", "parallel"]
 serde = []
 async = []
 async-tokio = ["async"]
@@ -105,6 +108,7 @@ parallel = ["rayon"]
 simd = ["wide"]
 gpu = []
 blas = []
+rdf-12 = []
 
 [[bench]]
 name = "indexed_graph_bench"

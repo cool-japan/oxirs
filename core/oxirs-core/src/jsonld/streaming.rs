@@ -25,6 +25,7 @@ use tokio::{
     time::{Duration, Instant},
 };
 use serde_json::{Value, Deserializer, Map};
+#[cfg(feature = "parallel")]
 use rayon::prelude::*;
 use dashmap::DashMap;
 use parking_lot::Mutex;
@@ -289,7 +290,10 @@ impl UltraStreamingJsonLdParser {
         let context = Self::resolve_context_zero_copy(&json_value, context_cache).await?;
         
         // Parallel triple extraction with work-stealing
+        #[cfg(feature = "parallel")]
         let triples = Self::extract_triples_parallel(&json_value, &context, term_interner).await?;
+        #[cfg(not(feature = "parallel"))]
+        let triples = Self::extract_triples_standard(&json_value, &context, term_interner).await?;
         
         // Record performance metrics
         let processing_time = start.elapsed();
@@ -350,6 +354,7 @@ impl UltraStreamingJsonLdParser {
     }
 
     /// Parallel triple extraction with work-stealing
+    #[cfg(feature = "parallel")]
     async fn extract_triples_parallel(
         json_value: &Value,
         context: &Value,

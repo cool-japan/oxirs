@@ -4,11 +4,12 @@ use oxirs_arq::expression::ExpressionEvaluator;
 use oxirs_arq::term::{Term, xsd};
 use oxirs_arq::algebra::{Expression, BinaryOperator, UnaryOperator, Literal};
 use oxirs_arq::extensions::ExtensionRegistry;
+use std::sync::Arc;
 
 #[test]
 fn test_arithmetic_expressions() {
     let registry = ExtensionRegistry::new();
-    let mut evaluator = ExpressionEvaluator::new(registry);
+    let mut evaluator = ExpressionEvaluator::new(Arc::new(registry));
     
     // Bind some variables
     evaluator.binding_context_mut().bind("x", Term::typed_literal("10", xsd::INTEGER).unwrap());
@@ -52,7 +53,7 @@ fn test_arithmetic_expressions() {
 #[test]
 fn test_comparison_expressions() {
     let registry = ExtensionRegistry::new();
-    let mut evaluator = ExpressionEvaluator::new(registry);
+    let mut evaluator = ExpressionEvaluator::new(Arc::new(registry));
     
     evaluator.binding_context_mut().bind("a", Term::typed_literal("10", xsd::INTEGER).unwrap());
     evaluator.binding_context_mut().bind("b", Term::typed_literal("20", xsd::INTEGER).unwrap());
@@ -95,7 +96,7 @@ fn test_comparison_expressions() {
 #[test]
 fn test_logical_expressions() {
     let registry = ExtensionRegistry::new();
-    let mut evaluator = ExpressionEvaluator::new(registry);
+    let mut evaluator = ExpressionEvaluator::new(Arc::new(registry));
     
     evaluator.binding_context_mut().bind("p", Term::typed_literal("true", xsd::BOOLEAN).unwrap());
     evaluator.binding_context_mut().bind("q", Term::typed_literal("false", xsd::BOOLEAN).unwrap());
@@ -133,7 +134,7 @@ fn test_logical_expressions() {
 #[test]
 fn test_string_functions() {
     let registry = ExtensionRegistry::new();
-    let mut evaluator = ExpressionEvaluator::new(registry);
+    let mut evaluator = ExpressionEvaluator::new(Arc::new(registry));
     
     evaluator.binding_context_mut().bind("name", Term::literal("hello world"));
     evaluator.binding_context_mut().bind("url", Term::iri("http://example.org"));
@@ -190,7 +191,7 @@ fn test_string_functions() {
 #[test]
 fn test_type_checking_functions() {
     let registry = ExtensionRegistry::new();
-    let mut evaluator = ExpressionEvaluator::new(registry);
+    let mut evaluator = ExpressionEvaluator::new(Arc::new(registry));
     
     evaluator.binding_context_mut().bind("iri", Term::iri("http://example.org"));
     evaluator.binding_context_mut().bind("lit", Term::literal("test"));
@@ -237,7 +238,7 @@ fn test_type_checking_functions() {
 #[test]
 fn test_conditional_expression() {
     let registry = ExtensionRegistry::new();
-    let mut evaluator = ExpressionEvaluator::new(registry);
+    let mut evaluator = ExpressionEvaluator::new(Arc::new(registry));
     
     evaluator.binding_context_mut().bind("x", Term::typed_literal("10", xsd::INTEGER).unwrap());
     
@@ -271,7 +272,7 @@ fn test_conditional_expression() {
 #[test]
 fn test_bound_expression() {
     let registry = ExtensionRegistry::new();
-    let mut evaluator = ExpressionEvaluator::new(registry);
+    let mut evaluator = ExpressionEvaluator::new(Arc::new(registry));
     
     evaluator.binding_context_mut().bind("x", Term::literal("value"));
     
@@ -289,7 +290,7 @@ fn test_bound_expression() {
 #[test]
 fn test_constructor_functions() {
     let registry = ExtensionRegistry::new();
-    let mut evaluator = ExpressionEvaluator::new(registry);
+    let mut evaluator = ExpressionEvaluator::new(Arc::new(registry));
     
     evaluator.binding_context_mut().bind("str", Term::literal("http://example.org/resource"));
     evaluator.binding_context_mut().bind("lang", Term::literal("en"));

@@ -171,7 +171,12 @@ impl GpuQueryExecutor {
             GpuBackend::Cuda => self.execute_cuda(plan, data),
             GpuBackend::OpenCL => self.execute_opencl(plan, data),
             GpuBackend::WebGPU => self.execute_webgpu(plan, data),
-            GpuBackend::CpuFallback => self.execute_cpu_parallel(plan, data),
+            GpuBackend::CpuFallback => {
+                #[cfg(feature = "parallel")]
+                return self.execute_cpu_parallel(plan, data);
+                #[cfg(not(feature = "parallel"))]
+                return Err(OxirsError::Query("CPU fallback requires 'parallel' feature".to_string()));
+            }
         }
     }
 
@@ -203,6 +208,7 @@ impl GpuQueryExecutor {
     }
 
     /// Execute with CPU parallel fallback
+    #[cfg(feature = "parallel")]
     fn execute_cpu_parallel(
         &self,
         plan: &ExecutionPlan,

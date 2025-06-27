@@ -150,69 +150,69 @@ This document outlines the comprehensive implementation plan for oxirs-shacl, a 
   - [ ] Path result caching
 
 ### 2.4 Core Constraint Validation Engine
-- [ ] **Value Constraints**
-  - [ ] Class constraint validation (`sh:class`)
-  - [ ] Datatype constraint validation (`sh:datatype`)
-  - [ ] Node kind constraint validation (`sh:nodeKind`)
-  - [ ] Enumeration constraint validation (`sh:in`)
-  - [ ] Value constraint validation (`sh:hasValue`)
+- [x] **Value Constraints**
+  - [x] Class constraint validation (`sh:class`)
+  - [x] Datatype constraint validation (`sh:datatype`)
+  - [x] Node kind constraint validation (`sh:nodeKind`)
+  - [x] Enumeration constraint validation (`sh:in`)
+  - [x] Value constraint validation (`sh:hasValue`)
 
-- [ ] **Cardinality Constraints**
-  - [ ] Min/max count validation (`sh:minCount`, `sh:maxCount`)
+- [x] **Cardinality Constraints**
+  - [x] Min/max count validation (`sh:minCount`, `sh:maxCount`)
   - [ ] Qualified cardinality validation
-  - [ ] Unique language validation (`sh:uniqueLang`)
+  - [x] Unique language validation (`sh:uniqueLang`)
 
-- [ ] **String Constraints**
-  - [ ] Length constraints (`sh:minLength`, `sh:maxLength`)
-  - [ ] Pattern matching constraints (`sh:pattern`, `sh:flags`)
-  - [ ] Language constraints (`sh:languageIn`)
+- [x] **String Constraints**
+  - [x] Length constraints (`sh:minLength`, `sh:maxLength`)
+  - [x] Pattern matching constraints (`sh:pattern`, `sh:flags`)
+  - [x] Language constraints (`sh:languageIn`)
 
-- [ ] **Numeric Constraints**
-  - [ ] Range constraints (min/max inclusive/exclusive)
-  - [ ] Comparison constraints (`sh:lessThan`, `sh:lessThanOrEquals`)
+- [x] **Numeric Constraints**
+  - [x] Range constraints (min/max inclusive/exclusive)
+  - [x] Comparison constraints (`sh:lessThan`, `sh:lessThanOrEquals`)
 
-- [ ] **Relationship Constraints**
-  - [ ] Equality constraints (`sh:equals`)
-  - [ ] Disjointness constraints (`sh:disjoint`)
+- [x] **Relationship Constraints**
+  - [x] Equality constraints (`sh:equals`)
+  - [x] Disjointness constraints (`sh:disjoint`)
 
 ### 2.5 Logical Constraint Engine
-- [ ] **Negation (`sh:not`)**
-  - [ ] Nested shape negation
-  - [ ] Constraint negation
+- [x] **Negation (`sh:not`)**
+  - [x] Nested shape negation
+  - [x] Constraint negation
   - [ ] Performance optimization for negation
 
-- [ ] **Conjunction (`sh:and`)**
-  - [ ] Multiple constraint validation
-  - [ ] Short-circuit evaluation optimization
-  - [ ] Error aggregation
+- [x] **Conjunction (`sh:and`)**
+  - [x] Multiple constraint validation
+  - [x] Short-circuit evaluation optimization
+  - [x] Error aggregation
 
-- [ ] **Disjunction (`sh:or`)**
-  - [ ] Alternative constraint validation
-  - [ ] Success on first match optimization
-  - [ ] Comprehensive error reporting
+- [x] **Disjunction (`sh:or`)**
+  - [x] Alternative constraint validation
+  - [x] Success on first match optimization
+  - [x] Comprehensive error reporting
 
-- [ ] **Exclusive Disjunction (`sh:xone`)**
-  - [ ] Exactly-one constraint validation
-  - [ ] Violation when zero or multiple matches
-  - [ ] Detailed error reporting
+- [x] **Exclusive Disjunction (`sh:xone`)**
+  - [x] Exactly-one constraint validation
+  - [x] Violation when zero or multiple matches
+  - [x] Detailed error reporting
 
 ### 2.6 Shape-based Constraint Engine
-- [ ] **Nested Shape Validation (`sh:node`)**
-  - [ ] Recursive shape validation
-  - [ ] Circular reference detection
+- [x] **Nested Shape Validation (`sh:node`)**
+  - [x] Recursive shape validation
+  - [x] Circular reference detection
   - [ ] Performance optimization for deep nesting
 
-- [ ] **Qualified Value Shapes**
-  - [ ] Qualified cardinality constraint validation
-  - [ ] Shape disjointness handling
+- [x] **Qualified Value Shapes**
+  - [x] Qualified cardinality constraint validation
+  - [x] Shape disjointness handling
   - [ ] Complex qualified shape combinations
 
 ### 2.7 Closed Shape Validation
-- [ ] **Closed Shape Engine**
-  - [ ] Property closure validation
-  - [ ] Ignored properties handling
-  - [ ] Efficient closed shape checking
-  - [ ] Integration with other constraints
+- [x] **Closed Shape Engine**
+  - [x] Property closure validation
+  - [x] Ignored properties handling
+  - [x] Efficient closed shape checking
+  - [x] Integration with other constraints
 
 ---
 

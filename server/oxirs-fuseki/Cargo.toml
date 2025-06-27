@@ -39,6 +39,9 @@ figment = { version = "0.10", features = ["toml", "yaml", "env"] }
 anyhow = "1.0"
 thiserror = "1.0"
 
+# Hashing
+md5 = "0.7"
+
 # Logging and tracing
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "chrono"] }

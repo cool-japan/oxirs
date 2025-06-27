@@ -21,7 +21,7 @@
 //!
 //! ```rust
 //! use oxirs_shacl::{Validator, ValidationConfig};
-//! use oxirs_core::store::Store;
+//! use oxirs_core::Store;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let store = Store::new()?;
@@ -49,7 +49,7 @@ use uuid::Uuid;
 use oxirs_core::{
     graph::Graph,
     model::{BlankNode, Literal, NamedNode, Quad, Term, Triple, Variable},
-    store::Store,
+    Store,
     OxirsError,
 };
 
@@ -624,22 +624,24 @@ impl Validator {
         // Find or create node for this shape
         let shape_node = self.get_or_create_shape_node(&shape_id);
         
+        // Collect all dependencies first to avoid borrow checker issues
+        let mut all_dependencies = Vec::new();
+        
         if let Some(shape) = self.shapes.get(&shape_id) {
-            // Add dependencies from inheritance
-            for parent_shape_id in &shape.extends {
-                let parent_node = self.get_or_create_shape_node(parent_shape_id);
-                self.shape_dependencies.add_edge(shape_node, parent_node, ());
-            }
+            // Collect dependencies from inheritance
+            all_dependencies.extend(shape.extends.iter().cloned());
             
-            // Find dependencies from constraints
+            // Collect dependencies from constraints
             for (_, constraint) in &shape.constraints {
                 let dependencies = self.extract_constraint_dependencies(constraint);
-                for dep_shape_id in dependencies {
-                    // Create edge from this shape to dependency
-                    let dep_node = self.get_or_create_shape_node(&dep_shape_id);
-                    self.shape_dependencies.add_edge(shape_node, dep_node, ());
-                }
+                all_dependencies.extend(dependencies);
             }
+        }
+        
+        // Now add all the edges
+        for dep_shape_id in all_dependencies {
+            let dep_node = self.get_or_create_shape_node(&dep_shape_id);
+            self.shape_dependencies.add_edge(shape_node, dep_node, ());
         }
         
         // Check for circular dependencies
@@ -653,7 +655,7 @@ impl Validator {
     }
     
     /// Get or create a node in the dependency graph for a shape
-    fn get_or_create_shape_node(&mut self, shape_id: &ShapeId) -> NodeIndex {
+    fn get_or_create_shape_node(&mut self, shape_id: &ShapeId) -> petgraph::graph::NodeIndex {
         use petgraph::visit::IntoNodeReferences;
         
         // Check if node already exists
@@ -673,22 +675,22 @@ impl Validator {
         
         match constraint {
             Constraint::Node(node_constraint) => {
-                dependencies.push(node_constraint.shape_id.clone());
+                dependencies.push(node_constraint.shape.clone());
             }
             Constraint::QualifiedValueShape(qualified_constraint) => {
                 dependencies.push(qualified_constraint.qualified_value_shape.clone());
             }
             Constraint::Not(not_constraint) => {
-                dependencies.push(not_constraint.shape_id.clone());
+                dependencies.push(not_constraint.shape.clone());
             }
             Constraint::And(and_constraint) => {
-                dependencies.extend(and_constraint.shape_ids.clone());
+                dependencies.extend(and_constraint.shapes.clone());
             }
             Constraint::Or(or_constraint) => {
-                dependencies.extend(or_constraint.shape_ids.clone());
+                dependencies.extend(or_constraint.shapes.clone());
             }
             Constraint::Xone(xone_constraint) => {
-                dependencies.extend(xone_constraint.shape_ids.clone());
+                dependencies.extend(xone_constraint.shapes.clone());
             }
             _ => {
                 // Other constraints don't have shape dependencies

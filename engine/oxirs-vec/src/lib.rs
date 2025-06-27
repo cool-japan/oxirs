@@ -34,22 +34,44 @@
 
 use anyhow::Result;
 
+pub mod advanced_caching;
 pub mod advanced_metrics;
+pub mod cache_friendly_index;
+pub mod clustering;
 pub mod compression;
 pub mod embeddings;
 pub mod embedding_pipeline;
+pub mod gnn_embeddings;
+pub mod graph_aware_search;
+pub mod graph_indices;
 pub mod hnsw;
 pub mod index;
 pub mod ivf;
+pub mod kg_embeddings;
+pub mod lsh;
+pub mod mmap_index;
+pub mod mmap_advanced;
 pub mod pq;
+pub mod opq;
 pub mod similarity;
 pub mod sparse;
 pub mod sparql_integration;
 pub mod structured_vectors;
+pub mod tree_indices;
+pub mod word2vec;
 
 // Re-export commonly used types
+pub use advanced_caching::{
+    MultiLevelCache, CacheConfig, CacheKey, CacheEntry, EvictionPolicy, 
+    CacheStats, MultiLevelCacheStats, CacheInvalidator
+};
+pub use cache_friendly_index::{CacheFriendlyVectorIndex, IndexConfig as CacheFriendlyIndexConfig};
 pub use compression::{CompressionMethod, VectorCompressor, create_compressor};
-pub use embeddings::{EmbeddableContent, EmbeddingConfig, EmbeddingManager, EmbeddingStrategy};
+pub use embeddings::{
+    EmbeddableContent, EmbeddingConfig, EmbeddingManager, EmbeddingStrategy, 
+    OpenAIConfig, OpenAIEmbeddingGenerator, TransformerModelType,
+    SentenceTransformerGenerator,
+};
 pub use embedding_pipeline::{
     EmbeddingPipeline, PreprocessingPipeline, PostprocessingPipeline,
     TokenizerConfig, NormalizationConfig, VectorNormalization, DimensionalityReduction,
@@ -57,6 +79,8 @@ pub use embedding_pipeline::{
 pub use hnsw::{HnswConfig, HnswIndex};
 pub use index::{AdvancedVectorIndex, DistanceMetric, IndexConfig, IndexType, SearchResult};
 pub use ivf::{IvfConfig, IvfIndex, IvfStats};
+pub use lsh::{LshConfig, LshIndex, LshFamily, LshStats};
+pub use mmap_index::{MemoryMappedVectorIndex, MemoryMappedIndexStats};
 pub use pq::{PQConfig, PQIndex, PQStats};
 pub use similarity::{AdaptiveSimilarity, SemanticSimilarity, SimilarityConfig, SimilarityMetric};
 pub use sparql_integration::{
@@ -68,6 +92,20 @@ pub use structured_vectors::{
     NamedDimensionVector, HierarchicalVector, TemporalVector, WeightedDimensionVector,
     ConfidenceScoredVector,
 };
+pub use tree_indices::{
+    TreeIndex, TreeIndexConfig, TreeType, BallTree, KdTree, VpTree, CoverTree, RandomProjectionTree,
+};
+pub use graph_indices::{
+    GraphIndex, GraphIndexConfig, GraphType, NSWGraph, ONNGGraph, PANNGGraph, DelaunayGraph, RNGGraph,
+};
+pub use word2vec::{
+    Word2VecEmbeddingGenerator, Word2VecConfig, Word2VecFormat, AggregationMethod, OovStrategy,
+};
+pub use kg_embeddings::{
+    KGEmbedding, KGEmbeddingConfig, KGEmbeddingModel as KGModel, KGEmbeddingModelType, Triple,
+    TransE, ComplEx, RotatE,
+};
+pub use gnn_embeddings::{GCN, GraphSAGE, AggregatorType};
 
 /// Precision types for vectors
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]

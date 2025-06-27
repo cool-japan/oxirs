@@ -5,7 +5,7 @@ use anyhow::{anyhow, Result};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use tracing::{debug, info};
+use tracing::info;
 
 /// Comprehensive evaluation suite for knowledge graph embeddings
 pub struct EvaluationSuite {
@@ -481,8 +481,6 @@ pub struct ModelComparison {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ModelConfig;
-    use crate::TransE;
 
     #[test]
     fn test_evaluation_suite() {

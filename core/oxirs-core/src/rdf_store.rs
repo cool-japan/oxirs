@@ -4,6 +4,7 @@ use crate::indexing::{IndexStats, MemoryUsage, UltraIndex};
 use crate::model::*;
 use crate::optimization::{OptimizedGraph, RdfArena};
 use crate::{OxirsError, Result};
+#[cfg(feature = "parallel")]
 use rayon::prelude::*;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::Path;

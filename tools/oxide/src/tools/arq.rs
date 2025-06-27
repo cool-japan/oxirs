@@ -133,6 +133,7 @@ struct QueryInfo {
 
 /// Data source types
 #[derive(Debug)]
+#[allow(dead_code)]
 enum DataSource {
     Dataset(PathBuf),
     File(PathBuf),
@@ -258,7 +259,7 @@ fn extract_offset(query: &str) -> Option<usize> {
 }
 
 /// Explain query execution plan
-fn explain_query(query: &str, query_info: &QueryInfo) -> ToolResult<()> {
+fn explain_query(_query: &str, query_info: &QueryInfo) -> ToolResult<()> {
     println!("\n=== Query Explanation ===");
     println!("Query type: {}", query_info.query_type);
     println!(
