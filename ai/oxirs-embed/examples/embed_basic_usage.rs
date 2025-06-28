@@ -2,7 +2,7 @@
 //!
 //! This example demonstrates the core functionality of the embedding system.
 
-use oxirs_embed::{EmbeddingModel, ModelConfig, TrainingStats, Triple, Vector, ModelStats};
+use oxirs_embed::{EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -261,10 +261,19 @@ impl EmbeddingModel for SimpleTransE {
         self.is_trained
     }
 
-    fn predict_objects(&self, subject: &str, predicate: &str, k: usize) -> anyhow::Result<Vec<(String, f64)>> {
-        let subject_id = self.entity_to_id.get(subject)
+    fn predict_objects(
+        &self,
+        subject: &str,
+        predicate: &str,
+        k: usize,
+    ) -> anyhow::Result<Vec<(String, f64)>> {
+        let subject_id = self
+            .entity_to_id
+            .get(subject)
             .ok_or_else(|| anyhow::anyhow!("Subject not found: {}", subject))?;
-        let predicate_id = self.relation_to_id.get(predicate)
+        let predicate_id = self
+            .relation_to_id
+            .get(predicate)
             .ok_or_else(|| anyhow::anyhow!("Predicate not found: {}", predicate))?;
 
         let mut scores = Vec::new();
@@ -278,10 +287,19 @@ impl EmbeddingModel for SimpleTransE {
         Ok(scores)
     }
 
-    fn predict_subjects(&self, predicate: &str, object: &str, k: usize) -> anyhow::Result<Vec<(String, f64)>> {
-        let predicate_id = self.relation_to_id.get(predicate)
+    fn predict_subjects(
+        &self,
+        predicate: &str,
+        object: &str,
+        k: usize,
+    ) -> anyhow::Result<Vec<(String, f64)>> {
+        let predicate_id = self
+            .relation_to_id
+            .get(predicate)
             .ok_or_else(|| anyhow::anyhow!("Predicate not found: {}", predicate))?;
-        let object_id = self.entity_to_id.get(object)
+        let object_id = self
+            .entity_to_id
+            .get(object)
             .ok_or_else(|| anyhow::anyhow!("Object not found: {}", object))?;
 
         let mut scores = Vec::new();
@@ -295,10 +313,19 @@ impl EmbeddingModel for SimpleTransE {
         Ok(scores)
     }
 
-    fn predict_relations(&self, subject: &str, object: &str, k: usize) -> anyhow::Result<Vec<(String, f64)>> {
-        let subject_id = self.entity_to_id.get(subject)
+    fn predict_relations(
+        &self,
+        subject: &str,
+        object: &str,
+        k: usize,
+    ) -> anyhow::Result<Vec<(String, f64)>> {
+        let subject_id = self
+            .entity_to_id
+            .get(subject)
             .ok_or_else(|| anyhow::anyhow!("Subject not found: {}", subject))?;
-        let object_id = self.entity_to_id.get(object)
+        let object_id = self
+            .entity_to_id
+            .get(object)
             .ok_or_else(|| anyhow::anyhow!("Object not found: {}", object))?;
 
         let mut scores = Vec::new();
@@ -321,7 +348,11 @@ impl EmbeddingModel for SimpleTransE {
             is_trained: self.is_trained,
             model_type: "SimpleTransE".to_string(),
             creation_time: chrono::Utc::now(),
-            last_training_time: if self.is_trained { Some(chrono::Utc::now()) } else { None },
+            last_training_time: if self.is_trained {
+                Some(chrono::Utc::now())
+            } else {
+                None
+            },
         }
     }
 
@@ -354,27 +385,51 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Add some simple triples
     model.add_triple(Triple::new(
-        oxirs_embed::NamedNode { iri: "alice".to_string() },
-        oxirs_embed::NamedNode { iri: "knows".to_string() },
-        oxirs_embed::NamedNode { iri: "bob".to_string() },
+        oxirs_embed::NamedNode {
+            iri: "alice".to_string(),
+        },
+        oxirs_embed::NamedNode {
+            iri: "knows".to_string(),
+        },
+        oxirs_embed::NamedNode {
+            iri: "bob".to_string(),
+        },
     ))?;
 
     model.add_triple(Triple::new(
-        oxirs_embed::NamedNode { iri: "bob".to_string() },
-        oxirs_embed::NamedNode { iri: "knows".to_string() },
-        oxirs_embed::NamedNode { iri: "charlie".to_string() },
+        oxirs_embed::NamedNode {
+            iri: "bob".to_string(),
+        },
+        oxirs_embed::NamedNode {
+            iri: "knows".to_string(),
+        },
+        oxirs_embed::NamedNode {
+            iri: "charlie".to_string(),
+        },
     ))?;
 
     model.add_triple(Triple::new(
-        oxirs_embed::NamedNode { iri: "alice".to_string() },
-        oxirs_embed::NamedNode { iri: "likes".to_string() },
-        oxirs_embed::NamedNode { iri: "charlie".to_string() },
+        oxirs_embed::NamedNode {
+            iri: "alice".to_string(),
+        },
+        oxirs_embed::NamedNode {
+            iri: "likes".to_string(),
+        },
+        oxirs_embed::NamedNode {
+            iri: "charlie".to_string(),
+        },
     ))?;
 
     model.add_triple(Triple::new(
-        oxirs_embed::NamedNode { iri: "charlie".to_string() },
-        oxirs_embed::NamedNode { iri: "works_at".to_string() },
-        oxirs_embed::NamedNode { iri: "company".to_string() },
+        oxirs_embed::NamedNode {
+            iri: "charlie".to_string(),
+        },
+        oxirs_embed::NamedNode {
+            iri: "works_at".to_string(),
+        },
+        oxirs_embed::NamedNode {
+            iri: "company".to_string(),
+        },
     ))?;
 
     println!("✅ Added {} triples", model.triples.len());

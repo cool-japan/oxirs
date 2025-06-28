@@ -4,9 +4,8 @@
 //! including basic graph patterns, joins, unions, filters, and other operations.
 
 use oxirs_core::model::{
-    NamedNode, Literal as CoreLiteral, BlankNode as CoreBlankNode,
-    Subject, Predicate, Object, Triple as CoreTriple, Quad as CoreQuad,
-    Variable as CoreVariable
+    BlankNode as CoreBlankNode, Literal as CoreLiteral, NamedNode, Object, Predicate,
+    Quad as CoreQuad, Subject, Triple as CoreTriple, Variable as CoreVariable,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -1282,7 +1281,9 @@ impl Statistics {
         Self {
             cardinality: self.cardinality * other.cardinality,
             selectivity: self.selectivity * other.selectivity,
-            available_indexes: self.available_indexes.iter()
+            available_indexes: self
+                .available_indexes
+                .iter()
                 .chain(other.available_indexes.iter())
                 .cloned()
                 .collect(),
@@ -1297,16 +1298,16 @@ impl OptimizationHints {
     /// Create hints for BGP patterns
     pub fn for_bgp(patterns: &[TriplePattern]) -> Self {
         let mut hints = OptimizationHints::default();
-        
+
         // Estimate based on pattern complexity
         let cardinality = match patterns.len() {
             0 => 0,
-            1 => 1000, // Single pattern estimate
+            1 => 1000,                         // Single pattern estimate
             n => 1000 / (n as u64 * n as u64), // Selectivity decreases with more patterns
         };
-        
+
         hints.statistics = Some(Statistics::with_cardinality(cardinality));
-        
+
         // Suggest indexes based on pattern structure
         for pattern in patterns {
             if let Term::Variable(_) = pattern.subject {
@@ -1316,21 +1317,25 @@ impl OptimizationHints {
                 hints.preferred_indexes.push(IndexType::SubjectIndex);
             }
             if let Term::Variable(_) = pattern.object {
-                hints.preferred_indexes.push(IndexType::SubjectPredicateIndex);
+                hints
+                    .preferred_indexes
+                    .push(IndexType::SubjectPredicateIndex);
             }
         }
-        
+
         hints
     }
 
     /// Create hints for join operations
     pub fn for_join(left_hints: &OptimizationHints, right_hints: &OptimizationHints) -> Self {
         let mut hints = OptimizationHints::default();
-        
+
         // Combine statistics
-        if let (Some(left_stats), Some(right_stats)) = (&left_hints.statistics, &right_hints.statistics) {
+        if let (Some(left_stats), Some(right_stats)) =
+            (&left_hints.statistics, &right_hints.statistics)
+        {
             hints.statistics = Some(left_stats.combine(right_stats));
-            
+
             // Choose join algorithm based on cardinalities
             hints.join_algorithm = Some(match (left_stats.cardinality, right_stats.cardinality) {
                 (l, r) if l < 1000 && r < 1000 => JoinAlgorithm::NestedLoopJoin,
@@ -1338,33 +1343,35 @@ impl OptimizationHints {
                 _ => JoinAlgorithm::HashJoin,
             });
         }
-        
+
         // Inherit index preferences
-        hints.preferred_indexes = left_hints.preferred_indexes.iter()
+        hints.preferred_indexes = left_hints
+            .preferred_indexes
+            .iter()
             .chain(right_hints.preferred_indexes.iter())
             .cloned()
             .collect();
-        
+
         hints
     }
 
     /// Create hints for filter operations
     pub fn for_filter(pattern_hints: &OptimizationHints, condition: &Expression) -> Self {
         let mut hints = pattern_hints.clone();
-        
+
         // Apply filter selectivity
         if let Some(ref mut stats) = hints.statistics {
             let filter_selectivity = estimate_filter_selectivity(condition);
             *stats = stats.clone().with_selectivity(filter_selectivity);
         }
-        
+
         // Suggest early filter placement for selective filters
         hints.filter_placement = if estimate_filter_selectivity(condition) < 0.1 {
             FilterPlacement::Early
         } else {
             FilterPlacement::Optimal
         };
-        
+
         hints
     }
 }
@@ -1378,12 +1385,10 @@ impl AnnotatedAlgebra {
                 // For now, use default hints - in practice, we'd analyze the children
                 OptimizationHints::default()
             }
-            Algebra::Filter { condition, .. } => {
-                OptimizationHints::default()
-            }
+            Algebra::Filter { condition, .. } => OptimizationHints::default(),
             _ => OptimizationHints::default(),
         };
-        
+
         Self {
             algebra,
             hints,
@@ -1408,12 +1413,20 @@ impl AnnotatedAlgebra {
 
     /// Get estimated cost
     pub fn estimated_cost(&self) -> f64 {
-        self.hints.statistics.as_ref().map(|s| s.cost).unwrap_or(0.0)
+        self.hints
+            .statistics
+            .as_ref()
+            .map(|s| s.cost)
+            .unwrap_or(0.0)
     }
 
     /// Get estimated cardinality
     pub fn estimated_cardinality(&self) -> u64 {
-        self.hints.statistics.as_ref().map(|s| s.cardinality).unwrap_or(0)
+        self.hints
+            .statistics
+            .as_ref()
+            .map(|s| s.cardinality)
+            .unwrap_or(0)
     }
 }
 
@@ -1421,22 +1434,24 @@ impl AnnotatedAlgebra {
 fn estimate_filter_selectivity(condition: &Expression) -> f64 {
     match condition {
         Expression::Binary { op, .. } => match op {
-            BinaryOperator::Equal => 0.01,       // Very selective
-            BinaryOperator::NotEqual => 0.99,    // Not selective
-            BinaryOperator::Less | BinaryOperator::LessEqual 
-            | BinaryOperator::Greater | BinaryOperator::GreaterEqual => 0.33, // Range
-            BinaryOperator::And => 0.25,         // Compound - more selective
-            BinaryOperator::Or => 0.75,          // Compound - less selective
-            _ => 0.5,                             // Default
+            BinaryOperator::Equal => 0.01,    // Very selective
+            BinaryOperator::NotEqual => 0.99, // Not selective
+            BinaryOperator::Less
+            | BinaryOperator::LessEqual
+            | BinaryOperator::Greater
+            | BinaryOperator::GreaterEqual => 0.33, // Range
+            BinaryOperator::And => 0.25,      // Compound - more selective
+            BinaryOperator::Or => 0.75,       // Compound - less selective
+            _ => 0.5,                         // Default
         },
         Expression::Function { name, .. } => match name.as_str() {
-            "regex" | "contains" => 0.2,         // Text search
-            "bound" => 0.8,                      // Usually true
+            "regex" | "contains" => 0.2,              // Text search
+            "bound" => 0.8,                           // Usually true
             "isIRI" | "isLiteral" | "isBlank" => 0.3, // Type checks
-            _ => 0.5,                            // Default
+            _ => 0.5,                                 // Default
         },
         Expression::Unary { op, .. } => match op {
-            UnaryOperator::Not => 0.5,          // Invert selectivity (simplified)
+            UnaryOperator::Not => 0.5, // Invert selectivity (simplified)
             _ => 0.5,
         },
         _ => 0.5, // Default selectivity

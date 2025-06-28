@@ -8,7 +8,7 @@ use crate::bft::{BftConfig, BftConsensus, BftMessage};
 #[cfg(feature = "bft")]
 use crate::bft_network::BftNetworkService;
 use crate::consensus::{ConsensusManager, ConsensusStatus};
-use crate::network::{NetworkService, NetworkConfig};
+use crate::network::{NetworkConfig, NetworkService};
 use crate::raft::{OxirsNodeId, RdfCommand, RdfResponse};
 use crate::storage::StorageBackend;
 use crate::{ClusterError, Result};
@@ -56,23 +56,25 @@ impl BftConsensusManager {
         // Create BFT configuration based on cluster size
         let num_nodes = peers.len() + 1; // Include self
         let bft_config = BftConfig::new(num_nodes);
-        
+
         // Create BFT consensus engine
         let consensus = Arc::new(BftConsensus::new(node_id.clone(), bft_config)?);
-        
+
         // Create network service
         let network_service = Arc::new(NetworkService::new(
-            node_id.parse().map_err(|_| ClusterError::Config("Invalid node ID".to_string()))?,
+            node_id
+                .parse()
+                .map_err(|_| ClusterError::Config("Invalid node ID".to_string()))?,
             network_config,
         ));
-        
+
         // Create BFT network service
         let bft_network = Arc::new(BftNetworkService::new(
             node_id.clone(),
             consensus.clone(),
             network_service,
         ));
-        
+
         Ok(BftConsensusManager {
             node_id,
             consensus,
@@ -82,61 +84,71 @@ impl BftConsensusManager {
             peers: Arc::new(RwLock::new(HashMap::new())),
         })
     }
-    
+
     /// Start the BFT consensus manager
     pub async fn start(&self) -> Result<()> {
         info!("Starting BFT consensus manager for node {}", self.node_id);
-        
+
         // Start network service
         self.network.clone().start().await?;
-        
+
         // Start consensus timers
         self.consensus.start_view_timer()?;
-        
+
         // Update status
         let mut status = self.status.write().await;
         *status = ConsensusStatus::Running;
-        
+
         Ok(())
     }
-    
+
     /// Stop the BFT consensus manager
     pub async fn stop(&self) -> Result<()> {
         info!("Stopping BFT consensus manager for node {}", self.node_id);
-        
+
         // Update status
         let mut status = self.status.write().await;
         *status = ConsensusStatus::Stopped;
-        
+
         Ok(())
     }
-    
+
     /// Register a peer node
-    pub async fn register_peer(&self, node_id: String, public_key: PublicKey, address: String) -> Result<()> {
+    pub async fn register_peer(
+        &self,
+        node_id: String,
+        public_key: PublicKey,
+        address: String,
+    ) -> Result<()> {
         // Register with consensus engine
         self.consensus.register_node(node_id.clone(), public_key)?;
-        
+
         // Register with network service
-        self.network.register_peer(node_id.clone(), public_key).await?;
-        
+        self.network
+            .register_peer(node_id.clone(), public_key)
+            .await?;
+
         // Store peer info
         let mut peers = self.peers.write().await;
-        peers.insert(node_id.clone(), PeerInfo {
-            node_id,
-            public_key,
-            address,
-            is_active: true,
-        });
-        
+        peers.insert(
+            node_id.clone(),
+            PeerInfo {
+                node_id,
+                public_key,
+                address,
+                is_active: true,
+            },
+        );
+
         Ok(())
     }
-    
+
     /// Process a client request through BFT consensus
     pub async fn process_request(&self, command: RdfCommand) -> Result<RdfResponse> {
         // Serialize command
-        let operation = serde_json::to_vec(&command)
-            .map_err(|e| ClusterError::Serialize(e.to_string()))?;
-        
+        let operation =
+            serde_json::to_vec(&command).map_err(|e| ClusterError::Serialize(e.to_string()))?;
+
         // Create BFT request
         let request = BftMessage::Request {
             client_id: self.node_id.clone(),
@@ -147,31 +159,31 @@ impl BftConsensusManager {
                 .as_secs(),
             signature: None,
         };
-        
+
         // Process through consensus
         self.consensus.process_request(request)?;
-        
+
         // TODO: Wait for consensus and return result
         // For now, return success
         Ok(RdfResponse::Success)
     }
-    
+
     /// Get current consensus status
     pub async fn get_status(&self) -> ConsensusStatus {
         let status = self.status.read().await;
         *status
     }
-    
+
     /// Check if this node is the primary
     pub fn is_primary(&self) -> Result<bool> {
         self.consensus.is_primary()
     }
-    
+
     /// Get current view number
     pub fn current_view(&self) -> Result<u64> {
         self.consensus.current_view()
     }
-    
+
     /// Get peer information
     pub async fn get_peers(&self) -> Vec<PeerInfo> {
         let peers = self.peers.read().await;
@@ -187,23 +199,23 @@ impl ConsensusManager for BftConsensusManager {
             .map_err(|e| ClusterError::Runtime(e.to_string()))?
             .block_on(self.start())
     }
-    
+
     fn stop(&mut self) -> Result<()> {
         tokio::runtime::Runtime::new()
             .map_err(|e| ClusterError::Runtime(e.to_string()))?
             .block_on(self.stop())
     }
-    
+
     fn is_leader(&self) -> bool {
         self.is_primary().unwrap_or(false)
     }
-    
+
     fn get_status(&self) -> ConsensusStatus {
         tokio::runtime::Runtime::new()
             .map(|rt| rt.block_on(self.get_status()))
             .unwrap_or(ConsensusStatus::Unknown)
     }
-    
+
     fn process_command(&mut self, command: RdfCommand) -> Result<RdfResponse> {
         tokio::runtime::Runtime::new()
             .map_err(|e| ClusterError::Runtime(e.to_string()))?
@@ -237,27 +249,29 @@ pub fn create_consensus_manager(
         }
     } else {
         // Create standard Raft consensus manager
-        Ok(Box::new(crate::consensus::ConsensusManager::new(node_id, peers)))
+        Ok(Box::new(crate::consensus::ConsensusManager::new(
+            node_id, peers,
+        )))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_peer_info() {
         use rand::rngs::OsRng;
-        let mut csprng = OsRng{};
+        let mut csprng = OsRng {};
         let keypair = Keypair::generate(&mut csprng);
-        
+
         let peer = PeerInfo {
             node_id: "node1".to_string(),
             public_key: keypair.public,
             address: "127.0.0.1:8080".to_string(),
             is_active: true,
         };
-        
+
         assert_eq!(peer.node_id, "node1");
         assert_eq!(peer.address, "127.0.0.1:8080");
         assert!(peer.is_active);

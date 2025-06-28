@@ -3,19 +3,19 @@
 //! This module provides the core node functionality for clustering including
 //! node lifecycle management, health monitoring, and inter-node communication.
 
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     net::SocketAddr,
     sync::Arc,
     time::{Duration, Instant},
 };
-use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
-use tokio::sync::{RwLock, mpsc};
-use tracing::{info, warn, error};
+use tokio::sync::{mpsc, RwLock};
+use tracing::{error, info, warn};
 
-use crate::error::{FusekiResult, FusekiError};
-use super::{NodeState, NodeInfo, NodeMetadata, ClusterConfig};
+use super::{ClusterConfig, NodeInfo, NodeMetadata, NodeState};
+use crate::error::{FusekiError, FusekiResult};
 
 /// Node lifecycle events
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,23 +40,16 @@ pub enum NodeMessage {
         metadata: NodeMetadata,
     },
     /// Join request
-    JoinRequest {
-        node_info: NodeInfo,
-    },
+    JoinRequest { node_info: NodeInfo },
     /// Join response
     JoinResponse {
         accepted: bool,
         cluster_members: Vec<NodeInfo>,
     },
     /// Leave notification
-    LeaveNotification {
-        node_id: String,
-    },
+    LeaveNotification { node_id: String },
     /// Leader election message
-    LeaderElection {
-        candidate_id: String,
-        term: u64,
-    },
+    LeaderElection { candidate_id: String, term: u64 },
 }
 
 /// Node communication interface
@@ -64,10 +57,10 @@ pub enum NodeMessage {
 pub trait NodeCommunication: Send + Sync {
     /// Send message to a specific node
     async fn send_message(&self, target: &str, message: NodeMessage) -> Result<()>;
-    
+
     /// Broadcast message to all nodes
     async fn broadcast_message(&self, message: NodeMessage) -> Result<()>;
-    
+
     /// Receive messages from other nodes
     async fn receive_messages(&self) -> Result<mpsc::Receiver<(String, NodeMessage)>>;
 }
@@ -194,7 +187,11 @@ impl ClusterNode {
         let join_request = NodeMessage::JoinRequest { node_info };
 
         for seed in seed_nodes {
-            match self.communication.send_message(seed, join_request.clone()).await {
+            match self
+                .communication
+                .send_message(seed, join_request.clone())
+                .await
+            {
                 Ok(()) => {
                     info!("Successfully contacted seed node: {}", seed);
                     break;
@@ -227,7 +224,11 @@ impl ClusterNode {
                 }
 
                 match message {
-                    NodeMessage::Heartbeat { node_id, timestamp, metadata } => {
+                    NodeMessage::Heartbeat {
+                        node_id,
+                        timestamp,
+                        metadata,
+                    } => {
                         // Update heartbeat time
                         {
                             let mut heartbeats = last_heartbeats.write().await;
@@ -244,7 +245,9 @@ impl ClusterNode {
                         }
                     }
 
-                    NodeMessage::JoinRequest { node_info: joining_node } => {
+                    NodeMessage::JoinRequest {
+                        node_info: joining_node,
+                    } => {
                         info!("Received join request from node: {}", joining_node.id);
 
                         // Add to cluster members
@@ -257,7 +260,10 @@ impl ClusterNode {
                         let _ = event_sender.send(NodeEvent::Joined(joining_node));
                     }
 
-                    NodeMessage::JoinResponse { accepted, cluster_members: members } => {
+                    NodeMessage::JoinResponse {
+                        accepted,
+                        cluster_members: members,
+                    } => {
                         if accepted {
                             info!("Join request accepted, updating cluster membership");
                             let mut local_members = cluster_members.write().await;
@@ -289,7 +295,10 @@ impl ClusterNode {
                     }
 
                     NodeMessage::LeaderElection { candidate_id, term } => {
-                        info!("Received leader election message from {} for term {}", candidate_id, term);
+                        info!(
+                            "Received leader election message from {} for term {}",
+                            candidate_id, term
+                        );
                         // TODO: Implement leader election logic
                     }
                 }
@@ -363,15 +372,13 @@ impl ClusterNode {
                 // Mark failed nodes as down
                 for node_id in failed_nodes {
                     warn!("Node {} marked as down due to missed heartbeats", node_id);
-                    
+
                     {
                         let mut members = cluster_members.write().await;
                         if let Some(member) = members.get_mut(&node_id) {
                             member.state = NodeState::Down;
-                            let _ = event_sender.send(NodeEvent::StateChanged(
-                                node_id.clone(),
-                                NodeState::Down,
-                            ));
+                            let _ = event_sender
+                                .send(NodeEvent::StateChanged(node_id.clone(), NodeState::Down));
                         }
                     }
                 }
@@ -481,11 +488,15 @@ impl TcpNodeCommunication {
 impl NodeCommunication for TcpNodeCommunication {
     async fn send_message(&self, target: &str, message: NodeMessage) -> Result<()> {
         let nodes = self.known_nodes.read().await;
-        let target_addr = nodes.get(target)
+        let target_addr = nodes
+            .get(target)
             .ok_or_else(|| FusekiError::internal(format!("Unknown target node: {}", target)))?;
 
         // TODO: Implement actual TCP message sending
-        info!("Would send message to {} at {}: {:?}", target, target_addr, message);
+        info!(
+            "Would send message to {} at {}: {:?}",
+            target, target_addr, message
+        );
         Ok(())
     }
 
@@ -493,14 +504,17 @@ impl NodeCommunication for TcpNodeCommunication {
         let nodes = self.known_nodes.read().await;
         for (node_id, addr) in nodes.iter() {
             // TODO: Implement actual TCP message sending
-            info!("Would broadcast message to {} at {}: {:?}", node_id, addr, message);
+            info!(
+                "Would broadcast message to {} at {}: {:?}",
+                node_id, addr, message
+            );
         }
         Ok(())
     }
 
     async fn receive_messages(&self) -> Result<mpsc::Receiver<(String, NodeMessage)>> {
         let (sender, receiver) = mpsc::channel(1000);
-        
+
         // TODO: Implement actual TCP message receiving
         tokio::spawn(async move {
             // This would normally listen on a TCP port and decode messages
@@ -523,10 +537,12 @@ mod tests {
     async fn test_cluster_node_creation() {
         let config = ClusterConfig::default();
         let communication = Arc::new(TcpNodeCommunication::new(config.bind_addr));
-        
-        let node = ClusterNode::new(config.clone(), communication).await.unwrap();
+
+        let node = ClusterNode::new(config.clone(), communication)
+            .await
+            .unwrap();
         let info = node.get_node_info().await;
-        
+
         assert_eq!(info.id, config.node_id);
         assert_eq!(info.addr, config.bind_addr);
         assert_eq!(info.state, NodeState::Joining);
@@ -536,9 +552,9 @@ mod tests {
     async fn test_tcp_communication() {
         let addr = "127.0.0.1:7000".parse().unwrap();
         let comm = TcpNodeCommunication::new(addr);
-        
+
         comm.add_node("test-node".to_string(), addr).await;
-        
+
         let message = NodeMessage::Heartbeat {
             node_id: "test".to_string(),
             timestamp: chrono::Utc::now().timestamp_millis(),
@@ -550,7 +566,7 @@ mod tests {
                 version: "1.0.0".to_string(),
             },
         };
-        
+
         // Should not fail (just logs for now)
         comm.send_message("test-node", message).await.unwrap();
     }

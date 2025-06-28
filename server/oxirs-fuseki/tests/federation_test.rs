@@ -1,10 +1,9 @@
 //! Integration tests for federation functionality
 
-use oxirs_fuseki::{
-    federation::{
-        FederationConfig, FederationManager, ServiceEndpoint, ServiceMetadata, ServiceHealth,
-        ServiceCapabilities, discovery::{DiscoveryMethod, ServiceRegistration},
-    },
+use oxirs_fuseki::federation::{
+    discovery::{DiscoveryMethod, ServiceRegistration},
+    FederationConfig, FederationManager, ServiceCapabilities, ServiceEndpoint, ServiceHealth,
+    ServiceMetadata,
 };
 use std::time::Duration;
 use url::Url;
@@ -13,10 +12,10 @@ use url::Url;
 async fn test_federation_manager_creation() {
     let config = FederationConfig::default();
     let manager = FederationManager::new(config);
-    
+
     // Start the manager
     manager.start().await.unwrap();
-    
+
     // Register a test endpoint
     let endpoint = ServiceEndpoint {
         url: Url::parse("http://example.com/sparql").unwrap(),
@@ -36,14 +35,17 @@ async fn test_federation_manager_creation() {
             result_formats: vec!["application/sparql-results+json".to_string()],
         },
     };
-    
-    manager.register_endpoint("test-endpoint".to_string(), endpoint).await.unwrap();
-    
+
+    manager
+        .register_endpoint("test-endpoint".to_string(), endpoint)
+        .await
+        .unwrap();
+
     // Get healthy endpoints
     let healthy = manager.get_healthy_endpoints().await;
     assert_eq!(healthy.len(), 1);
     assert_eq!(healthy[0].0, "test-endpoint");
-    
+
     // Stop the manager
     manager.stop().await.unwrap();
 }
@@ -52,9 +54,9 @@ async fn test_federation_manager_creation() {
 async fn test_static_service_discovery() {
     let mut config = FederationConfig::default();
     config.enable_discovery = true;
-    
+
     let manager = FederationManager::new(config);
-    
+
     // Add static service registration
     let registrations = vec![
         ServiceRegistration {
@@ -74,7 +76,7 @@ async fn test_static_service_discovery() {
             },
         },
     ];
-    
+
     // This would normally be done through the discovery module
     // For testing, we'll register them directly
     for reg in registrations {
@@ -86,16 +88,16 @@ async fn test_static_service_discovery() {
         };
         manager.register_endpoint(reg.id, endpoint).await.unwrap();
     }
-    
+
     manager.start().await.unwrap();
-    
+
     // Give discovery time to run
     tokio::time::sleep(Duration::from_millis(100)).await;
-    
+
     let endpoints = manager.get_healthy_endpoints().await;
     // Health is Unknown, so no healthy endpoints yet
     assert_eq!(endpoints.len(), 0);
-    
+
     manager.stop().await.unwrap();
 }
 
@@ -105,7 +107,7 @@ async fn test_circuit_breaker_config() {
     config.circuit_breaker.failure_threshold = 3;
     config.circuit_breaker.success_threshold = 2;
     config.circuit_breaker.timeout = Duration::from_secs(30);
-    
+
     assert_eq!(config.circuit_breaker.failure_threshold, 3);
     assert_eq!(config.circuit_breaker.success_threshold, 2);
     assert_eq!(config.circuit_breaker.timeout, Duration::from_secs(30));

@@ -3,9 +3,9 @@
 //! Comprehensive integration tests for all streaming backends including
 //! Kafka, NATS, Redis, Kinesis, and Pulsar implementations.
 
-use oxirs_stream::*;
 use anyhow::Result;
 use chrono::Utc;
+use oxirs_stream::*;
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::timeout;
@@ -24,9 +24,12 @@ impl Default for TestConfig {
     fn default() -> Self {
         Self {
             kafka_url: std::env::var("KAFKA_URL").unwrap_or_else(|_| "localhost:9092".to_string()),
-            nats_url: std::env::var("NATS_URL").unwrap_or_else(|_| "nats://localhost:4222".to_string()),
-            redis_url: std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string()),
-            pulsar_url: std::env::var("PULSAR_URL").unwrap_or_else(|_| "pulsar://localhost:6650".to_string()),
+            nats_url: std::env::var("NATS_URL")
+                .unwrap_or_else(|_| "nats://localhost:4222".to_string()),
+            redis_url: std::env::var("REDIS_URL")
+                .unwrap_or_else(|_| "redis://localhost:6379".to_string()),
+            pulsar_url: std::env::var("PULSAR_URL")
+                .unwrap_or_else(|_| "pulsar://localhost:6650".to_string()),
             kinesis_region: std::env::var("AWS_REGION").unwrap_or_else(|_| "us-west-2".to_string()),
         }
     }
@@ -136,8 +139,18 @@ mod memory_backend_tests {
         for (original, received) in events.iter().zip(received_events.iter()) {
             match (original, received) {
                 (
-                    StreamEvent::TripleAdded { subject: s1, predicate: p1, object: o1, .. },
-                    StreamEvent::TripleAdded { subject: s2, predicate: p2, object: o2, .. }
+                    StreamEvent::TripleAdded {
+                        subject: s1,
+                        predicate: p1,
+                        object: o1,
+                        ..
+                    },
+                    StreamEvent::TripleAdded {
+                        subject: s2,
+                        predicate: p2,
+                        object: o2,
+                        ..
+                    },
                 ) => {
                     assert_eq!(s1, s2);
                     assert_eq!(p1, p2);
@@ -180,7 +193,10 @@ mod memory_backend_tests {
         }
         let consume_duration = start.elapsed();
 
-        println!("Consumed {} events in {:?}", received_count, consume_duration);
+        println!(
+            "Consumed {} events in {:?}",
+            received_count, consume_duration
+        );
 
         assert_eq!(received_count, event_count);
         stream.close().await?;
@@ -240,7 +256,7 @@ mod kafka_backend_tests {
 
         // Test transaction begin/commit
         stream.begin_transaction().await?;
-        
+
         let events = create_test_events(2);
         for event in &events {
             stream.publish(event.clone()).await?;
@@ -250,10 +266,10 @@ mod kafka_backend_tests {
 
         // Test transaction rollback
         stream.begin_transaction().await?;
-        
+
         let rollback_event = create_test_events(1);
         stream.publish(rollback_event[0].clone()).await?;
-        
+
         stream.rollback_transaction().await?;
 
         stream.close().await?;
@@ -320,7 +336,7 @@ mod nats_backend_tests {
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         let mut total_received = 0;
-        
+
         // Consumer 1
         for _ in 0..2 {
             if let Ok(Some(_)) = timeout(Duration::from_millis(500), consumer1.consume()).await {
@@ -565,8 +581,8 @@ mod kinesis_backend_tests {
 #[cfg(test)]
 mod rdf_patch_integration_tests {
     use super::*;
-    use oxirs_stream::patch::*;
     use oxirs_stream::delta::*;
+    use oxirs_stream::patch::*;
 
     #[tokio::test]
     async fn test_rdf_patch_streaming() -> Result<()> {
@@ -652,7 +668,12 @@ mod rdf_patch_integration_tests {
         // Verify event types
         for event in &received_events {
             match event {
-                StreamEvent::TripleAdded { subject, predicate, object, .. } => {
+                StreamEvent::TripleAdded {
+                    subject,
+                    predicate,
+                    object,
+                    ..
+                } => {
                     assert!(subject.contains("person1"));
                     assert!(predicate.contains("example.org"));
                     assert!(!object.is_empty());
@@ -689,26 +710,30 @@ mod monitoring_integration_tests {
 
         // Simulate some activity
         for i in 0..10 {
-            collector.update_producer_metrics(ProducerMetricsUpdate {
-                events_published: 1,
-                events_failed: if i % 10 == 0 { 1 } else { 0 },
-                bytes_sent: 1024,
-                batches_sent: 1,
-                latency_ms: 5.0,
-                throughput_eps: 100.0,
-            }).await;
+            collector
+                .update_producer_metrics(ProducerMetricsUpdate {
+                    events_published: 1,
+                    events_failed: if i % 10 == 0 { 1 } else { 0 },
+                    bytes_sent: 1024,
+                    batches_sent: 1,
+                    latency_ms: 5.0,
+                    throughput_eps: 100.0,
+                })
+                .await;
 
-            collector.update_consumer_metrics(ConsumerMetricsUpdate {
-                events_consumed: 1,
-                events_processed: 1,
-                events_filtered: 0,
-                events_failed: 0,
-                bytes_received: 1024,
-                batches_received: 1,
-                processing_time_ms: 2.0,
-                throughput_eps: 100.0,
-                lag_ms: Some(10.0),
-            }).await;
+            collector
+                .update_consumer_metrics(ConsumerMetricsUpdate {
+                    events_consumed: 1,
+                    events_processed: 1,
+                    events_filtered: 0,
+                    events_failed: 0,
+                    bytes_received: 1024,
+                    batches_received: 1,
+                    processing_time_ms: 2.0,
+                    throughput_eps: 100.0,
+                    lag_ms: Some(10.0),
+                })
+                .await;
 
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
@@ -773,7 +798,10 @@ mod performance_tests {
         let publish_duration = start.elapsed();
 
         let publish_throughput = event_count as f64 / publish_duration.as_secs_f64();
-        println!("Publish throughput: {:.0} events/second", publish_throughput);
+        println!(
+            "Publish throughput: {:.0} events/second",
+            publish_throughput
+        );
 
         // Benchmark consuming
         let start = std::time::Instant::now();
@@ -788,11 +816,20 @@ mod performance_tests {
         let consume_duration = start.elapsed();
 
         let consume_throughput = consumed_count as f64 / consume_duration.as_secs_f64();
-        println!("Consume throughput: {:.0} events/second", consume_throughput);
+        println!(
+            "Consume throughput: {:.0} events/second",
+            consume_throughput
+        );
 
         // Verify performance targets
-        assert!(publish_throughput > 1000.0, "Publish throughput should exceed 1K events/sec");
-        assert!(consume_throughput > 1000.0, "Consume throughput should exceed 1K events/sec");
+        assert!(
+            publish_throughput > 1000.0,
+            "Publish throughput should exceed 1K events/sec"
+        );
+        assert!(
+            consume_throughput > 1000.0,
+            "Consume throughput should exceed 1K events/sec"
+        );
 
         stream.close().await?;
         Ok(())
@@ -808,7 +845,7 @@ mod performance_tests {
 
         for _ in 0..100 {
             let start = std::time::Instant::now();
-            
+
             let event = create_test_events(1)[0].clone();
             producer.publish(event).await?;
 
@@ -827,7 +864,10 @@ mod performance_tests {
         println!("Latency P50: {:?}, P95: {:?}, P99: {:?}", p50, p95, p99);
 
         // Verify latency targets (for memory backend)
-        assert!(p99 < Duration::from_millis(100), "P99 latency should be under 100ms");
+        assert!(
+            p99 < Duration::from_millis(100),
+            "P99 latency should be under 100ms"
+        );
 
         producer.close().await?;
         consumer.close().await?;
@@ -871,7 +911,7 @@ mod error_handling_tests {
 
         // Test graceful degradation
         let event = create_test_events(1)[0].clone();
-        
+
         // This should work normally
         assert!(stream.publish(event.clone()).await.is_ok());
 
@@ -891,25 +931,23 @@ mod error_handling_tests {
         let mut stream = Stream::new(config).await?;
 
         // Test with various invalid events
-        let invalid_events = vec![
-            StreamEvent::TripleAdded {
-                subject: "".to_string(), // Empty subject
-                predicate: "http://example.org/p".to_string(),
-                object: "http://example.org/o".to_string(),
-                graph: None,
-                metadata: EventMetadata {
-                    event_id: Uuid::new_v4().to_string(),
-                    timestamp: Utc::now(),
-                    source: "test".to_string(),
-                    user: None,
-                    context: None,
-                    caused_by: None,
-                    version: "1.0".to_string(),
-                    properties: HashMap::new(),
-                    checksum: None,
-                },
+        let invalid_events = vec![StreamEvent::TripleAdded {
+            subject: "".to_string(), // Empty subject
+            predicate: "http://example.org/p".to_string(),
+            object: "http://example.org/o".to_string(),
+            graph: None,
+            metadata: EventMetadata {
+                event_id: Uuid::new_v4().to_string(),
+                timestamp: Utc::now(),
+                source: "test".to_string(),
+                user: None,
+                context: None,
+                caused_by: None,
+                version: "1.0".to_string(),
+                properties: HashMap::new(),
+                checksum: None,
             },
-        ];
+        }];
 
         for event in invalid_events {
             // Should handle invalid events gracefully

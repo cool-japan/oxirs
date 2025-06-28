@@ -148,7 +148,11 @@ impl Statistics {
         // Adjust based on subject term
         match &pattern.subject {
             Term::Iri(iri) => {
-                cardinality = self.subject_cardinality.get(iri.as_str()).copied().unwrap_or(100);
+                cardinality = self
+                    .subject_cardinality
+                    .get(iri.as_str())
+                    .copied()
+                    .unwrap_or(100);
             }
             Term::Variable(_) => {
                 cardinality *= 10; // Variables are less selective
@@ -175,7 +179,11 @@ impl Statistics {
         // Adjust based on object term
         match &pattern.object {
             Term::Iri(iri) => {
-                let obj_card = self.object_cardinality.get(iri.as_str()).copied().unwrap_or(100);
+                let obj_card = self
+                    .object_cardinality
+                    .get(iri.as_str())
+                    .copied()
+                    .unwrap_or(100);
                 cardinality = std::cmp::min(cardinality, obj_card);
             }
             Term::Literal(_) => {
@@ -459,13 +467,13 @@ impl QueryOptimizer {
         let mut collector = StatisticsCollector::new()
             .with_sample_rate(0.1)
             .with_histogram_buckets(100);
-        
+
         collector.collect_from_patterns(patterns)?;
-        
+
         // Merge collected statistics into optimizer's statistics
         let new_stats = collector.into_statistics();
         self.merge_statistics(new_stats);
-        
+
         Ok(())
     }
 
@@ -484,43 +492,52 @@ impl QueryOptimizer {
             execution_time,
             timestamp: Instant::now(),
         };
-        
-        self.dynamic_updater.update_from_execution(record, &mut self.statistics)
+
+        self.dynamic_updater
+            .update_from_execution(record, &mut self.statistics)
     }
 
     /// Merge new statistics into existing ones
     fn merge_statistics(&mut self, new_stats: Statistics) {
         // Merge pattern cardinalities
         for (pattern, count) in new_stats.pattern_cardinality {
-            self.statistics.pattern_cardinality
+            self.statistics
+                .pattern_cardinality
                 .entry(pattern)
                 .and_modify(|c| *c = (*c + count) / 2)
                 .or_insert(count);
         }
-        
+
         // Merge predicate frequencies
         for (pred, freq) in new_stats.predicate_frequency {
-            self.statistics.predicate_frequency
+            self.statistics
+                .predicate_frequency
                 .entry(pred)
                 .and_modify(|f| *f += freq)
                 .or_insert(freq);
         }
-        
+
         // Merge variable selectivities
         for (var, sel) in new_stats.variable_selectivity {
-            self.statistics.variable_selectivity
+            self.statistics
+                .variable_selectivity
                 .entry(var)
                 .and_modify(|s| *s = (*s + sel) / 2.0)
                 .or_insert(sel);
         }
-        
+
         // Merge index statistics
         for index_type in new_stats.index_stats.available_indexes {
-            self.statistics.index_stats.available_indexes.insert(index_type);
+            self.statistics
+                .index_stats
+                .available_indexes
+                .insert(index_type);
         }
-        
+
         for (index_type, sel) in new_stats.index_stats.index_selectivity {
-            self.statistics.index_stats.index_selectivity
+            self.statistics
+                .index_stats
+                .index_selectivity
                 .entry(index_type)
                 .and_modify(|s| *s = (*s + sel) / 2.0)
                 .or_insert(sel);
@@ -821,12 +838,13 @@ impl QueryOptimizer {
         match algebra {
             Algebra::Bgp(patterns) => {
                 // Use the advanced BGP optimizer
-                let bgp_optimizer = BGPOptimizer::new(&self.statistics, &self.statistics.index_stats);
+                let bgp_optimizer =
+                    BGPOptimizer::new(&self.statistics, &self.statistics.index_stats);
                 let optimized_bgp = bgp_optimizer.optimize_bgp(patterns)?;
-                
+
                 // Apply recommended index usage if needed
                 // In a real implementation, this would annotate the patterns with index hints
-                
+
                 Ok(Algebra::Bgp(optimized_bgp.patterns))
             }
             _ => self.apply_to_children(algebra, |child| self.index_aware_optimization(child)),
@@ -1376,11 +1394,15 @@ impl QueryOptimizer {
             )),
         }
     }
-    
+
     /// Decompose complex filters into conjunctive normal form (CNF)
     fn decompose_filter_cnf(&self, expr: &Expression) -> Vec<Expression> {
         match expr {
-            Expression::Binary { op: BinaryOperator::And, left, right } => {
+            Expression::Binary {
+                op: BinaryOperator::And,
+                left,
+                right,
+            } => {
                 let mut filters = self.decompose_filter_cnf(left);
                 filters.extend(self.decompose_filter_cnf(right));
                 filters
@@ -1388,27 +1410,33 @@ impl QueryOptimizer {
             _ => vec![expr.clone()],
         }
     }
-    
+
     /// Check if a filter expression uses only indexed properties
     fn is_indexed_filter(&self, expr: &Expression) -> bool {
         match expr {
-            Expression::Binary { op: BinaryOperator::Equal, left, right } => {
+            Expression::Binary {
+                op: BinaryOperator::Equal,
+                left,
+                right,
+            } => {
                 // Check if comparing a variable with a constant
                 matches!(
                     (left.as_ref(), right.as_ref()),
-                    (Expression::Variable(_), Expression::Literal(_)) |
-                    (Expression::Literal(_), Expression::Variable(_)) |
-                    (Expression::Variable(_), Expression::Iri(_)) |
-                    (Expression::Iri(_), Expression::Variable(_))
+                    (Expression::Variable(_), Expression::Literal(_))
+                        | (Expression::Literal(_), Expression::Variable(_))
+                        | (Expression::Variable(_), Expression::Iri(_))
+                        | (Expression::Iri(_), Expression::Variable(_))
                 )
             }
-            Expression::Binary { op: BinaryOperator::And, left, right } => {
-                self.is_indexed_filter(left) || self.is_indexed_filter(right)
-            }
+            Expression::Binary {
+                op: BinaryOperator::And,
+                left,
+                right,
+            } => self.is_indexed_filter(left) || self.is_indexed_filter(right),
             _ => false,
         }
     }
-    
+
     /// Enhanced filter optimization with reordering and selectivity estimation
     fn optimize_filters(&self, algebra: Algebra) -> Result<Algebra> {
         // First apply filter pushdown
@@ -1416,17 +1444,21 @@ impl QueryOptimizer {
         // Then reorder filters based on selectivity
         self.reorder_filters(pushed)
     }
-    
+
     /// Reorder filters based on estimated selectivity
     fn reorder_filters(&self, algebra: Algebra) -> Result<Algebra> {
         match algebra {
             Algebra::Filter { pattern, condition } => {
                 // Check if pattern is also a filter to enable reordering
-                if let Algebra::Filter { pattern: inner_pattern, condition: inner_condition } = *pattern {
+                if let Algebra::Filter {
+                    pattern: inner_pattern,
+                    condition: inner_condition,
+                } = *pattern
+                {
                     // Estimate selectivity of both conditions
                     let outer_selectivity = self.estimate_filter_selectivity(&condition);
                     let inner_selectivity = self.estimate_filter_selectivity(&inner_condition);
-                    
+
                     // If outer filter is more selective, keep current order
                     if outer_selectivity <= inner_selectivity {
                         Ok(Algebra::Filter {
@@ -1456,47 +1488,69 @@ impl QueryOptimizer {
             _ => self.apply_to_children(algebra, |child| self.reorder_filters(child)),
         }
     }
-    
+
     /// Estimate filter selectivity (lower is more selective)
     fn estimate_filter_selectivity(&self, expr: &Expression) -> f64 {
         match expr {
             // Equality filters are usually very selective
-            Expression::Binary { op: BinaryOperator::Equal, .. } => 0.1,
-            
+            Expression::Binary {
+                op: BinaryOperator::Equal,
+                ..
+            } => 0.1,
+
             // Inequality filters are less selective
-            Expression::Binary { op: BinaryOperator::NotEqual, .. } => 0.9,
-            
+            Expression::Binary {
+                op: BinaryOperator::NotEqual,
+                ..
+            } => 0.9,
+
             // Range filters
-            Expression::Binary { op: BinaryOperator::Less, .. } => 0.3,
-            Expression::Binary { op: BinaryOperator::Greater, .. } => 0.3,
-            Expression::Binary { op: BinaryOperator::LessEqual, .. } => 0.35,
-            Expression::Binary { op: BinaryOperator::GreaterEqual, .. } => 0.35,
-            
+            Expression::Binary {
+                op: BinaryOperator::Less,
+                ..
+            } => 0.3,
+            Expression::Binary {
+                op: BinaryOperator::Greater,
+                ..
+            } => 0.3,
+            Expression::Binary {
+                op: BinaryOperator::LessEqual,
+                ..
+            } => 0.35,
+            Expression::Binary {
+                op: BinaryOperator::GreaterEqual,
+                ..
+            } => 0.35,
+
             // Logical operations
-            Expression::Binary { op: BinaryOperator::And, left, right } => {
-                self.estimate_filter_selectivity(left) * self.estimate_filter_selectivity(right)
-            }
-            Expression::Binary { op: BinaryOperator::Or, left, right } => {
+            Expression::Binary {
+                op: BinaryOperator::And,
+                left,
+                right,
+            } => self.estimate_filter_selectivity(left) * self.estimate_filter_selectivity(right),
+            Expression::Binary {
+                op: BinaryOperator::Or,
+                left,
+                right,
+            } => {
                 let sel_left = self.estimate_filter_selectivity(left);
                 let sel_right = self.estimate_filter_selectivity(right);
                 sel_left + sel_right - (sel_left * sel_right)
             }
-            
+
             // Functions - depends on the function
-            Expression::Function { name, .. } => {
-                match name.as_str() {
-                    "bound" => 0.8,
-                    "isIRI" | "isBlank" | "isLiteral" => 0.3,
-                    "regex" => 0.2,
-                    "contains" | "strstarts" | "strends" => 0.15,
-                    _ => 0.5,
-                }
-            }
-            
+            Expression::Function { name, .. } => match name.as_str() {
+                "bound" => 0.8,
+                "isIRI" | "isBlank" | "isLiteral" => 0.3,
+                "regex" => 0.2,
+                "contains" | "strstarts" | "strends" => 0.15,
+                _ => 0.5,
+            },
+
             // EXISTS/NOT EXISTS
             Expression::Exists { .. } => 0.5,
             Expression::NotExists { .. } => 0.5,
-            
+
             // Default
             _ => 0.5,
         }

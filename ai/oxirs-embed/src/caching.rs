@@ -342,7 +342,7 @@ impl CacheManager {
     /// Create a new cache manager
     pub fn new(config: CacheConfig) -> Self {
         let ttl = Duration::from_secs(config.ttl_seconds);
-        
+
         Self {
             l1_cache: Arc::new(RwLock::new(LRUCache::new(config.l1_max_size, ttl))),
             l2_cache: Arc::new(RwLock::new(LRUCache::new(config.l2_max_size, ttl))),
@@ -365,38 +365,38 @@ impl CacheManager {
 
         let cleanup_task = tokio::spawn(async move {
             let mut interval = tokio::time::interval(cleanup_interval);
-            
+
             loop {
                 interval.tick().await;
-                
+
                 // Cleanup expired entries
                 let expired_l1 = {
                     let mut cache = l1_cache.write().unwrap();
                     cache.cleanup_expired()
                 };
-                
+
                 let expired_l2 = {
                     let mut cache = l2_cache.write().unwrap();
                     cache.cleanup_expired()
                 };
-                
+
                 let expired_l3 = {
                     let mut cache = l3_cache.write().unwrap();
                     cache.cleanup_expired()
                 };
-                
+
                 let total_expired = expired_l1 + expired_l2 + expired_l3;
                 if total_expired > 0 {
                     debug!("Cleaned up {} expired cache entries", total_expired);
                 }
-                
+
                 // Update stats
                 {
                     let mut stats = stats.write().unwrap();
                     stats.l1_stats.size = l1_cache.read().unwrap().len();
                     stats.l2_stats.size = l2_cache.read().unwrap().len();
                     stats.l3_stats.size = l3_cache.read().unwrap().len();
-                    
+
                     // Update hit rate
                     let total_requests = stats.total_hits + stats.total_misses;
                     if total_requests > 0 {
@@ -407,7 +407,10 @@ impl CacheManager {
         });
 
         self.cleanup_task = Some(cleanup_task);
-        info!("Cache manager started with cleanup interval: {:?}", cleanup_interval);
+        info!(
+            "Cache manager started with cleanup interval: {:?}",
+            cleanup_interval
+        );
         Ok(())
     }
 
@@ -422,7 +425,7 @@ impl CacheManager {
     /// Get cached embedding
     pub fn get_embedding(&self, entity: &str) -> Option<Vector> {
         let start = Instant::now();
-        
+
         let result = {
             let mut cache = self.l1_cache.write().unwrap();
             cache.get(&entity.to_string())
@@ -477,7 +480,7 @@ impl CacheManager {
     /// Get cached computation result
     pub fn get_computation(&self, key: &ComputationKey) -> Option<ComputationResult> {
         let start = Instant::now();
-        
+
         let result = {
             let mut cache = self.l2_cache.write().unwrap();
             cache.get(key)
@@ -501,7 +504,12 @@ impl CacheManager {
     }
 
     /// Cache a computation result
-    pub fn put_computation(&self, key: ComputationKey, result: ComputationResult, computation_time_us: u64) {
+    pub fn put_computation(
+        &self,
+        key: ComputationKey,
+        result: ComputationResult,
+        computation_time_us: u64,
+    ) {
         let cached = CachedComputation {
             result,
             cached_at: Utc::now(),
@@ -519,7 +527,7 @@ impl CacheManager {
     /// Get cached similarity results
     pub fn get_similarity_cache(&self, query: &str) -> Option<Vec<(String, f64)>> {
         let start = Instant::now();
-        
+
         let result = {
             let mut cache = self.l3_cache.write().unwrap();
             cache.get(&query.to_string())
@@ -549,7 +557,11 @@ impl CacheManager {
     }
 
     /// Warm up cache with frequently accessed entities
-    pub async fn warm_cache(&self, model: &dyn EmbeddingModel, entities: Vec<String>) -> Result<usize> {
+    pub async fn warm_cache(
+        &self,
+        model: &dyn EmbeddingModel,
+        entities: Vec<String>,
+    ) -> Result<usize> {
         if !self.config.enable_warming {
             return Ok(0);
         }
@@ -585,7 +597,10 @@ impl CacheManager {
         model: &dyn EmbeddingModel,
         common_queries: Vec<(String, String)>,
     ) -> Result<usize> {
-        info!("Starting precomputation for {} common queries", common_queries.len());
+        info!(
+            "Starting precomputation for {} common queries",
+            common_queries.len()
+        );
         let mut precomputed_count = 0;
 
         for (subject, predicate) in common_queries {
@@ -610,12 +625,18 @@ impl CacheManager {
                     precomputed_count += 1;
                 }
                 Err(e) => {
-                    warn!("Failed to precompute prediction for ({}, {}): {}", subject, predicate, e);
+                    warn!(
+                        "Failed to precompute prediction for ({}, {}): {}",
+                        subject, predicate, e
+                    );
                 }
             }
         }
 
-        info!("Precomputation completed: {} operations cached", precomputed_count);
+        info!(
+            "Precomputation completed: {} operations cached",
+            precomputed_count
+        );
         Ok(precomputed_count)
     }
 
@@ -638,13 +659,13 @@ impl CacheManager {
             let mut cache = self.l3_cache.write().unwrap();
             cache.clear();
         }
-        
+
         // Reset stats
         {
             let mut stats = self.stats.write().unwrap();
             *stats = CacheStats::default();
         }
-        
+
         info!("All caches cleared");
     }
 
@@ -654,26 +675,28 @@ impl CacheManager {
             let cache = self.l1_cache.read().unwrap();
             cache.len() * std::mem::size_of::<CachedEmbedding>()
         };
-        
+
         let l2_size = {
             let cache = self.l2_cache.read().unwrap();
             cache.len() * std::mem::size_of::<CachedComputation>()
         };
-        
+
         let l3_size = {
             let cache = self.l3_cache.read().unwrap();
             cache.len() * std::mem::size_of::<Vec<(String, f64)>>()
         };
-        
+
         l1_size + l2_size + l3_size
     }
 
     /// Adaptive cache resizing based on usage patterns
     pub fn adaptive_resize(&mut self) {
         let stats = self.get_stats();
-        
+
         // Resize based on hit rates and memory usage
-        if stats.l1_stats.hits > stats.l1_stats.misses * 2 && stats.memory_usage_bytes < self.config.max_memory_mb * 1024 * 1024 / 2 {
+        if stats.l1_stats.hits > stats.l1_stats.misses * 2
+            && stats.memory_usage_bytes < self.config.max_memory_mb * 1024 * 1024 / 2
+        {
             // High hit rate and low memory usage - increase L1 cache
             self.config.l1_max_size = (self.config.l1_max_size as f64 * 1.2) as usize;
             info!("Increased L1 cache size to {}", self.config.l1_max_size);
@@ -708,10 +731,11 @@ impl CachedEmbeddingModel {
 
         // Cache miss - get from model
         let embedding = self.model.get_entity_embedding(entity)?;
-        
+
         // Cache the result
-        self.cache_manager.put_embedding(entity.to_string(), embedding.clone());
-        
+        self.cache_manager
+            .put_embedding(entity.to_string(), embedding.clone());
+
         Ok(embedding)
     }
 
@@ -719,12 +743,18 @@ impl CachedEmbeddingModel {
     pub fn score_triple_cached(&self, subject: &str, predicate: &str, object: &str) -> Result<f64> {
         let key = ComputationKey {
             operation: "score_triple".to_string(),
-            inputs: vec![subject.to_string(), predicate.to_string(), object.to_string()],
+            inputs: vec![
+                subject.to_string(),
+                predicate.to_string(),
+                object.to_string(),
+            ],
             model_id: *self.model.model_id(),
         };
 
         // Try cache first
-        if let Some(ComputationResult::TripleScore(score)) = self.cache_manager.get_computation(&key) {
+        if let Some(ComputationResult::TripleScore(score)) =
+            self.cache_manager.get_computation(&key)
+        {
             return Ok(score);
         }
 
@@ -732,15 +762,24 @@ impl CachedEmbeddingModel {
         let start = Instant::now();
         let score = self.model.score_triple(subject, predicate, object)?;
         let computation_time = start.elapsed().as_micros() as u64;
-        
+
         // Cache the result
-        self.cache_manager.put_computation(key, ComputationResult::TripleScore(score), computation_time);
-        
+        self.cache_manager.put_computation(
+            key,
+            ComputationResult::TripleScore(score),
+            computation_time,
+        );
+
         Ok(score)
     }
 
     /// Predict objects with caching
-    pub fn predict_objects_cached(&self, subject: &str, predicate: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    pub fn predict_objects_cached(
+        &self,
+        subject: &str,
+        predicate: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let key = ComputationKey {
             operation: format!("predict_objects_{}", k),
             inputs: vec![subject.to_string(), predicate.to_string()],
@@ -748,7 +787,9 @@ impl CachedEmbeddingModel {
         };
 
         // Try cache first
-        if let Some(ComputationResult::PredictionResults(predictions)) = self.cache_manager.get_computation(&key) {
+        if let Some(ComputationResult::PredictionResults(predictions)) =
+            self.cache_manager.get_computation(&key)
+        {
             return Ok(predictions);
         }
 
@@ -756,10 +797,14 @@ impl CachedEmbeddingModel {
         let start = Instant::now();
         let predictions = self.model.predict_objects(subject, predicate, k)?;
         let computation_time = start.elapsed().as_micros() as u64;
-        
+
         // Cache the result
-        self.cache_manager.put_computation(key, ComputationResult::PredictionResults(predictions.clone()), computation_time);
-        
+        self.cache_manager.put_computation(
+            key,
+            ComputationResult::PredictionResults(predictions.clone()),
+            computation_time,
+        );
+
         Ok(predictions)
     }
 }
@@ -771,16 +816,16 @@ mod tests {
     #[test]
     fn test_lru_cache_basic() {
         let mut cache = LRUCache::new(3, Duration::from_secs(60));
-        
+
         cache.put("a".to_string(), 1);
         cache.put("b".to_string(), 2);
         cache.put("c".to_string(), 3);
-        
+
         assert_eq!(cache.get(&"a".to_string()), Some(1));
         assert_eq!(cache.get(&"b".to_string()), Some(2));
         assert_eq!(cache.get(&"c".to_string()), Some(3));
         assert_eq!(cache.len(), 3);
-        
+
         // Add one more - should evict least recently used
         cache.put("d".to_string(), 4);
         assert_eq!(cache.len(), 3);
@@ -806,30 +851,30 @@ mod tests {
             l3_max_size: 100,
             ..Default::default()
         };
-        
+
         let cache_manager = CacheManager::new(config);
-        
+
         // Test embedding caching
         let embedding = Vector::new(vec![1.0, 2.0, 3.0]);
         cache_manager.put_embedding("test_entity".to_string(), embedding.clone());
-        
+
         let cached = cache_manager.get_embedding("test_entity");
         assert!(cached.is_some());
         assert_eq!(cached.unwrap().values, embedding.values);
-        
+
         // Test computation caching
         let key = ComputationKey {
             operation: "test_op".to_string(),
             inputs: vec!["input1".to_string()],
             model_id: Uuid::new_v4(),
         };
-        
+
         let result = ComputationResult::TripleScore(0.85);
         cache_manager.put_computation(key.clone(), result, 1000);
-        
+
         let cached_result = cache_manager.get_computation(&key);
         assert!(cached_result.is_some());
-        
+
         if let Some(ComputationResult::TripleScore(score)) = cached_result {
             assert_eq!(score, 0.85);
         } else {
@@ -841,25 +886,25 @@ mod tests {
     fn test_cache_stats() {
         let config = CacheConfig::default();
         let cache_manager = CacheManager::new(config);
-        
+
         // Initially empty
         let stats = cache_manager.get_stats();
         assert_eq!(stats.total_hits, 0);
         assert_eq!(stats.total_misses, 0);
-        
+
         // Cache miss
         let result = cache_manager.get_embedding("nonexistent");
         assert!(result.is_none());
-        
+
         let stats = cache_manager.get_stats();
         assert_eq!(stats.total_misses, 1);
-        
+
         // Cache hit
         let embedding = Vector::new(vec![1.0, 2.0, 3.0]);
         cache_manager.put_embedding("test".to_string(), embedding);
         let cached = cache_manager.get_embedding("test");
         assert!(cached.is_some());
-        
+
         let stats = cache_manager.get_stats();
         assert_eq!(stats.total_hits, 1);
     }
@@ -871,19 +916,19 @@ mod tests {
             inputs: vec!["a".to_string(), "b".to_string()],
             model_id: Uuid::new_v4(),
         };
-        
+
         let key2 = ComputationKey {
             operation: "test".to_string(),
             inputs: vec!["a".to_string(), "b".to_string()],
             model_id: key1.model_id,
         };
-        
+
         let key3 = ComputationKey {
             operation: "different".to_string(),
             inputs: vec!["a".to_string(), "b".to_string()],
             model_id: key1.model_id,
         };
-        
+
         assert_eq!(key1, key2);
         assert_ne!(key1, key3);
     }

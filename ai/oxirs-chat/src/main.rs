@@ -5,7 +5,7 @@ use oxirs_chat::{
     server::{ChatServer, ServerConfig},
     ChatManager,
 };
-use oxirs_core::{Store, parser::RdfFormat, NamedNode, Literal, Triple, Quad, GraphName};
+use oxirs_core::{parser::RdfFormat, GraphName, Literal, NamedNode, Quad, Store, Triple};
 use std::{path::PathBuf, sync::Arc};
 use tracing::{error, info, warn};
 
@@ -87,7 +87,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Ok(manager) => Arc::new(manager),
                 Err(e) => {
                     error!("Failed to initialize chat manager with persistence: {}", e);
-                    return Err(format!("Failed to initialize chat manager with persistence: {}", e).into());
+                    return Err(format!(
+                        "Failed to initialize chat manager with persistence: {}",
+                        e
+                    )
+                    .into());
                 }
             }
         }
@@ -106,7 +110,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Store host and port for later use
     let host = args.host.clone();
     let port = args.port;
-    
+
     // Configure the server
     let server_config = ServerConfig {
         host: args.host,
@@ -126,29 +130,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Clone chat_manager before moving it
     let chat_manager_clone = chat_manager.clone();
-    
+
     // Create and start the server
     let server = ChatServer::new(chat_manager, server_config);
 
     info!("🚀 OxiRS Chat server starting...");
-    info!(
-        "📡 HTTP API available at: http://{}:{}/api",
-        host, port
-    );
+    info!("📡 HTTP API available at: http://{}:{}/api", host, port);
     info!(
         "🔄 WebSocket endpoint: ws://{}:{}/api/sessions/{{session_id}}/ws",
         host, port
     );
-    info!(
-        "❤️  Health check: http://{}:{}/health",
-        host, port
-    );
+    info!("❤️  Health check: http://{}:{}/health", host, port);
 
     if args.enable_metrics {
-        info!(
-            "📊 Metrics endpoint: http://{}:{}/metrics",
-            host, port
-        );
+        info!("📊 Metrics endpoint: http://{}:{}/metrics", host, port);
     }
 
     if args.persistence_path.is_some() {
@@ -158,7 +153,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Set up graceful shutdown
     let chat_manager_for_shutdown = chat_manager_clone.clone();
     tokio::spawn(async move {
-        tokio::signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to listen for Ctrl+C");
         info!("Received shutdown signal, saving sessions...");
         if let Err(e) = chat_manager_for_shutdown.save_all_sessions().await {
             error!("Failed to save sessions on shutdown: {}", e);
@@ -187,7 +184,7 @@ async fn initialize_store(
 
     if let Some(path) = dataset_path {
         info!("Loading dataset from: {:?}", path);
-        
+
         // Determine file format from extension
         let format = if let Some(extension) = path.extension().and_then(|s| s.to_str()) {
             match extension.to_lowercase().as_str() {
@@ -197,7 +194,10 @@ async fn initialize_store(
                 "n3" => RdfFormat::Turtle, // N3 not supported, use Turtle
                 "jsonld" | "json-ld" => RdfFormat::JsonLd,
                 _ => {
-                    warn!("Unknown file extension '{}', defaulting to Turtle", extension);
+                    warn!(
+                        "Unknown file extension '{}', defaulting to Turtle",
+                        extension
+                    );
                     RdfFormat::Turtle
                 }
             }
@@ -210,7 +210,7 @@ async fn initialize_store(
         match std::fs::read_to_string(path) {
             Ok(_content) => {
                 info!("File read successfully, format: {:?}", format);
-                
+
                 // TODO: Implement parsing from string with format detection
                 // For now, we'll use the sample data below
                 warn!("Dataset parsing from file not yet implemented, using sample data");
@@ -222,7 +222,7 @@ async fn initialize_store(
         }
     } else {
         info!("No dataset specified, starting with empty store");
-        
+
         // Add some sample triples for demonstration
         info!("Adding sample triples for demonstration...");
         add_sample_data(&mut store)?;
@@ -233,7 +233,6 @@ async fn initialize_store(
 
 /// Add sample RDF data for demonstration when no dataset is provided
 fn add_sample_data(store: &mut Store) -> Result<(), Box<dyn std::error::Error>> {
-    
     let sample_triples = vec![
         // Person data
         Triple::new(
@@ -249,9 +248,11 @@ fn add_sample_data(store: &mut Store) -> Result<(), Box<dyn std::error::Error>> 
         Triple::new(
             NamedNode::new("http://example.org/person/alice")?,
             NamedNode::new("http://example.org/age")?,
-            Literal::new_typed_literal("30", NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")?),
+            Literal::new_typed_literal(
+                "30",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")?,
+            ),
         ),
-        
         // Organization data
         Triple::new(
             NamedNode::new("http://example.org/org/acme")?,
@@ -263,7 +264,6 @@ fn add_sample_data(store: &mut Store) -> Result<(), Box<dyn std::error::Error>> 
             NamedNode::new("http://xmlns.com/foaf/0.1/name")?,
             Literal::new_simple_literal("ACME Corporation"),
         ),
-        
         // Relationship data
         Triple::new(
             NamedNode::new("http://example.org/person/alice")?,
@@ -271,7 +271,7 @@ fn add_sample_data(store: &mut Store) -> Result<(), Box<dyn std::error::Error>> 
             NamedNode::new("http://example.org/org/acme")?,
         ),
     ];
-    
+
     let mut triples_added = 0;
     for triple in sample_triples {
         let quad = Quad::new(
@@ -280,14 +280,14 @@ fn add_sample_data(store: &mut Store) -> Result<(), Box<dyn std::error::Error>> 
             triple.object().clone(),
             GraphName::DefaultGraph,
         );
-        
+
         if let Err(e) = store.insert_quad(quad) {
             warn!("Failed to insert sample triple: {}", e);
         } else {
             triples_added += 1;
         }
     }
-    
+
     info!("Added {} sample triples", triples_added);
     Ok(())
 }

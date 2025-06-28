@@ -35,21 +35,21 @@ pub mod model;
 pub mod optimization;
 pub mod parser;
 pub mod query;
+pub mod rdf_store;
 pub mod serializer;
 pub mod storage;
-pub mod rdf_store;
 pub mod store;
 pub mod vocab;
 // pub mod config;
 pub mod jsonld; // Re-enabled after fixing StringInterner method calls
-// pub mod rdfxml; // TODO: Fix lifetime issues in serializer
+                // pub mod rdfxml; // TODO: Fix lifetime issues in serializer
 pub mod oxigraph_compat; // Oxigraph compatibility layer
 
 // Core abstractions for OxiRS ecosystem
 pub mod error;
-pub mod platform;
 #[cfg(feature = "parallel")]
 pub mod parallel;
+pub mod platform;
 #[cfg(feature = "simd")]
 pub mod simd;
 

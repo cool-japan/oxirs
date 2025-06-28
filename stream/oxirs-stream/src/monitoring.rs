@@ -165,7 +165,9 @@ pub struct PerformanceTrace {
 /// Component health checker trait
 pub trait ComponentHealthChecker: Send + Sync {
     fn component_name(&self) -> &str;
-    fn check_health(&self) -> std::pin::Pin<Box<dyn std::future::Future<Output = ComponentHealth> + Send + '_>>;
+    fn check_health(
+        &self,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ComponentHealth> + Send + '_>>;
 }
 
 impl MetricsCollector {
@@ -670,13 +672,16 @@ mod tests {
 
         // Add a mock component checker
         struct MockChecker;
-        
+
         impl ComponentHealthChecker for MockChecker {
             fn component_name(&self) -> &str {
                 "mock_component"
             }
 
-            fn check_health(&self) -> std::pin::Pin<Box<dyn std::future::Future<Output = ComponentHealth> + Send + '_>> {
+            fn check_health(
+                &self,
+            ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ComponentHealth> + Send + '_>>
+            {
                 Box::pin(async move {
                     ComponentHealth {
                         status: HealthStatus::Healthy,

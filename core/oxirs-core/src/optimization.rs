@@ -15,11 +15,11 @@ use parking_lot::RwLock;
 use rayon::iter::IntoParallelRefIterator;
 #[cfg(feature = "parallel")]
 use rayon::iter::ParallelIterator;
+use simd_json;
 use std::collections::BTreeSet;
+use std::pin::Pin;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use simd_json;
-use std::pin::Pin;
 
 /// Type alias for string interner used throughout optimization module
 pub type TermInterner = StringInterner;
@@ -28,18 +28,26 @@ pub type TermInterner = StringInterner;
 pub trait TermInternerExt {
     /// Intern a named node and return it
     fn intern_named_node(&self, iri: &str) -> Result<NamedNode, crate::OxirsError>;
-    
+
     /// Create and intern a new blank node
     fn intern_blank_node(&self) -> BlankNode;
-    
+
     /// Intern a simple literal
     fn intern_literal(&self, value: &str) -> Result<Literal, crate::OxirsError>;
-    
+
     /// Intern a literal with datatype
-    fn intern_literal_with_datatype(&self, value: &str, datatype_iri: &str) -> Result<Literal, crate::OxirsError>;
-    
+    fn intern_literal_with_datatype(
+        &self,
+        value: &str,
+        datatype_iri: &str,
+    ) -> Result<Literal, crate::OxirsError>;
+
     /// Intern a literal with language tag
-    fn intern_literal_with_language(&self, value: &str, language: &str) -> Result<Literal, crate::OxirsError>;
+    fn intern_literal_with_language(
+        &self,
+        value: &str,
+        language: &str,
+    ) -> Result<Literal, crate::OxirsError>;
 }
 
 impl TermInternerExt for TermInterner {
@@ -49,34 +57,48 @@ impl TermInternerExt for TermInterner {
         // Create NamedNode from the interned string
         NamedNode::new(interned.as_ref())
     }
-    
+
     fn intern_blank_node(&self) -> BlankNode {
         // Generate a unique blank node
         BlankNode::new_unique()
     }
-    
+
     fn intern_literal(&self, value: &str) -> Result<Literal, crate::OxirsError> {
         // Intern the literal value
         let interned = self.intern(value);
         // Create simple literal
         Ok(Literal::new_simple_literal(interned.as_ref()))
     }
-    
-    fn intern_literal_with_datatype(&self, value: &str, datatype_iri: &str) -> Result<Literal, crate::OxirsError> {
+
+    fn intern_literal_with_datatype(
+        &self,
+        value: &str,
+        datatype_iri: &str,
+    ) -> Result<Literal, crate::OxirsError> {
         // Intern both value and datatype IRI
         let value_interned = self.intern(value);
         let datatype_interned = self.intern(datatype_iri);
         // Create datatype node and literal
         let datatype_node = NamedNode::new(datatype_interned.as_ref())?;
-        Ok(Literal::new_typed_literal(value_interned.as_ref(), datatype_node))
+        Ok(Literal::new_typed_literal(
+            value_interned.as_ref(),
+            datatype_node,
+        ))
     }
-    
-    fn intern_literal_with_language(&self, value: &str, language: &str) -> Result<Literal, crate::OxirsError> {
+
+    fn intern_literal_with_language(
+        &self,
+        value: &str,
+        language: &str,
+    ) -> Result<Literal, crate::OxirsError> {
         // Intern both value and language tag
         let value_interned = self.intern(value);
         let language_interned = self.intern(language);
         // Create language-tagged literal
-        let literal = Literal::new_language_tagged_literal(value_interned.as_ref(), language_interned.as_ref())?;
+        let literal = Literal::new_language_tagged_literal(
+            value_interned.as_ref(),
+            language_interned.as_ref(),
+        )?;
         Ok(literal)
     }
 }
@@ -1141,7 +1163,7 @@ impl ZeroCopyBuffer {
         let mut vec = Vec::with_capacity(capacity);
         vec.resize(capacity, 0);
         let data = vec.into_boxed_slice();
-        
+
         ZeroCopyBuffer {
             data: Pin::new(data),
             len: 0,
@@ -1177,7 +1199,7 @@ impl ZeroCopyBuffer {
     pub fn clear(&mut self) {
         self.len = 0;
     }
-    
+
     /// Reset the buffer (alias for clear)
     pub fn reset(&mut self) {
         self.clear();
@@ -1193,11 +1215,11 @@ impl ZeroCopyBuffer {
     pub fn write(&mut self, data: &[u8]) -> Result<usize, std::io::Error> {
         let available = self.capacity() - self.len;
         let to_write = data.len().min(available);
-        
+
         if to_write == 0 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::WriteZero,
-                "Buffer is full"
+                "Buffer is full",
             ));
         }
 
@@ -1206,7 +1228,7 @@ impl ZeroCopyBuffer {
             let dst = self.data.as_mut_ptr().add(self.len);
             std::ptr::copy_nonoverlapping(data.as_ptr(), dst, to_write);
         }
-        
+
         self.len += to_write;
         Ok(to_write)
     }
@@ -1223,18 +1245,27 @@ impl SimdJsonProcessor {
     }
 
     /// Parse JSON bytes into a Value
-    pub fn parse<'a>(&mut self, json: &'a mut [u8]) -> Result<simd_json::BorrowedValue<'a>, simd_json::Error> {
+    pub fn parse<'a>(
+        &mut self,
+        json: &'a mut [u8],
+    ) -> Result<simd_json::BorrowedValue<'a>, simd_json::Error> {
         simd_json::to_borrowed_value(json)
     }
 
     /// Parse JSON string into a Value
-    pub fn parse_str<'a>(&mut self, json: &'a mut str) -> Result<simd_json::BorrowedValue<'a>, simd_json::Error> {
+    pub fn parse_str<'a>(
+        &mut self,
+        json: &'a mut str,
+    ) -> Result<simd_json::BorrowedValue<'a>, simd_json::Error> {
         let bytes = unsafe { json.as_bytes_mut() };
         simd_json::to_borrowed_value(bytes)
     }
 
     /// Parse JSON bytes into an owned Value
-    pub fn parse_owned(&mut self, json: &mut [u8]) -> Result<simd_json::OwnedValue, simd_json::Error> {
+    pub fn parse_owned(
+        &mut self,
+        json: &mut [u8],
+    ) -> Result<simd_json::OwnedValue, simd_json::Error> {
         simd_json::to_owned_value(json)
     }
 

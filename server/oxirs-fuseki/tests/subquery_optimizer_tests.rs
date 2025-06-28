@@ -6,7 +6,7 @@ use std::collections::HashMap;
 #[tokio::test]
 async fn test_exists_to_semi_join_optimization() {
     let optimizer = AdvancedSubqueryOptimizer::new();
-    
+
     let query = r#"
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
         SELECT ?person
@@ -19,18 +19,21 @@ async fn test_exists_to_semi_join_optimization() {
             }
         }
     "#;
-    
+
     let result = optimizer.optimize(query).await.unwrap();
-    
+
     assert!(!result.rewrites_applied.is_empty());
-    assert!(result.rewrites_applied.iter().any(|r| r.id == "exists_to_semi_join"));
+    assert!(result
+        .rewrites_applied
+        .iter()
+        .any(|r| r.id == "exists_to_semi_join"));
     assert!(result.estimated_cost_reduction > 0.0);
 }
 
 #[tokio::test]
 async fn test_not_exists_to_anti_join_optimization() {
     let optimizer = AdvancedSubqueryOptimizer::new();
-    
+
     let query = r#"
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
         SELECT ?person
@@ -42,17 +45,20 @@ async fn test_not_exists_to_anti_join_optimization() {
             }
         }
     "#;
-    
+
     let result = optimizer.optimize(query).await.unwrap();
-    
+
     assert!(!result.rewrites_applied.is_empty());
-    assert!(result.rewrites_applied.iter().any(|r| r.id == "not_exists_to_anti_join"));
+    assert!(result
+        .rewrites_applied
+        .iter()
+        .any(|r| r.id == "not_exists_to_anti_join"));
 }
 
 #[tokio::test]
 async fn test_simple_subquery_pullup() {
     let optimizer = AdvancedSubqueryOptimizer::new();
-    
+
     let query = r#"
         SELECT ?name ?age
         WHERE {
@@ -66,17 +72,20 @@ async fn test_simple_subquery_pullup() {
             FILTER(?age > 21)
         }
     "#;
-    
+
     let result = optimizer.optimize(query).await.unwrap();
-    
+
     // Simple subquery should be pulled up
-    assert!(result.rewrites_applied.iter().any(|r| r.id == "simple_subquery_pullup"));
+    assert!(result
+        .rewrites_applied
+        .iter()
+        .any(|r| r.id == "simple_subquery_pullup"));
 }
 
 #[tokio::test]
 async fn test_in_subquery_to_join() {
     let optimizer = AdvancedSubqueryOptimizer::new();
-    
+
     let query = r#"
         SELECT ?product
         WHERE {
@@ -90,16 +99,16 @@ async fn test_in_subquery_to_join() {
             ))
         }
     "#;
-    
+
     let result = optimizer.optimize(query).await.unwrap();
-    
+
     assert!(result.rewrites_applied.iter().any(|r| r.id == "in_to_join"));
 }
 
 #[tokio::test]
 async fn test_correlated_subquery_decorrelation() {
     let optimizer = AdvancedSubqueryOptimizer::new();
-    
+
     let query = r#"
         SELECT ?dept (COUNT(?emp) AS ?count)
         WHERE {
@@ -120,17 +129,20 @@ async fn test_correlated_subquery_decorrelation() {
         }
         GROUP BY ?dept
     "#;
-    
+
     let result = optimizer.optimize(query).await.unwrap();
-    
+
     // Should attempt to decorrelate the nested correlated subquery
-    assert!(result.rewrites_applied.iter().any(|r| r.id == "decorrelate_simple"));
+    assert!(result
+        .rewrites_applied
+        .iter()
+        .any(|r| r.id == "decorrelate_simple"));
 }
 
 #[tokio::test]
 async fn test_scalar_subquery_optimization() {
     let optimizer = AdvancedSubqueryOptimizer::new();
-    
+
     let query = r#"
         SELECT ?product ?price
         WHERE {
@@ -141,9 +153,9 @@ async fn test_scalar_subquery_optimization() {
             ))
         }
     "#;
-    
+
     let result = optimizer.optimize(query).await.unwrap();
-    
+
     // Scalar subquery should be optimized
     assert!(result.estimated_cost_reduction > 0.0);
 }
@@ -151,7 +163,7 @@ async fn test_scalar_subquery_optimization() {
 #[tokio::test]
 async fn test_multiple_subquery_optimization() {
     let optimizer = AdvancedSubqueryOptimizer::new();
-    
+
     let query = r#"
         SELECT ?person ?totalSpent
         WHERE {
@@ -179,9 +191,9 @@ async fn test_multiple_subquery_optimization() {
             ) AS ?totalSpent)
         }
     "#;
-    
+
     let result = optimizer.optimize(query).await.unwrap();
-    
+
     // Should optimize multiple subqueries
     assert!(result.rewrites_applied.len() >= 2);
 }
@@ -189,7 +201,7 @@ async fn test_multiple_subquery_optimization() {
 #[tokio::test]
 async fn test_materialization_manager() {
     let manager = MaterializationManager::new();
-    
+
     let subquery = SubqueryInfo {
         id: "test_sq".to_string(),
         query_text: "SELECT * WHERE { ?s ?p ?o }".to_string(),
@@ -204,30 +216,36 @@ async fn test_materialization_manager() {
         outer_cardinality: 1,
         dependencies: vec![],
     };
-    
+
     // First execution - should execute and potentially cache
-    let results1 = manager.get_or_materialize(&subquery, || {
-        Ok(vec![
-            HashMap::from([("s".to_string(), serde_json::json!("subject1"))]),
-            HashMap::from([("s".to_string(), serde_json::json!("subject2"))]),
-        ])
-    }).await.unwrap();
-    
+    let results1 = manager
+        .get_or_materialize(&subquery, || {
+            Ok(vec![
+                HashMap::from([("s".to_string(), serde_json::json!("subject1"))]),
+                HashMap::from([("s".to_string(), serde_json::json!("subject2"))]),
+            ])
+        })
+        .await
+        .unwrap();
+
     assert_eq!(results1.len(), 2);
-    
+
     // Second execution - should hit cache
-    let results2 = manager.get_or_materialize(&subquery, || {
-        // This shouldn't be called if cache hit
-        panic!("Should not execute - should use cache");
-    }).await.unwrap();
-    
+    let results2 = manager
+        .get_or_materialize(&subquery, || {
+            // This shouldn't be called if cache hit
+            panic!("Should not execute - should use cache");
+        })
+        .await
+        .unwrap();
+
     assert_eq!(results2.len(), 2);
 }
 
 #[tokio::test]
 async fn test_execution_strategy_selection() {
     let selector = ExecutionStrategySelector::new();
-    
+
     // EXISTS subquery should use semi-join
     let exists_subquery = SubqueryInfo {
         id: "exists_sq".to_string(),
@@ -243,13 +261,13 @@ async fn test_execution_strategy_selection() {
         outer_cardinality: 1,
         dependencies: vec![],
     };
-    
+
     let strategy = selector.select_strategy(&exists_subquery).unwrap();
     match strategy {
-        ExecutionStrategy::SemiJoin => {},
+        ExecutionStrategy::SemiJoin => {}
         _ => panic!("Expected SemiJoin strategy for EXISTS"),
     }
-    
+
     // Correlated scalar subquery should use correlated execution
     let correlated_subquery = SubqueryInfo {
         id: "corr_sq".to_string(),
@@ -265,10 +283,10 @@ async fn test_execution_strategy_selection() {
         outer_cardinality: 100,
         dependencies: vec![],
     };
-    
+
     let strategy = selector.select_strategy(&correlated_subquery).unwrap();
     match strategy {
-        ExecutionStrategy::CorrelatedExecution => {},
+        ExecutionStrategy::CorrelatedExecution => {}
         _ => panic!("Expected CorrelatedExecution strategy for correlated subquery"),
     }
 }
@@ -276,7 +294,7 @@ async fn test_execution_strategy_selection() {
 #[tokio::test]
 async fn test_cost_estimation() {
     let estimator = SubqueryCostEstimator::new();
-    
+
     let subquery = SubqueryInfo {
         id: "cost_sq".to_string(),
         query_text: "SELECT * WHERE { ?s ?p ?o . ?o ?p2 ?o2 }".to_string(),
@@ -291,12 +309,21 @@ async fn test_cost_estimation() {
         outer_cardinality: 1,
         dependencies: vec![],
     };
-    
+
     // Test different execution strategies
-    let materialize_cost = estimator.estimate_cost(&subquery, &ExecutionStrategy::MaterializeOnce).await.unwrap();
-    let join_cost = estimator.estimate_cost(&subquery, &ExecutionStrategy::JoinConversion).await.unwrap();
-    let semi_join_cost = estimator.estimate_cost(&subquery, &ExecutionStrategy::SemiJoin).await.unwrap();
-    
+    let materialize_cost = estimator
+        .estimate_cost(&subquery, &ExecutionStrategy::MaterializeOnce)
+        .await
+        .unwrap();
+    let join_cost = estimator
+        .estimate_cost(&subquery, &ExecutionStrategy::JoinConversion)
+        .await
+        .unwrap();
+    let semi_join_cost = estimator
+        .estimate_cost(&subquery, &ExecutionStrategy::SemiJoin)
+        .await
+        .unwrap();
+
     // Semi-join should be cheaper than materialize for this case
     assert!(semi_join_cost < materialize_cost);
     // Join conversion should also be reasonably efficient
@@ -306,11 +333,11 @@ async fn test_cost_estimation() {
 #[cfg(test)]
 mod integration_tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_complex_query_optimization() {
         let optimizer = AdvancedSubqueryOptimizer::new();
-        
+
         let complex_query = r#"
             PREFIX foaf: <http://xmlns.com/foaf/0.1/>
             PREFIX ex: <http://example.org/>
@@ -362,23 +389,23 @@ mod integration_tests {
             ORDER BY DESC(?friendCount)
             LIMIT 10
         "#;
-        
+
         let result = optimizer.optimize(complex_query).await.unwrap();
-        
+
         // Should apply multiple optimizations
         assert!(result.rewrites_applied.len() > 1);
         assert!(result.estimated_cost_reduction > 0.2); // At least 20% improvement
-        
+
         // Check that specific optimizations were applied
         let rewrite_ids: Vec<_> = result.rewrites_applied.iter().map(|r| &r.id).collect();
         assert!(rewrite_ids.contains(&&"exists_to_semi_join".to_string()));
         assert!(rewrite_ids.contains(&&"not_exists_to_anti_join".to_string()));
     }
-    
+
     #[tokio::test]
     async fn test_optimization_with_sparql_star() {
         let optimizer = AdvancedSubqueryOptimizer::new();
-        
+
         // Query with SPARQL-star features and subqueries
         let query = r#"
             PREFIX ex: <http://example.org/>
@@ -404,9 +431,9 @@ mod integration_tests {
                 ))
             }
         "#;
-        
+
         let result = optimizer.optimize(query).await;
-        
+
         // Should handle SPARQL-star with subqueries
         assert!(result.is_ok());
         if let Ok(opt) = result {

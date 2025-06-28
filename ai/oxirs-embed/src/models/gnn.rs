@@ -3,7 +3,9 @@
 //! This module provides various GNN architectures for knowledge graph embeddings
 //! including GCN, GraphSAGE, GAT, and Graph Transformers.
 
-use crate::{EmbeddingError, EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector};
+use crate::{
+    EmbeddingError, EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector,
+};
 use anyhow::Result;
 use async_trait::async_trait;
 use chrono::Utc;
@@ -71,7 +73,7 @@ pub struct GNNConfig {
     pub hidden_dimensions: Vec<usize>,
     pub dropout: f64,
     pub aggregation: AggregationType,
-    pub num_heads: Option<usize>, // For attention-based models
+    pub num_heads: Option<usize>,        // For attention-based models
     pub sample_neighbors: Option<usize>, // For GraphSAGE
     pub residual_connections: bool,
     pub layer_norm: bool,
@@ -163,10 +165,10 @@ impl GNNEmbedding {
     fn initialize_layers(&mut self) -> Result<()> {
         self.layers.clear();
         let mut rng = rand::thread_rng();
-        
+
         let mut input_dim = self.config.base_config.dimensions;
         let num_layers = self.config.num_layers;
-        
+
         for i in 0..num_layers {
             let output_dim = if i == num_layers - 1 {
                 // Final layer should output back to original embedding dimension
@@ -176,23 +178,23 @@ impl GNNEmbedding {
             } else {
                 self.config.base_config.dimensions
             };
-            
+
             // Initialize weight matrix
             let scale = (2.0 / (input_dim + output_dim) as f32).sqrt();
             let weight_matrix = Array2::from_shape_fn((input_dim, output_dim), |_| {
                 rng.gen::<f32>() * scale * 2.0 - scale
             });
-            
+
             let bias = Array1::zeros(output_dim);
-            
+
             // Initialize attention weights if needed
             let attention_weights = if self.config.gnn_type.requires_attention() {
                 let num_heads = self.config.num_heads.unwrap_or(8);
                 let head_dim = output_dim / num_heads;
-                
+
                 // For multi-head attention, each head processes a portion of the output
                 let attention_dim = head_dim * num_heads; // Should equal output_dim
-                
+
                 Some(AttentionWeights {
                     query_weights: Array2::from_shape_fn((input_dim, attention_dim), |_| {
                         rng.gen::<f32>() * scale * 2.0 - scale
@@ -208,7 +210,7 @@ impl GNNEmbedding {
             } else {
                 None
             };
-            
+
             // Initialize layer normalization if needed
             let layer_norm = if self.config.layer_norm {
                 Some(LayerNormalization {
@@ -219,17 +221,17 @@ impl GNNEmbedding {
             } else {
                 None
             };
-            
+
             self.layers.push(GNNLayer {
                 weight_matrix,
                 bias,
                 attention_weights,
                 layer_norm,
             });
-            
+
             input_dim = output_dim;
         }
-        
+
         Ok(())
     }
 
@@ -237,18 +239,18 @@ impl GNNEmbedding {
     fn build_adjacency_lists(&mut self) {
         self.adjacency_list.clear();
         self.reverse_adjacency_list.clear();
-        
+
         for triple in &self.triples {
             let subject_idx = self.entity_to_idx[&triple.subject.iri];
             let object_idx = self.entity_to_idx[&triple.object.iri];
             let relation_idx = self.relation_to_idx[&triple.predicate.iri];
-            
+
             // Forward adjacency
             self.adjacency_list
                 .entry(subject_idx)
                 .or_default()
                 .insert((object_idx, relation_idx));
-            
+
             // Reverse adjacency
             self.reverse_adjacency_list
                 .entry(object_idx)
@@ -265,9 +267,9 @@ impl GNNEmbedding {
     ) -> Array1<f32> {
         let neighbors = self.adjacency_list.get(&node_idx);
         let reverse_neighbors = self.reverse_adjacency_list.get(&node_idx);
-        
+
         let mut neighbor_features = Vec::new();
-        
+
         // Collect forward neighbors
         if let Some(neighbors) = neighbors {
             for (neighbor_idx, _) in neighbors {
@@ -276,7 +278,7 @@ impl GNNEmbedding {
                 }
             }
         }
-        
+
         // Collect reverse neighbors
         if let Some(reverse_neighbors) = reverse_neighbors {
             for (neighbor_idx, _) in reverse_neighbors {
@@ -285,39 +287,33 @@ impl GNNEmbedding {
                 }
             }
         }
-        
+
         if neighbor_features.is_empty() {
             // Return zero vector if no neighbors
             return Array1::zeros(node_features.values().next().unwrap().len());
         }
-        
+
         // Aggregate based on configuration
         match self.config.aggregation {
             AggregationType::Mean => {
-                let sum: Array1<f32> = neighbor_features.iter().fold(
-                    Array1::zeros(neighbor_features[0].len()),
-                    |acc, x| acc + x,
-                );
+                let sum: Array1<f32> = neighbor_features
+                    .iter()
+                    .fold(Array1::zeros(neighbor_features[0].len()), |acc, x| acc + x);
                 sum / neighbor_features.len() as f32
             }
-            AggregationType::Max => {
-                neighbor_features.iter().fold(
-                    Array1::from_elem(neighbor_features[0].len(), f32::NEG_INFINITY),
-                    |acc, x| {
-                        let mut result = acc.clone();
-                        for (i, &val) in x.iter().enumerate() {
-                            result[i] = result[i].max(val);
-                        }
-                        result
-                    },
-                )
-            }
-            AggregationType::Sum => {
-                neighbor_features.iter().fold(
-                    Array1::zeros(neighbor_features[0].len()),
-                    |acc, x| acc + x,
-                )
-            }
+            AggregationType::Max => neighbor_features.iter().fold(
+                Array1::from_elem(neighbor_features[0].len(), f32::NEG_INFINITY),
+                |acc, x| {
+                    let mut result = acc.clone();
+                    for (i, &val) in x.iter().enumerate() {
+                        result[i] = result[i].max(val);
+                    }
+                    result
+                },
+            ),
+            AggregationType::Sum => neighbor_features
+                .iter()
+                .fold(Array1::zeros(neighbor_features[0].len()), |acc, x| acc + x),
             AggregationType::LSTM => {
                 // Simplified LSTM aggregation - in practice would use actual LSTM
                 self.aggregate_neighbors_lstm(&neighbor_features)
@@ -342,15 +338,17 @@ impl GNNEmbedding {
         node_features: &HashMap<usize, Array1<f32>>,
     ) -> HashMap<usize, Array1<f32>> {
         let mut new_features = HashMap::new();
-        
+
         match self.config.gnn_type {
             GNNType::GCN => self.apply_gcn_layer(layer, node_features, &mut new_features),
-            GNNType::GraphSAGE => self.apply_graphsage_layer(layer, node_features, &mut new_features),
+            GNNType::GraphSAGE => {
+                self.apply_graphsage_layer(layer, node_features, &mut new_features)
+            }
             GNNType::GAT => self.apply_gat_layer(layer, node_features, &mut new_features),
             GNNType::GIN => self.apply_gin_layer(layer, node_features, &mut new_features),
             _ => self.apply_gcn_layer(layer, node_features, &mut new_features), // Default to GCN
         }
-        
+
         new_features
     }
 
@@ -365,17 +363,17 @@ impl GNNEmbedding {
             let aggregated = self.aggregate_neighbors(*node_idx, node_features);
             let combined = feature + &aggregated;
             let transformed = combined.dot(&layer.weight_matrix) + &layer.bias;
-            
+
             // Apply activation (ReLU)
             let activated = transformed.mapv(|x| x.max(0.0));
-            
+
             // Apply layer norm if configured
             let output = if let Some(ln) = &layer.layer_norm {
                 self.apply_layer_norm(&activated, ln)
             } else {
                 activated
             };
-            
+
             new_features.insert(*node_idx, output);
         }
     }
@@ -389,21 +387,21 @@ impl GNNEmbedding {
     ) {
         for (node_idx, feature) in node_features {
             let aggregated = self.aggregate_neighbors(*node_idx, node_features);
-            
+
             // For GraphSAGE, we apply separate transformations and then combine
             // Transform node feature
             let node_transformed = feature.dot(&layer.weight_matrix) + &layer.bias;
-            
+
             // Transform aggregated neighbor features (reuse same weight matrix for simplicity)
             let neighbor_transformed = aggregated.dot(&layer.weight_matrix) + &layer.bias;
-            
+
             // Combine the transformed features
             let combined = &node_transformed + &neighbor_transformed;
-            
+
             // Apply activation and normalization
             let activated = combined.mapv(|x| x.max(0.0));
             let normalized = &activated / (activated.dot(&activated).sqrt() + 1e-6);
-            
+
             new_features.insert(*node_idx, normalized);
         }
     }
@@ -417,7 +415,7 @@ impl GNNEmbedding {
     ) {
         // Simplified GAT - real implementation would compute attention scores
         let attention = layer.attention_weights.as_ref().unwrap();
-        
+
         for (node_idx, feature) in node_features {
             // Get neighbors
             let mut neighbor_indices = Vec::new();
@@ -427,7 +425,7 @@ impl GNNEmbedding {
             if let Some(neighbors) = self.reverse_adjacency_list.get(node_idx) {
                 neighbor_indices.extend(neighbors.iter().map(|(n, _)| *n));
             }
-            
+
             if neighbor_indices.is_empty() {
                 // Apply linear transformation even when no neighbors
                 let transformed = feature.dot(&layer.weight_matrix) + &layer.bias;
@@ -435,7 +433,7 @@ impl GNNEmbedding {
                 new_features.insert(*node_idx, activated);
                 continue;
             }
-            
+
             // Ensure feature dimensions match weight matrix input dimensions
             if feature.len() != attention.query_weights.shape()[0] {
                 // Fallback to simple aggregation if dimensions don't match
@@ -446,22 +444,22 @@ impl GNNEmbedding {
                 new_features.insert(*node_idx, activated);
                 continue;
             }
-            
+
             // Compute attention scores (simplified)
             let query = feature.dot(&attention.query_weights);
             let mut attention_scores = Vec::new();
             let mut neighbor_values = Vec::new();
-            
+
             for neighbor_idx in &neighbor_indices {
                 if let Some(neighbor_feature) = node_features.get(neighbor_idx) {
                     // Check dimension compatibility before computing attention
                     if neighbor_feature.len() != attention.key_weights.shape()[0] {
                         continue;
                     }
-                    
+
                     let key = neighbor_feature.dot(&attention.key_weights);
                     let value = neighbor_feature.dot(&attention.value_weights);
-                    
+
                     // Compute attention score with proper dimension checking
                     if query.len() == key.len() {
                         let score = query.dot(&key) / (attention.num_heads as f32).sqrt();
@@ -470,7 +468,7 @@ impl GNNEmbedding {
                     }
                 }
             }
-            
+
             if attention_scores.is_empty() {
                 // Fallback to simple aggregation if no valid attention scores
                 let aggregated = self.aggregate_neighbors(*node_idx, node_features);
@@ -480,17 +478,22 @@ impl GNNEmbedding {
                 new_features.insert(*node_idx, activated);
                 continue;
             }
-            
+
             // Softmax
-            let max_score = attention_scores.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
-            let exp_scores: Vec<f32> = attention_scores.iter().map(|&s| (s - max_score).exp()).collect();
+            let max_score = attention_scores
+                .iter()
+                .fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+            let exp_scores: Vec<f32> = attention_scores
+                .iter()
+                .map(|&s| (s - max_score).exp())
+                .collect();
             let sum_exp = exp_scores.iter().sum::<f32>();
             let attention_weights: Vec<f32> = exp_scores.iter().map(|&e| e / sum_exp).collect();
-            
+
             // Apply attention with proper output dimensions
             let output_dim = layer.weight_matrix.shape()[1];
             let mut aggregated = Array1::<f32>::zeros(output_dim);
-            
+
             for (i, value) in neighbor_values.iter().enumerate() {
                 // Ensure value dimension matches output dimension
                 let min_dim = aggregated.len().min(value.len());
@@ -498,15 +501,16 @@ impl GNNEmbedding {
                     aggregated[j] += value[j] * attention_weights[i];
                 }
             }
-            
+
             // Apply linear transformation
             let transformed = feature.dot(&layer.weight_matrix) + &layer.bias;
-            let combined = if self.config.residual_connections && transformed.len() == aggregated.len() {
-                transformed + &aggregated
-            } else {
-                transformed
-            };
-            
+            let combined =
+                if self.config.residual_connections && transformed.len() == aggregated.len() {
+                    transformed + &aggregated
+                } else {
+                    transformed
+                };
+
             let activated = combined.mapv(|x| x.max(0.0));
             new_features.insert(*node_idx, activated);
         }
@@ -520,15 +524,15 @@ impl GNNEmbedding {
         new_features: &mut HashMap<usize, Array1<f32>>,
     ) {
         let epsilon = 0.0; // GIN epsilon parameter
-        
+
         for (node_idx, feature) in node_features {
             let aggregated = self.aggregate_neighbors(*node_idx, node_features);
             let combined = (1.0 + epsilon) * feature + aggregated;
-            
+
             // MLP transformation (simplified as single linear layer)
             let transformed = combined.dot(&layer.weight_matrix) + &layer.bias;
             let activated = transformed.mapv(|x| x.max(0.0));
-            
+
             new_features.insert(*node_idx, activated);
         }
     }
@@ -542,16 +546,19 @@ impl GNNEmbedding {
     }
 
     /// Forward pass through all GNN layers
-    fn forward(&self, initial_features: HashMap<usize, Array1<f32>>) -> HashMap<usize, Array1<f32>> {
+    fn forward(
+        &self,
+        initial_features: HashMap<usize, Array1<f32>>,
+    ) -> HashMap<usize, Array1<f32>> {
         let mut features = initial_features;
-        
+
         for layer in self.layers.iter() {
             let new_features = self.apply_layer(layer, &features);
-            
+
             // Apply dropout during training (simplified - always applied here)
             let dropout_rate = self.config.dropout;
             let mut rng = rand::thread_rng();
-            
+
             features = new_features
                 .into_iter()
                 .map(|(idx, feat)| {
@@ -566,7 +573,7 @@ impl GNNEmbedding {
                 })
                 .collect();
         }
-        
+
         features
     }
 }
@@ -590,25 +597,25 @@ impl EmbeddingModel for GNNEmbedding {
         let subject = triple.subject.iri.clone();
         let object = triple.object.iri.clone();
         let predicate = triple.predicate.iri.clone();
-        
+
         if !self.entity_to_idx.contains_key(&subject) {
             let idx = self.entity_to_idx.len();
             self.entity_to_idx.insert(subject.clone(), idx);
             self.idx_to_entity.insert(idx, subject);
         }
-        
+
         if !self.entity_to_idx.contains_key(&object) {
             let idx = self.entity_to_idx.len();
             self.entity_to_idx.insert(object.clone(), idx);
             self.idx_to_entity.insert(idx, object);
         }
-        
+
         if !self.relation_to_idx.contains_key(&predicate) {
             let idx = self.relation_to_idx.len();
             self.relation_to_idx.insert(predicate.clone(), idx);
             self.idx_to_relation.insert(idx, predicate);
         }
-        
+
         self.triples.push(triple);
         self.is_trained = false;
         Ok(())
@@ -617,66 +624,64 @@ impl EmbeddingModel for GNNEmbedding {
     async fn train(&mut self, epochs: Option<usize>) -> Result<TrainingStats> {
         let start_time = std::time::Instant::now();
         let epochs = epochs.unwrap_or(self.config.base_config.max_epochs);
-        
+
         // Build adjacency lists
         self.build_adjacency_lists();
-        
+
         // Initialize layers
         self.initialize_layers()?;
-        
+
         // Initialize random embeddings
         let mut rng = rand::thread_rng();
         let dimensions = self.config.base_config.dimensions;
-        
+
         let mut initial_features = HashMap::new();
         for idx in self.entity_to_idx.values() {
-            let embedding = Array1::from_shape_fn(dimensions, |_| {
-                rng.gen::<f32>() * 0.1 - 0.05
-            });
+            let embedding = Array1::from_shape_fn(dimensions, |_| rng.gen::<f32>() * 0.1 - 0.05);
             initial_features.insert(*idx, embedding);
         }
-        
+
         // Training loop (simplified)
         let mut loss_history = Vec::new();
-        
+
         for _epoch in 0..epochs {
             // Forward pass
             let output_features = self.forward(initial_features.clone());
-            
+
             // Compute loss (simplified - just using L2 regularization)
-            let loss = output_features.values()
+            let loss = output_features
+                .values()
                 .map(|f| f.mapv(|x| x * x).sum())
-                .sum::<f32>() / output_features.len() as f32;
-            
+                .sum::<f32>()
+                / output_features.len() as f32;
+
             loss_history.push(loss as f64);
-            
+
             // Update initial features with output (simplified training)
             initial_features = output_features;
-            
+
             // Early stopping
             if loss < 0.001 {
                 break;
             }
         }
-        
+
         // Store final embeddings
         for (idx, embedding) in initial_features {
             if let Some(entity) = self.idx_to_entity.get(&idx) {
                 self.entity_embeddings.insert(entity.clone(), embedding);
             }
         }
-        
+
         // Generate relation embeddings (simplified - using random initialization)
         for relation in self.relation_to_idx.keys() {
-            let embedding = Array1::from_shape_fn(dimensions, |_| {
-                rng.gen::<f32>() * 0.1 - 0.05
-            });
+            let embedding = Array1::from_shape_fn(dimensions, |_| rng.gen::<f32>() * 0.1 - 0.05);
             self.relation_embeddings.insert(relation.clone(), embedding);
         }
-        
+
         self.is_trained = true;
         self.last_training_time = Some(Utc::now());
-        
+
         Ok(TrainingStats {
             epochs_completed: loss_history.len(),
             final_loss: *loss_history.last().unwrap_or(&0.0),
@@ -690,48 +695,59 @@ impl EmbeddingModel for GNNEmbedding {
         if !self.is_trained {
             return Err(EmbeddingError::ModelNotTrained.into());
         }
-        
+
         self.entity_embeddings
             .get(entity)
             .map(|e| Vector::new(e.to_vec()))
-            .ok_or_else(|| EmbeddingError::EntityNotFound {
-                entity: entity.to_string(),
-            }.into())
+            .ok_or_else(|| {
+                EmbeddingError::EntityNotFound {
+                    entity: entity.to_string(),
+                }
+                .into()
+            })
     }
 
     fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
         if !self.is_trained {
             return Err(EmbeddingError::ModelNotTrained.into());
         }
-        
+
         self.relation_embeddings
             .get(relation)
             .map(|e| Vector::new(e.to_vec()))
-            .ok_or_else(|| EmbeddingError::RelationNotFound {
-                relation: relation.to_string(),
-            }.into())
+            .ok_or_else(|| {
+                EmbeddingError::RelationNotFound {
+                    relation: relation.to_string(),
+                }
+                .into()
+            })
     }
 
     fn score_triple(&self, subject: &str, predicate: &str, object: &str) -> Result<f64> {
         if !self.is_trained {
             return Err(EmbeddingError::ModelNotTrained.into());
         }
-        
-        let subj_emb = self.entity_embeddings.get(subject)
-            .ok_or_else(|| EmbeddingError::EntityNotFound {
-                entity: subject.to_string(),
-            })?;
-        
-        let pred_emb = self.relation_embeddings.get(predicate)
-            .ok_or_else(|| EmbeddingError::RelationNotFound {
+
+        let subj_emb =
+            self.entity_embeddings
+                .get(subject)
+                .ok_or_else(|| EmbeddingError::EntityNotFound {
+                    entity: subject.to_string(),
+                })?;
+
+        let pred_emb = self.relation_embeddings.get(predicate).ok_or_else(|| {
+            EmbeddingError::RelationNotFound {
                 relation: predicate.to_string(),
-            })?;
-        
-        let obj_emb = self.entity_embeddings.get(object)
-            .ok_or_else(|| EmbeddingError::EntityNotFound {
-                entity: object.to_string(),
-            })?;
-        
+            }
+        })?;
+
+        let obj_emb =
+            self.entity_embeddings
+                .get(object)
+                .ok_or_else(|| EmbeddingError::EntityNotFound {
+                    entity: object.to_string(),
+                })?;
+
         // Simple scoring: dot product of transformed embeddings
         let transformed = (subj_emb + pred_emb) * obj_emb;
         Ok(transformed.sum() as f64)
@@ -746,18 +762,18 @@ impl EmbeddingModel for GNNEmbedding {
         if !self.is_trained {
             return Err(EmbeddingError::ModelNotTrained.into());
         }
-        
+
         let mut scores = Vec::new();
-        
+
         for entity in self.entity_to_idx.keys() {
             if let Ok(score) = self.score_triple(subject, predicate, entity) {
                 scores.push((entity.clone(), score));
             }
         }
-        
+
         scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         scores.truncate(k);
-        
+
         Ok(scores)
     }
 
@@ -770,18 +786,18 @@ impl EmbeddingModel for GNNEmbedding {
         if !self.is_trained {
             return Err(EmbeddingError::ModelNotTrained.into());
         }
-        
+
         let mut scores = Vec::new();
-        
+
         for entity in self.entity_to_idx.keys() {
             if let Ok(score) = self.score_triple(entity, predicate, object) {
                 scores.push((entity.clone(), score));
             }
         }
-        
+
         scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         scores.truncate(k);
-        
+
         Ok(scores)
     }
 
@@ -794,18 +810,18 @@ impl EmbeddingModel for GNNEmbedding {
         if !self.is_trained {
             return Err(EmbeddingError::ModelNotTrained.into());
         }
-        
+
         let mut scores = Vec::new();
-        
+
         for relation in self.relation_to_idx.keys() {
             if let Ok(score) = self.score_triple(subject, relation, object) {
                 scores.push((relation.clone(), score));
             }
         }
-        
+
         scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         scores.truncate(k);
-        
+
         Ok(scores)
     }
 
@@ -872,39 +888,39 @@ mod tests {
             hidden_dimensions: vec![64, 32],
             ..Default::default()
         };
-        
+
         let mut model = GNNEmbedding::new(config);
-        
+
         // Add some triples
         let triple1 = Triple::new(
             NamedNode::new("http://example.org/Alice").unwrap(),
             NamedNode::new("http://example.org/knows").unwrap(),
             NamedNode::new("http://example.org/Bob").unwrap(),
         );
-        
+
         let triple2 = Triple::new(
             NamedNode::new("http://example.org/Bob").unwrap(),
             NamedNode::new("http://example.org/knows").unwrap(),
             NamedNode::new("http://example.org/Charlie").unwrap(),
         );
-        
+
         model.add_triple(triple1).unwrap();
         model.add_triple(triple2).unwrap();
-        
+
         // Train the model
         let _stats = model.train(Some(10)).await.unwrap();
         assert!(model.is_trained());
-        
+
         // Get embeddings
-        let alice_emb = model.get_entity_embedding("http://example.org/Alice").unwrap();
+        let alice_emb = model
+            .get_entity_embedding("http://example.org/Alice")
+            .unwrap();
         assert_eq!(alice_emb.dimensions, 100); // Default dimensions
-        
+
         // Test predictions
-        let predictions = model.predict_objects(
-            "http://example.org/Alice",
-            "http://example.org/knows",
-            5
-        ).unwrap();
+        let predictions = model
+            .predict_objects("http://example.org/Alice", "http://example.org/knows", 5)
+            .unwrap();
         assert!(!predictions.is_empty());
     }
 
@@ -913,18 +929,22 @@ mod tests {
         for gnn_type in [GNNType::GCN, GNNType::GraphSAGE, GNNType::GAT, GNNType::GIN] {
             let config = GNNConfig {
                 gnn_type,
-                num_heads: if gnn_type == GNNType::GAT { Some(4) } else { None },
+                num_heads: if gnn_type == GNNType::GAT {
+                    Some(4)
+                } else {
+                    None
+                },
                 ..Default::default()
             };
-            
+
             let mut model = GNNEmbedding::new(config);
-            
+
             let triple = Triple::new(
                 NamedNode::new("http://example.org/A").unwrap(),
                 NamedNode::new("http://example.org/rel").unwrap(),
                 NamedNode::new("http://example.org/B").unwrap(),
             );
-            
+
             model.add_triple(triple).unwrap();
             let _stats = model.train(Some(5)).await.unwrap();
             assert!(model.is_trained());

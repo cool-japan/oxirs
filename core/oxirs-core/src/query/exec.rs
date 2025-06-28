@@ -5,8 +5,8 @@
 use crate::model::*;
 use crate::query::algebra::*;
 use crate::query::plan::ExecutionPlan;
-use crate::Store;
 use crate::OxirsError;
+use crate::Store;
 use std::collections::{HashMap, HashSet};
 
 /// A solution mapping (binding of variables to values)
@@ -60,7 +60,7 @@ impl Solution {
         }
         projected
     }
-    
+
     /// Returns an iterator over the variable-term bindings
     pub fn iter(&self) -> std::collections::hash_map::Iter<Variable, Term> {
         self.bindings.iter()
@@ -115,7 +115,10 @@ impl<'a> QueryExecutor<'a> {
         }
     }
 
-    fn execute_triple_scan(&self, pattern: &crate::model::pattern::TriplePattern) -> Result<Vec<Solution>, OxirsError> {
+    fn execute_triple_scan(
+        &self,
+        pattern: &crate::model::pattern::TriplePattern,
+    ) -> Result<Vec<Solution>, OxirsError> {
         let mut solutions = Vec::new();
 
         // Get all triples from the store
@@ -130,38 +133,30 @@ impl<'a> QueryExecutor<'a> {
         Ok(solutions)
     }
 
-    fn match_triple_pattern(&self, triple: &Triple, pattern: &crate::model::pattern::TriplePattern) -> Option<Solution> {
+    fn match_triple_pattern(
+        &self,
+        triple: &Triple,
+        pattern: &crate::model::pattern::TriplePattern,
+    ) -> Option<Solution> {
         let mut solution = Solution::new();
 
         // Match subject
         if let Some(ref subject_pattern) = pattern.subject {
-            if !self.match_subject_pattern(
-                triple.subject(),
-                subject_pattern,
-                &mut solution,
-            ) {
+            if !self.match_subject_pattern(triple.subject(), subject_pattern, &mut solution) {
                 return None;
             }
         }
 
         // Match predicate
         if let Some(ref predicate_pattern) = pattern.predicate {
-            if !self.match_predicate_pattern(
-                triple.predicate(),
-                predicate_pattern,
-                &mut solution,
-            ) {
+            if !self.match_predicate_pattern(triple.predicate(), predicate_pattern, &mut solution) {
                 return None;
             }
         }
 
         // Match object
         if let Some(ref object_pattern) = pattern.object {
-            if !self.match_object_pattern(
-                triple.object(),
-                object_pattern,
-                &mut solution,
-            ) {
+            if !self.match_object_pattern(triple.object(), object_pattern, &mut solution) {
                 return None;
             }
         }
@@ -212,7 +207,9 @@ impl<'a> QueryExecutor<'a> {
                         _ => false,
                     }
                 } else {
-                    solution.bindings.insert(var.clone(), Term::from_subject(subject));
+                    solution
+                        .bindings
+                        .insert(var.clone(), Term::from_subject(subject));
                     true
                 }
             }
@@ -236,11 +233,15 @@ impl<'a> QueryExecutor<'a> {
                         _ => false,
                     }
                 } else {
-                    solution.bindings.insert(var.clone(), Term::from_predicate(predicate));
+                    solution
+                        .bindings
+                        .insert(var.clone(), Term::from_predicate(predicate));
                     true
                 }
             }
-            PredicatePattern::NamedNode(n) => matches!(predicate, Predicate::NamedNode(nn) if nn == n),
+            PredicatePattern::NamedNode(n) => {
+                matches!(predicate, Predicate::NamedNode(nn) if nn == n)
+            }
         }
     }
 
@@ -261,7 +262,9 @@ impl<'a> QueryExecutor<'a> {
                         _ => false,
                     }
                 } else {
-                    solution.bindings.insert(var.clone(), Term::from_object(object));
+                    solution
+                        .bindings
+                        .insert(var.clone(), Term::from_object(object));
                     true
                 }
             }
@@ -396,15 +399,15 @@ impl<'a> QueryExecutor<'a> {
                                 "http://www.w3.org/2001/XMLSchema#boolean" => {
                                     value.parse::<bool>().ok()
                                 }
-                                "http://www.w3.org/2001/XMLSchema#integer" |
-                                "http://www.w3.org/2001/XMLSchema#decimal" |
-                                "http://www.w3.org/2001/XMLSchema#double" => {
+                                "http://www.w3.org/2001/XMLSchema#integer"
+                                | "http://www.w3.org/2001/XMLSchema#decimal"
+                                | "http://www.w3.org/2001/XMLSchema#double" => {
                                     value.parse::<f64>().map(|n| n != 0.0).ok()
                                 }
                                 "http://www.w3.org/2001/XMLSchema#string" => {
                                     Some(!value.is_empty())
                                 }
-                                _ => Some(!value.is_empty())
+                                _ => Some(!value.is_empty()),
                             }
                         }
                         _ => Some(true), // Non-literal terms are considered true
@@ -416,15 +419,13 @@ impl<'a> QueryExecutor<'a> {
             Expression::Literal(lit) => {
                 let value = lit.as_str();
                 match lit.datatype().as_str() {
-                    "http://www.w3.org/2001/XMLSchema#boolean" => {
-                        value.parse::<bool>().ok()
-                    }
-                    "http://www.w3.org/2001/XMLSchema#integer" |
-                    "http://www.w3.org/2001/XMLSchema#decimal" |
-                    "http://www.w3.org/2001/XMLSchema#double" => {
+                    "http://www.w3.org/2001/XMLSchema#boolean" => value.parse::<bool>().ok(),
+                    "http://www.w3.org/2001/XMLSchema#integer"
+                    | "http://www.w3.org/2001/XMLSchema#decimal"
+                    | "http://www.w3.org/2001/XMLSchema#double" => {
                         value.parse::<f64>().map(|n| n != 0.0).ok()
                     }
-                    _ => Some(!value.is_empty())
+                    _ => Some(!value.is_empty()),
                 }
             }
             Expression::And(left, right) => {
@@ -463,9 +464,7 @@ impl<'a> QueryExecutor<'a> {
             Expression::GreaterOrEqual(left, right) => {
                 self.evaluate_numeric_comparison(left, right, solution, |a, b| a >= b)
             }
-            Expression::Bound(var) => {
-                Some(solution.get(var).is_some())
-            }
+            Expression::Bound(var) => Some(solution.get(var).is_some()),
             Expression::IsIri(expr) => {
                 if let Some(term) = self.evaluate_expression_to_term(expr, solution) {
                     Some(matches!(term, Term::NamedNode(_)))
@@ -490,11 +489,12 @@ impl<'a> QueryExecutor<'a> {
             Expression::IsNumeric(expr) => {
                 if let Some(Term::Literal(lit)) = self.evaluate_expression_to_term(expr, solution) {
                     let datatype_str = lit.datatype().as_str().to_string();
-                    Some(matches!(datatype_str.as_str(),
-                        "http://www.w3.org/2001/XMLSchema#integer" |
-                        "http://www.w3.org/2001/XMLSchema#decimal" |
-                        "http://www.w3.org/2001/XMLSchema#double" |
-                        "http://www.w3.org/2001/XMLSchema#float"
+                    Some(matches!(
+                        datatype_str.as_str(),
+                        "http://www.w3.org/2001/XMLSchema#integer"
+                            | "http://www.w3.org/2001/XMLSchema#decimal"
+                            | "http://www.w3.org/2001/XMLSchema#double"
+                            | "http://www.w3.org/2001/XMLSchema#float"
                     ))
                 } else {
                     Some(false)
@@ -507,13 +507,14 @@ impl<'a> QueryExecutor<'a> {
             Expression::Regex(text_expr, pattern_expr, flags_expr) => {
                 let text = self.evaluate_expression_to_string(text_expr, solution)?;
                 let pattern = self.evaluate_expression_to_string(pattern_expr, solution)?;
-                
+
                 let flags = if let Some(flags_expr) = flags_expr {
-                    self.evaluate_expression_to_string(flags_expr, solution).unwrap_or_default()
+                    self.evaluate_expression_to_string(flags_expr, solution)
+                        .unwrap_or_default()
                 } else {
                     String::new()
                 };
-                
+
                 // Basic regex implementation (would need full regex crate for production)
                 if flags.is_empty() {
                     Some(text.contains(&pattern))
@@ -533,7 +534,7 @@ impl<'a> QueryExecutor<'a> {
             }
         }
     }
-    
+
     /// Evaluate an expression to a term value
     fn evaluate_expression_to_term(&self, expr: &Expression, solution: &Solution) -> Option<Term> {
         match expr {
@@ -558,9 +559,13 @@ impl<'a> QueryExecutor<'a> {
             _ => None, // Other expressions don't directly evaluate to terms
         }
     }
-    
+
     /// Evaluate an expression to a string value
-    fn evaluate_expression_to_string(&self, expr: &Expression, solution: &Solution) -> Option<String> {
+    fn evaluate_expression_to_string(
+        &self,
+        expr: &Expression,
+        solution: &Solution,
+    ) -> Option<String> {
         if let Some(term) = self.evaluate_expression_to_term(expr, solution) {
             match term {
                 Term::NamedNode(n) => Some(n.as_str().to_string()),
@@ -572,7 +577,7 @@ impl<'a> QueryExecutor<'a> {
             None
         }
     }
-    
+
     /// Evaluate a numeric comparison
     fn evaluate_numeric_comparison<F>(
         &self,
@@ -588,18 +593,20 @@ impl<'a> QueryExecutor<'a> {
         let right_val = self.evaluate_expression_to_numeric(right, solution)?;
         Some(comparator(left_val, right_val))
     }
-    
+
     /// Evaluate an expression to a numeric value
-    fn evaluate_expression_to_numeric(&self, expr: &Expression, solution: &Solution) -> Option<f64> {
+    fn evaluate_expression_to_numeric(
+        &self,
+        expr: &Expression,
+        solution: &Solution,
+    ) -> Option<f64> {
         if let Some(Term::Literal(lit)) = self.evaluate_expression_to_term(expr, solution) {
             let value = lit.as_str();
             match lit.datatype().as_str() {
-                "http://www.w3.org/2001/XMLSchema#integer" |
-                "http://www.w3.org/2001/XMLSchema#decimal" |
-                "http://www.w3.org/2001/XMLSchema#double" |
-                "http://www.w3.org/2001/XMLSchema#float" => {
-                    value.parse::<f64>().ok()
-                }
+                "http://www.w3.org/2001/XMLSchema#integer"
+                | "http://www.w3.org/2001/XMLSchema#decimal"
+                | "http://www.w3.org/2001/XMLSchema#double"
+                | "http://www.w3.org/2001/XMLSchema#float" => value.parse::<f64>().ok(),
                 _ => None,
             }
         } else {

@@ -255,7 +255,7 @@ impl FederationCache {
         self.put_entry(&cache_key, entry).await;
     }
 
-    /// Get cached service result 
+    /// Get cached service result
     pub async fn get_service_result(&self, cache_key: &str) -> Option<SparqlResults> {
         if let Some(result) = self.get_query_result(cache_key).await {
             match result {

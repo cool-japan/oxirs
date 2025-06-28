@@ -9,12 +9,12 @@
 //! - Event correlation and causality tracking
 //! - Real-time analytics and metrics computation
 
-use crate::{StreamEvent, EventMetadata};
 use crate::event::StreamEventType;
+use crate::{EventMetadata, StreamEvent};
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, VecDeque, BTreeMap};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::time::{Duration, Instant};
 use tokio::time;
 use tracing::{debug, info, warn};
@@ -26,7 +26,10 @@ pub enum WindowType {
     /// Fixed time-based window
     Tumbling { duration: ChronoDuration },
     /// Overlapping time-based window
-    Sliding { duration: ChronoDuration, slide: ChronoDuration },
+    Sliding {
+        duration: ChronoDuration,
+        slide: ChronoDuration,
+    },
     /// Count-based window
     CountBased { size: usize },
     /// Session-based window (events grouped by activity)
@@ -224,7 +227,7 @@ impl EventProcessor {
         self.update_watermark(event_time).await?;
 
         // Update processing latency
-        self.stats.processing_latency_ms = 
+        self.stats.processing_latency_ms =
             (self.stats.processing_latency_ms + start_time.elapsed().as_millis() as f64) / 2.0;
 
         Ok(results)
@@ -234,10 +237,10 @@ impl EventProcessor {
     pub fn create_window(&mut self, config: WindowConfig) -> String {
         let window_id = Uuid::new_v4().to_string();
         let window = EventWindow::new(window_id.clone(), config);
-        
+
         self.windows.insert(window_id.clone(), window);
         self.stats.windows_created += 1;
-        
+
         info!("Created window: {}", window_id);
         window_id
     }
@@ -260,7 +263,7 @@ impl EventProcessor {
     /// Force trigger all windows
     pub async fn trigger_all_windows(&mut self) -> Result<Vec<WindowResult>> {
         let mut results = Vec::new();
-        
+
         for (window_id, window) in &mut self.windows {
             if !window.events.is_empty() {
                 if let Some(result) = window.trigger("manual").await? {
@@ -269,7 +272,7 @@ impl EventProcessor {
                 }
             }
         }
-        
+
         Ok(results)
     }
 
@@ -317,13 +320,17 @@ impl EventProcessor {
         }
     }
 
-    async fn handle_late_event(&mut self, event: StreamEvent, event_time: DateTime<Utc>) -> Result<()> {
+    async fn handle_late_event(
+        &mut self,
+        event: StreamEvent,
+        event_time: DateTime<Utc>,
+    ) -> Result<()> {
         self.stats.late_events += 1;
-        
+
         // Try to add to existing windows if they allow lateness
         let mut handled = false;
         let window_ids: Vec<String> = self.windows.keys().cloned().collect();
-        
+
         for window_id in window_ids {
             if let Some(window) = self.windows.get(&window_id) {
                 if let Some(allow_lateness) = &window.config.allow_lateness {
@@ -336,24 +343,28 @@ impl EventProcessor {
                 }
             }
         }
-        
+
         if !handled {
             // Store in late events buffer
             self.late_events.push_back((event, event_time));
-            
+
             // Trim buffer if too large
             while self.late_events.len() > self.config.max_late_events {
                 self.late_events.pop_front();
                 self.stats.dropped_events += 1;
             }
-            
+
             warn!("Handled late event with timestamp: {}", event_time);
         }
-        
+
         Ok(())
     }
 
-    async fn add_event_to_window(&mut self, window_id: &str, event: &StreamEvent) -> Result<Option<Vec<WindowResult>>> {
+    async fn add_event_to_window(
+        &mut self,
+        window_id: &str,
+        event: &StreamEvent,
+    ) -> Result<Option<Vec<WindowResult>>> {
         if let Some(window) = self.windows.get_mut(window_id) {
             window.add_event(event.clone()).await
         } else {
@@ -363,11 +374,11 @@ impl EventProcessor {
 
     async fn update_watermark(&mut self, event_time: DateTime<Utc>) -> Result<()> {
         let new_watermark = event_time - self.config.watermark_delay;
-        
+
         if new_watermark > self.watermark {
             self.watermark = new_watermark;
             self.stats.last_watermark = Some(new_watermark);
-            
+
             // Trigger any windows that should fire based on watermark
             let window_ids: Vec<String> = self.windows.keys().cloned().collect();
             for window_id in window_ids {
@@ -382,7 +393,7 @@ impl EventProcessor {
                 }
             }
         }
-        
+
         Ok(())
     }
 }
@@ -401,7 +412,7 @@ impl EventWindow {
             WindowType::Sliding { duration, .. } => Some(start_time + *duration),
             WindowType::Session { .. } => None, // Determined dynamically
             WindowType::CountBased { .. } => None, // No time-based end
-            WindowType::Custom { .. } => None, // Custom logic
+            WindowType::Custom { .. } => None,  // Custom logic
         };
 
         Self {
@@ -430,23 +441,25 @@ impl EventWindow {
     fn update_aggregations(&mut self, event: &StreamEvent) {
         for aggregate in &self.config.aggregates {
             let key = format!("{:?}", aggregate);
-            
+
             match aggregate {
                 AggregateFunction::Count => {
-                    let state = self.aggregation_state
+                    let state = self
+                        .aggregation_state
                         .entry(key)
                         .or_insert(AggregationState::Count(0));
-                    
+
                     if let AggregationState::Count(ref mut count) = state {
                         *count += 1;
                     }
                 }
                 AggregateFunction::Sum { field } => {
                     if let Some(value) = self.extract_numeric_field(event, field) {
-                        let state = self.aggregation_state
+                        let state = self
+                            .aggregation_state
                             .entry(key)
                             .or_insert(AggregationState::Sum(0.0));
-                        
+
                         if let AggregationState::Sum(ref mut sum) = state {
                             *sum += value;
                         }
@@ -454,11 +467,16 @@ impl EventWindow {
                 }
                 AggregateFunction::Average { field } => {
                     if let Some(value) = self.extract_numeric_field(event, field) {
-                        let state = self.aggregation_state
+                        let state = self
+                            .aggregation_state
                             .entry(key)
                             .or_insert(AggregationState::Average { sum: 0.0, count: 0 });
-                        
-                        if let AggregationState::Average { ref mut sum, ref mut count } = state {
+
+                        if let AggregationState::Average {
+                            ref mut sum,
+                            ref mut count,
+                        } = state
+                        {
                             *sum += value;
                             *count += 1;
                         }
@@ -466,10 +484,11 @@ impl EventWindow {
                 }
                 AggregateFunction::Min { field } => {
                     if let Some(value) = self.extract_numeric_field(event, field) {
-                        let state = self.aggregation_state
+                        let state = self
+                            .aggregation_state
                             .entry(key.clone())
                             .or_insert(AggregationState::Min(f64::INFINITY));
-                        
+
                         if let AggregationState::Min(ref mut min_val) = state {
                             if value < *min_val {
                                 *min_val = value;
@@ -479,10 +498,11 @@ impl EventWindow {
                 }
                 AggregateFunction::Max { field } => {
                     if let Some(value) = self.extract_numeric_field(event, field) {
-                        let state = self.aggregation_state
+                        let state = self
+                            .aggregation_state
                             .entry(key.clone())
                             .or_insert(AggregationState::Max(f64::NEG_INFINITY));
-                        
+
                         if let AggregationState::Max(ref mut max_val) = state {
                             if value > *max_val {
                                 *max_val = value;
@@ -492,18 +512,20 @@ impl EventWindow {
                 }
                 AggregateFunction::First => {
                     if !self.aggregation_state.contains_key(&key) {
-                        self.aggregation_state.insert(key, AggregationState::First(event.clone()));
+                        self.aggregation_state
+                            .insert(key, AggregationState::First(event.clone()));
                     }
                 }
                 AggregateFunction::Last => {
-                    self.aggregation_state.insert(key, AggregationState::Last(event.clone()));
+                    self.aggregation_state
+                        .insert(key, AggregationState::Last(event.clone()));
                 }
                 AggregateFunction::Distinct { field } => {
                     if let Some(value) = self.extract_string_field(event, field) {
-                        let state = self.aggregation_state
-                            .entry(key)
-                            .or_insert(AggregationState::Distinct(std::collections::HashSet::new()));
-                        
+                        let state = self.aggregation_state.entry(key).or_insert(
+                            AggregationState::Distinct(std::collections::HashSet::new()),
+                        );
+
                         if let AggregationState::Distinct(ref mut set) = state {
                             set.insert(value);
                         }
@@ -594,7 +616,9 @@ impl EventWindow {
             StreamEvent::SchemaChanged { .. } => "schema_changed".to_string(),
             StreamEvent::SchemaDefinitionAdded { .. } => "schema_definition_added".to_string(),
             StreamEvent::SchemaDefinitionRemoved { .. } => "schema_definition_removed".to_string(),
-            StreamEvent::SchemaDefinitionModified { .. } => "schema_definition_modified".to_string(),
+            StreamEvent::SchemaDefinitionModified { .. } => {
+                "schema_definition_modified".to_string()
+            }
             StreamEvent::OntologyImported { .. } => "ontology_imported".to_string(),
             StreamEvent::OntologyRemoved { .. } => "ontology_removed".to_string(),
             StreamEvent::ConstraintAdded { .. } => "constraint_added".to_string(),
@@ -607,7 +631,9 @@ impl EventWindow {
             StreamEvent::ShapeRemoved { .. } => "shape_removed".to_string(),
             StreamEvent::ShapeModified { .. } => "shape_modified".to_string(),
             StreamEvent::ShapeValidationStarted { .. } => "shape_validation_started".to_string(),
-            StreamEvent::ShapeValidationCompleted { .. } => "shape_validation_completed".to_string(),
+            StreamEvent::ShapeValidationCompleted { .. } => {
+                "shape_validation_completed".to_string()
+            }
             StreamEvent::ShapeViolationDetected { .. } => "shape_violation_detected".to_string(),
             StreamEvent::QueryResultAdded { .. } => "query_result_added".to_string(),
             StreamEvent::QueryResultRemoved { .. } => "query_result_removed".to_string(),
@@ -702,30 +728,34 @@ impl EventWindow {
         }
 
         let mut aggregations = HashMap::new();
-        
+
         for (key, state) in &self.aggregation_state {
             let value = match state {
                 AggregationState::Count(count) => serde_json::Value::Number((*count).into()),
                 AggregationState::Sum(sum) => serde_json::Value::Number(
-                    serde_json::Number::from_f64(*sum).unwrap_or_else(|| 0.into())
+                    serde_json::Number::from_f64(*sum).unwrap_or_else(|| 0.into()),
                 ),
                 AggregationState::Average { sum, count } => {
-                    let avg = if *count > 0 { sum / (*count as f64) } else { 0.0 };
+                    let avg = if *count > 0 {
+                        sum / (*count as f64)
+                    } else {
+                        0.0
+                    };
                     serde_json::Value::Number(
-                        serde_json::Number::from_f64(avg).unwrap_or_else(|| 0.into())
+                        serde_json::Number::from_f64(avg).unwrap_or_else(|| 0.into()),
                     )
                 }
                 AggregationState::Min(min) => serde_json::Value::Number(
-                    serde_json::Number::from_f64(*min).unwrap_or_else(|| 0.into())
+                    serde_json::Number::from_f64(*min).unwrap_or_else(|| 0.into()),
                 ),
                 AggregationState::Max(max) => serde_json::Value::Number(
-                    serde_json::Number::from_f64(*max).unwrap_or_else(|| 0.into())
+                    serde_json::Number::from_f64(*max).unwrap_or_else(|| 0.into()),
                 ),
                 AggregationState::First(_) => serde_json::Value::String("first_event".to_string()),
                 AggregationState::Last(_) => serde_json::Value::String("last_event".to_string()),
                 AggregationState::Distinct(set) => serde_json::Value::Number(set.len().into()),
             };
-            
+
             aggregations.insert(key.clone(), value);
         }
 
@@ -763,8 +793,11 @@ impl EventWindow {
         }
 
         self.last_trigger = Some(Utc::now());
-        
-        debug!("Triggered window {} with {} events", self.id, result.event_count);
+
+        debug!(
+            "Triggered window {} with {} events",
+            self.id, result.event_count
+        );
         Ok(Some(result))
     }
 }
@@ -830,15 +863,15 @@ impl ComplexEventProcessor {
 
     pub async fn process_event(&mut self, event: StreamEvent) -> Result<Vec<PatternMatch>> {
         let event_time = self.extract_event_time(&event);
-        
+
         // Add to buffer
         self.event_buffer.push_back((event.clone(), event_time));
-        
+
         // Trim buffer if too large
         if self.event_buffer.len() > self.buffer_size {
             self.event_buffer.pop_front();
         }
-        
+
         // Check patterns
         let mut matches = Vec::new();
         for pattern in &self.patterns {
@@ -846,7 +879,7 @@ impl ComplexEventProcessor {
                 matches.push(pattern_match);
             }
         }
-        
+
         self.matches.extend(matches.clone());
         Ok(matches)
     }
@@ -906,7 +939,8 @@ impl ComplexEventProcessor {
 
         if confidence > 0.0 {
             // Execute the pattern action
-            self.execute_action(&pattern.action, &matched_events).await?;
+            self.execute_action(&pattern.action, &matched_events)
+                .await?;
 
             Ok(Some(PatternMatch {
                 pattern_name: pattern.name.clone(),
@@ -969,11 +1003,8 @@ impl ComplexEventProcessor {
                     }
                 }
                 PatternCondition::Sequence(seq_conditions) => {
-                    let seq_confidence = self.evaluate_sequence(
-                        seq_conditions,
-                        relevant_events,
-                        matched_events,
-                    )?;
+                    let seq_confidence =
+                        self.evaluate_sequence(seq_conditions, relevant_events, matched_events)?;
                     if seq_confidence > 0.0 {
                         matches += 1;
                         total_confidence += seq_confidence;
@@ -1021,10 +1052,19 @@ impl ComplexEventProcessor {
     ) -> Result<()> {
         match action {
             PatternAction::Log(message) => {
-                info!("Pattern matched: {} ({} events)", message, matched_events.len());
+                info!(
+                    "Pattern matched: {} ({} events)",
+                    message,
+                    matched_events.len()
+                );
             }
             PatternAction::Alert { severity, message } => {
-                warn!("Pattern alert [{}]: {} ({} events)", severity, message, matched_events.len());
+                warn!(
+                    "Pattern alert [{}]: {} ({} events)",
+                    severity,
+                    message,
+                    matched_events.len()
+                );
             }
             PatternAction::Emit(_event) => {
                 // In a real implementation, this would emit a new event to a stream
@@ -1087,35 +1127,36 @@ impl ComplexEventProcessor {
     fn match_field_equals(&self, event: &StreamEvent, field: &str, expected_value: &str) -> bool {
         match field {
             "subject" => match event {
-                StreamEvent::TripleAdded { subject, .. } |
-                StreamEvent::TripleRemoved { subject, .. } |
-                StreamEvent::QuadAdded { subject, .. } |
-                StreamEvent::QuadRemoved { subject, .. } => subject == expected_value,
+                StreamEvent::TripleAdded { subject, .. }
+                | StreamEvent::TripleRemoved { subject, .. }
+                | StreamEvent::QuadAdded { subject, .. }
+                | StreamEvent::QuadRemoved { subject, .. } => subject == expected_value,
                 _ => false,
             },
             "predicate" => match event {
-                StreamEvent::TripleAdded { predicate, .. } |
-                StreamEvent::TripleRemoved { predicate, .. } |
-                StreamEvent::QuadAdded { predicate, .. } |
-                StreamEvent::QuadRemoved { predicate, .. } => predicate == expected_value,
+                StreamEvent::TripleAdded { predicate, .. }
+                | StreamEvent::TripleRemoved { predicate, .. }
+                | StreamEvent::QuadAdded { predicate, .. }
+                | StreamEvent::QuadRemoved { predicate, .. } => predicate == expected_value,
                 _ => false,
             },
             "object" => match event {
-                StreamEvent::TripleAdded { object, .. } |
-                StreamEvent::TripleRemoved { object, .. } |
-                StreamEvent::QuadAdded { object, .. } |
-                StreamEvent::QuadRemoved { object, .. } => object == expected_value,
+                StreamEvent::TripleAdded { object, .. }
+                | StreamEvent::TripleRemoved { object, .. }
+                | StreamEvent::QuadAdded { object, .. }
+                | StreamEvent::QuadRemoved { object, .. } => object == expected_value,
                 _ => false,
             },
             "graph" => match event {
-                StreamEvent::TripleAdded { graph, .. } |
-                StreamEvent::TripleRemoved { graph, .. } => {
+                StreamEvent::TripleAdded { graph, .. }
+                | StreamEvent::TripleRemoved { graph, .. } => {
                     graph.as_ref().map(|g| g == expected_value).unwrap_or(false)
                 }
-                StreamEvent::QuadAdded { graph, .. } |
-                StreamEvent::QuadRemoved { graph, .. } => graph == expected_value,
-                StreamEvent::GraphCreated { graph, .. } |
-                StreamEvent::GraphDeleted { graph, .. } => graph == expected_value,
+                StreamEvent::QuadAdded { graph, .. } | StreamEvent::QuadRemoved { graph, .. } => {
+                    graph == expected_value
+                }
+                StreamEvent::GraphCreated { graph, .. }
+                | StreamEvent::GraphDeleted { graph, .. } => graph == expected_value,
                 StreamEvent::GraphCleared { graph, .. } => {
                     graph.as_ref().map(|g| g == expected_value).unwrap_or(false)
                 }
@@ -1250,18 +1291,18 @@ impl ComplexEventProcessor {
     /// Get event property as string
     fn get_event_property(&self, event: &StreamEvent, property: &str) -> Option<String> {
         match event {
-            StreamEvent::TripleAdded { metadata, .. } |
-            StreamEvent::TripleRemoved { metadata, .. } |
-            StreamEvent::QuadAdded { metadata, .. } |
-            StreamEvent::QuadRemoved { metadata, .. } |
-            StreamEvent::GraphCreated { metadata, .. } |
-            StreamEvent::GraphCleared { metadata, .. } |
-            StreamEvent::GraphDeleted { metadata, .. } |
-            StreamEvent::SparqlUpdate { metadata, .. } |
-            StreamEvent::TransactionBegin { metadata, .. } |
-            StreamEvent::TransactionCommit { metadata, .. } |
-            StreamEvent::TransactionAbort { metadata, .. } |
-            StreamEvent::SchemaChanged { metadata, .. }
+            StreamEvent::TripleAdded { metadata, .. }
+            | StreamEvent::TripleRemoved { metadata, .. }
+            | StreamEvent::QuadAdded { metadata, .. }
+            | StreamEvent::QuadRemoved { metadata, .. }
+            | StreamEvent::GraphCreated { metadata, .. }
+            | StreamEvent::GraphCleared { metadata, .. }
+            | StreamEvent::GraphDeleted { metadata, .. }
+            | StreamEvent::SparqlUpdate { metadata, .. }
+            | StreamEvent::TransactionBegin { metadata, .. }
+            | StreamEvent::TransactionCommit { metadata, .. }
+            | StreamEvent::TransactionAbort { metadata, .. }
+            | StreamEvent::SchemaChanged { metadata, .. }
             | StreamEvent::QueryResultAdded { metadata, .. }
             | StreamEvent::QueryResultRemoved { metadata, .. }
             | StreamEvent::QueryCompleted { metadata, .. } => {
@@ -1334,10 +1375,10 @@ mod tests {
     #[tokio::test]
     async fn test_tumbling_window() {
         let mut processor = EventProcessor::new();
-        
+
         let window_config = WindowConfig {
-            window_type: WindowType::Tumbling { 
-                duration: ChronoDuration::seconds(1) 
+            window_type: WindowType::Tumbling {
+                duration: ChronoDuration::seconds(1),
             },
             aggregates: vec![AggregateFunction::Count],
             group_by: vec![],
@@ -1345,21 +1386,21 @@ mod tests {
             allow_lateness: None,
             trigger: WindowTrigger::OnTime,
         };
-        
+
         let window_id = processor.create_window(window_config);
-        
+
         // Add some events
         let now = Utc::now();
         for i in 0..5 {
             let event = create_test_event("test", now + ChronoDuration::milliseconds(i * 100));
             let results = processor.process_event(event).await.unwrap();
-            
+
             // Should not trigger until window ends
             if i < 4 {
                 assert!(results.is_empty());
             }
         }
-        
+
         // Force trigger
         let results = processor.trigger_all_windows().await.unwrap();
         assert_eq!(results.len(), 1);
@@ -1369,30 +1410,32 @@ mod tests {
     #[tokio::test]
     async fn test_count_based_window() {
         let mut processor = EventProcessor::new();
-        
+
         let window_config = WindowConfig {
             window_type: WindowType::CountBased { size: 3 },
             aggregates: vec![
                 AggregateFunction::Count,
-                AggregateFunction::Sum { field: "value".to_string() },
+                AggregateFunction::Sum {
+                    field: "value".to_string(),
+                },
             ],
             group_by: vec![],
             filter: None,
             allow_lateness: None,
             trigger: WindowTrigger::OnCount(3),
         };
-        
+
         let _window_id = processor.create_window(window_config);
-        
+
         let now = Utc::now();
         let mut total_results = 0;
-        
+
         for i in 0..7 {
             let event = create_test_event("test", now + ChronoDuration::seconds(i));
             let results = processor.process_event(event).await.unwrap();
             total_results += results.len();
         }
-        
+
         // Should have triggered twice (at events 3 and 6)
         assert!(total_results >= 2);
     }
@@ -1400,44 +1443,59 @@ mod tests {
     #[tokio::test]
     async fn test_aggregation_functions() {
         let mut processor = EventProcessor::new();
-        
+
         let window_config = WindowConfig {
             window_type: WindowType::CountBased { size: 5 },
             aggregates: vec![
                 AggregateFunction::Count,
-                AggregateFunction::Sum { field: "value".to_string() },
-                AggregateFunction::Average { field: "value".to_string() },
-                AggregateFunction::Min { field: "value".to_string() },
-                AggregateFunction::Max { field: "value".to_string() },
+                AggregateFunction::Sum {
+                    field: "value".to_string(),
+                },
+                AggregateFunction::Average {
+                    field: "value".to_string(),
+                },
+                AggregateFunction::Min {
+                    field: "value".to_string(),
+                },
+                AggregateFunction::Max {
+                    field: "value".to_string(),
+                },
                 AggregateFunction::First,
                 AggregateFunction::Last,
-                AggregateFunction::Distinct { field: "source".to_string() },
+                AggregateFunction::Distinct {
+                    field: "source".to_string(),
+                },
             ],
             group_by: vec![],
             filter: None,
             allow_lateness: None,
             trigger: WindowTrigger::OnCount(5),
         };
-        
+
         let _window_id = processor.create_window(window_config);
-        
+
         let now = Utc::now();
         for i in 0..5 {
-            let event = create_test_event(&format!("source{}", i % 3), now + ChronoDuration::seconds(i));
+            let event = create_test_event(
+                &format!("source{}", i % 3),
+                now + ChronoDuration::seconds(i),
+            );
             processor.process_event(event).await.unwrap();
         }
-        
+
         let results = processor.trigger_all_windows().await.unwrap();
         assert_eq!(results.len(), 1);
-        
+
         let result = &results[0];
         assert_eq!(result.event_count, 5);
-        
+
         // Check aggregations
         assert!(result.aggregations.contains_key("Count"));
         assert!(result.aggregations.contains_key("Sum { field: \"value\" }"));
-        assert!(result.aggregations.contains_key("Average { field: \"value\" }"));
-        
+        assert!(result
+            .aggregations
+            .contains_key("Average { field: \"value\" }"));
+
         // Count should be 5
         if let Some(count_value) = result.aggregations.get("Count") {
             assert_eq!(count_value.as_u64(), Some(5));
@@ -1447,9 +1505,9 @@ mod tests {
     #[tokio::test]
     async fn test_sliding_window() {
         let mut processor = EventProcessor::new();
-        
+
         let window_config = WindowConfig {
-            window_type: WindowType::Sliding { 
+            window_type: WindowType::Sliding {
                 duration: ChronoDuration::seconds(5),
                 slide: ChronoDuration::seconds(1),
             },
@@ -1459,15 +1517,15 @@ mod tests {
             allow_lateness: None,
             trigger: WindowTrigger::OnTime,
         };
-        
+
         let _window_id = processor.create_window(window_config);
-        
+
         let now = Utc::now();
         for i in 0..10 {
             let event = create_test_event("test", now + ChronoDuration::seconds(i));
             processor.process_event(event).await.unwrap();
         }
-        
+
         let stats = processor.get_stats();
         assert_eq!(stats.events_processed, 10);
     }
@@ -1475,10 +1533,10 @@ mod tests {
     #[tokio::test]
     async fn test_late_event_handling() {
         let mut processor = EventProcessor::new();
-        
+
         let window_config = WindowConfig {
-            window_type: WindowType::Tumbling { 
-                duration: ChronoDuration::seconds(1) 
+            window_type: WindowType::Tumbling {
+                duration: ChronoDuration::seconds(1),
             },
             aggregates: vec![AggregateFunction::Count],
             group_by: vec![],
@@ -1486,19 +1544,19 @@ mod tests {
             allow_lateness: Some(ChronoDuration::seconds(2)),
             trigger: WindowTrigger::OnTime,
         };
-        
+
         let _window_id = processor.create_window(window_config);
-        
+
         let now = Utc::now();
-        
+
         // Add a normal event
         let event1 = create_test_event("test", now);
         processor.process_event(event1).await.unwrap();
-        
+
         // Add a late event (from the past)
         let late_event = create_test_event("test", now - ChronoDuration::seconds(10));
         processor.process_event(late_event).await.unwrap();
-        
+
         let stats = processor.get_stats();
         assert_eq!(stats.events_processed, 2);
         assert_eq!(stats.late_events, 1);
@@ -1507,7 +1565,7 @@ mod tests {
     #[tokio::test]
     async fn test_window_creation_and_removal() {
         let mut processor = EventProcessor::new();
-        
+
         let window_config = WindowConfig {
             window_type: WindowType::CountBased { size: 10 },
             aggregates: vec![AggregateFunction::Count],
@@ -1516,13 +1574,13 @@ mod tests {
             allow_lateness: None,
             trigger: WindowTrigger::OnCount(10),
         };
-        
+
         let window_id = processor.create_window(window_config);
         assert_eq!(processor.windows.len(), 1);
-        
+
         processor.remove_window(&window_id).unwrap();
         assert_eq!(processor.windows.len(), 0);
-        
+
         // Try to remove non-existent window
         let result = processor.remove_window("non-existent");
         assert!(result.is_err());
@@ -1531,24 +1589,24 @@ mod tests {
     #[tokio::test]
     async fn test_hybrid_trigger() {
         let mut processor = EventProcessor::new();
-        
+
         let window_config = WindowConfig {
             window_type: WindowType::CountBased { size: 100 },
             aggregates: vec![AggregateFunction::Count],
             group_by: vec![],
             filter: None,
             allow_lateness: None,
-            trigger: WindowTrigger::Hybrid { 
+            trigger: WindowTrigger::Hybrid {
                 time: ChronoDuration::milliseconds(100),
                 count: 3,
             },
         };
-        
+
         let _window_id = processor.create_window(window_config);
-        
+
         let now = Utc::now();
         let mut triggered = false;
-        
+
         // Add events - should trigger on count of 3
         for i in 0..3 {
             let event = create_test_event("test", now + ChronoDuration::milliseconds(i * 10));
@@ -1558,14 +1616,14 @@ mod tests {
                 break;
             }
         }
-        
+
         assert!(triggered);
     }
 
     #[test]
     fn test_complex_event_processor() {
         let mut cep = ComplexEventProcessor::new();
-        
+
         let pattern = EventPattern {
             name: "test_pattern".to_string(),
             conditions: vec![
@@ -1578,7 +1636,7 @@ mod tests {
             within: Some(ChronoDuration::seconds(10)),
             action: PatternAction::Log("Pattern matched".to_string()),
         };
-        
+
         cep.add_pattern(pattern);
         assert_eq!(cep.patterns.len(), 1);
     }
@@ -1586,7 +1644,7 @@ mod tests {
     #[tokio::test]
     async fn test_processor_stats() {
         let mut processor = EventProcessor::new();
-        
+
         let window_config = WindowConfig {
             window_type: WindowType::CountBased { size: 2 },
             aggregates: vec![AggregateFunction::Count],
@@ -1595,15 +1653,15 @@ mod tests {
             allow_lateness: None,
             trigger: WindowTrigger::OnCount(2),
         };
-        
+
         let _window_id = processor.create_window(window_config);
-        
+
         let now = Utc::now();
         for i in 0..5 {
             let event = create_test_event("test", now + ChronoDuration::seconds(i));
             processor.process_event(event).await.unwrap();
         }
-        
+
         let stats = processor.get_stats();
         assert_eq!(stats.events_processed, 5);
         assert!(stats.windows_created >= 1);
@@ -1613,22 +1671,24 @@ mod tests {
     #[test]
     fn test_window_config_serialization() {
         let config = WindowConfig {
-            window_type: WindowType::Tumbling { 
-                duration: ChronoDuration::seconds(60) 
+            window_type: WindowType::Tumbling {
+                duration: ChronoDuration::seconds(60),
             },
             aggregates: vec![
                 AggregateFunction::Count,
-                AggregateFunction::Average { field: "value".to_string() },
+                AggregateFunction::Average {
+                    field: "value".to_string(),
+                },
             ],
             group_by: vec!["source".to_string()],
             filter: Some("event_type = 'triple_added'".to_string()),
             allow_lateness: Some(ChronoDuration::seconds(30)),
             trigger: WindowTrigger::OnTime,
         };
-        
+
         let serialized = serde_json::to_string(&config).unwrap();
         let deserialized: WindowConfig = serde_json::from_str(&serialized).unwrap();
-        
+
         // Verify some key fields
         match deserialized.window_type {
             WindowType::Tumbling { duration } => {
@@ -1636,7 +1696,7 @@ mod tests {
             }
             _ => panic!("Wrong window type"),
         }
-        
+
         assert_eq!(deserialized.aggregates.len(), 2);
         assert_eq!(deserialized.group_by.len(), 1);
     }

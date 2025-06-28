@@ -1,9 +1,9 @@
 //! Example demonstrating pattern matching optimization for SPARQL queries
 
 use oxirs_core::model::*;
-use oxirs_core::query::{PatternOptimizer, PatternExecutor, IndexType};
-use oxirs_core::query::algebra::{TriplePattern as AlgebraTriplePattern, TermPattern};
+use oxirs_core::query::algebra::{TermPattern, TriplePattern as AlgebraTriplePattern};
 use oxirs_core::query::pattern_optimizer::IndexStats;
+use oxirs_core::query::{IndexType, PatternExecutor, PatternOptimizer};
 use oxirs_core::store::IndexedGraph;
 use std::sync::Arc;
 use std::time::Instant;
@@ -75,17 +75,15 @@ fn populate_sample_data(graph: &Arc<IndexedGraph>) -> Result<(), Box<dyn std::er
     Ok(())
 }
 
-fn basic_pattern_optimization(
-    stats: &Arc<IndexStats>,
-) -> Result<(), Box<dyn std::error::Error>> {
+fn basic_pattern_optimization(stats: &Arc<IndexStats>) -> Result<(), Box<dyn std::error::Error>> {
     let optimizer = PatternOptimizer::new(stats.clone());
 
     // Create a simple pattern: ?person rdf:type foaf:Person
     let pattern = AlgebraTriplePattern {
         subject: TermPattern::Variable(Variable::new("person")?),
-        predicate: TermPattern::NamedNode(
-            NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
-        ),
+        predicate: TermPattern::NamedNode(NamedNode::new(
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+        )?),
         object: TermPattern::NamedNode(NamedNode::new("http://xmlns.com/foaf/0.1/Person")?),
     };
 
@@ -100,9 +98,7 @@ fn basic_pattern_optimization(
     Ok(())
 }
 
-fn multi_pattern_optimization(
-    stats: &Arc<IndexStats>,
-) -> Result<(), Box<dyn std::error::Error>> {
+fn multi_pattern_optimization(stats: &Arc<IndexStats>) -> Result<(), Box<dyn std::error::Error>> {
     // Update statistics for realistic optimization
     stats.update_predicate_count("http://www.w3.org/1999/02/22-rdf-syntax-ns#type", 100);
     stats.update_predicate_count("http://xmlns.com/foaf/0.1/name", 100);
@@ -124,9 +120,9 @@ fn multi_pattern_optimization(
         // ?person rdf:type foaf:Person
         AlgebraTriplePattern {
             subject: TermPattern::Variable(Variable::new("person")?),
-            predicate: TermPattern::NamedNode(
-                NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?,
-            ),
+            predicate: TermPattern::NamedNode(NamedNode::new(
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+            )?),
             object: TermPattern::NamedNode(NamedNode::new("http://xmlns.com/foaf/0.1/Person")?),
         },
         // ?person foaf:knows ?friend
@@ -174,9 +170,9 @@ fn index_selection_demo(stats: &Arc<IndexStats>) -> Result<(), Box<dyn std::erro
         (
             "Bound subject",
             TriplePattern::new(
-                Some(SubjectPattern::NamedNode(
-                    NamedNode::new("http://example.org/alice")?,
-                )),
+                Some(SubjectPattern::NamedNode(NamedNode::new(
+                    "http://example.org/alice",
+                )?)),
                 None,
                 None,
             ),
@@ -185,9 +181,9 @@ fn index_selection_demo(stats: &Arc<IndexStats>) -> Result<(), Box<dyn std::erro
             "Bound predicate",
             TriplePattern::new(
                 None,
-                Some(PredicatePattern::NamedNode(
-                    NamedNode::new("http://xmlns.com/foaf/0.1/name")?,
-                )),
+                Some(PredicatePattern::NamedNode(NamedNode::new(
+                    "http://xmlns.com/foaf/0.1/name",
+                )?)),
                 None,
             ),
         ),
@@ -202,12 +198,12 @@ fn index_selection_demo(stats: &Arc<IndexStats>) -> Result<(), Box<dyn std::erro
         (
             "Bound subject and predicate",
             TriplePattern::new(
-                Some(SubjectPattern::NamedNode(
-                    NamedNode::new("http://example.org/alice")?,
-                )),
-                Some(PredicatePattern::NamedNode(
-                    NamedNode::new("http://xmlns.com/foaf/0.1/name")?,
-                )),
+                Some(SubjectPattern::NamedNode(NamedNode::new(
+                    "http://example.org/alice",
+                )?)),
+                Some(PredicatePattern::NamedNode(NamedNode::new(
+                    "http://xmlns.com/foaf/0.1/name",
+                )?)),
                 None,
             ),
         ),

@@ -207,12 +207,11 @@ pub trait EmbeddingModel: Send + Sync {
 
 // Re-export main types
 #[cfg(feature = "api-server")]
-pub use api::{ApiState, ApiConfig, start_server};
-pub use caching::{CacheManager, CacheConfig, CachedEmbeddingModel};
+pub use api::{start_server, ApiConfig, ApiState};
+pub use caching::{CacheConfig, CacheManager, CachedEmbeddingModel};
 pub use models::{
-    ComplEx, DistMult, RotatE, TransE,
-    TransformerEmbedding, TransformerType, TransformerConfig, PoolingStrategy,
-    GNNEmbedding, GNNType, GNNConfig, AggregationType
+    AggregationType, ComplEx, DistMult, GNNConfig, GNNEmbedding, GNNType, PoolingStrategy, RotatE,
+    TransE, TransformerConfig, TransformerEmbedding, TransformerType,
 };
 
 #[cfg(feature = "tucker")]

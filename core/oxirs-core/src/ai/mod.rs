@@ -5,15 +5,15 @@
 //! and automated reasoning.
 
 pub mod embeddings;
+pub mod entity_resolution;
 pub mod gnn;
 pub mod neural;
+pub mod relation_extraction;
+pub mod temporal_reasoning;
 pub mod training;
 pub mod vector_store;
-pub mod relation_extraction;
-pub mod entity_resolution;
-pub mod temporal_reasoning;
 
-use crate::model::{Triple, NamedNode, BlankNode, Literal};
+use crate::model::{BlankNode, Literal, NamedNode, Triple};
 use crate::OxirsError;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
@@ -21,41 +21,35 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 pub use embeddings::{
-    KnowledgeGraphEmbedding, TransE, DistMult, ComplEx, 
-    EmbeddingConfig, EmbeddingModelType,
-    TrainingConfig as EmbeddingTrainingConfig, 
-    TrainingMetrics as EmbeddingTrainingMetrics
+    ComplEx, DistMult, EmbeddingConfig, EmbeddingModelType, KnowledgeGraphEmbedding,
+    TrainingConfig as EmbeddingTrainingConfig, TrainingMetrics as EmbeddingTrainingMetrics, TransE,
 };
 pub use gnn::{
-    GraphNeuralNetwork, GnnConfig, GnnArchitecture,
-    MessagePassingType, Aggregation, LayerType
-};
-pub use vector_store::{
-    VectorStore, VectorIndex, SimilarityMetric, VectorQuery
+    Aggregation, GnnArchitecture, GnnConfig, GraphNeuralNetwork, LayerType, MessagePassingType,
 };
 pub use training::{
-    TrainingConfig, Trainer, DefaultTrainer, LossFunction,
-    Optimizer, TrainingMetrics
+    DefaultTrainer, LossFunction, Optimizer, Trainer, TrainingConfig, TrainingMetrics,
 };
+pub use vector_store::{SimilarityMetric, VectorIndex, VectorQuery, VectorStore};
 
 /// AI configuration for the OxiRS platform
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AiConfig {
     /// Enable Graph Neural Networks
     pub enable_gnn: bool,
-    
+
     /// Knowledge graph embedding configuration
     pub embedding_config: EmbeddingConfig,
-    
+
     /// Vector store configuration
     pub vector_store_config: VectorStoreConfig,
-    
+
     /// Training configuration
     pub training_config: TrainingConfig,
-    
+
     /// GPU acceleration settings
     pub gpu_config: GpuConfig,
-    
+
     /// Model cache settings
     pub cache_config: CacheConfig,
 }
@@ -78,19 +72,19 @@ impl Default for AiConfig {
 pub struct VectorStoreConfig {
     /// Vector dimension
     pub dimension: usize,
-    
+
     /// Distance metric for similarity search
     pub metric: SimilarityMetric,
-    
+
     /// Index type for nearest neighbor search
     pub index_type: IndexType,
-    
+
     /// Maximum number of vectors in memory
     pub max_vectors: usize,
-    
+
     /// Enable approximate nearest neighbor search
     pub enable_ann: bool,
-    
+
     /// Number of neighbors for ANN
     pub ann_neighbors: usize,
 }
@@ -116,7 +110,10 @@ pub enum IndexType {
     /// IVF (Inverted File) index
     InvertedFile { clusters: usize },
     /// LSH (Locality-Sensitive Hashing)
-    LocalitySensitiveHashing { hash_tables: usize, hash_length: usize },
+    LocalitySensitiveHashing {
+        hash_tables: usize,
+        hash_length: usize,
+    },
     /// HNSW (Hierarchical Navigable Small World)
     HierarchicalNavigableSmallWorld,
     /// Product Quantization
@@ -128,16 +125,16 @@ pub enum IndexType {
 pub struct GpuConfig {
     /// Enable GPU acceleration
     pub enabled: bool,
-    
+
     /// GPU device ID
     pub device_id: u32,
-    
+
     /// Memory pool size in MB
     pub memory_pool_mb: usize,
-    
+
     /// Batch size for GPU operations
     pub batch_size: usize,
-    
+
     /// Enable mixed precision training
     pub mixed_precision: bool,
 }
@@ -159,16 +156,16 @@ impl Default for GpuConfig {
 pub struct CacheConfig {
     /// Enable model caching
     pub enabled: bool,
-    
+
     /// Cache directory path
     pub cache_dir: String,
-    
+
     /// Maximum cache size in MB
     pub max_size_mb: usize,
-    
+
     /// Cache TTL in seconds
     pub ttl_seconds: u64,
-    
+
     /// Enable compression for cached models
     pub compression: bool,
 }
@@ -189,25 +186,25 @@ impl Default for CacheConfig {
 pub struct AiEngine {
     /// Configuration
     config: AiConfig,
-    
+
     /// Graph Neural Network
     gnn: Option<Arc<dyn GraphNeuralNetwork>>,
-    
+
     /// Knowledge graph embeddings
     embeddings: HashMap<String, Arc<dyn KnowledgeGraphEmbedding>>,
-    
+
     /// Vector store for similarity search
     vector_store: Arc<dyn VectorStore>,
-    
+
     /// Training engine
     trainer: Arc<Mutex<Box<dyn Trainer>>>,
-    
+
     /// Entity resolution module
     entity_resolver: Arc<entity_resolution::EntityResolver>,
-    
+
     /// Relation extraction module
     relation_extractor: Arc<relation_extraction::RelationExtractor>,
-    
+
     /// Temporal reasoning module
     temporal_reasoner: Arc<temporal_reasoning::TemporalReasoner>,
 }
@@ -220,22 +217,47 @@ impl AiEngine {
             default_metric: config.vector_store_config.metric,
             index_type: match config.vector_store_config.index_type {
                 IndexType::Flat => vector_store::IndexType::Flat,
-                IndexType::HierarchicalNavigableSmallWorld => vector_store::IndexType::HNSW { max_connections: 16, ef_construction: 200, ef_search: 50 },
-                IndexType::InvertedFile { clusters } => vector_store::IndexType::IVF { num_clusters: clusters, num_probes: 8 },
-                IndexType::LocalitySensitiveHashing { hash_tables, hash_length } => vector_store::IndexType::LSH { num_tables: hash_tables, hash_length },
-                IndexType::ProductQuantization { subquantizers, bits } => vector_store::IndexType::PQ { num_subquantizers: subquantizers, bits_per_subquantizer: bits },
+                IndexType::HierarchicalNavigableSmallWorld => vector_store::IndexType::HNSW {
+                    max_connections: 16,
+                    ef_construction: 200,
+                    ef_search: 50,
+                },
+                IndexType::InvertedFile { clusters } => vector_store::IndexType::IVF {
+                    num_clusters: clusters,
+                    num_probes: 8,
+                },
+                IndexType::LocalitySensitiveHashing {
+                    hash_tables,
+                    hash_length,
+                } => vector_store::IndexType::LSH {
+                    num_tables: hash_tables,
+                    hash_length,
+                },
+                IndexType::ProductQuantization {
+                    subquantizers,
+                    bits,
+                } => vector_store::IndexType::PQ {
+                    num_subquantizers: subquantizers,
+                    bits_per_subquantizer: bits,
+                },
             },
             enable_cache: config.vector_store_config.enable_ann,
-            cache_size: if config.vector_store_config.max_vectors > 10000 { 10000 } else { config.vector_store_config.max_vectors },
+            cache_size: if config.vector_store_config.max_vectors > 10000 {
+                10000
+            } else {
+                config.vector_store_config.max_vectors
+            },
             cache_ttl: 3600,
             batch_size: 1000,
         };
         let vector_store = vector_store::create_vector_store(&vs_config)?;
-        let trainer = Arc::new(Mutex::new(Box::new(training::DefaultTrainer::new(config.training_config.clone())) as Box<dyn Trainer>));
+        let trainer = Arc::new(Mutex::new(Box::new(training::DefaultTrainer::new(
+            config.training_config.clone(),
+        )) as Box<dyn Trainer>));
         let entity_resolver = Arc::new(entity_resolution::EntityResolver::new(&config)?);
         let relation_extractor = Arc::new(relation_extraction::RelationExtractor::new(&config)?);
         let temporal_reasoner = Arc::new(temporal_reasoning::TemporalReasoner::new(&config)?);
-        
+
         Ok(Self {
             config,
             gnn: None,
@@ -247,14 +269,14 @@ impl AiEngine {
             temporal_reasoner,
         })
     }
-    
+
     /// Initialize Graph Neural Network
     pub async fn initialize_gnn(&mut self, gnn_config: GnnConfig) -> Result<()> {
         let gnn = gnn::create_gnn(gnn_config)?;
         self.gnn = Some(gnn);
         Ok(())
     }
-    
+
     /// Add knowledge graph embedding model
     pub async fn add_embedding_model(
         &mut self,
@@ -264,20 +286,21 @@ impl AiEngine {
         self.embeddings.insert(name, model);
         Ok(())
     }
-    
+
     /// Generate embeddings for RDF graph
     pub async fn generate_embeddings(
         &self,
         model_name: &str,
         triples: &[Triple],
     ) -> Result<Vec<Vec<f32>>> {
-        let model = self.embeddings
+        let model = self
+            .embeddings
             .get(model_name)
             .ok_or_else(|| anyhow!("Embedding model not found: {}", model_name))?;
-        
+
         model.generate_embeddings(triples).await
     }
-    
+
     /// Find similar entities using vector similarity
     pub async fn find_similar_entities(
         &self,
@@ -292,10 +315,10 @@ impl AiEngine {
             filters: None,
             min_similarity: None,
         };
-        
+
         self.vector_store.search(&query).await
     }
-    
+
     /// Predict missing links in knowledge graph
     pub async fn predict_links(
         &self,
@@ -303,13 +326,14 @@ impl AiEngine {
         entities: &[String],
         relations: &[String],
     ) -> Result<Vec<(String, String, String, f32)>> {
-        let model = self.embeddings
+        let model = self
+            .embeddings
             .get(model_name)
             .ok_or_else(|| anyhow!("Embedding model not found: {}", model_name))?;
-        
+
         model.predict_links(entities, relations).await
     }
-    
+
     /// Resolve entity identity across different sources
     pub async fn resolve_entities(
         &self,
@@ -317,7 +341,7 @@ impl AiEngine {
     ) -> Result<Vec<entity_resolution::EntityCluster>> {
         self.entity_resolver.resolve_entities(entities).await
     }
-    
+
     /// Extract relations from text using NLP
     pub async fn extract_relations_from_text(
         &self,
@@ -325,7 +349,7 @@ impl AiEngine {
     ) -> Result<Vec<relation_extraction::ExtractedRelation>> {
         self.relation_extractor.extract_relations(text).await
     }
-    
+
     /// Perform temporal reasoning on knowledge graph
     pub async fn temporal_reasoning(
         &self,
@@ -333,7 +357,7 @@ impl AiEngine {
     ) -> Result<temporal_reasoning::TemporalResult> {
         self.temporal_reasoner.reason(query).await
     }
-    
+
     /// Train embedding model on knowledge graph
     pub async fn train_embedding_model(
         &self,
@@ -341,38 +365,38 @@ impl AiEngine {
         training_data: &[Triple],
         validation_data: &[Triple],
     ) -> Result<TrainingMetrics> {
-        let model = self.embeddings
+        let model = self
+            .embeddings
             .get(model_name)
             .ok_or_else(|| anyhow!("Embedding model not found: {}", model_name))?;
-        
+
         let mut trainer = self.trainer.lock().unwrap();
-        trainer.train_embedding_model(
-            model.clone(),
-            training_data,
-            validation_data,
-        ).await
+        trainer
+            .train_embedding_model(model.clone(), training_data, validation_data)
+            .await
     }
-    
+
     /// Evaluate model performance
     pub async fn evaluate_model(
         &self,
         model_name: &str,
         test_data: &[Triple],
     ) -> Result<EvaluationMetrics> {
-        let model = self.embeddings
+        let model = self
+            .embeddings
             .get(model_name)
             .ok_or_else(|| anyhow!("Embedding model not found: {}", model_name))?;
-        
+
         Ok(EvaluationMetrics::evaluate(model.as_ref(), test_data).await?)
     }
-    
+
     /// Get AI engine statistics
     pub fn get_statistics(&self) -> AiStatistics {
         AiStatistics {
             gnn_enabled: self.gnn.is_some(),
             embedding_models: self.embeddings.len(),
             vector_store_size: self.vector_store.size(),
-            cache_hit_rate: 0.0, // TODO: Implement cache statistics
+            cache_hit_rate: 0.0,  // TODO: Implement cache statistics
             gpu_utilization: 0.0, // TODO: Implement GPU monitoring
         }
     }
@@ -383,18 +407,18 @@ impl AiEngine {
 pub struct EvaluationMetrics {
     /// Mean Reciprocal Rank
     pub mrr: f32,
-    
+
     /// Hits at K (K=1,3,10)
     pub hits_at_1: f32,
     pub hits_at_3: f32,
     pub hits_at_10: f32,
-    
+
     /// Link prediction accuracy
     pub link_prediction_accuracy: f32,
-    
+
     /// Entity resolution F1 score
     pub entity_resolution_f1: f32,
-    
+
     /// Relation extraction precision/recall
     pub relation_extraction_precision: f32,
     pub relation_extraction_recall: f32,
@@ -425,16 +449,16 @@ impl EvaluationMetrics {
 pub struct AiStatistics {
     /// Whether GNN is enabled
     pub gnn_enabled: bool,
-    
+
     /// Number of embedding models loaded
     pub embedding_models: usize,
-    
+
     /// Vector store size
     pub vector_store_size: usize,
-    
+
     /// Cache hit rate
     pub cache_hit_rate: f32,
-    
+
     /// GPU utilization percentage
     pub gpu_utilization: f32,
 }
@@ -443,10 +467,10 @@ pub struct AiStatistics {
 pub trait AiQueryEnhancement {
     /// Enhance SPARQL query with AI insights
     fn enhance_query(&self, query: &str) -> Result<String>;
-    
+
     /// Suggest related entities
     fn suggest_entities(&self, entity: &str) -> Result<Vec<String>>;
-    
+
     /// Expand query with related concepts
     fn expand_query(&self, query: &str) -> Result<Vec<String>>;
 }
@@ -455,10 +479,10 @@ pub trait AiQueryEnhancement {
 pub trait AiDataValidation {
     /// Detect anomalies in RDF data
     fn detect_anomalies(&self, triples: &[Triple]) -> Result<Vec<Anomaly>>;
-    
+
     /// Suggest data quality improvements
     fn suggest_improvements(&self, triples: &[Triple]) -> Result<Vec<Improvement>>;
-    
+
     /// Validate data consistency
     fn validate_consistency(&self, triples: &[Triple]) -> Result<Vec<InconsistencyError>>;
 }
@@ -468,13 +492,13 @@ pub trait AiDataValidation {
 pub struct Anomaly {
     /// Anomaly type
     pub anomaly_type: AnomalyType,
-    
+
     /// Affected triple
     pub triple: Triple,
-    
+
     /// Confidence score
     pub confidence: f32,
-    
+
     /// Description
     pub description: String,
 }
@@ -484,16 +508,16 @@ pub struct Anomaly {
 pub enum AnomalyType {
     /// Outlier value
     Outlier,
-    
+
     /// Missing relation
     MissingRelation,
-    
+
     /// Inconsistent type
     InconsistentType,
-    
+
     /// Duplicate entity
     DuplicateEntity,
-    
+
     /// Invalid format
     InvalidFormat,
 }
@@ -503,13 +527,13 @@ pub enum AnomalyType {
 pub struct Improvement {
     /// Improvement type
     pub improvement_type: ImprovementType,
-    
+
     /// Target triple or pattern
     pub target: String,
-    
+
     /// Suggested action
     pub suggestion: String,
-    
+
     /// Impact score
     pub impact: f32,
 }
@@ -519,16 +543,16 @@ pub struct Improvement {
 pub enum ImprovementType {
     /// Add missing relation
     AddRelation,
-    
+
     /// Merge duplicate entities
     MergeEntities,
-    
+
     /// Correct data type
     CorrectType,
-    
+
     /// Add validation constraint
     AddConstraint,
-    
+
     /// Normalize format
     NormalizeFormat,
 }
@@ -538,13 +562,13 @@ pub enum ImprovementType {
 pub struct InconsistencyError {
     /// Error type
     pub error_type: InconsistencyType,
-    
+
     /// Conflicting triples
     pub triples: Vec<Triple>,
-    
+
     /// Severity level
     pub severity: Severity,
-    
+
     /// Error message
     pub message: String,
 }
@@ -554,13 +578,13 @@ pub struct InconsistencyError {
 pub enum InconsistencyType {
     /// Logical contradiction
     LogicalContradiction,
-    
+
     /// Type violation
     TypeViolation,
-    
+
     /// Cardinality violation
     CardinalityViolation,
-    
+
     /// Domain/range violation
     DomainRangeViolation,
 }
@@ -577,14 +601,14 @@ pub enum Severity {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_ai_engine_creation() {
         let config = AiConfig::default();
         let engine = AiEngine::new(config);
         assert!(engine.is_ok());
     }
-    
+
     #[test]
     fn test_config_serialization() {
         let config = AiConfig::default();

@@ -48,13 +48,13 @@ pub fn register_builtin_functions(registry: &ExtensionRegistry) -> Result<()> {
     registry.register_function(EncodeForUriFunction)?;
     registry.register_function(SubstringBeforeFunction)?;
     registry.register_function(SubstringAfterFunction)?;
-    
+
     // Additional numeric functions
     registry.register_function(CeilFunction)?;
     registry.register_function(FloorFunction)?;
     registry.register_function(RoundFunction)?;
     registry.register_function(RandFunction)?;
-    
+
     // Date/time functions
     registry.register_function(NowFunction)?;
     registry.register_function(YearFunction)?;
@@ -64,14 +64,14 @@ pub fn register_builtin_functions(registry: &ExtensionRegistry) -> Result<()> {
     registry.register_function(MinutesFunction)?;
     registry.register_function(SecondsFunction)?;
     registry.register_function(TimezoneFunction)?;
-    
+
     // Hash functions
     registry.register_function(Md5Function)?;
     registry.register_function(Sha1Function)?;
     registry.register_function(Sha256Function)?;
     registry.register_function(Sha384Function)?;
     registry.register_function(Sha512Function)?;
-    
+
     // Other functions
     registry.register_function(UuidFunction)?;
     registry.register_function(StruuidFunction)?;
@@ -1286,8 +1286,8 @@ impl CustomFunction for YearFunction {
             _ => bail!("year() requires a dateTime literal"),
         };
 
-        let datetime = DateTime::parse_from_rfc3339(datetime_str)
-            .context("Invalid dateTime format")?;
+        let datetime =
+            DateTime::parse_from_rfc3339(datetime_str).context("Invalid dateTime format")?;
         Ok(Value::Integer(datetime.year() as i64))
     }
 }
@@ -1325,8 +1325,8 @@ impl CustomFunction for MonthFunction {
             _ => bail!("month() requires a dateTime literal"),
         };
 
-        let datetime = DateTime::parse_from_rfc3339(datetime_str)
-            .context("Invalid dateTime format")?;
+        let datetime =
+            DateTime::parse_from_rfc3339(datetime_str).context("Invalid dateTime format")?;
         Ok(Value::Integer(datetime.month() as i64))
     }
 }
@@ -1364,8 +1364,8 @@ impl CustomFunction for DayFunction {
             _ => bail!("day() requires a dateTime literal"),
         };
 
-        let datetime = DateTime::parse_from_rfc3339(datetime_str)
-            .context("Invalid dateTime format")?;
+        let datetime =
+            DateTime::parse_from_rfc3339(datetime_str).context("Invalid dateTime format")?;
         Ok(Value::Integer(datetime.day() as i64))
     }
 }
@@ -1403,8 +1403,8 @@ impl CustomFunction for HoursFunction {
             _ => bail!("hours() requires a dateTime literal"),
         };
 
-        let datetime = DateTime::parse_from_rfc3339(datetime_str)
-            .context("Invalid dateTime format")?;
+        let datetime =
+            DateTime::parse_from_rfc3339(datetime_str).context("Invalid dateTime format")?;
         Ok(Value::Integer(datetime.hour() as i64))
     }
 }
@@ -1442,8 +1442,8 @@ impl CustomFunction for MinutesFunction {
             _ => bail!("minutes() requires a dateTime literal"),
         };
 
-        let datetime = DateTime::parse_from_rfc3339(datetime_str)
-            .context("Invalid dateTime format")?;
+        let datetime =
+            DateTime::parse_from_rfc3339(datetime_str).context("Invalid dateTime format")?;
         Ok(Value::Integer(datetime.minute() as i64))
     }
 }
@@ -1481,8 +1481,8 @@ impl CustomFunction for SecondsFunction {
             _ => bail!("seconds() requires a dateTime literal"),
         };
 
-        let datetime = DateTime::parse_from_rfc3339(datetime_str)
-            .context("Invalid dateTime format")?;
+        let datetime =
+            DateTime::parse_from_rfc3339(datetime_str).context("Invalid dateTime format")?;
         Ok(Value::Integer(datetime.second() as i64))
     }
 }
@@ -1520,8 +1520,8 @@ impl CustomFunction for TimezoneFunction {
             _ => bail!("timezone() requires a dateTime literal"),
         };
 
-        let datetime = DateTime::parse_from_rfc3339(datetime_str)
-            .context("Invalid dateTime format")?;
+        let datetime =
+            DateTime::parse_from_rfc3339(datetime_str).context("Invalid dateTime format")?;
         Ok(Value::String(datetime.format("%z").to_string()))
     }
 }
@@ -2026,7 +2026,9 @@ impl CustomFunction for LangMatchesFunction {
         let matches = if lang_range == "*" {
             !lang_tag.is_empty()
         } else {
-            lang_tag.to_lowercase().starts_with(&lang_range.to_lowercase())
+            lang_tag
+                .to_lowercase()
+                .starts_with(&lang_range.to_lowercase())
         };
 
         Ok(Value::Boolean(matches))
@@ -2070,7 +2072,9 @@ impl AggregateState for MinState {
     }
 
     fn result(&self) -> Result<Value> {
-        self.min.clone().ok_or_else(|| anyhow!("No values to aggregate"))
+        self.min
+            .clone()
+            .ok_or_else(|| anyhow!("No values to aggregate"))
     }
 
     fn reset(&mut self) {
@@ -2117,7 +2121,9 @@ impl AggregateState for MaxState {
     }
 
     fn result(&self) -> Result<Value> {
-        self.max.clone().ok_or_else(|| anyhow!("No values to aggregate"))
+        self.max
+            .clone()
+            .ok_or_else(|| anyhow!("No values to aggregate"))
     }
 
     fn reset(&mut self) {
@@ -2215,7 +2221,9 @@ impl AggregateState for SampleState {
     }
 
     fn result(&self) -> Result<Value> {
-        self.sample.clone().ok_or_else(|| anyhow!("No values to sample"))
+        self.sample
+            .clone()
+            .ok_or_else(|| anyhow!("No values to sample"))
     }
 
     fn reset(&mut self) {

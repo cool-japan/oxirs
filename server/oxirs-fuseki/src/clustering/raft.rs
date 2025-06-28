@@ -1,22 +1,22 @@
 //! Raft consensus protocol implementation
 
+use async_trait::async_trait;
+use rand::Rng;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, VecDeque},
     sync::Arc,
     time::{Duration, Instant},
 };
-use async_trait::async_trait;
-use rand::Rng;
-use serde::{Deserialize, Serialize};
 use tokio::{
-    sync::{mpsc, RwLock, Mutex},
+    sync::{mpsc, Mutex, RwLock},
     time::{interval, sleep},
 };
 
 use crate::{
+    clustering::RaftConfig,
     error::{FusekiError, FusekiResult},
     store::Store,
-    clustering::RaftConfig,
 };
 
 /// Raft node states
@@ -286,17 +286,23 @@ impl RaftNode {
                     RpcMessage::AppendEntries(req) => {
                         let resp = node.handle_append_entries(req).await;
                         // Send response back
-                        let _ = node.send_rpc(&from, RpcMessage::AppendEntriesResponse(resp)).await;
+                        let _ = node
+                            .send_rpc(&from, RpcMessage::AppendEntriesResponse(resp))
+                            .await;
                     }
                     RpcMessage::RequestVote(req) => {
                         let resp = node.handle_request_vote(req).await;
                         // Send response back
-                        let _ = node.send_rpc(&from, RpcMessage::RequestVoteResponse(resp)).await;
+                        let _ = node
+                            .send_rpc(&from, RpcMessage::RequestVoteResponse(resp))
+                            .await;
                     }
                     RpcMessage::InstallSnapshot(req) => {
                         let resp = node.handle_install_snapshot(req).await;
                         // Send response back
-                        let _ = node.send_rpc(&from, RpcMessage::InstallSnapshotResponse(resp)).await;
+                        let _ = node
+                            .send_rpc(&from, RpcMessage::InstallSnapshotResponse(resp))
+                            .await;
                     }
                     _ => {}
                 }
@@ -319,7 +325,8 @@ impl RaftNode {
                 let state = *node.state.read().await;
                 if state != RaftState::Leader {
                     let last_heartbeat = *node.election_timer.read().await;
-                    let timeout = rng.gen_range(config.election_timeout.0..config.election_timeout.1);
+                    let timeout =
+                        rng.gen_range(config.election_timeout.0..config.election_timeout.1);
 
                     if last_heartbeat.elapsed() > timeout {
                         // Start election
@@ -365,7 +372,8 @@ impl RaftNode {
                 drop(volatile);
 
                 if commit_index > last_applied {
-                    node.apply_committed_entries(last_applied + 1, commit_index).await;
+                    node.apply_committed_entries(last_applied + 1, commit_index)
+                        .await;
                 }
             }
         });
@@ -459,7 +467,11 @@ impl RaftNode {
                     let next_idx = state.next_index.get(member).copied().unwrap_or(1);
                     let prev_idx = next_idx.saturating_sub(1);
                     let prev_term = if prev_idx > 0 {
-                        persistent.log.get(prev_idx as usize - 1).map(|e| e.term).unwrap_or(0)
+                        persistent
+                            .log
+                            .get(prev_idx as usize - 1)
+                            .map(|e| e.term)
+                            .unwrap_or(0)
                     } else {
                         0
                     };
@@ -564,7 +576,8 @@ impl RaftNode {
         }
 
         // Check if can grant vote
-        let can_vote = persistent.voted_for.is_none() || persistent.voted_for.as_ref() == Some(&req.candidate_id);
+        let can_vote = persistent.voted_for.is_none()
+            || persistent.voted_for.as_ref() == Some(&req.candidate_id);
         let log_ok = self.is_log_up_to_date(&persistent, req.last_log_index, req.last_log_term);
 
         let vote_granted = can_vote && log_ok;
@@ -581,7 +594,10 @@ impl RaftNode {
     }
 
     /// Handle InstallSnapshot RPC
-    async fn handle_install_snapshot(&self, req: InstallSnapshotRequest) -> InstallSnapshotResponse {
+    async fn handle_install_snapshot(
+        &self,
+        req: InstallSnapshotRequest,
+    ) -> InstallSnapshotResponse {
         let current_term = self.persistent.read().await.current_term;
 
         // Reply immediately if term < currentTerm
@@ -595,11 +611,17 @@ impl RaftNode {
     }
 
     /// Check if candidate's log is at least as up-to-date as receiver's log
-    fn is_log_up_to_date(&self, persistent: &PersistentState, last_log_index: u64, last_log_term: u64) -> bool {
+    fn is_log_up_to_date(
+        &self,
+        persistent: &PersistentState,
+        last_log_index: u64,
+        last_log_term: u64,
+    ) -> bool {
         let my_last_index = persistent.log.len() as u64;
         let my_last_term = persistent.log.last().map(|e| e.term).unwrap_or(0);
 
-        last_log_term > my_last_term || (last_log_term == my_last_term && last_log_index >= my_last_index)
+        last_log_term > my_last_term
+            || (last_log_term == my_last_term && last_log_index >= my_last_index)
     }
 
     /// Append a log entry
@@ -621,7 +643,7 @@ impl RaftNode {
     /// Apply committed entries to state machine
     async fn apply_committed_entries(&self, start: u64, end: u64) {
         let persistent = self.persistent.read().await;
-        
+
         for i in start..=end {
             if let Some(entry) = persistent.log.get(i as usize - 1) {
                 // Apply to state machine
@@ -716,7 +738,10 @@ impl RaftNodeRefs {
         }
     }
 
-    async fn handle_install_snapshot(&self, req: InstallSnapshotRequest) -> InstallSnapshotResponse {
+    async fn handle_install_snapshot(
+        &self,
+        req: InstallSnapshotRequest,
+    ) -> InstallSnapshotResponse {
         // Implementation would be similar to RaftNode::handle_install_snapshot
         InstallSnapshotResponse { term: 0 }
     }
@@ -754,7 +779,7 @@ mod tests {
 
         let json = serde_json::to_string(&entry).unwrap();
         let decoded: LogEntry = serde_json::from_str(&json).unwrap();
-        
+
         assert_eq!(decoded.index, entry.index);
         assert_eq!(decoded.term, entry.term);
     }

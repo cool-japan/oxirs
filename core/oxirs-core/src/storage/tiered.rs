@@ -145,7 +145,8 @@ impl TieredStorageEngine {
         // Initialize hot tier
         let hot_capacity = config.tiers.hot_tier.max_size_mb * 1024 * 1024 / 1000; // Approximate
         let hot_tier = Arc::new(Mutex::new(LruCache::new(
-            std::num::NonZeroUsize::new(hot_capacity).unwrap_or(std::num::NonZeroUsize::new(10000).unwrap())
+            std::num::NonZeroUsize::new(hot_capacity)
+                .unwrap_or(std::num::NonZeroUsize::new(10000).unwrap()),
         )));
 
         // Initialize warm tier
@@ -805,17 +806,19 @@ mod tests {
 
     #[tokio::test]
     async fn test_tiered_storage() {
-        let test_dir = format!("/tmp/oxirs_tiered_test_{}", 
+        let test_dir = format!(
+            "/tmp/oxirs_tiered_test_{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
-                .as_millis());
-        
+                .as_millis()
+        );
+
         let mut config = StorageConfig::default();
         config.tiers.warm_tier.path = format!("{}/warm", test_dir);
         config.tiers.cold_tier.path = format!("{}/cold", test_dir);
         config.tiers.archive_tier.backend = ArchiveBackend::Local(format!("{}/archive", test_dir));
-        
+
         let engine = TieredStorageEngine::new(config).await.unwrap();
 
         // Create test triple

@@ -35,8 +35,8 @@
 //!
 //! // Query triples
 //! let results = store.query_triples(
-//!     Some(&subject), 
-//!     None, 
+//!     Some(&subject),
+//!     None,
 //!     None
 //! )?;
 //!
@@ -146,29 +146,29 @@ pub use triple_store::{Quad, Triple, TripleStore, TripleStoreConfig, TripleStore
 #[derive(Debug, Clone)]
 pub struct TdbConfig {
     /// Database location on disk
-    /// 
+    ///
     /// This directory will contain all database files including:
     /// - Node table files (nodes.dat, nodes.idn)
     /// - Triple index files (SPO.bpt, POS.bpt, etc.)
     /// - Transaction logs (txn.log)
     /// - Metadata files (tdb.info, tdb.lock)
     pub location: String,
-    
+
     /// Buffer pool cache size in bytes
-    /// 
+    ///
     /// Controls how much memory is used for caching database pages.
     /// Larger values improve performance but use more memory.
     /// Recommended: 25-50% of available system memory.
     pub cache_size: usize,
-    
+
     /// Enable ACID transaction support
-    /// 
+    ///
     /// When enabled, provides full ACID guarantees with write-ahead logging.
     /// Disable only for read-only workloads or bulk loading scenarios.
     pub enable_transactions: bool,
-    
+
     /// Enable multi-version concurrency control
-    /// 
+    ///
     /// Allows multiple concurrent readers with snapshot isolation.
     /// Provides better performance for read-heavy workloads.
     pub enable_mvcc: bool,
@@ -517,8 +517,8 @@ impl TdbStore {
     ///
     /// // Query specific triple
     /// let specific = store.query_triples(
-    ///     Some(&alice), 
-    ///     Some(&name), 
+    ///     Some(&alice),
+    ///     Some(&name),
     ///     Some(&Term::literal("Alice"))
     /// )?;
     /// assert_eq!(specific.len(), 1);

@@ -80,18 +80,18 @@ impl PageHeader {
     /// Serialize header to bytes (fixed size)
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
         let mut bytes = Vec::with_capacity(Self::SIZE);
-        
+
         // Fixed-size serialization to ensure consistent header size
-        bytes.extend_from_slice(&self.page_id.to_le_bytes());          // 8 bytes
-        bytes.push(self.page_type as u8);                              // 1 byte
-        bytes.extend_from_slice(&self.record_count.to_le_bytes());     // 4 bytes
-        bytes.extend_from_slice(&self.free_space.to_le_bytes());       // 4 bytes
-        bytes.extend_from_slice(&self.next_page.to_le_bytes());        // 8 bytes
-        bytes.extend_from_slice(&self.prev_page.to_le_bytes());        // 8 bytes
-        bytes.extend_from_slice(&self.checksum.to_le_bytes());         // 8 bytes
-        bytes.extend_from_slice(&self.modified.to_le_bytes());         // 8 bytes
-        bytes.extend_from_slice(&self.reserved);                       // 16 bytes
-        
+        bytes.extend_from_slice(&self.page_id.to_le_bytes()); // 8 bytes
+        bytes.push(self.page_type as u8); // 1 byte
+        bytes.extend_from_slice(&self.record_count.to_le_bytes()); // 4 bytes
+        bytes.extend_from_slice(&self.free_space.to_le_bytes()); // 4 bytes
+        bytes.extend_from_slice(&self.next_page.to_le_bytes()); // 8 bytes
+        bytes.extend_from_slice(&self.prev_page.to_le_bytes()); // 8 bytes
+        bytes.extend_from_slice(&self.checksum.to_le_bytes()); // 8 bytes
+        bytes.extend_from_slice(&self.modified.to_le_bytes()); // 8 bytes
+        bytes.extend_from_slice(&self.reserved); // 16 bytes
+
         // Total: 8+1+4+4+8+8+8+8+16 = 65 bytes, pad to 72 for alignment
         bytes.resize(Self::SIZE, 0);
         Ok(bytes)
@@ -100,17 +100,27 @@ impl PageHeader {
     /// Deserialize header from bytes
     pub fn from_bytes(data: &[u8]) -> Result<Self> {
         if data.len() < Self::SIZE {
-            return Err(anyhow!("Insufficient data for page header: {} < {}", data.len(), Self::SIZE));
+            return Err(anyhow!(
+                "Insufficient data for page header: {} < {}",
+                data.len(),
+                Self::SIZE
+            ));
         }
-        
+
         let mut offset = 0;
-        
+
         let page_id = u64::from_le_bytes([
-            data[offset], data[offset+1], data[offset+2], data[offset+3],
-            data[offset+4], data[offset+5], data[offset+6], data[offset+7],
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+            data[offset + 4],
+            data[offset + 5],
+            data[offset + 6],
+            data[offset + 7],
         ]);
         offset += 8;
-        
+
         let page_type = match data[offset] {
             1 => PageType::Data,
             2 => PageType::Index,
@@ -120,44 +130,74 @@ impl PageHeader {
             _ => return Err(anyhow!("Invalid page type: {}", data[offset])),
         };
         offset += 1;
-        
+
         let record_count = u32::from_le_bytes([
-            data[offset], data[offset+1], data[offset+2], data[offset+3],
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
         ]);
         offset += 4;
-        
+
         let free_space = u32::from_le_bytes([
-            data[offset], data[offset+1], data[offset+2], data[offset+3],
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
         ]);
         offset += 4;
-        
+
         let next_page = u64::from_le_bytes([
-            data[offset], data[offset+1], data[offset+2], data[offset+3],
-            data[offset+4], data[offset+5], data[offset+6], data[offset+7],
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+            data[offset + 4],
+            data[offset + 5],
+            data[offset + 6],
+            data[offset + 7],
         ]);
         offset += 8;
-        
+
         let prev_page = u64::from_le_bytes([
-            data[offset], data[offset+1], data[offset+2], data[offset+3],
-            data[offset+4], data[offset+5], data[offset+6], data[offset+7],
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+            data[offset + 4],
+            data[offset + 5],
+            data[offset + 6],
+            data[offset + 7],
         ]);
         offset += 8;
-        
+
         let checksum = u64::from_le_bytes([
-            data[offset], data[offset+1], data[offset+2], data[offset+3],
-            data[offset+4], data[offset+5], data[offset+6], data[offset+7],
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+            data[offset + 4],
+            data[offset + 5],
+            data[offset + 6],
+            data[offset + 7],
         ]);
         offset += 8;
-        
+
         let modified = u64::from_le_bytes([
-            data[offset], data[offset+1], data[offset+2], data[offset+3],
-            data[offset+4], data[offset+5], data[offset+6], data[offset+7],
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+            data[offset + 4],
+            data[offset + 5],
+            data[offset + 6],
+            data[offset + 7],
         ]);
         offset += 8;
-        
+
         let mut reserved = [0u8; 16];
-        reserved.copy_from_slice(&data[offset..offset+16]);
-        
+        reserved.copy_from_slice(&data[offset..offset + 16]);
+
         Ok(Self {
             page_id,
             page_type,
@@ -574,7 +614,7 @@ impl BufferPool {
             };
 
             self.evict_page(page_id)?;
-            
+
             let mut tail = self
                 .lru_tail
                 .lock()
@@ -771,7 +811,7 @@ impl BufferPool {
             .next_page_id
             .lock()
             .map_err(|_| anyhow!("Failed to lock next_page_id"))?;
-        
+
         let id = *next_id;
         *next_id += 1;
         Ok(id)
@@ -872,7 +912,7 @@ mod tests {
         // Create pages up to capacity
         let (page1_id, _) = buffer_pool.create_page(PageType::Data).unwrap();
         let (page2_id, _) = buffer_pool.create_page(PageType::Data).unwrap();
-        
+
         // Check initial stats
         let initial_stats = buffer_pool.get_stats().unwrap();
         assert_eq!(initial_stats.evicted_pages, 0);
@@ -883,7 +923,7 @@ mod tests {
         // Check that eviction occurred during page creation
         let stats = buffer_pool.get_stats().unwrap();
         assert!(stats.evicted_pages > 0);
-        
+
         // Verify buffer pool is at capacity
         let current_count = {
             let pages = buffer_pool.pages.read().unwrap();

@@ -5,8 +5,9 @@
 
 use crate::algebra::{Iri, Literal, Term as AlgebraTerm, Variable};
 use anyhow::{anyhow, bail, Result};
-use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc, Timelike, Datelike};
+use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike, Utc};
 use ordered_float::OrderedFloat;
+use oxirs_core::model::NamedNode;
 use rust_decimal::Decimal;
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -22,7 +23,7 @@ pub const RDF_NS: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
 /// Common XSD datatypes
 pub mod xsd {
     use super::XSD_NS;
-    
+
     pub const STRING: &str = "http://www.w3.org/2001/XMLSchema#string";
     pub const BOOLEAN: &str = "http://www.w3.org/2001/XMLSchema#boolean";
     pub const DECIMAL: &str = "http://www.w3.org/2001/XMLSchema#decimal";
@@ -98,57 +99,56 @@ impl Term {
     pub fn iri(iri: &str) -> Self {
         Term::Iri(iri.to_string())
     }
-    
+
     /// Create a blank node term
     pub fn blank_node(id: &str) -> Self {
         Term::BlankNode(id.to_string())
     }
-    
+
     /// Create a simple literal term
     pub fn literal(value: &str) -> Self {
         Term::Literal(LiteralValue::new_simple(value))
     }
-    
+
     /// Create a typed literal term
     pub fn typed_literal(value: &str, datatype: &str) -> Result<Self> {
         Ok(Term::Literal(LiteralValue::new_typed(value, datatype)?))
     }
-    
+
     /// Create a language-tagged literal
     pub fn lang_literal(value: &str, lang: &str) -> Self {
         Term::Literal(LiteralValue::new_lang(value, lang))
     }
-    
+
     /// Create a variable term
     pub fn variable(name: &str) -> Self {
         Term::Variable(name.to_string())
     }
-    
+
     /// Check if term is a variable
     pub fn is_variable(&self) -> bool {
         matches!(self, Term::Variable(_))
     }
-    
+
     /// Check if term is ground (not a variable)
     pub fn is_ground(&self) -> bool {
         !self.is_variable()
     }
-    
+
     /// Check if term is an IRI
     pub fn is_iri(&self) -> bool {
         matches!(self, Term::Iri(_))
     }
-    
+
     /// Check if term is a blank node
     pub fn is_blank_node(&self) -> bool {
         matches!(self, Term::BlankNode(_))
     }
-    
+
     /// Check if term is a literal
     pub fn is_literal(&self) -> bool {
         matches!(self, Term::Literal(_))
     }
-    
 }
 
 impl LiteralValue {
@@ -161,7 +161,7 @@ impl LiteralValue {
             parsed_value: ParsedValue::String(value.to_string()),
         }
     }
-    
+
     /// Create a language-tagged literal
     pub fn new_lang(value: &str, lang: &str) -> Self {
         Self {
@@ -171,7 +171,7 @@ impl LiteralValue {
             parsed_value: ParsedValue::String(value.to_string()),
         }
     }
-    
+
     /// Create a typed literal
     pub fn new_typed(value: &str, datatype: &str) -> Result<Self> {
         let parsed_value = Self::parse_value(value, datatype)?;
@@ -182,7 +182,7 @@ impl LiteralValue {
             parsed_value,
         })
     }
-    
+
     /// Parse value according to datatype
     fn parse_value(value: &str, datatype: &str) -> Result<ParsedValue> {
         Ok(match datatype {
@@ -196,22 +196,26 @@ impl LiteralValue {
                 ParsedValue::Boolean(b)
             }
             xsd::INTEGER | xsd::LONG | xsd::INT | xsd::SHORT | xsd::BYTE => {
-                let i = value.parse::<i64>()
+                let i = value
+                    .parse::<i64>()
                     .map_err(|_| anyhow!("Invalid integer value: {}", value))?;
                 ParsedValue::Integer(i)
             }
             xsd::DECIMAL => {
-                let d = value.parse::<f64>()
+                let d = value
+                    .parse::<f64>()
                     .map_err(|_| anyhow!("Invalid decimal value: {}", value))?;
                 ParsedValue::Decimal(OrderedFloat(d))
             }
             xsd::FLOAT => {
-                let f = value.parse::<f32>()
+                let f = value
+                    .parse::<f32>()
                     .map_err(|_| anyhow!("Invalid float value: {}", value))?;
                 ParsedValue::Float(OrderedFloat(f))
             }
             xsd::DOUBLE => {
-                let d = value.parse::<f64>()
+                let d = value
+                    .parse::<f64>()
                     .map_err(|_| anyhow!("Invalid double value: {}", value))?;
                 ParsedValue::Double(OrderedFloat(d))
             }
@@ -228,7 +232,10 @@ impl LiteralValue {
             xsd::TIME => {
                 let time = NaiveTime::parse_from_str(value, "%H:%M:%S%.f")
                     .map_err(|_| anyhow!("Invalid time value: {}", value))?;
-                ParsedValue::Time(time.num_seconds_from_midnight() as i64 * 1_000_000_000 + time.nanosecond() as i64)
+                ParsedValue::Time(
+                    time.num_seconds_from_midnight() as i64 * 1_000_000_000
+                        + time.nanosecond() as i64,
+                )
             }
             xsd::HEX_BINARY => {
                 let bytes = hex::decode(value)
@@ -243,7 +250,7 @@ impl LiteralValue {
             _ => ParsedValue::Other,
         })
     }
-    
+
     /// Get effective boolean value
     pub fn effective_boolean_value(&self) -> Result<bool> {
         match &self.parsed_value {
@@ -256,7 +263,7 @@ impl LiteralValue {
             _ => Ok(true),
         }
     }
-    
+
     /// Convert to numeric value
     pub fn to_numeric(&self) -> Result<NumericValue> {
         match &self.parsed_value {
@@ -278,13 +285,15 @@ impl LiteralValue {
             _ => bail!("Cannot convert {} to numeric", self.datatype),
         }
     }
-    
+
     /// Check if literal is numeric
     pub fn is_numeric(&self) -> bool {
         matches!(
             &self.parsed_value,
-            ParsedValue::Integer(_) | ParsedValue::Decimal(_) | 
-            ParsedValue::Float(_) | ParsedValue::Double(_)
+            ParsedValue::Integer(_)
+                | ParsedValue::Decimal(_)
+                | ParsedValue::Float(_)
+                | ParsedValue::Double(_)
         )
     }
 }
@@ -321,22 +330,14 @@ impl NumericValue {
             (Double(a), Double(b)) => (Double(*a), Double(*b)),
         }
     }
-    
+
     /// Convert back to term
     pub fn to_term(&self) -> Term {
         match self {
-            NumericValue::Integer(i) => {
-                Term::typed_literal(&i.to_string(), xsd::INTEGER).unwrap()
-            }
-            NumericValue::Decimal(d) => {
-                Term::typed_literal(&d.to_string(), xsd::DECIMAL).unwrap()
-            }
-            NumericValue::Float(f) => {
-                Term::typed_literal(&f.to_string(), xsd::FLOAT).unwrap()
-            }
-            NumericValue::Double(d) => {
-                Term::typed_literal(&d.to_string(), xsd::DOUBLE).unwrap()
-            }
+            NumericValue::Integer(i) => Term::typed_literal(&i.to_string(), xsd::INTEGER).unwrap(),
+            NumericValue::Decimal(d) => Term::typed_literal(&d.to_string(), xsd::DECIMAL).unwrap(),
+            NumericValue::Float(f) => Term::typed_literal(&f.to_string(), xsd::FLOAT).unwrap(),
+            NumericValue::Double(d) => Term::typed_literal(&d.to_string(), xsd::DOUBLE).unwrap(),
         }
     }
 }
@@ -351,21 +352,21 @@ impl PartialOrd for Term {
 impl Ord for Term {
     fn cmp(&self, other: &Self) -> Ordering {
         use Term::*;
-        
+
         // Order: Unbound < Blank < IRI < Literal
         match (self, other) {
             (Variable(_), Variable(_)) => Ordering::Equal,
             (Variable(_), _) => Ordering::Less,
             (_, Variable(_)) => Ordering::Greater,
-            
+
             (BlankNode(a), BlankNode(b)) => a.cmp(b),
             (BlankNode(_), _) => Ordering::Less,
             (_, BlankNode(_)) => Ordering::Greater,
-            
+
             (Iri(a), Iri(b)) => a.cmp(b),
             (Iri(_), Literal(_)) => Ordering::Less,
             (Literal(_), Iri(_)) => Ordering::Greater,
-            
+
             (Literal(a), Literal(b)) => a.cmp(b),
         }
     }
@@ -381,12 +382,10 @@ impl Ord for LiteralValue {
     fn cmp(&self, other: &Self) -> Ordering {
         // Language tags take precedence
         match (&self.language_tag, &other.language_tag) {
-            (Some(a), Some(b)) => {
-                match a.cmp(b) {
-                    Ordering::Equal => self.lexical_form.cmp(&other.lexical_form),
-                    ord => ord,
-                }
-            }
+            (Some(a), Some(b)) => match a.cmp(b) {
+                Ordering::Equal => self.lexical_form.cmp(&other.lexical_form),
+                ord => ord,
+            },
             (Some(_), None) => Ordering::Less,
             (None, Some(_)) => Ordering::Greater,
             (None, None) => {
@@ -432,14 +431,14 @@ impl BindingContext {
     pub fn new() -> Self {
         Self::default()
     }
-    
+
     /// Bind a variable to a term
     pub fn bind(&mut self, var: &str, term: Term) {
         if let Ok(variable) = Variable::new(var) {
             self.bindings.insert(variable, term);
         }
     }
-    
+
     /// Get binding for a variable
     pub fn get(&self, var: &str) -> Option<&Term> {
         // Check current scope first
@@ -448,7 +447,7 @@ impl BindingContext {
                 return Some(term);
             }
         }
-        
+
         // Check parent scopes
         for scope in self.scopes.iter().rev() {
             if let Ok(variable) = Variable::new(var) {
@@ -457,32 +456,32 @@ impl BindingContext {
                 }
             }
         }
-        
+
         None
     }
-    
+
     /// Check if variable is bound
     pub fn is_bound(&self, var: &str) -> bool {
         self.get(var).is_some()
     }
-    
+
     /// Push new scope
     pub fn push_scope(&mut self) {
         let current = std::mem::take(&mut self.bindings);
         self.scopes.push(current);
     }
-    
+
     /// Pop scope
     pub fn pop_scope(&mut self) {
         if let Some(scope) = self.scopes.pop() {
             self.bindings = scope;
         }
     }
-    
+
     /// Get all bound variables
     pub fn variables(&self) -> Vec<&str> {
         let mut vars: Vec<_> = self.bindings.keys().map(|s| s.as_str()).collect();
-        
+
         for scope in &self.scopes {
             for var in scope.keys() {
                 if !vars.contains(&var.as_str()) {
@@ -490,16 +489,14 @@ impl BindingContext {
                 }
             }
         }
-        
+
         vars
     }
-    
+
     /// Apply bindings to a term
     pub fn apply(&self, term: &Term) -> Term {
         match term {
-            Term::Variable(var) => {
-                self.get(var).cloned().unwrap_or_else(|| term.clone())
-            }
+            Term::Variable(var) => self.get(var).cloned().unwrap_or_else(|| term.clone()),
             _ => term.clone(),
         }
     }
@@ -557,57 +554,52 @@ impl Term {
                 if let Some(lang) = &lit.language {
                     Term::lang_literal(&lit.value, lang)
                 } else if let Some(datatype) = &lit.datatype {
-                    Term::typed_literal(&lit.value, datatype.as_str()).unwrap_or_else(|_| Term::literal(&lit.value))
+                    Term::typed_literal(&lit.value, datatype.as_str())
+                        .unwrap_or_else(|_| Term::literal(&lit.value))
                 } else {
                     Term::literal(&lit.value)
                 }
             }
             AlgebraTerm::BlankNode(bn) => Term::blank_node(bn),
-            AlgebraTerm::Variable(var) => Term::variable(var),
+            AlgebraTerm::Variable(var) => Term::variable(var.as_str()),
         }
     }
 
     /// Convert from term::Term to algebra::Term
     pub fn to_algebra_term(&self) -> AlgebraTerm {
         match self {
-            Term::Iri(iri) => AlgebraTerm::Iri(iri.clone()),
+            Term::Iri(iri) => AlgebraTerm::Iri(NamedNode::new_unchecked(iri)),
             Term::BlankNode(bn) => AlgebraTerm::BlankNode(bn.clone()),
-            Term::Literal(lit_val) => {
-                AlgebraTerm::Literal(Literal {
-                    value: lit_val.lexical_form.clone(),
-                    language: lit_val.language_tag.clone(),
-                    datatype: if lit_val.datatype != xsd::STRING {
-                        Some(lit_val.datatype.clone())
-                    } else {
-                        None
-                    },
-                })
-            }
-            Term::Variable(var) => AlgebraTerm::Variable(var.clone()),
+            Term::Literal(lit_val) => AlgebraTerm::Literal(Literal {
+                value: lit_val.lexical_form.clone(),
+                language: lit_val.language_tag.clone(),
+                datatype: if lit_val.datatype != xsd::STRING {
+                    Some(NamedNode::new_unchecked(&lit_val.datatype))
+                } else {
+                    None
+                },
+            }),
+            Term::Variable(var) => AlgebraTerm::Variable(Variable::new(var).unwrap()),
         }
     }
 
     /// Check if this term represents a truthy value for SPARQL evaluation
     pub fn effective_boolean_value(&self) -> Result<bool> {
         match self {
-            Term::Literal(lit_val) => {
-                match lit_val.datatype.as_str() {
-                    xsd::BOOLEAN => {
-                        Ok(lit_val.lexical_form == "true" || lit_val.lexical_form == "1")
-                    }
-                    xsd::STRING => {
-                        Ok(!lit_val.lexical_form.is_empty())
-                    }
-                    dt if dt.starts_with(XSD_NS) && (
-                        dt.ends_with("integer") || dt.ends_with("decimal") || 
-                        dt.ends_with("double") || dt.ends_with("float")
-                    ) => {
-                        let val = lit_val.lexical_form.parse::<f64>().unwrap_or(0.0);
-                        Ok(val != 0.0 && !val.is_nan())
-                    }
-                    _ => Ok(!lit_val.lexical_form.is_empty())
+            Term::Literal(lit_val) => match lit_val.datatype.as_str() {
+                xsd::BOOLEAN => Ok(lit_val.lexical_form == "true" || lit_val.lexical_form == "1"),
+                xsd::STRING => Ok(!lit_val.lexical_form.is_empty()),
+                dt if dt.starts_with(XSD_NS)
+                    && (dt.ends_with("integer")
+                        || dt.ends_with("decimal")
+                        || dt.ends_with("double")
+                        || dt.ends_with("float")) =>
+                {
+                    let val = lit_val.lexical_form.parse::<f64>().unwrap_or(0.0);
+                    Ok(val != 0.0 && !val.is_nan())
                 }
-            }
+                _ => Ok(!lit_val.lexical_form.is_empty()),
+            },
             Term::Iri(_) | Term::BlankNode(_) => Ok(true),
             Term::Variable(_) => bail!("Cannot evaluate variable as boolean"),
         }
@@ -617,7 +609,9 @@ impl Term {
     pub fn to_numeric(&self) -> Result<NumericValue> {
         match self {
             Term::Literal(lit_val) => lit_val.to_numeric(),
-            Term::Iri(_) | Term::BlankNode(_) => bail!("Cannot convert IRI or blank node to numeric"),
+            Term::Iri(_) | Term::BlankNode(_) => {
+                bail!("Cannot convert IRI or blank node to numeric")
+            }
             Term::Variable(_) => bail!("Cannot convert unbound variable to numeric"),
         }
     }
@@ -626,88 +620,88 @@ impl Term {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_term_creation() {
         let iri = Term::iri("http://example.org/foo");
         assert!(iri.is_iri());
-        
+
         let blank = Term::blank_node("b1");
         assert!(blank.is_blank_node());
-        
+
         let lit = Term::literal("hello");
         assert!(lit.is_literal());
-        
+
         let var = Term::variable("x");
         assert!(var.is_variable());
     }
-    
+
     #[test]
     fn test_typed_literals() {
         let int_lit = Term::typed_literal("42", xsd::INTEGER).unwrap();
         assert!(matches!(int_lit, Term::Literal(_)));
-        
+
         let bool_lit = Term::typed_literal("true", xsd::BOOLEAN).unwrap();
         assert_eq!(bool_lit.effective_boolean_value().unwrap(), true);
-        
+
         let date_lit = Term::typed_literal("2023-01-01", xsd::DATE).unwrap();
         assert!(matches!(date_lit, Term::Literal(_)));
     }
-    
+
     #[test]
     fn test_numeric_conversion() {
         let int_term = Term::typed_literal("42", xsd::INTEGER).unwrap();
         let num = int_term.to_numeric().unwrap();
         assert_eq!(num, NumericValue::Integer(42));
-        
+
         let float_term = Term::typed_literal("3.14", xsd::FLOAT).unwrap();
         let num = float_term.to_numeric().unwrap();
         assert!(matches!(num, NumericValue::Float(_)));
     }
-    
+
     #[test]
     fn test_term_ordering() {
         let var = Term::variable("x");
         let blank = Term::blank_node("b1");
         let iri = Term::iri("http://example.org");
         let lit = Term::literal("test");
-        
+
         assert!(var < blank);
         assert!(blank < iri);
         assert!(iri < lit);
     }
-    
+
     #[test]
     fn test_binding_context() {
         let mut ctx = BindingContext::new();
-        
+
         let term = Term::literal("value");
         ctx.bind("x", term.clone());
-        
+
         assert!(ctx.is_bound("x"));
         assert_eq!(ctx.get("x"), Some(&term));
-        
+
         ctx.push_scope();
         ctx.bind("y", Term::literal("other"));
-        
+
         assert!(ctx.is_bound("x")); // Still visible
         assert!(ctx.is_bound("y"));
-        
+
         ctx.pop_scope();
         assert!(ctx.is_bound("x"));
         assert!(!ctx.is_bound("y")); // No longer visible
     }
-    
+
     #[test]
     fn test_pattern_matching() {
         let mut ctx = BindingContext::new();
-        
+
         let pattern = Term::variable("x");
         let term = Term::literal("test");
-        
+
         assert!(matches_pattern(&pattern, &term, &mut ctx));
         assert_eq!(ctx.get("x"), Some(&term));
-        
+
         // Second match with same variable should check equality
         let term2 = Term::literal("other");
         assert!(!matches_pattern(&pattern, &term2, &mut ctx));

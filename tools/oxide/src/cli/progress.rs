@@ -211,7 +211,8 @@ pub mod helpers {
 
     /// Create a download progress bar
     pub fn download_progress(total_bytes: u64, url: &str) -> ProgressBar {
-        let filename = Path::new(url).file_name()
+        let filename = Path::new(url)
+            .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("file");
 
@@ -234,7 +235,9 @@ pub mod helpers {
             .with_total(total_items)
             .with_style(
                 ProgressStyle::default_bar()
-                    .template("{spinner:.green} {msg:20} [{bar:40.cyan/blue}] {pos}/{len} ({percent}%)")
+                    .template(
+                        "{spinner:.green} {msg:20} [{bar:40.cyan/blue}] {pos}/{len} ({percent}%)",
+                    )
                     .unwrap()
                     .progress_chars("=>-"),
             )
@@ -253,10 +256,10 @@ pub mod helpers {
 pub trait ProgressCallback: Send + Sync {
     /// Update progress
     fn update(&self, current: u64, total: Option<u64>, message: Option<&str>);
-    
+
     /// Mark as completed
     fn finish(&self, message: Option<&str>);
-    
+
     /// Report an error
     fn error(&self, message: &str);
 }
@@ -292,10 +295,8 @@ mod tests {
 
     #[test]
     fn test_progress_builder() {
-        let pb = ProgressBuilder::new("Testing")
-            .with_total(100)
-            .build();
-        
+        let pb = ProgressBuilder::new("Testing").with_total(100).build();
+
         assert_eq!(pb.length().unwrap(), 100);
         pb.finish_and_clear();
     }
@@ -303,13 +304,13 @@ mod tests {
     #[test]
     fn test_progress_tracker() {
         let mut tracker = ProgressTracker::new();
-        
+
         let pb1 = tracker.add_progress("Task 1", ProgressType::Bar(100));
         let pb2 = tracker.add_progress("Task 2", ProgressType::Spinner);
-        
+
         pb1.inc(50);
         pb2.tick();
-        
+
         tracker.finish_all();
     }
 

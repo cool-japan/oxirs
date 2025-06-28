@@ -5,9 +5,11 @@
 
 use crate::indexing::IndexStats;
 use crate::model::Variable;
-use crate::query::algebra::{GraphPattern, TriplePattern, TermPattern, QueryForm, Query as AlgebraQuery};
-use crate::query::sparql_query::Query;
+use crate::query::algebra::{
+    GraphPattern, Query as AlgebraQuery, QueryForm, TermPattern, TriplePattern,
+};
 use crate::query::plan::{ExecutionPlan, QueryPlanner};
+use crate::query::sparql_query::Query;
 use crate::OxirsError;
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, RwLock};
@@ -302,7 +304,10 @@ impl AIQueryOptimizer {
     }
 
     /// Generate candidate execution plans
-    fn generate_candidate_plans(&self, query: &AlgebraQuery) -> Result<Vec<ExecutionPlan>, OxirsError> {
+    fn generate_candidate_plans(
+        &self,
+        query: &AlgebraQuery,
+    ) -> Result<Vec<ExecutionPlan>, OxirsError> {
         let mut candidates = Vec::new();
 
         // Basic plan from base planner
@@ -394,7 +399,10 @@ impl AIQueryOptimizer {
     }
 
     /// Generate index-based execution plans
-    fn generate_index_plans(&self, _query: &AlgebraQuery) -> Result<Vec<ExecutionPlan>, OxirsError> {
+    fn generate_index_plans(
+        &self,
+        _query: &AlgebraQuery,
+    ) -> Result<Vec<ExecutionPlan>, OxirsError> {
         // Would generate plans that leverage specific indexes
         Ok(Vec::new())
     }
@@ -431,7 +439,9 @@ impl AIQueryOptimizer {
                 let mut cost = 100.0;
 
                 // Adjust based on predicate selectivity
-                if let Some(crate::model::pattern::PredicatePattern::NamedNode(pred)) = &pattern.predicate {
+                if let Some(crate::model::pattern::PredicatePattern::NamedNode(pred)) =
+                    &pattern.predicate
+                {
                     if let Some(&pred_cost) = params.scan_costs.get(pred.as_str()) {
                         cost *= pred_cost;
                     }
@@ -637,7 +647,10 @@ impl MultiQueryOptimizer {
     }
 
     /// Optimize multiple queries together
-    pub fn optimize_batch(&self, queries: &[AlgebraQuery]) -> Result<Vec<OptimizedPlan>, OxirsError> {
+    pub fn optimize_batch(
+        &self,
+        queries: &[AlgebraQuery],
+    ) -> Result<Vec<OptimizedPlan>, OxirsError> {
         // Detect common subexpressions
         let common_subs = self.detect_common_subexpressions(queries)?;
 
@@ -679,9 +692,15 @@ impl MultiQueryOptimizer {
                     pattern_key,
                     ExecutionPlan::TripleScan {
                         pattern: crate::model::pattern::TriplePattern::new(
-                            Some(crate::model::pattern::SubjectPattern::Variable(Variable::new("?s").unwrap())),
-                            Some(crate::model::pattern::PredicatePattern::Variable(Variable::new("?p").unwrap())),
-                            Some(crate::model::pattern::ObjectPattern::Variable(Variable::new("?o").unwrap())),
+                            Some(crate::model::pattern::SubjectPattern::Variable(
+                                Variable::new("?s").unwrap(),
+                            )),
+                            Some(crate::model::pattern::PredicatePattern::Variable(
+                                Variable::new("?p").unwrap(),
+                            )),
+                            Some(crate::model::pattern::ObjectPattern::Variable(
+                                Variable::new("?o").unwrap(),
+                            )),
                         ),
                     },
                 );

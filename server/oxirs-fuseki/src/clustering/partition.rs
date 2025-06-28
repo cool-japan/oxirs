@@ -1,18 +1,18 @@
 //! Data partitioning and sharding for distributed storage
 
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use std::{
-    collections::{HashMap, BTreeMap},
+    collections::{BTreeMap, HashMap},
     hash::{Hash, Hasher},
     sync::Arc,
 };
-use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
 use crate::{
-    error::{Error, Result},
+    clustering::{NodeInfo, PartitionConfig, PartitionStrategy},
+    error::{FusekiError, FusekiResult},
     store::Store,
-    clustering::{PartitionConfig, PartitionStrategy, NodeInfo},
 };
 
 /// Partition information
@@ -94,7 +94,7 @@ impl ConsistentHashRing {
         }
 
         let hash = self.hash_key(key);
-        
+
         // Find the first node with hash >= key hash
         if let Some((_, node)) = self.ring.range(hash..).next() {
             Some(node.as_str())
@@ -116,7 +116,7 @@ impl ConsistentHashRing {
 
         // Start from the hash position
         let iter = self.ring.range(hash..).chain(self.ring.iter());
-        
+
         for (_, node) in iter {
             if seen.insert(node.clone()) {
                 nodes.push(node.clone());
@@ -150,7 +150,7 @@ impl PartitionManager {
     /// Create a new partition manager
     pub fn new(config: PartitionConfig, store: Arc<Store>) -> Self {
         let hash_ring = ConsistentHashRing::new(config.vnodes);
-        
+
         Self {
             config,
             partitions: Arc::new(RwLock::new(HashMap::new())),
@@ -165,7 +165,7 @@ impl PartitionManager {
     }
 
     /// Start the partition manager
-    pub async fn start(&self) -> Result<()> {
+    pub async fn start(&self) -> FusekiResult<()> {
         // Initialize partitions
         self.initialize_partitions().await?;
 
@@ -173,18 +173,21 @@ impl PartitionManager {
     }
 
     /// Initialize partitions
-    async fn initialize_partitions(&self) -> Result<()> {
+    async fn initialize_partitions(&self) -> FusekiResult<()> {
         let mut partitions = self.partitions.write().await;
-        
+
         for id in 0..self.config.partition_count {
-            partitions.insert(id, Partition {
+            partitions.insert(
                 id,
-                nodes: vec![],
-                state: PartitionState::Offline,
-                size: 0,
-                key_count: 0,
-                updated_at: chrono::Utc::now().timestamp_millis(),
-            });
+                Partition {
+                    id,
+                    nodes: vec![],
+                    state: PartitionState::Offline,
+                    size: 0,
+                    key_count: 0,
+                    updated_at: chrono::Utc::now().timestamp_millis(),
+                },
+            );
         }
 
         Ok(())
@@ -218,14 +221,16 @@ impl PartitionManager {
     }
 
     /// Assign partitions to nodes
-    pub async fn assign_partitions(&self, nodes: Vec<NodeInfo>) -> Result<()> {
+    pub async fn assign_partitions(&self, nodes: Vec<NodeInfo>) -> FusekiResult<()> {
         if nodes.is_empty() {
-            return Err(Error::Custom("No nodes available for partition assignment".to_string()));
+            return Err(FusekiError::internal(
+                "No nodes available for partition assignment",
+            ));
         }
 
         let mut assignment = self.assignment.write().await;
         let mut hash_ring = self.hash_ring.write().await;
-        
+
         // Clear existing assignments
         assignment.partitions.clear();
         assignment.nodes.clear();
@@ -241,14 +246,17 @@ impl PartitionManager {
 
         // Assign partitions using consistent hashing
         let mut partitions = self.partitions.write().await;
-        
+
         for partition_id in 0..self.config.partition_count {
             let key = format!("partition-{}", partition_id);
-            let assigned_nodes = hash_ring.get_nodes(&key, self.config.rebalancing.max_concurrent_moves);
-            
+            let assigned_nodes =
+                hash_ring.get_nodes(&key, self.config.rebalancing.max_concurrent_moves);
+
             if !assigned_nodes.is_empty() {
-                assignment.partitions.insert(partition_id, assigned_nodes.clone());
-                
+                assignment
+                    .partitions
+                    .insert(partition_id, assigned_nodes.clone());
+
                 // Update node assignments
                 for node_id in &assigned_nodes {
                     if let Some(node_partitions) = assignment.nodes.get_mut(node_id) {
@@ -271,17 +279,17 @@ impl PartitionManager {
     }
 
     /// Check if rebalancing is needed
-    pub async fn check_rebalancing(&self) -> Result<()> {
+    pub async fn check_rebalancing(&self) -> FusekiResult<()> {
         if !self.config.rebalancing.enabled {
             return Ok(());
         }
 
         let assignment = self.assignment.read().await;
         let partitions = self.partitions.read().await;
-        
+
         // Calculate data distribution
         let mut node_sizes: HashMap<String, u64> = HashMap::new();
-        
+
         for (partition_id, partition) in partitions.iter() {
             if let Some(primary_node) = partition.nodes.first() {
                 *node_sizes.entry(primary_node.clone()).or_default() += partition.size;
@@ -295,16 +303,12 @@ impl PartitionManager {
         // Check for imbalance
         let total_size: u64 = node_sizes.values().sum();
         let avg_size = total_size / node_sizes.len() as u64;
-        
+
         for (node_id, size) in &node_sizes {
             let skew = (*size as f64 - avg_size as f64).abs() / avg_size as f64;
-            
+
             if skew > self.config.rebalancing.threshold {
-                tracing::info!(
-                    "Node {} has {} skew, triggering rebalancing",
-                    node_id,
-                    skew
-                );
+                tracing::info!("Node {} has {} skew, triggering rebalancing", node_id, skew);
                 // TODO: Trigger rebalancing
                 break;
             }
@@ -314,21 +318,26 @@ impl PartitionManager {
     }
 
     /// Move a partition to a new node
-    pub async fn move_partition(&self, partition_id: u32, from_node: &str, to_node: &str) -> Result<()> {
+    pub async fn move_partition(
+        &self,
+        partition_id: u32,
+        from_node: &str,
+        to_node: &str,
+    ) -> FusekiResult<()> {
         let mut partitions = self.partitions.write().await;
         let mut assignment = self.assignment.write().await;
-        
+
         // Update partition state
         if let Some(partition) = partitions.get_mut(&partition_id) {
             partition.state = PartitionState::Migrating;
-            
+
             // TODO: Implement actual data migration
-            
+
             // Update assignment
             if let Some(nodes) = partition.nodes.iter_mut().find(|n| *n == from_node) {
                 *nodes = to_node.to_string();
             }
-            
+
             partition.state = PartitionState::Active;
             partition.updated_at = chrono::Utc::now().timestamp_millis();
         }
@@ -337,8 +346,9 @@ impl PartitionManager {
         if let Some(from_partitions) = assignment.nodes.get_mut(from_node) {
             from_partitions.retain(|&id| id != partition_id);
         }
-        
-        assignment.nodes
+
+        assignment
+            .nodes
             .entry(to_node.to_string())
             .or_insert_with(Vec::new)
             .push(partition_id);
@@ -352,21 +362,24 @@ impl PartitionManager {
     pub async fn get_statistics(&self) -> PartitionStatistics {
         let partitions = self.partitions.read().await;
         let assignment = self.assignment.read().await;
-        
+
         let total_partitions = partitions.len();
-        let active_partitions = partitions.values()
+        let active_partitions = partitions
+            .values()
             .filter(|p| p.state == PartitionState::Active)
             .count();
-        let under_replicated = partitions.values()
+        let under_replicated = partitions
+            .values()
             .filter(|p| p.state == PartitionState::UnderReplicated)
             .count();
-        let offline = partitions.values()
+        let offline = partitions
+            .values()
             .filter(|p| p.state == PartitionState::Offline)
             .count();
-        
+
         let total_size: u64 = partitions.values().map(|p| p.size).sum();
         let total_keys: u64 = partitions.values().map(|p| p.key_count).sum();
-        
+
         let mut node_partition_counts = HashMap::new();
         for (node_id, node_partitions) in &assignment.nodes {
             node_partition_counts.insert(node_id.clone(), node_partitions.len());
@@ -403,15 +416,15 @@ mod tests {
     #[test]
     fn test_consistent_hash_ring() {
         let mut ring = ConsistentHashRing::new(3);
-        
+
         ring.add_node("node1");
         ring.add_node("node2");
         ring.add_node("node3");
-        
+
         // Test key assignment
         let node = ring.get_node("test-key").unwrap();
         assert!(["node1", "node2", "node3"].contains(&node));
-        
+
         // Test replication
         let nodes = ring.get_nodes("test-key", 2);
         assert_eq!(nodes.len(), 2);
@@ -425,7 +438,7 @@ mod tests {
             nodes: HashMap::new(),
             version: 1,
         };
-        
+
         assert_eq!(assignment.version, 1);
     }
 }

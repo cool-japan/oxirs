@@ -7,24 +7,19 @@
 //! - Cross-node query coordination
 //! - Split-brain protection
 
-pub mod raft;
+pub mod coordinator;
 pub mod node;
 pub mod partition;
-pub mod coordinator;
+pub mod raft;
 
-use std::{
-    collections::HashMap,
-    net::SocketAddr,
-    sync::Arc,
-    time::Duration,
-};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Duration};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::{
-    error::{Error, Result},
+    error::{FusekiError, FusekiResult},
     store::Store,
 };
 
@@ -270,28 +265,20 @@ impl ClusterManager {
 
         // Initialize Raft node
         let raft_node = Arc::new(
-            raft::RaftNode::new(
-                config.node_id.clone(),
-                config.raft.clone(),
-                store.clone(),
-            ).await?
+            raft::RaftNode::new(config.node_id.clone(), config.raft.clone(), store.clone()).await?,
         );
 
         // Initialize partition manager
-        let partition_manager = Arc::new(
-            partition::PartitionManager::new(
-                config.partitioning.clone(),
-                store.clone(),
-            )
-        );
+        let partition_manager = Arc::new(partition::PartitionManager::new(
+            config.partitioning.clone(),
+            store.clone(),
+        ));
 
         // Initialize query coordinator
-        let coordinator = Arc::new(
-            coordinator::QueryCoordinator::new(
-                config.replication.clone(),
-                store.clone(),
-            )
-        );
+        let coordinator = Arc::new(coordinator::QueryCoordinator::new(
+            config.replication.clone(),
+            store.clone(),
+        ));
 
         let cluster_view = Arc::new(RwLock::new(ClusterView {
             members: HashMap::new(),
@@ -335,7 +322,7 @@ impl ClusterManager {
     /// Join existing cluster
     async fn join_cluster(&self) -> Result<()> {
         tracing::info!("Joining cluster with seeds: {:?}", self.config.seeds);
-        
+
         // Contact seed nodes
         for seed in &self.config.seeds {
             if let Ok(()) = self.contact_seed(seed).await {
@@ -352,13 +339,14 @@ impl ClusterManager {
     /// Bootstrap new cluster
     async fn bootstrap_cluster(&self) -> Result<()> {
         tracing::info!("Bootstrapping new cluster");
-        
+
         // Initialize as single-node cluster
         self.raft_node.bootstrap().await?;
 
         // Update cluster view
         let mut view = self.cluster_view.write().await;
-        view.members.insert(self.node_info.id.clone(), self.node_info.clone());
+        view.members
+            .insert(self.node_info.id.clone(), self.node_info.clone());
         view.leader = Some(self.node_info.id.clone());
         view.version = 1;
 
@@ -406,7 +394,7 @@ impl ClusterManager {
                 interval.tick().await;
                 let now = chrono::Utc::now().timestamp_millis();
                 let mut view = cluster_view.write().await;
-                
+
                 for (_, node) in view.members.iter_mut() {
                     if node.state == NodeState::Active {
                         let elapsed = now - node.last_heartbeat;
@@ -444,12 +432,16 @@ impl ClusterManager {
     /// Get cluster health
     pub async fn get_health(&self) -> ClusterHealth {
         let view = self.cluster_view.read().await;
-        
+
         let total_nodes = view.members.len();
-        let active_nodes = view.members.values()
+        let active_nodes = view
+            .members
+            .values()
             .filter(|n| n.state == NodeState::Active)
             .count();
-        let down_nodes = view.members.values()
+        let down_nodes = view
+            .members
+            .values()
             .filter(|n| n.state == NodeState::Down)
             .count();
 

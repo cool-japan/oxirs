@@ -1,15 +1,14 @@
 //! Example demonstrating zero-copy serialization for efficient RDF processing
 
-use oxirs_core::model::*;
-use oxirs_core::io::{
-    MmapReader, MmapWriter, ZeroCopyDeserialize, ZeroCopySerialize,
-    ZeroCopyTerm, ZeroCopyTriple,
-};
 use bytes::Buf;
+use bytes::{Bytes, BytesMut};
+use oxirs_core::io::{
+    MmapReader, MmapWriter, ZeroCopyDeserialize, ZeroCopySerialize, ZeroCopyTerm, ZeroCopyTriple,
+};
+use oxirs_core::model::*;
 use std::fs;
 use std::time::Instant;
 use tempfile::TempDir;
-use bytes::{Bytes, BytesMut};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== Zero-Copy Serialization Example ===\n");
@@ -48,7 +47,7 @@ fn basic_example() -> Result<(), Box<dyn std::error::Error>> {
     // Serialize to bytes
     let mut buffer = Vec::new();
     triple.serialize_to(&mut buffer)?;
-    
+
     println!("Serialized triple size: {} bytes", buffer.len());
     println!("Calculated size: {} bytes", triple.serialized_size());
 
@@ -101,16 +100,16 @@ fn mmap_example() -> Result<(), Box<dyn std::error::Error>> {
     // Read data using memory-mapped file
     {
         let reader = MmapReader::new(&file_path)?;
-        
+
         println!("Reading triples with zero-copy...");
         let start = Instant::now();
-        
+
         let mut count = 0;
         for result in reader.iter_triples() {
             let triple = result?;
             // Data is accessed directly from mapped memory
             count += 1;
-            
+
             if count <= 3 {
                 match &triple.subject {
                     ZeroCopyTerm::NamedNode(iri) => println!("  Subject: {}", iri.as_str()),
@@ -118,9 +117,9 @@ fn mmap_example() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
-        
+
         println!("Read {} triples in {:?}", count, start.elapsed());
-        
+
         let file_size = fs::metadata(&file_path)?.len();
         println!("File size: {} KB", file_size / 1024);
     }
@@ -197,22 +196,24 @@ fn performance_example() -> Result<(), Box<dyn std::error::Error>> {
     // Measure serialization performance
     let mut total_size = 0;
     let start = Instant::now();
-    
+
     for _ in 0..iterations {
         let mut buf = Vec::with_capacity(test_triple.serialized_size());
         test_triple.serialize_to(&mut buf)?;
         total_size += buf.len();
     }
-    
+
     let serialize_time = start.elapsed();
     let serialize_rate = iterations as f64 / serialize_time.as_secs_f64();
-    
+
     println!("Serialization performance:");
     println!("  Iterations: {}", iterations);
     println!("  Time: {:?}", serialize_time);
     println!("  Rate: {:.0} triples/second", serialize_rate);
-    println!("  Throughput: {:.2} MB/second", 
-        (total_size as f64 / 1024.0 / 1024.0) / serialize_time.as_secs_f64());
+    println!(
+        "  Throughput: {:.2} MB/second",
+        (total_size as f64 / 1024.0 / 1024.0) / serialize_time.as_secs_f64()
+    );
 
     // Prepare data for deserialization test
     let mut buf = Vec::new();
@@ -220,14 +221,14 @@ fn performance_example() -> Result<(), Box<dyn std::error::Error>> {
 
     // Measure deserialization performance
     let start = Instant::now();
-    
+
     for _ in 0..iterations {
         let (_, _) = ZeroCopyTriple::deserialize_from(&buf)?;
     }
-    
+
     let deserialize_time = start.elapsed();
     let deserialize_rate = iterations as f64 / deserialize_time.as_secs_f64();
-    
+
     println!("\nDeserialization performance (zero-copy):");
     println!("  Iterations: {}", iterations);
     println!("  Time: {:?}", deserialize_time);
@@ -239,16 +240,16 @@ fn performance_example() -> Result<(), Box<dyn std::error::Error>> {
 fn large_dataset_example() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = TempDir::new()?;
     let file_path = temp_dir.path().join("large_dataset.rdf.bin");
-    
+
     let num_triples = 100_000;
-    
+
     // Generate and write large dataset
     {
         println!("Generating {} triples...", num_triples);
         let start = Instant::now();
-        
+
         let mut writer = MmapWriter::new(&file_path, 50 * 1024 * 1024)?; // 50MB
-        
+
         for i in 0..num_triples {
             let triple = Triple::new(
                 NamedNode::new(&format!("http://example.org/entity/{}", i))?,
@@ -261,26 +262,26 @@ fn large_dataset_example() -> Result<(), Box<dyn std::error::Error>> {
             );
             writer.write_triple(&triple)?;
         }
-        
+
         writer.finalize()?;
         println!("Generation time: {:?}", start.elapsed());
     }
-    
+
     // Process dataset with zero-copy
     {
         let reader = MmapReader::new(&file_path)?;
         let file_size = fs::metadata(&file_path)?.len();
-        
+
         println!("\nProcessing dataset:");
         println!("  File size: {:.2} MB", file_size as f64 / 1024.0 / 1024.0);
-        
+
         let start = Instant::now();
-        
+
         // Count different types of objects
         let mut literal_count = 0;
         let mut named_node_count = 0;
         let mut blank_node_count = 0;
-        
+
         for result in reader.iter_triples() {
             let triple = result?;
             match &triple.object {
@@ -290,10 +291,10 @@ fn large_dataset_example() -> Result<(), Box<dyn std::error::Error>> {
                 _ => {}
             }
         }
-        
+
         let process_time = start.elapsed();
         let process_rate = num_triples as f64 / process_time.as_secs_f64();
-        
+
         println!("  Processing time: {:?}", process_time);
         println!("  Processing rate: {:.0} triples/second", process_rate);
         println!("  Object types:");

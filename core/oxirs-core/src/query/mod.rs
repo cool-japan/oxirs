@@ -27,34 +27,33 @@ pub use plan::ExecutionPlan;
 
 // Legacy algebra for backward compatibility
 pub use algebra::{
-    PropertyPath as LegacyPropertyPath,
-    Expression as LegacyExpression,
-    GraphPattern as LegacyGraphPattern,
+    Expression as LegacyExpression, GraphPattern as LegacyGraphPattern,
+    PropertyPath as LegacyPropertyPath, TermPattern as LegacyTermPattern,
     TriplePattern as LegacyTriplePattern,
-    TermPattern as LegacyTermPattern,
 };
-pub use binding_optimizer::{BindingSet, BindingOptimizer, BindingIterator, Constraint, TermType};
+pub use binding_optimizer::{BindingIterator, BindingOptimizer, BindingSet, Constraint, TermType};
 pub use distributed::{DistributedConfig, DistributedQueryEngine, FederatedEndpoint};
 pub use gpu::{GpuBackend, GpuQueryExecutor};
 pub use jit::{JitCompiler, JitConfig};
 pub use optimizer::{AIQueryOptimizer, MultiQueryOptimizer};
 pub use parser::*;
-pub use pattern_optimizer::{PatternOptimizer, PatternExecutor, OptimizedPatternPlan, IndexType};
+pub use pattern_optimizer::{IndexType, OptimizedPatternPlan, PatternExecutor, PatternOptimizer};
 pub use pattern_unification::{
-    UnifiedTriplePattern, UnifiedTermPattern, PatternConverter, PatternOptimizer as UnifiedPatternOptimizer,
+    PatternConverter, PatternOptimizer as UnifiedPatternOptimizer, UnifiedTermPattern,
+    UnifiedTriplePattern,
 };
 pub use streaming_results::{
-    StreamingQueryResults, SelectResults, ConstructResults, Solution as StreamingSolution, SolutionMetadata,
-    StreamingConfig, StreamingProgress, StreamingResultBuilder,
+    ConstructResults, SelectResults, Solution as StreamingSolution, SolutionMetadata,
+    StreamingConfig, StreamingProgress, StreamingQueryResults, StreamingResultBuilder,
 };
 pub use wasm::{OptimizationLevel, WasmQueryCompiler, WasmTarget};
 
 // TODO: Temporary compatibility layer for SHACL module
-pub use exec::{QueryResults, Solution, QueryExecutor};
+pub use exec::{QueryExecutor, QueryResults, Solution};
 
-use crate::Store;
-use crate::model::{Term, Subject, Object, Predicate, Variable};
+use crate::model::{Object, Predicate, Subject, Term, Variable};
 use crate::OxirsError;
+use crate::Store;
 use std::collections::HashMap;
 
 /// Simplified QueryResult for SHACL compatibility
@@ -108,7 +107,7 @@ impl QueryEngine {
             executor_config: QueryExecutorConfig::default(),
         }
     }
-    
+
     /// Create a new query engine with custom configuration
     pub fn with_config(config: QueryExecutorConfig) -> Self {
         Self {
@@ -116,34 +115,37 @@ impl QueryEngine {
             executor_config: config,
         }
     }
-    
+
     /// Execute a SPARQL query string against a store
     pub fn query(&self, query_str: &str, store: &Store) -> Result<QueryResult, OxirsError> {
         // Parse the query string
         let parsed_query = self.parser.parse(query_str)?;
-        
+
         // Execute the parsed query
         self.execute_query(&parsed_query, store)
     }
-    
+
     /// Execute a parsed Query object against a store
     pub fn execute_query(&self, query: &Query, store: &Store) -> Result<QueryResult, OxirsError> {
         match query {
-            Query::Select { pattern, dataset, .. } => {
-                self.execute_select_query(pattern, dataset.as_ref(), store)
-            }
-            Query::Ask { pattern, dataset, .. } => {
-                self.execute_ask_query(pattern, dataset.as_ref(), store)
-            }
-            Query::Construct { template, pattern, dataset, .. } => {
-                self.execute_construct_query(template, pattern, dataset.as_ref(), store)
-            }
-            Query::Describe { pattern, dataset, .. } => {
-                self.execute_describe_query(pattern, dataset.as_ref(), store)
-            }
+            Query::Select {
+                pattern, dataset, ..
+            } => self.execute_select_query(pattern, dataset.as_ref(), store),
+            Query::Ask {
+                pattern, dataset, ..
+            } => self.execute_ask_query(pattern, dataset.as_ref(), store),
+            Query::Construct {
+                template,
+                pattern,
+                dataset,
+                ..
+            } => self.execute_construct_query(template, pattern, dataset.as_ref(), store),
+            Query::Describe {
+                pattern, dataset, ..
+            } => self.execute_describe_query(pattern, dataset.as_ref(), store),
         }
     }
-    
+
     /// Execute a SELECT query
     fn execute_select_query(
         &self,
@@ -152,13 +154,13 @@ impl QueryEngine {
         store: &Store,
     ) -> Result<QueryResult, OxirsError> {
         let executor = QueryExecutor::new(store);
-        
+
         // Convert graph pattern to execution plan
         let plan = self.pattern_to_plan(pattern)?;
-        
+
         // Execute the plan
         let solutions = executor.execute(&plan)?;
-        
+
         // Extract variable names and convert solutions
         let variables = self.extract_variables(pattern);
         let bindings: Vec<HashMap<String, Term>> = solutions
@@ -174,10 +176,16 @@ impl QueryEngine {
                 binding
             })
             .collect();
-        
-        Ok(QueryResult::Select { variables: variables.into_iter().map(|v| v.name().to_string()).collect(), bindings })
+
+        Ok(QueryResult::Select {
+            variables: variables
+                .into_iter()
+                .map(|v| v.name().to_string())
+                .collect(),
+            bindings,
+        })
     }
-    
+
     /// Execute an ASK query
     fn execute_ask_query(
         &self,
@@ -186,17 +194,17 @@ impl QueryEngine {
         store: &Store,
     ) -> Result<QueryResult, OxirsError> {
         let executor = QueryExecutor::new(store);
-        
+
         // Convert graph pattern to execution plan
         let plan = self.pattern_to_plan(pattern)?;
-        
+
         // Execute the plan
         let solutions = executor.execute(&plan)?;
-        
+
         // ASK query returns true if there are any solutions
         Ok(QueryResult::Ask(!solutions.is_empty()))
     }
-    
+
     /// Execute a CONSTRUCT query
     fn execute_construct_query(
         &self,
@@ -206,13 +214,13 @@ impl QueryEngine {
         store: &Store,
     ) -> Result<QueryResult, OxirsError> {
         let executor = QueryExecutor::new(store);
-        
+
         // Convert graph pattern to execution plan
         let plan = self.pattern_to_plan(pattern)?;
-        
+
         // Execute the plan
         let solutions = executor.execute(&plan)?;
-        
+
         // Construct triples from template and solutions
         let mut triples = Vec::new();
         for solution in solutions.into_iter().take(self.executor_config.max_results) {
@@ -222,10 +230,10 @@ impl QueryEngine {
                 }
             }
         }
-        
+
         Ok(QueryResult::Construct(triples))
     }
-    
+
     /// Execute a DESCRIBE query
     fn execute_describe_query(
         &self,
@@ -236,13 +244,13 @@ impl QueryEngine {
         // For now, treat DESCRIBE like CONSTRUCT *
         // This is a simplified implementation
         let executor = QueryExecutor::new(store);
-        
+
         // Convert graph pattern to execution plan
         let plan = self.pattern_to_plan(pattern)?;
-        
+
         // Execute the plan
         let solutions = executor.execute(&plan)?;
-        
+
         // Get all triples involving the found entities
         let mut triples = Vec::new();
         for solution in solutions.into_iter().take(self.executor_config.max_results) {
@@ -257,41 +265,41 @@ impl QueryEngine {
                 }
             }
         }
-        
+
         triples.dedup();
         Ok(QueryResult::Construct(triples))
     }
-    
+
     /// Convert a graph pattern to an execution plan
     fn pattern_to_plan(&self, pattern: &GraphPattern) -> Result<ExecutionPlan, OxirsError> {
         match pattern {
             GraphPattern::Bgp { patterns } => {
                 if patterns.len() == 1 {
                     // Single triple pattern
-                    Ok(ExecutionPlan::TripleScan { 
-                        pattern: self.convert_triple_pattern(&patterns[0])? 
+                    Ok(ExecutionPlan::TripleScan {
+                        pattern: self.convert_triple_pattern(&patterns[0])?,
                     })
                 } else {
                     // Multiple patterns - join them
-                    let mut plan = ExecutionPlan::TripleScan { 
-                        pattern: self.convert_triple_pattern(&patterns[0])? 
+                    let mut plan = ExecutionPlan::TripleScan {
+                        pattern: self.convert_triple_pattern(&patterns[0])?,
                     };
-                    
+
                     for triple_pattern in &patterns[1..] {
-                        let right_plan = ExecutionPlan::TripleScan { 
-                            pattern: self.convert_triple_pattern(triple_pattern)? 
+                        let right_plan = ExecutionPlan::TripleScan {
+                            pattern: self.convert_triple_pattern(triple_pattern)?,
                         };
-                        
+
                         // Find join variables
                         let join_vars = self.find_join_variables(&plan, &right_plan);
-                        
+
                         plan = ExecutionPlan::HashJoin {
                             left: Box::new(plan),
                             right: Box::new(right_plan),
                             join_vars,
                         };
                     }
-                    
+
                     Ok(plan)
                 }
             }
@@ -299,7 +307,7 @@ impl QueryEngine {
                 let left_plan = self.pattern_to_plan(left)?;
                 let right_plan = self.pattern_to_plan(right)?;
                 let join_vars = self.find_join_variables(&left_plan, &right_plan);
-                
+
                 Ok(ExecutionPlan::HashJoin {
                     left: Box::new(left_plan),
                     right: Box::new(right_plan),
@@ -318,7 +326,7 @@ impl QueryEngine {
             GraphPattern::Union { left, right } => {
                 let left_plan = self.pattern_to_plan(left)?;
                 let right_plan = self.pattern_to_plan(right)?;
-                
+
                 Ok(ExecutionPlan::Union {
                     left: Box::new(left_plan),
                     right: Box::new(right_plan),
@@ -337,7 +345,11 @@ impl QueryEngine {
                     input: Box::new(input_plan),
                 })
             }
-            GraphPattern::Slice { inner, start, length } => {
+            GraphPattern::Slice {
+                inner,
+                start,
+                length,
+            } => {
                 let input_plan = self.pattern_to_plan(inner)?;
                 Ok(ExecutionPlan::Limit {
                     input: Box::new(input_plan),
@@ -354,24 +366,27 @@ impl QueryEngine {
             }
         }
     }
-    
+
     /// Convert a SPARQL algebra triple pattern to a model triple pattern
-    fn convert_triple_pattern(&self, pattern: &TriplePattern) -> Result<crate::model::pattern::TriplePattern, OxirsError> {
+    fn convert_triple_pattern(
+        &self,
+        pattern: &TriplePattern,
+    ) -> Result<crate::model::pattern::TriplePattern, OxirsError> {
         use crate::model::pattern::*;
-        
+
         let subject = match &pattern.subject {
             TermPattern::Variable(v) => Some(SubjectPattern::Variable(v.clone())),
             TermPattern::NamedNode(n) => Some(SubjectPattern::NamedNode(n.clone())),
             TermPattern::BlankNode(b) => Some(SubjectPattern::BlankNode(b.clone())),
             _ => None,
         };
-        
+
         let predicate = match &pattern.predicate {
             TermPattern::Variable(v) => Some(PredicatePattern::Variable(v.clone())),
             TermPattern::NamedNode(n) => Some(PredicatePattern::NamedNode(n.clone())),
             _ => None,
         };
-        
+
         let object = match &pattern.object {
             TermPattern::Variable(v) => Some(ObjectPattern::Variable(v.clone())),
             TermPattern::NamedNode(n) => Some(ObjectPattern::NamedNode(n.clone())),
@@ -379,25 +394,28 @@ impl QueryEngine {
             TermPattern::Literal(l) => Some(ObjectPattern::Literal(l.clone())),
             _ => None,
         };
-        
+
         Ok(crate::model::pattern::TriplePattern {
             subject,
             predicate,
             object,
         })
     }
-    
+
     /// Find variables that appear in both execution plans
     fn find_join_variables(&self, _left: &ExecutionPlan, _right: &ExecutionPlan) -> Vec<Variable> {
         // Simplified implementation - would need to analyze the plans
         Vec::new()
     }
-    
+
     /// Convert sparql_algebra::Expression to algebra::Expression
-    fn convert_expression(&self, expr: sparql_algebra::Expression) -> Result<algebra::Expression, OxirsError> {
-        use sparql_algebra::Expression as SparqlExpr;
+    fn convert_expression(
+        &self,
+        expr: sparql_algebra::Expression,
+    ) -> Result<algebra::Expression, OxirsError> {
         use algebra::Expression as AlgebraExpr;
-        
+        use sparql_algebra::Expression as SparqlExpr;
+
         match expr {
             SparqlExpr::NamedNode(n) => Ok(AlgebraExpr::Term(crate::model::Term::NamedNode(n))),
             SparqlExpr::Literal(l) => Ok(AlgebraExpr::Term(crate::model::Term::Literal(l))),
@@ -415,22 +433,34 @@ impl QueryEngine {
             SparqlExpr::Equal(left, right) => {
                 let left_expr = self.convert_expression(*left)?;
                 let right_expr = self.convert_expression(*right)?;
-                Ok(AlgebraExpr::Equal(Box::new(left_expr), Box::new(right_expr)))
+                Ok(AlgebraExpr::Equal(
+                    Box::new(left_expr),
+                    Box::new(right_expr),
+                ))
             }
             SparqlExpr::SameTerm(left, right) => {
                 let left_expr = self.convert_expression(*left)?;
                 let right_expr = self.convert_expression(*right)?;
-                Ok(AlgebraExpr::Equal(Box::new(left_expr), Box::new(right_expr))) // Map SameTerm to Equal for now
+                Ok(AlgebraExpr::Equal(
+                    Box::new(left_expr),
+                    Box::new(right_expr),
+                )) // Map SameTerm to Equal for now
             }
             SparqlExpr::Greater(left, right) => {
                 let left_expr = self.convert_expression(*left)?;
                 let right_expr = self.convert_expression(*right)?;
-                Ok(AlgebraExpr::Greater(Box::new(left_expr), Box::new(right_expr)))
+                Ok(AlgebraExpr::Greater(
+                    Box::new(left_expr),
+                    Box::new(right_expr),
+                ))
             }
             SparqlExpr::GreaterOrEqual(left, right) => {
                 let left_expr = self.convert_expression(*left)?;
                 let right_expr = self.convert_expression(*right)?;
-                Ok(AlgebraExpr::GreaterOrEqual(Box::new(left_expr), Box::new(right_expr)))
+                Ok(AlgebraExpr::GreaterOrEqual(
+                    Box::new(left_expr),
+                    Box::new(right_expr),
+                ))
             }
             SparqlExpr::Less(left, right) => {
                 let left_expr = self.convert_expression(*left)?;
@@ -440,7 +470,10 @@ impl QueryEngine {
             SparqlExpr::LessOrEqual(left, right) => {
                 let left_expr = self.convert_expression(*left)?;
                 let right_expr = self.convert_expression(*right)?;
-                Ok(AlgebraExpr::LessOrEqual(Box::new(left_expr), Box::new(right_expr)))
+                Ok(AlgebraExpr::LessOrEqual(
+                    Box::new(left_expr),
+                    Box::new(right_expr),
+                ))
             }
             SparqlExpr::Not(inner) => {
                 let inner_expr = self.convert_expression(*inner)?;
@@ -455,7 +488,7 @@ impl QueryEngine {
             }
         }
     }
-    
+
     /// Extract all variables from a graph pattern
     fn extract_variables(&self, pattern: &GraphPattern) -> Vec<Variable> {
         let mut variables = Vec::new();
@@ -464,9 +497,13 @@ impl QueryEngine {
         variables.dedup();
         variables
     }
-    
+
     /// Recursively collect variables from a graph pattern
-    fn collect_variables_from_pattern(&self, pattern: &GraphPattern, variables: &mut Vec<Variable>) {
+    fn collect_variables_from_pattern(
+        &self,
+        pattern: &GraphPattern,
+        variables: &mut Vec<Variable>,
+    ) {
         match pattern {
             GraphPattern::Bgp { patterns } => {
                 for triple_pattern in patterns {
@@ -484,7 +521,10 @@ impl QueryEngine {
                 self.collect_variables_from_pattern(left, variables);
                 self.collect_variables_from_pattern(right, variables);
             }
-            GraphPattern::Project { inner, variables: proj_vars } => {
+            GraphPattern::Project {
+                inner,
+                variables: proj_vars,
+            } => {
                 self.collect_variables_from_pattern(inner, variables);
                 variables.extend(proj_vars.iter().cloned());
             }
@@ -499,9 +539,13 @@ impl QueryEngine {
             }
         }
     }
-    
+
     /// Collect variables from a triple pattern
-    fn collect_variables_from_triple_pattern(&self, pattern: &TriplePattern, variables: &mut Vec<Variable>) {
+    fn collect_variables_from_triple_pattern(
+        &self,
+        pattern: &TriplePattern,
+        variables: &mut Vec<Variable>,
+    ) {
         if let TermPattern::Variable(v) = &pattern.subject {
             variables.push(v.clone());
         }
@@ -512,7 +556,7 @@ impl QueryEngine {
             variables.push(v.clone());
         }
     }
-    
+
     /// Instantiate a triple pattern with a solution
     fn instantiate_triple_pattern(
         &self,
@@ -520,7 +564,7 @@ impl QueryEngine {
         solution: &Solution,
     ) -> Result<Option<crate::model::Triple>, OxirsError> {
         use crate::model::*;
-        
+
         let subject = match &pattern.subject {
             TermPattern::Variable(v) => {
                 if let Some(term) = solution.get(&v) {
@@ -537,7 +581,7 @@ impl QueryEngine {
             TermPattern::BlankNode(b) => Subject::BlankNode(b.clone()),
             _ => return Ok(None), // Invalid subject pattern
         };
-        
+
         let predicate = match &pattern.predicate {
             TermPattern::Variable(v) => {
                 if let Some(Term::NamedNode(n)) = solution.get(&v) {
@@ -549,7 +593,7 @@ impl QueryEngine {
             TermPattern::NamedNode(n) => Predicate::NamedNode(n.clone()),
             _ => return Ok(None), // Invalid predicate pattern
         };
-        
+
         let object = match &pattern.object {
             TermPattern::Variable(v) => {
                 if let Some(term) = solution.get(&v) {
@@ -568,21 +612,21 @@ impl QueryEngine {
             TermPattern::Literal(l) => Object::Literal(l.clone()),
             _ => return Ok(None), // Invalid object pattern
         };
-        
+
         Ok(Some(Triple::new(subject, predicate, object)))
     }
-    
+
     /// Check if a triple involves a specific term
     fn triple_involves_term(&self, triple: &crate::model::Triple, term: &Term) -> bool {
         match term {
             Term::NamedNode(n) => {
-                matches!(triple.subject(), Subject::NamedNode(sn) if sn == n) ||
-                matches!(triple.predicate(), Predicate::NamedNode(pn) if pn == n) ||
-                matches!(triple.object(), Object::NamedNode(on) if on == n)
+                matches!(triple.subject(), Subject::NamedNode(sn) if sn == n)
+                    || matches!(triple.predicate(), Predicate::NamedNode(pn) if pn == n)
+                    || matches!(triple.object(), Object::NamedNode(on) if on == n)
             }
             Term::BlankNode(b) => {
-                matches!(triple.subject(), Subject::BlankNode(sb) if sb == b) ||
-                matches!(triple.object(), Object::BlankNode(ob) if ob == b)
+                matches!(triple.subject(), Subject::BlankNode(sb) if sb == b)
+                    || matches!(triple.object(), Object::BlankNode(ob) if ob == b)
             }
             Term::Literal(l) => {
                 matches!(triple.object(), Object::Literal(ol) if ol == l)

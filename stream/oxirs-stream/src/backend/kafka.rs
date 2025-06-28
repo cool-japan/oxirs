@@ -137,6 +137,39 @@ pub enum PartitionStrategy {
     Sticky,
 }
 
+/// Workload profiles for performance optimization
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum WorkloadProfile {
+    HighThroughput,
+    LowLatency,
+    Balanced,
+    LargeMessages,
+}
+
+/// Performance configuration summary
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KafkaPerformanceConfig {
+    pub batch_size: u32,
+    pub linger_ms: u32,
+    pub buffer_memory: u64,
+    pub compression_type: KafkaCompressionType,
+    pub max_in_flight_requests: u32,
+    pub request_timeout_ms: u32,
+    pub delivery_timeout_ms: u32,
+    pub retry_backoff_ms: u32,
+    pub enable_idempotence: bool,
+    pub acks: KafkaAcks,
+}
+
+/// Performance recommendation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PerformanceRecommendation {
+    pub category: String,
+    pub description: String,
+    pub suggested_action: String,
+    pub impact: String,
+}
+
 /// Schema registry configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchemaRegistryConfig {
@@ -632,7 +665,7 @@ pub struct KafkaMetrics {
     pub producer_buffer_available_bytes: i64,
     pub producer_batch_size_avg: f64,
     pub producer_compression_rate_avg: f64,
-    
+
     // Consumer metrics
     pub consumer_records_lag: i64,
     pub consumer_records_lag_max: i64,
@@ -640,19 +673,19 @@ pub struct KafkaMetrics {
     pub consumer_fetch_latency_avg: f64,
     pub consumer_records_consumed_rate: f64,
     pub consumer_bytes_consumed_rate: f64,
-    
+
     // Connection metrics
     pub connection_count: i32,
     pub connection_creation_rate: f64,
     pub connection_close_rate: f64,
     pub network_io_rate: f64,
-    
+
     // Schema registry metrics
     pub schema_registry_requests: u64,
     pub schema_registry_cache_hits: u64,
     pub schema_registry_cache_misses: u64,
     pub schema_registry_errors: u64,
-    
+
     // Timestamps
     pub last_update: Option<DateTime<Utc>>,
     pub metrics_interval_ms: u64,
@@ -706,16 +739,16 @@ impl KafkaProducer {
         // TODO: Enable when reqwest is added
         // if let Some(ref config) = self.kafka_config.schema_registry_config {
         //     let client = SchemaRegistryClient::new(config.clone())?;
-        //     
+        //
         //     // Pre-register RDF event schemas
         //     RdfEventSchemas::register_all_schemas(&client, "oxirs").await?;
-        //     
+        //
         //     self.schema_registry_client = Some(Arc::new(client));
         //     info!("Initialized schema registry client");
         // }
         Ok(())
     }
-    
+
     /// Initialize metrics collector
     fn init_metrics_collector(&mut self) {
         self.metrics_collector = Some(Arc::new(RwLock::new(KafkaMetrics::default())));
@@ -723,6 +756,9 @@ impl KafkaProducer {
 
     #[cfg(feature = "kafka")]
     pub async fn connect(&mut self) -> Result<()> {
+        // Apply performance optimizations before connecting
+        self.optimize_performance_parameters().await?;
+
         let mut client_config = ClientConfig::new();
 
         // Basic configuration
@@ -760,6 +796,13 @@ impl KafkaProducer {
             )
             .set("log_level", "info");
 
+        // Advanced performance tuning
+        self.apply_advanced_performance_config(&mut client_config)?;
+        self.apply_buffer_memory_optimization(&mut client_config)?;
+        self.apply_linger_time_optimization(&mut client_config)?;
+        self.apply_timeout_optimization(&mut client_config)?;
+        self.apply_retry_optimization(&mut client_config)?;
+
         // Transaction support
         if let Some(transaction_id) = &self.kafka_config.transaction_id {
             client_config.set("transactional.id", transaction_id);
@@ -791,13 +834,13 @@ impl KafkaProducer {
         }
 
         self.producer = Some(producer);
-        
+
         // Initialize schema registry if configured
         self.init_schema_registry().await?;
-        
+
         // Initialize metrics collector
         self.init_metrics_collector();
-        
+
         info!(
             "Connected to Kafka: {} (idempotence: {}, transactions: {})",
             self.kafka_config.brokers.join(","),
@@ -809,7 +852,369 @@ impl KafkaProducer {
 
     #[cfg(not(feature = "kafka"))]
     pub async fn connect(&mut self) -> Result<()> {
+        // Apply mock optimizations
+        self.optimize_performance_parameters().await?;
+        let mut mock_config = ();
+        self.apply_buffer_memory_optimization(&mut mock_config)?;
+        self.apply_linger_time_optimization(&mut mock_config)?;
+        self.apply_timeout_optimization(&mut mock_config)?;
+        self.apply_retry_optimization(&mut mock_config)?;
+
         warn!("Kafka feature not enabled, using mock producer");
+        Ok(())
+    }
+
+    /// Optimize Kafka performance parameters based on workload characteristics
+    async fn optimize_performance_parameters(&mut self) -> Result<()> {
+        let workload_profile = self.analyze_workload_profile().await;
+
+        match workload_profile {
+            WorkloadProfile::HighThroughput => {
+                self.optimize_for_throughput();
+                info!("Applied high-throughput optimizations");
+            }
+            WorkloadProfile::LowLatency => {
+                self.optimize_for_latency();
+                info!("Applied low-latency optimizations");
+            }
+            WorkloadProfile::Balanced => {
+                self.optimize_for_balanced();
+                info!("Applied balanced optimizations");
+            }
+            WorkloadProfile::LargeMessages => {
+                self.optimize_for_large_messages();
+                info!("Applied large message optimizations");
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Analyze workload characteristics to determine optimal configuration
+    async fn analyze_workload_profile(&self) -> WorkloadProfile {
+        // For now, return balanced profile
+        // In production, this would analyze:
+        // - Message size distribution
+        // - Throughput requirements
+        // - Latency requirements
+        // - Network conditions
+        // - Available memory
+        WorkloadProfile::Balanced
+    }
+
+    /// Optimize configuration for maximum throughput
+    fn optimize_for_throughput(&mut self) {
+        self.kafka_config.batch_size = 131072; // 128KB
+        self.kafka_config.linger_ms = 50; // Wait for batches to fill
+        self.kafka_config.buffer_memory = 67108864; // 64MB
+        self.kafka_config.compression_type = KafkaCompressionType::Lz4; // Fast compression
+        self.kafka_config.max_in_flight_requests = 5;
+        self.kafka_config.request_timeout_ms = 60000; // Longer timeout for stability
+        self.kafka_config.delivery_timeout_ms = 600000; // 10 minutes
+        self.kafka_config.retry_backoff_ms = 500; // Longer backoff for stability
+    }
+
+    /// Optimize configuration for minimum latency
+    fn optimize_for_latency(&mut self) {
+        self.kafka_config.batch_size = 1024; // Small batches
+        self.kafka_config.linger_ms = 0; // Send immediately
+        self.kafka_config.buffer_memory = 16777216; // 16MB
+        self.kafka_config.compression_type = KafkaCompressionType::None; // No compression overhead
+        self.kafka_config.max_in_flight_requests = 1; // Ordered delivery
+        self.kafka_config.request_timeout_ms = 5000; // Quick timeout
+        self.kafka_config.delivery_timeout_ms = 30000; // 30 seconds
+        self.kafka_config.retry_backoff_ms = 50; // Quick retry
+    }
+
+    /// Optimize configuration for balanced performance
+    fn optimize_for_balanced(&mut self) {
+        self.kafka_config.batch_size = 65536; // 64KB
+        self.kafka_config.linger_ms = 10; // Small wait for batching
+        self.kafka_config.buffer_memory = 33554432; // 32MB
+        self.kafka_config.compression_type = KafkaCompressionType::Snappy; // Balanced compression
+        self.kafka_config.max_in_flight_requests = 3; // Good parallelism
+        self.kafka_config.request_timeout_ms = 30000; // 30 seconds
+        self.kafka_config.delivery_timeout_ms = 300000; // 5 minutes
+        self.kafka_config.retry_backoff_ms = 100; // Standard backoff
+    }
+
+    /// Optimize configuration for large message handling
+    fn optimize_for_large_messages(&mut self) {
+        self.kafka_config.batch_size = 262144; // 256KB
+        self.kafka_config.linger_ms = 100; // Wait longer for large batches
+        self.kafka_config.buffer_memory = 134217728; // 128MB
+        self.kafka_config.compression_type = KafkaCompressionType::Zstd; // Best compression
+        self.kafka_config.max_in_flight_requests = 2; // Reduced for large messages
+        self.kafka_config.request_timeout_ms = 120000; // 2 minutes
+        self.kafka_config.delivery_timeout_ms = 1200000; // 20 minutes
+        self.kafka_config.retry_backoff_ms = 1000; // Longer backoff for large messages
+    }
+
+    /// Apply advanced performance configuration to Kafka client
+    #[cfg(feature = "kafka")]
+    fn apply_advanced_performance_config(&self, client_config: &mut ClientConfig) -> Result<()> {
+        // Advanced buffer management
+        client_config
+            .set("send.buffer.bytes", "131072") // 128KB send buffer
+            .set("receive.buffer.bytes", "131072") // 128KB receive buffer
+            .set("socket.send.buffer.bytes", "131072") // OS send buffer
+            .set("socket.receive.buffer.bytes", "131072") // OS receive buffer
+            // Advanced batching and compression
+            .set("batch.num.messages", "10000") // Max messages per batch
+            .set("queue.buffering.max.messages", "1000000") // 1M message queue
+            .set("queue.buffering.max.kbytes", "2097152") // 2GB memory limit
+            // Advanced retry and timeout configuration
+            .set(
+                "message.send.max.retries",
+                self.kafka_config.retries.to_string(),
+            )
+            .set(
+                "retry.backoff.max.ms",
+                (self.kafka_config.retry_backoff_ms * 10).to_string(),
+            )
+            .set(
+                "queue.buffering.max.ms",
+                self.kafka_config.linger_ms.to_string(),
+            )
+            // Advanced network configuration
+            .set("socket.keepalive.enable", "true")
+            .set("socket.nagle.disable", "true") // Disable Nagle for lower latency
+            .set("socket.max.fails", "3")
+            .set("reconnect.backoff.ms", "100")
+            .set("reconnect.backoff.max.ms", "10000")
+            // Advanced threading and parallelism
+            .set("internal.termination.signal", "2") // SIGINT
+            .set("api.version.request", "true")
+            .set("api.version.fallback.ms", "10000")
+            // Advanced metadata configuration
+            .set("metadata.request.timeout.ms", "60000")
+            .set("metadata.refresh.interval.ms", "300000") // 5 minutes
+            .set("metadata.max.age.ms", "900000") // 15 minutes
+            // Advanced partition and leadership configuration
+            .set("topic.metadata.refresh.interval.ms", "30000")
+            .set("topic.metadata.refresh.sparse", "true");
+
+        info!("Applied advanced Kafka performance configuration");
+        Ok(())
+    }
+
+    /// Apply buffer memory specific optimizations
+    #[cfg(feature = "kafka")]
+    fn apply_buffer_memory_optimization(&self, client_config: &mut ClientConfig) -> Result<()> {
+        // Adaptive buffer sizing based on available memory
+        let total_memory = std::env::var("KAFKA_TOTAL_MEMORY")
+            .unwrap_or_else(|_| "1073741824".to_string()) // Default 1GB
+            .parse::<u64>()
+            .unwrap_or(1073741824);
+
+        let buffer_ratio = 0.1; // Use 10% of total memory for buffers
+        let optimal_buffer = (total_memory as f64 * buffer_ratio) as u64;
+
+        client_config
+            .set("buffer.memory", optimal_buffer.to_string())
+            .set("send.buffer.bytes", (optimal_buffer / 256).to_string()) // 1/256th of buffer memory
+            .set("receive.buffer.bytes", (optimal_buffer / 256).to_string())
+            .set("socket.send.buffer.bytes", "262144") // 256KB OS buffer
+            .set("socket.receive.buffer.bytes", "262144"); // 256KB OS buffer
+
+        info!(
+            "Applied buffer memory optimizations: {}MB total buffer",
+            optimal_buffer / 1024 / 1024
+        );
+        Ok(())
+    }
+
+    /// Apply linger time optimizations based on workload
+    #[cfg(feature = "kafka")]
+    fn apply_linger_time_optimization(&self, client_config: &mut ClientConfig) -> Result<()> {
+        // Dynamic linger time based on throughput requirements
+        let target_throughput = std::env::var("KAFKA_TARGET_THROUGHPUT")
+            .unwrap_or_else(|_| "10000".to_string()) // Default 10K msg/sec
+            .parse::<u32>()
+            .unwrap_or(10000);
+
+        let optimal_linger = if target_throughput > 50000 {
+            50 // High throughput: longer linger for better batching
+        } else if target_throughput > 10000 {
+            self.kafka_config.linger_ms // Medium throughput: use configured value
+        } else {
+            0 // Low throughput: immediate send for low latency
+        };
+
+        client_config
+            .set("linger.ms", optimal_linger.to_string())
+            .set(
+                "batch.size",
+                if optimal_linger > 20 {
+                    "131072"
+                } else {
+                    "65536"
+                },
+            ) // Adaptive batch size
+            .set(
+                "batch.num.messages",
+                if optimal_linger > 20 {
+                    "20000"
+                } else {
+                    "10000"
+                },
+            );
+
+        info!(
+            "Applied linger time optimizations: {}ms (target throughput: {})",
+            optimal_linger, target_throughput
+        );
+        Ok(())
+    }
+
+    /// Apply timeout optimizations based on network conditions
+    #[cfg(feature = "kafka")]
+    fn apply_timeout_optimization(&self, client_config: &mut ClientConfig) -> Result<()> {
+        // Adaptive timeouts based on network latency and reliability
+        let network_class =
+            std::env::var("KAFKA_NETWORK_CLASS").unwrap_or_else(|_| "lan".to_string()); // lan, wan, or cloud
+
+        let (request_timeout, delivery_timeout, retry_backoff) = match network_class.as_str() {
+            "lan" => (15000, 120000, 100),    // Fast local network
+            "wan" => (45000, 600000, 500),    // Slower WAN
+            "cloud" => (60000, 900000, 1000), // Variable cloud network
+            _ => (
+                self.kafka_config.request_timeout_ms,
+                self.kafka_config.delivery_timeout_ms,
+                self.kafka_config.retry_backoff_ms,
+            ),
+        };
+
+        client_config
+            .set("request.timeout.ms", request_timeout.to_string())
+            .set("delivery.timeout.ms", delivery_timeout.to_string())
+            .set("retry.backoff.ms", retry_backoff.to_string())
+            .set("reconnect.backoff.ms", (retry_backoff / 2).to_string())
+            .set("reconnect.backoff.max.ms", (retry_backoff * 20).to_string())
+            .set(
+                "connections.max.idle.ms",
+                (delivery_timeout / 2).to_string(),
+            );
+
+        info!(
+            "Applied timeout optimizations for {} network: request={}ms, delivery={}ms",
+            network_class, request_timeout, delivery_timeout
+        );
+        Ok(())
+    }
+
+    /// Apply retry mechanism optimizations
+    #[cfg(feature = "kafka")]
+    fn apply_retry_optimization(&self, client_config: &mut ClientConfig) -> Result<()> {
+        // Intelligent retry configuration based on reliability requirements
+        let reliability_level =
+            std::env::var("KAFKA_RELIABILITY_LEVEL").unwrap_or_else(|_| "high".to_string()); // low, medium, high, critical
+
+        let (max_retries, retry_backoff_max, enable_idempotence) = match reliability_level.as_str()
+        {
+            "low" => (3, 2000, false),
+            "medium" => (10, 5000, true),
+            "high" => (2147483647, 10000, true), // Max retries
+            "critical" => (2147483647, 20000, true), // Max retries with longer backoff
+            _ => (
+                self.kafka_config.retries,
+                10000,
+                self.kafka_config.enable_idempotence,
+            ),
+        };
+
+        let acks_value = if reliability_level == "critical" {
+            "all".to_string()
+        } else {
+            self.kafka_config.acks.to_string()
+        };
+
+        client_config
+            .set("retries", max_retries.to_string())
+            .set("retry.backoff.max.ms", retry_backoff_max.to_string())
+            .set("enable.idempotence", enable_idempotence.to_string())
+            .set(
+                "max.in.flight.requests.per.connection",
+                if enable_idempotence { "5" } else { "1" },
+            ) // Maintain ordering if needed
+            .set("acks", &acks_value);
+
+        info!(
+            "Applied retry optimizations for {} reliability: retries={}, idempotence={}",
+            reliability_level, max_retries, enable_idempotence
+        );
+        Ok(())
+    }
+
+    /// Mock buffer memory optimization for non-kafka builds
+    #[cfg(not(feature = "kafka"))]
+    fn apply_buffer_memory_optimization(&self, _client_config: &mut ()) -> Result<()> {
+        debug!("Mock: applied buffer memory optimizations");
+        Ok(())
+    }
+
+    /// Mock linger time optimization for non-kafka builds
+    #[cfg(not(feature = "kafka"))]
+    fn apply_linger_time_optimization(&self, _client_config: &mut ()) -> Result<()> {
+        debug!("Mock: applied linger time optimizations");
+        Ok(())
+    }
+
+    /// Mock timeout optimization for non-kafka builds
+    #[cfg(not(feature = "kafka"))]
+    fn apply_timeout_optimization(&self, _client_config: &mut ()) -> Result<()> {
+        debug!("Mock: applied timeout optimizations");
+        Ok(())
+    }
+
+    /// Mock retry optimization for non-kafka builds
+    #[cfg(not(feature = "kafka"))]
+    fn apply_retry_optimization(&self, _client_config: &mut ()) -> Result<()> {
+        debug!("Mock: applied retry optimizations");
+        Ok(())
+    }
+
+    /// Dynamic performance tuning based on runtime metrics
+    pub async fn tune_performance_dynamically(&mut self) -> Result<()> {
+        if let Some(ref metrics_collector) = self.metrics_collector {
+            if let Ok(metrics) = metrics_collector.try_read() {
+                // Analyze current performance metrics
+                let avg_latency = metrics.producer_request_latency_avg;
+                let error_rate = metrics.producer_record_error_rate;
+                let buffer_utilization = 1.0
+                    - (metrics.producer_buffer_available_bytes as f64
+                        / self.kafka_config.buffer_memory as f64);
+
+                // Adjust parameters based on metrics
+                if avg_latency > 100.0 && buffer_utilization < 0.5 {
+                    // High latency, low buffer usage - optimize for latency
+                    self.kafka_config.linger_ms = (self.kafka_config.linger_ms / 2).max(0);
+                    self.kafka_config.batch_size = (self.kafka_config.batch_size / 2).max(1024);
+                    info!(
+                        "Dynamically adjusted for lower latency: linger_ms={}, batch_size={}",
+                        self.kafka_config.linger_ms, self.kafka_config.batch_size
+                    );
+                } else if error_rate > 0.01 && buffer_utilization > 0.8 {
+                    // High error rate, high buffer usage - increase buffer and timeouts
+                    self.kafka_config.buffer_memory =
+                        (self.kafka_config.buffer_memory * 2).min(134217728); // Max 128MB
+                    self.kafka_config.request_timeout_ms =
+                        (self.kafka_config.request_timeout_ms * 2).min(120000); // Max 2 min
+                    info!(
+                        "Dynamically increased buffer and timeouts: buffer={} bytes, timeout={} ms",
+                        self.kafka_config.buffer_memory, self.kafka_config.request_timeout_ms
+                    );
+                } else if avg_latency < 10.0 && buffer_utilization < 0.3 {
+                    // Low latency, low buffer usage - can optimize for throughput
+                    self.kafka_config.batch_size = (self.kafka_config.batch_size * 2).min(262144); // Max 256KB
+                    self.kafka_config.linger_ms = (self.kafka_config.linger_ms + 5).min(100);
+                    info!(
+                        "Dynamically optimized for throughput: batch_size={}, linger_ms={}",
+                        self.kafka_config.batch_size, self.kafka_config.linger_ms
+                    );
+                }
+            }
+        }
         Ok(())
     }
 
@@ -894,19 +1299,21 @@ impl KafkaProducer {
             if let Ok(mut metrics) = metrics_collector.try_write() {
                 // Extract relevant metrics from Kafka statistics
                 if let Some(brokers) = stats.brokers.values().next() {
-                    metrics.producer_request_latency_avg = brokers.latency.avg as f64;
-                    metrics.producer_request_latency_max = brokers.latency.max as f64;
+                    // Use available broker metrics
+                    metrics.producer_request_latency_avg = brokers.rtt.avg as f64 / 1000.0; // Convert to ms
+                    metrics.producer_request_latency_max = brokers.rtt.max as f64 / 1000.0;
+                    // Convert to ms
                 }
-                
+
                 // Update connection metrics
                 metrics.connection_count = stats.brokers.len() as i32;
-                
+
                 // Update timestamp
                 metrics.last_update = Some(Utc::now());
             }
         }
     }
-    
+
     // TODO: Enable when reqwest is added
     // /// Register event schema with schema registry
     // #[cfg(feature = "kafka")]
@@ -916,12 +1323,12 @@ impl KafkaProducer {
     //     schema_registry: &SchemaRegistryClient,
     // ) -> Result<u32> {
     //     let subject = format!("oxirs-{}-value", event.event_type);
-    //     
+    //
     //     // Check cache first
     //     if let Some(&schema_id) = self.schema_cache.get(&subject) {
     //         return Ok(schema_id);
     //     }
-    //     
+    //
     //     // Get the appropriate schema based on event type
     //     let schema = match event.event_type.as_str() {
     //         "triple_added" | "triple_removed" => RdfEventSchemas::triple_event_schema(),
@@ -929,12 +1336,12 @@ impl KafkaProducer {
     //         "sparql_update" => RdfEventSchemas::sparql_update_schema(),
     //         _ => return Err(anyhow!("Unknown event type for schema: {}", event.event_type)),
     //     };
-    //     
+    //
     //     // Register schema and get ID
     //     let metadata = schema_registry
     //         .register_schema(&subject, schema, SchemaType::Json, None)
     //         .await?;
-    //     
+    //
     //     Ok(metadata.id)
     // }
 
@@ -961,10 +1368,20 @@ impl KafkaProducer {
 
         #[cfg(feature = "kafka")]
         {
+            // Periodically tune performance based on metrics (every 1000 events)
+            if self.stats.events_published % 1000 == 0 && self.stats.events_published > 0 {
+                if let Err(e) = self.tune_performance_dynamically().await {
+                    warn!("Failed to tune performance dynamically: {}", e);
+                }
+            }
+
             // Acquire send permit to limit concurrent sends
-            let _permit = self.send_semaphore.acquire().await
+            let _permit = self
+                .send_semaphore
+                .acquire()
+                .await
                 .map_err(|_| anyhow!("Failed to acquire send permit"))?;
-            
+
             // Register schema if using schema registry
             // TODO: Enable when reqwest is added
             // if let Some(ref schema_registry) = self.schema_registry_client {
@@ -979,7 +1396,7 @@ impl KafkaProducer {
             //         }
             //     }
             // }
-            
+
             if let Some(ref producer) = self.producer {
                 let payload = serde_json::to_string(&kafka_event)
                     .map_err(|e| anyhow!("Failed to serialize event: {}", e))?;
@@ -1091,7 +1508,10 @@ impl KafkaProducer {
                     }
 
                     // Send and await immediately
-                    match producer.send(record, Timeout::After(Duration::from_secs(30))).await {
+                    match producer
+                        .send(record, Timeout::After(Duration::from_secs(30)))
+                        .await
+                    {
                         Ok(_) => success_count += 1,
                         Err((err, _)) => {
                             error!("Failed to send Kafka message: {}", err);
@@ -1183,16 +1603,20 @@ impl KafkaProducer {
                 PatchOperation::AddPrefix { .. } => {
                     // Skip prefix operations for now
                     continue;
-                },
+                }
                 PatchOperation::DeletePrefix { .. } => {
                     // Skip prefix operations for now
                     continue;
-                },
-                PatchOperation::TransactionBegin { transaction_id } => StreamEvent::TransactionBegin {
-                    transaction_id: transaction_id.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
-                    isolation_level: None,
-                    metadata,
-                },
+                }
+                PatchOperation::TransactionBegin { transaction_id } => {
+                    StreamEvent::TransactionBegin {
+                        transaction_id: transaction_id
+                            .clone()
+                            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+                        isolation_level: None,
+                        metadata,
+                    }
+                }
                 PatchOperation::TransactionCommit => StreamEvent::TransactionCommit {
                     transaction_id: uuid::Uuid::new_v4().to_string(),
                     metadata,
@@ -1204,7 +1628,7 @@ impl KafkaProducer {
                 PatchOperation::Header { .. } => {
                     // Skip header operations for now
                     continue;
-                },
+                }
             };
             events.push(event);
         }
@@ -1233,6 +1657,82 @@ impl KafkaProducer {
 
     pub fn get_stats(&self) -> &ProducerStats {
         &self.stats
+    }
+
+    /// Get current performance configuration summary
+    pub fn get_performance_config(&self) -> KafkaPerformanceConfig {
+        KafkaPerformanceConfig {
+            batch_size: self.kafka_config.batch_size,
+            linger_ms: self.kafka_config.linger_ms,
+            buffer_memory: self.kafka_config.buffer_memory,
+            compression_type: self.kafka_config.compression_type.clone(),
+            max_in_flight_requests: self.kafka_config.max_in_flight_requests,
+            request_timeout_ms: self.kafka_config.request_timeout_ms,
+            delivery_timeout_ms: self.kafka_config.delivery_timeout_ms,
+            retry_backoff_ms: self.kafka_config.retry_backoff_ms,
+            enable_idempotence: self.kafka_config.enable_idempotence,
+            acks: self.kafka_config.acks.clone(),
+        }
+    }
+
+    /// Get performance recommendations based on current metrics
+    pub async fn get_performance_recommendations(&self) -> Vec<PerformanceRecommendation> {
+        let mut recommendations = Vec::new();
+
+        if let Some(ref metrics_collector) = self.metrics_collector {
+            if let Ok(metrics) = metrics_collector.try_read() {
+                // Analyze latency
+                if metrics.producer_request_latency_avg > 100.0 {
+                    recommendations.push(PerformanceRecommendation {
+                        category: "Latency".to_string(),
+                        description: "High average latency detected. Consider reducing batch size and linger time.".to_string(),
+                        suggested_action: "Set batch_size < 32KB and linger_ms = 0".to_string(),
+                        impact: "Medium".to_string(),
+                    });
+                }
+
+                // Analyze error rate
+                if metrics.producer_record_error_rate > 0.01 {
+                    recommendations.push(PerformanceRecommendation {
+                        category: "Reliability".to_string(),
+                        description:
+                            "High error rate detected. Consider increasing retry configuration."
+                                .to_string(),
+                        suggested_action: "Increase request_timeout_ms and retry_backoff_ms"
+                            .to_string(),
+                        impact: "High".to_string(),
+                    });
+                }
+
+                // Analyze buffer utilization
+                if metrics.producer_buffer_available_bytes
+                    < (self.kafka_config.buffer_memory as i64 / 10)
+                {
+                    recommendations.push(PerformanceRecommendation {
+                        category: "Memory".to_string(),
+                        description: "Low buffer availability. Consider increasing buffer memory."
+                            .to_string(),
+                        suggested_action: "Increase buffer_memory to at least 64MB".to_string(),
+                        impact: "High".to_string(),
+                    });
+                }
+
+                // Analyze throughput
+                if metrics.producer_record_send_rate < 1000.0 && self.stats.events_published > 10000
+                {
+                    recommendations.push(PerformanceRecommendation {
+                        category: "Throughput".to_string(),
+                        description: "Low send rate detected. Consider optimizing for throughput."
+                            .to_string(),
+                        suggested_action: "Increase batch_size and linger_ms, enable compression"
+                            .to_string(),
+                        impact: "Medium".to_string(),
+                    });
+                }
+            }
+        }
+
+        recommendations
     }
 }
 

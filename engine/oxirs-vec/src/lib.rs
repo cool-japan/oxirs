@@ -39,9 +39,11 @@ pub mod advanced_metrics;
 pub mod cache_friendly_index;
 pub mod clustering;
 pub mod compression;
-pub mod embeddings;
+pub mod cross_modal_embeddings;
 pub mod embedding_pipeline;
+pub mod embeddings;
 pub mod gnn_embeddings;
+pub mod gpu_acceleration;
 pub mod graph_aware_search;
 pub mod graph_indices;
 pub mod hnsw;
@@ -49,13 +51,14 @@ pub mod index;
 pub mod ivf;
 pub mod kg_embeddings;
 pub mod lsh;
-pub mod mmap_index;
 pub mod mmap_advanced;
-pub mod pq;
+pub mod mmap_index;
 pub mod opq;
+pub mod pq;
+pub mod real_time_analytics;
 pub mod similarity;
-pub mod sparse;
 pub mod sparql_integration;
+pub mod sparse;
 pub mod storage_optimizations;
 pub mod structured_vectors;
 pub mod tree_indices;
@@ -63,54 +66,65 @@ pub mod word2vec;
 
 // Re-export commonly used types
 pub use advanced_caching::{
-    MultiLevelCache, CacheConfig, CacheKey, CacheEntry, EvictionPolicy, 
-    CacheStats, MultiLevelCacheStats, CacheInvalidator, BackgroundCacheWorker,
-    CacheWarmer, CacheAnalyzer, CacheAnalysisReport, InvalidationStats
+    BackgroundCacheWorker, CacheAnalysisReport, CacheAnalyzer, CacheConfig, CacheEntry,
+    CacheInvalidator, CacheKey, CacheStats, CacheWarmer, EvictionPolicy, InvalidationStats,
+    MultiLevelCache, MultiLevelCacheStats,
 };
 pub use cache_friendly_index::{CacheFriendlyVectorIndex, IndexConfig as CacheFriendlyIndexConfig};
-pub use compression::{CompressionMethod, VectorCompressor, create_compressor};
-pub use embeddings::{
-    EmbeddableContent, EmbeddingConfig, EmbeddingManager, EmbeddingStrategy, 
-    OpenAIConfig, OpenAIEmbeddingGenerator, TransformerModelType, ModelDetails,
-    SentenceTransformerGenerator,
+pub use compression::{create_compressor, CompressionMethod, VectorCompressor};
+pub use cross_modal_embeddings::{
+    AttentionMechanism, AudioData, AudioEncoder, CrossModalConfig, CrossModalEncoder, FusionLayer,
+    FusionStrategy, GraphData, GraphEncoder, ImageData, ImageEncoder, Modality, ModalityData,
+    MultiModalContent, TextEncoder, VideoData, VideoEncoder,
 };
 pub use embedding_pipeline::{
-    EmbeddingPipeline, PreprocessingPipeline, PostprocessingPipeline,
-    TokenizerConfig, NormalizationConfig, VectorNormalization, DimensionalityReduction,
+    DimensionalityReduction, EmbeddingPipeline, NormalizationConfig, PostprocessingPipeline,
+    PreprocessingPipeline, TokenizerConfig, VectorNormalization,
+};
+pub use embeddings::{
+    EmbeddableContent, EmbeddingConfig, EmbeddingManager, EmbeddingStrategy, ModelDetails,
+    OpenAIConfig, OpenAIEmbeddingGenerator, SentenceTransformerGenerator, TransformerModelType,
+};
+pub use gnn_embeddings::{AggregatorType, GraphSAGE, GCN};
+pub use gpu_acceleration::{GpuAccelerator, GpuBuffer, GpuConfig, GpuDevice, GpuVectorIndex};
+pub use graph_indices::{
+    DelaunayGraph, GraphIndex, GraphIndexConfig, GraphType, NSWGraph, ONNGGraph, PANNGGraph,
+    RNGGraph,
 };
 pub use hnsw::{HnswConfig, HnswIndex};
 pub use index::{AdvancedVectorIndex, DistanceMetric, IndexConfig, IndexType, SearchResult};
 pub use ivf::{IvfConfig, IvfIndex, IvfStats, QuantizationStrategy};
-pub use lsh::{LshConfig, LshIndex, LshFamily, LshStats};
-pub use mmap_index::{MemoryMappedVectorIndex, MemoryMappedIndexStats};
+pub use kg_embeddings::{
+    ComplEx, KGEmbedding, KGEmbeddingConfig, KGEmbeddingModel as KGModel, KGEmbeddingModelType,
+    RotatE, TransE, Triple,
+};
+pub use lsh::{LshConfig, LshFamily, LshIndex, LshStats};
+pub use mmap_index::{MemoryMappedIndexStats, MemoryMappedVectorIndex};
 pub use pq::{PQConfig, PQIndex, PQStats};
+pub use real_time_analytics::{
+    AlertSeverity, AlertType, AnalyticsConfig, AnalyticsEvent, AnalyticsReport, DashboardData,
+    ExportFormat, MetricsCollector, PerformanceMonitor, QualityMetrics, QueryMetrics,
+    SystemMetrics, VectorAnalyticsEngine,
+};
 pub use similarity::{AdaptiveSimilarity, SemanticSimilarity, SimilarityConfig, SimilarityMetric};
 pub use sparql_integration::{
     HybridQuery, SparqlVectorService, VectorOperation, VectorQueryBuilder, VectorServiceConfig,
     VectorServiceRegistry,
 };
-pub use sparse::{SparseVector, CSRMatrix, COOMatrix};
+pub use sparse::{COOMatrix, CSRMatrix, SparseVector};
+pub use storage_optimizations::{
+    CompressionType, MmapVectorFile, StorageConfig, StorageUtils, VectorBlock, VectorFileHeader,
+    VectorReader, VectorWriter,
+};
 pub use structured_vectors::{
-    NamedDimensionVector, HierarchicalVector, TemporalVector, WeightedDimensionVector,
-    ConfidenceScoredVector,
+    ConfidenceScoredVector, HierarchicalVector, NamedDimensionVector, TemporalVector,
+    WeightedDimensionVector,
 };
 pub use tree_indices::{
-    TreeIndex, TreeIndexConfig, TreeType, BallTree, KdTree, VpTree, CoverTree, RandomProjectionTree,
-};
-pub use graph_indices::{
-    GraphIndex, GraphIndexConfig, GraphType, NSWGraph, ONNGGraph, PANNGGraph, DelaunayGraph, RNGGraph,
+    BallTree, CoverTree, KdTree, RandomProjectionTree, TreeIndex, TreeIndexConfig, TreeType, VpTree,
 };
 pub use word2vec::{
-    Word2VecEmbeddingGenerator, Word2VecConfig, Word2VecFormat, AggregationMethod, OovStrategy,
-};
-pub use kg_embeddings::{
-    KGEmbedding, KGEmbeddingConfig, KGEmbeddingModel as KGModel, KGEmbeddingModelType, Triple,
-    TransE, ComplEx, RotatE,
-};
-pub use gnn_embeddings::{GCN, GraphSAGE, AggregatorType};
-pub use storage_optimizations::{
-    CompressionType, StorageConfig, VectorFileHeader, VectorBlock,
-    VectorWriter, VectorReader, MmapVectorFile, StorageUtils,
+    AggregationMethod, OovStrategy, Word2VecConfig, Word2VecEmbeddingGenerator, Word2VecFormat,
 };
 
 /// Precision types for vectors
@@ -163,7 +177,7 @@ impl Vector {
             VectorData::I8(v) => (v.len(), VectorPrecision::I8),
             VectorData::Binary(v) => (v.len() * 8, VectorPrecision::Binary), // 8 bits per byte
         };
-        
+
         Self {
             dimensions,
             precision,
@@ -232,14 +246,14 @@ impl Vector {
         let sign = (bits >> 31) & 0x1;
         let exp = ((bits >> 23) & 0xff) as i32;
         let mantissa = bits & 0x7fffff;
-        
+
         // Simplified conversion
         let f16_exp = if exp == 0 {
             0
         } else {
             ((exp - 127 + 15).max(0).min(31)) as u16
         };
-        
+
         let f16_mantissa = (mantissa >> 13) as u16;
         ((sign as u16) << 15) | (f16_exp << 10) | f16_mantissa
     }
@@ -250,10 +264,14 @@ impl Vector {
         let sign = (value >> 15) & 0x1;
         let exp = ((value >> 10) & 0x1f) as i32;
         let mantissa = value & 0x3ff;
-        
+
         if exp == 0 {
             if mantissa == 0 {
-                if sign == 1 { -0.0 } else { 0.0 }
+                if sign == 1 {
+                    -0.0
+                } else {
+                    0.0
+                }
             } else {
                 // Denormalized number
                 let f32_exp = -14 - 127;
@@ -273,15 +291,18 @@ impl Vector {
         let min_val = values.iter().fold(f32::INFINITY, |a, &b| a.min(b));
         let max_val = values.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
         let range = max_val - min_val;
-        
+
         if range == 0.0 {
             vec![0; values.len()]
         } else {
-            values.iter().map(|&x| {
-                let normalized = (x - min_val) / range; // 0 to 1
-                let scaled = normalized * 254.0 - 127.0; // -127 to 127
-                scaled.round().clamp(-127.0, 127.0) as i8
-            }).collect()
+            values
+                .iter()
+                .map(|&x| {
+                    let normalized = (x - min_val) / range; // 0 to 1
+                    let scaled = normalized * 254.0 - 127.0; // -127 to 127
+                    scaled.round().clamp(-127.0, 127.0) as i8
+                })
+                .collect()
         }
     }
 
@@ -290,12 +311,12 @@ impl Vector {
         let mut binary = Vec::new();
         let mut current_byte = 0u8;
         let mut bit_position = 0;
-        
+
         for &value in values {
             if value > threshold {
                 current_byte |= 1 << bit_position;
             }
-            
+
             bit_position += 1;
             if bit_position == 8 {
                 binary.push(current_byte);
@@ -303,12 +324,12 @@ impl Vector {
                 bit_position = 0;
             }
         }
-        
+
         // Handle remaining bits
         if bit_position > 0 {
             binary.push(current_byte);
         }
-        
+
         binary
     }
 
@@ -321,11 +342,7 @@ impl Vector {
         let self_f32 = self.as_f32();
         let other_f32 = other.as_f32();
 
-        let dot_product: f32 = self_f32
-            .iter()
-            .zip(&other_f32)
-            .map(|(a, b)| a * b)
-            .sum();
+        let dot_product: f32 = self_f32.iter().zip(&other_f32).map(|(a, b)| a * b).sum();
 
         let magnitude_self: f32 = self_f32.iter().map(|x| x * x).sum::<f32>().sqrt();
         let magnitude_other: f32 = other_f32.iter().map(|x| x * x).sum::<f32>().sqrt();
@@ -517,7 +534,7 @@ pub trait VectorIndex: Send + Sync {
 
     /// Find all vectors within threshold similarity
     fn search_threshold(&self, query: &Vector, threshold: f32) -> Result<Vec<(String, f32)>>;
-    
+
     /// Get a vector by its URI
     fn get_vector(&self, uri: &str) -> Option<&Vector>;
 }
@@ -594,12 +611,9 @@ impl VectorIndex for MemoryVectorIndex {
 
         Ok(similarities)
     }
-    
+
     fn get_vector(&self, uri: &str) -> Option<&Vector> {
-        self.vectors
-            .iter()
-            .find(|(u, _)| u == uri)
-            .map(|(_, v)| v)
+        self.vectors.iter().find(|(u, _)| u == uri).map(|(_, v)| v)
     }
 }
 
@@ -802,21 +816,25 @@ impl VectorStore {
             Ok(()) // No-op if no embedding manager
         }
     }
-    
+
     /// Calculate similarity between two resources by their URIs
     pub fn calculate_similarity(&self, uri1: &str, uri2: &str) -> Result<f32> {
         // If the URIs are identical, return perfect similarity
         if uri1 == uri2 {
             return Ok(1.0);
         }
-        
+
         // Get the vectors for both URIs
-        let vector1 = self.index.get_vector(uri1)
+        let vector1 = self
+            .index
+            .get_vector(uri1)
             .ok_or_else(|| anyhow::anyhow!("Vector not found for URI: {}", uri1))?;
-        
-        let vector2 = self.index.get_vector(uri2)
+
+        let vector2 = self
+            .index
+            .get_vector(uri2)
             .ok_or_else(|| anyhow::anyhow!("Vector not found for URI: {}", uri2))?;
-        
+
         // Calculate cosine similarity between the vectors
         vector1.cosine_similarity(vector2)
     }
@@ -995,7 +1013,7 @@ mod tests {
     fn test_vector_creation() {
         let values = vec![1.0, 2.0, 3.0];
         let vector = Vector::new(values.clone());
-        
+
         assert_eq!(vector.dimensions, 3);
         assert_eq!(vector.precision, VectorPrecision::F32);
         assert_eq!(vector.as_f32(), values);
@@ -1009,7 +1027,7 @@ mod tests {
         assert_eq!(f64_vector.precision, VectorPrecision::F64);
         assert_eq!(f64_vector.dimensions, 3);
 
-        // Test I8 vector  
+        // Test I8 vector
         let i8_values = vec![100, -50, 0];
         let i8_vector = Vector::i8(i8_values);
         assert_eq!(i8_vector.precision, VectorPrecision::I8);
@@ -1056,15 +1074,19 @@ mod tests {
     #[test]
     fn test_vector_store() {
         let mut store = VectorStore::new();
-        
+
         // Test indexing
-        store.index_resource("doc1".to_string(), "This is a test").unwrap();
-        store.index_resource("doc2".to_string(), "Another test document").unwrap();
+        store
+            .index_resource("doc1".to_string(), "This is a test")
+            .unwrap();
+        store
+            .index_resource("doc2".to_string(), "Another test document")
+            .unwrap();
 
         // Test searching
         let results = store.similarity_search("test", 5).unwrap();
         assert_eq!(results.len(), 2);
-        
+
         // Results should be sorted by similarity (descending)
         assert!(results[0].1 >= results[1].1);
     }
@@ -1089,7 +1111,7 @@ mod tests {
     fn test_quantization() {
         let values = vec![1.0, -0.5, 0.0, 0.75];
         let quantized = Vector::quantize_to_i8(&values);
-        
+
         // Check that quantized values are in the expected range
         for &q in &quantized {
             assert!(q >= -127 && q <= 127);
@@ -1100,10 +1122,10 @@ mod tests {
     fn test_binary_conversion() {
         let values = vec![0.8, -0.3, 0.1, -0.9];
         let binary = Vector::to_binary(&values, 0.0);
-        
+
         // Should have 1 byte (4 values, each becomes 1 bit, packed into bytes)
         assert_eq!(binary.len(), 1);
-        
+
         // First bit should be 1 (0.8 > 0.0), second should be 0 (-0.3 < 0.0), etc.
         let byte = binary[0];
         assert_eq!(byte & 1, 1); // bit 0: 0.8 > 0.0
@@ -1115,18 +1137,18 @@ mod tests {
     #[test]
     fn test_memory_vector_index() {
         let mut index = MemoryVectorIndex::new();
-        
+
         let v1 = Vector::new(vec![1.0, 0.0, 0.0]);
         let v2 = Vector::new(vec![0.0, 1.0, 0.0]);
-        
+
         index.insert("v1".to_string(), v1.clone()).unwrap();
         index.insert("v2".to_string(), v2.clone()).unwrap();
-        
+
         // Test KNN search
         let results = index.search_knn(&v1, 1).unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, "v1");
-        
+
         // Test threshold search
         let results = index.search_threshold(&v1, 0.5).unwrap();
         assert!(results.len() >= 1);
@@ -1135,22 +1157,22 @@ mod tests {
     #[test]
     fn test_hnsw_index() {
         use crate::hnsw::{HnswConfig, HnswIndex};
-        
+
         let config = HnswConfig::default();
         let mut index = HnswIndex::new(config);
-        
+
         let v1 = Vector::new(vec![1.0, 0.0, 0.0]);
         let v2 = Vector::new(vec![0.0, 1.0, 0.0]);
         let v3 = Vector::new(vec![0.0, 0.0, 1.0]);
-        
+
         index.insert("v1".to_string(), v1.clone()).unwrap();
         index.insert("v2".to_string(), v2.clone()).unwrap();
         index.insert("v3".to_string(), v3.clone()).unwrap();
-        
+
         // Test KNN search
         let results = index.search_knn(&v1, 2).unwrap();
         assert!(results.len() <= 2);
-        
+
         // The first result should be v1 itself (highest similarity)
         if !results.is_empty() {
             assert_eq!(results[0].0, "v1");
@@ -1159,34 +1181,36 @@ mod tests {
 
     #[test]
     fn test_sparql_vector_service() {
-        use crate::sparql_integration::{SparqlVectorService, VectorServiceConfig, VectorServiceArg, VectorServiceResult};
         use crate::embeddings::EmbeddingStrategy;
-        
+        use crate::sparql_integration::{
+            SparqlVectorService, VectorServiceArg, VectorServiceConfig, VectorServiceResult,
+        };
+
         let config = VectorServiceConfig::default();
-        let mut service = SparqlVectorService::new(config, EmbeddingStrategy::SentenceTransformer).unwrap();
-        
+        let mut service =
+            SparqlVectorService::new(config, EmbeddingStrategy::SentenceTransformer).unwrap();
+
         // Test vector similarity function
         let v1 = Vector::new(vec![1.0, 0.0, 0.0]);
         let v2 = Vector::new(vec![1.0, 0.0, 0.0]);
-        
-        let args = vec![
-            VectorServiceArg::Vector(v1),
-            VectorServiceArg::Vector(v2),
-        ];
-        
-        let result = service.execute_function("vector_similarity", &args).unwrap();
-        
+
+        let args = vec![VectorServiceArg::Vector(v1), VectorServiceArg::Vector(v2)];
+
+        let result = service
+            .execute_function("vector_similarity", &args)
+            .unwrap();
+
         match result {
             VectorServiceResult::Number(similarity) => {
                 assert!((similarity - 1.0).abs() < 0.001); // Should be very similar
             }
             _ => panic!("Expected a number result"),
         }
-        
+
         // Test text embedding function
         let text_args = vec![VectorServiceArg::String("test text".to_string())];
         let embed_result = service.execute_function("embed_text", &text_args).unwrap();
-        
+
         match embed_result {
             VectorServiceResult::Vector(vector) => {
                 assert_eq!(vector.dimensions, 384); // Default embedding size

@@ -2,12 +2,12 @@
 //!
 //! This module contains configuration structures for query execution.
 
-use crate::extensions::ExtensionRegistry;
 use crate::builtin::register_builtin_functions;
-use std::sync::Arc;
-use std::time::Duration;
-use std::thread;
+use crate::extensions::ExtensionRegistry;
 use lazy_static::lazy_static;
+use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 
 /// Query execution context
 #[derive(Debug, Clone)]

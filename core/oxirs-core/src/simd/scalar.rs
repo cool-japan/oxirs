@@ -25,7 +25,7 @@ pub fn cosine_distance_f32(a: &[f32], b: &[f32]) -> f32 {
     let dot = dot_f32(a, b);
     let norm_a = norm_f32(a);
     let norm_b = norm_f32(b);
-    
+
     if norm_a == 0.0 || norm_b == 0.0 {
         1.0
     } else {
@@ -44,10 +44,7 @@ pub fn euclidean_distance_f32(a: &[f32], b: &[f32]) -> f32 {
 
 /// Compute Manhattan distance between two f32 slices
 pub fn manhattan_distance_f32(a: &[f32], b: &[f32]) -> f32 {
-    a.iter()
-        .zip(b)
-        .map(|(x, y)| (x - y).abs())
-        .sum()
+    a.iter().zip(b).map(|(x, y)| (x - y).abs()).sum()
 }
 
 /// Compute L2 norm of f32 slice
@@ -87,7 +84,7 @@ pub fn cosine_distance_f64(a: &[f64], b: &[f64]) -> f64 {
     let dot = dot_f64(a, b);
     let norm_a = norm_f64(a);
     let norm_b = norm_f64(b);
-    
+
     if norm_a == 0.0 || norm_b == 0.0 {
         1.0
     } else {
@@ -106,10 +103,7 @@ pub fn euclidean_distance_f64(a: &[f64], b: &[f64]) -> f64 {
 
 /// Compute Manhattan distance between two f64 slices
 pub fn manhattan_distance_f64(a: &[f64], b: &[f64]) -> f64 {
-    a.iter()
-        .zip(b)
-        .map(|(x, y)| (x - y).abs())
-        .sum()
+    a.iter().zip(b).map(|(x, y)| (x - y).abs()).sum()
 }
 
 /// Compute L2 norm of f64 slice

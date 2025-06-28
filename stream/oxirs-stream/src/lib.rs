@@ -30,18 +30,28 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 /// Re-export commonly used types for convenience
-pub use bridge::{MessageBridgeManager, BridgeType, ExternalSystemConfig, ExternalSystemType, 
-                RoutingRule, MessageTransformer, ExternalMessage, BridgeInfo};
+pub use bridge::{
+    BridgeInfo, BridgeType, ExternalMessage, ExternalSystemConfig, ExternalSystemType,
+    MessageBridgeManager, MessageTransformer, RoutingRule,
+};
 pub use circuit_breaker::{CircuitBreakerError, FailureType, SharedCircuitBreakerExt};
 pub use connection_pool::{DetailedPoolMetrics, PoolConfig, PoolStatus};
-pub use event::{StreamEvent, EventMetadata, EventCategory, EventPriority, SparqlOperationType, 
-               IsolationLevel, SchemaType, SchemaChangeType, QueryResult};
-pub use sparql_streaming::{ContinuousQueryManager, QueryMetadata, QueryManagerConfig,
-                          QueryResultChannel, QueryResultUpdate, UpdateType};
-pub use store_integration::{StoreChangeDetector, ChangeDetectionStrategy, UpdateNotification,
-                           RealtimeUpdateManager, UpdateFilter, ChangeNotification};
-pub use webhook::{WebhookManager, WebhookConfig, HttpMethod, EventFilter as WebhookEventFilter,
-                 RetryConfig as WebhookRetryConfig, RateLimit, WebhookMetadata, WebhookInfo};
+pub use event::{
+    EventCategory, EventMetadata, EventPriority, IsolationLevel, QueryResult, SchemaChangeType,
+    SchemaType, SparqlOperationType, StreamEvent,
+};
+pub use sparql_streaming::{
+    ContinuousQueryManager, QueryManagerConfig, QueryMetadata, QueryResultChannel,
+    QueryResultUpdate, UpdateType,
+};
+pub use store_integration::{
+    ChangeDetectionStrategy, ChangeNotification, RealtimeUpdateManager, StoreChangeDetector,
+    UpdateFilter, UpdateNotification,
+};
+pub use webhook::{
+    EventFilter as WebhookEventFilter, HttpMethod, RateLimit, RetryConfig as WebhookRetryConfig,
+    WebhookConfig, WebhookInfo, WebhookManager, WebhookMetadata,
+};
 
 #[cfg(test)]
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -50,12 +60,12 @@ pub mod backend;
 pub mod bridge;
 pub mod circuit_breaker;
 pub mod config;
-pub mod event;
 pub mod connection_pool;
 pub mod consumer;
 pub mod delta;
 pub mod diagnostics;
 pub mod error;
+pub mod event;
 pub mod failover;
 pub mod health_monitor;
 pub mod join;
@@ -249,7 +259,6 @@ pub enum PulsarAuthMethod {
     Oauth2,
     Tls,
 }
-
 
 /// Enhanced stream producer for publishing RDF changes with backend support
 pub struct StreamProducer {
@@ -800,28 +809,39 @@ impl StreamProducer {
                     PatchOperation::AddPrefix { .. } => {
                         // Skip prefix operations for now
                         None
-                    },
+                    }
                     PatchOperation::DeletePrefix { .. } => {
                         // Skip prefix operations for now
                         None
-                    },
-                    PatchOperation::TransactionBegin { .. } => Some(StreamEvent::TransactionBegin {
-                        transaction_id: patch.transaction_id.clone().unwrap_or_else(|| Uuid::new_v4().to_string()),
-                        isolation_level: None,
-                        metadata,
-                    }),
+                    }
+                    PatchOperation::TransactionBegin { .. } => {
+                        Some(StreamEvent::TransactionBegin {
+                            transaction_id: patch
+                                .transaction_id
+                                .clone()
+                                .unwrap_or_else(|| Uuid::new_v4().to_string()),
+                            isolation_level: None,
+                            metadata,
+                        })
+                    }
                     PatchOperation::TransactionCommit => Some(StreamEvent::TransactionCommit {
-                        transaction_id: patch.transaction_id.clone().unwrap_or_else(|| Uuid::new_v4().to_string()),
+                        transaction_id: patch
+                            .transaction_id
+                            .clone()
+                            .unwrap_or_else(|| Uuid::new_v4().to_string()),
                         metadata,
                     }),
                     PatchOperation::TransactionAbort => Some(StreamEvent::TransactionAbort {
-                        transaction_id: patch.transaction_id.clone().unwrap_or_else(|| Uuid::new_v4().to_string()),
+                        transaction_id: patch
+                            .transaction_id
+                            .clone()
+                            .unwrap_or_else(|| Uuid::new_v4().to_string()),
                         metadata,
                     }),
                     PatchOperation::Header { .. } => {
                         // Skip header operations for now
                         None
-                    },
+                    }
                 }
             })
             .collect();
@@ -1314,35 +1334,21 @@ pub enum PatchOperation {
         object: String,
     },
     /// Add a graph (GA operation)
-    AddGraph {
-        graph: String,
-    },
+    AddGraph { graph: String },
     /// Delete a graph (GD operation)
-    DeleteGraph {
-        graph: String,
-    },
+    DeleteGraph { graph: String },
     /// Add a prefix (PA operation)
-    AddPrefix {
-        prefix: String,
-        namespace: String,
-    },
+    AddPrefix { prefix: String, namespace: String },
     /// Delete a prefix (PD operation)
-    DeletePrefix {
-        prefix: String,
-    },
+    DeletePrefix { prefix: String },
     /// Transaction begin (TX operation)
-    TransactionBegin {
-        transaction_id: Option<String>,
-    },
+    TransactionBegin { transaction_id: Option<String> },
     /// Transaction commit (TC operation)
     TransactionCommit,
     /// Transaction abort (TA operation)
     TransactionAbort,
     /// Header information (H operation)
-    Header {
-        key: String,
-        value: String,
-    },
+    Header { key: String, value: String },
 }
 
 /// RDF patch for atomic updates with full protocol support
@@ -1387,8 +1393,7 @@ impl RdfPatch {
 
     /// Parse from RDF Patch format
     pub fn from_rdf_patch_format(input: &str) -> Result<Self> {
-        let mut parser = crate::patch::PatchParser::new()
-            .with_strict_mode(false);
+        let mut parser = crate::patch::PatchParser::new().with_strict_mode(false);
         parser.parse(input)
     }
 }

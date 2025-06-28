@@ -1,32 +1,32 @@
 //! Federated query executor for parallel service execution
 
-use std::{
-    collections::HashMap,
-    sync::Arc,
-    time::{Duration, Instant},
-};
 use futures::{
     future::{join_all, select_all},
     stream::{self, StreamExt},
 };
 use reqwest::Client;
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tokio::{
-    sync::{Semaphore, RwLock},
+    sync::{RwLock, Semaphore},
     time::timeout,
 };
 use url::Url;
 
-use oxirs_core::{
-    query::QueryResults,
-};
 use oxirs_arq::{Query, QueryType};
+use oxirs_core::query::QueryResults;
 
 use crate::{
-    error::{Error, Result},
+    error::{FusekiError, FusekiResult},
     federation::{
-        FederationConfig,
-        planner::{FederatedQueryPlan, ExecutionStep, ExecutionStrategy, ServiceSelection, QueryPlanner},
         health::HealthMonitor,
+        planner::{
+            ExecutionStep, ExecutionStrategy, FederatedQueryPlan, QueryPlanner, ServiceSelection,
+        },
+        FederationConfig,
     },
 };
 
@@ -58,7 +58,7 @@ impl QueryResult {
             metadata: QueryMetadata::default(),
         }
     }
-    
+
     /// Get size hint for result
     pub fn size_hint(&self) -> usize {
         self.metadata.result_count
@@ -108,7 +108,7 @@ impl FederatedExecutor {
         health_monitor: Arc<HealthMonitor>,
     ) -> Self {
         let max_concurrent = config.max_concurrent_requests;
-        
+
         Self {
             http_client: Client::builder()
                 .timeout(config.request_timeout)
@@ -125,7 +125,7 @@ impl FederatedExecutor {
     /// Execute a federated query plan
     pub async fn execute(&self, plan: FederatedQueryPlan) -> Result<QueryResult> {
         let start = Instant::now();
-        
+
         let mut context = ExecutionContext {
             plan: plan.clone(),
             results: HashMap::new(),
@@ -134,15 +134,9 @@ impl FederatedExecutor {
 
         // Execute based on strategy
         let result = match plan.strategy {
-            ExecutionStrategy::Sequential => {
-                self.execute_sequential(&mut context).await?
-            }
-            ExecutionStrategy::Parallel => {
-                self.execute_parallel(&mut context).await?
-            }
-            ExecutionStrategy::Adaptive => {
-                self.execute_adaptive(&mut context).await?
-            }
+            ExecutionStrategy::Sequential => self.execute_sequential(&mut context).await?,
+            ExecutionStrategy::Parallel => self.execute_parallel(&mut context).await?,
+            ExecutionStrategy::Adaptive => self.execute_adaptive(&mut context).await?,
         };
 
         // Update metrics
@@ -169,30 +163,32 @@ impl FederatedExecutor {
     async fn execute_parallel(&self, context: &mut ExecutionContext) -> Result<QueryResult> {
         // Group steps by dependencies
         let step_groups = self.group_steps_by_dependencies(&context.plan.steps);
-        
+
         let mut final_result = QueryResult::new_empty();
 
         // Execute each group in sequence, but steps within group in parallel
         for group in step_groups {
             let mut group_results = Vec::new();
-            
+
             // Execute steps in this group concurrently
             let futures = group.into_iter().map(|step| {
                 let step = step.clone();
                 async move {
                     // Create a temporary context for this step
                     let start = std::time::Instant::now();
-                    let primary_service = step.services.iter()
-                        .find(|s| s.is_primary)
-                        .ok_or_else(|| Error::Custom("No primary service for step".to_string()))?;
-                    
-                    self.execute_on_service_standalone(primary_service, &step.sub_query).await
+                    let primary_service =
+                        step.services.iter().find(|s| s.is_primary).ok_or_else(|| {
+                            Error::Custom("No primary service for step".to_string())
+                        })?;
+
+                    self.execute_on_service_standalone(primary_service, &step.sub_query)
+                        .await
                         .map(|result| (step.id.clone(), result))
                 }
             });
 
             let results = join_all(futures).await;
-            
+
             // Process results and update main context
             for result in results {
                 match result {
@@ -203,7 +199,7 @@ impl FederatedExecutor {
                     Err(e) => return Err(e),
                 }
             }
-            
+
             // Use the last result as final result (or merge if needed)
             if let Some(last_result) = group_results.last() {
                 final_result = last_result.clone();
@@ -234,21 +230,33 @@ impl FederatedExecutor {
         context: &mut ExecutionContext,
     ) -> Result<QueryResult> {
         let start = Instant::now();
-        
+
         // Check if we should use circuit breaker
-        let primary_service = step.services.iter()
+        let primary_service = step
+            .services
+            .iter()
             .find(|s| s.is_primary)
             .ok_or_else(|| Error::Custom("No primary service for step".to_string()))?;
 
-        if !self.health_monitor.should_use_service(&primary_service.service_id).await {
+        if !self
+            .health_monitor
+            .should_use_service(&primary_service.service_id)
+            .await
+        {
             // Try fallback services
             for service in &step.services {
-                if !service.is_primary && 
-                   self.health_monitor.should_use_service(&service.service_id).await {
-                    return self.execute_on_service(service, &step.sub_query, context).await;
+                if !service.is_primary
+                    && self
+                        .health_monitor
+                        .should_use_service(&service.service_id)
+                        .await
+                {
+                    return self
+                        .execute_on_service(service, &step.sub_query, context)
+                        .await;
                 }
             }
-            
+
             return Err(Error::Custom(format!(
                 "All services unavailable for step {}",
                 step.id
@@ -256,20 +264,27 @@ impl FederatedExecutor {
         }
 
         // Execute on primary service
-        let result = self.execute_on_service(primary_service, &step.sub_query, context).await;
-        
+        let result = self
+            .execute_on_service(primary_service, &step.sub_query, context)
+            .await;
+
         // Update metrics
-        context.metrics.step_times.insert(step.id.clone(), start.elapsed());
-        
+        context
+            .metrics
+            .step_times
+            .insert(step.id.clone(), start.elapsed());
+
         // Update planner statistics
         if let Ok(ref res) = result {
-            self.planner.update_statistics(
-                &primary_service.service_id,
-                format!("step_{}", step.id),
-                res.size_hint(),
-                start.elapsed(),
-                true,
-            ).await;
+            self.planner
+                .update_statistics(
+                    &primary_service.service_id,
+                    format!("step_{}", step.id),
+                    res.size_hint(),
+                    start.elapsed(),
+                    true,
+                )
+                .await;
         }
 
         result
@@ -282,12 +297,15 @@ impl FederatedExecutor {
         query: &Query,
     ) -> Result<QueryResult> {
         // Acquire semaphore permit
-        let _permit = self.semaphore.acquire().await
+        let _permit = self
+            .semaphore
+            .acquire()
+            .await
             .map_err(|_| Error::Custom("Failed to acquire semaphore".to_string()))?;
 
         // Prepare request
         let query_string = self.serialize_query(query)?;
-        
+
         let response = match timeout(
             self.config.request_timeout,
             self.http_client
@@ -295,8 +313,10 @@ impl FederatedExecutor {
                 .header("Content-Type", "application/sparql-query")
                 .header("Accept", self.get_accept_header(&query.query_type))
                 .body(query_string)
-                .send()
-        ).await {
+                .send(),
+        )
+        .await
+        {
             Ok(Ok(resp)) => resp,
             Ok(Err(e)) => {
                 return Err(Error::Custom(format!("Service request failed: {}", e)));
@@ -325,14 +345,17 @@ impl FederatedExecutor {
         context: &mut ExecutionContext,
     ) -> Result<QueryResult> {
         // Acquire semaphore permit
-        let _permit = self.semaphore.acquire().await
+        let _permit = self
+            .semaphore
+            .acquire()
+            .await
             .map_err(|_| Error::Custom("Failed to acquire semaphore".to_string()))?;
 
         context.metrics.service_calls += 1;
 
         // Prepare request
         let query_string = self.serialize_query(query)?;
-        
+
         let response = match timeout(
             self.config.request_timeout,
             self.http_client
@@ -340,8 +363,10 @@ impl FederatedExecutor {
                 .header("Content-Type", "application/sparql-query")
                 .header("Accept", self.get_accept_header(&query.query_type))
                 .body(query_string)
-                .send()
-        ).await {
+                .send(),
+        )
+        .await
+        {
             Ok(Ok(resp)) => resp,
             Ok(Err(e)) => {
                 context.metrics.failed_calls += 1;
@@ -369,40 +394,44 @@ impl FederatedExecutor {
         // Parse response based on query type
         self.parse_response(response, &query.query_type).await
     }
-    
+
     /// Parse HTTP response into QueryResult
     async fn parse_response(
         &self,
         response: reqwest::Response,
         query_type: &QueryType,
     ) -> Result<QueryResult> {
-        let response_text = response.text().await
+        let response_text = response
+            .text()
+            .await
             .map_err(|e| Error::Custom(format!("Failed to read response: {}", e)))?;
-        
+
         // Parse based on query type
         let results = match query_type {
             QueryType::Select { .. } => {
                 // Parse SPARQL JSON results
                 let json: serde_json::Value = serde_json::from_str(&response_text)
                     .map_err(|e| Error::Custom(format!("Invalid JSON response: {}", e)))?;
-                
+
                 // Extract bindings count for metadata
-                let result_count = json.get("results")
+                let result_count = json
+                    .get("results")
                     .and_then(|r| r.get("bindings"))
                     .and_then(|b| b.as_array())
                     .map(|arr| arr.len())
                     .unwrap_or(0);
-                
+
                 QueryResults::Solutions(vec![]) // TODO: Parse actual bindings
             }
             QueryType::Ask { .. } => {
                 let json: serde_json::Value = serde_json::from_str(&response_text)
                     .map_err(|e| Error::Custom(format!("Invalid JSON response: {}", e)))?;
-                
-                let boolean_result = json.get("boolean")
+
+                let boolean_result = json
+                    .get("boolean")
                     .and_then(|b| b.as_bool())
                     .unwrap_or(false);
-                
+
                 QueryResults::Boolean(boolean_result)
             }
             QueryType::Construct { .. } | QueryType::Describe { .. } => {
@@ -410,7 +439,7 @@ impl FederatedExecutor {
                 QueryResults::Graph(Default::default()) // TODO: Parse actual graph
             }
         };
-        
+
         Ok(QueryResult {
             results,
             metadata: QueryMetadata {
@@ -426,43 +455,42 @@ impl FederatedExecutor {
         // Use oxirs-arq's built-in query serialization
         match query.to_string() {
             query_str if !query_str.is_empty() => Ok(query_str),
-            _ => Err(Error::Custom("Failed to serialize query".to_string()))
+            _ => Err(Error::Custom("Failed to serialize query".to_string())),
         }
     }
 
     /// Get appropriate Accept header for query type
     fn get_accept_header(&self, query_type: &QueryType) -> &'static str {
         match query_type {
-            QueryType::Select { .. } | QueryType::Ask { .. } => {
-                "application/sparql-results+json"
-            }
-            QueryType::Construct { .. } | QueryType::Describe { .. } => {
-                "application/n-triples"
-            }
+            QueryType::Select { .. } | QueryType::Ask { .. } => "application/sparql-results+json",
+            QueryType::Construct { .. } | QueryType::Describe { .. } => "application/n-triples",
         }
     }
-    
+
     /// Group execution steps by their dependencies
     fn group_steps_by_dependencies(&self, steps: &[ExecutionStep]) -> Vec<Vec<ExecutionStep>> {
         let mut groups = Vec::new();
-        let mut remaining_steps: HashMap<String, ExecutionStep> = steps.iter()
+        let mut remaining_steps: HashMap<String, ExecutionStep> = steps
+            .iter()
             .map(|step| (step.id.clone(), step.clone()))
             .collect();
         let mut processed = std::collections::HashSet::new();
-        
+
         while !remaining_steps.is_empty() {
             let mut current_group = Vec::new();
-            
+
             // Find steps with no unresolved dependencies
-            let ready_steps: Vec<String> = remaining_steps.keys()
+            let ready_steps: Vec<String> = remaining_steps
+                .keys()
                 .filter(|step_id| {
-                    remaining_steps.get(*step_id)
+                    remaining_steps
+                        .get(*step_id)
                         .map(|step| step.dependencies.iter().all(|dep| processed.contains(dep)))
                         .unwrap_or(false)
                 })
                 .cloned()
                 .collect();
-            
+
             if ready_steps.is_empty() {
                 // No more resolvable dependencies - break potential cycles
                 // by taking first remaining step
@@ -482,7 +510,7 @@ impl FederatedExecutor {
                     }
                 }
             }
-            
+
             if !current_group.is_empty() {
                 groups.push(current_group);
             } else {
@@ -490,7 +518,7 @@ impl FederatedExecutor {
                 break;
             }
         }
-        
+
         groups
     }
 
@@ -500,7 +528,9 @@ impl FederatedExecutor {
         response: reqwest::Response,
         query_type: &QueryType,
     ) -> Result<QueryResult> {
-        let body = response.text().await
+        let body = response
+            .text()
+            .await
             .map_err(|e| Error::Custom(format!("Failed to read response: {}", e)))?;
 
         // TODO: Implement proper response parsing based on query type
@@ -511,10 +541,10 @@ impl FederatedExecutor {
     fn group_steps_by_dependencies(&self, steps: &[ExecutionStep]) -> Vec<Vec<ExecutionStep>> {
         let mut groups = Vec::new();
         let mut processed = std::collections::HashSet::new();
-        
+
         while processed.len() < steps.len() {
             let mut group = Vec::new();
-            
+
             for step in steps {
                 if !processed.contains(&step.id) {
                     // Check if all dependencies are processed
@@ -523,19 +553,19 @@ impl FederatedExecutor {
                     }
                 }
             }
-            
+
             if group.is_empty() {
                 // Circular dependency or error
                 break;
             }
-            
+
             for step in &group {
                 processed.insert(step.id.clone());
             }
-            
+
             groups.push(group);
         }
-        
+
         groups
     }
 
@@ -547,11 +577,11 @@ impl FederatedExecutor {
             metrics.service_calls,
             metrics.failed_calls
         );
-        
+
         if !metrics.step_times.is_empty() {
             tracing::debug!("Step execution times: {:?}", metrics.step_times);
         }
-        
+
         if metrics.bytes_transferred > 0 {
             tracing::debug!("Bytes transferred: {}", metrics.bytes_transferred);
         }
@@ -597,9 +627,7 @@ impl ResultMerger {
             MergeStrategy::Union => self.merge_union(results).await,
             MergeStrategy::Intersection => self.merge_intersection(results).await,
             MergeStrategy::Join(vars) => self.merge_join(results, vars).await,
-            MergeStrategy::Custom => {
-                Err(Error::Custom("Custom merge not implemented".to_string()))
-            }
+            MergeStrategy::Custom => Err(Error::Custom("Custom merge not implemented".to_string())),
         }
     }
 

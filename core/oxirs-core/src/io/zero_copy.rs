@@ -4,22 +4,22 @@
 
 use crate::model::{Term, Triple};
 use crate::OxirsError;
-use std::borrow::Cow;
-use std::io::{self, Write};
-use std::str;
-use bytes::{Bytes, BytesMut, Buf, BufMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use memmap2::{Mmap, MmapMut};
+use std::borrow::Cow;
 use std::fs::File;
+use std::io::{self, Write};
 use std::path::Path;
+use std::str;
 
 /// Trait for types that can be serialized with zero-copy
 pub trait ZeroCopySerialize {
     /// Serialize to a writer
     fn serialize_to<W: Write>(&self, writer: &mut W) -> io::Result<()>;
-    
+
     /// Get the serialized size in bytes
     fn serialized_size(&self) -> usize;
-    
+
     /// Serialize to a byte buffer
     fn serialize_to_bytes(&self, buf: &mut BytesMut);
 }
@@ -28,7 +28,7 @@ pub trait ZeroCopySerialize {
 pub trait ZeroCopyDeserialize<'a>: Sized {
     /// Deserialize from a byte slice
     fn deserialize_from(data: &'a [u8]) -> Result<(Self, &'a [u8]), OxirsError>;
-    
+
     /// Deserialize from a Bytes buffer
     fn deserialize_from_bytes(buf: &mut Bytes) -> Result<Self, OxirsError>;
 }
@@ -41,15 +41,15 @@ impl<'a> ZeroCopyStr<'a> {
     pub fn new_borrowed(s: &'a str) -> Self {
         ZeroCopyStr(Cow::Borrowed(s))
     }
-    
+
     pub fn new_owned(s: String) -> Self {
         ZeroCopyStr(Cow::Owned(s))
     }
-    
+
     pub fn as_str(&self) -> &str {
         &self.0
     }
-    
+
     pub fn into_owned(self) -> String {
         self.0.into_owned()
     }
@@ -65,7 +65,7 @@ impl<'a> ZeroCopyIri<'a> {
     pub fn new(value: ZeroCopyStr<'a>) -> Self {
         Self { value }
     }
-    
+
     pub fn as_str(&self) -> &str {
         self.value.as_str()
     }
@@ -81,7 +81,7 @@ impl<'a> ZeroCopyBlankNode<'a> {
     pub fn new(id: ZeroCopyStr<'a>) -> Self {
         Self { id }
     }
-    
+
     pub fn id(&self) -> &str {
         self.id.as_str()
     }
@@ -103,7 +103,7 @@ impl<'a> ZeroCopyLiteral<'a> {
             datatype: None,
         }
     }
-    
+
     pub fn new_language_tagged(value: ZeroCopyStr<'a>, language: ZeroCopyStr<'a>) -> Self {
         Self {
             value,
@@ -111,7 +111,7 @@ impl<'a> ZeroCopyLiteral<'a> {
             datatype: None,
         }
     }
-    
+
     pub fn new_typed(value: ZeroCopyStr<'a>, datatype: ZeroCopyIri<'a>) -> Self {
         Self {
             value,
@@ -119,15 +119,15 @@ impl<'a> ZeroCopyLiteral<'a> {
             datatype: Some(datatype),
         }
     }
-    
+
     pub fn value(&self) -> &str {
         self.value.as_str()
     }
-    
+
     pub fn language(&self) -> Option<&str> {
         self.language.as_ref().map(|l| l.as_str())
     }
-    
+
     pub fn datatype(&self) -> Option<&ZeroCopyIri<'a>> {
         self.datatype.as_ref()
     }
@@ -180,19 +180,21 @@ fn write_string<W: Write>(writer: &mut W, s: &str) -> io::Result<()> {
 /// Read a length-prefixed string (zero-copy)
 fn read_string<'a>(data: &'a [u8]) -> Result<(&'a str, &'a [u8]), OxirsError> {
     if data.len() < 4 {
-        return Err(OxirsError::Parse("Insufficient data for string length".into()));
+        return Err(OxirsError::Parse(
+            "Insufficient data for string length".into(),
+        ));
     }
-    
+
     let len = u32::from_le_bytes([data[0], data[1], data[2], data[3]]) as usize;
     let data = &data[4..];
-    
+
     if data.len() < len {
         return Err(OxirsError::Parse("Insufficient data for string".into()));
     }
-    
+
     let s = str::from_utf8(&data[..len])
         .map_err(|e| OxirsError::Parse(format!("Invalid UTF-8: {}", e)))?;
-    
+
     Ok((s, &data[len..]))
 }
 
@@ -226,12 +228,15 @@ impl ZeroCopySerialize for Term {
                 write_string(writer, v.as_str())?;
             }
             Term::QuotedTriple(_) => {
-                return Err(io::Error::new(io::ErrorKind::Other, "QuotedTriple serialization not supported"));
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "QuotedTriple serialization not supported",
+                ));
             }
         }
         Ok(())
     }
-    
+
     fn serialized_size(&self) -> usize {
         1 + match self {
             Term::NamedNode(n) => 4 + n.as_str().len(),
@@ -249,7 +254,7 @@ impl ZeroCopySerialize for Term {
             Term::QuotedTriple(_) => panic!("QuotedTriple size calculation not supported"),
         }
     }
-    
+
     fn serialize_to_bytes(&self, buf: &mut BytesMut) {
         match self {
             &Term::NamedNode(ref n) => {
@@ -298,10 +303,10 @@ impl<'a> ZeroCopyDeserialize<'a> for ZeroCopyTerm<'a> {
         if data.is_empty() {
             return Err(OxirsError::Parse("No data for term type".into()));
         }
-        
+
         let term_type = data[0];
         let data = &data[1..];
-        
+
         match term_type {
             TERM_NAMED_NODE => {
                 let (iri, rest) = read_string(data)?;
@@ -320,9 +325,9 @@ impl<'a> ZeroCopyDeserialize<'a> for ZeroCopyTerm<'a> {
             TERM_LITERAL_SIMPLE => {
                 let (value, rest) = read_string(data)?;
                 Ok((
-                    ZeroCopyTerm::Literal(ZeroCopyLiteral::new_simple(
-                        ZeroCopyStr::new_borrowed(value)
-                    )),
+                    ZeroCopyTerm::Literal(ZeroCopyLiteral::new_simple(ZeroCopyStr::new_borrowed(
+                        value,
+                    ))),
                     rest,
                 ))
             }
@@ -355,17 +360,20 @@ impl<'a> ZeroCopyDeserialize<'a> for ZeroCopyTerm<'a> {
                     rest,
                 ))
             }
-            _ => Err(OxirsError::Parse(format!("Unknown term type: {}", term_type))),
+            _ => Err(OxirsError::Parse(format!(
+                "Unknown term type: {}",
+                term_type
+            ))),
         }
     }
-    
+
     fn deserialize_from_bytes(buf: &mut Bytes) -> Result<Self, OxirsError> {
         if buf.remaining() == 0 {
             return Err(OxirsError::Parse("No data for term type".into()));
         }
-        
+
         let term_type = buf.get_u8();
-        
+
         match term_type {
             TERM_NAMED_NODE => {
                 let len = buf.get_u32_le() as usize;
@@ -373,7 +381,7 @@ impl<'a> ZeroCopyDeserialize<'a> for ZeroCopyTerm<'a> {
                 let iri = str::from_utf8(&bytes)
                     .map_err(|e| OxirsError::Parse(format!("Invalid UTF-8: {}", e)))?;
                 Ok(ZeroCopyTerm::NamedNode(ZeroCopyIri::new(
-                    ZeroCopyStr::new_owned(iri.to_string())
+                    ZeroCopyStr::new_owned(iri.to_string()),
                 )))
             }
             TERM_BLANK_NODE => {
@@ -382,7 +390,7 @@ impl<'a> ZeroCopyDeserialize<'a> for ZeroCopyTerm<'a> {
                 let id = str::from_utf8(&bytes)
                     .map_err(|e| OxirsError::Parse(format!("Invalid UTF-8: {}", e)))?;
                 Ok(ZeroCopyTerm::BlankNode(ZeroCopyBlankNode::new(
-                    ZeroCopyStr::new_owned(id.to_string())
+                    ZeroCopyStr::new_owned(id.to_string()),
                 )))
             }
             TERM_LITERAL_SIMPLE => {
@@ -391,10 +399,13 @@ impl<'a> ZeroCopyDeserialize<'a> for ZeroCopyTerm<'a> {
                 let value = str::from_utf8(&bytes)
                     .map_err(|e| OxirsError::Parse(format!("Invalid UTF-8: {}", e)))?;
                 Ok(ZeroCopyTerm::Literal(ZeroCopyLiteral::new_simple(
-                    ZeroCopyStr::new_owned(value.to_string())
+                    ZeroCopyStr::new_owned(value.to_string()),
                 )))
             }
-            _ => Err(OxirsError::Parse(format!("Unknown term type: {}", term_type))),
+            _ => Err(OxirsError::Parse(format!(
+                "Unknown term type: {}",
+                term_type
+            ))),
         }
     }
 }
@@ -407,18 +418,21 @@ impl ZeroCopySerialize for Triple {
             crate::model::Subject::BlankNode(b) => Term::BlankNode(b.clone()),
             crate::model::Subject::Variable(v) => Term::Variable(v.clone()),
             crate::model::Subject::QuotedTriple(_) => {
-                return Err(io::Error::new(io::ErrorKind::Other, "QuotedTriple not supported"));
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "QuotedTriple not supported",
+                ));
             }
         };
         subject_term.serialize_to(writer)?;
-        
+
         // Convert Predicate to Term
         let predicate_term = match self.predicate() {
             crate::model::Predicate::NamedNode(n) => Term::NamedNode(n.clone()),
             crate::model::Predicate::Variable(v) => Term::Variable(v.clone()),
         };
         predicate_term.serialize_to(writer)?;
-        
+
         // Convert Object to Term
         let object_term = match self.object() {
             crate::model::Object::NamedNode(n) => Term::NamedNode(n.clone()),
@@ -426,14 +440,17 @@ impl ZeroCopySerialize for Triple {
             crate::model::Object::Literal(l) => Term::Literal(l.clone()),
             crate::model::Object::Variable(v) => Term::Variable(v.clone()),
             crate::model::Object::QuotedTriple(_) => {
-                return Err(io::Error::new(io::ErrorKind::Other, "QuotedTriple not supported"));
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "QuotedTriple not supported",
+                ));
             }
         };
         object_term.serialize_to(writer)?;
-        
+
         Ok(())
     }
-    
+
     fn serialized_size(&self) -> usize {
         // Convert to Terms and use their serialized_size
         let subject_term: Term = match self.subject() {
@@ -442,12 +459,12 @@ impl ZeroCopySerialize for Triple {
             crate::model::Subject::Variable(v) => Term::Variable(v.clone()),
             crate::model::Subject::QuotedTriple(_) => panic!("QuotedTriple not supported"),
         };
-        
+
         let predicate_term: Term = match self.predicate() {
             crate::model::Predicate::NamedNode(n) => Term::NamedNode(n.clone()),
             crate::model::Predicate::Variable(v) => Term::Variable(v.clone()),
         };
-        
+
         let object_term: Term = match self.object() {
             crate::model::Object::NamedNode(n) => Term::NamedNode(n.clone()),
             crate::model::Object::BlankNode(b) => Term::BlankNode(b.clone()),
@@ -455,10 +472,12 @@ impl ZeroCopySerialize for Triple {
             crate::model::Object::Variable(v) => Term::Variable(v.clone()),
             crate::model::Object::QuotedTriple(_) => panic!("QuotedTriple not supported"),
         };
-        
-        subject_term.serialized_size() + predicate_term.serialized_size() + object_term.serialized_size()
+
+        subject_term.serialized_size()
+            + predicate_term.serialized_size()
+            + object_term.serialized_size()
     }
-    
+
     fn serialize_to_bytes(&self, buf: &mut BytesMut) {
         // Convert and serialize subject
         let subject_term: Term = match self.subject() {
@@ -468,14 +487,14 @@ impl ZeroCopySerialize for Triple {
             crate::model::Subject::QuotedTriple(_) => panic!("QuotedTriple not supported"),
         };
         subject_term.serialize_to_bytes(buf);
-        
+
         // Convert and serialize predicate
         let predicate_term: Term = match self.predicate() {
             crate::model::Predicate::NamedNode(n) => Term::NamedNode(n.clone()),
             crate::model::Predicate::Variable(v) => Term::Variable(v.clone()),
         };
         predicate_term.serialize_to_bytes(buf);
-        
+
         // Convert and serialize object
         let object_term: Term = match self.object() {
             crate::model::Object::NamedNode(n) => Term::NamedNode(n.clone()),
@@ -493,12 +512,12 @@ impl<'a> ZeroCopyDeserialize<'a> for ZeroCopyTriple<'a> {
         let (subject, data) = ZeroCopyTerm::deserialize_from(data)?;
         let (predicate, data) = ZeroCopyTerm::deserialize_from(data)?;
         let (object, data) = ZeroCopyTerm::deserialize_from(data)?;
-        
+
         let predicate_iri = match predicate {
             ZeroCopyTerm::NamedNode(iri) => iri,
             _ => return Err(OxirsError::Parse("Predicate must be IRI".into())),
         };
-        
+
         Ok((
             ZeroCopyTriple {
                 subject,
@@ -508,17 +527,17 @@ impl<'a> ZeroCopyDeserialize<'a> for ZeroCopyTriple<'a> {
             data,
         ))
     }
-    
+
     fn deserialize_from_bytes(buf: &mut Bytes) -> Result<Self, OxirsError> {
         let subject = ZeroCopyTerm::deserialize_from_bytes(buf)?;
         let predicate = ZeroCopyTerm::deserialize_from_bytes(buf)?;
         let object = ZeroCopyTerm::deserialize_from_bytes(buf)?;
-        
+
         let predicate_iri = match predicate {
             ZeroCopyTerm::NamedNode(iri) => iri,
             _ => return Err(OxirsError::Parse("Predicate must be IRI".into())),
         };
-        
+
         Ok(ZeroCopyTriple {
             subject,
             predicate: predicate_iri,
@@ -539,11 +558,11 @@ impl MmapReader {
         let mmap = unsafe { Mmap::map(&file)? };
         Ok(Self { _file: file, mmap })
     }
-    
+
     pub fn data(&self) -> &[u8] {
         &self.mmap
     }
-    
+
     /// Iterate over triples in the file with zero-copy
     pub fn iter_triples(&self) -> ZeroCopyTripleIterator {
         ZeroCopyTripleIterator {
@@ -561,12 +580,12 @@ pub struct ZeroCopyTripleIterator<'a> {
 
 impl<'a> Iterator for ZeroCopyTripleIterator<'a> {
     type Item = Result<ZeroCopyTriple<'a>, OxirsError>;
-    
+
     fn next(&mut self) -> Option<Self::Item> {
         if self.offset >= self.data.len() {
             return None;
         }
-        
+
         match ZeroCopyTriple::deserialize_from(&self.data[self.offset..]) {
             Ok((triple, rest)) => {
                 self.offset = self.data.len() - rest.len();
@@ -595,7 +614,7 @@ impl MmapWriter {
             position: 0,
         })
     }
-    
+
     pub fn write_triple(&mut self, triple: &Triple) -> io::Result<()> {
         let size = triple.serialized_size();
         if self.position + size > self.mmap.len() {
@@ -604,13 +623,13 @@ impl MmapWriter {
                 "MmapWriter capacity exceeded",
             ));
         }
-        
+
         let mut cursor = io::Cursor::new(&mut self.mmap[self.position..]);
         triple.serialize_to(&mut cursor)?;
         self.position += size;
         Ok(())
     }
-    
+
     pub fn finalize(mut self) -> io::Result<()> {
         // Truncate file to actual size
         self.file.set_len(self.position as u64)?;
@@ -622,18 +641,18 @@ impl MmapWriter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{NamedNode, Literal};
-    
+    use crate::{Literal, NamedNode};
+
     #[test]
     fn test_term_serialization() {
         let term = Term::NamedNode(NamedNode::new("http://example.org/test").unwrap());
-        
+
         let mut buf = Vec::new();
         term.serialize_to(&mut buf).unwrap();
-        
+
         let (deserialized, rest) = ZeroCopyTerm::deserialize_from(&buf).unwrap();
         assert!(rest.is_empty());
-        
+
         match deserialized {
             ZeroCopyTerm::NamedNode(iri) => {
                 assert_eq!(iri.as_str(), "http://example.org/test");
@@ -641,7 +660,7 @@ mod tests {
             _ => panic!("Wrong term type"),
         }
     }
-    
+
     #[test]
     fn test_triple_serialization() {
         let triple = Triple::new(
@@ -649,22 +668,25 @@ mod tests {
             NamedNode::new("http://example.org/predicate").unwrap(),
             Literal::new("Object"),
         );
-        
+
         let mut buf = Vec::new();
         triple.serialize_to(&mut buf).unwrap();
-        
+
         let (deserialized, rest) = ZeroCopyTriple::deserialize_from(&buf).unwrap();
         assert!(rest.is_empty());
-        
+
         match &deserialized.subject {
             ZeroCopyTerm::NamedNode(iri) => {
                 assert_eq!(iri.as_str(), "http://example.org/subject");
             }
             _ => panic!("Wrong subject type"),
         }
-        
-        assert_eq!(deserialized.predicate.as_str(), "http://example.org/predicate");
-        
+
+        assert_eq!(
+            deserialized.predicate.as_str(),
+            "http://example.org/predicate"
+        );
+
         match &deserialized.object {
             ZeroCopyTerm::Literal(lit) => {
                 assert_eq!(lit.value(), "Object");
@@ -672,17 +694,17 @@ mod tests {
             _ => panic!("Wrong object type"),
         }
     }
-    
+
     #[test]
     fn test_bytes_serialization() {
         let term = Term::Literal(Literal::new("Hello, World!"));
-        
+
         let mut buf = BytesMut::with_capacity(term.serialized_size());
         term.serialize_to_bytes(&mut buf);
-        
+
         let mut bytes = buf.freeze();
         let deserialized = ZeroCopyTerm::deserialize_from_bytes(&mut bytes).unwrap();
-        
+
         match deserialized {
             ZeroCopyTerm::Literal(lit) => {
                 assert_eq!(lit.value(), "Hello, World!");

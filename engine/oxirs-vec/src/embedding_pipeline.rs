@@ -1,7 +1,10 @@
-use crate::{Vector, VectorData, embeddings::{EmbeddableContent, EmbeddingConfig}};
+use crate::{
+    embeddings::{EmbeddableContent, EmbeddingConfig},
+    Vector, VectorData,
+};
 use anyhow::Result;
-use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 
 /// Text preprocessing pipeline
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,9 +71,11 @@ impl Default for PreprocessingPipeline {
     fn default() -> Self {
         // Common English stop words
         let mut stop_words = HashSet::new();
-        for word in &["the", "is", "at", "which", "on", "a", "an", "and", "or", "but", 
-                      "in", "with", "to", "for", "of", "as", "by", "that", "this",
-                      "it", "from", "be", "are", "was", "were", "been"] {
+        for word in &[
+            "the", "is", "at", "which", "on", "a", "an", "and", "or", "but", "in", "with", "to",
+            "for", "of", "as", "by", "that", "this", "it", "from", "be", "are", "was", "were",
+            "been",
+        ] {
             stop_words.insert(word.to_string());
         }
 
@@ -87,60 +92,66 @@ impl PreprocessingPipeline {
     /// Process text through the preprocessing pipeline
     pub fn process(&self, text: &str) -> Vec<String> {
         let mut tokens = self.tokenize(text);
-        
+
         if self.normalization.unicode_normalization {
             tokens = self.normalize_unicode(tokens);
         }
-        
+
         if self.normalization.accent_removal {
             tokens = self.remove_accents(tokens);
         }
-        
+
         tokens = self.filter_tokens(tokens);
-        
+
         if self.normalization.stemming {
             tokens = self.stem_tokens(tokens);
         }
-        
+
         tokens
     }
 
     fn tokenize(&self, text: &str) -> Vec<String> {
         let mut processed = text.to_string();
-        
+
         if self.tokenizer.remove_punctuation {
-            processed = processed.chars()
-                .map(|c| if c.is_alphanumeric() || c.is_whitespace() { c } else { ' ' })
+            processed = processed
+                .chars()
+                .map(|c| {
+                    if c.is_alphanumeric() || c.is_whitespace() {
+                        c
+                    } else {
+                        ' '
+                    }
+                })
                 .collect();
         }
-        
+
         // Split on whitespace and filter
         let mut tokens: Vec<String> = processed
             .split_whitespace()
             .map(|s| s.to_string())
             .collect();
-        
+
         // Split camelCase if enabled (must happen before lowercasing)
         if self.tokenizer.split_camel_case {
-            tokens = tokens.into_iter()
+            tokens = tokens
+                .into_iter()
                 .flat_map(|token| self.split_camel_case(&token))
                 .collect();
         }
-        
+
         // Lowercase after camel case splitting
         if self.tokenizer.lowercase {
-            tokens = tokens.into_iter()
-                .map(|s| s.to_lowercase())
-                .collect();
+            tokens = tokens.into_iter().map(|s| s.to_lowercase()).collect();
         }
-        
+
         tokens
     }
 
     fn split_camel_case(&self, word: &str) -> Vec<String> {
         let mut result = Vec::new();
         let mut current = String::new();
-        
+
         for (i, ch) in word.chars().enumerate() {
             if i > 0 && ch.is_uppercase() && !current.is_empty() {
                 result.push(current.clone());
@@ -148,11 +159,11 @@ impl PreprocessingPipeline {
             }
             current.push(ch);
         }
-        
+
         if !current.is_empty() {
             result.push(current);
         }
-        
+
         if result.is_empty() {
             vec![word.to_string()]
         } else {
@@ -166,9 +177,11 @@ impl PreprocessingPipeline {
     }
 
     fn remove_accents(&self, tokens: Vec<String>) -> Vec<String> {
-        tokens.into_iter()
+        tokens
+            .into_iter()
             .map(|token| {
-                token.chars()
+                token
+                    .chars()
                     .map(|c| match c {
                         'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' => 'a',
                         'è' | 'é' | 'ê' | 'ë' => 'e',
@@ -185,18 +198,20 @@ impl PreprocessingPipeline {
     }
 
     fn filter_tokens(&self, tokens: Vec<String>) -> Vec<String> {
-        tokens.into_iter()
+        tokens
+            .into_iter()
             .filter(|token| {
-                token.len() >= self.tokenizer.min_token_length &&
-                token.len() <= self.tokenizer.max_token_length &&
-                !self.stop_words.contains(token)
+                token.len() >= self.tokenizer.min_token_length
+                    && token.len() <= self.tokenizer.max_token_length
+                    && !self.stop_words.contains(token)
             })
             .collect()
     }
 
     fn stem_tokens(&self, tokens: Vec<String>) -> Vec<String> {
         // Simple suffix stripping - in production, use a proper stemmer
-        tokens.into_iter()
+        tokens
+            .into_iter()
             .map(|mut token| {
                 if token.ends_with("ing") && token.len() > 4 {
                     token.truncate(token.len() - 3);
@@ -267,28 +282,32 @@ impl PostprocessingPipeline {
         if let Some(ref dr) = self.dimensionality_reduction {
             self.apply_dimensionality_reduction(vector, dr)?;
         }
-        
+
         // Apply normalization
         self.apply_normalization(vector)?;
-        
+
         // Calculate quality score
         let quality_score = if self.quality_scoring {
             self.calculate_quality_score(vector)
         } else {
             1.0
         };
-        
+
         // Check for outliers
         if let Some(ref od) = self.outlier_detection {
             if self.is_outlier(vector, od) {
                 return Ok(quality_score * 0.5); // Reduce quality score for outliers
             }
         }
-        
+
         Ok(quality_score)
     }
 
-    fn apply_dimensionality_reduction(&self, vector: &mut Vector, method: &DimensionalityReduction) -> Result<()> {
+    fn apply_dimensionality_reduction(
+        &self,
+        vector: &mut Vector,
+        method: &DimensionalityReduction,
+    ) -> Result<()> {
         match method {
             DimensionalityReduction::PCA { target_dims } => {
                 // Simplified PCA - in production, use proper implementation
@@ -296,7 +315,7 @@ impl PostprocessingPipeline {
                 if values.len() <= *target_dims {
                     return Ok(());
                 }
-                
+
                 // Take first target_dims dimensions (simplified)
                 let reduced: Vec<f32> = values.into_iter().take(*target_dims).collect();
                 vector.values = VectorData::F32(reduced);
@@ -308,12 +327,12 @@ impl PostprocessingPipeline {
                 if values.len() <= *target_dims {
                     return Ok(());
                 }
-                
+
                 // Generate random projection matrix (simplified)
                 use rand::{Rng, SeedableRng};
                 let mut rng = rand::rngs::StdRng::seed_from_u64(42);
                 let mut projected = vec![0.0; *target_dims];
-                
+
                 for i in 0..*target_dims {
                     for (j, &val) in values.iter().enumerate() {
                         let random_weight: f32 = rng.gen_range(-1.0..1.0);
@@ -321,7 +340,7 @@ impl PostprocessingPipeline {
                     }
                     projected[i] /= (values.len() as f32).sqrt();
                 }
-                
+
                 vector.values = VectorData::F32(projected);
                 vector.dimensions = *target_dims;
             }
@@ -343,9 +362,7 @@ impl PostprocessingPipeline {
                 let values = vector.as_f32();
                 let l1_norm: f32 = values.iter().map(|x| x.abs()).sum();
                 if l1_norm > 0.0 {
-                    let normalized: Vec<f32> = values.into_iter()
-                        .map(|x| x / l1_norm)
-                        .collect();
+                    let normalized: Vec<f32> = values.into_iter().map(|x| x / l1_norm).collect();
                     vector.values = VectorData::F32(normalized);
                 }
                 Ok(())
@@ -355,11 +372,10 @@ impl PostprocessingPipeline {
                 let min = values.iter().cloned().fold(f32::INFINITY, f32::min);
                 let max = values.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
                 let range = max - min;
-                
+
                 if range > 0.0 {
-                    let normalized: Vec<f32> = values.into_iter()
-                        .map(|x| (x - min) / range)
-                        .collect();
+                    let normalized: Vec<f32> =
+                        values.into_iter().map(|x| (x - min) / range).collect();
                     vector.values = VectorData::F32(normalized);
                 }
                 Ok(())
@@ -368,15 +384,12 @@ impl PostprocessingPipeline {
                 let values = vector.as_f32();
                 let n = values.len() as f32;
                 let mean: f32 = values.iter().sum::<f32>() / n;
-                let variance: f32 = values.iter()
-                    .map(|x| (x - mean).powi(2))
-                    .sum::<f32>() / n;
+                let variance: f32 = values.iter().map(|x| (x - mean).powi(2)).sum::<f32>() / n;
                 let std_dev = variance.sqrt();
-                
+
                 if std_dev > 0.0 {
-                    let normalized: Vec<f32> = values.into_iter()
-                        .map(|x| (x - mean) / std_dev)
-                        .collect();
+                    let normalized: Vec<f32> =
+                        values.into_iter().map(|x| (x - mean) / std_dev).collect();
                     vector.values = VectorData::F32(normalized);
                 }
                 Ok(())
@@ -386,38 +399,36 @@ impl PostprocessingPipeline {
 
     fn calculate_quality_score(&self, vector: &Vector) -> f32 {
         let values = vector.as_f32();
-        
+
         // Quality based on several factors
         let mut score = 1.0;
-        
+
         // Check for NaN or infinite values
         if values.iter().any(|x| !x.is_finite()) {
             return 0.0;
         }
-        
+
         // Check sparsity (too many zeros might indicate poor quality)
         let zero_count = values.iter().filter(|&&x| x.abs() < f32::EPSILON).count();
         let sparsity = zero_count as f32 / values.len() as f32;
         if sparsity > 0.9 {
             score *= 0.5;
         }
-        
+
         // Check variance (too low variance might indicate poor quality)
         let mean = values.iter().sum::<f32>() / values.len() as f32;
-        let variance = values.iter()
-            .map(|x| (x - mean).powi(2))
-            .sum::<f32>() / values.len() as f32;
-        
+        let variance = values.iter().map(|x| (x - mean).powi(2)).sum::<f32>() / values.len() as f32;
+
         if variance < 0.01 {
             score *= 0.7;
         }
-        
+
         // Check magnitude (vectors that are too small might be problematic)
         let magnitude = vector.magnitude();
         if magnitude < 0.1 {
             score *= 0.8;
         }
-        
+
         score
     }
 
@@ -426,13 +437,14 @@ impl PostprocessingPipeline {
             OutlierMethod::ZScore => {
                 let values = vector.as_f32();
                 let mean = values.iter().sum::<f32>() / values.len() as f32;
-                let variance = values.iter()
-                    .map(|x| (x - mean).powi(2))
-                    .sum::<f32>() / values.len() as f32;
+                let variance =
+                    values.iter().map(|x| (x - mean).powi(2)).sum::<f32>() / values.len() as f32;
                 let std_dev = variance.sqrt();
-                
+
                 // Check if any dimension is beyond threshold standard deviations
-                values.iter().any(|&x| ((x - mean) / std_dev).abs() > config.threshold)
+                values
+                    .iter()
+                    .any(|&x| ((x - mean) / std_dev).abs() > config.threshold)
             }
             _ => false, // Other methods would require more complex implementations
         }
@@ -460,10 +472,10 @@ impl EmbeddingPipeline {
     pub fn process_content(&self, content: &EmbeddableContent) -> Result<(Vec<String>, f32)> {
         // Extract text from content
         let text = content.to_text();
-        
+
         // Apply preprocessing
         let tokens = self.preprocessing.process(&text);
-        
+
         // Return tokens and a placeholder quality score
         // In a real implementation, this would generate embeddings and apply postprocessing
         Ok((tokens, 1.0))
@@ -482,10 +494,10 @@ mod tests {
     #[test]
     fn test_preprocessing_pipeline() {
         let pipeline = PreprocessingPipeline::default();
-        
+
         let text = "The quick brown fox jumps over the lazy dog!";
         let tokens = pipeline.process(text);
-        
+
         // Should remove stop words and punctuation
         assert!(!tokens.contains(&"the".to_string()));
         assert!(tokens.contains(&"quick".to_string()));
@@ -496,10 +508,10 @@ mod tests {
     fn test_camel_case_splitting() {
         let mut pipeline = PreprocessingPipeline::default();
         pipeline.tokenizer.split_camel_case = true;
-        
+
         let text = "CamelCaseWord HTTPSConnection";
         let tokens = pipeline.process(text);
-        
+
         assert!(tokens.contains(&"camel".to_string()));
         assert!(tokens.contains(&"case".to_string()));
         assert!(tokens.contains(&"word".to_string()));
@@ -509,10 +521,10 @@ mod tests {
     fn test_postprocessing_normalization() {
         let mut pipeline = PostprocessingPipeline::default();
         pipeline.normalization = VectorNormalization::L2;
-        
+
         let mut vector = Vector::new(vec![3.0, 4.0, 0.0]);
         let quality = pipeline.process(&mut vector).unwrap();
-        
+
         // Check L2 normalization
         let magnitude = vector.magnitude();
         assert!((magnitude - 1.0).abs() < 1e-6);
@@ -522,12 +534,12 @@ mod tests {
     #[test]
     fn test_quality_scoring() {
         let pipeline = PostprocessingPipeline::default();
-        
+
         // Good quality vector
         let mut good_vector = Vector::new(vec![0.5, 0.3, -0.2, 0.8]);
         let good_quality = pipeline.process(&mut good_vector).unwrap();
         assert!(good_quality > 0.9);
-        
+
         // Poor quality vector (all zeros)
         let mut poor_vector = Vector::new(vec![0.0, 0.0, 0.0, 0.0]);
         let poor_quality = pipeline.calculate_quality_score(&poor_vector);

@@ -21,7 +21,9 @@ use tracing::{debug, error, info, instrument, warn};
 
 use crate::{
     cache::FederationCache,
-    executor::{QueryResultData, SparqlBinding, SparqlResults, SparqlValue, SparqlHead, SparqlResultSet},
+    executor::{
+        QueryResultData, SparqlBinding, SparqlHead, SparqlResultSet, SparqlResults, SparqlValue,
+    },
     service::{FederatedService, ServiceCapability},
     service_optimizer::{OptimizedServiceClause, ServiceExecutionStrategy},
     ServiceRegistry,
@@ -84,38 +86,46 @@ impl ServiceExecutor {
         query: &str,
         bindings: Option<&[SparqlBinding]>,
     ) -> Result<SparqlResults> {
-        debug!("Executing SPARQL query on service {}: {}", service_id, query);
-        
+        debug!(
+            "Executing SPARQL query on service {}: {}",
+            service_id, query
+        );
+
         // Generate cache key
         let cache_key = format!("service:{}:query:{}", service_id, query);
-        
+
         // Check cache first
         if let Some(cached) = self.cache.get_service_result(&cache_key).await {
             debug!("Cache hit for service query: {}", service_id);
             return Ok(cached);
         }
-        
+
         let start_time = Instant::now();
-        
+
         // Build the complete query with bindings if provided
         let final_query = if let Some(bindings) = bindings {
             self.inject_bindings(query, bindings)?
         } else {
             query.to_string()
         };
-        
+
         // Execute with retry logic and timeout
         let result = self.execute_with_retry(service_id, &final_query).await?;
-        
+
         let execution_time = start_time.elapsed();
-        debug!("Service query completed in {:?} with {} results", 
-               execution_time, result.results.bindings.len());
-        
+        debug!(
+            "Service query completed in {:?} with {} results",
+            execution_time,
+            result.results.bindings.len()
+        );
+
         // Cache successful results
         if !result.results.bindings.is_empty() {
-            self.cache.put_service_result(&cache_key, &result, Some(Duration::from_secs(300))).await;
+            self.cache
+                .put_service_result(&cache_key, &result, Some(Duration::from_secs(300)))
+                .await;
         }
-        
+
         Ok(result)
     }
 
@@ -127,26 +137,30 @@ impl ServiceExecutor {
         service: &FederatedService,
     ) -> Result<ServiceExecutionResult> {
         debug!("Executing with VALUES binding for service: {}", service.id);
-        
+
         // Create batches of bindings
         let batch_size = self.config.values_batch_size;
         let mut all_results = Vec::new();
-        
+
         for chunk in bindings.chunks(batch_size) {
             let values_clause = self.build_values_clause(chunk);
             let enhanced_query = format!("{}\n{}", service_clause.query, values_clause);
-            
-            let batch_result = self.execute_single_query(&service.endpoint, &enhanced_query).await?;
+
+            let batch_result = self
+                .execute_single_query(&service.endpoint, &enhanced_query)
+                .await?;
             all_results.extend(batch_result.results.bindings);
         }
-        
+
         Ok(ServiceExecutionResult {
             service_id: service.id.clone(),
             execution_time: Duration::from_millis(100), // Mock timing
             result_count: all_results.len(),
             results: SparqlResults {
                 head: SparqlHead { vars: vec![] },
-                results: SparqlResultSet { bindings: all_results },
+                results: SparqlResultSet {
+                    bindings: all_results,
+                },
             },
             cached: false,
         })
@@ -159,12 +173,20 @@ impl ServiceExecutor {
         }
 
         let vars: Vec<_> = bindings[0].keys().collect();
-        let mut values_clause = format!("VALUES ({}) {{", vars.iter().map(|v| format!("?{}", v)).collect::<Vec<_>>().join(" "));
+        let mut values_clause = format!(
+            "VALUES ({}) {{",
+            vars.iter()
+                .map(|v| format!("?{}", v))
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
 
         for binding in bindings {
-            let values: Vec<_> = vars.iter()
+            let values: Vec<_> = vars
+                .iter()
                 .map(|var| {
-                    binding.get(*var)
+                    binding
+                        .get(*var)
                         .map(|v| format!("\"{}\"", v.value))
                         .unwrap_or_else(|| "UNDEF".to_string())
                 })
@@ -179,10 +201,16 @@ impl ServiceExecutor {
     /// Execute a single query against a service
     async fn execute_single_query(&self, endpoint: &str, query: &str) -> Result<SparqlResults> {
         let _permit = self.semaphore.acquire().await?;
-        
+
         let mut headers = HeaderMap::new();
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/sparql-query"));
-        headers.insert(ACCEPT, HeaderValue::from_static("application/sparql-results+json"));
+        headers.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/sparql-query"),
+        );
+        headers.insert(
+            ACCEPT,
+            HeaderValue::from_static("application/sparql-results+json"),
+        );
 
         let response = self
             .client
@@ -201,42 +229,47 @@ impl ServiceExecutor {
 
         Ok(sparql_results)
     }
-    
+
     /// Execute query with exponential backoff retry logic
     async fn execute_with_retry(&self, service_id: &str, query: &str) -> Result<SparqlResults> {
         let mut attempt = 0;
         let max_attempts = self.config.max_retry_attempts;
-        
+
         loop {
             attempt += 1;
-            
+
             // Get service info (this would come from service registry in real implementation)
             let endpoint = format!("http://localhost:3030/{}/sparql", service_id); // Mock endpoint
-            
+
             match self.execute_single_query(&endpoint, query).await {
                 Ok(result) => return Ok(result),
                 Err(e) if attempt >= max_attempts => {
-                    error!("All retry attempts failed for service {}: {}", service_id, e);
+                    error!(
+                        "All retry attempts failed for service {}: {}",
+                        service_id, e
+                    );
                     return Err(e);
-                },
+                }
                 Err(e) => {
                     let delay = Duration::from_millis(100 * (2_u64.pow(attempt - 1)));
-                    warn!("Service {} failed (attempt {}/{}), retrying in {:?}: {}", 
-                          service_id, attempt, max_attempts, delay, e);
+                    warn!(
+                        "Service {} failed (attempt {}/{}), retrying in {:?}: {}",
+                        service_id, attempt, max_attempts, delay, e
+                    );
                     tokio::time::sleep(delay).await;
                 }
             }
         }
     }
-    
+
     /// Inject variable bindings into a SPARQL query using VALUES clause
     fn inject_bindings(&self, query: &str, bindings: &[SparqlBinding]) -> Result<String> {
         if bindings.is_empty() {
             return Ok(query.to_string());
         }
-        
+
         let values_clause = self.build_values_clause(bindings);
-        
+
         // Find appropriate location to inject VALUES clause
         if query.trim_end().ends_with('}') {
             // Insert before final closing brace
@@ -249,28 +282,30 @@ impl ServiceExecutor {
             Ok(format!("{} {}", query, values_clause))
         }
     }
-    
+
     /// Parse SPARQL results with proper error handling
     fn parse_sparql_results(&self, response_text: &str) -> Result<SparqlResults> {
         // Try JSON format first
         if let Ok(results) = serde_json::from_str::<SparqlResults>(response_text) {
             return Ok(results);
         }
-        
+
         // Try to parse XML format as fallback
         if response_text.trim().starts_with("<?xml") {
             return self.parse_sparql_xml(response_text);
         }
-        
+
         // Try TSV format
         if response_text.lines().next().unwrap_or("").starts_with('?') {
             return self.parse_sparql_tsv(response_text);
         }
-        
-        Err(anyhow!("Unknown SPARQL result format: {}", 
-                   response_text.chars().take(100).collect::<String>()))
+
+        Err(anyhow!(
+            "Unknown SPARQL result format: {}",
+            response_text.chars().take(100).collect::<String>()
+        ))
     }
-    
+
     /// Parse SPARQL XML results format
     fn parse_sparql_xml(&self, _xml_text: &str) -> Result<SparqlResults> {
         // Simplified XML parsing - would need proper XML parser in real implementation
@@ -280,7 +315,7 @@ impl ServiceExecutor {
             results: SparqlResultSet { bindings: vec![] },
         })
     }
-    
+
     /// Parse SPARQL TSV results format
     fn parse_sparql_tsv(&self, tsv_text: &str) -> Result<SparqlResults> {
         let lines: Vec<&str> = tsv_text.lines().collect();
@@ -290,37 +325,41 @@ impl ServiceExecutor {
                 results: SparqlResultSet { bindings: vec![] },
             });
         }
-        
+
         // Parse header line to get variable names
         let header = lines[0];
-        let vars: Vec<String> = header.split('\t')
+        let vars: Vec<String> = header
+            .split('\t')
             .map(|var| var.trim_start_matches('?').to_string())
             .collect();
-        
+
         // Parse data lines
         let mut bindings = Vec::new();
         for line in lines.iter().skip(1) {
             let values: Vec<&str> = line.split('\t').collect();
             let mut binding = SparqlBinding::new();
-            
+
             for (i, value) in values.iter().enumerate() {
                 if let Some(var) = vars.get(i) {
                     if !value.is_empty() {
-                        binding.insert(var.clone(), SparqlValue {
-                            value_type: "literal".to_string(),
-                            value: value.to_string(),
-                            datatype: None,
-                            lang: None,
-                        });
+                        binding.insert(
+                            var.clone(),
+                            SparqlValue {
+                                value_type: "literal".to_string(),
+                                value: value.to_string(),
+                                datatype: None,
+                                lang: None,
+                            },
+                        );
                     }
                 }
             }
-            
+
             if !binding.is_empty() {
                 bindings.push(binding);
             }
         }
-        
+
         Ok(SparqlResults {
             head: SparqlHead { vars },
             results: SparqlResultSet { bindings },
@@ -342,7 +381,10 @@ impl JoinExecutor {
     }
 
     /// Execute advanced join with multiple optimization strategies
-    pub async fn execute_advanced_join(&self, inputs: &[&QueryResultData]) -> Result<QueryResultData> {
+    pub async fn execute_advanced_join(
+        &self,
+        inputs: &[&QueryResultData],
+    ) -> Result<QueryResultData> {
         debug!("Executing advanced join on {} inputs", inputs.len());
 
         match inputs {
@@ -358,22 +400,30 @@ impl JoinExecutor {
     }
 
     /// Hash join implementation for SPARQL results
-    fn join_sparql_hash_join(&self, left: &SparqlResults, right: &SparqlResults) -> Result<SparqlResults> {
+    fn join_sparql_hash_join(
+        &self,
+        left: &SparqlResults,
+        right: &SparqlResults,
+    ) -> Result<SparqlResults> {
         // Find common variables
         let left_vars: HashSet<_> = left.head.vars.iter().collect();
         let right_vars: HashSet<_> = right.head.vars.iter().collect();
-        let join_vars: Vec<_> = left_vars.intersection(&right_vars).map(|s| s.to_string()).collect();
+        let join_vars: Vec<_> = left_vars
+            .intersection(&right_vars)
+            .map(|s| s.to_string())
+            .collect();
 
         if join_vars.is_empty() {
             return self.cartesian_product(left, right);
         }
 
         // Build hash table for smaller relation
-        let (build_side, probe_side) = if left.results.bindings.len() <= right.results.bindings.len() {
-            (left, right)
-        } else {
-            (right, left)
-        };
+        let (build_side, probe_side) =
+            if left.results.bindings.len() <= right.results.bindings.len() {
+                (left, right)
+            } else {
+                (right, left)
+            };
 
         let mut hash_table: HashMap<String, Vec<&SparqlBinding>> = HashMap::new();
         for binding in &build_side.results.bindings {
@@ -388,7 +438,7 @@ impl JoinExecutor {
             if let Some(matching_bindings) = hash_table.get(&key) {
                 for build_binding in matching_bindings {
                     let mut joined_binding = SparqlBinding::new();
-                    
+
                     // Add all variables from both bindings
                     for (var, value) in probe_binding {
                         joined_binding.insert(var.clone(), value.clone());
@@ -398,7 +448,7 @@ impl JoinExecutor {
                             joined_binding.insert(var.clone(), value.clone());
                         }
                     }
-                    
+
                     result_bindings.push(joined_binding);
                 }
             }
@@ -414,15 +464,19 @@ impl JoinExecutor {
 
         Ok(SparqlResults {
             head: SparqlHead { vars: all_vars },
-            results: SparqlResultSet { bindings: result_bindings },
+            results: SparqlResultSet {
+                bindings: result_bindings,
+            },
         })
     }
 
     /// Create join key from binding and join variables
     fn create_join_key(&self, binding: &SparqlBinding, join_vars: &[String]) -> String {
-        join_vars.iter()
+        join_vars
+            .iter()
             .map(|var| {
-                binding.get(var)
+                binding
+                    .get(var)
                     .map(|v| format!("{}:{}", v.value_type, v.value))
                     .unwrap_or_else(|| "NULL".to_string())
             })
@@ -431,20 +485,24 @@ impl JoinExecutor {
     }
 
     /// Cartesian product for joins without common variables
-    fn cartesian_product(&self, left: &SparqlResults, right: &SparqlResults) -> Result<SparqlResults> {
+    fn cartesian_product(
+        &self,
+        left: &SparqlResults,
+        right: &SparqlResults,
+    ) -> Result<SparqlResults> {
         let mut result_bindings = Vec::new();
-        
+
         for left_binding in &left.results.bindings {
             for right_binding in &right.results.bindings {
                 let mut joined_binding = SparqlBinding::new();
-                
+
                 for (var, value) in left_binding {
                     joined_binding.insert(var.clone(), value.clone());
                 }
                 for (var, value) in right_binding {
                     joined_binding.insert(var.clone(), value.clone());
                 }
-                
+
                 result_bindings.push(joined_binding);
             }
         }
@@ -454,7 +512,9 @@ impl JoinExecutor {
 
         Ok(SparqlResults {
             head: SparqlHead { vars: all_vars },
-            results: SparqlResultSet { bindings: result_bindings },
+            results: SparqlResultSet {
+                bindings: result_bindings,
+            },
         })
     }
 
@@ -480,25 +540,37 @@ impl JoinExecutor {
 
     /// Bind join implementation - sends bindings from one result to filter the other
     /// Most efficient for selective joins where one side is much smaller
-    pub async fn join_sparql_bind_join(&self, left: &SparqlResults, right: &SparqlResults, service_executor: &ServiceExecutor) -> Result<SparqlResults> {
-        debug!("Executing bind join with {} left bindings, {} right bindings", 
-               left.results.bindings.len(), right.results.bindings.len());
+    pub async fn join_sparql_bind_join(
+        &self,
+        left: &SparqlResults,
+        right: &SparqlResults,
+        service_executor: &ServiceExecutor,
+    ) -> Result<SparqlResults> {
+        debug!(
+            "Executing bind join with {} left bindings, {} right bindings",
+            left.results.bindings.len(),
+            right.results.bindings.len()
+        );
 
         // Find common variables for join
         let left_vars: HashSet<_> = left.head.vars.iter().collect();
         let right_vars: HashSet<_> = right.head.vars.iter().collect();
-        let join_vars: Vec<_> = left_vars.intersection(&right_vars).map(|s| s.to_string()).collect();
+        let join_vars: Vec<_> = left_vars
+            .intersection(&right_vars)
+            .map(|s| s.to_string())
+            .collect();
 
         if join_vars.is_empty() {
             return self.cartesian_product(left, right);
         }
 
         // Choose smaller side for binding propagation
-        let (bind_side, query_side, reverse_join) = if left.results.bindings.len() <= right.results.bindings.len() {
-            (left, right, false)
-        } else {
-            (right, left, true)
-        };
+        let (bind_side, query_side, reverse_join) =
+            if left.results.bindings.len() <= right.results.bindings.len() {
+                (left, right, false)
+            } else {
+                (right, left, true)
+            };
 
         let mut result_bindings = Vec::new();
         let batch_size = self.config.join_buffer_size;
@@ -506,24 +578,24 @@ impl JoinExecutor {
         // Process bindings in batches to avoid overwhelming the remote service
         for batch in bind_side.results.bindings.chunks(batch_size) {
             // Convert batch to SparqlBinding format for VALUES clause injection
-            let sparql_bindings: Vec<SparqlBinding> = batch.iter()
-                .map(|binding| binding.clone())
-                .collect();
+            let sparql_bindings: Vec<SparqlBinding> =
+                batch.iter().map(|binding| binding.clone()).collect();
 
             // Execute query with bindings (this would call the remote service)
             // For now, simulate by filtering the query_side results
-            let filtered_results = self.filter_results_with_bindings(query_side, &sparql_bindings, &join_vars)?;
+            let filtered_results =
+                self.filter_results_with_bindings(query_side, &sparql_bindings, &join_vars)?;
 
             // Join filtered results with original bindings
             for bind_binding in batch {
                 let bind_key = self.create_join_key(bind_binding, &join_vars);
-                
+
                 for query_binding in &filtered_results.results.bindings {
                     let query_key = self.create_join_key(query_binding, &join_vars);
-                    
+
                     if bind_key == query_key {
                         let mut joined_binding = SparqlBinding::new();
-                        
+
                         // Add bindings in correct order
                         if reverse_join {
                             // query_binding is from left, bind_binding is from right
@@ -546,7 +618,7 @@ impl JoinExecutor {
                                 }
                             }
                         }
-                        
+
                         result_bindings.push(joined_binding);
                     }
                 }
@@ -563,18 +635,30 @@ impl JoinExecutor {
 
         Ok(SparqlResults {
             head: SparqlHead { vars: all_vars },
-            results: SparqlResultSet { bindings: result_bindings },
+            results: SparqlResultSet {
+                bindings: result_bindings,
+            },
         })
     }
 
     /// Nested loop join implementation - simple but memory-efficient for small datasets
-    pub fn join_sparql_nested_loop(&self, left: &SparqlResults, right: &SparqlResults) -> Result<SparqlResults> {
-        debug!("Executing nested loop join with {} x {} bindings", 
-               left.results.bindings.len(), right.results.bindings.len());
+    pub fn join_sparql_nested_loop(
+        &self,
+        left: &SparqlResults,
+        right: &SparqlResults,
+    ) -> Result<SparqlResults> {
+        debug!(
+            "Executing nested loop join with {} x {} bindings",
+            left.results.bindings.len(),
+            right.results.bindings.len()
+        );
 
         let left_vars: HashSet<_> = left.head.vars.iter().collect();
         let right_vars: HashSet<_> = right.head.vars.iter().collect();
-        let join_vars: Vec<_> = left_vars.intersection(&right_vars).map(|s| s.to_string()).collect();
+        let join_vars: Vec<_> = left_vars
+            .intersection(&right_vars)
+            .map(|s| s.to_string())
+            .collect();
 
         if join_vars.is_empty() {
             return self.cartesian_product(left, right);
@@ -585,13 +669,13 @@ impl JoinExecutor {
         // Nested loop: for each binding in left, check all bindings in right
         for left_binding in &left.results.bindings {
             let left_key = self.create_join_key(left_binding, &join_vars);
-            
+
             for right_binding in &right.results.bindings {
                 let right_key = self.create_join_key(right_binding, &join_vars);
-                
+
                 if left_key == right_key {
                     let mut joined_binding = SparqlBinding::new();
-                    
+
                     // Add all variables from both bindings
                     for (var, value) in left_binding {
                         joined_binding.insert(var.clone(), value.clone());
@@ -601,7 +685,7 @@ impl JoinExecutor {
                             joined_binding.insert(var.clone(), value.clone());
                         }
                     }
-                    
+
                     result_bindings.push(joined_binding);
                 }
             }
@@ -616,18 +700,30 @@ impl JoinExecutor {
 
         Ok(SparqlResults {
             head: SparqlHead { vars: all_vars },
-            results: SparqlResultSet { bindings: result_bindings },
+            results: SparqlResultSet {
+                bindings: result_bindings,
+            },
         })
     }
 
     /// Sort-merge join implementation - efficient for pre-sorted data
-    pub fn join_sparql_sort_merge(&self, left: &SparqlResults, right: &SparqlResults) -> Result<SparqlResults> {
-        debug!("Executing sort-merge join with {} left bindings, {} right bindings", 
-               left.results.bindings.len(), right.results.bindings.len());
+    pub fn join_sparql_sort_merge(
+        &self,
+        left: &SparqlResults,
+        right: &SparqlResults,
+    ) -> Result<SparqlResults> {
+        debug!(
+            "Executing sort-merge join with {} left bindings, {} right bindings",
+            left.results.bindings.len(),
+            right.results.bindings.len()
+        );
 
         let left_vars: HashSet<_> = left.head.vars.iter().collect();
         let right_vars: HashSet<_> = right.head.vars.iter().collect();
-        let join_vars: Vec<_> = left_vars.intersection(&right_vars).map(|s| s.to_string()).collect();
+        let join_vars: Vec<_> = left_vars
+            .intersection(&right_vars)
+            .map(|s| s.to_string())
+            .collect();
 
         if join_vars.is_empty() {
             return self.cartesian_product(left, right);
@@ -668,14 +764,16 @@ impl JoinExecutor {
                 std::cmp::Ordering::Equal => {
                     // Found match - collect all matching pairs
                     let mut left_end = left_idx;
-                    while left_end < left_sorted.len() && 
-                          self.create_join_key(&left_sorted[left_end], &join_vars) == left_key {
+                    while left_end < left_sorted.len()
+                        && self.create_join_key(&left_sorted[left_end], &join_vars) == left_key
+                    {
                         left_end += 1;
                     }
 
                     let mut right_end = right_idx;
-                    while right_end < right_sorted.len() && 
-                          self.create_join_key(&right_sorted[right_end], &join_vars) == right_key {
+                    while right_end < right_sorted.len()
+                        && self.create_join_key(&right_sorted[right_end], &join_vars) == right_key
+                    {
                         right_end += 1;
                     }
 
@@ -683,7 +781,7 @@ impl JoinExecutor {
                     for left_binding in &left_sorted[left_idx..left_end] {
                         for right_binding in &right_sorted[right_idx..right_end] {
                             let mut joined_binding = SparqlBinding::new();
-                            
+
                             for (var, value) in left_binding {
                                 joined_binding.insert(var.clone(), value.clone());
                             }
@@ -692,7 +790,7 @@ impl JoinExecutor {
                                     joined_binding.insert(var.clone(), value.clone());
                                 }
                             }
-                            
+
                             result_bindings.push(joined_binding);
                         }
                     }
@@ -712,18 +810,30 @@ impl JoinExecutor {
 
         Ok(SparqlResults {
             head: SparqlHead { vars: all_vars },
-            results: SparqlResultSet { bindings: result_bindings },
+            results: SparqlResultSet {
+                bindings: result_bindings,
+            },
         })
     }
 
     /// Semi-join implementation - returns only left side tuples that have matches in right side
-    pub fn join_sparql_semi_join(&self, left: &SparqlResults, right: &SparqlResults) -> Result<SparqlResults> {
-        debug!("Executing semi-join with {} left bindings, {} right bindings", 
-               left.results.bindings.len(), right.results.bindings.len());
+    pub fn join_sparql_semi_join(
+        &self,
+        left: &SparqlResults,
+        right: &SparqlResults,
+    ) -> Result<SparqlResults> {
+        debug!(
+            "Executing semi-join with {} left bindings, {} right bindings",
+            left.results.bindings.len(),
+            right.results.bindings.len()
+        );
 
         let left_vars: HashSet<_> = left.head.vars.iter().collect();
         let right_vars: HashSet<_> = right.head.vars.iter().collect();
-        let join_vars: Vec<_> = left_vars.intersection(&right_vars).map(|s| s.to_string()).collect();
+        let join_vars: Vec<_> = left_vars
+            .intersection(&right_vars)
+            .map(|s| s.to_string())
+            .collect();
 
         if join_vars.is_empty() {
             // No join variables - return left as-is
@@ -748,18 +858,30 @@ impl JoinExecutor {
 
         Ok(SparqlResults {
             head: left.head.clone(),
-            results: SparqlResultSet { bindings: result_bindings },
+            results: SparqlResultSet {
+                bindings: result_bindings,
+            },
         })
     }
 
     /// Anti-join implementation - returns only left side tuples that have NO matches in right side
-    pub fn join_sparql_anti_join(&self, left: &SparqlResults, right: &SparqlResults) -> Result<SparqlResults> {
-        debug!("Executing anti-join with {} left bindings, {} right bindings", 
-               left.results.bindings.len(), right.results.bindings.len());
+    pub fn join_sparql_anti_join(
+        &self,
+        left: &SparqlResults,
+        right: &SparqlResults,
+    ) -> Result<SparqlResults> {
+        debug!(
+            "Executing anti-join with {} left bindings, {} right bindings",
+            left.results.bindings.len(),
+            right.results.bindings.len()
+        );
 
         let left_vars: HashSet<_> = left.head.vars.iter().collect();
         let right_vars: HashSet<_> = right.head.vars.iter().collect();
-        let join_vars: Vec<_> = left_vars.intersection(&right_vars).map(|s| s.to_string()).collect();
+        let join_vars: Vec<_> = left_vars
+            .intersection(&right_vars)
+            .map(|s| s.to_string())
+            .collect();
 
         if join_vars.is_empty() {
             // No join variables - return left as-is
@@ -784,17 +906,27 @@ impl JoinExecutor {
 
         Ok(SparqlResults {
             head: left.head.clone(),
-            results: SparqlResultSet { bindings: result_bindings },
+            results: SparqlResultSet {
+                bindings: result_bindings,
+            },
         })
     }
 
     /// Adaptive join that chooses the best strategy based on data characteristics
-    pub async fn join_sparql_adaptive(&self, left: &SparqlResults, right: &SparqlResults, service_executor: &ServiceExecutor) -> Result<SparqlResults> {
+    pub async fn join_sparql_adaptive(
+        &self,
+        left: &SparqlResults,
+        right: &SparqlResults,
+        service_executor: &ServiceExecutor,
+    ) -> Result<SparqlResults> {
         let left_size = left.results.bindings.len();
         let right_size = right.results.bindings.len();
         let total_size = left_size + right_size;
 
-        debug!("Choosing adaptive join strategy for {} x {} bindings", left_size, right_size);
+        debug!(
+            "Choosing adaptive join strategy for {} x {} bindings",
+            left_size, right_size
+        );
 
         // Choose strategy based on data characteristics
         match (left_size, right_size) {
@@ -803,19 +935,20 @@ impl JoinExecutor {
                 debug!("Using nested loop join for small datasets");
                 self.join_sparql_nested_loop(left, right)
             }
-            
+
             // One side much smaller - use bind join for efficiency
             (l, r) if l < r / 10 || r < l / 10 => {
                 debug!("Using bind join for skewed data sizes");
-                self.join_sparql_bind_join(left, right, service_executor).await
+                self.join_sparql_bind_join(left, right, service_executor)
+                    .await
             }
-            
+
             // Large datasets - use hash join
             (l, r) if l > 1000 || r > 1000 => {
                 debug!("Using hash join for large datasets");
                 self.join_sparql_hash_join(left, right)
             }
-            
+
             // Medium datasets - use sort-merge if pre-sorted, otherwise hash
             _ => {
                 if self.is_likely_sorted(left) && self.is_likely_sorted(right) {
@@ -836,7 +969,7 @@ impl JoinExecutor {
         if results.results.bindings.len() < 10 {
             return false;
         }
-        
+
         // Check if first variable values are in ascending order for first 10 rows
         if let Some(first_var) = results.head.vars.first() {
             let mut prev_value = String::new();
@@ -855,18 +988,19 @@ impl JoinExecutor {
 
     /// Filter results using bindings (simulates VALUES clause injection)
     fn filter_results_with_bindings(
-        &self, 
-        results: &SparqlResults, 
-        bindings: &[SparqlBinding], 
-        join_vars: &[String]
+        &self,
+        results: &SparqlResults,
+        bindings: &[SparqlBinding],
+        join_vars: &[String],
     ) -> Result<SparqlResults> {
         let mut filtered_bindings = Vec::new();
-        
+
         // Create lookup set of binding keys
-        let binding_keys: HashSet<_> = bindings.iter()
+        let binding_keys: HashSet<_> = bindings
+            .iter()
             .map(|b| self.create_join_key(b, join_vars))
             .collect();
-        
+
         // Filter results to only include matching bindings
         for result_binding in &results.results.bindings {
             let result_key = self.create_join_key(result_binding, join_vars);
@@ -874,10 +1008,12 @@ impl JoinExecutor {
                 filtered_bindings.push(result_binding.clone());
             }
         }
-        
+
         Ok(SparqlResults {
             head: results.head.clone(),
-            results: SparqlResultSet { bindings: filtered_bindings },
+            results: SparqlResultSet {
+                bindings: filtered_bindings,
+            },
         })
     }
 
@@ -885,18 +1021,21 @@ impl JoinExecutor {
     pub fn optimize_join_order(&self, inputs: &[&QueryResultData]) -> Vec<usize> {
         let mut order = Vec::new();
         let mut remaining: Vec<_> = (0..inputs.len()).collect();
-        
+
         // Start with smallest input
-        if let Some((min_idx, _)) = remaining.iter().enumerate()
-            .min_by_key(|(_, &idx)| self.get_result_size(inputs[idx])) {
+        if let Some((min_idx, _)) = remaining
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, &idx)| self.get_result_size(inputs[idx]))
+        {
             order.push(remaining.remove(min_idx));
         }
-        
+
         // Greedily add inputs that minimize intermediate result size
         while !remaining.is_empty() {
             let mut best_idx = 0;
             let mut best_cost = f64::INFINITY;
-            
+
             for (pos, &candidate_idx) in remaining.iter().enumerate() {
                 let estimated_cost = self.estimate_join_cost(&order, candidate_idx, inputs);
                 if estimated_cost < best_cost {
@@ -904,31 +1043,37 @@ impl JoinExecutor {
                     best_idx = pos;
                 }
             }
-            
+
             order.push(remaining.remove(best_idx));
         }
-        
+
         order
     }
-    
+
     /// Estimate cost of adding an input to current join order
-    fn estimate_join_cost(&self, current_order: &[usize], candidate: usize, inputs: &[&QueryResultData]) -> f64 {
+    fn estimate_join_cost(
+        &self,
+        current_order: &[usize],
+        candidate: usize,
+        inputs: &[&QueryResultData],
+    ) -> f64 {
         let current_size = if current_order.is_empty() {
             1.0
         } else {
             // Estimate size of current partial result
-            current_order.iter()
+            current_order
+                .iter()
                 .map(|&idx| self.get_result_size(inputs[idx]) as f64)
                 .product::<f64>()
                 .sqrt() // Rough selectivity estimate
         };
-        
+
         let candidate_size = self.get_result_size(inputs[candidate]) as f64;
-        
+
         // Cost is roughly the product of intermediate result size and new input size
         current_size * candidate_size
     }
-    
+
     /// Get size of query result data
     fn get_result_size(&self, data: &QueryResultData) -> usize {
         match data {

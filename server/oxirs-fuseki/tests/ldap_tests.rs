@@ -24,7 +24,7 @@ async fn test_ldap_service_creation() {
     security_config.ldap = Some(ldap_config);
 
     let auth_service = AuthService::new(security_config);
-    
+
     // Verify LDAP is enabled
     assert!(auth_service.is_ldap_enabled());
 }
@@ -46,7 +46,7 @@ async fn test_ldap_authentication_flow() {
     security_config.ldap = Some(ldap_config);
 
     let auth_service = AuthService::new(security_config);
-    
+
     // Test authentication (this will use the mock implementation)
     match auth_service.authenticate_ldap("testuser", "testpass").await {
         Ok(AuthResult::Authenticated(user)) => {
@@ -90,9 +90,12 @@ async fn test_active_directory_configuration() {
     );
 
     assert_eq!(config.server, "ldap://dc1.corp.example.com");
-    assert_eq!(config.bind_dn, Some("service_account@corp.example.com".to_string()));
+    assert_eq!(
+        config.bind_dn,
+        Some("service_account@corp.example.com".to_string())
+    );
     assert_eq!(config.user_filter, "(sAMAccountName={username})");
-    
+
     // Check Active Directory specific settings
     assert!(config.active_directory.is_some());
     let ad_config = config.active_directory.unwrap();
@@ -102,13 +105,9 @@ async fn test_active_directory_configuration() {
 
 #[tokio::test]
 async fn test_ldap_handler_endpoints() {
-    use axum::{
-        body::Body,
-        http::Request,
-        Router,
-    };
+    use axum::{body::Body, http::Request, Router};
     use oxirs_fuseki::{
-        handlers::ldap::{ldap_login, test_ldap_connection, get_ldap_groups, get_ldap_config},
+        handlers::ldap::{get_ldap_config, get_ldap_groups, ldap_login, test_ldap_connection},
         server::AppState,
     };
     use tower::ServiceExt;
@@ -203,7 +202,7 @@ async fn test_ldap_handler_endpoints() {
 
     let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    
+
     assert_eq!(json["configured"], true);
     assert_eq!(json["server"], "ldap://localhost:389");
 }
@@ -248,8 +247,12 @@ fn test_ldap_group_mapping() {
             g if g.contains("reader") => "reader",
             _ => "user",
         };
-        
-        assert_eq!(role, *expected_role, "Group '{}' should map to role '{}'", group, expected_role);
+
+        assert_eq!(
+            role, *expected_role,
+            "Group '{}' should map to role '{}'",
+            group, expected_role
+        );
     }
 }
 
@@ -270,13 +273,17 @@ async fn test_ldap_caching() {
     security_config.ldap = Some(ldap_config);
 
     let auth_service = AuthService::new(security_config);
-    
+
     // First authentication attempt
-    let _result1 = auth_service.authenticate_ldap("cacheduser", "password").await;
-    
+    let _result1 = auth_service
+        .authenticate_ldap("cacheduser", "password")
+        .await;
+
     // Second authentication attempt should use cache
-    let _result2 = auth_service.authenticate_ldap("cacheduser", "password").await;
-    
+    let _result2 = auth_service
+        .authenticate_ldap("cacheduser", "password")
+        .await;
+
     // Cleanup cache
     auth_service.cleanup_ldap_cache().await;
 }
@@ -305,7 +312,7 @@ mod integration_tests {
         security_config.ldap = Some(ldap_config);
 
         let auth_service = AuthService::new(security_config);
-        
+
         // Test connection
         match auth_service.test_ldap_connection().await {
             Ok(connected) => {

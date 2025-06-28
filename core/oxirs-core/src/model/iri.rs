@@ -426,7 +426,9 @@ impl<T> Iri<T> {
 impl<T: AsRef<str>> Iri<T> {
     /// Parses an IRI with validation
     pub fn parse(iri: T) -> Result<Self, IriParseError> {
-        validate_iri(iri.as_ref()).map_err(|e| IriParseError { message: e.to_string() })?;
+        validate_iri(iri.as_ref()).map_err(|e| IriParseError {
+            message: e.to_string(),
+        })?;
         Ok(Iri { inner: iri })
     }
 
@@ -443,12 +445,12 @@ impl<T: AsRef<str>> Iri<T> {
     /// Resolves a relative IRI against this base IRI
     pub fn resolve(&self, relative: &str) -> Result<Iri<String>, IriParseError> {
         let base = self.as_str();
-        
+
         // If relative is already absolute, return it
         if relative.contains("://") {
             return Iri::parse(relative.to_string());
         }
-        
+
         // Handle different relative IRI patterns
         let resolved = if relative.starts_with("//") {
             // Authority-relative
@@ -461,7 +463,10 @@ impl<T: AsRef<str>> Iri<T> {
             }
         } else if relative.starts_with('/') {
             // Absolute path
-            if let Some(authority_end) = base.find("://").and_then(|i| base[i+3..].find('/').map(|j| i + 3 + j)) {
+            if let Some(authority_end) = base
+                .find("://")
+                .and_then(|i| base[i + 3..].find('/').map(|j| i + 3 + j))
+            {
                 format!("{}{}", &base[..authority_end], relative)
             } else {
                 format!("{}{}", base.trim_end_matches('/'), relative)
@@ -484,19 +489,19 @@ impl<T: AsRef<str>> Iri<T> {
                 format!("{}/{}", base, relative)
             }
         };
-        
+
         Iri::parse(resolved)
     }
-    
+
     /// Resolves a relative IRI against this base IRI without validation
     pub fn resolve_unchecked(&self, relative: &str) -> String {
         let base = self.as_str();
-        
+
         // If relative is already absolute, return it
         if relative.contains("://") {
             return relative.to_string();
         }
-        
+
         // Handle different relative IRI patterns
         if relative.starts_with("//") {
             // Authority-relative
@@ -507,7 +512,10 @@ impl<T: AsRef<str>> Iri<T> {
             }
         } else if relative.starts_with('/') {
             // Absolute path
-            if let Some(authority_end) = base.find("://").and_then(|i| base[i+3..].find('/').map(|j| i + 3 + j)) {
+            if let Some(authority_end) = base
+                .find("://")
+                .and_then(|i| base[i + 3..].find('/').map(|j| i + 3 + j))
+            {
                 format!("{}{}", &base[..authority_end], relative)
             } else {
                 format!("{}{}", base.trim_end_matches('/'), relative)
@@ -549,54 +557,64 @@ impl<T: AsRef<str>> Iri<T> {
             })
         } else {
             // Try more complex relativization
-            if let (Some(base_scheme_end), Some(target_scheme_end)) = (base.find("://"), target.find("://")) {
+            if let (Some(base_scheme_end), Some(target_scheme_end)) =
+                (base.find("://"), target.find("://"))
+            {
                 let base_scheme = &base[..base_scheme_end];
                 let target_scheme = &target[..target_scheme_end];
-                
+
                 if base_scheme == target_scheme {
                     // Same scheme, check authority
                     let base_rest = &base[base_scheme_end + 3..];
                     let target_rest = &target[target_scheme_end + 3..];
-                    
-                    if let (Some(base_slash), Some(target_slash)) = (base_rest.find('/'), target_rest.find('/')) {
+
+                    if let (Some(base_slash), Some(target_slash)) =
+                        (base_rest.find('/'), target_rest.find('/'))
+                    {
                         let base_authority = &base_rest[..base_slash];
                         let target_authority = &target_rest[..target_slash];
-                        
+
                         if base_authority == target_authority {
                             // Same authority, work with paths
                             let base_path = &base_rest[base_slash..];
                             let target_path = &target_rest[target_slash..];
-                            
+
                             // Find common prefix
-                            let base_parts: Vec<&str> = base_path.split('/').filter(|s| !s.is_empty()).collect();
-                            let target_parts: Vec<&str> = target_path.split('/').filter(|s| !s.is_empty()).collect();
-                            
+                            let base_parts: Vec<&str> =
+                                base_path.split('/').filter(|s| !s.is_empty()).collect();
+                            let target_parts: Vec<&str> =
+                                target_path.split('/').filter(|s| !s.is_empty()).collect();
+
                             let mut common_prefix_len = 0;
-                            for (i, (a, b)) in base_parts.iter().zip(target_parts.iter()).enumerate() {
+                            for (i, (a, b)) in
+                                base_parts.iter().zip(target_parts.iter()).enumerate()
+                            {
                                 if a == b {
                                     common_prefix_len = i + 1;
                                 } else {
                                     break;
                                 }
                             }
-                            
+
                             // Build relative path
                             let mut relative_parts = Vec::new();
-                            
+
                             // Add ".." for each remaining base part
                             for _ in common_prefix_len..base_parts.len() {
                                 relative_parts.push("..");
                             }
-                            
+
                             // Add remaining target parts
                             for part in &target_parts[common_prefix_len..] {
                                 relative_parts.push(part);
                             }
-                            
+
                             if relative_parts.is_empty() {
-                                return Ok(Iri { inner: ".".to_string() });
+                                return Ok(Iri {
+                                    inner: ".".to_string(),
+                                });
                             }
-                            
+
                             return Ok(Iri {
                                 inner: relative_parts.join("/"),
                             });
@@ -604,7 +622,7 @@ impl<T: AsRef<str>> Iri<T> {
                     }
                 }
             }
-            
+
             // Cannot relativize, return the original
             Err(IriParseError {
                 message: "Cannot relativize IRIs with different schemes or authorities".to_string(),

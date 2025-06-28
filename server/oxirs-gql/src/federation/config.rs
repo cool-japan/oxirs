@@ -37,10 +37,10 @@ pub enum RetryStrategy {
     /// Fixed delay between retries
     FixedDelay { delay_ms: u64 },
     /// Exponential backoff with jitter
-    ExponentialBackoff { 
-        initial_delay_ms: u64, 
-        max_delay_ms: u64, 
-        multiplier: f64 
+    ExponentialBackoff {
+        initial_delay_ms: u64,
+        max_delay_ms: u64,
+        multiplier: f64,
     },
 }
 

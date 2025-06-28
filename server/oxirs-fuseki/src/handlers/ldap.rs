@@ -1,7 +1,7 @@
 //! LDAP authentication handlers
 
 use crate::{
-    auth::{AuthResult, AuthService, User, ldap::LdapAuthRequest},
+    auth::{ldap::LdapAuthRequest, AuthResult, AuthService, User},
     error::FusekiResult,
     server::AppState,
 };
@@ -169,7 +169,10 @@ pub async fn ldap_login(
             Ok((StatusCode::UNAUTHORIZED, Json(response)).into_response())
         }
         Ok(AuthResult::Locked) => {
-            warn!("LDAP authentication failed - account locked: {}", request.username);
+            warn!(
+                "LDAP authentication failed - account locked: {}",
+                request.username
+            );
             let response = LdapLoginResponse {
                 success: false,
                 access_token: None,
@@ -254,7 +257,9 @@ pub async fn test_ldap_connection(
             let response = LdapTestResponse {
                 success: false,
                 message: "LDAP connection failed".to_string(),
-                details: Some("Unable to bind to LDAP server with configured credentials".to_string()),
+                details: Some(
+                    "Unable to bind to LDAP server with configured credentials".to_string(),
+                ),
             };
             Ok((StatusCode::SERVICE_UNAVAILABLE, Json(response)).into_response())
         }
@@ -331,9 +336,7 @@ pub async fn get_ldap_groups(
 }
 
 /// Get current LDAP configuration (without sensitive data)
-pub async fn get_ldap_config(
-    State(state): State<Arc<AppState>>,
-) -> Result<Response, StatusCode> {
+pub async fn get_ldap_config(State(state): State<Arc<AppState>>) -> Result<Response, StatusCode> {
     debug!("Getting LDAP configuration");
 
     // Check if LDAP is configured
@@ -345,8 +348,9 @@ pub async fn get_ldap_config(
                 Json(serde_json::json!({
                     "success": false,
                     "message": "Authentication service not configured"
-                }))
-            ).into_response());
+                })),
+            )
+                .into_response());
         }
     };
 
@@ -369,16 +373,17 @@ pub async fn get_ldap_config(
                 "success": false,
                 "configured": false,
                 "message": "LDAP not configured"
-            }))
-        ).into_response())
+            })),
+        )
+            .into_response())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{LdapConfig, SecurityConfig};
     use crate::auth::AuthService;
+    use crate::config::{LdapConfig, SecurityConfig};
 
     #[tokio::test]
     async fn test_ldap_login_response_serialization() {

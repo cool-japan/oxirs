@@ -26,7 +26,6 @@ pub use star::*;
 pub use term::*;
 pub use triple::*;
 
-
 /// A trait for all RDF terms
 pub trait RdfTerm {
     /// Returns the string representation of this term

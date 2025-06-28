@@ -7,11 +7,11 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::consumer::{ConsumerConfig, ConsumerGroup};
 use crate::error::{StreamError, StreamResult};
 use crate::event::{StreamEvent, StreamEventType};
-use crate::types::{EventMetadata, Offset, PartitionId, StreamPosition, TopicName};
-use crate::consumer::{ConsumerConfig, ConsumerGroup};
 use crate::producer::ProducerConfig;
+use crate::types::{EventMetadata, Offset, PartitionId, StreamPosition, TopicName};
 
 /// Common trait for all streaming backends
 #[async_trait]
@@ -38,7 +38,11 @@ pub trait StreamBackend: Send + Sync {
     async fn send_event(&self, topic: &TopicName, event: StreamEvent) -> StreamResult<Offset>;
 
     /// Send multiple events as a batch
-    async fn send_batch(&self, topic: &TopicName, events: Vec<StreamEvent>) -> StreamResult<Vec<Offset>>;
+    async fn send_batch(
+        &self,
+        topic: &TopicName,
+        events: Vec<StreamEvent>,
+    ) -> StreamResult<Vec<Offset>>;
 
     /// Receive events from a topic
     async fn receive_events(

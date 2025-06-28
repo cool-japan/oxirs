@@ -329,22 +329,22 @@ impl PulsarProducer {
         #[cfg(feature = "pulsar")]
         {
             let mut builder = Pulsar::builder(&self.pulsar_config.service_url, TokioExecutor);
-            
+
             // Add authentication if configured
             if let Some(auth_config) = &self.pulsar_config.properties.get("auth_token") {
                 builder = builder.with_auth(Authentication::Token(auth_config.clone()));
             }
-            
+
             let client = builder.build().await?;
             let client = Arc::new(client);
-            
+
             // Create producer with configuration
             let mut producer_builder = client.producer();
-            
+
             if let Some(producer_name) = &self.pulsar_config.producer_name {
                 producer_builder = producer_builder.with_name(producer_name);
             }
-            
+
             let compression = match self.pulsar_config.compression_type {
                 PulsarCompressionType::None => Compression::None,
                 PulsarCompressionType::Lz4 => Compression::Lz4(Default::default()),
@@ -352,23 +352,23 @@ impl PulsarProducer {
                 PulsarCompressionType::Zstd => Compression::Zstd(Default::default()),
                 PulsarCompressionType::Snappy => Compression::Snappy,
             };
-            
+
             let mut options = ProducerOptions {
                 compression: Some(compression),
                 batch_size: Some(self.pulsar_config.batch_size as usize),
                 ..Default::default()
             };
-            
+
             if self.pulsar_config.batching_enabled {
                 options.batch_size = Some(self.pulsar_config.batch_size as usize);
             }
-            
+
             let producer = producer_builder
                 .with_topic(&self.pulsar_config.topic)
                 .with_options(options)
                 .build()
                 .await?;
-                
+
             self.client = Some(client);
             self.producer = Some(producer);
         }
@@ -483,37 +483,38 @@ impl PulsarProducer {
             if let Some(producer) = &mut self.producer {
                 // Acquire send permit
                 let _permit = self.send_semaphore.acquire().await?;
-                
+
                 // Serialize message
                 let payload = serde_json::to_vec(&message.event_data)?;
-                
+
                 // Build Pulsar message
                 let mut pulsar_msg = producer.create_message(&payload[..]);
-                
+
                 // Add properties
                 for (key, value) in &message.properties {
                     pulsar_msg = pulsar_msg.with_property(key, value);
                 }
-                
+
                 // Add ordering key if present
                 if let Some(ordering_key) = &message.ordering_key {
                     pulsar_msg = pulsar_msg.with_ordering_key(ordering_key.as_bytes());
                 }
-                
+
                 // Add partition key if present
                 if let Some(partition_key) = &message.partition_key {
                     pulsar_msg = pulsar_msg.with_partition_key(partition_key);
                 }
-                
+
                 // Add event time
-                pulsar_msg = pulsar_msg.with_event_time(message.event_time.timestamp_millis() as u64);
-                
+                pulsar_msg =
+                    pulsar_msg.with_event_time(message.event_time.timestamp_millis() as u64);
+
                 // Send message
                 let send_future = pulsar_msg.send();
                 let receipt = send_future.await?;
-                
+
                 debug!("Message sent with receipt: {:?}", receipt);
-                
+
                 // Update stats
                 let mut stats = self.stats.write().await;
                 stats.messages_sent += 1;
@@ -523,7 +524,7 @@ impl PulsarProducer {
                 return Err(anyhow!("Producer not connected"));
             }
         }
-        
+
         #[cfg(not(feature = "pulsar"))]
         {
             // Simulate for testing
@@ -775,22 +776,22 @@ impl PulsarConsumer {
         {
             // Create Pulsar client
             let mut builder = Pulsar::builder(&self.pulsar_config.service_url, TokioExecutor);
-            
+
             // Add authentication if configured
             if let Some(auth_token) = self.pulsar_config.properties.get("auth_token") {
                 builder = builder.with_auth(Authentication::Token(auth_token.clone()));
             }
-            
+
             let client = builder.build().await?;
             let client = Arc::new(client);
-            
+
             // Create consumer with configuration
             let mut consumer_builder = client.consumer();
-            
+
             if let Some(consumer_name) = &self.pulsar_config.consumer_name {
                 consumer_builder = consumer_builder.with_consumer_name(consumer_name);
             }
-            
+
             // Set subscription type
             let sub_type = match self.pulsar_config.subscription_type {
                 PulsarSubscriptionType::Exclusive => SubType::Exclusive,
@@ -798,30 +799,30 @@ impl PulsarConsumer {
                 PulsarSubscriptionType::Failover => SubType::Failover,
                 PulsarSubscriptionType::KeyShared => SubType::KeyShared,
             };
-            
+
             // Set initial position
             let initial_position = match self.pulsar_config.subscription_initial_position {
                 PulsarSubscriptionInitialPosition::Latest => InitialPosition::Latest,
                 PulsarSubscriptionInitialPosition::Earliest => InitialPosition::Earliest,
             };
-            
+
             let mut options = ConsumerOptions {
                 initial_position: Some(initial_position),
                 subscription_type: Some(sub_type),
                 ..Default::default()
             };
-            
+
             if self.pulsar_config.read_compacted {
                 options.read_compacted = Some(true);
             }
-            
+
             let consumer = consumer_builder
                 .with_topic(&self.pulsar_config.topic)
                 .with_subscription(&self.subscription_name)
                 .with_options(options)
                 .build()
                 .await?;
-                
+
             self.client = Some(client);
             self.consumer = Some(consumer);
         }
@@ -854,44 +855,47 @@ impl PulsarConsumer {
             if let Some(consumer) = &mut self.consumer {
                 // Acquire receive permit
                 let _permit = self.receive_semaphore.acquire().await?;
-                
+
                 // Try to receive a message with timeout
                 match tokio::time::timeout(Duration::from_millis(100), consumer.next()).await {
                     Ok(Some(Ok(msg))) => {
                         // Deserialize the payload
                         let payload = msg.payload.data;
                         let event: StreamEvent = serde_json::from_slice(&payload)?;
-                        
+
                         // Create PulsarMessage wrapper
                         let pulsar_message = PulsarMessage {
                             message_id: format!("{:?}", msg.message_id),
                             event_data: event.clone(),
-                            ordering_key: msg.key().map(|k| String::from_utf8_lossy(k).into_owned()),
+                            ordering_key: msg
+                                .key()
+                                .map(|k| String::from_utf8_lossy(k).into_owned()),
                             partition_key: msg.partition_key().map(|s| s.to_string()),
                             event_time: DateTime::from_timestamp_millis(msg.event_time() as i64)
                                 .unwrap_or_else(Utc::now),
-                            properties: msg.properties()
+                            properties: msg
+                                .properties()
                                 .map(|(k, v)| (k.to_string(), v.to_string()))
                                 .collect(),
                             sequence_id: msg.sequence_id(),
                             schema_version: None,
                             replication_clusters: vec![],
                         };
-                        
+
                         // Acknowledge the message
                         consumer.ack(&msg).await?;
-                        
+
                         // Update stats
                         let mut stats = self.stats.write().await;
                         stats.messages_received += 1;
                         stats.bytes_received += payload.len() as u64;
                         stats.messages_acknowledged += 1;
                         stats.last_message = Some(Instant::now());
-                        
+
                         let processing_time = start_time.elapsed().as_millis() as f64;
                         stats.avg_processing_time_ms =
                             (stats.avg_processing_time_ms + processing_time) / 2.0;
-                        
+
                         return Ok(Some(event));
                     }
                     Ok(Some(Err(e))) => {
@@ -913,23 +917,23 @@ impl PulsarConsumer {
                 return Err(anyhow!("Consumer not connected"));
             }
         }
-        
+
         #[cfg(not(feature = "pulsar"))]
         {
             // Simulate for testing
             tokio::time::sleep(Duration::from_millis(10)).await;
-            
+
             // Check if we have buffered messages
             if let Some(message) = self.message_buffer.pop() {
                 let mut stats = self.stats.write().await;
                 stats.messages_received += 1;
                 stats.bytes_received += self.estimate_message_size(&message);
                 stats.last_message = Some(Instant::now());
-                
+
                 let processing_time = start_time.elapsed().as_millis() as f64;
                 stats.avg_processing_time_ms =
                     (stats.avg_processing_time_ms + processing_time) / 2.0;
-                
+
                 return Ok(Some(message.event_data));
             }
         }
@@ -946,7 +950,7 @@ impl PulsarConsumer {
 
     pub async fn negative_acknowledge(&mut self, message: &PulsarMessage) -> Result<()> {
         debug!("Negative acknowledging message: {}", message.message_id);
-        
+
         #[cfg(feature = "pulsar")]
         {
             if let Some(consumer) = &mut self.consumer {
@@ -957,14 +961,14 @@ impl PulsarConsumer {
                 stats.redelivery_count += 1;
             }
         }
-        
+
         #[cfg(not(feature = "pulsar"))]
         {
             let mut stats = self.stats.write().await;
             stats.messages_negative_acknowledged += 1;
             stats.redelivery_count += 1;
         }
-        
+
         Ok(())
     }
 

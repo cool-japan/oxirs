@@ -1,11 +1,9 @@
 //! Example demonstrating adaptive indexing that learns from query patterns
 
 use oxirs_core::model::*;
-use oxirs_core::store::{
-    IndexedGraph, AdaptiveIndexManager, AdaptiveConfig, QueryPattern,
-};
-use std::time::{Duration, Instant};
+use oxirs_core::store::{AdaptiveConfig, AdaptiveIndexManager, IndexedGraph, QueryPattern};
 use rand::Rng;
+use std::time::{Duration, Instant};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== Adaptive Indexing Example ===\n");
@@ -57,11 +55,7 @@ fn example_query_pattern_learning() -> Result<(), Box<dyn std::error::Error>> {
         // Add relationships
         if i > 0 {
             let friend = NamedNode::new(&format!("http://example.org/person{}", i - 1))?;
-            manager.insert(Triple::new(
-                person,
-                knows_pred,
-                friend,
-            ))?;
+            manager.insert(Triple::new(person, knows_pred, friend))?;
         }
     }
 
@@ -69,7 +63,7 @@ fn example_query_pattern_learning() -> Result<(), Box<dyn std::error::Error>> {
 
     // Simulate different query patterns
     println!("Simulating query patterns...");
-    
+
     // Pattern 1: Frequent predicate queries (should trigger predicate index)
     let name_pred = Predicate::NamedNode(NamedNode::new("http://example.org/name")?);
     for _ in 0..10 {
@@ -97,7 +91,10 @@ fn example_query_pattern_learning() -> Result<(), Box<dyn std::error::Error>> {
         println!("  {:?}:", pattern);
         println!("    Query count: {}", pattern_stats.query_count);
         println!("    Avg result size: {:.2}", pattern_stats.avg_result_size);
-        println!("    Query frequency: {:.3} queries/sec", pattern_stats.query_frequency);
+        println!(
+            "    Query frequency: {:.3} queries/sec",
+            pattern_stats.query_frequency
+        );
     }
 
     println!("\nActive adaptive indexes: {:?}", stats.active_indexes);
@@ -128,7 +125,7 @@ fn example_index_creation() -> Result<(), Box<dyn std::error::Error>> {
 
     for i in 0..200 {
         let subject = NamedNode::new(&format!("http://example.org/resource{}", i))?;
-        
+
         // Add type
         let type_pred = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
         let type_obj = NamedNode::new(&format!("http://example.org/{}", types[i % types.len()]))?;
@@ -149,7 +146,9 @@ fn example_index_creation() -> Result<(), Box<dyn std::error::Error>> {
     let mut rng = rand::thread_rng();
 
     // Heavy type queries (should create index)
-    let type_pred = Predicate::NamedNode(NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?);
+    let type_pred = Predicate::NamedNode(NamedNode::new(
+        "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+    )?);
     println!("  Executing type queries...");
     for _ in 0..20 {
         manager.query(None, Some(&type_pred), None)?;
@@ -166,7 +165,10 @@ fn example_index_creation() -> Result<(), Box<dyn std::error::Error>> {
     println!("  Executing random queries...");
     for _ in 0..5 {
         let random_id = rng.gen_range(0..200);
-        let subject = Subject::NamedNode(NamedNode::new(&format!("http://example.org/resource{}", random_id))?);
+        let subject = Subject::NamedNode(NamedNode::new(&format!(
+            "http://example.org/resource{}",
+            random_id
+        ))?);
         manager.query(Some(&subject), None, None)?;
     }
 
@@ -192,14 +194,14 @@ fn example_performance_comparison() -> Result<(), Box<dyn std::error::Error>> {
     // Create two managers - one adaptive, one not
     let base_graph1 = IndexedGraph::new();
     let base_graph2 = IndexedGraph::new();
-    
+
     let adaptive_config = AdaptiveConfig {
         min_queries_for_index: 5,
         min_frequency_for_index: 0.01,
         maintenance_interval: Duration::from_millis(50),
         ..Default::default()
     };
-    
+
     let adaptive_manager = AdaptiveIndexManager::new(base_graph1, adaptive_config);
 
     // Insert same data into both
@@ -220,7 +222,7 @@ fn example_performance_comparison() -> Result<(), Box<dyn std::error::Error>> {
     for _ in 0..10 {
         adaptive_manager.query(None, Some(&frequent_pred), None)?;
     }
-    
+
     // Wait for index creation
     std::thread::sleep(Duration::from_millis(100));
 
@@ -245,7 +247,7 @@ fn example_performance_comparison() -> Result<(), Box<dyn std::error::Error>> {
     println!("\nResults for {} queries:", num_queries);
     println!("  Base IndexedGraph: {:?}", base_duration);
     println!("  Adaptive Indexing: {:?}", adaptive_duration);
-    
+
     let speedup = base_duration.as_secs_f64() / adaptive_duration.as_secs_f64();
     if speedup > 1.0 {
         println!("  Speedup: {:.2}x faster with adaptive indexing", speedup);
@@ -257,7 +259,10 @@ fn example_performance_comparison() -> Result<(), Box<dyn std::error::Error>> {
     let stats = adaptive_manager.get_stats();
     println!("\nFinal adaptive index statistics:");
     println!("  Total queries executed: {}", stats.total_queries);
-    println!("  Indexes automatically created: {:?}", stats.active_indexes);
+    println!(
+        "  Indexes automatically created: {:?}",
+        stats.active_indexes
+    );
 
     Ok(())
 }

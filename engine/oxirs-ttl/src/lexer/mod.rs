@@ -2,9 +2,9 @@
 //!
 //! This module provides specialized lexers for different RDF formats.
 
-pub mod n3;
 pub mod line_formats;
+pub mod n3;
 
 // Re-export main lexer types
-pub use n3::*;
 pub use line_formats::*;
+pub use n3::*;

@@ -1,7 +1,9 @@
 //! Optimizations for Two-Phase Commit protocol
 
-use crate::transaction::{Transaction, TransactionId, TransactionOp, TransactionState, IsolationLevel};
 use crate::shard::ShardId;
+use crate::transaction::{
+    IsolationLevel, Transaction, TransactionId, TransactionOp, TransactionState,
+};
 use anyhow::Result;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -42,9 +44,10 @@ impl TwoPhaseOptimizer {
         let mut optimization = TransactionOptimization::default();
 
         // Check if transaction is read-only
-        let is_readonly = transaction.operations.iter().all(|(_, op)| {
-            matches!(op, TransactionOp::Query { .. })
-        });
+        let is_readonly = transaction
+            .operations
+            .iter()
+            .all(|(_, op)| matches!(op, TransactionOp::Query { .. }));
 
         if is_readonly && self.enable_readonly_opt {
             optimization.skip_2pc = true;
@@ -54,7 +57,9 @@ impl TwoPhaseOptimizer {
         }
 
         // Check if transaction affects only one shard
-        let affected_shards: HashSet<_> = transaction.operations.iter()
+        let affected_shards: HashSet<_> = transaction
+            .operations
+            .iter()
             .map(|(shard_id, _)| *shard_id)
             .collect();
 
@@ -94,16 +99,16 @@ impl TwoPhaseOptimizer {
     }
 
     /// Optimize the prepare phase for parallel execution
-    pub async fn optimize_prepare_phase(
-        &self,
-        transaction: &Transaction,
-    ) -> PrepareOptimization {
+    pub async fn optimize_prepare_phase(&self, transaction: &Transaction) -> PrepareOptimization {
         let mut optimization = PrepareOptimization::default();
 
         // Group operations by shard for batch processing
         let mut shard_ops: HashMap<ShardId, Vec<TransactionOp>> = HashMap::new();
         for (shard_id, op) in &transaction.operations {
-            shard_ops.entry(*shard_id).or_insert_with(Vec::new).push(op.clone());
+            shard_ops
+                .entry(*shard_id)
+                .or_insert_with(Vec::new)
+                .push(op.clone());
         }
 
         // Determine parallel groups (shards that can be prepared in parallel)
@@ -130,9 +135,13 @@ impl TwoPhaseOptimizer {
     }
 
     /// Compute critical path for transaction
-    fn compute_critical_path(&self, shard_ops: &HashMap<ShardId, Vec<TransactionOp>>) -> Vec<ShardId> {
+    fn compute_critical_path(
+        &self,
+        shard_ops: &HashMap<ShardId, Vec<TransactionOp>>,
+    ) -> Vec<ShardId> {
         // Simple implementation: return shards ordered by operation count
-        let mut shards: Vec<_> = shard_ops.iter()
+        let mut shards: Vec<_> = shard_ops
+            .iter()
             .map(|(shard_id, ops)| (*shard_id, ops.len()))
             .collect();
         shards.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
@@ -142,7 +151,7 @@ impl TwoPhaseOptimizer {
     /// Compute optimized timeout based on transaction characteristics
     fn compute_optimized_timeout(&self, transaction: &Transaction) -> std::time::Duration {
         use std::time::Duration;
-        
+
         // Base timeout
         let mut timeout = Duration::from_secs(10);
 
@@ -163,10 +172,7 @@ impl TwoPhaseOptimizer {
     }
 
     /// Optimize commit phase for faster completion
-    pub async fn optimize_commit_phase(
-        &self,
-        transaction: &Transaction,
-    ) -> CommitOptimization {
+    pub async fn optimize_commit_phase(&self, transaction: &Transaction) -> CommitOptimization {
         let mut optimization = CommitOptimization::default();
 
         // Enable asynchronous commit for non-critical transactions
@@ -270,13 +276,14 @@ impl DeadlockDetector {
     /// Add a wait dependency
     pub async fn add_wait(&self, waiter: &str, holder: &str) -> Result<()> {
         let mut graph = self.wait_graph.write().await;
-        
+
         // Check if adding this edge would create a cycle
         if self.would_create_cycle(&graph, waiter, holder) {
             return Err(anyhow::anyhow!("Deadlock detected"));
         }
 
-        graph.entry(waiter.to_string())
+        graph
+            .entry(waiter.to_string())
             .or_insert_with(HashSet::new)
             .insert(holder.to_string());
 
@@ -286,10 +293,10 @@ impl DeadlockDetector {
     /// Remove wait dependencies for a transaction
     pub async fn remove_transaction(&self, tx_id: &str) {
         let mut graph = self.wait_graph.write().await;
-        
+
         // Remove as waiter
         graph.remove(tx_id);
-        
+
         // Remove as holder
         for waiters in graph.values_mut() {
             waiters.remove(tx_id);
@@ -397,17 +404,18 @@ mod tests {
     #[tokio::test]
     async fn test_readonly_optimization() {
         let optimizer = TwoPhaseOptimizer::new();
-        
+
         let mut transaction = Transaction {
             id: "test-tx".to_string(),
             state: TransactionState::Active,
-            operations: vec![
-                (0, TransactionOp::Query {
+            operations: vec![(
+                0,
+                TransactionOp::Query {
                     subject: Some("test".to_string()),
                     predicate: None,
                     object: None,
-                }),
-            ],
+                },
+            )],
             participants: HashMap::new(),
             created_at: std::time::Instant::now(),
             timeout: std::time::Duration::from_secs(30),
@@ -422,19 +430,20 @@ mod tests {
     #[tokio::test]
     async fn test_single_shard_optimization() {
         let optimizer = TwoPhaseOptimizer::new();
-        
+
         let transaction = Transaction {
             id: "test-tx".to_string(),
             state: TransactionState::Active,
-            operations: vec![
-                (0, TransactionOp::Insert {
+            operations: vec![(
+                0,
+                TransactionOp::Insert {
                     triple: oxirs_core::model::Triple::new(
                         oxirs_core::model::NamedNode::new("http://example.org/s").unwrap(),
                         oxirs_core::model::NamedNode::new("http://example.org/p").unwrap(),
                         oxirs_core::model::NamedNode::new("http://example.org/o").unwrap(),
                     ),
-                }),
-            ],
+                },
+            )],
             participants: HashMap::new(),
             created_at: std::time::Instant::now(),
             timeout: std::time::Duration::from_secs(30),
@@ -450,15 +459,21 @@ mod tests {
     #[test]
     fn test_deadlock_detection() {
         let detector = DeadlockDetector::new();
-        
+
         // Test cycle detection
         let mut graph = HashMap::new();
-        graph.insert("tx1".to_string(), vec!["tx2".to_string()].into_iter().collect());
-        graph.insert("tx2".to_string(), vec!["tx3".to_string()].into_iter().collect());
-        
+        graph.insert(
+            "tx1".to_string(),
+            vec!["tx2".to_string()].into_iter().collect(),
+        );
+        graph.insert(
+            "tx2".to_string(),
+            vec!["tx3".to_string()].into_iter().collect(),
+        );
+
         // This would create a cycle: tx3 -> tx1 -> tx2 -> tx3
         assert!(detector.would_create_cycle(&graph, "tx3", "tx1"));
-        
+
         // This would not create a cycle
         assert!(!detector.would_create_cycle(&graph, "tx3", "tx4"));
     }

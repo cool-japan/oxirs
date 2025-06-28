@@ -3,11 +3,11 @@
 //! This module provides indexes that learn from query patterns and automatically
 //! create, update, or remove indexes to optimize query performance.
 
-use crate::model::{Term, Triple, Subject, Predicate, Object};
-use crate::store::{IndexedGraph, IndexType, IndexStats};
+use crate::model::{Object, Predicate, Subject, Term, Triple};
+use crate::store::{IndexStats, IndexType, IndexedGraph};
 use crate::OxirsError;
 use dashmap::DashMap;
-use parking_lot::{RwLock, Mutex};
+use parking_lot::{Mutex, RwLock};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -59,7 +59,7 @@ impl QueryPattern {
             QueryPattern::PredicateQuery | QueryPattern::PredicateObject => Some(IndexType::POS),
             QueryPattern::ObjectQuery | QueryPattern::SubjectObject => Some(IndexType::OSP),
             QueryPattern::SpecificTriple => Some(IndexType::SPO), // Any index works
-            QueryPattern::FullScan => None, // No specific index helps
+            QueryPattern::FullScan => None,                       // No specific index helps
         }
     }
 }
@@ -116,7 +116,7 @@ impl Default for AdaptiveConfig {
             max_adaptive_indexes: 5,
             analysis_window: Duration::from_secs(300), // 5 minutes
             maintenance_interval: Duration::from_secs(60), // 1 minute
-            index_cost_threshold: 0.5, // Index if cost < 50% of full scan
+            index_cost_threshold: 0.5,                 // Index if cost < 50% of full scan
         }
     }
 }
@@ -174,15 +174,15 @@ impl AdaptiveIndexManager {
         }?;
 
         let duration = start.elapsed();
-        
+
         // Update statistics
         self.update_pattern_stats(pattern, duration, result.len());
-        
+
         // Record in history
         {
             let mut history = self.query_history.lock();
             history.push_back((pattern, Instant::now(), duration));
-            
+
             // Keep only recent history
             let cutoff = Instant::now() - self.config.analysis_window;
             while let Some((_, timestamp, _)) = history.front() {
@@ -203,22 +203,23 @@ impl AdaptiveIndexManager {
     /// Update statistics for a query pattern
     fn update_pattern_stats(&self, pattern: QueryPattern, duration: Duration, result_size: usize) {
         let mut stats = self.pattern_stats.entry(pattern).or_default();
-        
+
         let now = Instant::now();
         let time_since_last = now.duration_since(stats.last_queried).as_secs_f64();
-        
+
         // Update basic stats
         stats.query_count += 1;
         stats.total_time += duration;
-        stats.avg_result_size = (stats.avg_result_size * (stats.query_count - 1) as f64 
-            + result_size as f64) / stats.query_count as f64;
-        
+        stats.avg_result_size = (stats.avg_result_size * (stats.query_count - 1) as f64
+            + result_size as f64)
+            / stats.query_count as f64;
+
         // Update frequency with exponential moving average
         if time_since_last > 0.0 {
             let instant_frequency = 1.0 / time_since_last;
             stats.query_frequency = stats.query_frequency * 0.9 + instant_frequency * 0.1;
         }
-        
+
         stats.last_queried = now;
     }
 
@@ -228,7 +229,7 @@ impl AdaptiveIndexManager {
         if last_maintenance.elapsed() >= self.config.maintenance_interval {
             *last_maintenance = Instant::now();
             drop(last_maintenance);
-            
+
             // Run maintenance in background
             let self_clone = self.clone();
             std::thread::spawn(move || {
@@ -238,7 +239,7 @@ impl AdaptiveIndexManager {
     }
 
     /// Run index maintenance (public for testing only)
-    /// 
+    ///
     /// # Note
     /// This method is only intended for use in tests to trigger maintenance
     /// manually. In production, maintenance runs automatically based on the
@@ -246,17 +247,17 @@ impl AdaptiveIndexManager {
     pub fn run_maintenance(&self) {
         self.run_maintenance_internal();
     }
-    
+
     /// Run index maintenance (internal)
     fn run_maintenance_internal(&self) {
         // Analyze patterns and create/remove indexes
         let patterns_to_index = self.analyze_patterns();
-        
+
         // Create new indexes
         for pattern in patterns_to_index {
             self.create_adaptive_index(pattern);
         }
-        
+
         // Remove underused indexes
         self.cleanup_indexes();
     }
@@ -264,15 +265,15 @@ impl AdaptiveIndexManager {
     /// Analyze query patterns to determine which indexes to create
     fn analyze_patterns(&self) -> Vec<QueryPattern> {
         let mut candidates = Vec::new();
-        
+
         for entry in self.pattern_stats.iter() {
             let (pattern, stats) = entry.pair();
-            
+
             // Skip if already indexed
             if self.adaptive_indexes.read().contains_key(pattern) {
                 continue;
             }
-            
+
             // Check if pattern qualifies for indexing
             if stats.query_count >= self.config.min_queries_for_index
                 && stats.query_frequency >= self.config.min_frequency_for_index
@@ -285,11 +286,11 @@ impl AdaptiveIndexManager {
                 }
             }
         }
-        
+
         // Sort by benefit and take top candidates
         candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
         candidates.truncate(self.config.max_adaptive_indexes);
-        
+
         candidates.into_iter().map(|(pattern, _)| pattern).collect()
     }
 
@@ -298,13 +299,13 @@ impl AdaptiveIndexManager {
         // Simple cost model: benefit = (scan_cost - index_cost) / scan_cost
         let graph = self.base_graph.read();
         let total_triples = graph.len() as f64;
-        
+
         // Estimate scan cost (proportional to total triples)
         let scan_cost = total_triples;
-        
+
         // Estimate index cost (proportional to result size)
         let index_cost = stats.avg_result_size;
-        
+
         if scan_cost > 0.0 {
             Some((scan_cost - index_cost) / scan_cost)
         } else {
@@ -315,23 +316,21 @@ impl AdaptiveIndexManager {
     /// Create an adaptive index for a pattern
     fn create_adaptive_index(&self, pattern: QueryPattern) {
         let mut indexes = self.adaptive_indexes.write();
-        
+
         // Check capacity
         if indexes.len() >= self.config.max_adaptive_indexes {
             return;
         }
-        
+
         // Create appropriate index type
         let index: Box<dyn AdaptiveIndex> = match pattern {
-            QueryPattern::PredicateQuery => {
-                Box::new(PredicateIndex::new(self.base_graph.clone()))
-            }
+            QueryPattern::PredicateQuery => Box::new(PredicateIndex::new(self.base_graph.clone())),
             QueryPattern::SubjectPredicate => {
                 Box::new(SubjectPredicateIndex::new(self.base_graph.clone()))
             }
             _ => return, // Add more index types as needed
         };
-        
+
         indexes.insert(pattern, index);
     }
 
@@ -339,7 +338,7 @@ impl AdaptiveIndexManager {
     fn cleanup_indexes(&self) {
         let mut indexes = self.adaptive_indexes.write();
         let stats = self.pattern_stats.clone();
-        
+
         indexes.retain(|pattern, _| {
             if let Some(pattern_stats) = stats.get(pattern) {
                 // Keep if still meeting frequency threshold
@@ -352,19 +351,17 @@ impl AdaptiveIndexManager {
 
     /// Get current statistics
     pub fn get_stats(&self) -> AdaptiveIndexStats {
-        let pattern_stats: HashMap<QueryPattern, PatternStats> = self.pattern_stats
+        let pattern_stats: HashMap<QueryPattern, PatternStats> = self
+            .pattern_stats
             .iter()
             .map(|entry| (*entry.key(), entry.value().clone()))
             .collect();
-        
-        let active_indexes: Vec<QueryPattern> = self.adaptive_indexes
-            .read()
-            .keys()
-            .copied()
-            .collect();
-        
+
+        let active_indexes: Vec<QueryPattern> =
+            self.adaptive_indexes.read().keys().copied().collect();
+
         let total_queries = pattern_stats.values().map(|s| s.query_count).sum();
-        
+
         AdaptiveIndexStats {
             pattern_stats,
             active_indexes,
@@ -376,7 +373,7 @@ impl AdaptiveIndexManager {
     pub fn insert(&self, triple: Triple) -> Result<bool, OxirsError> {
         // Insert into base graph
         let inserted = self.base_graph.write().insert(&triple);
-        
+
         if inserted {
             // Update adaptive indexes
             let indexes = self.adaptive_indexes.read();
@@ -384,7 +381,7 @@ impl AdaptiveIndexManager {
                 index.insert(&triple)?;
             }
         }
-        
+
         Ok(inserted)
     }
 
@@ -392,7 +389,7 @@ impl AdaptiveIndexManager {
     pub fn remove(&self, triple: &Triple) -> Result<bool, OxirsError> {
         // Remove from base graph
         let removed = self.base_graph.write().remove(&triple);
-        
+
         if removed {
             // Update adaptive indexes
             let indexes = self.adaptive_indexes.read();
@@ -400,7 +397,7 @@ impl AdaptiveIndexManager {
                 index.remove(triple)?;
             }
         }
-        
+
         Ok(removed)
     }
 }
@@ -428,10 +425,10 @@ trait AdaptiveIndex: Send + Sync {
         predicate: Option<&Predicate>,
         object: Option<&Object>,
     ) -> Result<Vec<Triple>, OxirsError>;
-    
+
     /// Insert a triple
     fn insert(&self, triple: &Triple) -> Result<(), OxirsError>;
-    
+
     /// Remove a triple
     fn remove(&self, triple: &Triple) -> Result<(), OxirsError>;
 }
@@ -448,16 +445,17 @@ impl PredicateIndex {
             base_graph: base_graph.clone(),
             predicate_map: Arc::new(DashMap::new()),
         };
-        
+
         // Build initial index
         let graph = base_graph.read();
         for triple in graph.iter() {
-            index.predicate_map
+            index
+                .predicate_map
                 .entry(triple.predicate().clone())
                 .or_default()
                 .push(triple);
         }
-        
+
         index
     }
 }
@@ -482,12 +480,12 @@ impl AdaptiveIndex for PredicateIndex {
                 return Ok(results);
             }
         }
-        
+
         // Fall back to base graph
         let graph = self.base_graph.read();
         Ok(graph.match_pattern(subject, predicate, object))
     }
-    
+
     fn insert(&self, triple: &Triple) -> Result<(), OxirsError> {
         self.predicate_map
             .entry(triple.predicate().clone())
@@ -495,7 +493,7 @@ impl AdaptiveIndex for PredicateIndex {
             .push(triple.clone());
         Ok(())
     }
-    
+
     fn remove(&self, triple: &Triple) -> Result<(), OxirsError> {
         if let Some(mut triples) = self.predicate_map.get_mut(triple.predicate()) {
             triples.retain(|t| t != triple);
@@ -516,16 +514,17 @@ impl SubjectPredicateIndex {
             base_graph: base_graph.clone(),
             sp_map: Arc::new(DashMap::new()),
         };
-        
+
         // Build initial index
         let graph = base_graph.read();
         for triple in graph.iter() {
-            index.sp_map
+            index
+                .sp_map
                 .entry((triple.subject().clone(), triple.predicate().clone()))
                 .or_default()
                 .push(triple.object().clone());
         }
-        
+
         index
     }
 }
@@ -547,12 +546,12 @@ impl AdaptiveIndex for SubjectPredicateIndex {
                 return Ok(results);
             }
         }
-        
+
         // Fall back to base graph
         let graph = self.base_graph.read();
         Ok(graph.match_pattern(subject, predicate, object))
     }
-    
+
     fn insert(&self, triple: &Triple) -> Result<(), OxirsError> {
         self.sp_map
             .entry((triple.subject().clone(), triple.predicate().clone()))
@@ -560,9 +559,12 @@ impl AdaptiveIndex for SubjectPredicateIndex {
             .push(triple.object().clone());
         Ok(())
     }
-    
+
     fn remove(&self, triple: &Triple) -> Result<(), OxirsError> {
-        if let Some(mut objects) = self.sp_map.get_mut(&(triple.subject().clone(), triple.predicate().clone())) {
+        if let Some(mut objects) = self
+            .sp_map
+            .get_mut(&(triple.subject().clone(), triple.predicate().clone()))
+        {
             objects.retain(|o| o != triple.object());
         }
         Ok(())
@@ -614,9 +616,9 @@ mod tests {
             min_frequency_for_index: 0.01,
             ..Default::default()
         };
-        
+
         let manager = AdaptiveIndexManager::new(graph, config);
-        
+
         // Insert test data
         for i in 0..10 {
             let triple = Triple::new(
@@ -626,17 +628,17 @@ mod tests {
             );
             manager.insert(triple).unwrap();
         }
-        
+
         // Query the same pattern multiple times
         let pred = Predicate::NamedNode(NamedNode::new("http://p").unwrap());
         for _ in 0..3 {
             let results = manager.query(None, Some(&pred), None).unwrap();
             assert_eq!(results.len(), 10);
         }
-        
+
         // Force maintenance
         manager.run_maintenance();
-        
+
         // Check if index was created
         let stats = manager.get_stats();
         assert!(stats.total_queries >= 3);
@@ -645,7 +647,7 @@ mod tests {
     #[test]
     fn test_predicate_index() {
         let graph = Arc::new(RwLock::new(IndexedGraph::new()));
-        
+
         // Insert test data
         for i in 0..5 {
             let triple = Triple::new(
@@ -655,7 +657,7 @@ mod tests {
             );
             graph.write().insert(&triple);
         }
-        
+
         for i in 0..3 {
             let triple = Triple::new(
                 NamedNode::new(format!("http://s{}", i)).unwrap(),
@@ -664,14 +666,14 @@ mod tests {
             );
             graph.write().insert(&triple);
         }
-        
+
         let index = PredicateIndex::new(graph.clone());
-        
+
         // Query by predicate
         let p1 = Predicate::NamedNode(NamedNode::new("http://p1").unwrap());
         let results = index.query(None, Some(&p1), None).unwrap();
         assert_eq!(results.len(), 5);
-        
+
         let p2 = Predicate::NamedNode(NamedNode::new("http://p2").unwrap());
         let results = index.query(None, Some(&p2), None).unwrap();
         assert_eq!(results.len(), 3);
@@ -680,11 +682,11 @@ mod tests {
     #[test]
     fn test_subject_predicate_index() {
         let graph = Arc::new(RwLock::new(IndexedGraph::new()));
-        
+
         // Insert test data
         let s1 = Subject::NamedNode(NamedNode::new("http://s1").unwrap());
         let p1 = Predicate::NamedNode(NamedNode::new("http://p1").unwrap());
-        
+
         for i in 0..5 {
             let triple = Triple::new(
                 s1.clone(),
@@ -693,9 +695,9 @@ mod tests {
             );
             graph.write().insert(&triple);
         }
-        
+
         let index = SubjectPredicateIndex::new(graph.clone());
-        
+
         // Query by subject and predicate
         let results = index.query(Some(&s1), Some(&p1), None).unwrap();
         assert_eq!(results.len(), 5);

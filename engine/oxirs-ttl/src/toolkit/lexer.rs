@@ -10,10 +10,10 @@ use std::io::{BufRead, Read};
 pub trait TokenRecognizer {
     /// The token type produced by this recognizer
     type Token<'a>;
-    
+
     /// Configuration options for tokenization
     type Options: Default;
-    
+
     /// Recognize the next token from input data
     ///
     /// Returns:
@@ -26,7 +26,7 @@ pub trait TokenRecognizer {
         is_ending: bool,
         options: &Self::Options,
     ) -> Option<(usize, Result<Self::Token<'a>, TokenRecognizerError>)>;
-    
+
     /// Reset the recognizer state
     fn reset(&mut self) {}
 }
@@ -62,7 +62,7 @@ impl<R: BufRead, T: TokenRecognizer> StreamingTokenizer<R, T> {
             buffer_capacity: 8192, // 8KB default buffer
         }
     }
-    
+
     /// Create a new streaming tokenizer with custom options
     pub fn with_options(recognizer: T, reader: R, options: T::Options) -> Self {
         Self {
@@ -74,13 +74,13 @@ impl<R: BufRead, T: TokenRecognizer> StreamingTokenizer<R, T> {
             buffer_capacity: 8192,
         }
     }
-    
+
     /// Set the buffer capacity
     pub fn with_buffer_capacity(mut self, capacity: usize) -> Self {
         self.buffer_capacity = capacity;
         self
     }
-    
+
     /// Get the current position in the input
     pub fn position(&self) -> TextPosition {
         self.position
@@ -89,24 +89,24 @@ impl<R: BufRead, T: TokenRecognizer> StreamingTokenizer<R, T> {
 
 impl<R: BufRead, T: TokenRecognizer> Iterator for StreamingTokenizer<R, T> {
     type Item = Result<TokenOrLineJump<T::Token<'static>>, TokenRecognizerError>;
-    
+
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             // Clone buffer data to avoid borrowing issues
             let buffer_data = self.buffer.clone();
-            
+
             // Try to recognize a token from current buffer
             let recognition_result = self.recognizer.recognize_next_token(
                 &buffer_data,
                 false, // We'll handle EOF separately
                 &self.options,
             );
-            
+
             if let Some((consumed, result)) = recognition_result {
                 // Update position and consume bytes
                 self.position.advance_bytes(&self.buffer[..consumed]);
                 self.buffer.drain(..consumed);
-                
+
                 return Some(result.map(|token| {
                     // Convert token to owned version
                     // This is a simplification - in practice we'd need trait bounds
@@ -114,7 +114,7 @@ impl<R: BufRead, T: TokenRecognizer> Iterator for StreamingTokenizer<R, T> {
                     unsafe { std::mem::transmute(TokenOrLineJump::Token(token)) }
                 }));
             }
-            
+
             // Need more data - read from input
             let mut chunk = vec![0u8; self.buffer_capacity];
             match self.reader.read(&mut chunk) {
@@ -122,17 +122,15 @@ impl<R: BufRead, T: TokenRecognizer> Iterator for StreamingTokenizer<R, T> {
                     // EOF - try to recognize with ending flag
                     if !self.buffer.is_empty() {
                         let buffer_data = self.buffer.clone();
-                        let eof_recognition_result = self.recognizer.recognize_next_token(
-                            &buffer_data,
-                            true,
-                            &self.options,
-                        );
-                        
+                        let eof_recognition_result =
+                            self.recognizer
+                                .recognize_next_token(&buffer_data, true, &self.options);
+
                         if let Some((consumed, result)) = eof_recognition_result {
                             self.position.advance_bytes(&self.buffer[..consumed]);
                             self.buffer.drain(..consumed);
-                            return Some(result.map(|token| {
-                                unsafe { std::mem::transmute(TokenOrLineJump::Token(token)) }
+                            return Some(result.map(|token| unsafe {
+                                std::mem::transmute(TokenOrLineJump::Token(token))
                             }));
                         }
                     }
@@ -144,7 +142,7 @@ impl<R: BufRead, T: TokenRecognizer> Iterator for StreamingTokenizer<R, T> {
                 }
                 Err(e) => {
                     return Some(Err(TokenRecognizerError::UnexpectedCharacter(
-                        e.to_string().chars().next().unwrap_or('?')
+                        e.to_string().chars().next().unwrap_or('?'),
                     )));
                 }
             }
@@ -166,7 +164,7 @@ impl<R: BufRead> LineTokenizer<R> {
             position: TextPosition::start(),
         }
     }
-    
+
     /// Get the current position
     pub fn position(&self) -> TextPosition {
         self.position
@@ -175,7 +173,7 @@ impl<R: BufRead> LineTokenizer<R> {
 
 impl<R: BufRead> Iterator for LineTokenizer<R> {
     type Item = Result<String, std::io::Error>;
-    
+
     fn next(&mut self) -> Option<Self::Item> {
         let mut line = String::new();
         match self.reader.read_line(&mut line) {
@@ -185,7 +183,7 @@ impl<R: BufRead> Iterator for LineTokenizer<R> {
                 for ch in line.chars() {
                     self.position.advance_char(ch);
                 }
-                
+
                 // Remove trailing newline
                 if line.ends_with('\n') {
                     line.pop();
@@ -193,7 +191,7 @@ impl<R: BufRead> Iterator for LineTokenizer<R> {
                         line.pop();
                     }
                 }
-                
+
                 Some(Ok(line))
             }
             Err(e) => Some(Err(e)),

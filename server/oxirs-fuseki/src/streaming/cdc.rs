@@ -7,31 +7,31 @@ use std::{
 };
 use tokio::sync::{mpsc, RwLock};
 
-use oxirs_core::{Triple, Quad, Dataset};
 use crate::{
     error::Result,
-    streaming::{CDCConfig, RDFEvent, StreamingManager},
     store::Store,
+    streaming::{CDCConfig, RDFEvent, StreamingManager},
 };
+use oxirs_core::{Dataset, Quad, Triple};
 
 /// CDC listener trait for intercepting store operations
 #[async_trait::async_trait]
 pub trait CDCListener: Send + Sync {
     /// Called when a triple is added
     async fn on_triple_added(&self, triple: &Triple, graph: Option<&str>);
-    
+
     /// Called when a triple is removed
     async fn on_triple_removed(&self, triple: &Triple, graph: Option<&str>);
-    
+
     /// Called when a quad is added
     async fn on_quad_added(&self, quad: &Quad);
-    
+
     /// Called when a quad is removed
     async fn on_quad_removed(&self, quad: &Quad);
-    
+
     /// Called when a graph is cleared
     async fn on_graph_cleared(&self, graph: &str);
-    
+
     /// Called at transaction boundaries
     async fn on_transaction_start(&self, tx_id: &str);
     async fn on_transaction_commit(&self, tx_id: &str);
@@ -43,27 +43,48 @@ pub struct CDCManager {
     config: CDCConfig,
     streaming_manager: Arc<StreamingManager>,
     transaction_buffer: Arc<RwLock<HashMap<String, Vec<RDFEvent>>>>,
-    event_channel: (mpsc::Sender<CDCEvent>, Arc<RwLock<mpsc::Receiver<CDCEvent>>>),
+    event_channel: (
+        mpsc::Sender<CDCEvent>,
+        Arc<RwLock<mpsc::Receiver<CDCEvent>>>,
+    ),
 }
 
 /// Internal CDC event type
 #[derive(Debug, Clone)]
 enum CDCEvent {
-    TripleAdded { triple: Triple, graph: Option<String> },
-    TripleRemoved { triple: Triple, graph: Option<String> },
-    QuadAdded { quad: Quad },
-    QuadRemoved { quad: Quad },
-    GraphCleared { graph: String },
-    TransactionStart { tx_id: String },
-    TransactionCommit { tx_id: String },
-    TransactionRollback { tx_id: String },
+    TripleAdded {
+        triple: Triple,
+        graph: Option<String>,
+    },
+    TripleRemoved {
+        triple: Triple,
+        graph: Option<String>,
+    },
+    QuadAdded {
+        quad: Quad,
+    },
+    QuadRemoved {
+        quad: Quad,
+    },
+    GraphCleared {
+        graph: String,
+    },
+    TransactionStart {
+        tx_id: String,
+    },
+    TransactionCommit {
+        tx_id: String,
+    },
+    TransactionRollback {
+        tx_id: String,
+    },
 }
 
 impl CDCManager {
     /// Create a new CDC manager
     pub fn new(config: CDCConfig, streaming_manager: Arc<StreamingManager>) -> Self {
         let (tx, rx) = mpsc::channel(10000);
-        
+
         Self {
             config,
             streaming_manager,
@@ -78,11 +99,11 @@ impl CDCManager {
         let streaming_manager = self.streaming_manager.clone();
         let transaction_buffer = self.transaction_buffer.clone();
         let receiver = self.event_channel.1.clone();
-        
+
         tokio::spawn(async move {
             let mut batch = Vec::new();
             let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(100));
-            
+
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
@@ -127,7 +148,7 @@ impl CDCManager {
                                         let buffer = transaction_buffer.read().await;
                                         let in_transaction = buffer.keys().next().cloned();
                                         drop(buffer);
-                                        
+
                                         if let Some(tx_id) = in_transaction {
                                             let mut buffer = transaction_buffer.write().await;
                                             if let Some(tx_events) = buffer.get_mut(&tx_id) {
@@ -164,7 +185,7 @@ impl CDCManager {
     /// Convert internal CDC event to RDF event
     fn convert_to_rdf_event(event: &CDCEvent, config: &CDCConfig) -> Option<RDFEvent> {
         let timestamp = Self::current_timestamp();
-        
+
         match event {
             CDCEvent::TripleAdded { triple, graph } if config.capture_inserts => {
                 Some(RDFEvent::TripleAdded {
@@ -180,12 +201,10 @@ impl CDCManager {
                     timestamp,
                 })
             }
-            CDCEvent::QuadAdded { quad } if config.capture_inserts => {
-                Some(RDFEvent::QuadAdded {
-                    quad: quad.clone(),
-                    timestamp,
-                })
-            }
+            CDCEvent::QuadAdded { quad } if config.capture_inserts => Some(RDFEvent::QuadAdded {
+                quad: quad.clone(),
+                timestamp,
+            }),
             CDCEvent::QuadRemoved { quad } if config.capture_deletes => {
                 Some(RDFEvent::QuadRemoved {
                     quad: quad.clone(),
@@ -235,18 +254,14 @@ impl CDCListener for CDCManager {
 
     async fn on_quad_added(&self, quad: &Quad) {
         if self.config.enabled && self.config.capture_inserts {
-            let event = CDCEvent::QuadAdded {
-                quad: quad.clone(),
-            };
+            let event = CDCEvent::QuadAdded { quad: quad.clone() };
             let _ = self.event_channel.0.send(event).await;
         }
     }
 
     async fn on_quad_removed(&self, quad: &Quad) {
         if self.config.enabled && self.config.capture_deletes {
-            let event = CDCEvent::QuadRemoved {
-                quad: quad.clone(),
-            };
+            let event = CDCEvent::QuadRemoved { quad: quad.clone() };
             let _ = self.event_channel.0.send(event).await;
         }
     }
@@ -329,17 +344,18 @@ impl CDCStore {
 
     // Wrapper methods that trigger CDC events would go here
     // For example:
-    
+
     pub async fn add_triple(&self, triple: Triple, graph: Option<String>) -> Result<()> {
         // Add to store
         // self.inner.add_triple(triple.clone(), graph.clone()).await?;
-        
+
         // Notify CDC listeners
         let graph_ref = graph.as_deref();
         self.notify_listeners(|listener| async move {
             listener.on_triple_added(&triple, graph_ref).await;
-        }).await;
-        
+        })
+        .await;
+
         Ok(())
     }
 }

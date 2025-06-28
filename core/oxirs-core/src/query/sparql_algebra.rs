@@ -250,7 +250,7 @@ impl fmt::Display for Expression {
                     write!(f, "{}", item)?;
                 }
                 f.write_str("))")
-            },
+            }
             Self::Add(left, right) => write!(f, "({} + {})", left, right),
             Self::Subtract(left, right) => write!(f, "({} - {})", left, right),
             Self::Multiply(left, right) => write!(f, "({} * {})", left, right),
@@ -262,7 +262,7 @@ impl fmt::Display for Expression {
             Self::Bound(var) => write!(f, "BOUND({})", var),
             Self::If(condition, then_expr, else_expr) => {
                 write!(f, "IF({}, {}, {})", condition, then_expr, else_expr)
-            },
+            }
             Self::Coalesce(exprs) => {
                 f.write_str("COALESCE(")?;
                 for (i, expr) in exprs.iter().enumerate() {
@@ -272,7 +272,7 @@ impl fmt::Display for Expression {
                     write!(f, "{}", expr)?;
                 }
                 f.write_str(")")
-            },
+            }
             Self::FunctionCall(func, args) => {
                 write!(f, "{}(", func)?;
                 for (i, arg) in args.iter().enumerate() {
@@ -282,7 +282,7 @@ impl fmt::Display for Expression {
                     write!(f, "{}", arg)?;
                 }
                 f.write_str(")")
-            },
+            }
         }
     }
 }
@@ -340,14 +340,14 @@ pub enum BuiltInFunction {
     Concat,
     Replace,
     Regex,
-    
+
     // Numeric functions
     Abs,
     Round,
     Ceil,
     Floor,
     Rand,
-    
+
     // Date/Time functions
     Now,
     Year,
@@ -358,21 +358,21 @@ pub enum BuiltInFunction {
     Seconds,
     Timezone,
     Tz,
-    
+
     // Hash functions
     Md5,
     Sha1,
     Sha256,
     Sha384,
     Sha512,
-    
+
     // Type checking
     IsIri,
     IsUri,
     IsBlank,
     IsLiteral,
     IsNumeric,
-    
+
     // Additional functions
     Uuid,
     StrUuid,
@@ -575,13 +575,21 @@ impl fmt::Display for GraphPattern {
                 }
                 Ok(())
             }
-            Self::Path { subject, path, object } => {
+            Self::Path {
+                subject,
+                path,
+                object,
+            } => {
                 write!(f, "{} {} {}", subject, path, object)
             }
             Self::Join { left, right } => {
                 write!(f, "{} . {}", left, right)
             }
-            Self::LeftJoin { left, right, expression } => {
+            Self::LeftJoin {
+                left,
+                right,
+                expression,
+            } => {
                 write!(f, "{} OPTIONAL {{ {}", left, right)?;
                 if let Some(expr) = expression {
                     write!(f, " FILTER ({})", expr)?;
@@ -597,13 +605,20 @@ impl fmt::Display for GraphPattern {
             Self::Graph { name, inner } => {
                 write!(f, "GRAPH {} {{ {} }}", name, inner)
             }
-            Self::Extend { inner, variable, expression } => {
+            Self::Extend {
+                inner,
+                variable,
+                expression,
+            } => {
                 write!(f, "{} BIND ({} AS {})", inner, expression, variable)
             }
             Self::Minus { left, right } => {
                 write!(f, "{} MINUS {{ {} }}", left, right)
             }
-            Self::Values { variables, bindings } => {
+            Self::Values {
+                variables,
+                bindings,
+            } => {
                 f.write_str("VALUES ")?;
                 if variables.len() == 1 {
                     write!(f, "{}", variables[0])?;
@@ -668,14 +683,22 @@ impl fmt::Display for GraphPattern {
             Self::Reduced { inner } => {
                 write!(f, "SELECT REDUCED * WHERE {{ {} }}", inner)
             }
-            Self::Slice { inner, start, length } => {
+            Self::Slice {
+                inner,
+                start,
+                length,
+            } => {
                 write!(f, "{} OFFSET {}", inner, start)?;
                 if let Some(length) = length {
                     write!(f, " LIMIT {}", length)?;
                 }
                 Ok(())
             }
-            Self::Group { inner, variables, aggregates } => {
+            Self::Group {
+                inner,
+                variables,
+                aggregates,
+            } => {
                 write!(f, "{} GROUP BY", inner)?;
                 for var in variables {
                     write!(f, " {}", var)?;
@@ -688,7 +711,11 @@ impl fmt::Display for GraphPattern {
                 }
                 Ok(())
             }
-            Self::Service { name, inner, silent } => {
+            Self::Service {
+                name,
+                inner,
+                silent,
+            } => {
                 if *silent {
                     write!(f, "SERVICE SILENT {} {{ {} }}", name, inner)
                 } else {
@@ -711,7 +738,11 @@ impl GraphPattern {
                 }
                 f.write_str(")")
             }
-            Self::Path { subject, path, object } => {
+            Self::Path {
+                subject,
+                path,
+                object,
+            } => {
                 f.write_str("(path ")?;
                 subject.fmt_sse(f)?;
                 f.write_str(" ")?;
@@ -727,7 +758,11 @@ impl GraphPattern {
                 right.fmt_sse(f)?;
                 f.write_str(")")
             }
-            Self::LeftJoin { left, right, expression } => {
+            Self::LeftJoin {
+                left,
+                right,
+                expression,
+            } => {
                 f.write_str("(leftjoin ")?;
                 left.fmt_sse(f)?;
                 f.write_str(" ")?;
@@ -759,7 +794,11 @@ impl GraphPattern {
                 inner.fmt_sse(f)?;
                 f.write_str(")")
             }
-            Self::Extend { inner, variable, expression } => {
+            Self::Extend {
+                inner,
+                variable,
+                expression,
+            } => {
                 f.write_str("(extend ")?;
                 inner.fmt_sse(f)?;
                 f.write_str(" (")?;
@@ -775,7 +814,10 @@ impl GraphPattern {
                 right.fmt_sse(f)?;
                 f.write_str(")")
             }
-            Self::Values { variables, bindings } => {
+            Self::Values {
+                variables,
+                bindings,
+            } => {
                 f.write_str("(table")?;
                 if !variables.is_empty() {
                     f.write_str(" (vars")?;
@@ -833,7 +875,11 @@ impl GraphPattern {
                 inner.fmt_sse(f)?;
                 f.write_str(")")
             }
-            Self::Slice { inner, start, length } => {
+            Self::Slice {
+                inner,
+                start,
+                length,
+            } => {
                 f.write_str("(slice ")?;
                 inner.fmt_sse(f)?;
                 write!(f, " {start}")?;
@@ -842,7 +888,11 @@ impl GraphPattern {
                 }
                 f.write_str(")")
             }
-            Self::Group { inner, variables, aggregates } => {
+            Self::Group {
+                inner,
+                variables,
+                aggregates,
+            } => {
                 f.write_str("(group ")?;
                 inner.fmt_sse(f)?;
                 if !variables.is_empty() {
@@ -871,7 +921,11 @@ impl GraphPattern {
                 }
                 f.write_str(")")
             }
-            Self::Service { name, inner, silent } => {
+            Self::Service {
+                name,
+                inner,
+                silent,
+            } => {
                 if *silent {
                     f.write_str("(service silent ")?;
                 } else {
@@ -1275,7 +1329,11 @@ impl AggregateExpression {
                 expr.fmt_sse(f)?;
                 f.write_str(")")
             }
-            Self::GroupConcat { expr, distinct, separator } => {
+            Self::GroupConcat {
+                expr,
+                distinct,
+                separator,
+            } => {
                 if *distinct {
                     f.write_str("(group_concat distinct ")?;
                 } else {
@@ -1296,7 +1354,11 @@ impl AggregateExpression {
                 expr.fmt_sse(f)?;
                 f.write_str(")")
             }
-            Self::Custom { name, expr, distinct } => {
+            Self::Custom {
+                name,
+                expr,
+                distinct,
+            } => {
                 if *distinct {
                     write!(f, "({name} distinct ")?;
                 } else {
@@ -1361,7 +1423,11 @@ impl fmt::Display for AggregateExpression {
                 expr.fmt(f)?;
                 f.write_str(")")
             }
-            Self::GroupConcat { expr, distinct, separator } => {
+            Self::GroupConcat {
+                expr,
+                distinct,
+                separator,
+            } => {
                 if *distinct {
                     f.write_str("GROUP_CONCAT(DISTINCT ")?;
                 } else {
@@ -1382,7 +1448,11 @@ impl fmt::Display for AggregateExpression {
                 expr.fmt(f)?;
                 f.write_str(")")
             }
-            Self::Custom { name, expr, distinct } => {
+            Self::Custom {
+                name,
+                expr,
+                distinct,
+            } => {
                 if *distinct {
                     write!(f, "{}(DISTINCT ", name)?;
                 } else {
@@ -1432,12 +1502,12 @@ mod tests {
     fn test_property_path_display() {
         let p1 = NamedNode::new("http://example.org/p1").unwrap();
         let p2 = NamedNode::new("http://example.org/p2").unwrap();
-        
+
         let path = PropertyPathExpression::Sequence(
             Box::new(PropertyPathExpression::NamedNode(p1)),
             Box::new(PropertyPathExpression::NamedNode(p2)),
         );
-        
+
         assert!(path.to_string().contains("/"));
     }
 
@@ -1446,10 +1516,12 @@ mod tests {
         let subject = TermPattern::Variable(Variable::new("s").unwrap());
         let predicate = TermPattern::Variable(Variable::new("p").unwrap());
         let object = TermPattern::Variable(Variable::new("o").unwrap());
-        
+
         let triple = TriplePattern::new(subject, predicate, object);
-        let bgp = GraphPattern::Bgp { patterns: vec![triple] };
-        
+        let bgp = GraphPattern::Bgp {
+            patterns: vec![triple],
+        };
+
         let mut sse = String::new();
         bgp.fmt_sse(&mut sse).unwrap();
         assert!(sse.contains("bgp"));
@@ -1463,7 +1535,7 @@ mod tests {
         let var1 = Expression::Variable(Variable::new("x").unwrap());
         let var2 = Expression::Variable(Variable::new("y").unwrap());
         let expr = Expression::Add(Box::new(var1), Box::new(var2));
-        
+
         let mut sse = String::new();
         expr.fmt_sse(&mut sse).unwrap();
         assert!(sse.contains("+ ?x ?y"));
@@ -1473,7 +1545,7 @@ mod tests {
     fn test_built_in_function() {
         let func = BuiltInFunction::Str;
         assert_eq!(func.to_string(), "STR");
-        
+
         let mut sse = String::new();
         func.fmt_sse(&mut sse).unwrap();
         assert_eq!(sse, "str");

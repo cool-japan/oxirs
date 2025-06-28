@@ -3,7 +3,7 @@
 //! This module provides an indexed graph structure with SPO, POS, and OSP indexes
 //! for efficient triple pattern matching. All terms are interned for memory efficiency.
 
-use crate::model::{Triple, Subject, Predicate, Object};
+use crate::model::{Object, Predicate, Subject, Triple};
 use crate::store::term_interner::TermInterner;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Arc, RwLock};
@@ -293,8 +293,9 @@ impl IndexedGraph {
         object: Option<&Object>,
     ) -> Vec<Triple> {
         // Determine the best index to use
-        let index_type = self.select_index(subject.is_some(), predicate.is_some(), object.is_some());
-        
+        let index_type =
+            self.select_index(subject.is_some(), predicate.is_some(), object.is_some());
+
         // Update stats
         match index_type {
             IndexType::SPO => self.stats.write().unwrap().spo_lookups += 1,
@@ -308,9 +309,10 @@ impl IndexedGraph {
         let o_id = object.and_then(|o| self.interner.get_object_id(o));
 
         // If any required term is not found, return empty result
-        if (subject.is_some() && s_id.is_none()) ||
-           (predicate.is_some() && p_id.is_none()) ||
-           (object.is_some() && o_id.is_none()) {
+        if (subject.is_some() && s_id.is_none())
+            || (predicate.is_some() && p_id.is_none())
+            || (object.is_some() && o_id.is_none())
+        {
             return Vec::new();
         }
 
@@ -331,18 +333,23 @@ impl IndexedGraph {
     /// Select the best index based on the query pattern
     fn select_index(&self, has_s: bool, has_p: bool, has_o: bool) -> IndexType {
         match (has_s, has_p, has_o) {
-            (true, true, _) => IndexType::SPO,   // S+P given, use SPO
-            (true, false, true) => IndexType::OSP, // S+O given, use OSP
-            (false, true, true) => IndexType::POS, // P+O given, use POS
+            (true, true, _) => IndexType::SPO,      // S+P given, use SPO
+            (true, false, true) => IndexType::OSP,  // S+O given, use OSP
+            (false, true, true) => IndexType::POS,  // P+O given, use POS
             (true, false, false) => IndexType::SPO, // Only S given
             (false, true, false) => IndexType::POS, // Only P given
             (false, false, true) => IndexType::OSP, // Only O given
-            _ => IndexType::SPO, // No constraint or all given, default to SPO
+            _ => IndexType::SPO,                    // No constraint or all given, default to SPO
         }
     }
 
     /// Query using SPO index
-    fn query_spo(&self, s_id: Option<u32>, p_id: Option<u32>, o_id: Option<u32>) -> Vec<InternedTriple> {
+    fn query_spo(
+        &self,
+        s_id: Option<u32>,
+        p_id: Option<u32>,
+        o_id: Option<u32>,
+    ) -> Vec<InternedTriple> {
         let spo = self.spo_index.read().unwrap();
         let mut results = Vec::new();
 
@@ -430,7 +437,12 @@ impl IndexedGraph {
     }
 
     /// Query using POS index
-    fn query_pos(&self, p_id: Option<u32>, o_id: Option<u32>, s_id: Option<u32>) -> Vec<InternedTriple> {
+    fn query_pos(
+        &self,
+        p_id: Option<u32>,
+        o_id: Option<u32>,
+        s_id: Option<u32>,
+    ) -> Vec<InternedTriple> {
         let pos = self.pos_index.read().unwrap();
         let mut results = Vec::new();
 
@@ -477,7 +489,12 @@ impl IndexedGraph {
     }
 
     /// Query using OSP index
-    fn query_osp(&self, o_id: Option<u32>, s_id: Option<u32>, p_id: Option<u32>) -> Vec<InternedTriple> {
+    fn query_osp(
+        &self,
+        o_id: Option<u32>,
+        s_id: Option<u32>,
+        p_id: Option<u32>,
+    ) -> Vec<InternedTriple> {
         let osp = self.osp_index.read().unwrap();
         let mut results = Vec::new();
 
@@ -584,7 +601,7 @@ impl IndexedGraph {
     #[cfg(feature = "parallel")]
     pub fn par_insert_batch(&self, triples: Vec<Triple>) -> Vec<bool> {
         use rayon::prelude::*;
-        
+
         // First pass: intern all terms in parallel
         let interned_triples: Vec<_> = triples
             .par_iter()
@@ -594,13 +611,16 @@ impl IndexedGraph {
                 object_id: self.interner.intern_object(triple.object()),
             })
             .collect();
-        
+
         // Group by subject for better lock granularity
         let mut grouped: HashMap<u32, Vec<InternedTriple>> = HashMap::new();
         for interned in interned_triples {
-            grouped.entry(interned.subject_id).or_default().push(interned);
+            grouped
+                .entry(interned.subject_id)
+                .or_default()
+                .push(interned);
         }
-        
+
         // Process groups in parallel
         let results: Vec<_> = grouped
             .into_par_iter()
@@ -613,7 +633,7 @@ impl IndexedGraph {
                 group_results
             })
             .collect();
-        
+
         results
     }
 
@@ -621,7 +641,7 @@ impl IndexedGraph {
     #[cfg(feature = "parallel")]
     pub fn par_remove_batch(&self, triples: &[Triple]) -> Vec<bool> {
         use rayon::prelude::*;
-        
+
         triples
             .par_iter()
             .map(|triple| self.remove(triple))
@@ -635,12 +655,10 @@ impl IndexedGraph {
         patterns: Vec<(Option<Subject>, Option<Predicate>, Option<Object>)>,
     ) -> Vec<Vec<Triple>> {
         use rayon::prelude::*;
-        
+
         patterns
             .into_par_iter()
-            .map(|(s, p, o)| {
-                self.query(s.as_ref(), p.as_ref(), o.as_ref())
-            })
+            .map(|(s, p, o)| self.query(s.as_ref(), p.as_ref(), o.as_ref()))
             .collect()
     }
 
@@ -651,10 +669,10 @@ impl IndexedGraph {
         F: Fn(&Triple) -> Option<Triple> + Send + Sync,
     {
         use rayon::prelude::*;
-        
+
         // Get all triples
         let all_triples = self.query(None, None, None);
-        
+
         // Transform in parallel
         all_triples
             .into_par_iter()
@@ -670,7 +688,7 @@ impl IndexedGraph {
         R: Send,
     {
         use rayon::prelude::*;
-        
+
         let all_triples = self.query(None, None, None);
         all_triples
             .into_par_iter()
@@ -685,7 +703,7 @@ impl IndexedGraph {
         F: Fn(&Triple) -> bool + Send + Sync,
     {
         use rayon::prelude::*;
-        
+
         let all_triples = self.query(None, None, None);
         all_triples
             .into_par_iter()
@@ -701,16 +719,19 @@ impl IndexedGraph {
         R: Send + Sync + Clone + 'static,
     {
         use rayon::prelude::*;
-        
+
         let all_triples = self.query(None, None, None);
         all_triples
             .into_par_iter()
             .fold(|| init.clone(), |acc, triple| fold_fn(acc, &triple))
-            .reduce(|| init.clone(), |acc1, acc2| {
-                // For a proper fold, we need a reduce function that makes sense
-                // This is a simplified version - in practice, you'd want a proper combine function
-                acc1
-            })
+            .reduce(
+                || init.clone(),
+                |acc1, acc2| {
+                    // For a proper fold, we need a reduce function that makes sense
+                    // This is a simplified version - in practice, you'd want a proper combine function
+                    acc1
+                },
+            )
     }
 
     /// Iterator over all triples in the graph
@@ -749,7 +770,10 @@ pub struct MemoryUsage {
 impl MemoryUsage {
     /// Get total memory usage in bytes
     pub fn total_bytes(&self) -> usize {
-        self.term_interner_bytes + self.spo_index_bytes + self.pos_index_bytes + self.osp_index_bytes
+        self.term_interner_bytes
+            + self.spo_index_bytes
+            + self.pos_index_bytes
+            + self.osp_index_bytes
     }
 
     /// Get average bytes per triple
@@ -782,11 +806,10 @@ fn estimate_index_memory(index: &BTreeMap<u32, BTreeMap<u32, BTreeSet<u32>>>) ->
     total
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{NamedNode, Literal};
+    use crate::model::{Literal, NamedNode};
 
     fn create_test_triple(s: &str, p: &str, o: &str) -> Triple {
         Triple::new(
@@ -799,19 +822,20 @@ mod tests {
     #[test]
     fn test_basic_operations() {
         let graph = IndexedGraph::new();
-        
-        let triple = create_test_triple("http://example.org/s1", "http://example.org/p1", "object1");
-        
+
+        let triple =
+            create_test_triple("http://example.org/s1", "http://example.org/p1", "object1");
+
         // Test insertion
         assert!(graph.insert(&triple));
         assert!(!graph.insert(&triple)); // Duplicate
         assert_eq!(graph.len(), 1);
-        
+
         // Test query
         let results = graph.query(Some(triple.subject()), None, None);
         assert_eq!(results.len(), 1);
         assert_eq!(results[0], triple);
-        
+
         // Test removal
         assert!(graph.remove(&triple));
         assert!(!graph.remove(&triple)); // Already removed
@@ -821,14 +845,14 @@ mod tests {
     #[test]
     fn test_batch_insert() {
         let graph = IndexedGraph::new();
-        
+
         let triples = vec![
             create_test_triple("http://example.org/s1", "http://example.org/p1", "o1"),
             create_test_triple("http://example.org/s1", "http://example.org/p2", "o2"),
             create_test_triple("http://example.org/s2", "http://example.org/p1", "o3"),
             create_test_triple("http://example.org/s1", "http://example.org/p1", "o1"), // Duplicate
         ];
-        
+
         let results = graph.batch_insert(&triples);
         assert_eq!(results, vec![true, true, true, false]);
         assert_eq!(graph.len(), 3);
@@ -837,7 +861,7 @@ mod tests {
     #[test]
     fn test_query_patterns() {
         let graph = IndexedGraph::new();
-        
+
         // Insert test data
         let triples = vec![
             create_test_triple("http://example.org/s1", "http://example.org/p1", "o1"),
@@ -845,43 +869,43 @@ mod tests {
             create_test_triple("http://example.org/s2", "http://example.org/p1", "o3"),
             create_test_triple("http://example.org/s2", "http://example.org/p2", "o4"),
         ];
-        
+
         for triple in &triples {
             graph.insert(triple);
         }
-        
+
         // Test S pattern
         let s1 = Subject::NamedNode(NamedNode::new("http://example.org/s1").unwrap());
         let results = graph.query(Some(&s1), None, None);
         assert_eq!(results.len(), 2);
-        
+
         // Test P pattern
         let p1 = Predicate::NamedNode(NamedNode::new("http://example.org/p1").unwrap());
         let results = graph.query(None, Some(&p1), None);
         assert_eq!(results.len(), 2);
-        
+
         // Test O pattern
         let o1 = Object::Literal(Literal::new("o1"));
         let results = graph.query(None, None, Some(&o1));
         assert_eq!(results.len(), 1);
-        
+
         // Test SP pattern
         let results = graph.query(Some(&s1), Some(&p1), None);
         assert_eq!(results.len(), 1);
-        
+
         // Test PO pattern
         let results = graph.query(None, Some(&p1), Some(&o1));
         assert_eq!(results.len(), 1);
-        
+
         // Test SO pattern
         let o2 = Object::Literal(Literal::new("o2"));
         let results = graph.query(Some(&s1), None, Some(&o2));
         assert_eq!(results.len(), 1);
-        
+
         // Test SPO pattern (exact match)
         let results = graph.query(Some(&s1), Some(&p1), Some(&o1));
         assert_eq!(results.len(), 1);
-        
+
         // Test all triples
         let results = graph.query(None, None, None);
         assert_eq!(results.len(), 4);
@@ -890,16 +914,16 @@ mod tests {
     #[test]
     fn test_index_selection() {
         let graph = IndexedGraph::new();
-        
+
         // SPO patterns
         assert_eq!(graph.select_index(true, true, true), IndexType::SPO);
         assert_eq!(graph.select_index(true, true, false), IndexType::SPO);
         assert_eq!(graph.select_index(true, false, false), IndexType::SPO);
-        
+
         // POS patterns
         assert_eq!(graph.select_index(false, true, true), IndexType::POS);
         assert_eq!(graph.select_index(false, true, false), IndexType::POS);
-        
+
         // OSP patterns
         assert_eq!(graph.select_index(true, false, true), IndexType::OSP);
         assert_eq!(graph.select_index(false, false, true), IndexType::OSP);
@@ -908,7 +932,7 @@ mod tests {
     #[test]
     fn test_memory_usage() {
         let graph = IndexedGraph::new();
-        
+
         // Insert some triples
         for i in 0..10 {
             let triple = create_test_triple(
@@ -918,7 +942,7 @@ mod tests {
             );
             graph.insert(&triple);
         }
-        
+
         let usage = graph.memory_usage();
         assert_eq!(usage.total_triple_count, 10);
         assert!(usage.total_bytes() > 0);
@@ -928,16 +952,16 @@ mod tests {
     #[test]
     fn test_clear() {
         let graph = IndexedGraph::new();
-        
+
         // Insert and then clear
         let triple = create_test_triple("http://example.org/s1", "http://example.org/p1", "o1");
         graph.insert(&triple);
         assert_eq!(graph.len(), 1);
-        
+
         graph.clear();
         assert_eq!(graph.len(), 0);
         assert!(graph.is_empty());
-        
+
         // Should be able to insert again after clear
         assert!(graph.insert(&triple));
         assert_eq!(graph.len(), 1);
@@ -975,9 +999,7 @@ mod tests {
         let mut handles = vec![];
         for _ in 0..10 {
             let graph_clone = Arc::clone(&graph);
-            let handle = thread::spawn(move || {
-                graph_clone.query(None, None, None).len()
-            });
+            let handle = thread::spawn(move || graph_clone.query(None, None, None).len());
             handles.push(handle);
         }
 

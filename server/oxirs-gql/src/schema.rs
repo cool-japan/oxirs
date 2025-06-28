@@ -355,8 +355,9 @@ impl SchemaGenerator {
 
         if let QueryResults::Solutions(solutions) = results {
             for solution in solutions {
-
-                if let Some(class_term) = solution.get(&oxirs_core::model::Variable::new("class").unwrap()) {
+                if let Some(class_term) =
+                    solution.get(&oxirs_core::model::Variable::new("class").unwrap())
+                {
                     let class_uri = class_term.to_string();
 
                     let label = solution
@@ -367,7 +368,9 @@ impl SchemaGenerator {
                         .get(&oxirs_core::model::Variable::new("comment").unwrap())
                         .and_then(|t| self.extract_literal_value(&t.to_string()));
 
-                    let super_class = solution.get(&oxirs_core::model::Variable::new("superClass").unwrap()).map(|t| t.to_string());
+                    let super_class = solution
+                        .get(&oxirs_core::model::Variable::new("superClass").unwrap())
+                        .map(|t| t.to_string());
 
                     // Get or create class entry
                     let rdf_class = classes
@@ -408,8 +411,9 @@ impl SchemaGenerator {
 
         if let QueryResults::Solutions(solutions) = results {
             for solution in solutions {
-
-                if let Some(property_term) = solution.get(&oxirs_core::model::Variable::new("property").unwrap()) {
+                if let Some(property_term) =
+                    solution.get(&oxirs_core::model::Variable::new("property").unwrap())
+                {
                     let property_uri = property_term.to_string();
 
                     let label = solution
@@ -420,9 +424,13 @@ impl SchemaGenerator {
                         .get(&oxirs_core::model::Variable::new("comment").unwrap())
                         .and_then(|t| self.extract_literal_value(&t.to_string()));
 
-                    let domain = solution.get(&oxirs_core::model::Variable::new("domain").unwrap()).map(|t| t.to_string());
+                    let domain = solution
+                        .get(&oxirs_core::model::Variable::new("domain").unwrap())
+                        .map(|t| t.to_string());
 
-                    let range = solution.get(&oxirs_core::model::Variable::new("range").unwrap()).map(|t| t.to_string());
+                    let range = solution
+                        .get(&oxirs_core::model::Variable::new("range").unwrap())
+                        .map(|t| t.to_string());
 
                     let property_type = solution
                         .get(&oxirs_core::model::Variable::new("type").unwrap())

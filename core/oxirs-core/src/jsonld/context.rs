@@ -1,10 +1,10 @@
 use super::error::{JsonLdErrorCode, JsonLdSyntaxError};
 use super::{JsonLdProcessingMode, JsonLdProfile, JsonLdProfileSet};
-use json_event_parser::{JsonEvent, JsonSyntaxError, SliceJsonParser};
 use crate::model::iri::Iri;
+use json_event_parser::{JsonEvent, JsonSyntaxError, SliceJsonParser};
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::error::Error;
 use std::panic::{RefUnwindSafe, UnwindSafe};
 use std::slice;

@@ -1,6 +1,6 @@
 use crate::{Vector, VectorData, VectorError};
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Sparse vector representation using a hash map for efficient storage
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -15,24 +15,30 @@ pub struct SparseVector {
 
 impl SparseVector {
     /// Create a new sparse vector from indices and values
-    pub fn new(indices: Vec<usize>, values: Vec<f32>, dimensions: usize) -> Result<Self, VectorError> {
+    pub fn new(
+        indices: Vec<usize>,
+        values: Vec<f32>,
+        dimensions: usize,
+    ) -> Result<Self, VectorError> {
         if indices.len() != values.len() {
             return Err(VectorError::InvalidDimensions(
-                "Indices and values must have same length".to_string()
+                "Indices and values must have same length".to_string(),
             ));
         }
 
         if let Some(&max_idx) = indices.iter().max() {
             if max_idx >= dimensions {
-                return Err(VectorError::InvalidDimensions(
-                    format!("Index {} exceeds dimensions {}", max_idx, dimensions)
-                ));
+                return Err(VectorError::InvalidDimensions(format!(
+                    "Index {} exceeds dimensions {}",
+                    max_idx, dimensions
+                )));
             }
         }
 
         let mut sparse_values = HashMap::new();
         for (idx, val) in indices.into_iter().zip(values.into_iter()) {
-            if val != 0.0 {  // Only store non-zero values
+            if val != 0.0 {
+                // Only store non-zero values
                 sparse_values.insert(idx, val);
             }
         }
@@ -50,7 +56,8 @@ impl SparseVector {
         let mut sparse_values = HashMap::new();
 
         for (idx, &val) in values.iter().enumerate() {
-            if val.abs() > f32::EPSILON {  // Only store non-zero values
+            if val.abs() > f32::EPSILON {
+                // Only store non-zero values
                 sparse_values.insert(idx, val);
             }
         }
@@ -65,7 +72,7 @@ impl SparseVector {
     /// Convert to dense vector
     pub fn to_dense(&self) -> Vector {
         let mut values = vec![0.0; self.dimensions];
-        
+
         for (&idx, &val) in &self.values {
             if idx < self.dimensions {
                 values[idx] = val;
@@ -85,9 +92,10 @@ impl SparseVector {
     /// Set value at index
     pub fn set(&mut self, index: usize, value: f32) -> Result<(), VectorError> {
         if index >= self.dimensions {
-            return Err(VectorError::InvalidDimensions(
-                format!("Index {} exceeds dimensions {}", index, self.dimensions)
-            ));
+            return Err(VectorError::InvalidDimensions(format!(
+                "Index {} exceeds dimensions {}",
+                index, self.dimensions
+            )));
         }
 
         if value.abs() > f32::EPSILON {
@@ -121,7 +129,7 @@ impl SparseVector {
         }
 
         let mut sum = 0.0;
-        
+
         // Only iterate over the smaller set of indices
         if self.values.len() <= other.values.len() {
             for (&idx, &val) in &self.values {
@@ -173,7 +181,7 @@ impl SparseVector {
         }
 
         let mut result = self.clone();
-        
+
         for (&idx, &val) in &other.values {
             let new_val = result.get(idx) + val;
             result.set(idx, new_val)?;
@@ -192,7 +200,7 @@ impl SparseVector {
         }
 
         let mut result = self.clone();
-        
+
         for (&idx, &val) in &other.values {
             let new_val = result.get(idx) - val;
             result.set(idx, new_val)?;
@@ -204,7 +212,7 @@ impl SparseVector {
     /// Scale by scalar
     pub fn scale(&self, scalar: f32) -> SparseVector {
         let mut result = self.clone();
-        
+
         for val in result.values.values_mut() {
             *val *= scalar;
         }
@@ -254,9 +262,10 @@ impl CSRMatrix {
         // Verify all vectors have same dimensions
         for (i, vec) in vectors.iter().enumerate() {
             if vec.dimensions != num_cols {
-                return Err(VectorError::InvalidDimensions(
-                    format!("Vector {} has {} dimensions, expected {}", i, vec.dimensions, num_cols)
-                ));
+                return Err(VectorError::InvalidDimensions(format!(
+                    "Vector {} has {} dimensions, expected {}",
+                    i, vec.dimensions, num_cols
+                )));
             }
         }
 
@@ -336,9 +345,9 @@ impl CSRMatrix {
 
     /// Get memory usage in bytes
     pub fn memory_usage(&self) -> usize {
-        self.values.len() * std::mem::size_of::<f32>() +
-        self.col_indices.len() * std::mem::size_of::<usize>() +
-        self.row_ptrs.len() * std::mem::size_of::<usize>()
+        self.values.len() * std::mem::size_of::<f32>()
+            + self.col_indices.len() * std::mem::size_of::<usize>()
+            + self.row_ptrs.len() * std::mem::size_of::<usize>()
     }
 
     /// Get sparsity of the matrix
@@ -372,9 +381,10 @@ impl COOMatrix {
     /// Add a value to the matrix
     pub fn add_value(&mut self, row: usize, col: usize, value: f32) -> Result<(), VectorError> {
         if row >= self.shape.0 || col >= self.shape.1 {
-            return Err(VectorError::InvalidDimensions(
-                format!("Index ({}, {}) out of bounds for shape {:?}", row, col, self.shape)
-            ));
+            return Err(VectorError::InvalidDimensions(format!(
+                "Index ({}, {}) out of bounds for shape {:?}",
+                row, col, self.shape
+            )));
         }
 
         if value.abs() > f32::EPSILON {
@@ -444,7 +454,7 @@ mod tests {
     fn test_sparse_dense_conversion() {
         let dense = Vector::new(vec![0.0, 1.0, 0.0, 2.0, 0.0]);
         let sparse = SparseVector::from_dense(&dense);
-        
+
         assert_eq!(sparse.nnz(), 2);
         assert_eq!(sparse.get(1), 1.0);
         assert_eq!(sparse.get(3), 2.0);
@@ -486,7 +496,7 @@ mod tests {
         ];
 
         let csr = CSRMatrix::from_sparse_vectors(&vectors).unwrap();
-        
+
         assert_eq!(csr.shape, (3, 4));
         assert_eq!(csr.values.len(), 7);
         assert_eq!(csr.row_ptrs, vec![0, 2, 4, 7]);

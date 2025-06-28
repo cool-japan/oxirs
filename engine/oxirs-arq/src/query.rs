@@ -8,8 +8,8 @@ use crate::algebra::{
     OrderCondition, PropertyPath, PropertyPathPattern, Term, TriplePattern, UnaryOperator,
     Variable,
 };
-use oxirs_core::model::NamedNode;
 use anyhow::{anyhow, bail, Context, Result};
+use oxirs_core::model::NamedNode;
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
@@ -379,7 +379,7 @@ impl QueryParser {
     fn parse_identifier(&self, chars: &mut std::iter::Peekable<std::str::Chars>) -> String {
         let mut identifier = String::new();
         let mut found_colon = false;
-        
+
         while let Some(&ch) = chars.peek() {
             if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' || ch == '.' {
                 identifier.push(ch);
@@ -683,10 +683,10 @@ impl QueryParser {
             Ok(result)
         }
     }
-    
+
     fn parse_graph_pattern_or_union(&mut self) -> Result<Algebra> {
         let mut left = self.parse_graph_pattern()?;
-        
+
         // Check for UNION after the first pattern
         while self.match_token(&Token::Union) {
             let right = self.parse_graph_pattern()?;
@@ -695,7 +695,7 @@ impl QueryParser {
                 right: Box::new(right),
             };
         }
-        
+
         Ok(left)
     }
 
@@ -737,7 +737,7 @@ impl QueryParser {
     fn parse_triple_pattern(&mut self) -> Result<TriplePattern> {
         // Skip whitespace and newlines before parsing
         self.skip_whitespace_and_newlines();
-        
+
         let subject = self.parse_term()?;
 
         // Skip whitespace between subject and predicate
@@ -746,7 +746,7 @@ impl QueryParser {
         // Check if we have a property path instead of a simple predicate
         if self.is_property_path_start() {
             let path = self.parse_property_path()?;
-            
+
             // Skip whitespace between path and object
             self.skip_whitespace_and_newlines();
             let object = self.parse_term()?;
@@ -762,7 +762,7 @@ impl QueryParser {
         }
 
         let predicate = self.parse_term()?;
-        
+
         // Skip whitespace between predicate and object
         self.skip_whitespace_and_newlines();
         let object = self.parse_term()?;
@@ -890,7 +890,7 @@ impl QueryParser {
     fn parse_term(&mut self) -> Result<Term> {
         // Skip whitespace/newlines
         self.skip_whitespace_and_newlines();
-        
+
         match self.peek() {
             Some(Token::Variable(var)) => {
                 let var = var.clone();
@@ -927,7 +927,9 @@ impl QueryParser {
                 Ok(Term::Literal(Literal {
                     value,
                     language: None,
-                    datatype: Some(NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#decimal")),
+                    datatype: Some(NamedNode::new_unchecked(
+                        "http://www.w3.org/2001/XMLSchema#decimal",
+                    )),
                 }))
             }
             Some(Token::BooleanLiteral(value)) => {
@@ -936,7 +938,9 @@ impl QueryParser {
                 Ok(Term::Literal(Literal {
                     value: value.to_string(),
                     language: None,
-                    datatype: Some(NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#boolean")),
+                    datatype: Some(NamedNode::new_unchecked(
+                        "http://www.w3.org/2001/XMLSchema#boolean",
+                    )),
                 }))
             }
             Some(Token::BlankNode(id)) => {
@@ -967,7 +971,7 @@ impl QueryParser {
         // In standard SPARQL, UNION should appear between patterns, not at the start
         // But we'll handle it gracefully by treating it as an empty pattern UNION { pattern }
         self.expect_token(Token::Union)?;
-        
+
         // Parse the pattern after UNION
         let pattern = if self.match_token(&Token::LeftBrace) {
             let p = self.parse_group_graph_pattern()?;
@@ -976,7 +980,7 @@ impl QueryParser {
         } else {
             self.parse_graph_pattern()?
         };
-        
+
         Ok(Algebra::Union {
             left: Box::new(Algebra::Table), // Empty pattern on the left
             right: Box::new(pattern),
@@ -1363,7 +1367,12 @@ impl QueryParser {
         if let Some(base) = self.prefixes.get(prefix) {
             Ok(format!("{}{}", base, local))
         } else {
-            bail!("Undefined prefix '{}' in prefixed name '{}:{}'", prefix, prefix, local)
+            bail!(
+                "Undefined prefix '{}' in prefixed name '{}:{}'",
+                prefix,
+                prefix,
+                local
+            )
         }
     }
 
@@ -1612,10 +1621,10 @@ mod tests {
     fn test_tokenization() {
         let mut parser = QueryParser::new();
         parser.tokenize("SELECT ?x WHERE { ?x ?y ?z }").unwrap();
-        
+
         // Debug print tokens
         println!("Tokens: {:?}", parser.tokens);
-        
+
         // Also test prefixed name tokenization specifically
         let mut parser2 = QueryParser::new();
         parser2.tokenize("foaf:name").unwrap();
@@ -1625,7 +1634,7 @@ mod tests {
         assert!(matches!(parser.tokens[1], Token::Variable(_)));
         assert!(matches!(parser.tokens[2], Token::Where));
     }
-    
+
     #[test]
     fn test_union_query() {
         let query_str = r#"
@@ -1635,11 +1644,11 @@ mod tests {
                 { ?person rdfs:label ?name }
             }
         "#;
-        
+
         let query = parse_query(query_str).unwrap();
         assert_eq!(query.query_type, QueryType::Select);
         assert_eq!(query.select_variables, vec!["name".to_string()]);
-        
+
         // Check that the where clause is a Union
         match &query.where_clause {
             Algebra::Union { left, right } => {
@@ -1649,7 +1658,7 @@ mod tests {
                 } else {
                     panic!("Expected BGP on left side of union");
                 }
-                
+
                 // Check right side is a BGP with one pattern
                 if let Algebra::Bgp(patterns) = right.as_ref() {
                     assert_eq!(patterns.len(), 1);
@@ -1660,7 +1669,7 @@ mod tests {
             _ => panic!("Expected Union algebra"),
         }
     }
-    
+
     #[test]
     fn test_multiple_union_query() {
         let query_str = r#"
@@ -1672,9 +1681,9 @@ mod tests {
                 { ?x a :ClassC }
             }
         "#;
-        
+
         let query = parse_query(query_str).unwrap();
-        
+
         // Check that we have nested unions (right-associative)
         match &query.where_clause {
             Algebra::Union { left: _, right } => {

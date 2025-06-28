@@ -17,7 +17,7 @@ pub mod temporal;
 pub mod tiered;
 pub mod virtualization;
 
-pub use mvcc::{MvccStore, MvccConfig, TransactionId as MvccTransactionId, IsolationLevel};
+pub use mvcc::{IsolationLevel, MvccConfig, MvccStore, TransactionId as MvccTransactionId};
 
 use crate::OxirsError;
 use std::path::Path;

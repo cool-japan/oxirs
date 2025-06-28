@@ -778,12 +778,16 @@ impl NodeTable {
                 // For adaptive compression, we need to determine the actual algorithm used
                 // This is a simplified implementation - in practice, we'd store metadata
                 self.adaptive_decompress_data(data)
-            },
+            }
             _ => Err(anyhow!("Unsupported compression type: {:?}", compression)),
         }
     }
 
-    fn advanced_compress_data(&self, data: &[u8], term: &Term) -> Result<(Vec<u8>, CompressionType)> {
+    fn advanced_compress_data(
+        &self,
+        data: &[u8],
+        term: &Term,
+    ) -> Result<(Vec<u8>, CompressionType)> {
         // Analyze term for column-store optimization
         if self.config.enable_column_store {
             self.analyze_term_for_column_store(term)?;
@@ -796,7 +800,9 @@ impl NodeTable {
                     AdvancedCompressionType::RunLength => CompressionType::RunLength,
                     AdvancedCompressionType::Delta => CompressionType::Delta,
                     AdvancedCompressionType::FrameOfReference => CompressionType::FrameOfReference,
-                    AdvancedCompressionType::AdaptiveDictionary => CompressionType::AdaptiveDictionary,
+                    AdvancedCompressionType::AdaptiveDictionary => {
+                        CompressionType::AdaptiveDictionary
+                    }
                     AdvancedCompressionType::Adaptive => CompressionType::Adaptive,
                     _ => CompressionType::None,
                 };
@@ -860,8 +866,12 @@ impl NodeTable {
         if let Ok(mut compressor) = self.column_compressor.write() {
             let column_name = match term {
                 Term::Iri(_) => "iri",
-                Term::Literal { datatype: Some(_), .. } => "literal_datatype",
-                Term::Literal { language: Some(_), .. } => "literal_language",
+                Term::Literal {
+                    datatype: Some(_), ..
+                } => "literal_datatype",
+                Term::Literal {
+                    language: Some(_), ..
+                } => "literal_language",
                 Term::Literal { .. } => "literal_value",
                 Term::BlankNode(_) => "blank_node",
                 Term::Variable(_) => "variable",
@@ -877,14 +887,20 @@ impl NodeTable {
     fn dictionary_compress(&self, data: &[u8], term: &Term) -> Result<Vec<u8>> {
         // For complex terms with metadata, don't use dictionary compression
         match term {
-            Term::Literal { datatype: Some(_), .. } |
-            Term::Literal { language: Some(_), .. } => {
+            Term::Literal {
+                datatype: Some(_), ..
+            }
+            | Term::Literal {
+                language: Some(_), ..
+            } => {
                 // Don't compress literals with datatype or language tags
-                return Err(anyhow!("Complex literals not suitable for dictionary compression"));
+                return Err(anyhow!(
+                    "Complex literals not suitable for dictionary compression"
+                ));
             }
             _ => {}
         }
-        
+
         // Simplified dictionary compression for simple terms
         let (term_type, term_str) = match term {
             Term::Iri(iri) => (1u8, iri),
@@ -899,7 +915,7 @@ impl NodeTable {
             .map_err(|_| anyhow!("Failed to acquire dictionary lock"))?;
 
         let dict_id = dictionary.intern(term_str);
-        
+
         // Store term type + dictionary ID
         let mut result = vec![term_type];
         result.extend_from_slice(&dict_id.to_le_bytes());
@@ -914,7 +930,7 @@ impl NodeTable {
         // First byte indicates the term type
         let term_type = data[0];
         let dict_id = u32::from_le_bytes([data[1], data[2], data[3], data[4]]);
-        
+
         let dictionary = self
             .dictionary
             .read()
@@ -924,16 +940,16 @@ impl NodeTable {
             // Reconstruct the original Term based on type
             let term = match term_type {
                 1 => Term::Iri(string.clone()),
-                2 => Term::Literal { 
-                    value: string.clone(), 
-                    datatype: None, 
-                    language: None 
+                2 => Term::Literal {
+                    value: string.clone(),
+                    datatype: None,
+                    language: None,
                 },
                 3 => Term::BlankNode(string.clone()),
                 4 => Term::Variable(string.clone()),
                 _ => return Err(anyhow!("Invalid term type: {}", term_type)),
             };
-            
+
             bincode::serialize(&term)
                 .map_err(|e| anyhow!("Failed to serialize reconstructed term: {}", e))
         } else {

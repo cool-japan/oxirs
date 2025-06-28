@@ -5,7 +5,7 @@
 //! hybrid logical clocks (HLC) for timestamp generation and maintains multiple
 //! versions of each triple.
 
-use crate::transaction::{TransactionId, IsolationLevel};
+use crate::transaction::{IsolationLevel, TransactionId};
 use anyhow::Result;
 use dashmap::DashMap;
 use oxirs_core::model::Triple;
@@ -16,7 +16,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tokio::sync::{RwLock, Mutex};
+use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info, warn};
 
 /// Hybrid Logical Clock for distributed timestamp generation
@@ -37,7 +37,7 @@ impl HybridLogicalClock {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_millis() as u64;
-        
+
         Self {
             physical_time: AtomicU64::new(physical_time),
             logical_counter: AtomicU64::new(0),
@@ -51,12 +51,13 @@ impl HybridLogicalClock {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_millis() as u64;
-        
+
         let last_physical = self.physical_time.load(AtomicOrdering::SeqCst);
-        
+
         let (physical, logical) = if current_physical > last_physical {
             // Physical time has advanced
-            self.physical_time.store(current_physical, AtomicOrdering::SeqCst);
+            self.physical_time
+                .store(current_physical, AtomicOrdering::SeqCst);
             self.logical_counter.store(0, AtomicOrdering::SeqCst);
             (current_physical, 0)
         } else {
@@ -64,7 +65,7 @@ impl HybridLogicalClock {
             let logical = self.logical_counter.fetch_add(1, AtomicOrdering::SeqCst) + 1;
             (last_physical, logical)
         };
-        
+
         HLCTimestamp {
             physical,
             logical,
@@ -78,31 +79,37 @@ impl HybridLogicalClock {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_millis() as u64;
-        
+
         let last_physical = self.physical_time.load(AtomicOrdering::SeqCst);
         let max_physical = current_physical.max(last_physical).max(received.physical);
-        
-        let (physical, logical) = if max_physical > last_physical && max_physical > received.physical {
-            // Local physical time is ahead
-            self.physical_time.store(max_physical, AtomicOrdering::SeqCst);
-            self.logical_counter.store(0, AtomicOrdering::SeqCst);
-            (max_physical, 0)
-        } else if max_physical == received.physical {
-            // Received timestamp has same or higher physical time
-            let logical = if max_physical == last_physical {
-                self.logical_counter.load(AtomicOrdering::SeqCst).max(received.logical) + 1
+
+        let (physical, logical) =
+            if max_physical > last_physical && max_physical > received.physical {
+                // Local physical time is ahead
+                self.physical_time
+                    .store(max_physical, AtomicOrdering::SeqCst);
+                self.logical_counter.store(0, AtomicOrdering::SeqCst);
+                (max_physical, 0)
+            } else if max_physical == received.physical {
+                // Received timestamp has same or higher physical time
+                let logical = if max_physical == last_physical {
+                    self.logical_counter
+                        .load(AtomicOrdering::SeqCst)
+                        .max(received.logical)
+                        + 1
+                } else {
+                    received.logical + 1
+                };
+                self.physical_time
+                    .store(max_physical, AtomicOrdering::SeqCst);
+                self.logical_counter.store(logical, AtomicOrdering::SeqCst);
+                (max_physical, logical)
             } else {
-                received.logical + 1
+                // Local physical time matches max
+                let logical = self.logical_counter.fetch_add(1, AtomicOrdering::SeqCst) + 1;
+                (max_physical, logical)
             };
-            self.physical_time.store(max_physical, AtomicOrdering::SeqCst);
-            self.logical_counter.store(logical, AtomicOrdering::SeqCst);
-            (max_physical, logical)
-        } else {
-            // Local physical time matches max
-            let logical = self.logical_counter.fetch_add(1, AtomicOrdering::SeqCst) + 1;
-            (max_physical, logical)
-        };
-        
+
         HLCTimestamp {
             physical,
             logical,
@@ -233,25 +240,25 @@ impl MVCCManager {
         let versions = Arc::clone(&self.versions);
         let committed_transactions = Arc::clone(&self.committed_transactions);
         let clock = Arc::clone(&self.clock);
-        
+
         let gc_task = tokio::spawn(async move {
             let mut interval = tokio::time::interval(gc_interval);
             loop {
                 interval.tick().await;
-                
+
                 let current_time = clock.now();
-                let cutoff_physical = current_time.physical.saturating_sub(gc_min_age.as_millis() as u64);
-                
+                let cutoff_physical = current_time
+                    .physical
+                    .saturating_sub(gc_min_age.as_millis() as u64);
+
                 // Clean up old versions
                 for mut entry in versions.iter_mut() {
                     let key = entry.key();
                     let versions_map = entry.value_mut();
-                    
+
                     // Remove versions older than cutoff
-                    versions_map.retain(|timestamp, _| {
-                        timestamp.physical >= cutoff_physical
-                    });
-                    
+                    versions_map.retain(|timestamp, _| timestamp.physical >= cutoff_physical);
+
                     // Keep only max_versions most recent
                     if versions_map.len() > max_versions {
                         let to_remove: Vec<_> = versions_map
@@ -259,26 +266,24 @@ impl MVCCManager {
                             .take(versions_map.len() - max_versions)
                             .cloned()
                             .collect();
-                        
+
                         for timestamp in to_remove {
                             versions_map.remove(&timestamp);
                         }
                     }
                 }
-                
+
                 // Clean up old committed transaction records
                 let mut committed = committed_transactions.write().await;
-                committed.retain(|timestamp, _| {
-                    timestamp.physical >= cutoff_physical
-                });
-                
+                committed.retain(|timestamp, _| timestamp.physical >= cutoff_physical);
+
                 debug!("MVCC garbage collection completed");
             }
         });
-        
+
         *self.gc_handle.lock().await = Some(gc_task);
         info!("MVCC manager started with garbage collection");
-        
+
         Ok(())
     }
 
@@ -298,7 +303,7 @@ impl MVCCManager {
         isolation_level: IsolationLevel,
     ) -> Result<TransactionSnapshot> {
         let timestamp = self.clock.now();
-        
+
         let snapshot = TransactionSnapshot {
             transaction_id: transaction_id.clone(),
             timestamp,
@@ -306,28 +311,31 @@ impl MVCCManager {
             read_set: Arc::new(RwLock::new(HashSet::new())),
             write_set: Arc::new(RwLock::new(HashSet::new())),
         };
-        
-        self.transactions.write().await.insert(transaction_id, snapshot.clone());
-        
-        debug!("Started MVCC transaction {} at {:?}", snapshot.transaction_id, timestamp);
+
+        self.transactions
+            .write()
+            .await
+            .insert(transaction_id, snapshot.clone());
+
+        debug!(
+            "Started MVCC transaction {} at {:?}",
+            snapshot.transaction_id, timestamp
+        );
         Ok(snapshot)
     }
 
     /// Read a value with MVCC
-    pub async fn read(
-        &self,
-        transaction_id: &TransactionId,
-        key: &str,
-    ) -> Result<Option<Triple>> {
+    pub async fn read(&self, transaction_id: &TransactionId, key: &str) -> Result<Option<Triple>> {
         let transactions = self.transactions.read().await;
-        let snapshot = transactions.get(transaction_id)
+        let snapshot = transactions
+            .get(transaction_id)
             .ok_or_else(|| anyhow::anyhow!("Transaction not found"))?;
-        
+
         // Record read in read set
         if self.config.enable_conflict_detection {
             snapshot.read_set.write().await.insert(key.to_string());
         }
-        
+
         // Get the appropriate version based on isolation level
         let version = match snapshot.isolation_level {
             IsolationLevel::ReadUncommitted => {
@@ -336,14 +344,16 @@ impl MVCCManager {
             }
             IsolationLevel::ReadCommitted => {
                 // Read the latest committed version
-                self.get_latest_committed_version(key, &snapshot.timestamp).await
+                self.get_latest_committed_version(key, &snapshot.timestamp)
+                    .await
             }
             IsolationLevel::RepeatableRead | IsolationLevel::Serializable => {
                 // Read the version as of transaction start
-                self.get_version_at_timestamp(key, &snapshot.timestamp).await
+                self.get_version_at_timestamp(key, &snapshot.timestamp)
+                    .await
             }
         };
-        
+
         Ok(version.and_then(|v| v.data))
     }
 
@@ -355,14 +365,15 @@ impl MVCCManager {
         triple: Option<Triple>,
     ) -> Result<()> {
         let transactions = self.transactions.read().await;
-        let snapshot = transactions.get(transaction_id)
+        let snapshot = transactions
+            .get(transaction_id)
             .ok_or_else(|| anyhow::anyhow!("Transaction not found"))?;
-        
+
         // Record write in write set
         if self.config.enable_conflict_detection {
             snapshot.write_set.write().await.insert(key.to_string());
         }
-        
+
         // Create new version
         let timestamp = self.clock.now();
         let version = Version {
@@ -371,14 +382,17 @@ impl MVCCManager {
             is_deleted: triple.is_none(),
             data: triple,
         };
-        
+
         // Store version
         self.versions
             .entry(key.to_string())
             .or_insert_with(BTreeMap::new)
             .insert(timestamp, version);
-        
-        debug!("Wrote version for key {} in transaction {} at {:?}", key, transaction_id, timestamp);
+
+        debug!(
+            "Wrote version for key {} in transaction {} at {:?}",
+            key, transaction_id, timestamp
+        );
         Ok(())
     }
 
@@ -387,29 +401,33 @@ impl MVCCManager {
         if !self.config.enable_conflict_detection {
             return Ok(false);
         }
-        
+
         let transactions = self.transactions.read().await;
-        let snapshot = transactions.get(transaction_id)
+        let snapshot = transactions
+            .get(transaction_id)
             .ok_or_else(|| anyhow::anyhow!("Transaction not found"))?;
-        
+
         let read_set = snapshot.read_set.read().await;
         let write_set = snapshot.write_set.read().await;
-        
+
         // Check for write-write conflicts
         for key in write_set.iter() {
             if let Some(versions) = self.versions.get(key) {
                 // Check if any version was written after our snapshot
-                let has_conflict = versions.range(snapshot.timestamp..).any(|(ts, v)| {
-                    ts > &snapshot.timestamp && v.transaction_id != *transaction_id
-                });
-                
+                let has_conflict = versions
+                    .range(snapshot.timestamp..)
+                    .any(|(ts, v)| ts > &snapshot.timestamp && v.transaction_id != *transaction_id);
+
                 if has_conflict {
-                    warn!("Write-write conflict detected for key {} in transaction {}", key, transaction_id);
+                    warn!(
+                        "Write-write conflict detected for key {} in transaction {}",
+                        key, transaction_id
+                    );
                     return Ok(true);
                 }
             }
         }
-        
+
         // Check for read-write conflicts (for serializable isolation)
         if snapshot.isolation_level == IsolationLevel::Serializable {
             for key in read_set.iter() {
@@ -418,15 +436,18 @@ impl MVCCManager {
                     let has_conflict = versions.range(snapshot.timestamp..).any(|(ts, v)| {
                         ts > &snapshot.timestamp && v.transaction_id != *transaction_id
                     });
-                    
+
                     if has_conflict {
-                        warn!("Read-write conflict detected for key {} in transaction {}", key, transaction_id);
+                        warn!(
+                            "Read-write conflict detected for key {} in transaction {}",
+                            key, transaction_id
+                        );
                         return Ok(true);
                     }
                 }
             }
         }
-        
+
         Ok(false)
     }
 
@@ -436,21 +457,28 @@ impl MVCCManager {
         if self.check_conflicts(transaction_id).await? {
             return Err(anyhow::anyhow!("Transaction conflicts detected"));
         }
-        
+
         let timestamp = {
             let transactions = self.transactions.read().await;
-            let snapshot = transactions.get(transaction_id)
+            let snapshot = transactions
+                .get(transaction_id)
                 .ok_or_else(|| anyhow::anyhow!("Transaction not found"))?;
             snapshot.timestamp
         };
-        
+
         // Record committed transaction
-        self.committed_transactions.write().await.insert(timestamp, transaction_id.clone());
-        
+        self.committed_transactions
+            .write()
+            .await
+            .insert(timestamp, transaction_id.clone());
+
         // Remove from active transactions
         self.transactions.write().await.remove(transaction_id);
-        
-        info!("Committed transaction {} at {:?}", transaction_id, timestamp);
+
+        info!(
+            "Committed transaction {} at {:?}",
+            transaction_id, timestamp
+        );
         Ok(())
     }
 
@@ -458,23 +486,23 @@ impl MVCCManager {
     pub async fn rollback_transaction(&self, transaction_id: &TransactionId) -> Result<()> {
         // Remove all versions created by this transaction
         for mut entry in self.versions.iter_mut() {
-            entry.value_mut().retain(|_, version| {
-                version.transaction_id != *transaction_id
-            });
+            entry
+                .value_mut()
+                .retain(|_, version| version.transaction_id != *transaction_id);
         }
-        
+
         // Remove from active transactions
         self.transactions.write().await.remove(transaction_id);
-        
+
         info!("Rolled back transaction {}", transaction_id);
         Ok(())
     }
 
     /// Get the latest version of a key
     async fn get_latest_version(&self, key: &str) -> Option<Version> {
-        self.versions.get(key).and_then(|versions| {
-            versions.values().last().cloned()
-        })
+        self.versions
+            .get(key)
+            .and_then(|versions| versions.values().last().cloned())
     }
 
     /// Get the latest committed version of a key
@@ -484,14 +512,16 @@ impl MVCCManager {
         before_timestamp: &HLCTimestamp,
     ) -> Option<Version> {
         let committed = self.committed_transactions.read().await;
-        
+
         self.versions.get(key).and_then(|versions| {
             versions
                 .range(..=before_timestamp)
                 .rev()
                 .find(|(ts, version)| {
                     // Check if this version's transaction is committed
-                    committed.values().any(|tx_id| tx_id == &version.transaction_id)
+                    committed
+                        .values()
+                        .any(|tx_id| tx_id == &version.transaction_id)
                 })
                 .map(|(_, version)| version.clone())
         })
@@ -504,14 +534,16 @@ impl MVCCManager {
         timestamp: &HLCTimestamp,
     ) -> Option<Version> {
         let committed = self.committed_transactions.read().await;
-        
+
         self.versions.get(key).and_then(|versions| {
             versions
                 .range(..=timestamp)
                 .rev()
                 .find(|(_, version)| {
                     // For repeatable read, only consider committed versions
-                    committed.values().any(|tx_id| tx_id == &version.transaction_id)
+                    committed
+                        .values()
+                        .any(|tx_id| tx_id == &version.transaction_id)
                 })
                 .map(|(_, version)| version.clone())
         })
@@ -530,16 +562,16 @@ impl MVCCManager {
         let total_keys = self.versions.len();
         let mut total_versions = 0;
         let mut max_versions_per_key = 0;
-        
+
         for entry in self.versions.iter() {
             let version_count = entry.value().len();
             total_versions += version_count;
             max_versions_per_key = max_versions_per_key.max(version_count);
         }
-        
+
         let active_transactions = self.transactions.read().await.len();
         let committed_transactions = self.committed_transactions.read().await.len();
-        
+
         MVCCStatistics {
             total_keys,
             total_versions,
@@ -581,11 +613,27 @@ mod tests {
 
     #[test]
     fn test_hlc_timestamp_ordering() {
-        let ts1 = HLCTimestamp { physical: 100, logical: 0, node_id: 1 };
-        let ts2 = HLCTimestamp { physical: 100, logical: 1, node_id: 1 };
-        let ts3 = HLCTimestamp { physical: 101, logical: 0, node_id: 1 };
-        let ts4 = HLCTimestamp { physical: 100, logical: 0, node_id: 2 };
-        
+        let ts1 = HLCTimestamp {
+            physical: 100,
+            logical: 0,
+            node_id: 1,
+        };
+        let ts2 = HLCTimestamp {
+            physical: 100,
+            logical: 1,
+            node_id: 1,
+        };
+        let ts3 = HLCTimestamp {
+            physical: 101,
+            logical: 0,
+            node_id: 1,
+        };
+        let ts4 = HLCTimestamp {
+            physical: 100,
+            logical: 0,
+            node_id: 2,
+        };
+
         assert!(ts1 < ts2);
         assert!(ts2 < ts3);
         assert!(ts1 < ts4); // Different node IDs
@@ -594,10 +642,10 @@ mod tests {
     #[test]
     fn test_hlc_generation() {
         let clock = HybridLogicalClock::new(1);
-        
+
         let ts1 = clock.now();
         let ts2 = clock.now();
-        
+
         assert!(ts2 > ts1);
         assert_eq!(ts1.node_id, 1);
         assert_eq!(ts2.node_id, 1);
@@ -606,16 +654,16 @@ mod tests {
     #[test]
     fn test_hlc_update() {
         let clock = HybridLogicalClock::new(1);
-        
+
         let ts1 = clock.now();
         let received = HLCTimestamp {
             physical: ts1.physical + 1000,
             logical: 5,
             node_id: 2,
         };
-        
+
         let ts2 = clock.update(&received);
-        
+
         assert!(ts2.physical >= received.physical);
         assert!(ts2 > ts1);
     }
@@ -624,32 +672,37 @@ mod tests {
     async fn test_mvcc_basic_operations() {
         let mvcc = MVCCManager::new(1, MVCCConfig::default());
         mvcc.start().await.unwrap();
-        
+
         // Begin transaction
         let tx_id = "tx1".to_string();
-        let snapshot = mvcc.begin_transaction(tx_id.clone(), IsolationLevel::ReadCommitted).await.unwrap();
-        
+        let snapshot = mvcc
+            .begin_transaction(tx_id.clone(), IsolationLevel::ReadCommitted)
+            .await
+            .unwrap();
+
         // Write a value
         let triple = Triple::new(
             oxirs_core::model::NamedNode::new("http://example.org/s").unwrap(),
             oxirs_core::model::NamedNode::new("http://example.org/p").unwrap(),
             oxirs_core::model::Literal::new_typed_literal("value", xsd::STRING.clone()),
         );
-        
-        mvcc.write(&tx_id, "key1", Some(triple.clone())).await.unwrap();
-        
+
+        mvcc.write(&tx_id, "key1", Some(triple.clone()))
+            .await
+            .unwrap();
+
         // Read the value
         let read_value = mvcc.read(&tx_id, "key1").await.unwrap();
         assert!(read_value.is_some());
-        
+
         // Commit transaction
         mvcc.commit_transaction(&tx_id).await.unwrap();
-        
+
         // Verify statistics
         let stats = mvcc.get_statistics().await;
         assert_eq!(stats.total_keys, 1);
         assert_eq!(stats.total_versions, 1);
-        
+
         mvcc.stop().await.unwrap();
     }
 
@@ -657,46 +710,54 @@ mod tests {
     async fn test_mvcc_isolation_levels() {
         let mvcc = MVCCManager::new(1, MVCCConfig::default());
         mvcc.start().await.unwrap();
-        
+
         // Create a committed version
         let tx1 = "tx1".to_string();
-        mvcc.begin_transaction(tx1.clone(), IsolationLevel::ReadCommitted).await.unwrap();
-        
+        mvcc.begin_transaction(tx1.clone(), IsolationLevel::ReadCommitted)
+            .await
+            .unwrap();
+
         let triple = Triple::new(
             oxirs_core::model::NamedNode::new("http://example.org/s").unwrap(),
             oxirs_core::model::NamedNode::new("http://example.org/p").unwrap(),
             oxirs_core::model::Literal::new_typed_literal("value1", xsd::STRING.clone()),
         );
-        
-        mvcc.write(&tx1, "key1", Some(triple.clone())).await.unwrap();
+
+        mvcc.write(&tx1, "key1", Some(triple.clone()))
+            .await
+            .unwrap();
         mvcc.commit_transaction(&tx1).await.unwrap();
-        
+
         // Start new transaction with repeatable read
         let tx2 = "tx2".to_string();
-        mvcc.begin_transaction(tx2.clone(), IsolationLevel::RepeatableRead).await.unwrap();
-        
+        mvcc.begin_transaction(tx2.clone(), IsolationLevel::RepeatableRead)
+            .await
+            .unwrap();
+
         // Read should see committed value
         let value = mvcc.read(&tx2, "key1").await.unwrap();
         assert!(value.is_some());
-        
+
         // Another transaction modifies the value
         let tx3 = "tx3".to_string();
-        mvcc.begin_transaction(tx3.clone(), IsolationLevel::ReadCommitted).await.unwrap();
-        
+        mvcc.begin_transaction(tx3.clone(), IsolationLevel::ReadCommitted)
+            .await
+            .unwrap();
+
         let triple2 = Triple::new(
             oxirs_core::model::NamedNode::new("http://example.org/s").unwrap(),
             oxirs_core::model::NamedNode::new("http://example.org/p").unwrap(),
             oxirs_core::model::Literal::new_typed_literal("value2", xsd::STRING.clone()),
         );
-        
+
         mvcc.write(&tx3, "key1", Some(triple2)).await.unwrap();
         mvcc.commit_transaction(&tx3).await.unwrap();
-        
+
         // tx2 should still see the old value (repeatable read)
         let value2 = mvcc.read(&tx2, "key1").await.unwrap();
         assert!(value2.is_some());
         // Note: In a real implementation, we'd verify it's the old value
-        
+
         mvcc.stop().await.unwrap();
     }
 
@@ -708,35 +769,41 @@ mod tests {
         };
         let mvcc = MVCCManager::new(1, config);
         mvcc.start().await.unwrap();
-        
+
         // Two transactions modifying the same key
         let tx1 = "tx1".to_string();
         let tx2 = "tx2".to_string();
-        
-        mvcc.begin_transaction(tx1.clone(), IsolationLevel::Serializable).await.unwrap();
-        mvcc.begin_transaction(tx2.clone(), IsolationLevel::Serializable).await.unwrap();
-        
+
+        mvcc.begin_transaction(tx1.clone(), IsolationLevel::Serializable)
+            .await
+            .unwrap();
+        mvcc.begin_transaction(tx2.clone(), IsolationLevel::Serializable)
+            .await
+            .unwrap();
+
         let triple = Triple::new(
             oxirs_core::model::NamedNode::new("http://example.org/s").unwrap(),
             oxirs_core::model::NamedNode::new("http://example.org/p").unwrap(),
             oxirs_core::model::Literal::new_typed_literal("value", xsd::STRING.clone()),
         );
-        
+
         // Both read the same key
         mvcc.read(&tx1, "key1").await.unwrap();
         mvcc.read(&tx2, "key1").await.unwrap();
-        
+
         // Both write to the same key
-        mvcc.write(&tx1, "key1", Some(triple.clone())).await.unwrap();
+        mvcc.write(&tx1, "key1", Some(triple.clone()))
+            .await
+            .unwrap();
         mvcc.write(&tx2, "key1", Some(triple)).await.unwrap();
-        
+
         // First commit should succeed
         mvcc.commit_transaction(&tx1).await.unwrap();
-        
+
         // Second commit should fail due to conflict
         let result = mvcc.commit_transaction(&tx2).await;
         assert!(result.is_err());
-        
+
         mvcc.stop().await.unwrap();
     }
 
@@ -744,27 +811,31 @@ mod tests {
     async fn test_mvcc_rollback() {
         let mvcc = MVCCManager::new(1, MVCCConfig::default());
         mvcc.start().await.unwrap();
-        
+
         let tx_id = "tx1".to_string();
-        mvcc.begin_transaction(tx_id.clone(), IsolationLevel::ReadCommitted).await.unwrap();
-        
+        mvcc.begin_transaction(tx_id.clone(), IsolationLevel::ReadCommitted)
+            .await
+            .unwrap();
+
         let triple = Triple::new(
             oxirs_core::model::NamedNode::new("http://example.org/s").unwrap(),
             oxirs_core::model::NamedNode::new("http://example.org/p").unwrap(),
             oxirs_core::model::Literal::new_typed_literal("value", xsd::STRING.clone()),
         );
-        
+
         mvcc.write(&tx_id, "key1", Some(triple)).await.unwrap();
-        
+
         // Rollback the transaction
         mvcc.rollback_transaction(&tx_id).await.unwrap();
-        
+
         // Start new transaction and verify value is not there
         let tx2 = "tx2".to_string();
-        mvcc.begin_transaction(tx2.clone(), IsolationLevel::ReadCommitted).await.unwrap();
+        mvcc.begin_transaction(tx2.clone(), IsolationLevel::ReadCommitted)
+            .await
+            .unwrap();
         let value = mvcc.read(&tx2, "key1").await.unwrap();
         assert!(value.is_none());
-        
+
         mvcc.stop().await.unwrap();
     }
 }

@@ -53,6 +53,12 @@ pub enum GNNArchitecture {
     GraphSAGE,
     /// Message Passing Neural Network
     MPNN,
+    /// Graph Completion Network for link prediction
+    GraphCompletion,
+    /// Entity Completion Network
+    EntityCompletion,
+    /// Relation Completion Network  
+    RelationCompletion,
 }
 
 /// Activation functions
@@ -84,6 +90,9 @@ enum GNNLayer {
     GINLayer(GINLayerState),
     GraphSAGELayer(GraphSAGELayerState),
     MPNNLayer(MPNNLayerState),
+    GraphCompletionLayer(GraphCompletionLayerState),
+    EntityCompletionLayer(EntityCompletionLayerState),
+    RelationCompletionLayer(RelationCompletionLayerState),
 }
 
 /// GCN layer state
@@ -133,6 +142,51 @@ struct MPNNLayerState {
     input_dim: usize,
     hidden_dim: usize,
     output_dim: usize,
+}
+
+/// Graph completion layer state for link prediction
+#[derive(Debug)]
+struct GraphCompletionLayerState {
+    entity_encoder: Array2<f64>,
+    relation_encoder: Array2<f64>,
+    scoring_function: ScoringFunction,
+    input_dim: usize,
+    output_dim: usize,
+}
+
+/// Entity completion layer state  
+#[derive(Debug)]
+struct EntityCompletionLayerState {
+    entity_embedding: Array2<f64>,
+    context_encoder: Array2<f64>,
+    completion_head: Array2<f64>,
+    input_dim: usize,
+    output_dim: usize,
+}
+
+/// Relation completion layer state
+#[derive(Debug)]
+struct RelationCompletionLayerState {
+    relation_embedding: Array2<f64>,
+    pattern_encoder: Array2<f64>,
+    completion_head: Array2<f64>,
+    input_dim: usize,
+    output_dim: usize,
+}
+
+/// Scoring functions for graph completion
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ScoringFunction {
+    /// TransE scoring function
+    TransE,
+    /// DistMult scoring function
+    DistMult,
+    /// ComplEx scoring function
+    ComplEx,
+    /// RotatE scoring function
+    RotatE,
+    /// ConvE scoring function
+    ConvE,
 }
 
 /// Output layer for shape prediction
@@ -211,6 +265,15 @@ impl GraphNeuralNetwork {
                 GNNArchitecture::MPNN => {
                     GNNLayer::MPNNLayer(Self::init_mpnn_layer(current_dim, output_dim))
                 }
+                GNNArchitecture::GraphCompletion => GNNLayer::GraphCompletionLayer(
+                    Self::init_graph_completion_layer(current_dim, output_dim),
+                ),
+                GNNArchitecture::EntityCompletion => GNNLayer::EntityCompletionLayer(
+                    Self::init_entity_completion_layer(current_dim, output_dim),
+                ),
+                GNNArchitecture::RelationCompletion => GNNLayer::RelationCompletionLayer(
+                    Self::init_relation_completion_layer(current_dim, output_dim),
+                ),
             };
 
             layers.push(layer);
@@ -327,6 +390,81 @@ impl GraphNeuralNetwork {
         }
     }
 
+    /// Initialize graph completion layer for link prediction
+    fn init_graph_completion_layer(
+        input_dim: usize,
+        output_dim: usize,
+    ) -> GraphCompletionLayerState {
+        let mut rng = rand::thread_rng();
+        let scale = (2.0 / input_dim as f64).sqrt();
+
+        let entity_encoder =
+            Array2::from_shape_fn((input_dim, output_dim), |_| rng.gen_range(-scale..scale));
+
+        let relation_encoder =
+            Array2::from_shape_fn((input_dim, output_dim), |_| rng.gen_range(-scale..scale));
+
+        GraphCompletionLayerState {
+            entity_encoder,
+            relation_encoder,
+            scoring_function: ScoringFunction::TransE, // Default to TransE
+            input_dim,
+            output_dim,
+        }
+    }
+
+    /// Initialize entity completion layer  
+    fn init_entity_completion_layer(
+        input_dim: usize,
+        output_dim: usize,
+    ) -> EntityCompletionLayerState {
+        let mut rng = rand::thread_rng();
+        let scale = (2.0 / input_dim as f64).sqrt();
+
+        let entity_embedding =
+            Array2::from_shape_fn((input_dim, output_dim), |_| rng.gen_range(-scale..scale));
+
+        let context_encoder =
+            Array2::from_shape_fn((input_dim, output_dim), |_| rng.gen_range(-scale..scale));
+
+        let completion_head =
+            Array2::from_shape_fn((output_dim, output_dim), |_| rng.gen_range(-scale..scale));
+
+        EntityCompletionLayerState {
+            entity_embedding,
+            context_encoder,
+            completion_head,
+            input_dim,
+            output_dim,
+        }
+    }
+
+    /// Initialize relation completion layer
+    fn init_relation_completion_layer(
+        input_dim: usize,
+        output_dim: usize,
+    ) -> RelationCompletionLayerState {
+        let mut rng = rand::thread_rng();
+        let scale = (2.0 / input_dim as f64).sqrt();
+
+        let relation_embedding =
+            Array2::from_shape_fn((input_dim, output_dim), |_| rng.gen_range(-scale..scale));
+
+        let pattern_encoder =
+            Array2::from_shape_fn((input_dim, output_dim), |_| rng.gen_range(-scale..scale));
+
+        let completion_head =
+            Array2::from_shape_fn((output_dim, output_dim), |_| rng.gen_range(-scale..scale));
+
+        RelationCompletionLayerState {
+            relation_embedding,
+            pattern_encoder,
+            completion_head,
+            input_dim,
+            output_dim,
+        }
+    }
+
     /// Initialize output layer
     fn initialize_output_layer(config: &GNNConfig) -> OutputLayer {
         let mut rng = rand::thread_rng();
@@ -388,6 +526,15 @@ impl GraphNeuralNetwork {
                     self.graphsage_forward(sage, &hidden, &adj_matrix)?
                 }
                 GNNLayer::MPNNLayer(mpnn) => self.mpnn_forward(mpnn, &hidden, &adj_matrix)?,
+                GNNLayer::GraphCompletionLayer(gc) => {
+                    self.graph_completion_forward(gc, &hidden, &adj_matrix, graph_data)?
+                }
+                GNNLayer::EntityCompletionLayer(ec) => {
+                    self.entity_completion_forward(ec, &hidden, &adj_matrix, graph_data)?
+                }
+                GNNLayer::RelationCompletionLayer(rc) => {
+                    self.relation_completion_forward(rc, &hidden, &adj_matrix, graph_data)?
+                }
             };
 
             // Apply activation
@@ -639,6 +786,225 @@ impl GraphNeuralNetwork {
         }
 
         normalized
+    }
+
+    /// Graph completion forward pass for link prediction
+    fn graph_completion_forward(
+        &self,
+        layer: &GraphCompletionLayerState,
+        features: &Array2<f64>,
+        _adj_matrix: &Array2<f64>,
+        graph_data: &GraphData,
+    ) -> Result<Array2<f64>, ModelError> {
+        // Entity embeddings
+        let entity_embeddings = features.dot(&layer.entity_encoder);
+
+        // For now, simulate relation embeddings based on edge features
+        let num_relations = graph_data.edges.len().max(1);
+        let mut relation_features = Array2::zeros((num_relations, layer.input_dim));
+
+        for (i, edge) in graph_data.edges.iter().enumerate() {
+            if i < num_relations {
+                // Simple encoding of edge features
+                for (j, feature_val) in edge
+                    .features
+                    .features
+                    .iter()
+                    .take(layer.input_dim)
+                    .enumerate()
+                {
+                    relation_features[[i, j]] = *feature_val;
+                }
+            }
+        }
+
+        let relation_embeddings = relation_features.dot(&layer.relation_encoder);
+
+        // Apply scoring function for completion
+        let completion_scores = match layer.scoring_function {
+            ScoringFunction::TransE => {
+                self.transe_scoring(&entity_embeddings, &relation_embeddings)
+            }
+            ScoringFunction::DistMult => {
+                self.distmult_scoring(&entity_embeddings, &relation_embeddings)
+            }
+            ScoringFunction::ComplEx => {
+                self.complex_scoring(&entity_embeddings, &relation_embeddings)
+            }
+            ScoringFunction::RotatE => {
+                self.rotate_scoring(&entity_embeddings, &relation_embeddings)
+            }
+            ScoringFunction::ConvE => self.conve_scoring(&entity_embeddings, &relation_embeddings),
+        };
+
+        Ok(completion_scores)
+    }
+
+    /// Entity completion forward pass
+    fn entity_completion_forward(
+        &self,
+        layer: &EntityCompletionLayerState,
+        features: &Array2<f64>,
+        _adj_matrix: &Array2<f64>,
+        _graph_data: &GraphData,
+    ) -> Result<Array2<f64>, ModelError> {
+        // Encode entities and context
+        let entity_embeddings = features.dot(&layer.entity_embedding);
+        let context_embeddings = features.dot(&layer.context_encoder);
+
+        // Combine entity and context information
+        let combined = entity_embeddings + context_embeddings;
+
+        // Apply completion head
+        let completion_output = combined.dot(&layer.completion_head);
+
+        Ok(completion_output)
+    }
+
+    /// Relation completion forward pass
+    fn relation_completion_forward(
+        &self,
+        layer: &RelationCompletionLayerState,
+        features: &Array2<f64>,
+        _adj_matrix: &Array2<f64>,
+        graph_data: &GraphData,
+    ) -> Result<Array2<f64>, ModelError> {
+        // Encode pattern information
+        let pattern_embeddings = features.dot(&layer.pattern_encoder);
+
+        // Create relation features from graph structure
+        let num_edges = graph_data.edges.len().max(1);
+        let mut relation_features = Array2::zeros((num_edges, layer.input_dim));
+
+        for (i, edge) in graph_data.edges.iter().enumerate() {
+            if i < num_edges {
+                for (j, feature_val) in edge
+                    .features
+                    .features
+                    .iter()
+                    .take(layer.input_dim)
+                    .enumerate()
+                {
+                    relation_features[[i, j]] = *feature_val;
+                }
+            }
+        }
+
+        let relation_embeddings = relation_features.dot(&layer.relation_embedding);
+
+        // Pad to match dimensions if needed
+        let (pattern_rows, pattern_cols) = pattern_embeddings.dim();
+        let (relation_rows, _) = relation_embeddings.dim();
+
+        let combined = if pattern_rows >= relation_rows {
+            let mut combined = pattern_embeddings.clone();
+            for i in 0..relation_rows.min(pattern_rows) {
+                for j in 0..pattern_cols.min(layer.output_dim) {
+                    combined[[i, j]] += relation_embeddings[[i, j]];
+                }
+            }
+            combined
+        } else {
+            let mut combined = Array2::zeros((relation_rows, pattern_cols));
+            for i in 0..pattern_rows.min(relation_rows) {
+                for j in 0..pattern_cols {
+                    combined[[i, j]] = pattern_embeddings[[i, j]] + relation_embeddings[[i, j]];
+                }
+            }
+            combined
+        };
+
+        // Apply completion head
+        let completion_output = combined.dot(&layer.completion_head);
+
+        Ok(completion_output)
+    }
+
+    /// TransE scoring function for graph completion
+    fn transe_scoring(
+        &self,
+        entity_embeddings: &Array2<f64>,
+        relation_embeddings: &Array2<f64>,
+    ) -> Array2<f64> {
+        // TransE: score(h,r,t) = -||h + r - t||
+        let num_entities = entity_embeddings.nrows();
+        let num_relations = relation_embeddings.nrows();
+        let mut scores = Array2::zeros((num_entities, num_relations));
+
+        for i in 0..num_entities {
+            for j in 0..num_relations.min(num_entities) {
+                let h = entity_embeddings.row(i);
+                let r = relation_embeddings.row(j);
+                let t = entity_embeddings.row(j); // Simplified: use same entity as tail
+
+                let diff = &h + &r - &t;
+                let norm = diff.mapv(|x| x * x).sum().sqrt();
+                scores[[i, j]] = -norm;
+            }
+        }
+
+        scores
+    }
+
+    /// DistMult scoring function
+    fn distmult_scoring(
+        &self,
+        entity_embeddings: &Array2<f64>,
+        relation_embeddings: &Array2<f64>,
+    ) -> Array2<f64> {
+        // DistMult: score(h,r,t) = h^T * diag(r) * t
+        let num_entities = entity_embeddings.nrows();
+        let num_relations = relation_embeddings.nrows();
+        let mut scores = Array2::zeros((num_entities, num_relations));
+
+        for i in 0..num_entities {
+            for j in 0..num_relations.min(num_entities) {
+                let h = entity_embeddings.row(i);
+                let r = relation_embeddings.row(j);
+                let t = entity_embeddings.row(j); // Simplified
+
+                let score = h
+                    .iter()
+                    .zip(r.iter())
+                    .zip(t.iter())
+                    .map(|((h_val, r_val), t_val)| h_val * r_val * t_val)
+                    .sum::<f64>();
+
+                scores[[i, j]] = score;
+            }
+        }
+
+        scores
+    }
+
+    /// ComplEx scoring function (simplified)
+    fn complex_scoring(
+        &self,
+        entity_embeddings: &Array2<f64>,
+        relation_embeddings: &Array2<f64>,
+    ) -> Array2<f64> {
+        // Simplified ComplEx implementation
+        self.distmult_scoring(entity_embeddings, relation_embeddings)
+    }
+
+    /// RotatE scoring function (simplified)
+    fn rotate_scoring(
+        &self,
+        entity_embeddings: &Array2<f64>,
+        relation_embeddings: &Array2<f64>,
+    ) -> Array2<f64> {
+        // Simplified RotatE implementation
+        self.transe_scoring(entity_embeddings, relation_embeddings)
+    }
+
+    /// ConvE scoring function (simplified)
+    fn conve_scoring(
+        &self,
+        entity_embeddings: &Array2<f64>,
+        relation_embeddings: &Array2<f64>,
+    ) -> Array2<f64> {
+        // Simplified ConvE implementation
+        self.distmult_scoring(entity_embeddings, relation_embeddings)
     }
 
     /// Create target vector from shape labels

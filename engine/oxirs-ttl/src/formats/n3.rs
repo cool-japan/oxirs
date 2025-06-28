@@ -19,7 +19,7 @@ impl Parser<Triple> for N3Parser {
     fn parse<R: Read>(&self, _reader: R) -> TurtleResult<Vec<Triple>> {
         todo!("N3 parser implementation")
     }
-    
+
     fn for_reader<R: BufRead>(&self, _reader: R) -> Box<dyn Iterator<Item = TurtleResult<Triple>>> {
         todo!("N3 streaming parser implementation")
     }

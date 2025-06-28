@@ -83,7 +83,10 @@ impl QualityTrend {
 
     pub fn to_map(&self) -> HashMap<String, String> {
         let mut map = HashMap::new();
-        map.insert("decline_percentage".to_string(), self.decline_percentage.to_string());
+        map.insert(
+            "decline_percentage".to_string(),
+            self.decline_percentage.to_string(),
+        );
         map.insert("confidence".to_string(), self.confidence.to_string());
         map
     }
@@ -241,13 +244,16 @@ impl QualityAssessor {
     }
 
     /// Train the quality assessment model
-    pub fn train_model(&mut self, training_data: &QualityTrainingData) -> Result<crate::ModelTrainingResult> {
+    pub fn train_model(
+        &mut self,
+        training_data: &QualityTrainingData,
+    ) -> Result<crate::ModelTrainingResult> {
         tracing::info!("Training quality assessment model");
-        
+
         let start_time = std::time::Instant::now();
         let success = true;
         let epochs_trained = training_data.quality_examples.len().min(100);
-        
+
         // Simulate training process
         let mut total_accuracy = 0.0;
         for example in &training_data.quality_examples {
@@ -257,7 +263,7 @@ impl QualityAssessor {
             let accuracy = 1.0 - (predicted_score - actual_score).abs();
             total_accuracy += accuracy;
         }
-        
+
         let accuracy = total_accuracy / training_data.quality_examples.len() as f64;
         let loss = 1.0 - accuracy;
         let training_time = start_time.elapsed();
@@ -372,12 +378,17 @@ impl QualityAssessor {
             let instances = self.get_shape_instances(store, shape)?;
 
             for constraint in &shape.constraints {
-                if let Some(min_count) = self.extract_min_count_constraint(&(constraint.0.clone(), constraint.1.clone())) {
+                if let Some(min_count) =
+                    self.extract_min_count_constraint(&(constraint.0.clone(), constraint.1.clone()))
+                {
                     total_expected_properties += instances.len();
 
                     // Count how many instances actually have this property
-                    let present_count =
-                        self.count_instances_with_property(store, &instances, &(constraint.0.clone(), constraint.1.clone()))?;
+                    let present_count = self.count_instances_with_property(
+                        store,
+                        &instances,
+                        &(constraint.0.clone(), constraint.1.clone()),
+                    )?;
                     total_present_properties += present_count;
                 }
             }
@@ -466,12 +477,11 @@ impl QualityAssessor {
             ..Default::default()
         };
 
-        let validation_report =
-            validator.validate_store(store, Some(validation_config))?;
+        let validation_report = validator.validate_store(store, Some(validation_config))?;
 
         // TODO: Access validation results when API is available
         let total_validations = 0;
-        // TODO: Access validation results when API is available  
+        // TODO: Access validation results when API is available
         let violations = 0;
 
         let conformance_score = if total_validations > 0 {
@@ -714,8 +724,6 @@ impl QualityAssessor {
             + weights.conformance * report.conformance_score
             + weights.schema_adherence * report.schema_adherence_score
     }
-
-
 
     /// Clear assessment cache
     pub fn clear_cache(&mut self) {
@@ -1484,7 +1492,6 @@ pub struct QualityStatistics {
     pub average_consistency: f64,
     pub average_accuracy: f64,
 }
-
 
 /// Quality score breakdown
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -3,7 +3,7 @@
 //! This module provides comprehensive training capabilities for various AI models
 //! including knowledge graph embeddings, graph neural networks, and other ML models.
 
-use crate::ai::{KnowledgeGraphEmbedding, GraphNeuralNetwork};
+use crate::ai::{GraphNeuralNetwork, KnowledgeGraphEmbedding};
 use crate::model::Triple;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
@@ -16,40 +16,40 @@ use std::time::{Duration, Instant};
 pub struct TrainingConfig {
     /// Maximum number of epochs
     pub max_epochs: usize,
-    
+
     /// Batch size
     pub batch_size: usize,
-    
+
     /// Learning rate
     pub learning_rate: f32,
-    
+
     /// Learning rate scheduler
     pub lr_scheduler: LearningRateScheduler,
-    
+
     /// Loss function
     pub loss_function: LossFunction,
-    
+
     /// Optimizer
     pub optimizer: Optimizer,
-    
+
     /// Early stopping configuration
     pub early_stopping: EarlyStoppingConfig,
-    
+
     /// Validation configuration
     pub validation: ValidationConfig,
-    
+
     /// Regularization settings
     pub regularization: RegularizationConfig,
-    
+
     /// Gradient clipping
     pub gradient_clipping: Option<f32>,
-    
+
     /// Mixed precision training
     pub mixed_precision: bool,
-    
+
     /// Checkpoint configuration
     pub checkpointing: CheckpointConfig,
-    
+
     /// Logging configuration
     pub logging: LoggingConfig,
 }
@@ -114,31 +114,23 @@ impl Default for TrainingConfig {
 pub enum LearningRateScheduler {
     /// Constant learning rate
     Constant,
-    
+
     /// Step decay
-    StepDecay {
-        step_size: usize,
-        gamma: f32,
-    },
-    
+    StepDecay { step_size: usize, gamma: f32 },
+
     /// Exponential decay
-    ExponentialDecay {
-        gamma: f32,
-    },
-    
+    ExponentialDecay { gamma: f32 },
+
     /// Cosine annealing
-    CosineAnnealing {
-        t_max: usize,
-        eta_min: f32,
-    },
-    
+    CosineAnnealing { t_max: usize, eta_min: f32 },
+
     /// Reduce on plateau
     ReduceOnPlateau {
         factor: f32,
         patience: usize,
         threshold: f32,
     },
-    
+
     /// Warmup with cosine decay
     WarmupCosine {
         warmup_epochs: usize,
@@ -153,28 +145,28 @@ pub enum LearningRateScheduler {
 pub enum LossFunction {
     /// Margin ranking loss
     MarginRankingLoss { margin: f32 },
-    
+
     /// Binary cross-entropy loss
     BinaryCrossEntropy,
-    
+
     /// Cross-entropy loss
     CrossEntropy,
-    
+
     /// Mean squared error
     MeanSquaredError,
-    
+
     /// Contrastive loss
     ContrastiveLoss { margin: f32 },
-    
+
     /// Triplet loss
     TripletLoss { margin: f32 },
-    
+
     /// InfoNCE loss
     InfoNCE { temperature: f32 },
-    
+
     /// Focal loss
     FocalLoss { alpha: f32, gamma: f32 },
-    
+
     /// Custom loss function
     Custom(String),
 }
@@ -188,7 +180,7 @@ pub enum Optimizer {
         weight_decay: f32,
         nesterov: bool,
     },
-    
+
     /// Adam optimizer
     Adam {
         beta1: f32,
@@ -196,7 +188,7 @@ pub enum Optimizer {
         epsilon: f32,
         weight_decay: f32,
     },
-    
+
     /// AdamW optimizer
     AdamW {
         beta1: f32,
@@ -204,13 +196,10 @@ pub enum Optimizer {
         epsilon: f32,
         weight_decay: f32,
     },
-    
+
     /// AdaGrad optimizer
-    AdaGrad {
-        epsilon: f32,
-        weight_decay: f32,
-    },
-    
+    AdaGrad { epsilon: f32, weight_decay: f32 },
+
     /// RMSprop optimizer
     RMSprop {
         alpha: f32,
@@ -218,7 +207,7 @@ pub enum Optimizer {
         weight_decay: f32,
         momentum: f32,
     },
-    
+
     /// AdaBound optimizer
     AdaBound {
         beta1: f32,
@@ -235,16 +224,16 @@ pub enum Optimizer {
 pub struct EarlyStoppingConfig {
     /// Enable early stopping
     pub enabled: bool,
-    
+
     /// Number of epochs to wait without improvement
     pub patience: usize,
-    
+
     /// Minimum change to qualify as improvement
     pub min_delta: f32,
-    
+
     /// Metric to monitor
     pub monitor_metric: String,
-    
+
     /// Mode (minimize or maximize)
     pub mode: MonitorMode,
 }
@@ -261,10 +250,10 @@ pub enum MonitorMode {
 pub struct ValidationConfig {
     /// Validation split ratio
     pub validation_split: f32,
-    
+
     /// Validation frequency (epochs)
     pub validation_frequency: usize,
-    
+
     /// Metrics to compute during validation
     pub metrics: Vec<TrainingMetric>,
 }
@@ -274,31 +263,31 @@ pub struct ValidationConfig {
 pub enum TrainingMetric {
     /// Training/validation loss
     Loss,
-    
+
     /// Accuracy
     Accuracy,
-    
+
     /// Mean Reciprocal Rank
     MeanReciprocalRank,
-    
+
     /// Hits@K
     HitsAtK { k: usize },
-    
+
     /// Area Under Curve
     AUC,
-    
+
     /// F1 Score
     F1Score,
-    
+
     /// Precision
     Precision,
-    
+
     /// Recall
     Recall,
-    
+
     /// Mean Average Precision
     MeanAveragePrecision,
-    
+
     /// Normalized Discounted Cumulative Gain
     NDCG { k: usize },
 }
@@ -308,13 +297,13 @@ pub enum TrainingMetric {
 pub struct RegularizationConfig {
     /// L1 regularization weight
     pub l1_weight: f32,
-    
+
     /// L2 regularization weight
     pub l2_weight: f32,
-    
+
     /// Dropout rate
     pub dropout_rate: f32,
-    
+
     /// Enable batch normalization
     pub batch_norm: bool,
 }
@@ -324,13 +313,13 @@ pub struct RegularizationConfig {
 pub struct CheckpointConfig {
     /// Enable checkpointing
     pub enabled: bool,
-    
+
     /// Checkpoint frequency (epochs)
     pub frequency: usize,
-    
+
     /// Save only the best model
     pub save_best_only: bool,
-    
+
     /// Checkpoint directory
     pub save_dir: String,
 }
@@ -340,10 +329,10 @@ pub struct CheckpointConfig {
 pub struct LoggingConfig {
     /// Logging frequency (batches)
     pub log_frequency: usize,
-    
+
     /// TensorBoard logging directory
     pub tensorboard_dir: Option<String>,
-    
+
     /// Weights & Biases project name
     pub wandb_project: Option<String>,
 }
@@ -353,37 +342,37 @@ pub struct LoggingConfig {
 pub struct TrainingMetrics {
     /// Training loss history
     pub train_loss: Vec<f32>,
-    
+
     /// Validation loss history
     pub val_loss: Vec<f32>,
-    
+
     /// Training accuracy history
     pub train_accuracy: Vec<f32>,
-    
+
     /// Validation accuracy history
     pub val_accuracy: Vec<f32>,
-    
+
     /// Learning rate history
     pub learning_rate: Vec<f32>,
-    
+
     /// Epoch times
     pub epoch_times: Vec<Duration>,
-    
+
     /// Best validation score
     pub best_val_score: f32,
-    
+
     /// Best epoch
     pub best_epoch: usize,
-    
+
     /// Total training time
     pub total_time: Duration,
-    
+
     /// Final epoch reached
     pub final_epoch: usize,
-    
+
     /// Early stopping triggered
     pub early_stopped: bool,
-    
+
     /// Additional metrics
     pub additional_metrics: HashMap<String, Vec<f32>>,
 }
@@ -406,7 +395,7 @@ impl TrainingMetrics {
             additional_metrics: HashMap::new(),
         }
     }
-    
+
     /// Update metrics for an epoch
     pub fn update_epoch(
         &mut self,
@@ -421,7 +410,7 @@ impl TrainingMetrics {
         self.train_loss.push(train_loss);
         self.learning_rate.push(lr);
         self.epoch_times.push(epoch_time);
-        
+
         if let Some(val_loss) = val_loss {
             self.val_loss.push(val_loss);
             if val_loss < self.best_val_score {
@@ -429,18 +418,18 @@ impl TrainingMetrics {
                 self.best_epoch = epoch;
             }
         }
-        
+
         if let Some(train_acc) = train_acc {
             self.train_accuracy.push(train_acc);
         }
-        
+
         if let Some(val_acc) = val_acc {
             self.val_accuracy.push(val_acc);
         }
-        
+
         self.final_epoch = epoch;
     }
-    
+
     /// Add custom metric
     pub fn add_metric(&mut self, name: String, value: f32) {
         self.additional_metrics
@@ -460,7 +449,7 @@ pub trait Trainer: Send + Sync {
         training_data: &[Triple],
         validation_data: &[Triple],
     ) -> Result<TrainingMetrics>;
-    
+
     /// Train graph neural network
     async fn train_gnn(
         &mut self,
@@ -468,7 +457,7 @@ pub trait Trainer: Send + Sync {
         training_data: &[Triple],
         validation_data: &[Triple],
     ) -> Result<TrainingMetrics>;
-    
+
     /// Resume training from checkpoint
     async fn resume_training(
         &mut self,
@@ -476,7 +465,7 @@ pub trait Trainer: Send + Sync {
         training_data: &[Triple],
         validation_data: &[Triple],
     ) -> Result<TrainingMetrics>;
-    
+
     /// Evaluate model on test data
     async fn evaluate(
         &self,
@@ -490,10 +479,10 @@ pub trait Trainer: Send + Sync {
 pub struct DefaultTrainer {
     /// Training configuration
     config: TrainingConfig,
-    
+
     /// Current learning rate
     current_lr: f32,
-    
+
     /// Early stopping state
     early_stopping_state: EarlyStoppingState,
 }
@@ -519,14 +508,14 @@ impl DefaultTrainer {
             patience_counter: 0,
             should_stop: false,
         };
-        
+
         Self {
             config,
             current_lr,
             early_stopping_state,
         }
     }
-    
+
     /// Update learning rate based on scheduler
     fn update_learning_rate(&mut self, epoch: usize, val_score: Option<f32>) {
         match &self.config.lr_scheduler {
@@ -543,31 +532,43 @@ impl DefaultTrainer {
             }
             LearningRateScheduler::CosineAnnealing { t_max, eta_min } => {
                 let cos_inner = std::f32::consts::PI * (epoch as f32) / (*t_max as f32);
-                self.current_lr = eta_min + (self.config.learning_rate - eta_min) * 
-                    (1.0 + cos_inner.cos()) / 2.0;
+                self.current_lr =
+                    eta_min + (self.config.learning_rate - eta_min) * (1.0 + cos_inner.cos()) / 2.0;
             }
-            LearningRateScheduler::WarmupCosine { warmup_epochs, max_epochs, warmup_start_lr, eta_min } => {
+            LearningRateScheduler::WarmupCosine {
+                warmup_epochs,
+                max_epochs,
+                warmup_start_lr,
+                eta_min,
+            } => {
                 if epoch < *warmup_epochs {
                     // Linear warmup
-                    self.current_lr = warmup_start_lr + 
-                        (self.config.learning_rate - warmup_start_lr) * 
-                        (epoch as f32) / (*warmup_epochs as f32);
+                    self.current_lr = warmup_start_lr
+                        + (self.config.learning_rate - warmup_start_lr) * (epoch as f32)
+                            / (*warmup_epochs as f32);
                 } else {
                     // Cosine decay
-                    let cos_inner = std::f32::consts::PI * 
-                        ((epoch - warmup_epochs) as f32) / 
-                        ((*max_epochs - warmup_epochs) as f32);
-                    self.current_lr = eta_min + (self.config.learning_rate - eta_min) * 
-                        (1.0 + cos_inner.cos()) / 2.0;
+                    let cos_inner = std::f32::consts::PI * ((epoch - warmup_epochs) as f32)
+                        / ((*max_epochs - warmup_epochs) as f32);
+                    self.current_lr = eta_min
+                        + (self.config.learning_rate - eta_min) * (1.0 + cos_inner.cos()) / 2.0;
                 }
             }
-            LearningRateScheduler::ReduceOnPlateau { factor, patience, threshold } => {
+            LearningRateScheduler::ReduceOnPlateau {
+                factor,
+                patience,
+                threshold,
+            } => {
                 if let Some(score) = val_score {
                     let improved = match self.config.early_stopping.mode {
-                        MonitorMode::Min => score < self.early_stopping_state.best_score - threshold,
-                        MonitorMode::Max => score > self.early_stopping_state.best_score + threshold,
+                        MonitorMode::Min => {
+                            score < self.early_stopping_state.best_score - threshold
+                        }
+                        MonitorMode::Max => {
+                            score > self.early_stopping_state.best_score + threshold
+                        }
                     };
-                    
+
                     if !improved {
                         self.early_stopping_state.patience_counter += 1;
                         if self.early_stopping_state.patience_counter >= *patience {
@@ -581,61 +582,67 @@ impl DefaultTrainer {
             }
         }
     }
-    
+
     /// Check early stopping condition
     fn check_early_stopping(&mut self, val_score: f32) -> bool {
         if !self.config.early_stopping.enabled {
             return false;
         }
-        
+
         let improved = match self.config.early_stopping.mode {
-            MonitorMode::Min => val_score < self.early_stopping_state.best_score - self.config.early_stopping.min_delta,
-            MonitorMode::Max => val_score > self.early_stopping_state.best_score + self.config.early_stopping.min_delta,
+            MonitorMode::Min => {
+                val_score
+                    < self.early_stopping_state.best_score - self.config.early_stopping.min_delta
+            }
+            MonitorMode::Max => {
+                val_score
+                    > self.early_stopping_state.best_score + self.config.early_stopping.min_delta
+            }
         };
-        
+
         if improved {
             self.early_stopping_state.best_score = val_score;
             self.early_stopping_state.patience_counter = 0;
         } else {
             self.early_stopping_state.patience_counter += 1;
         }
-        
+
         if self.early_stopping_state.patience_counter >= self.config.early_stopping.patience {
             self.early_stopping_state.should_stop = true;
             return true;
         }
-        
+
         false
     }
-    
+
     /// Generate negative samples for training
     fn generate_negative_samples(&self, positive_triples: &[Triple], ratio: f32) -> Vec<Triple> {
         // Simplified negative sampling
         // In a real implementation, this would be more sophisticated
         let num_negatives = (positive_triples.len() as f32 * ratio) as usize;
         let mut negatives = Vec::with_capacity(num_negatives);
-        
+
         // TODO: Implement proper negative sampling strategies
         // - Random corruption of head/tail entities
         // - Type-constrained negative sampling
         // - Adversarial negative sampling
-        
+
         negatives
     }
-    
+
     /// Compute training loss
     fn compute_loss(&self, positive_scores: &[f32], negative_scores: &[f32]) -> f32 {
         match &self.config.loss_function {
             LossFunction::MarginRankingLoss { margin } => {
                 let mut total_loss = 0.0;
                 let mut count = 0;
-                
+
                 for (pos_score, neg_score) in positive_scores.iter().zip(negative_scores.iter()) {
                     let loss = (neg_score - pos_score + margin).max(0.0);
                     total_loss += loss;
                     count += 1;
                 }
-                
+
                 if count > 0 {
                     total_loss / count as f32
                 } else {
@@ -656,21 +663,25 @@ impl DefaultTrainer {
             }
         }
     }
-    
+
     /// Compute evaluation metrics
-    fn compute_metrics(&self, test_triples: &[Triple], model: &dyn KnowledgeGraphEmbedding) -> HashMap<String, f32> {
+    fn compute_metrics(
+        &self,
+        test_triples: &[Triple],
+        model: &dyn KnowledgeGraphEmbedding,
+    ) -> HashMap<String, f32> {
         let mut metrics = HashMap::new();
-        
+
         // TODO: Implement proper metric computation
         // - Mean Reciprocal Rank (MRR)
         // - Hits@K for K=1,3,10
         // - Link prediction accuracy
-        
+
         metrics.insert("mrr".to_string(), 0.0);
         metrics.insert("hits_at_1".to_string(), 0.0);
         metrics.insert("hits_at_3".to_string(), 0.0);
         metrics.insert("hits_at_10".to_string(), 0.0);
-        
+
         metrics
     }
 }
@@ -685,76 +696,82 @@ impl Trainer for DefaultTrainer {
     ) -> Result<TrainingMetrics> {
         let mut metrics = TrainingMetrics::new();
         let start_time = Instant::now();
-        
+
         // Split data into batches
         let batch_size = self.config.batch_size;
         let num_batches = (training_data.len() + batch_size - 1) / batch_size;
-        
+
         for epoch in 0..self.config.max_epochs {
             let epoch_start = Instant::now();
             let mut epoch_loss = 0.0;
-            
+
             // Training phase
             for batch_idx in 0..num_batches {
                 let start_idx = batch_idx * batch_size;
                 let end_idx = (start_idx + batch_size).min(training_data.len());
                 let batch = &training_data[start_idx..end_idx];
-                
+
                 // Generate negative samples
                 let negatives = self.generate_negative_samples(batch, 1.0);
-                
+
                 // Forward pass (simplified)
                 let mut positive_scores = Vec::new();
                 let mut negative_scores = Vec::new();
-                
+
                 for triple in batch {
-                    if let Ok(score) = model.score_triple(
-                        &triple.subject().to_string(),
-                        &triple.predicate().to_string(),
-                        &triple.object().to_string(),
-                    ).await {
+                    if let Ok(score) = model
+                        .score_triple(
+                            &triple.subject().to_string(),
+                            &triple.predicate().to_string(),
+                            &triple.object().to_string(),
+                        )
+                        .await
+                    {
                         positive_scores.push(score);
                     }
                 }
-                
+
                 // Compute loss
                 let batch_loss = self.compute_loss(&positive_scores, &negative_scores);
                 epoch_loss += batch_loss;
-                
+
                 // TODO: Implement backward pass and parameter updates
             }
-            
+
             epoch_loss /= num_batches as f32;
-            
+
             // Validation phase
             let val_loss = if epoch % self.config.validation.validation_frequency == 0 {
                 let mut val_loss = 0.0;
                 let val_batches = (validation_data.len() + batch_size - 1) / batch_size;
-                
+
                 for batch_idx in 0..val_batches {
                     let start_idx = batch_idx * batch_size;
                     let end_idx = (start_idx + batch_size).min(validation_data.len());
                     let batch = &validation_data[start_idx..end_idx];
-                    
+
                     // Compute validation loss (no gradient computation)
                     for triple in batch {
-                        if let Ok(score) = model.score_triple(
-                            &triple.subject().to_string(),
-                            &triple.predicate().to_string(),
-                            &triple.object().to_string(),
-                        ).await {
+                        if let Ok(score) = model
+                            .score_triple(
+                                &triple.subject().to_string(),
+                                &triple.predicate().to_string(),
+                                &triple.object().to_string(),
+                            )
+                            .await
+                        {
                             val_loss += score; // Simplified
                         }
                     }
                 }
-                
+
                 Some(val_loss / validation_data.len() as f32)
             } else {
                 None
             };
-            
+
             let epoch_time = epoch_start.elapsed();
-            
+
             // Update metrics
             metrics.update_epoch(
                 epoch,
@@ -765,7 +782,7 @@ impl Trainer for DefaultTrainer {
                 self.current_lr,
                 epoch_time,
             );
-            
+
             // Check early stopping
             if let Some(val_loss) = val_loss {
                 if self.check_early_stopping(val_loss) {
@@ -773,10 +790,10 @@ impl Trainer for DefaultTrainer {
                     break;
                 }
             }
-            
+
             // Update learning rate
             self.update_learning_rate(epoch, val_loss);
-            
+
             // Logging
             if epoch % self.config.logging.log_frequency == 0 {
                 println!(
@@ -788,11 +805,11 @@ impl Trainer for DefaultTrainer {
                 );
             }
         }
-        
+
         metrics.total_time = start_time.elapsed();
         Ok(metrics)
     }
-    
+
     async fn train_gnn(
         &mut self,
         model: Arc<dyn GraphNeuralNetwork>,
@@ -802,7 +819,7 @@ impl Trainer for DefaultTrainer {
         // TODO: Implement GNN training
         Ok(TrainingMetrics::new())
     }
-    
+
     async fn resume_training(
         &mut self,
         checkpoint_path: &str,
@@ -812,7 +829,7 @@ impl Trainer for DefaultTrainer {
         // TODO: Implement checkpoint loading and resume training
         Err(anyhow!("Resume training not yet implemented"))
     }
-    
+
     async fn evaluate(
         &self,
         model: Arc<dyn KnowledgeGraphEmbedding>,
@@ -833,10 +850,10 @@ pub fn create_trainer(config: &TrainingConfig) -> Result<Arc<dyn Trainer>> {
 pub struct HyperparameterOptimizer {
     /// Search space
     search_space: HashMap<String, ParameterRange>,
-    
+
     /// Optimization strategy
     strategy: OptimizationStrategy,
-    
+
     /// Number of trials
     num_trials: usize,
 }
@@ -856,7 +873,7 @@ pub enum OptimizationStrategy {
     RandomSearch,
     GridSearch,
     BayesianOptimization,
-    TPE, // Tree-structured Parzen Estimator
+    TPE,   // Tree-structured Parzen Estimator
     CmaEs, // Covariance Matrix Adaptation Evolution Strategy
 }
 
@@ -873,7 +890,7 @@ impl HyperparameterOptimizer {
             num_trials,
         }
     }
-    
+
     /// Optimize hyperparameters
     pub async fn optimize(
         &self,
@@ -887,7 +904,7 @@ impl HyperparameterOptimizer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_training_config_creation() {
         let config = TrainingConfig::default();
@@ -895,11 +912,11 @@ mod tests {
         assert_eq!(config.batch_size, 256);
         assert_eq!(config.learning_rate, 0.001);
     }
-    
+
     #[test]
     fn test_training_metrics() {
         let mut metrics = TrainingMetrics::new();
-        
+
         metrics.update_epoch(
             0,
             0.5,
@@ -909,20 +926,20 @@ mod tests {
             0.001,
             Duration::from_millis(100),
         );
-        
+
         assert_eq!(metrics.train_loss.len(), 1);
         assert_eq!(metrics.val_loss.len(), 1);
         assert_eq!(metrics.best_val_score, 0.4);
         assert_eq!(metrics.best_epoch, 0);
     }
-    
+
     #[test]
     fn test_trainer_creation() {
         let config = TrainingConfig::default();
         let trainer = DefaultTrainer::new(config);
         assert_eq!(trainer.current_lr, 0.001);
     }
-    
+
     #[test]
     fn test_learning_rate_scheduler() {
         let mut config = TrainingConfig::default();
@@ -930,10 +947,10 @@ mod tests {
             step_size: 100,
             gamma: 0.1,
         };
-        
+
         let mut trainer = DefaultTrainer::new(config);
         assert_eq!(trainer.current_lr, 0.001);
-        
+
         trainer.update_learning_rate(100, None);
         assert!((trainer.current_lr - 0.0001).abs() < 1e-8);
     }

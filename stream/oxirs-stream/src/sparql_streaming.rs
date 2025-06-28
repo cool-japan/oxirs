@@ -16,8 +16,8 @@ use tokio::time::interval;
 use tracing::{debug, error, info, warn};
 
 use crate::{
-    store_integration::{RdfStore, QueryResult, Triple},
-    StreamEvent, EventMetadata,
+    store_integration::{QueryResult, RdfStore, Triple},
+    EventMetadata, StreamEvent,
 };
 
 /// Continuous query manager
@@ -327,21 +327,18 @@ struct RetryConfig {
 
 impl ContinuousQueryManager {
     /// Create a new continuous query manager
-    pub async fn new(
-        store: Arc<dyn RdfStore>,
-        config: QueryManagerConfig,
-    ) -> Result<Self> {
+    pub async fn new(store: Arc<dyn RdfStore>, config: QueryManagerConfig) -> Result<Self> {
         let (tx, _) = broadcast::channel(1000);
-        
+
         let optimizer = Arc::new(QueryOptimizer::new());
         let cache = Arc::new(RwLock::new(ResultCache::new(config.cache_size_limit)));
-        
+
         let executor = Arc::new(QueryExecutor {
             pool: tokio::runtime::Handle::current(),
             optimizer: optimizer.clone(),
             cache: cache.clone(),
         });
-        
+
         let dispatcher = Arc::new(ResultDispatcher {
             handle: tokio::runtime::Handle::current(),
             webhook_client: reqwest::Client::new(),
@@ -352,7 +349,7 @@ impl ContinuousQueryManager {
                 exponential_backoff: true,
             },
         });
-        
+
         Ok(Self {
             queries: Arc::new(RwLock::new(HashMap::new())),
             store,
@@ -363,7 +360,7 @@ impl ContinuousQueryManager {
             event_notifier: tx,
         })
     }
-    
+
     /// Register a continuous query
     pub async fn register_query(
         &self,
@@ -373,15 +370,16 @@ impl ContinuousQueryManager {
     ) -> Result<String> {
         // Validate query
         self.validate_query(&query)?;
-        
+
         // Check limits
         let queries = self.queries.read().await;
         if queries.len() >= self.config.max_concurrent_queries {
             return Err(anyhow!("Maximum concurrent queries limit reached"));
         }
-        
+
         if let Some(owner) = &metadata.owner {
-            let owner_count = queries.values()
+            let owner_count = queries
+                .values()
                 .filter(|q| q.metadata.owner.as_ref() == Some(owner))
                 .count();
             if owner_count >= self.config.max_queries_per_owner {
@@ -389,17 +387,17 @@ impl ContinuousQueryManager {
             }
         }
         drop(queries);
-        
+
         // Generate query ID
         let query_id = uuid::Uuid::new_v4().to_string();
-        
+
         // Optimize query if enabled
         let optimized_query = if self.config.enable_optimization {
             self.executor.optimizer.optimize(&query).await
         } else {
             query.clone()
         };
-        
+
         // Create registered query
         let registered_query = RegisteredQuery {
             id: query_id.clone(),
@@ -411,95 +409,105 @@ impl ContinuousQueryManager {
             created_at: Instant::now(),
             last_execution: None,
         };
-        
+
         // Register query
-        self.queries.write().await.insert(query_id.clone(), registered_query);
-        
+        self.queries
+            .write()
+            .await
+            .insert(query_id.clone(), registered_query);
+
         // Update statistics
         let mut stats = self.stats.write().await;
         stats.total_queries += 1;
         stats.active_queries += 1;
         drop(stats);
-        
+
         // Start query execution
         self.start_query_execution(&query_id).await?;
-        
+
         // Notify
         let _ = self.event_notifier.send(QueryEvent::QueryRegistered {
             id: query_id.clone(),
             query,
         });
-        
+
         info!("Registered continuous query: {}", query_id);
         Ok(query_id)
     }
-    
+
     /// Unregister a query
     pub async fn unregister_query(&self, query_id: &str) -> Result<()> {
         let mut queries = self.queries.write().await;
-        let query = queries.remove(query_id)
+        let query = queries
+            .remove(query_id)
             .ok_or_else(|| anyhow!("Query not found"))?;
-        
+
         // Update statistics
         self.stats.write().await.active_queries -= 1;
-        
+
         // Notify
         let _ = self.event_notifier.send(QueryEvent::QueryStopped {
             id: query_id.to_string(),
         });
-        
+
         info!("Unregistered query: {}", query_id);
         Ok(())
     }
-    
+
     /// Pause a query
     pub async fn pause_query(&self, query_id: &str) -> Result<()> {
         let mut queries = self.queries.write().await;
-        let query = queries.get_mut(query_id)
+        let query = queries
+            .get_mut(query_id)
             .ok_or_else(|| anyhow!("Query not found"))?;
-        
+
         query.state = QueryState::Paused;
         Ok(())
     }
-    
+
     /// Resume a query
     pub async fn resume_query(&self, query_id: &str) -> Result<()> {
         let mut queries = self.queries.write().await;
-        let query = queries.get_mut(query_id)
+        let query = queries
+            .get_mut(query_id)
             .ok_or_else(|| anyhow!("Query not found"))?;
-        
+
         if query.state == QueryState::Paused {
             query.state = QueryState::Active;
             drop(queries);
             self.start_query_execution(query_id).await?;
         }
-        
+
         Ok(())
     }
-    
+
     /// Validate a SPARQL query
     fn validate_query(&self, query: &str) -> Result<()> {
         // Basic validation - check for required keywords
         let query_lower = query.to_lowercase();
-        
-        if !query_lower.contains("select") && 
-           !query_lower.contains("construct") && 
-           !query_lower.contains("ask") && 
-           !query_lower.contains("describe") {
+
+        if !query_lower.contains("select")
+            && !query_lower.contains("construct")
+            && !query_lower.contains("ask")
+            && !query_lower.contains("describe")
+        {
             return Err(anyhow!("Invalid SPARQL query: missing query form"));
         }
-        
+
         // Check for dangerous operations
-        if query_lower.contains("drop") || 
-           query_lower.contains("clear") ||
-           query_lower.contains("delete") ||
-           query_lower.contains("insert") {
-            return Err(anyhow!("Continuous queries cannot contain update operations"));
+        if query_lower.contains("drop")
+            || query_lower.contains("clear")
+            || query_lower.contains("delete")
+            || query_lower.contains("insert")
+        {
+            return Err(anyhow!(
+                "Continuous queries cannot contain update operations"
+            ));
         }
-        
+
         Ok(())
     }
-    
+
     /// Register a SPARQL subscription query with enhanced syntax
     pub async fn register_subscription(
         &self,
@@ -509,38 +517,38 @@ impl ContinuousQueryManager {
     ) -> Result<String> {
         // Parse subscription syntax extensions
         let enhanced_query = self.parse_subscription_syntax(&query)?;
-        
+
         // Register as continuous query
         self.register_query(enhanced_query, metadata, channel).await
     }
-    
+
     /// Parse SPARQL subscription syntax extensions
     fn parse_subscription_syntax(&self, query: &str) -> Result<String> {
         let mut enhanced_query = query.to_string();
-        
+
         // Check for SUBSCRIBE keyword (custom extension)
         if enhanced_query.to_lowercase().contains("subscribe") {
             // Convert SUBSCRIBE to SELECT for standard SPARQL processing
             enhanced_query = enhanced_query.replace("SUBSCRIBE", "SELECT");
             enhanced_query = enhanced_query.replace("subscribe", "SELECT");
         }
-        
+
         // Parse ON CHANGE clauses for change detection
         if enhanced_query.to_lowercase().contains("on change") {
             // Extract change detection patterns
             // This would be expanded to parse custom change detection syntax
             info!("Detected ON CHANGE clause in subscription query");
         }
-        
+
         // Parse WINDOW clauses for temporal windows
         if enhanced_query.to_lowercase().contains("window") {
             // Extract windowing information
             info!("Detected WINDOW clause in subscription query");
         }
-        
+
         Ok(enhanced_query)
     }
-    
+
     /// Start query execution
     async fn start_query_execution(&self, query_id: &str) -> Result<()> {
         let queries = self.queries.clone();
@@ -550,45 +558,49 @@ impl ContinuousQueryManager {
         let stats = self.stats.clone();
         let event_notifier = self.event_notifier.clone();
         let query_id = query_id.to_string();
-        
+
         tokio::spawn(async move {
             let query_data = {
                 let queries_guard = queries.read().await;
-                queries_guard.get(&query_id).map(|q| (
-                    q.query.clone(),
-                    q.metadata.clone(),
-                    q.metadata.interval.unwrap_or(Duration::from_secs(60)),
-                ))
+                queries_guard.get(&query_id).map(|q| {
+                    (
+                        q.query.clone(),
+                        q.metadata.clone(),
+                        q.metadata.interval.unwrap_or(Duration::from_secs(60)),
+                    )
+                })
             };
-            
+
             if let Some((query, metadata, poll_interval)) = query_data {
                 let mut interval = interval(poll_interval);
                 let mut last_result_hash = None;
-                
+
                 loop {
                     interval.tick().await;
-                    
+
                     // Check if query is still active
                     let state = {
                         let queries_guard = queries.read().await;
                         queries_guard.get(&query_id).map(|q| q.state.clone())
                     };
-                    
+
                     match state {
                         Some(QueryState::Active) => {
                             // Execute query
                             let start_time = Instant::now();
-                            
+
                             match Self::execute_query(
                                 &store,
                                 &executor,
                                 &query,
                                 &metadata,
                                 last_result_hash.as_ref(),
-                            ).await {
+                            )
+                            .await
+                            {
                                 Ok((result, hash)) => {
                                     let execution_time = start_time.elapsed();
-                                    
+
                                     // Update query statistics
                                     {
                                         let mut queries_guard = queries.write().await;
@@ -598,14 +610,16 @@ impl ContinuousQueryManager {
                                             q.stats.total_results += result.bindings.len() as u64;
                                             q.stats.last_execution_time = Some(execution_time);
                                             q.last_execution = Some(Instant::now());
-                                            
+
                                             // Update average execution time
                                             let count = q.stats.execution_count as u32;
-                                            q.stats.avg_execution_time = 
-                                                (q.stats.avg_execution_time * (count - 1) + execution_time) / count;
+                                            q.stats.avg_execution_time =
+                                                (q.stats.avg_execution_time * (count - 1)
+                                                    + execution_time)
+                                                    / count;
                                         }
                                     }
-                                    
+
                                     // Check if results changed
                                     if Some(&hash) != last_result_hash.as_ref() {
                                         // Create update
@@ -621,31 +635,37 @@ impl ContinuousQueryManager {
                                             triples: None,
                                             metadata: HashMap::new(),
                                         };
-                                        
+
                                         // Dispatch results
                                         if let Err(e) = Self::dispatch_results(
                                             &queries,
                                             &dispatcher,
                                             &query_id,
                                             update,
-                                        ).await {
-                                            error!("Failed to dispatch results for query {}: {}", query_id, e);
+                                        )
+                                        .await
+                                        {
+                                            error!(
+                                                "Failed to dispatch results for query {}: {}",
+                                                query_id, e
+                                            );
                                         } else {
-                                            let _ = event_notifier.send(QueryEvent::ResultsDelivered {
-                                                id: query_id.clone(),
-                                                count: result.bindings.len(),
-                                            });
+                                            let _ =
+                                                event_notifier.send(QueryEvent::ResultsDelivered {
+                                                    id: query_id.clone(),
+                                                    count: result.bindings.len(),
+                                                });
                                         }
-                                        
+
                                         last_result_hash = Some(hash);
                                     }
-                                    
+
                                     // Update global statistics
                                     stats.write().await.total_executions += 1;
                                 }
                                 Err(e) => {
                                     error!("Query execution failed for {}: {}", query_id, e);
-                                    
+
                                     // Update query statistics
                                     {
                                         let mut queries_guard = queries.write().await;
@@ -654,10 +674,10 @@ impl ContinuousQueryManager {
                                             q.stats.failure_count += 1;
                                         }
                                     }
-                                    
+
                                     // Update global statistics
                                     stats.write().await.failed_executions += 1;
-                                    
+
                                     // Send error update
                                     let update = QueryResultUpdate {
                                         query_id: query_id.clone(),
@@ -669,9 +689,15 @@ impl ContinuousQueryManager {
                                         triples: None,
                                         metadata: HashMap::new(),
                                     };
-                                    
-                                    let _ = Self::dispatch_results(&queries, &dispatcher, &query_id, update).await;
-                                    
+
+                                    let _ = Self::dispatch_results(
+                                        &queries,
+                                        &dispatcher,
+                                        &query_id,
+                                        update,
+                                    )
+                                    .await;
+
                                     let _ = event_notifier.send(QueryEvent::QueryFailed {
                                         id: query_id.clone(),
                                         reason: e.to_string(),
@@ -695,14 +721,14 @@ impl ContinuousQueryManager {
                 }
             }
         });
-        
+
         let _ = self.event_notifier.send(QueryEvent::QueryStarted {
             id: query_id.to_string(),
         });
-        
+
         Ok(())
     }
-    
+
     /// Execute a query
     async fn execute_query(
         store: &Arc<dyn RdfStore>,
@@ -717,15 +743,13 @@ impl ContinuousQueryManager {
                 return Ok((cached, Self::hash_result(&cached)));
             }
         }
-        
+
         // Execute query with timeout
-        let result = tokio::time::timeout(
-            metadata.timeout,
-            store.query(query)
-        ).await
+        let result = tokio::time::timeout(metadata.timeout, store.query(query))
+            .await
             .map_err(|_| anyhow!("Query timeout"))?
             .map_err(|e| anyhow!("Query execution failed: {}", e))?;
-        
+
         // Apply limit if specified
         let result = if let Some(limit) = metadata.limit {
             QueryResult {
@@ -734,21 +758,25 @@ impl ContinuousQueryManager {
         } else {
             result
         };
-        
+
         // Cache result if enabled
         if metadata.enable_caching {
-            executor.cache.write().await.put(query.to_string(), result.clone(), metadata.cache_ttl);
+            executor
+                .cache
+                .write()
+                .await
+                .put(query.to_string(), result.clone(), metadata.cache_ttl);
         }
-        
+
         let hash = Self::hash_result(&result);
         Ok((result, hash))
     }
-    
+
     /// Hash query result for change detection
     fn hash_result(result: &QueryResult) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
         for binding in &result.bindings {
             for (key, value) in binding {
@@ -756,10 +784,10 @@ impl ContinuousQueryManager {
                 value.hash(&mut hasher);
             }
         }
-        
+
         hasher.finish().to_string()
     }
-    
+
     /// Dispatch query results
     async fn dispatch_results(
         queries: &Arc<RwLock<HashMap<String, RegisteredQuery>>>,
@@ -769,18 +797,20 @@ impl ContinuousQueryManager {
     ) -> Result<()> {
         let channel = {
             let queries_guard = queries.read().await;
-            queries_guard.get(query_id)
+            queries_guard
+                .get(query_id)
                 .map(|q| &q.result_channel)
                 .ok_or_else(|| anyhow!("Query not found"))?
         };
-        
+
         match channel {
-            QueryResultChannel::Direct(sender) => {
-                sender.send(update).await
-                    .map_err(|_| anyhow!("Failed to send to direct channel"))
-            }
+            QueryResultChannel::Direct(sender) => sender
+                .send(update)
+                .await
+                .map_err(|_| anyhow!("Failed to send to direct channel")),
             QueryResultChannel::Broadcast(sender) => {
-                sender.send(update)
+                sender
+                    .send(update)
                     .map_err(|_| anyhow!("Failed to broadcast results"))?;
                 Ok(())
             }
@@ -793,13 +823,14 @@ impl ContinuousQueryManager {
             }
         }
     }
-    
+
     /// Get query status
     pub async fn get_query_status(&self, query_id: &str) -> Result<QueryStatus> {
         let queries = self.queries.read().await;
-        let query = queries.get(query_id)
+        let query = queries
+            .get(query_id)
             .ok_or_else(|| anyhow!("Query not found"))?;
-        
+
         Ok(QueryStatus {
             id: query.id.clone(),
             state: format!("{:?}", query.state),
@@ -815,24 +846,27 @@ impl ContinuousQueryManager {
             avg_execution_time: query.stats.avg_execution_time,
         })
     }
-    
+
     /// List all queries
     pub async fn list_queries(&self) -> Vec<QueryInfo> {
         let queries = self.queries.read().await;
-        queries.values().map(|q| QueryInfo {
-            id: q.id.clone(),
-            name: q.metadata.name.clone(),
-            owner: q.metadata.owner.clone(),
-            state: format!("{:?}", q.state),
-            created_at: q.created_at.elapsed(),
-        }).collect()
+        queries
+            .values()
+            .map(|q| QueryInfo {
+                id: q.id.clone(),
+                name: q.metadata.name.clone(),
+                owner: q.metadata.owner.clone(),
+                state: format!("{:?}", q.state),
+                created_at: q.created_at.elapsed(),
+            })
+            .collect()
     }
-    
+
     /// Get manager statistics
     pub async fn get_stats(&self) -> QueryManagerStats {
         self.stats.read().await.clone()
     }
-    
+
     /// Subscribe to query events
     pub fn subscribe(&self) -> broadcast::Receiver<QueryEvent> {
         self.event_notifier.subscribe()
@@ -869,43 +903,39 @@ impl QueryOptimizer {
             rules: Vec::new(),
             patterns: HashMap::new(),
         };
-        
+
         // Add default optimization rules
         optimizer.add_default_rules();
         optimizer
     }
-    
+
     /// Add default optimization rules
     fn add_default_rules(&mut self) {
         // Rule: Remove redundant DISTINCT
         self.rules.push(OptimizationRule {
             name: "remove-redundant-distinct".to_string(),
-            condition: Box::new(|query| {
-                query.contains("DISTINCT") && !query.contains("ORDER BY")
-            }),
+            condition: Box::new(|query| query.contains("DISTINCT") && !query.contains("ORDER BY")),
             transform: Box::new(|query| {
                 // This would implement the actual transformation
                 query.to_string()
             }),
         });
-        
+
         // Rule: Optimize filter placement
         self.rules.push(OptimizationRule {
             name: "optimize-filter-placement".to_string(),
-            condition: Box::new(|query| {
-                query.contains("FILTER") && query.contains("OPTIONAL")
-            }),
+            condition: Box::new(|query| query.contains("FILTER") && query.contains("OPTIONAL")),
             transform: Box::new(|query| {
                 // This would move filters before optionals when possible
                 query.to_string()
             }),
         });
     }
-    
+
     /// Optimize a query
     async fn optimize(&self, query: &str) -> String {
         let mut optimized = query.to_string();
-        
+
         // Apply optimization rules
         for rule in &self.rules {
             if (rule.condition)(&optimized) {
@@ -913,7 +943,7 @@ impl QueryOptimizer {
                 debug!("Applied optimization rule: {}", rule.name);
             }
         }
-        
+
         optimized
     }
 }
@@ -927,7 +957,7 @@ impl ResultCache {
             limit,
         }
     }
-    
+
     /// Get cached result
     fn get(&self, query: &str, ttl: Duration) -> Option<QueryResult> {
         self.cache.get(query).and_then(|cached| {
@@ -938,30 +968,32 @@ impl ResultCache {
             }
         })
     }
-    
+
     /// Put result in cache
     fn put(&mut self, query: String, result: QueryResult, ttl: Duration) {
         let size = result.bindings.len();
-        
+
         // Evict old entries if needed
         while self.size + size > self.limit && !self.cache.is_empty() {
             // Simple LRU eviction - remove oldest
-            if let Some((oldest_key, _)) = self.cache.iter()
-                .min_by_key(|(_, v)| v.cached_at) {
+            if let Some((oldest_key, _)) = self.cache.iter().min_by_key(|(_, v)| v.cached_at) {
                 let key = oldest_key.clone();
                 if let Some(removed) = self.cache.remove(&key) {
                     self.size -= removed.data.bindings.len();
                 }
             }
         }
-        
-        self.cache.insert(query, CachedResult {
-            data: result,
-            cached_at: Instant::now(),
-            ttl,
-            access_count: 0,
-        });
-        
+
+        self.cache.insert(
+            query,
+            CachedResult {
+                data: result,
+                cached_at: Instant::now(),
+                ttl,
+                access_count: 0,
+            },
+        );
+
         self.size += size;
     }
 }
@@ -988,7 +1020,7 @@ impl ResultDispatcher {
             performance: crate::PerformanceConfig::default(),
             monitoring: crate::MonitoringConfig::default(),
         };
-        
+
         // Create and return the producer
         crate::StreamProducer::new(config).await
     }
@@ -999,22 +1031,24 @@ impl ResultDispatcher {
         headers: &HashMap<String, String>,
         update: QueryResultUpdate,
     ) -> Result<()> {
-        let mut request = self.webhook_client.post(url)
+        let mut request = self
+            .webhook_client
+            .post(url)
             .json(&update)
             .timeout(Duration::from_secs(30));
-        
+
         // Add custom headers
         for (key, value) in headers {
             request = request.header(key, value);
         }
-        
+
         // Send with retry
         let mut attempts = 0;
         let mut delay = self.retry_config.initial_delay;
-        
+
         loop {
             attempts += 1;
-            
+
             match request.try_clone().unwrap().send().await {
                 Ok(response) => {
                     if response.status().is_success() {
@@ -1022,11 +1056,11 @@ impl ResultDispatcher {
                     } else {
                         let status = response.status();
                         let body = response.text().await.unwrap_or_default();
-                        
+
                         if attempts >= self.retry_config.max_attempts {
                             return Err(anyhow!("Webhook failed with status {}: {}", status, body));
                         }
-                        
+
                         warn!("Webhook attempt {} failed with status {}", attempts, status);
                     }
                 }
@@ -1034,27 +1068,23 @@ impl ResultDispatcher {
                     if attempts >= self.retry_config.max_attempts {
                         return Err(anyhow!("Webhook failed after {} attempts: {}", attempts, e));
                     }
-                    
+
                     warn!("Webhook attempt {} failed: {}", attempts, e);
                 }
             }
-            
+
             // Wait before retry
             tokio::time::sleep(delay).await;
-            
+
             // Update delay for next attempt
             if self.retry_config.exponential_backoff {
                 delay = (delay * 2).min(self.retry_config.max_delay);
             }
         }
     }
-    
+
     /// Send results to stream topic
-    async fn send_stream(
-        &self,
-        topic: &str,
-        update: QueryResultUpdate,
-    ) -> Result<()> {
+    async fn send_stream(&self, topic: &str, update: QueryResultUpdate) -> Result<()> {
         // Convert query result update to stream event
         let stream_event = match update.update_type {
             UpdateType::Added => StreamEvent::QueryResultAdded {
@@ -1125,102 +1155,116 @@ impl ResultDispatcher {
                         properties: {
                             let mut props = std::collections::HashMap::new();
                             props.insert("topic".to_string(), topic.to_string());
-                            props.insert("update_type".to_string(), format!("{:?}", update.update_type).to_lowercase());
+                            props.insert(
+                                "update_type".to_string(),
+                                format!("{:?}", update.update_type).to_lowercase(),
+                            );
                             props
                         },
                         checksum: None,
                     },
                 }
-            },
+            }
             UpdateType::Error { message } => {
                 // For errors, we'll just log and return Ok for now
                 warn!("Query error in stream: {}", message);
                 return Ok(());
-            },
+            }
         };
-        
+
         // Create a stream producer for the topic and publish the event
         match self.create_stream_producer_for_topic(topic).await {
-            Ok(mut producer) => {
-                match producer.publish(stream_event).await {
-                    Ok(_) => {
-                        info!("Successfully published query result to stream topic '{}'", topic);
-                    }
-                    Err(e) => {
-                        error!("Failed to publish to stream topic '{}': {}", topic, e);
-                        return Err(anyhow!("Stream publishing failed: {}", e));
-                    }
+            Ok(mut producer) => match producer.publish(stream_event).await {
+                Ok(_) => {
+                    info!(
+                        "Successfully published query result to stream topic '{}'",
+                        topic
+                    );
                 }
-            }
+                Err(e) => {
+                    error!("Failed to publish to stream topic '{}': {}", topic, e);
+                    return Err(anyhow!("Stream publishing failed: {}", e));
+                }
+            },
             Err(e) => {
-                error!("Failed to create stream producer for topic '{}': {}", topic, e);
+                error!(
+                    "Failed to create stream producer for topic '{}': {}",
+                    topic, e
+                );
                 return Err(anyhow!("Stream producer creation failed: {}", e));
             }
         }
-        
+
         Ok(())
     }
 }
 
 /// Create subscription channel for query results
-pub fn create_subscription_channel() -> (mpsc::Sender<QueryResultUpdate>, mpsc::Receiver<QueryResultUpdate>) {
+pub fn create_subscription_channel() -> (
+    mpsc::Sender<QueryResultUpdate>,
+    mpsc::Receiver<QueryResultUpdate>,
+) {
     mpsc::channel(100)
 }
 
 /// Create broadcast channel for query results
-pub fn create_broadcast_channel() -> (broadcast::Sender<QueryResultUpdate>, broadcast::Receiver<QueryResultUpdate>) {
+pub fn create_broadcast_channel() -> (
+    broadcast::Sender<QueryResultUpdate>,
+    broadcast::Receiver<QueryResultUpdate>,
+) {
     broadcast::channel(100)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store_integration::MockRdfStore;
-    
+    use crate::store_integration::tests::MockRdfStore;
+
     #[tokio::test]
     async fn test_query_registration() {
         let store = Arc::new(MockRdfStore {
             log_position: Arc::new(RwLock::new(0)),
             changes: Arc::new(RwLock::new(vec![])),
         });
-        
+
         let manager = ContinuousQueryManager::new(store, QueryManagerConfig::default())
             .await
             .unwrap();
-        
+
         let query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 10";
         let metadata = QueryMetadata::default();
         let (tx, _rx) = create_subscription_channel();
         let channel = QueryResultChannel::Direct(tx);
-        
-        let query_id = manager.register_query(query.to_string(), metadata, channel)
+
+        let query_id = manager
+            .register_query(query.to_string(), metadata, channel)
             .await
             .unwrap();
-        
+
         assert!(!query_id.is_empty());
-        
+
         // Check query is registered
         let queries = manager.list_queries().await;
         assert_eq!(queries.len(), 1);
         assert_eq!(queries[0].id, query_id);
     }
-    
+
     #[tokio::test]
     async fn test_query_validation() {
         let store = Arc::new(MockRdfStore {
             log_position: Arc::new(RwLock::new(0)),
             changes: Arc::new(RwLock::new(vec![])),
         });
-        
+
         let manager = ContinuousQueryManager::new(store, QueryManagerConfig::default())
             .await
             .unwrap();
-        
+
         // Test invalid query
         let invalid_query = "DELETE WHERE { ?s ?p ?o }";
         let result = manager.validate_query(invalid_query);
         assert!(result.is_err());
-        
+
         // Test valid query
         let valid_query = "SELECT ?s WHERE { ?s ?p ?o }";
         let result = manager.validate_query(valid_query);

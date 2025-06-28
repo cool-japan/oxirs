@@ -4,8 +4,8 @@
 
 use super::error::{CliError, CliResult};
 use regex::Regex;
-use std::path::Path;
 use std::collections::HashMap;
+use std::path::Path;
 use url::Url;
 
 /// Argument validator with chainable validation methods
@@ -108,7 +108,8 @@ impl<'a> ArgumentValidator<'a> {
     pub fn is_iri(mut self) -> Self {
         if let Some(value) = self.value {
             if let Err(e) = validate_iri(value) {
-                self.errors.push(format!("{} is not a valid IRI: {}", self.name, e));
+                self.errors
+                    .push(format!("{} is not a valid IRI: {}", self.name, e));
             }
         }
         self
@@ -153,8 +154,10 @@ impl<'a> ArgumentValidator<'a> {
                     }
                 }
                 Err(_) => {
-                    self.errors
-                        .push(format!("{} must be a valid integer, got: {}", self.name, value));
+                    self.errors.push(format!(
+                        "{} must be a valid integer, got: {}",
+                        self.name, value
+                    ));
                 }
             }
         }
@@ -208,7 +211,10 @@ pub fn validate_iri(iri: &str) -> Result<(), String> {
                 return Err(format!("IRI contains whitespace at position {}", i));
             }
             '<' | '>' | '"' | '{' | '}' | '|' | '^' | '`' => {
-                return Err(format!("IRI contains invalid character '{}' at position {}", ch, i));
+                return Err(format!(
+                    "IRI contains invalid character '{}' at position {}",
+                    ch, i
+                ));
             }
             _ => {}
         }
@@ -225,8 +231,10 @@ pub fn validate_sparql_endpoint(url: &str) -> CliResult<Url> {
     })?;
 
     if parsed.scheme() != "http" && parsed.scheme() != "https" {
-        return Err(CliError::invalid_arguments("SPARQL endpoint must use HTTP or HTTPS")
-            .with_suggestion("Use http:// or https:// scheme"));
+        return Err(
+            CliError::invalid_arguments("SPARQL endpoint must use HTTP or HTTPS")
+                .with_suggestion("Use http:// or https:// scheme"),
+        );
     }
 
     Ok(parsed)
@@ -235,8 +243,8 @@ pub fn validate_sparql_endpoint(url: &str) -> CliResult<Url> {
 /// Validate RDF format
 pub fn validate_rdf_format(format: &str) -> CliResult<&str> {
     const VALID_FORMATS: &[&str] = &[
-        "turtle", "ttl", "ntriples", "nt", "rdfxml", "rdf", "xml", 
-        "jsonld", "json-ld", "trig", "nquads", "nq"
+        "turtle", "ttl", "ntriples", "nt", "rdfxml", "rdf", "xml", "jsonld", "json-ld", "trig",
+        "nquads", "nq",
     ];
 
     let normalized = format.to_lowercase();
@@ -294,7 +302,9 @@ mod tests {
         let result = ArgumentValidator::new("input", None).required().validate();
         assert!(result.is_err());
 
-        let result = ArgumentValidator::new("input", Some("value")).required().validate();
+        let result = ArgumentValidator::new("input", Some("value"))
+            .required()
+            .validate();
         assert!(result.is_ok());
     }
 
@@ -349,14 +359,14 @@ mod tests {
     #[test]
     fn test_multi_validator() {
         let mut validator = MultiValidator::new();
-        
+
         let port_validator = ArgumentValidator::new("port", Some("abc")).is_port();
         validator.add(port_validator);
-        
-        let format_validator = ArgumentValidator::new("format", Some("invalid"))
-            .one_of(&["turtle", "ntriples"]);
+
+        let format_validator =
+            ArgumentValidator::new("format", Some("invalid")).one_of(&["turtle", "ntriples"]);
         validator.add(format_validator);
-        
+
         let result = validator.finish();
         assert!(result.is_err());
     }
@@ -390,16 +400,14 @@ impl ValidationContext {
 
     /// Add mutually exclusive group
     pub fn add_mutually_exclusive(&mut self, args: Vec<&str>) {
-        self.mutually_exclusive.push(
-            args.into_iter().map(|s| s.to_string()).collect()
-        );
+        self.mutually_exclusive
+            .push(args.into_iter().map(|s| s.to_string()).collect());
     }
 
     /// Add required together group
     pub fn add_required_together(&mut self, args: Vec<&str>) {
-        self.required_together.push(
-            args.into_iter().map(|s| s.to_string()).collect()
-        );
+        self.required_together
+            .push(args.into_iter().map(|s| s.to_string()).collect());
     }
 
     /// Validate argument dependencies
@@ -411,10 +419,7 @@ impl ValidationContext {
             if let Some(deps) = self.dependencies.get(*arg) {
                 for dep in deps {
                     if !present_args.contains(&dep.as_str()) {
-                        errors.push(format!(
-                            "--{} requires --{} to be specified",
-                            arg, dep
-                        ));
+                        errors.push(format!("--{} requires --{} to be specified", arg, dep));
                     }
                 }
             }
@@ -426,11 +431,15 @@ impl ValidationContext {
                 .iter()
                 .filter(|arg| present_args.contains(&arg.as_str()))
                 .collect();
-            
+
             if present_in_group.len() > 1 {
                 errors.push(format!(
                     "The following arguments cannot be used together: {}",
-                    present_in_group.iter().map(|s| format!("--{}", s)).collect::<Vec<_>>().join(", ")
+                    present_in_group
+                        .iter()
+                        .map(|s| format!("--{}", s))
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 ));
             }
         }
@@ -441,17 +450,21 @@ impl ValidationContext {
                 .iter()
                 .filter(|arg| present_args.contains(&arg.as_str()))
                 .collect();
-            
+
             if !present_in_group.is_empty() && present_in_group.len() != group.len() {
                 let missing: Vec<_> = group
                     .iter()
                     .filter(|arg| !present_args.contains(&arg.as_str()))
                     .collect();
-                
+
                 errors.push(format!(
                     "When using --{}, you must also specify: {}",
                     present_in_group[0],
-                    missing.iter().map(|s| format!("--{}", s)).collect::<Vec<_>>().join(", ")
+                    missing
+                        .iter()
+                        .map(|s| format!("--{}", s))
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 ));
             }
         }
@@ -473,33 +486,40 @@ pub mod fs_validation {
     pub fn validate_writable_path(path: &Path) -> CliResult<()> {
         if path.exists() {
             // Check if we can write to existing file/directory
-            let metadata = fs::metadata(path)
-                .map_err(|e| CliError::io_error(e)
-                    .with_context(format!("Cannot access path: {}", path.display())))?;
-            
+            let metadata = fs::metadata(path).map_err(|e| {
+                CliError::io_error(e)
+                    .with_context(format!("Cannot access path: {}", path.display()))
+            })?;
+
             if metadata.permissions().readonly() {
-                return Err(CliError::invalid_arguments(
-                    format!("Path is read-only: {}", path.display())
-                ));
+                return Err(CliError::invalid_arguments(format!(
+                    "Path is read-only: {}",
+                    path.display()
+                )));
             }
         } else {
             // Check if we can create in parent directory
             if let Some(parent) = path.parent() {
                 if parent.exists() && !parent.is_dir() {
-                    return Err(CliError::invalid_arguments(
-                        format!("Parent path is not a directory: {}", parent.display())
-                    ));
+                    return Err(CliError::invalid_arguments(format!(
+                        "Parent path is not a directory: {}",
+                        parent.display()
+                    )));
                 }
-                
+
                 if parent.exists() {
-                    let parent_metadata = fs::metadata(parent)
-                        .map_err(|e| CliError::io_error(e)
-                            .with_context(format!("Cannot access parent directory: {}", parent.display())))?;
-                    
+                    let parent_metadata = fs::metadata(parent).map_err(|e| {
+                        CliError::io_error(e).with_context(format!(
+                            "Cannot access parent directory: {}",
+                            parent.display()
+                        ))
+                    })?;
+
                     if parent_metadata.permissions().readonly() {
-                        return Err(CliError::invalid_arguments(
-                            format!("Parent directory is read-only: {}", parent.display())
-                        ));
+                        return Err(CliError::invalid_arguments(format!(
+                            "Parent directory is read-only: {}",
+                            parent.display()
+                        )));
                     }
                 }
             }
@@ -509,18 +529,15 @@ pub mod fs_validation {
 
     /// Validate that a file has expected extension
     pub fn validate_file_extension(path: &Path, valid_extensions: &[&str]) -> CliResult<()> {
-        let extension = path.extension()
-            .and_then(|ext| ext.to_str())
-            .unwrap_or("");
-        
+        let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
+
         if !valid_extensions.iter().any(|&ext| ext == extension) {
-            return Err(CliError::invalid_arguments(
-                format!(
-                    "Invalid file extension '{}'. Expected one of: {}",
-                    extension,
-                    valid_extensions.join(", ")
-                )
-            ).with_suggestion(format!(
+            return Err(CliError::invalid_arguments(format!(
+                "Invalid file extension '{}'. Expected one of: {}",
+                extension,
+                valid_extensions.join(", ")
+            ))
+            .with_suggestion(format!(
                 "Use a file with extension: {}",
                 valid_extensions.join(" or ")
             )));
@@ -531,18 +548,18 @@ pub mod fs_validation {
     /// Validate file size constraints
     pub fn validate_file_size(path: &Path, max_size: Option<u64>) -> CliResult<()> {
         if let Some(max) = max_size {
-            let metadata = fs::metadata(path)
-                .map_err(|e| CliError::io_error(e)
-                    .with_context(format!("Cannot access file: {}", path.display())))?;
-            
+            let metadata = fs::metadata(path).map_err(|e| {
+                CliError::io_error(e)
+                    .with_context(format!("Cannot access file: {}", path.display()))
+            })?;
+
             if metadata.len() > max {
-                return Err(CliError::invalid_arguments(
-                    format!(
-                        "File too large: {} bytes (max: {} bytes)",
-                        metadata.len(),
-                        max
-                    )
-                ).with_suggestion("Use a smaller file or increase the limit"));
+                return Err(CliError::invalid_arguments(format!(
+                    "File too large: {} bytes (max: {} bytes)",
+                    metadata.len(),
+                    max
+                ))
+                .with_suggestion("Use a smaller file or increase the limit"));
             }
         }
         Ok(())
@@ -570,7 +587,7 @@ pub mod dataset_validation {
         // Check length
         if name.len() > 255 {
             return Err(CliError::invalid_arguments(
-                "Dataset name too long (max 255 characters)"
+                "Dataset name too long (max 255 characters)",
             ));
         }
 
@@ -608,8 +625,9 @@ pub mod query_validation {
 
         if !has_valid_keyword {
             return Err(CliError::invalid_arguments(
-                "Query must contain SELECT, CONSTRUCT, DESCRIBE, or ASK"
-            ).with_suggestion("Check your SPARQL query syntax"));
+                "Query must contain SELECT, CONSTRUCT, DESCRIBE, or ASK",
+            )
+            .with_suggestion("Check your SPARQL query syntax"));
         }
 
         Ok(())
@@ -624,16 +642,18 @@ pub mod query_validation {
         // Check for basic SPARQL Update keywords
         let update_upper = update.to_uppercase();
         let has_valid_keyword = [
-            "INSERT", "DELETE", "LOAD", "CLEAR", "CREATE", 
-            "DROP", "COPY", "MOVE", "ADD"
+            "INSERT", "DELETE", "LOAD", "CLEAR", "CREATE", "DROP", "COPY", "MOVE", "ADD",
         ]
         .iter()
         .any(|&kw| update_upper.contains(kw));
 
         if !has_valid_keyword {
             return Err(CliError::invalid_arguments(
-                "Update must contain valid SPARQL Update operation"
-            ).with_suggestion("Valid operations: INSERT, DELETE, LOAD, CLEAR, CREATE, DROP, COPY, MOVE, ADD"));
+                "Update must contain valid SPARQL Update operation",
+            )
+            .with_suggestion(
+                "Valid operations: INSERT, DELETE, LOAD, CLEAR, CREATE, DROP, COPY, MOVE, ADD",
+            ));
         }
 
         Ok(())
@@ -658,7 +678,8 @@ pub mod env_validation {
     pub fn is_production() -> bool {
         std::env::var("OXIDE_ENV")
             .unwrap_or_else(|_| "development".to_string())
-            .to_lowercase() == "production"
+            .to_lowercase()
+            == "production"
     }
 
     /// Validate production requirements

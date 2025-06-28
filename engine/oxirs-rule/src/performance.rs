@@ -589,13 +589,11 @@ mod tests {
         engine.add_rules(vec![rule]).unwrap();
 
         // Test with small number of facts (should use incremental)
-        let small_facts = vec![
-            RuleAtom::Triple {
-                subject: Term::Constant("item1".to_string()),
-                predicate: Term::Constant("input".to_string()),
-                object: Term::Constant("value".to_string()),
-            },
-        ];
+        let small_facts = vec![RuleAtom::Triple {
+            subject: Term::Constant("item1".to_string()),
+            predicate: Term::Constant("input".to_string()),
+            object: Term::Constant("value".to_string()),
+        }];
 
         let results = engine.reason(small_facts).unwrap();
         assert!(!results.is_empty());
@@ -622,49 +620,45 @@ mod tests {
         let mut engine = IncrementalReasoningEngine::new();
 
         // Add rules
-        let rules = vec![
-            Rule {
-                name: "rule1".to_string(),
-                body: vec![RuleAtom::Triple {
-                    subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("likes".to_string()),
-                    object: Term::Constant("food".to_string()),
-                }],
-                head: vec![RuleAtom::Triple {
-                    subject: Term::Variable("X".to_string()),
-                    predicate: Term::Constant("type".to_string()),
-                    object: Term::Constant("FoodLover".to_string()),
-                }],
-            },
-        ];
+        let rules = vec![Rule {
+            name: "rule1".to_string(),
+            body: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("likes".to_string()),
+                object: Term::Constant("food".to_string()),
+            }],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("type".to_string()),
+                object: Term::Constant("FoodLover".to_string()),
+            }],
+        }];
 
         engine.add_rules(rules).unwrap();
 
         // Initial facts
-        let initial_facts = vec![
-            RuleAtom::Triple {
-                subject: Term::Constant("alice".to_string()),
-                predicate: Term::Constant("likes".to_string()),
-                object: Term::Constant("food".to_string()),
-            },
-        ];
+        let initial_facts = vec![RuleAtom::Triple {
+            subject: Term::Constant("alice".to_string()),
+            predicate: Term::Constant("likes".to_string()),
+            object: Term::Constant("food".to_string()),
+        }];
 
         // New facts to add incrementally
-        let new_facts = vec![
-            RuleAtom::Triple {
-                subject: Term::Constant("bob".to_string()),
-                predicate: Term::Constant("likes".to_string()),
-                object: Term::Constant("food".to_string()),
-            },
-        ];
+        let new_facts = vec![RuleAtom::Triple {
+            subject: Term::Constant("bob".to_string()),
+            predicate: Term::Constant("likes".to_string()),
+            object: Term::Constant("food".to_string()),
+        }];
 
         // Run benchmark
-        let benchmark = engine.benchmark_incremental_vs_full(initial_facts, new_facts).unwrap();
-        
+        let benchmark = engine
+            .benchmark_incremental_vs_full(initial_facts, new_facts)
+            .unwrap();
+
         // Check that benchmark completed successfully
         assert!(benchmark.full_reasoning_time > Duration::new(0, 0));
         assert!(benchmark.facts_derived > 0);
-        
+
         println!("Benchmark results: {}", benchmark);
     }
 
@@ -726,7 +720,10 @@ impl ParallelRuleEngine {
                 .unwrap_or(4)
         });
 
-        info!("Initializing parallel rule engine with {} threads", num_threads);
+        info!(
+            "Initializing parallel rule engine with {} threads",
+            num_threads
+        );
 
         Self {
             num_threads,
@@ -756,15 +753,15 @@ impl ParallelRuleEngine {
     /// Add rules to the parallel engine
     pub fn add_rules(&mut self, rules: Vec<Rule>) -> Result<(), String> {
         let start_time = Instant::now();
-        
+
         if let Ok(mut rule_storage) = self.rules.lock() {
             rule_storage.extend(rules.clone());
-            
+
             if let Ok(mut metrics) = self.metrics.lock() {
                 metrics.rules_processed += rules.len();
                 metrics.rule_loading_time += start_time.elapsed();
             }
-            
+
             info!("Added {} rules to parallel engine", rules.len());
             Ok(())
         } else {
@@ -775,13 +772,16 @@ impl ParallelRuleEngine {
     /// Execute parallel forward chaining
     pub fn parallel_forward_chain(&mut self) -> Result<Vec<RuleAtom>, String> {
         let start_time = Instant::now();
-        info!("Starting parallel forward chaining with {} threads", self.num_threads);
+        info!(
+            "Starting parallel forward chaining with {} threads",
+            self.num_threads
+        );
 
         // Clone shared data for workers
         let rules = self.rules.clone();
         let facts = self.facts.clone();
         let metrics = self.metrics.clone();
-        
+
         let derived_facts = Arc::new(Mutex::new(Vec::new()));
         let mut handles = Vec::new();
 
@@ -801,7 +801,7 @@ impl ParallelRuleEngine {
                     metrics_clone,
                 );
             });
-            
+
             handles.push(handle);
         }
 
@@ -825,7 +825,10 @@ impl ParallelRuleEngine {
             metrics.inferred_facts += results.len();
         }
 
-        info!("Parallel forward chaining completed, derived {} facts", results.len());
+        info!(
+            "Parallel forward chaining completed, derived {} facts",
+            results.len()
+        );
         Ok(results)
     }
 
@@ -861,13 +864,17 @@ impl ParallelRuleEngine {
 
         if start_idx < local_facts.len() {
             let worker_facts = &local_facts[start_idx..end_idx];
-            
+
             match local_engine.forward_chain(worker_facts) {
                 Ok(new_facts) => {
                     if let Ok(mut derived) = derived_facts.lock() {
                         derived.extend(new_facts);
                     }
-                    debug!("Worker thread {} processed {} facts", thread_id, worker_facts.len());
+                    debug!(
+                        "Worker thread {} processed {} facts",
+                        thread_id,
+                        worker_facts.len()
+                    );
                 }
                 Err(e) => {
                     warn!("Worker thread {} failed: {}", thread_id, e);
@@ -969,8 +976,11 @@ impl IncrementalReasoningEngine {
 
     /// Add rules to the incremental engine
     pub fn add_rules(&mut self, rules: Vec<Rule>) -> Result<(), String> {
-        info!("Adding {} rules to incremental reasoning engine", rules.len());
-        
+        info!(
+            "Adding {} rules to incremental reasoning engine",
+            rules.len()
+        );
+
         if let Ok(mut engine) = self.base_engine.lock() {
             for rule in rules {
                 engine.add_rule(rule);
@@ -982,9 +992,15 @@ impl IncrementalReasoningEngine {
     }
 
     /// Add new facts and perform incremental reasoning
-    pub fn add_facts_incremental(&mut self, new_facts: Vec<RuleAtom>) -> Result<Vec<RuleAtom>, String> {
+    pub fn add_facts_incremental(
+        &mut self,
+        new_facts: Vec<RuleAtom>,
+    ) -> Result<Vec<RuleAtom>, String> {
         let start_time = Instant::now();
-        info!("Starting incremental reasoning with {} new facts", new_facts.len());
+        info!(
+            "Starting incremental reasoning with {} new facts",
+            new_facts.len()
+        );
 
         // Update change tracker
         if let Ok(mut tracker) = self.change_tracker.lock() {
@@ -1010,21 +1026,26 @@ impl IncrementalReasoningEngine {
                 start_time.elapsed()
             } else {
                 Duration::from_nanos(
-                    (metrics.avg_update_time.as_nanos() as u64 + start_time.elapsed().as_nanos() as u64) / 2
+                    (metrics.avg_update_time.as_nanos() as u64
+                        + start_time.elapsed().as_nanos() as u64)
+                        / 2,
                 )
             };
         }
 
-        info!("Incremental reasoning completed, derived {} new facts in {:?}", 
-              new_derived_facts.len(), start_time.elapsed());
-        
+        info!(
+            "Incremental reasoning completed, derived {} new facts in {:?}",
+            new_derived_facts.len(),
+            start_time.elapsed()
+        );
+
         Ok(new_derived_facts)
     }
 
     /// Identify rules that could be affected by new facts
     fn identify_affected_rules(&self, new_facts: &[RuleAtom]) -> Result<Vec<String>, String> {
         let mut affected_rules = Vec::new();
-        
+
         if let Ok(engine) = self.base_engine.lock() {
             for rule in &engine.rules {
                 for new_fact in new_facts {
@@ -1053,18 +1074,34 @@ impl IncrementalReasoningEngine {
     /// Check if two atoms could potentially unify
     fn atoms_could_unify(&self, atom1: &RuleAtom, atom2: &RuleAtom) -> bool {
         match (atom1, atom2) {
-            (RuleAtom::Triple { subject: s1, predicate: p1, object: o1 },
-             RuleAtom::Triple { subject: s2, predicate: p2, object: o2 }) => {
-                self.terms_could_unify(s1, s2) && 
-                self.terms_could_unify(p1, p2) && 
-                self.terms_could_unify(o1, o2)
+            (
+                RuleAtom::Triple {
+                    subject: s1,
+                    predicate: p1,
+                    object: o1,
+                },
+                RuleAtom::Triple {
+                    subject: s2,
+                    predicate: p2,
+                    object: o2,
+                },
+            ) => {
+                self.terms_could_unify(s1, s2)
+                    && self.terms_could_unify(p1, p2)
+                    && self.terms_could_unify(o1, o2)
             }
-            (RuleAtom::Builtin { name: n1, args: a1 },
-             RuleAtom::Builtin { name: n2, args: a2 }) => {
-                n1 == n2 && a1.len() == a2.len() &&
-                a1.iter().zip(a2.iter()).all(|(t1, t2)| self.terms_could_unify(t1, t2))
+            (
+                RuleAtom::Builtin { name: n1, args: a1 },
+                RuleAtom::Builtin { name: n2, args: a2 },
+            ) => {
+                n1 == n2
+                    && a1.len() == a2.len()
+                    && a1
+                        .iter()
+                        .zip(a2.iter())
+                        .all(|(t1, t2)| self.terms_could_unify(t1, t2))
             }
-            _ => false
+            _ => false,
         }
     }
 
@@ -1074,18 +1111,22 @@ impl IncrementalReasoningEngine {
             (Term::Variable(_), _) | (_, Term::Variable(_)) => true,
             (Term::Constant(c1), Term::Constant(c2)) => c1 == c2,
             (Term::Literal(l1), Term::Literal(l2)) => l1 == l2,
-            _ => false
+            _ => false,
         }
     }
 
     /// Perform incremental reasoning on affected rules only
-    fn reason_incrementally(&mut self, new_facts: Vec<RuleAtom>, affected_rules: Vec<String>) -> Result<Vec<RuleAtom>, String> {
+    fn reason_incrementally(
+        &mut self,
+        new_facts: Vec<RuleAtom>,
+        affected_rules: Vec<String>,
+    ) -> Result<Vec<RuleAtom>, String> {
         let mut derived_facts = Vec::new();
-        
+
         if let Ok(mut engine) = self.base_engine.lock() {
             // Add new facts to the engine
             engine.add_facts(new_facts.clone());
-            
+
             // Only apply affected rules for efficiency
             for rule_name in &affected_rules {
                 if let Some(rule) = engine.rules.iter().find(|r| r.name == *rule_name) {
@@ -1093,14 +1134,15 @@ impl IncrementalReasoningEngine {
                     let mut temp_engine = RuleEngine::new();
                     temp_engine.add_rule(rule.clone());
                     temp_engine.add_facts(engine.get_facts());
-                    
+
                     match temp_engine.forward_chain(&[]) {
                         Ok(rule_derived) => {
                             // Filter out facts we already knew
-                            let new_derived: Vec<RuleAtom> = rule_derived.into_iter()
+                            let new_derived: Vec<RuleAtom> = rule_derived
+                                .into_iter()
                                 .filter(|fact| !self.fact_already_known(fact))
                                 .collect();
-                            
+
                             derived_facts.extend(new_derived);
                         }
                         Err(e) => {
@@ -1109,7 +1151,7 @@ impl IncrementalReasoningEngine {
                     }
                 }
             }
-            
+
             // Update metrics
             if let Ok(mut metrics) = self.incremental_metrics.lock() {
                 let total_rules = engine.rules.len();
@@ -1142,37 +1184,43 @@ impl IncrementalReasoningEngine {
     /// Reset the incremental reasoning state
     pub fn reset(&mut self) {
         info!("Resetting incremental reasoning engine");
-        
+
         if let Ok(mut materialized) = self.materialized_facts.lock() {
             materialized.clear();
         }
-        
+
         if let Ok(mut dependencies) = self.fact_dependencies.lock() {
             dependencies.clear();
         }
-        
+
         if let Ok(mut activations) = self.rule_activations.lock() {
             activations.clear();
         }
-        
+
         if let Ok(mut tracker) = self.change_tracker.lock() {
             *tracker = ChangeTracker::default();
         }
-        
+
         if let Ok(mut metrics) = self.incremental_metrics.lock() {
             *metrics = IncrementalMetrics::default();
         }
     }
 
     /// Perform a full reasoning pass and cache results
-    pub fn full_reasoning_with_cache(&mut self, facts: Vec<RuleAtom>) -> Result<Vec<RuleAtom>, String> {
+    pub fn full_reasoning_with_cache(
+        &mut self,
+        facts: Vec<RuleAtom>,
+    ) -> Result<Vec<RuleAtom>, String> {
         let start_time = Instant::now();
-        info!("Performing full reasoning with caching for {} facts", facts.len());
-        
+        info!(
+            "Performing full reasoning with caching for {} facts",
+            facts.len()
+        );
+
         if let Ok(mut engine) = self.base_engine.lock() {
             engine.clear();
             engine.add_facts(facts);
-            
+
             match engine.forward_chain(&[]) {
                 Ok(derived_facts) => {
                     // Cache all derived facts
@@ -1180,16 +1228,19 @@ impl IncrementalReasoningEngine {
                         materialized.clear();
                         materialized.extend(derived_facts.clone());
                     }
-                    
+
                     // Build dependency graph for future incremental updates
                     self.build_dependency_graph(&derived_facts)?;
-                    
-                    info!("Full reasoning completed in {:?}, cached {} facts", 
-                          start_time.elapsed(), derived_facts.len());
-                    
+
+                    info!(
+                        "Full reasoning completed in {:?}, cached {} facts",
+                        start_time.elapsed(),
+                        derived_facts.len()
+                    );
+
                     Ok(derived_facts)
                 }
-                Err(e) => Err(format!("Full reasoning failed: {}", e))
+                Err(e) => Err(format!("Full reasoning failed: {}", e)),
             }
         } else {
             Err("Failed to acquire engine lock".to_string())
@@ -1200,50 +1251,54 @@ impl IncrementalReasoningEngine {
     fn build_dependency_graph(&self, derived_facts: &[RuleAtom]) -> Result<(), String> {
         if let Ok(mut dependencies) = self.fact_dependencies.lock() {
             dependencies.clear();
-            
+
             // For now, use a simple dependency model
             // In a full implementation, this would track which facts depend on which rules
             for fact in derived_facts {
                 dependencies.insert(fact.clone(), vec![]);
             }
         }
-        
+
         Ok(())
     }
 
     /// Compare incremental vs full reasoning performance
-    pub fn benchmark_incremental_vs_full(&mut self, initial_facts: Vec<RuleAtom>, new_facts: Vec<RuleAtom>) -> Result<BenchmarkResults, String> {
+    pub fn benchmark_incremental_vs_full(
+        &mut self,
+        initial_facts: Vec<RuleAtom>,
+        new_facts: Vec<RuleAtom>,
+    ) -> Result<BenchmarkResults, String> {
         info!("Benchmarking incremental vs full reasoning");
-        
+
         // First, establish baseline with full reasoning
         let full_start = Instant::now();
         let mut all_facts = initial_facts.clone();
         all_facts.extend(new_facts.clone());
         self.full_reasoning_with_cache(all_facts)?;
         let full_time = full_start.elapsed();
-        
+
         // Reset and setup for incremental test
         self.reset();
         self.full_reasoning_with_cache(initial_facts)?;
-        
+
         // Now test incremental reasoning
         let incremental_start = Instant::now();
         let incremental_results = self.add_facts_incremental(new_facts)?;
         let incremental_time = incremental_start.elapsed();
-        
+
         let speedup = if incremental_time.as_nanos() > 0 {
             full_time.as_nanos() as f64 / incremental_time.as_nanos() as f64
         } else {
             f64::INFINITY
         };
-        
+
         let results = BenchmarkResults {
             full_reasoning_time: full_time,
             incremental_reasoning_time: incremental_time,
             speedup_factor: speedup,
             facts_derived: incremental_results.len(),
         };
-        
+
         info!("Benchmark results: {:?}", results);
         Ok(results)
     }
@@ -1282,10 +1337,7 @@ impl std::fmt::Display for IncrementalMetrics {
         write!(
             f,
             "Incremental: {} updates, avg {:?}, {} facts reused, {} rules skipped",
-            self.incremental_updates,
-            self.avg_update_time,
-            self.facts_reused,
-            self.rules_skipped
+            self.incremental_updates, self.avg_update_time, self.facts_reused, self.rules_skipped
         )
     }
 }
@@ -1352,11 +1404,14 @@ impl HybridReasoningEngine {
     /// Reason using the configured strategy
     pub fn reason(&mut self, new_facts: Vec<RuleAtom>) -> Result<Vec<RuleAtom>, String> {
         let start_time = Instant::now();
-        
+
         let strategy_choice = match &self.strategy {
             ReasoningStrategy::AlwaysParallel => "parallel",
             ReasoningStrategy::AlwaysIncremental => "incremental",
-            ReasoningStrategy::Adaptive { parallel_threshold, complexity_threshold } => {
+            ReasoningStrategy::Adaptive {
+                parallel_threshold,
+                complexity_threshold,
+            } => {
                 if new_facts.len() > *parallel_threshold {
                     "parallel"
                 } else if self.estimate_rule_complexity()? > *complexity_threshold {
@@ -1367,7 +1422,11 @@ impl HybridReasoningEngine {
             }
         };
 
-        info!("Using {} reasoning strategy for {} facts", strategy_choice, new_facts.len());
+        info!(
+            "Using {} reasoning strategy for {} facts",
+            strategy_choice,
+            new_facts.len()
+        );
 
         let results = match strategy_choice {
             "parallel" => {
@@ -1376,10 +1435,8 @@ impl HybridReasoningEngine {
                 // In practice, you'd need to manage the fact store properly
                 self.parallel_engine.parallel_forward_chain()
             }
-            "incremental" => {
-                self.incremental_engine.add_facts_incremental(new_facts)
-            }
-            _ => unreachable!()
+            "incremental" => self.incremental_engine.add_facts_incremental(new_facts),
+            _ => unreachable!(),
         };
 
         // Update performance metrics

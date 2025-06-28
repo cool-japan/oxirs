@@ -11,21 +11,21 @@ use tokio;
 async fn test_federation_engine_lifecycle() {
     // Create federation engine
     let engine = FederationEngine::new();
-    
+
     // Register a test service
     let service = FederatedService::new_sparql(
         "test-sparql".to_string(),
         "Test SPARQL Service".to_string(),
         "http://localhost:3030/sparql".to_string(),
     );
-    
+
     // Should be able to register service
     assert!(engine.register_service(service).await.is_ok());
-    
+
     // Health check should work
     let health = engine.health_check().await.unwrap();
     assert_eq!(health.total_services, 1);
-    
+
     // Unregister service
     assert!(engine.unregister_service("test-sparql").await.is_ok());
 }
@@ -33,33 +33,33 @@ async fn test_federation_engine_lifecycle() {
 #[tokio::test]
 async fn test_service_registry_operations() {
     let mut registry = ServiceRegistry::new();
-    
+
     // Create test services
     let sparql_service = FederatedService::new_sparql(
         "sparql-1".to_string(),
         "SPARQL Service 1".to_string(),
         "http://example.com/sparql".to_string(),
     );
-    
+
     let graphql_service = FederatedService::new_graphql(
         "graphql-1".to_string(),
         "GraphQL Service 1".to_string(),
         "http://example.com/graphql".to_string(),
     );
-    
+
     // Register services
     registry.register(sparql_service).await.unwrap();
     registry.register(graphql_service).await.unwrap();
-    
+
     // Test service retrieval
     assert!(registry.get_service("sparql-1").is_some());
     assert!(registry.get_service("graphql-1").is_some());
     assert!(registry.get_service("non-existent").is_none());
-    
+
     // Test capability filtering
     let sparql_services = registry.get_services_with_capability(&ServiceCapability::SparqlQuery);
     assert_eq!(sparql_services.len(), 1);
-    
+
     let graphql_services = registry.get_services_with_capability(&ServiceCapability::GraphQLQuery);
     assert_eq!(graphql_services.len(), 1);
 }
@@ -67,18 +67,21 @@ async fn test_service_registry_operations() {
 #[tokio::test]
 async fn test_extended_metadata() {
     let mut registry = ServiceRegistry::new();
-    
+
     let service = FederatedService::new_sparql(
         "metadata-test".to_string(),
         "Metadata Test Service".to_string(),
         "http://example.com/sparql".to_string(),
     );
-    
+
     registry.register(service).await.unwrap();
-    
+
     // Enable extended metadata
-    registry.enable_extended_metadata("metadata-test").await.unwrap();
-    
+    registry
+        .enable_extended_metadata("metadata-test")
+        .await
+        .unwrap();
+
     let service = registry.get_service("metadata-test").unwrap();
     assert!(service.extended_metadata.is_some());
 }
@@ -87,11 +90,11 @@ async fn test_extended_metadata() {
 async fn test_query_planning() {
     let planner = QueryPlanner::new();
     let registry = ServiceRegistry::new();
-    
+
     // Analyze a simple SPARQL query
     let query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
     let query_info = planner.analyze_sparql(query).await.unwrap();
-    
+
     assert_eq!(query_info.query_type, QueryType::SparqlSelect);
     assert!(!query_info.patterns.is_empty());
     assert!(query_info.variables.contains("?s"));
@@ -102,7 +105,7 @@ async fn test_query_planning() {
 #[tokio::test]
 async fn test_service_clause_extraction() {
     let planner = QueryPlanner::new();
-    
+
     let query = r#"
         SELECT ?name ?email
         WHERE {
@@ -112,9 +115,9 @@ async fn test_service_clause_extraction() {
             }
         }
     "#;
-    
+
     let query_info = planner.analyze_sparql(query).await.unwrap();
-    
+
     assert_eq!(query_info.service_clauses.len(), 1);
     assert_eq!(
         query_info.service_clauses[0].service_url,
@@ -129,10 +132,10 @@ async fn test_capability_assessment() {
         "Assessment Test".to_string(),
         "http://example.com/sparql".to_string(),
     );
-    
+
     let assessor = CapabilityAssessor::new();
     let result = assessor.assess_service(&service).await;
-    
+
     // Assessment should complete (even if service is not available)
     assert!(result.is_ok() || result.is_err());
 }
@@ -148,26 +151,28 @@ async fn test_auto_discovery_lifecycle() {
         discovery_interval: Duration::from_secs(300),
         max_concurrent_discoveries: 5,
     };
-    
+
     let mut discovery = AutoDiscovery::new(config);
-    
+
     // Start discovery
     let mut receiver = discovery.start().await.unwrap();
-    
+
     // Stop discovery
     discovery.stop().await;
-    
+
     // Should not receive any endpoints with all discovery disabled
-    assert!(tokio::time::timeout(Duration::from_millis(100), receiver.recv())
-        .await
-        .is_err());
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), receiver.recv())
+            .await
+            .is_err()
+    );
 }
 
 #[tokio::test]
 async fn test_query_decomposition() {
     let decomposer = QueryDecomposer::new();
     let registry = ServiceRegistry::new();
-    
+
     let query_info = QueryInfo {
         query_type: QueryType::SparqlSelect,
         original_query: "SELECT * WHERE { ?s ?p ?o . ?o ?p2 ?o2 }".to_string(),
@@ -194,7 +199,7 @@ async fn test_query_decomposition() {
         complexity: QueryComplexity::Low,
         estimated_cost: 20,
     };
-    
+
     // Decomposition should work even with empty registry
     let result = decomposer.decompose(&query_info, &registry).await;
     assert!(result.is_ok() || result.is_err()); // May fail due to no services
@@ -203,31 +208,31 @@ async fn test_query_decomposition() {
 #[tokio::test]
 async fn test_service_client_creation() {
     let config = ClientConfig::default();
-    
+
     let sparql_service = FederatedService::new_sparql(
         "client-test-sparql".to_string(),
         "Client Test SPARQL".to_string(),
         "http://example.com/sparql".to_string(),
     );
-    
+
     let graphql_service = FederatedService::new_graphql(
         "client-test-graphql".to_string(),
         "Client Test GraphQL".to_string(),
         "http://example.com/graphql".to_string(),
     );
-    
+
     // Create clients
     let sparql_client = create_client(sparql_service, config.clone()).unwrap();
     let graphql_client = create_client(graphql_service, config).unwrap();
-    
+
     // Health checks should return false for non-existent services
     assert!(!sparql_client.health_check().await.unwrap_or(true));
     assert!(!graphql_client.health_check().await.unwrap_or(true));
-    
+
     // Get stats
     let sparql_stats = sparql_client.get_stats().await;
     let graphql_stats = graphql_client.get_stats().await;
-    
+
     assert_eq!(sparql_stats.total_requests, 0);
     assert_eq!(graphql_stats.total_requests, 0);
 }
@@ -235,7 +240,7 @@ async fn test_service_client_creation() {
 #[tokio::test]
 async fn test_cache_operations() {
     let cache = FederationCache::new();
-    
+
     // Test metadata caching
     let metadata = ServiceMetadata {
         description: Some("Test service".to_string()),
@@ -245,13 +250,18 @@ async fn test_cache_operations() {
         documentation_url: None,
         schema_url: None,
     };
-    
-    cache.put_metadata("test-service", metadata.clone(), None).await;
-    
+
+    cache
+        .put_metadata("test-service", metadata.clone(), None)
+        .await;
+
     let cached = cache.get_metadata("test-service").await;
     assert!(cached.is_some());
-    assert_eq!(cached.unwrap().description, Some("Test service".to_string()));
-    
+    assert_eq!(
+        cached.unwrap().description,
+        Some("Test service".to_string())
+    );
+
     // Test cache invalidation
     cache.invalidate_service("test-service").await;
     assert!(cache.get_metadata("test-service").await.is_none());
@@ -261,7 +271,7 @@ async fn test_cache_operations() {
 async fn test_complex_query_planning() {
     let planner = QueryPlanner::new();
     let mut registry = ServiceRegistry::new();
-    
+
     // Register multiple services
     for i in 1..=3 {
         let service = FederatedService::new_sparql(
@@ -271,7 +281,7 @@ async fn test_complex_query_planning() {
         );
         registry.register(service).await.unwrap();
     }
-    
+
     // Complex query with multiple patterns
     let query = r#"
         SELECT ?name ?age ?city
@@ -283,10 +293,10 @@ async fn test_complex_query_planning() {
             FILTER(?age > 18)
         }
     "#;
-    
+
     let query_info = planner.analyze_sparql(query).await.unwrap();
     let plan = planner.plan_sparql(&query_info, &registry).await.unwrap();
-    
+
     assert!(!plan.steps.is_empty());
     assert_eq!(plan.query_type, QueryType::SparqlSelect);
 }
@@ -298,7 +308,7 @@ async fn test_federation_with_authentication() {
         "Auth Test Service".to_string(),
         "http://example.com/sparql".to_string(),
     );
-    
+
     // Add authentication
     service.auth = Some(AuthConfig {
         auth_type: AuthType::Basic,
@@ -310,10 +320,10 @@ async fn test_federation_with_authentication() {
             oauth_config: None,
         },
     });
-    
+
     let config = ClientConfig::default();
     let client = create_client(service, config).unwrap();
-    
+
     // Client should be created successfully
     assert!(client.health_check().await.is_ok());
 }
@@ -321,7 +331,7 @@ async fn test_federation_with_authentication() {
 #[tokio::test]
 async fn test_monitoring_and_stats() {
     let engine = FederationEngine::new();
-    
+
     // Register a service
     let service = FederatedService::new_sparql(
         "monitor-test".to_string(),
@@ -329,11 +339,11 @@ async fn test_monitoring_and_stats() {
         "http://example.com/sparql".to_string(),
     );
     engine.register_service(service).await.unwrap();
-    
+
     // Get federation stats
     let stats = engine.get_stats().await;
     assert_eq!(stats.registry.total_services, 1);
-    
+
     // Get cache stats
     let cache_stats = engine.get_cache_stats().await;
     assert_eq!(cache_stats.total_entries, 0);

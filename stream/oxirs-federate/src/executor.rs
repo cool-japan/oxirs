@@ -17,10 +17,10 @@ use tokio::time::timeout;
 use tracing::{debug, error, info, instrument, warn};
 
 use crate::{
-    ExecutionPlan, ExecutionStep, FederatedService, FederationError, ServiceRegistry, StepType,
-    service_executor::{ServiceExecutor, JoinExecutor, ServiceExecutorConfig},
+    cache::{CacheConfig, FederationCache},
+    service_executor::{JoinExecutor, ServiceExecutor, ServiceExecutorConfig},
     service_optimizer::{OptimizedServiceClause, ServiceExecutionStrategy},
-    cache::{FederationCache, CacheConfig},
+    ExecutionPlan, ExecutionStep, FederatedService, FederationError, ServiceRegistry, StepType,
 };
 
 /// Federated query executor
@@ -70,8 +70,8 @@ impl FederatedExecutor {
         ));
         let join_executor = Arc::new(JoinExecutor::new());
 
-        Self { 
-            client, 
+        Self {
+            client,
             config,
             service_executor,
             join_executor,
@@ -322,7 +322,9 @@ impl FederatedExecutor {
         }
 
         // Use the advanced join executor for optimized joins
-        self.join_executor.execute_advanced_join(&input_results).await
+        self.join_executor
+            .execute_advanced_join(&input_results)
+            .await
     }
 
     /// Execute a union operation
@@ -380,7 +382,8 @@ impl FederatedExecutor {
 
         match input_data {
             QueryResultData::Sparql(sparql_results) => {
-                let filtered_results = self.filter_sparql_results(&sparql_results, &step.query_fragment)?;
+                let filtered_results =
+                    self.filter_sparql_results(&sparql_results, &step.query_fragment)?;
                 Ok(QueryResultData::Sparql(filtered_results))
             }
             QueryResultData::GraphQL(graphql_response) => {
@@ -393,7 +396,11 @@ impl FederatedExecutor {
     }
 
     /// Filter SPARQL results based on filter expression
-    fn filter_sparql_results(&self, results: &SparqlResults, filter_expr: &str) -> Result<SparqlResults> {
+    fn filter_sparql_results(
+        &self,
+        results: &SparqlResults,
+        filter_expr: &str,
+    ) -> Result<SparqlResults> {
         let filtered_bindings = results
             .results
             .bindings
@@ -420,22 +427,25 @@ impl FederatedExecutor {
         if filter_expr.contains("REGEX") {
             return self.evaluate_regex_filter(binding, filter_expr);
         }
-        
+
         if filter_expr.contains("langMatches") {
             return self.evaluate_lang_matches_filter(binding, filter_expr);
         }
-        
+
         if filter_expr.contains("=") || filter_expr.contains("!=") {
             return self.evaluate_comparison_filter(binding, filter_expr);
         }
-        
+
         if filter_expr.contains("BOUND") {
             return self.evaluate_bound_filter(binding, filter_expr);
         }
 
         // For complex expressions, default to true for now
         // In a full implementation, we'd need a proper SPARQL expression parser
-        warn!("Complex filter expression not fully supported: {}", filter_expr);
+        warn!(
+            "Complex filter expression not fully supported: {}",
+            filter_expr
+        );
         true
     }
 
@@ -450,7 +460,7 @@ impl FederatedExecutor {
                 if parts.len() >= 2 {
                     let var_name = parts[0].trim_start_matches('?');
                     let pattern = parts[1].trim_matches('"');
-                    
+
                     if let Some(value) = binding.get(var_name) {
                         if let Ok(regex) = regex::Regex::new(pattern) {
                             return regex.is_match(&value.value);
@@ -478,7 +488,7 @@ impl FederatedExecutor {
                         if let Some(var_end) = var_part.find(')') {
                             let var_name = var_part[..var_end].trim_start_matches('?');
                             let lang_pattern = parts[1].trim_matches('"');
-                            
+
                             if let Some(value) = binding.get(var_name) {
                                 if let Some(lang) = &value.lang {
                                     return lang == lang_pattern || lang_pattern == "*";
@@ -495,15 +505,15 @@ impl FederatedExecutor {
     /// Evaluate comparison filter expressions (=, !=, <, >, <=, >=)
     fn evaluate_comparison_filter(&self, binding: &SparqlBinding, filter_expr: &str) -> bool {
         let operators = ["!=", "<=", ">=", "=", "<", ">"];
-        
+
         for op in &operators {
             if let Some(pos) = filter_expr.find(op) {
                 let left = filter_expr[..pos].trim();
                 let right = filter_expr[pos + op.len()..].trim();
-                
+
                 let left_value = self.resolve_filter_value(binding, left);
                 let right_value = self.resolve_filter_value(binding, right);
-                
+
                 return match op {
                     "=" => left_value == right_value,
                     "!=" => left_value != right_value,
@@ -533,16 +543,17 @@ impl FederatedExecutor {
     /// Resolve a filter value (variable or literal)
     fn resolve_filter_value(&self, binding: &SparqlBinding, value_expr: &str) -> String {
         let value_expr = value_expr.trim();
-        
+
         if value_expr.starts_with('?') {
             // Variable reference
             let var_name = &value_expr[1..];
-            binding.get(var_name)
+            binding
+                .get(var_name)
                 .map(|v| v.value.clone())
                 .unwrap_or_default()
         } else if value_expr.starts_with('"') && value_expr.ends_with('"') {
             // String literal
-            value_expr[1..value_expr.len()-1].to_string()
+            value_expr[1..value_expr.len() - 1].to_string()
         } else {
             // Literal value
             value_expr.to_string()
@@ -600,11 +611,13 @@ impl FederatedExecutor {
             }
         }
 
-        let input_data = input_data.ok_or_else(|| anyhow!("No input data for aggregate operation"))?;
+        let input_data =
+            input_data.ok_or_else(|| anyhow!("No input data for aggregate operation"))?;
 
         match input_data {
             QueryResultData::Sparql(sparql_results) => {
-                let aggregated_results = self.aggregate_sparql_results(&sparql_results, &step.query_fragment)?;
+                let aggregated_results =
+                    self.aggregate_sparql_results(&sparql_results, &step.query_fragment)?;
                 Ok(QueryResultData::Sparql(aggregated_results))
             }
             QueryResultData::GraphQL(_) => {
@@ -616,7 +629,11 @@ impl FederatedExecutor {
     }
 
     /// Aggregate SPARQL results based on aggregate expression
-    fn aggregate_sparql_results(&self, results: &SparqlResults, aggregate_expr: &str) -> Result<SparqlResults> {
+    fn aggregate_sparql_results(
+        &self,
+        results: &SparqlResults,
+        aggregate_expr: &str,
+    ) -> Result<SparqlResults> {
         let aggregate_expr = aggregate_expr.trim();
 
         // Parse the aggregate expression to identify the operation
@@ -639,13 +656,17 @@ impl FederatedExecutor {
     }
 
     /// Perform GROUP BY aggregation
-    fn perform_group_by_aggregation(&self, results: &SparqlResults, expr: &str) -> Result<SparqlResults> {
+    fn perform_group_by_aggregation(
+        &self,
+        results: &SparqlResults,
+        expr: &str,
+    ) -> Result<SparqlResults> {
         // Extract GROUP BY variables
         let group_vars = self.extract_group_by_variables(expr);
-        
+
         // Group bindings by the GROUP BY variables
         let mut groups: HashMap<String, Vec<SparqlBinding>> = HashMap::new();
-        
+
         for binding in &results.results.bindings {
             let group_key = self.create_group_key(binding, &group_vars);
             groups.entry(group_key).or_default().push(binding.clone());
@@ -653,7 +674,7 @@ impl FederatedExecutor {
 
         // Create aggregated results
         let mut aggregated_bindings = Vec::new();
-        
+
         for (group_key, group_bindings) in groups {
             if let Some(first_binding) = group_bindings.first() {
                 // Start with the group variables from the first binding
@@ -663,7 +684,7 @@ impl FederatedExecutor {
                         agg_binding.insert(var.clone(), value.clone());
                     }
                 }
-                
+
                 // Apply aggregation functions within the group
                 if expr.contains("COUNT(") {
                     let count_value = SparqlValue {
@@ -674,7 +695,7 @@ impl FederatedExecutor {
                     };
                     agg_binding.insert("count".to_string(), count_value);
                 }
-                
+
                 // Add more aggregation functions as needed
                 aggregated_bindings.push(agg_binding);
             }
@@ -695,12 +716,16 @@ impl FederatedExecutor {
     }
 
     /// Perform COUNT aggregation
-    fn perform_count_aggregation(&self, results: &SparqlResults, expr: &str) -> Result<SparqlResults> {
+    fn perform_count_aggregation(
+        &self,
+        results: &SparqlResults,
+        expr: &str,
+    ) -> Result<SparqlResults> {
         let count = if expr.contains("COUNT(DISTINCT") {
             // Count distinct values
             let var_name = self.extract_count_variable(expr);
             let mut distinct_values = HashSet::new();
-            
+
             for binding in &results.results.bindings {
                 if let Some(var_name) = &var_name {
                     if let Some(value) = binding.get(var_name) {
@@ -716,12 +741,15 @@ impl FederatedExecutor {
 
         let count_binding = {
             let mut binding = HashMap::new();
-            binding.insert("count".to_string(), SparqlValue {
-                value_type: "literal".to_string(),
-                value: count.to_string(),
-                datatype: Some("http://www.w3.org/2001/XMLSchema#integer".to_string()),
-                lang: None,
-            });
+            binding.insert(
+                "count".to_string(),
+                SparqlValue {
+                    value_type: "literal".to_string(),
+                    value: count.to_string(),
+                    datatype: Some("http://www.w3.org/2001/XMLSchema#integer".to_string()),
+                    lang: None,
+                },
+            );
             binding
         };
 
@@ -736,7 +764,11 @@ impl FederatedExecutor {
     }
 
     /// Perform SUM aggregation
-    fn perform_sum_aggregation(&self, results: &SparqlResults, expr: &str) -> Result<SparqlResults> {
+    fn perform_sum_aggregation(
+        &self,
+        results: &SparqlResults,
+        expr: &str,
+    ) -> Result<SparqlResults> {
         let var_name = self.extract_aggregate_variable(expr, "SUM");
         let mut sum: f64 = 0.0;
         let mut count = 0;
@@ -754,12 +786,15 @@ impl FederatedExecutor {
 
         let sum_binding = {
             let mut binding = HashMap::new();
-            binding.insert("sum".to_string(), SparqlValue {
-                value_type: "literal".to_string(),
-                value: sum.to_string(),
-                datatype: Some("http://www.w3.org/2001/XMLSchema#decimal".to_string()),
-                lang: None,
-            });
+            binding.insert(
+                "sum".to_string(),
+                SparqlValue {
+                    value_type: "literal".to_string(),
+                    value: sum.to_string(),
+                    datatype: Some("http://www.w3.org/2001/XMLSchema#decimal".to_string()),
+                    lang: None,
+                },
+            );
             binding
         };
 
@@ -774,7 +809,11 @@ impl FederatedExecutor {
     }
 
     /// Perform AVG aggregation
-    fn perform_avg_aggregation(&self, results: &SparqlResults, expr: &str) -> Result<SparqlResults> {
+    fn perform_avg_aggregation(
+        &self,
+        results: &SparqlResults,
+        expr: &str,
+    ) -> Result<SparqlResults> {
         let var_name = self.extract_aggregate_variable(expr, "AVG");
         let mut sum: f64 = 0.0;
         let mut count = 0;
@@ -794,12 +833,15 @@ impl FederatedExecutor {
 
         let avg_binding = {
             let mut binding = HashMap::new();
-            binding.insert("avg".to_string(), SparqlValue {
-                value_type: "literal".to_string(),
-                value: avg.to_string(),
-                datatype: Some("http://www.w3.org/2001/XMLSchema#decimal".to_string()),
-                lang: None,
-            });
+            binding.insert(
+                "avg".to_string(),
+                SparqlValue {
+                    value_type: "literal".to_string(),
+                    value: avg.to_string(),
+                    datatype: Some("http://www.w3.org/2001/XMLSchema#decimal".to_string()),
+                    lang: None,
+                },
+            );
             binding
         };
 
@@ -814,7 +856,11 @@ impl FederatedExecutor {
     }
 
     /// Perform MIN aggregation
-    fn perform_min_aggregation(&self, results: &SparqlResults, expr: &str) -> Result<SparqlResults> {
+    fn perform_min_aggregation(
+        &self,
+        results: &SparqlResults,
+        expr: &str,
+    ) -> Result<SparqlResults> {
         let var_name = self.extract_aggregate_variable(expr, "MIN");
         let mut min_value: Option<String> = None;
 
@@ -835,12 +881,15 @@ impl FederatedExecutor {
 
         let min_binding = {
             let mut binding = HashMap::new();
-            binding.insert("min".to_string(), SparqlValue {
-                value_type: "literal".to_string(),
-                value: min_value.unwrap_or_default(),
-                datatype: None,
-                lang: None,
-            });
+            binding.insert(
+                "min".to_string(),
+                SparqlValue {
+                    value_type: "literal".to_string(),
+                    value: min_value.unwrap_or_default(),
+                    datatype: None,
+                    lang: None,
+                },
+            );
             binding
         };
 
@@ -855,7 +904,11 @@ impl FederatedExecutor {
     }
 
     /// Perform MAX aggregation
-    fn perform_max_aggregation(&self, results: &SparqlResults, expr: &str) -> Result<SparqlResults> {
+    fn perform_max_aggregation(
+        &self,
+        results: &SparqlResults,
+        expr: &str,
+    ) -> Result<SparqlResults> {
         let var_name = self.extract_aggregate_variable(expr, "MAX");
         let mut max_value: Option<String> = None;
 
@@ -876,12 +929,15 @@ impl FederatedExecutor {
 
         let max_binding = {
             let mut binding = HashMap::new();
-            binding.insert("max".to_string(), SparqlValue {
-                value_type: "literal".to_string(),
-                value: max_value.unwrap_or_default(),
-                datatype: None,
-                lang: None,
-            });
+            binding.insert(
+                "max".to_string(),
+                SparqlValue {
+                    value_type: "literal".to_string(),
+                    value: max_value.unwrap_or_default(),
+                    datatype: None,
+                    lang: None,
+                },
+            );
             binding
         };
 
@@ -916,7 +972,8 @@ impl FederatedExecutor {
             if let Some(end) = substr.find(')') {
                 let var_part = &substr[..end];
                 if var_part.contains("DISTINCT") {
-                    return var_part.split_whitespace()
+                    return var_part
+                        .split_whitespace()
                         .find(|s| s.starts_with('?'))
                         .map(|s| s.trim_start_matches('?').to_string());
                 } else if var_part.starts_with('?') {
@@ -978,7 +1035,8 @@ impl FederatedExecutor {
 
         match input_data {
             QueryResultData::Sparql(sparql_results) => {
-                let sorted_results = self.sort_sparql_results(&sparql_results, &step.query_fragment)?;
+                let sorted_results =
+                    self.sort_sparql_results(&sparql_results, &step.query_fragment)?;
                 Ok(QueryResultData::Sparql(sorted_results))
             }
             QueryResultData::GraphQL(graphql_response) => {
@@ -990,22 +1048,26 @@ impl FederatedExecutor {
     }
 
     /// Sort SPARQL results based on ORDER BY expression
-    fn sort_sparql_results(&self, results: &SparqlResults, order_expr: &str) -> Result<SparqlResults> {
+    fn sort_sparql_results(
+        &self,
+        results: &SparqlResults,
+        order_expr: &str,
+    ) -> Result<SparqlResults> {
         let order_clauses = self.parse_order_by_expression(order_expr);
-        
+
         let mut sorted_bindings = results.results.bindings.clone();
-        
+
         // Sort the bindings based on the ORDER BY clauses
         sorted_bindings.sort_by(|a, b| {
             for order_clause in &order_clauses {
                 let comparison = self.compare_bindings(a, b, &order_clause.variable);
-                
+
                 let result = if order_clause.descending {
                     comparison.reverse()
                 } else {
                     comparison
                 };
-                
+
                 if result != std::cmp::Ordering::Equal {
                     return result;
                 }
@@ -1024,14 +1086,14 @@ impl FederatedExecutor {
     /// Parse ORDER BY expression into order clauses
     fn parse_order_by_expression(&self, expr: &str) -> Vec<OrderClause> {
         let mut clauses = Vec::new();
-        
+
         if let Some(order_start) = expr.find("ORDER BY") {
             let order_part = &expr[order_start + 8..];
-            
+
             // Split by comma and parse each order expression
             for order_expr in order_part.split(',') {
                 let order_expr = order_expr.trim();
-                
+
                 let (variable, descending) = if order_expr.starts_with("DESC(") {
                     // DESC(?variable)
                     if let Some(start) = order_expr.find('(') {
@@ -1061,26 +1123,36 @@ impl FederatedExecutor {
                     (order_expr.trim_start_matches('?').to_string(), false)
                 } else {
                     // Try to extract variable from complex expressions
-                    if let Some(var_match) = order_expr.split_whitespace().find(|s| s.starts_with('?')) {
+                    if let Some(var_match) =
+                        order_expr.split_whitespace().find(|s| s.starts_with('?'))
+                    {
                         let descending = order_expr.to_lowercase().contains("desc");
                         (var_match.trim_start_matches('?').to_string(), descending)
                     } else {
                         continue;
                     }
                 };
-                
-                clauses.push(OrderClause { variable, descending });
+
+                clauses.push(OrderClause {
+                    variable,
+                    descending,
+                });
             }
         }
-        
+
         clauses
     }
 
     /// Compare two bindings for a specific variable
-    fn compare_bindings(&self, a: &SparqlBinding, b: &SparqlBinding, variable: &str) -> std::cmp::Ordering {
+    fn compare_bindings(
+        &self,
+        a: &SparqlBinding,
+        b: &SparqlBinding,
+        variable: &str,
+    ) -> std::cmp::Ordering {
         let a_value = a.get(variable);
         let b_value = b.get(variable);
-        
+
         match (a_value, b_value) {
             (Some(a_val), Some(b_val)) => self.compare_sparql_values(a_val, b_val),
             (Some(_), None) => std::cmp::Ordering::Greater, // Non-null values come after null
@@ -1098,10 +1170,10 @@ impl FederatedExecutor {
             "bnode" => 2,
             _ => 3,
         };
-        
+
         let a_type_order = type_order(&a.value_type);
         let b_type_order = type_order(&b.value_type);
-        
+
         match a_type_order.cmp(&b_type_order) {
             std::cmp::Ordering::Equal => {
                 // Same type, compare values
@@ -1122,34 +1194,39 @@ impl FederatedExecutor {
                 return self.compare_typed_literals(a, b, a_dt);
             }
         }
-        
+
         // Fall back to string comparison
         a.value.cmp(&b.value)
     }
 
     /// Compare typed literal values
-    fn compare_typed_literals(&self, a: &SparqlValue, b: &SparqlValue, datatype: &str) -> std::cmp::Ordering {
+    fn compare_typed_literals(
+        &self,
+        a: &SparqlValue,
+        b: &SparqlValue,
+        datatype: &str,
+    ) -> std::cmp::Ordering {
         match datatype {
-            "http://www.w3.org/2001/XMLSchema#integer" |
-            "http://www.w3.org/2001/XMLSchema#int" |
-            "http://www.w3.org/2001/XMLSchema#long" => {
+            "http://www.w3.org/2001/XMLSchema#integer"
+            | "http://www.w3.org/2001/XMLSchema#int"
+            | "http://www.w3.org/2001/XMLSchema#long" => {
                 match (a.value.parse::<i64>(), b.value.parse::<i64>()) {
                     (Ok(a_num), Ok(b_num)) => a_num.cmp(&b_num),
                     _ => a.value.cmp(&b.value),
                 }
             }
-            "http://www.w3.org/2001/XMLSchema#decimal" |
-            "http://www.w3.org/2001/XMLSchema#double" |
-            "http://www.w3.org/2001/XMLSchema#float" => {
+            "http://www.w3.org/2001/XMLSchema#decimal"
+            | "http://www.w3.org/2001/XMLSchema#double"
+            | "http://www.w3.org/2001/XMLSchema#float" => {
                 match (a.value.parse::<f64>(), b.value.parse::<f64>()) {
-                    (Ok(a_num), Ok(b_num)) => {
-                        a_num.partial_cmp(&b_num).unwrap_or(std::cmp::Ordering::Equal)
-                    }
+                    (Ok(a_num), Ok(b_num)) => a_num
+                        .partial_cmp(&b_num)
+                        .unwrap_or(std::cmp::Ordering::Equal),
                     _ => a.value.cmp(&b.value),
                 }
             }
-            "http://www.w3.org/2001/XMLSchema#dateTime" |
-            "http://www.w3.org/2001/XMLSchema#date" => {
+            "http://www.w3.org/2001/XMLSchema#dateTime"
+            | "http://www.w3.org/2001/XMLSchema#date" => {
                 // For dates, ISO format string comparison usually works
                 a.value.cmp(&b.value)
             }
@@ -1432,7 +1509,8 @@ struct OrderClause {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ExecutionPlan, ExecutionStep, QueryType};
+    use crate::planner::QueryType;
+    use crate::{ExecutionPlan, ExecutionStep};
 
     #[tokio::test]
     async fn test_executor_creation() {

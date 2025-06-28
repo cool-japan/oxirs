@@ -65,9 +65,7 @@ pub enum Constraint {
         relation: RelationType,
     },
     /// Custom filter expression
-    FilterConstraint {
-        expression: Expression,
-    },
+    FilterConstraint { expression: Expression },
 }
 
 /// Types of terms for type constraints
@@ -418,7 +416,7 @@ impl BindingOptimizer {
     fn propagate_constraints(&self, binding_set: &mut BindingSet) {
         // Build constraint graph with indices instead of references
         let mut constraint_graph: HashMap<Variable, Vec<usize>> = HashMap::new();
-        
+
         for (idx, constraint) in binding_set.constraints.iter().enumerate() {
             match constraint {
                 Constraint::TypeConstraint { variable, .. }
@@ -441,7 +439,7 @@ impl BindingOptimizer {
                 _ => {}
             }
         }
-        
+
         // Propagate equality constraints
         self.propagate_equality_constraints(binding_set, constraint_graph);
     }

@@ -9,10 +9,10 @@ use crate::query::algebra::{self, *};
 use crate::OxirsError;
 use async_trait::async_trait;
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant};
 #[cfg(not(feature = "async"))]
 use std::sync::mpsc; // For future message passing
+use std::sync::{Arc, RwLock};
+use std::time::{Duration, Instant};
 #[cfg(feature = "async")]
 use tokio::sync::mpsc;
 
@@ -774,9 +774,7 @@ impl QueryRouter {
                 left_patterns.append(&mut right_patterns);
                 Ok(left_patterns)
             }
-            GraphPattern::Filter { inner, .. } => {
-                self.extract_patterns_from_graph_pattern(inner)
-            }
+            GraphPattern::Filter { inner, .. } => self.extract_patterns_from_graph_pattern(inner),
             GraphPattern::Union(left, right) => {
                 let mut left_patterns = self.extract_patterns_from_graph_pattern(left)?;
                 let mut right_patterns = self.extract_patterns_from_graph_pattern(right)?;
@@ -788,29 +786,66 @@ impl QueryRouter {
     }
 
     /// Convert model pattern to algebra pattern
-    fn convert_to_algebra_pattern(&self, pattern: &crate::model::pattern::TriplePattern) -> Result<algebra::TriplePattern, OxirsError> {
+    fn convert_to_algebra_pattern(
+        &self,
+        pattern: &crate::model::pattern::TriplePattern,
+    ) -> Result<algebra::TriplePattern, OxirsError> {
         let subject = match &pattern.subject {
-            Some(crate::model::pattern::SubjectPattern::NamedNode(n)) => algebra::TermPattern::NamedNode(n.clone()),
-            Some(crate::model::pattern::SubjectPattern::BlankNode(b)) => algebra::TermPattern::BlankNode(b.clone()),
-            Some(crate::model::pattern::SubjectPattern::Variable(v)) => algebra::TermPattern::Variable(v.clone()),
-            None => return Err(OxirsError::Query("Subject pattern cannot be None in basic graph pattern".to_string())),
+            Some(crate::model::pattern::SubjectPattern::NamedNode(n)) => {
+                algebra::TermPattern::NamedNode(n.clone())
+            }
+            Some(crate::model::pattern::SubjectPattern::BlankNode(b)) => {
+                algebra::TermPattern::BlankNode(b.clone())
+            }
+            Some(crate::model::pattern::SubjectPattern::Variable(v)) => {
+                algebra::TermPattern::Variable(v.clone())
+            }
+            None => {
+                return Err(OxirsError::Query(
+                    "Subject pattern cannot be None in basic graph pattern".to_string(),
+                ))
+            }
         };
 
         let predicate = match &pattern.predicate {
-            Some(crate::model::pattern::PredicatePattern::NamedNode(n)) => algebra::TermPattern::NamedNode(n.clone()),
-            Some(crate::model::pattern::PredicatePattern::Variable(v)) => algebra::TermPattern::Variable(v.clone()),
-            None => return Err(OxirsError::Query("Predicate pattern cannot be None in basic graph pattern".to_string())),
+            Some(crate::model::pattern::PredicatePattern::NamedNode(n)) => {
+                algebra::TermPattern::NamedNode(n.clone())
+            }
+            Some(crate::model::pattern::PredicatePattern::Variable(v)) => {
+                algebra::TermPattern::Variable(v.clone())
+            }
+            None => {
+                return Err(OxirsError::Query(
+                    "Predicate pattern cannot be None in basic graph pattern".to_string(),
+                ))
+            }
         };
 
         let object = match &pattern.object {
-            Some(crate::model::pattern::ObjectPattern::NamedNode(n)) => algebra::TermPattern::NamedNode(n.clone()),
-            Some(crate::model::pattern::ObjectPattern::BlankNode(b)) => algebra::TermPattern::BlankNode(b.clone()),
-            Some(crate::model::pattern::ObjectPattern::Literal(l)) => algebra::TermPattern::Literal(l.clone()),
-            Some(crate::model::pattern::ObjectPattern::Variable(v)) => algebra::TermPattern::Variable(v.clone()),
-            None => return Err(OxirsError::Query("Object pattern cannot be None in basic graph pattern".to_string())),
+            Some(crate::model::pattern::ObjectPattern::NamedNode(n)) => {
+                algebra::TermPattern::NamedNode(n.clone())
+            }
+            Some(crate::model::pattern::ObjectPattern::BlankNode(b)) => {
+                algebra::TermPattern::BlankNode(b.clone())
+            }
+            Some(crate::model::pattern::ObjectPattern::Literal(l)) => {
+                algebra::TermPattern::Literal(l.clone())
+            }
+            Some(crate::model::pattern::ObjectPattern::Variable(v)) => {
+                algebra::TermPattern::Variable(v.clone())
+            }
+            None => {
+                return Err(OxirsError::Query(
+                    "Object pattern cannot be None in basic graph pattern".to_string(),
+                ))
+            }
         };
 
-        Ok(algebra::TriplePattern { subject, predicate, object })
+        Ok(algebra::TriplePattern {
+            subject,
+            predicate,
+            object,
+        })
     }
 
     /// Extract variables from query

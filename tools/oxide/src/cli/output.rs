@@ -3,7 +3,7 @@
 //! Provides consistent, colored output for different message types.
 
 use colored::*;
-use prettytable::{Table, Row, Cell, format};
+use prettytable::{format, Cell, Row, Table};
 use serde::Serialize;
 
 /// Output formatter with color and style management
@@ -43,7 +43,7 @@ impl OutputFormatter {
     pub fn new(no_color: bool) -> Self {
         // Respect NO_COLOR environment variable
         let no_color = no_color || std::env::var("NO_COLOR").is_ok();
-        
+
         if no_color {
             colored::control::set_override(false);
         }
@@ -225,41 +225,47 @@ impl ResultFormatter {
 
     fn format_as_table(results: &SparqlResults, formatter: &OutputFormatter) -> String {
         let mut table = formatter.create_table();
-        
+
         // Add headers
         if !results.vars.is_empty() {
             table.set_titles(Row::new(
-                results.vars.iter().map(|v| Cell::new(v)).collect()
+                results.vars.iter().map(|v| Cell::new(v)).collect(),
             ));
         }
-        
+
         // Add rows
         for binding in &results.bindings {
-            let cells: Vec<Cell> = results.vars.iter()
+            let cells: Vec<Cell> = results
+                .vars
+                .iter()
                 .map(|var| {
-                    binding.get(var)
+                    binding
+                        .get(var)
                         .map(|val| Cell::new(val))
                         .unwrap_or_else(|| Cell::new(""))
                 })
                 .collect();
             table.add_row(Row::new(cells));
         }
-        
+
         table.to_string()
     }
 
     fn format_as_csv(results: &SparqlResults) -> String {
         let mut output = String::new();
-        
+
         // Headers
         output.push_str(&results.vars.join(","));
         output.push('\n');
-        
+
         // Rows
         for binding in &results.bindings {
-            let values: Vec<String> = results.vars.iter()
+            let values: Vec<String> = results
+                .vars
+                .iter()
                 .map(|var| {
-                    binding.get(var)
+                    binding
+                        .get(var)
                         .map(|val| Self::escape_csv(val))
                         .unwrap_or_default()
                 })
@@ -267,40 +273,42 @@ impl ResultFormatter {
             output.push_str(&values.join(","));
             output.push('\n');
         }
-        
+
         output
     }
 
     fn format_as_tsv(results: &SparqlResults) -> String {
         let mut output = String::new();
-        
+
         // Headers
         output.push_str(&results.vars.join("\t"));
         output.push('\n');
-        
+
         // Rows
         for binding in &results.bindings {
-            let values: Vec<&str> = results.vars.iter()
+            let values: Vec<&str> = results
+                .vars
+                .iter()
                 .map(|var| binding.get(var).map(|s| s.as_str()).unwrap_or(""))
                 .collect();
             output.push_str(&values.join("\t"));
             output.push('\n');
         }
-        
+
         output
     }
 
     fn format_as_xml(results: &SparqlResults) -> String {
         let mut xml = String::from("<?xml version=\"1.0\"?>\n");
         xml.push_str("<sparql xmlns=\"http://www.w3.org/2005/sparql-results#\">\n");
-        
+
         // Head
         xml.push_str("  <head>\n");
         for var in &results.vars {
             xml.push_str(&format!("    <variable name=\"{}\"/>\n", var));
         }
         xml.push_str("  </head>\n");
-        
+
         // Results
         xml.push_str("  <results>\n");
         for binding in &results.bindings {
@@ -308,8 +316,10 @@ impl ResultFormatter {
             for var in &results.vars {
                 if let Some(value) = binding.get(var) {
                     xml.push_str(&format!("      <binding name=\"{}\">\n", var));
-                    xml.push_str(&format!("        <literal>{}</literal>\n", 
-                        Self::escape_xml(value)));
+                    xml.push_str(&format!(
+                        "        <literal>{}</literal>\n",
+                        Self::escape_xml(value)
+                    ));
                     xml.push_str("      </binding>\n");
                 }
             }
@@ -317,7 +327,7 @@ impl ResultFormatter {
         }
         xml.push_str("  </results>\n");
         xml.push_str("</sparql>\n");
-        
+
         xml
     }
 
@@ -354,7 +364,7 @@ mod tests {
     #[test]
     fn test_output_formatter() {
         let formatter = OutputFormatter::new(true); // no color for tests
-        
+
         // These should not panic
         formatter.info("Information");
         formatter.success("Success");

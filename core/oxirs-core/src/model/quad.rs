@@ -152,17 +152,17 @@ impl Quad {
             self.object.clone(),
         )
     }
-    
+
     /// Returns a reference to this quad
     pub fn as_ref(&self) -> QuadRef<'_> {
         QuadRef::from(self)
     }
-    
+
     /// Returns true if this quad is in the default graph
     pub fn is_default_graph(&self) -> bool {
         matches!(self.graph_name, GraphName::DefaultGraph)
     }
-    
+
     /// Returns the triple if this quad is in the default graph, None otherwise
     pub fn triple_in_default_graph(&self) -> Option<Triple> {
         if self.is_default_graph() {
@@ -184,7 +184,6 @@ impl Quad {
     pub fn is_ground(&self) -> bool {
         !self.has_variables()
     }
-
 }
 
 impl fmt::Display for Quad {
@@ -261,7 +260,7 @@ impl<'a> QuadRef<'a> {
     pub fn to_triple_ref(&self) -> TripleRef<'a> {
         TripleRef::new(self.subject, self.predicate, self.object)
     }
-    
+
     /// Returns the triple part of this quad (alias for to_triple_ref)
     pub fn triple(&self) -> TripleRef<'a> {
         self.to_triple_ref()

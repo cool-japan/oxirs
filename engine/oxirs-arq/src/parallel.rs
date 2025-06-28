@@ -5,16 +5,16 @@
 //! adaptive algorithms.
 
 use crate::algebra::{
-    Algebra, Binding, Expression, Solution, Term as AlgebraTerm, TriplePattern, Variable,
-    Aggregate, Iri, Literal, PropertyPath
+    Aggregate, Algebra, Binding, Expression, Iri, Literal, PropertyPath, Solution,
+    Term as AlgebraTerm, TriplePattern, Variable,
 };
-use oxirs_core::model::NamedNode;
-use crate::executor::{Dataset, ExecutionContext, ParallelConfig};
 use crate::executor::stats::ExecutionStats;
-use crate::term::{Term, BindingContext};
+use crate::executor::{Dataset, ExecutionContext, ParallelConfig};
 use crate::expression::ExpressionEvaluator;
+use crate::term::{BindingContext, Term};
 use anyhow::{anyhow, Result};
 use dashmap::DashMap;
+use oxirs_core::model::NamedNode;
 use parking_lot::{Mutex, RwLock};
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -45,11 +45,11 @@ pub trait ParallelSolutionIterator: Send + Sync {
     fn par_process<F>(&self, f: F) -> Result<Solution>
     where
         F: Fn(&Binding) -> Option<Binding> + Send + Sync;
-    
+
     fn par_filter<F>(&self, f: F) -> Result<Solution>
     where
         F: Fn(&Binding) -> bool + Send + Sync;
-    
+
     fn par_extend<F>(&self, f: F) -> Result<Solution>
     where
         F: Fn(&Binding) -> Vec<Binding> + Send + Sync;
@@ -61,7 +61,12 @@ impl ParallelQueryExecutor {
         let thread_pool = rayon::ThreadPoolBuilder::new()
             .num_threads(config.max_threads)
             .thread_name(|idx| format!("oxirs-arq-worker-{}", idx))
-            .stack_size(config.thread_pool_config.stack_size.unwrap_or(8 * 1024 * 1024))
+            .stack_size(
+                config
+                    .thread_pool_config
+                    .stack_size
+                    .unwrap_or(8 * 1024 * 1024),
+            )
             .build()
             .map_err(|e| anyhow!("Failed to create thread pool: {}", e))?;
 
@@ -81,16 +86,16 @@ impl ParallelQueryExecutor {
         stats: &mut ExecutionStats,
     ) -> Result<Solution> {
         let start = Instant::now();
-        
+
         // Update parallel stats
         {
             let mut pstats = self.stats.write();
             pstats.parallel_operations += 1;
         }
 
-        let result = self.thread_pool.install(|| {
-            self.execute_parallel_internal(algebra, dataset, context, stats)
-        })?;
+        let result = self
+            .thread_pool
+            .install(|| self.execute_parallel_internal(algebra, dataset, context, stats))?;
 
         // Calculate speedup
         let parallel_time = start.elapsed();
@@ -112,46 +117,76 @@ impl ParallelQueryExecutor {
     ) -> Result<Solution> {
         match algebra {
             Algebra::Bgp(patterns) => self.execute_parallel_bgp(patterns, dataset, stats),
-            Algebra::Join { left, right } => self.execute_parallel_join(left, right, dataset, context, stats),
-            Algebra::Union { left, right } => self.execute_parallel_union(left, right, dataset, context, stats),
+            Algebra::Join { left, right } => {
+                self.execute_parallel_join(left, right, dataset, context, stats)
+            }
+            Algebra::Union { left, right } => {
+                self.execute_parallel_union(left, right, dataset, context, stats)
+            }
             Algebra::Filter { pattern, condition } => {
                 self.execute_parallel_filter(pattern, condition, dataset, context, stats)
             }
-            Algebra::OrderBy { pattern, conditions } => {
+            Algebra::OrderBy {
+                pattern,
+                conditions,
+            } => {
                 let conditions_tuple: Vec<(Expression, bool)> = conditions
                     .iter()
                     .map(|c| (c.expr.clone(), c.ascending))
                     .collect();
                 self.execute_parallel_order_by(pattern, &conditions_tuple, dataset, context, stats)
             }
-            Algebra::Group { pattern, variables, aggregates } => {
+            Algebra::Group {
+                pattern,
+                variables,
+                aggregates,
+            } => {
                 let group_vars: Vec<Variable> = variables
                     .iter()
-                    .filter_map(|gc| gc.alias.clone().or_else(|| {
-                        if let Expression::Variable(var) = &gc.expr {
-                            Some(var.clone())
-                        } else {
-                            None
-                        }
-                    }))
+                    .filter_map(|gc| {
+                        gc.alias.clone().or_else(|| {
+                            if let Expression::Variable(var) = &gc.expr {
+                                Some(var.clone())
+                            } else {
+                                None
+                            }
+                        })
+                    })
                     .collect();
-                self.execute_parallel_group(pattern, &group_vars, aggregates, dataset, context, stats)
+                self.execute_parallel_group(
+                    pattern,
+                    &group_vars,
+                    aggregates,
+                    dataset,
+                    context,
+                    stats,
+                )
             }
-            Algebra::PropertyPath { subject, path, object } => {
+            Algebra::PropertyPath {
+                subject,
+                path,
+                object,
+            } => {
                 self.execute_parallel_property_path(subject, path, object, dataset, context, stats)
             }
-            Algebra::LeftJoin { left, right, filter } => {
-                self.execute_parallel_left_join(left, right, filter, dataset, context, stats)
-            }
-            Algebra::Extend { pattern, variable, expr } => {
-                self.execute_parallel_extend(pattern, variable, expr, dataset, context, stats)
-            }
+            Algebra::LeftJoin {
+                left,
+                right,
+                filter,
+            } => self.execute_parallel_left_join(left, right, filter, dataset, context, stats),
+            Algebra::Extend {
+                pattern,
+                variable,
+                expr,
+            } => self.execute_parallel_extend(pattern, variable, expr, dataset, context, stats),
             Algebra::Minus { left, right } => {
                 self.execute_parallel_minus(left, right, dataset, context, stats)
             }
-            Algebra::Service { endpoint, pattern, silent } => {
-                self.execute_parallel_service(endpoint, pattern, *silent, dataset, context, stats)
-            }
+            Algebra::Service {
+                endpoint,
+                pattern,
+                silent,
+            } => self.execute_parallel_service(endpoint, pattern, *silent, dataset, context, stats),
             Algebra::Graph { graph, pattern } => {
                 self.execute_parallel_graph(graph, pattern, dataset, context, stats)
             }
@@ -164,12 +199,16 @@ impl ParallelQueryExecutor {
             Algebra::Reduced { pattern } => {
                 self.execute_parallel_reduced(pattern, dataset, context, stats)
             }
-            Algebra::Slice { pattern, offset, limit } => {
-                self.execute_parallel_slice(pattern, *offset, *limit, dataset, context, stats)
-            }
+            Algebra::Slice {
+                pattern,
+                offset,
+                limit,
+            } => self.execute_parallel_slice(pattern, *offset, *limit, dataset, context, stats),
             _ => {
                 // Fall back to sequential execution for truly unsupported operations
-                Err(anyhow!("Parallel execution not supported for this algebra type"))
+                Err(anyhow!(
+                    "Parallel execution not supported for this algebra type"
+                ))
             }
         }
     }
@@ -256,14 +295,14 @@ impl ParallelQueryExecutor {
     ) -> Result<Vec<Binding>> {
         let instantiated = self.instantiate_pattern(pattern, binding);
         let triples = dataset.find_triples(&instantiated)?;
-        
+
         let mut results = Vec::new();
         for (s, p, o) in triples {
             if let Some(new_binding) = self.try_extend_binding(binding, pattern, &s, &p, &o) {
                 results.push(new_binding);
             }
         }
-        
+
         Ok(results)
     }
 
@@ -306,7 +345,12 @@ impl ParallelQueryExecutor {
     }
 
     /// Try to bind variable to value
-    fn try_bind(&self, binding: &mut Binding, pattern_term: &AlgebraTerm, value: &AlgebraTerm) -> bool {
+    fn try_bind(
+        &self,
+        binding: &mut Binding,
+        pattern_term: &AlgebraTerm,
+        value: &AlgebraTerm,
+    ) -> bool {
         match pattern_term {
             AlgebraTerm::Variable(var) => {
                 if let Some(existing) = binding.get(var) {
@@ -321,7 +365,11 @@ impl ParallelQueryExecutor {
     }
 
     /// Merge BGP results from parallel execution
-    fn merge_bgp_results(&self, partial_results: Vec<Solution>, stats: &mut ExecutionStats) -> Result<Solution> {
+    fn merge_bgp_results(
+        &self,
+        partial_results: Vec<Solution>,
+        stats: &mut ExecutionStats,
+    ) -> Result<Solution> {
         // Use parallel reduction for merging
         let merged = partial_results
             .into_par_iter()
@@ -367,7 +415,7 @@ impl ParallelQueryExecutor {
 
         let left_vars: HashSet<_> = left[0].keys().cloned().collect();
         let right_vars: HashSet<_> = right[0].keys().cloned().collect();
-        
+
         left_vars.intersection(&right_vars).cloned().collect()
     }
 
@@ -388,13 +436,13 @@ impl ParallelQueryExecutor {
 
         // Parallel hash table construction using DashMap
         let hash_table: DashMap<Vec<AlgebraTerm>, Vec<Binding>> = DashMap::new();
-        
+
         build_side.par_iter().for_each(|binding| {
             let key: Vec<AlgebraTerm> = join_vars
                 .iter()
                 .filter_map(|var| binding.get(var).cloned())
                 .collect();
-            
+
             if key.len() == join_vars.len() {
                 hash_table.entry(key).or_default().push(binding.clone());
             }
@@ -408,7 +456,7 @@ impl ParallelQueryExecutor {
                     .iter()
                     .filter_map(|var| probe_binding.get(var).cloned())
                     .collect();
-                
+
                 if key.len() == join_vars.len() {
                     if let Some(matches) = hash_table.get(&key) {
                         matches
@@ -433,7 +481,7 @@ impl ParallelQueryExecutor {
     /// Merge two bindings
     fn merge_bindings(&self, left: &Binding, right: &Binding) -> Option<Binding> {
         let mut merged = left.clone();
-        
+
         for (var, value) in right {
             if let Some(existing) = merged.get(var) {
                 if existing != value {
@@ -443,7 +491,7 @@ impl ParallelQueryExecutor {
                 merged.insert(var.clone(), value.clone());
             }
         }
-        
+
         Some(merged)
     }
 
@@ -483,10 +531,10 @@ impl ParallelQueryExecutor {
 
         let mut result = left_result;
         result.extend(right_result);
-        
+
         // Remove duplicates in parallel
         let unique_result = self.parallel_distinct(result);
-        
+
         stats.intermediate_results += unique_result.len();
         Ok(unique_result)
     }
@@ -495,7 +543,7 @@ impl ParallelQueryExecutor {
     fn parallel_distinct(&self, solution: Solution) -> Solution {
         // Create a hash representation of bindings for deduplication
         let seen: DashMap<String, ()> = DashMap::new();
-        
+
         solution
             .into_par_iter()
             .filter(|binding| {
@@ -506,7 +554,7 @@ impl ParallelQueryExecutor {
                     .collect();
                 key_parts.sort(); // Ensure consistent ordering
                 let key = key_parts.join("||");
-                
+
                 seen.insert(key, ()).is_none()
             })
             .collect()
@@ -522,10 +570,10 @@ impl ParallelQueryExecutor {
         stats: &mut ExecutionStats,
     ) -> Result<Solution> {
         let solution = self.execute_parallel_internal(pattern, dataset, context, stats)?;
-        
+
         // Create expression evaluator for filtering
         let extension_registry = context.extension_registry.clone();
-        
+
         // Parallel filtering
         let filtered: Vec<Binding> = solution
             .into_par_iter()
@@ -535,14 +583,10 @@ impl ParallelQueryExecutor {
                 for (var, term) in binding {
                     ctx.bind(var.as_str(), Term::from_algebra_term(term));
                 }
-                let evaluator_with_ctx = ExpressionEvaluator::with_context(
-                    extension_registry.clone(),
-                    ctx
-                );
+                let evaluator_with_ctx =
+                    ExpressionEvaluator::with_context(extension_registry.clone(), ctx);
                 match evaluator_with_ctx.evaluate(condition) {
-                    Ok(term) => {
-                        term.effective_boolean_value().unwrap_or(false)
-                    }
+                    Ok(term) => term.effective_boolean_value().unwrap_or(false),
                     Err(_) => false,
                 }
             })
@@ -562,10 +606,10 @@ impl ParallelQueryExecutor {
         stats: &mut ExecutionStats,
     ) -> Result<Solution> {
         let mut solution = self.execute_parallel_internal(pattern, dataset, context, stats)?;
-        
+
         // Clone extension registry for use in closure
         let extension_registry = context.extension_registry.clone();
-        
+
         // Parallel sort with custom comparator
         solution.par_sort_by(|a, b| {
             for (expr, ascending) in conditions {
@@ -578,19 +622,15 @@ impl ParallelQueryExecutor {
                 for (var, term) in b {
                     ctx_b.bind(var.as_str(), Term::from_algebra_term(term));
                 }
-                
-                let evaluator_a = ExpressionEvaluator::with_context(
-                    extension_registry.clone(),
-                    ctx_a
-                );
-                let evaluator_b = ExpressionEvaluator::with_context(
-                    extension_registry.clone(),
-                    ctx_b
-                );
-                
+
+                let evaluator_a =
+                    ExpressionEvaluator::with_context(extension_registry.clone(), ctx_a);
+                let evaluator_b =
+                    ExpressionEvaluator::with_context(extension_registry.clone(), ctx_b);
+
                 let val_a = evaluator_a.evaluate(expr).ok();
                 let val_b = evaluator_b.evaluate(expr).ok();
-                
+
                 match (val_a, val_b) {
                     (Some(a_term), Some(b_term)) => {
                         let alg_a = a_term.to_algebra_term();
@@ -616,7 +656,9 @@ impl ParallelQueryExecutor {
         // Convert to internal terms for proper comparison
         let term_a = Term::from_algebra_term(a);
         let term_b = Term::from_algebra_term(b);
-        term_a.partial_cmp(&term_b).unwrap_or(std::cmp::Ordering::Equal)
+        term_a
+            .partial_cmp(&term_b)
+            .unwrap_or(std::cmp::Ordering::Equal)
     }
 
     /// Execute parallel group by with aggregation
@@ -630,30 +672,33 @@ impl ParallelQueryExecutor {
         stats: &mut ExecutionStats,
     ) -> Result<Solution> {
         let solution = self.execute_parallel_internal(pattern, dataset, context, stats)?;
-        
+
         // Parallel grouping using DashMap
         let groups: DashMap<Vec<AlgebraTerm>, Vec<Binding>> = DashMap::new();
-        
+
         solution.par_iter().for_each(|binding| {
             let key: Vec<AlgebraTerm> = variables
                 .iter()
-                .map(|var| binding.get(var).cloned().unwrap_or(AlgebraTerm::Variable(var.clone())))
+                .map(|var| {
+                    binding
+                        .get(var)
+                        .cloned()
+                        .unwrap_or(AlgebraTerm::Variable(var.clone()))
+                })
                 .collect();
-            
+
             groups.entry(key).or_default().push(binding.clone());
         });
 
         // Parallel aggregation - convert DashMap to Vec for parallel iteration
-        let groups_vec: Vec<(Vec<AlgebraTerm>, Vec<Binding>)> = groups
-            .into_iter()
-            .map(|(k, v)| (k, v))
-            .collect();
-        
+        let groups_vec: Vec<(Vec<AlgebraTerm>, Vec<Binding>)> =
+            groups.into_iter().map(|(k, v)| (k, v)).collect();
+
         let result: Vec<Binding> = groups_vec
             .into_par_iter()
             .map(|(key, group)| {
                 let mut result_binding = HashMap::new();
-                
+
                 // Add grouping variables
                 for (i, var) in variables.iter().enumerate() {
                     if let Some(term) = key.get(i) {
@@ -662,14 +707,14 @@ impl ParallelQueryExecutor {
                         }
                     }
                 }
-                
+
                 // Compute aggregates
                 for (var, agg) in aggregates {
                     if let Ok(value) = self.compute_aggregate(agg, &group, context) {
                         result_binding.insert(var.clone(), value);
                     }
                 }
-                
+
                 result_binding
             })
             .collect();
@@ -687,32 +732,41 @@ impl ParallelQueryExecutor {
     ) -> Result<AlgebraTerm> {
         match aggregate {
             Aggregate::Count { expr, distinct } => {
-                let values = self.collect_aggregate_values(expr.as_ref(), group, *distinct, context)?;
+                let values =
+                    self.collect_aggregate_values(expr.as_ref(), group, *distinct, context)?;
                 Ok(AlgebraTerm::Literal(Literal::typed(
                     values.len().to_string(),
                     NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#integer"),
                 )))
             }
             Aggregate::Sum { expr, distinct } => {
-                let values = self.collect_aggregate_values(Some(expr), group, *distinct, context)?;
+                let values =
+                    self.collect_aggregate_values(Some(expr), group, *distinct, context)?;
                 let sum = self.sum_numeric_values(values)?;
                 Ok(sum)
             }
             Aggregate::Min { expr, distinct } => {
-                let values = self.collect_aggregate_values(Some(expr), group, *distinct, context)?;
-                values.into_iter().min_by(|a, b| self.compare_algebra_terms(a, b))
+                let values =
+                    self.collect_aggregate_values(Some(expr), group, *distinct, context)?;
+                values
+                    .into_iter()
+                    .min_by(|a, b| self.compare_algebra_terms(a, b))
                     .ok_or_else(|| anyhow!("No values for MIN"))
             }
             Aggregate::Max { expr, distinct } => {
-                let values = self.collect_aggregate_values(Some(expr), group, *distinct, context)?;
-                values.into_iter().max_by(|a, b| self.compare_algebra_terms(a, b))
+                let values =
+                    self.collect_aggregate_values(Some(expr), group, *distinct, context)?;
+                values
+                    .into_iter()
+                    .max_by(|a, b| self.compare_algebra_terms(a, b))
                     .ok_or_else(|| anyhow!("No values for MAX"))
             }
             Aggregate::Avg { expr, distinct } => {
-                let values = self.collect_aggregate_values(Some(expr), group, *distinct, context)?;
+                let values =
+                    self.collect_aggregate_values(Some(expr), group, *distinct, context)?;
                 let sum = self.sum_numeric_values(values.clone())?;
                 let count = values.len() as f64;
-                
+
                 match sum {
                     AlgebraTerm::Literal(lit) => {
                         let val = lit.value.parse::<f64>().unwrap_or(0.0);
@@ -724,8 +778,13 @@ impl ParallelQueryExecutor {
                     _ => Err(anyhow!("Invalid sum for AVG")),
                 }
             }
-            Aggregate::GroupConcat { expr, separator, distinct } => {
-                let values = self.collect_aggregate_values(Some(expr), group, *distinct, context)?;
+            Aggregate::GroupConcat {
+                expr,
+                separator,
+                distinct,
+            } => {
+                let values =
+                    self.collect_aggregate_values(Some(expr), group, *distinct, context)?;
                 let sep = separator.as_deref().unwrap_or(" ");
                 let concat = values
                     .iter()
@@ -747,7 +806,7 @@ impl ParallelQueryExecutor {
         context: &ExecutionContext,
     ) -> Result<Vec<AlgebraTerm>> {
         let extension_registry = context.extension_registry.clone();
-        
+
         let mut values: Vec<AlgebraTerm> = group
             .par_iter()
             .filter_map(|binding| {
@@ -756,10 +815,8 @@ impl ParallelQueryExecutor {
                     for (var, term) in binding {
                         ctx.bind(var.as_str(), Term::from_algebra_term(term));
                     }
-                    let evaluator = ExpressionEvaluator::with_context(
-                        extension_registry.clone(),
-                        ctx
-                    );
+                    let evaluator =
+                        ExpressionEvaluator::with_context(extension_registry.clone(), ctx);
                     evaluator.evaluate(expr).ok().map(|t| t.to_algebra_term())
                 } else {
                     // COUNT(*) case
@@ -855,7 +912,7 @@ impl ParallelQueryExecutor {
         // Clone stats to avoid mutable borrow conflicts
         let mut left_stats = stats.clone();
         let mut right_stats = stats.clone();
-        
+
         // Execute left and right patterns in parallel
         let (left_results, right_results) = rayon::join(
             || self.execute_parallel_internal(left, dataset, context, &mut left_stats),
@@ -884,7 +941,7 @@ impl ParallelQueryExecutor {
         stats: &mut ExecutionStats,
     ) -> Result<Solution> {
         let pattern_solution = self.execute_parallel_internal(pattern, dataset, context, stats)?;
-        
+
         // Extend bindings in parallel
         let extension_registry = context.extension_registry.clone();
         let extended_solution: Result<Solution> = pattern_solution
@@ -898,7 +955,7 @@ impl ParallelQueryExecutor {
                     let term_val = Term::from_algebra_term(val);
                     binding_context.bind(var.as_str(), term_val);
                 }
-                
+
                 match evaluator.evaluate(expr) {
                     Ok(value) => {
                         // Convert term::Term back to algebra::Term
@@ -927,7 +984,7 @@ impl ParallelQueryExecutor {
         // Clone stats to avoid mutable borrow conflicts
         let mut left_stats = stats.clone();
         let mut right_stats = stats.clone();
-        
+
         // Execute both patterns in parallel
         let (left_results, right_results) = rayon::join(
             || self.execute_parallel_internal(left, dataset, context, &mut left_stats),
@@ -959,7 +1016,8 @@ impl ParallelQueryExecutor {
         // but we can execute the pattern preparation in parallel
         if silent {
             // In silent mode, return empty solution on failure
-            Ok(self.execute_parallel_internal(pattern, dataset, context, stats)
+            Ok(self
+                .execute_parallel_internal(pattern, dataset, context, stats)
                 .unwrap_or_else(|_| vec![]))
         } else {
             self.execute_parallel_internal(pattern, dataset, context, stats)
@@ -989,7 +1047,7 @@ impl ParallelQueryExecutor {
         stats: &mut ExecutionStats,
     ) -> Result<Solution> {
         let pattern_solution = self.execute_parallel_internal(pattern, dataset, context, stats)?;
-        
+
         // Project variables in parallel
         let projected_solution: Solution = pattern_solution
             .par_iter()
@@ -1016,22 +1074,23 @@ impl ParallelQueryExecutor {
         stats: &mut ExecutionStats,
     ) -> Result<Solution> {
         let pattern_solution = self.execute_parallel_internal(pattern, dataset, context, stats)?;
-        
+
         // Use parallel deduplication with custom approach since HashMap doesn't implement Hash
         let mut distinct_solution = Vec::new();
         let mut seen = std::collections::BTreeSet::new();
-        
+
         for binding in pattern_solution {
             // Create a comparable representation of the binding
-            let binding_key: Vec<_> = binding.iter()
+            let binding_key: Vec<_> = binding
+                .iter()
                 .map(|(k, v)| (k.clone(), format!("{:?}", v)))
                 .collect();
-            
+
             if seen.insert(binding_key) {
                 distinct_solution.push(binding);
             }
         }
-        
+
         Ok(distinct_solution)
     }
 
@@ -1059,12 +1118,16 @@ impl ParallelQueryExecutor {
         stats: &mut ExecutionStats,
     ) -> Result<Solution> {
         let pattern_solution = self.execute_parallel_internal(pattern, dataset, context, stats)?;
-        
+
         // Apply offset and limit
         let start = offset.unwrap_or(0);
         let end = limit.map(|l| start + l).unwrap_or(pattern_solution.len());
-        
-        Ok(pattern_solution.into_iter().skip(start).take(end - start).collect())
+
+        Ok(pattern_solution
+            .into_iter()
+            .skip(start)
+            .take(end - start)
+            .collect())
     }
 
     // Helper methods for parallel operations
@@ -1088,17 +1151,18 @@ impl ParallelQueryExecutor {
                     if self.are_bindings_compatible(left_binding, right_binding) {
                         let mut joined = left_binding.clone();
                         joined.extend(right_binding.clone());
-                        
+
                         // Apply filter if present
                         if let Some(filter_expr) = filter {
-                            let evaluator = ExpressionEvaluator::new(context.extension_registry.clone());
+                            let evaluator =
+                                ExpressionEvaluator::new(context.extension_registry.clone());
                             let mut binding_context = BindingContext::new();
                             // Set up binding context
                             for (var, val) in &joined {
                                 let term_val = Term::from_algebra_term(val);
                                 binding_context.bind(var.as_str(), term_val);
                             }
-                            
+
                             if let Ok(result) = evaluator.evaluate(filter_expr) {
                                 // Check if the result is truthy
                                 if self.is_truthy_value(&result) {
@@ -1136,9 +1200,9 @@ impl ParallelQueryExecutor {
             .par_iter()
             .filter(|left_binding| {
                 // Keep left binding only if it doesn't have a compatible binding in right
-                !right_solution.iter().any(|right_binding| {
-                    self.are_bindings_compatible(left_binding, right_binding)
-                })
+                !right_solution
+                    .iter()
+                    .any(|right_binding| self.are_bindings_compatible(left_binding, right_binding))
             })
             .cloned()
             .collect();
@@ -1200,7 +1264,7 @@ impl<T: Send + Sync> WorkStealingQueue<T> {
         for _ in 0..thread_count {
             queues.push(Arc::new(Mutex::new(Vec::new())));
         }
-        
+
         Self {
             queues,
             thread_count,
@@ -1251,12 +1315,12 @@ mod tests {
     #[test]
     fn test_work_stealing_queue() {
         let queue: WorkStealingQueue<i32> = WorkStealingQueue::new(4);
-        
+
         // Push to different queues
         queue.push(0, 1);
         queue.push(1, 2);
         queue.push(2, 3);
-        
+
         // Steal from queue 3 (empty)
         assert_eq!(queue.steal(3), Some(3)); // Should steal from another queue
     }
@@ -1265,7 +1329,7 @@ mod tests {
     fn test_parallel_distinct() {
         let config = ParallelConfig::default();
         let executor = ParallelQueryExecutor::new(config).unwrap();
-        
+
         let mut solution = vec![];
         for i in 0..100 {
             let mut binding = HashMap::new();
@@ -1275,7 +1339,7 @@ mod tests {
             );
             solution.push(binding);
         }
-        
+
         let distinct = executor.parallel_distinct(solution);
         assert_eq!(distinct.len(), 10);
     }

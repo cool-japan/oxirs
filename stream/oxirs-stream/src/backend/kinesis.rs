@@ -582,7 +582,7 @@ impl KinesisProducer {
                 self.connect().await?;
             }
         }
-        
+
         #[cfg(not(feature = "kinesis"))]
         {
             warn!("Kinesis feature not enabled, using mock producer");

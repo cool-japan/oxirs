@@ -1,7 +1,7 @@
+use oxirs_star::model::*;
+use oxirs_star::{StarQuad, StarTerm, StarTriple};
 use proptest::prelude::*;
 use proptest::strategy::BoxedStrategy;
-use oxirs_star::model::*;
-use oxirs_star::{StarTerm, StarTriple, StarQuad};
 
 // Strategy for generating valid IRI strings
 fn iri_strategy() -> impl Strategy<Value = String> {
@@ -36,8 +36,9 @@ fn star_term_strategy() -> impl Strategy<Value = StarTerm> {
         (literal_value_strategy(), language_tag_strategy())
             .prop_map(|(value, lang)| StarTerm::literal_with_language(&value, &lang).unwrap()),
         // Literal with datatype
-        (literal_value_strategy(), iri_strategy())
-            .prop_map(|(value, datatype)| StarTerm::literal_with_datatype(&value, &datatype).unwrap()),
+        (literal_value_strategy(), iri_strategy()).prop_map(|(value, datatype)| {
+            StarTerm::literal_with_datatype(&value, &datatype).unwrap()
+        }),
     ]
 }
 
@@ -70,7 +71,11 @@ fn predicate_term_strategy() -> impl Strategy<Value = StarTerm> {
 
 // Strategy for generating simple triples (no quoted triples)
 fn simple_triple_strategy() -> impl Strategy<Value = StarTriple> {
-    (subject_term_strategy(), predicate_term_strategy(), non_quoted_star_term_strategy())
+    (
+        subject_term_strategy(),
+        predicate_term_strategy(),
+        non_quoted_star_term_strategy(),
+    )
         .prop_map(|(s, p, o)| StarTriple::new(s, p, o))
 }
 
@@ -86,7 +91,8 @@ fn quoted_triple_term_strategy(depth: u32) -> BoxedStrategy<StarTerm> {
             triple_strategy_with_depth(depth - 1)
                 .prop_map(|triple| StarTerm::quoted_triple(triple))
                 .boxed(),
-        ].boxed()
+        ]
+        .boxed()
     }
 }
 
@@ -101,9 +107,9 @@ fn triple_strategy_with_depth(depth: u32) -> impl Strategy<Value = StarTriple> {
                 .prop_map(|t| StarTerm::quoted_triple(t))
                 .boxed(),
         ];
-        
+
         let object = quoted_triple_term_strategy(depth - 1);
-        
+
         (subject, predicate_term_strategy(), object)
             .prop_map(|(s, p, o)| StarTriple::new(s, p, o))
             .boxed()
@@ -117,10 +123,11 @@ fn quad_strategy() -> impl Strategy<Value = StarQuad> {
         prop::option::of(prop_oneof![
             iri_strategy().prop_map(|iri| StarTerm::iri(&iri).unwrap()),
             blank_node_strategy().prop_map(|id| StarTerm::blank_node(&id).unwrap()),
-        ])
-    ).prop_map(|(triple, graph)| {
-        StarQuad::new(triple.subject, triple.predicate, triple.object, graph)
-    })
+        ]),
+    )
+        .prop_map(|(triple, graph)| {
+            StarQuad::new(triple.subject, triple.predicate, triple.object, graph)
+        })
 }
 
 #[cfg(test)]
@@ -140,7 +147,7 @@ mod tests {
         fn test_star_term_equality(term in star_term_strategy()) {
             // Test reflexivity: a term equals itself
             prop_assert_eq!(&term, &term);
-            
+
             // Test that clone produces equal terms
             let cloned = term.clone();
             prop_assert_eq!(term, cloned);
@@ -156,7 +163,7 @@ mod tests {
                 term.is_quoted_triple(),
                 term.is_variable(),
             ].iter().filter(|&&b| b).count();
-            
+
             prop_assert_eq!(type_count, 1);
         }
 
@@ -199,7 +206,7 @@ mod tests {
             // If nesting depth > 0, should contain quoted triples
             let contains_quoted = triple.contains_quoted_triples();
             let depth = triple.nesting_depth();
-            
+
             if depth > 0 {
                 prop_assert!(contains_quoted);
             }
@@ -216,7 +223,7 @@ mod tests {
             // Converting quad to triple and back should preserve non-graph components
             let triple = quad.clone().to_triple();
             let quad2 = triple.to_quad(quad.graph.clone());
-            
+
             prop_assert_eq!(quad.subject, quad2.subject);
             prop_assert_eq!(quad.predicate, quad2.predicate);
             prop_assert_eq!(quad.object, quad2.object);
@@ -226,26 +233,26 @@ mod tests {
         #[test]
         fn test_star_graph_operations(triples in prop::collection::vec(simple_triple_strategy(), 0..10)) {
             let mut graph = StarGraph::new();
-            
+
             // Insert all triples
             for triple in &triples {
                 prop_assert!(graph.insert(triple.clone()).is_ok());
             }
-            
+
             // Check size
             prop_assert_eq!(graph.len(), triples.len());
             prop_assert_eq!(graph.total_len(), triples.len());
-            
+
             // Check contains
             for triple in &triples {
                 prop_assert!(graph.contains(triple));
             }
-            
+
             // Remove all triples
             for triple in &triples {
                 prop_assert!(graph.remove(triple));
             }
-            
+
             // Graph should be empty
             prop_assert!(graph.is_empty());
             prop_assert_eq!(graph.len(), 0);
@@ -258,17 +265,17 @@ mod tests {
             object in star_term_strategy()
         ) {
             // Test RDF-star rules for term positions
-            
+
             // Only certain terms can be subjects
             if subject.is_literal() || subject.is_variable() {
                 prop_assert!(!subject.can_be_subject());
             } else {
                 prop_assert!(subject.can_be_subject());
             }
-            
+
             // Only IRIs can be predicates
             prop_assert_eq!(predicate.can_be_predicate(), predicate.is_named_node());
-            
+
             // All terms can be objects
             prop_assert!(object.can_be_object());
         }
@@ -281,7 +288,7 @@ mod tests {
         ) {
             let has_lang = lang.is_some();
             let has_datatype = datatype.is_some();
-            
+
             let literal = if let Some(l) = lang {
                 StarTerm::literal_with_language(&value, &l).unwrap()
             } else if let Some(dt) = datatype {
@@ -289,13 +296,13 @@ mod tests {
             } else {
                 StarTerm::literal(&value).unwrap()
             };
-            
+
             let display = format!("{}", literal);
-            
+
             // Check basic formatting rules
             prop_assert!(display.starts_with('"'));
             prop_assert!(display.contains(&value));
-            
+
             if has_lang {
                 prop_assert!(display.contains('@'));
             }
@@ -309,16 +316,16 @@ mod tests {
             struct TermCounter {
                 count: usize,
             }
-            
+
             impl StarTermVisitor for TermCounter {
                 fn visit_term(&mut self, _term: &StarTerm) {
                     self.count += 1;
                 }
             }
-            
+
             let mut counter = TermCounter { count: 0 };
             triple.visit_terms(&mut counter);
-            
+
             // Should visit at least 3 terms (subject, predicate, object)
             prop_assert!(counter.count >= 3);
         }
@@ -329,7 +336,7 @@ mod tests {
             graph_names in prop::collection::vec(iri_strategy(), 1..3)
         ) {
             let mut graph = StarGraph::new();
-            
+
             // Add triples to different named graphs
             for (i, triple) in triples.iter().enumerate() {
                 let graph_name = &graph_names[i % graph_names.len()];
@@ -341,7 +348,7 @@ mod tests {
                 );
                 prop_assert!(graph.insert_quad(quad).is_ok());
             }
-            
+
             // Check named graphs exist
             for graph_name in &graph_names {
                 if triples.iter().enumerate().any(|(i, _)| i % graph_names.len() == graph_names.iter().position(|g| g == graph_name).unwrap()) {
@@ -373,15 +380,15 @@ mod tests {
     #[test]
     fn test_graph_statistics() {
         let mut graph = StarGraph::new();
-        
+
         let triple = StarTriple::new(
             StarTerm::iri("http://example.org/s").unwrap(),
             StarTerm::iri("http://example.org/p").unwrap(),
             StarTerm::literal("o").unwrap(),
         );
-        
+
         graph.insert(triple).unwrap();
-        
+
         let stats = graph.statistics();
         assert_eq!(stats.get("triples"), Some(&1));
     }

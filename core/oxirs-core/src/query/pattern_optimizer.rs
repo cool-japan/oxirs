@@ -5,11 +5,11 @@
 
 use crate::indexing::IndexStats as BaseIndexStats;
 use crate::model::*;
+use crate::query::algebra::{TermPattern, TriplePattern as AlgebraTriplePattern};
 use crate::store::IndexedGraph;
-use crate::query::algebra::{TriplePattern as AlgebraTriplePattern, TermPattern};
 use crate::OxirsError;
-use std::sync::Arc;
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 /// Extended index statistics for pattern optimization
 #[derive(Debug, Default)]
@@ -40,40 +40,41 @@ impl IndexStats {
             join_selectivity_cache: std::sync::RwLock::new(HashMap::new()),
         }
     }
-    
+
     /// Update predicate count
     pub fn update_predicate_count(&self, predicate: &str, count: usize) {
         if let Ok(mut counts) = self.predicate_counts.write() {
             counts.insert(predicate.to_string(), count);
         }
     }
-    
+
     /// Set total triples
     pub fn set_total_triples(&self, count: usize) {
-        self.total_triples.store(count, std::sync::atomic::Ordering::Relaxed);
+        self.total_triples
+            .store(count, std::sync::atomic::Ordering::Relaxed);
     }
-    
+
     /// Update subject cardinality estimate
     pub fn update_subject_cardinality(&self, predicate: &str, cardinality: usize) {
         if let Ok(mut card) = self.subject_cardinality.write() {
             card.insert(predicate.to_string(), cardinality);
         }
     }
-    
+
     /// Update object cardinality estimate
     pub fn update_object_cardinality(&self, predicate: &str, cardinality: usize) {
         if let Ok(mut card) = self.object_cardinality.write() {
             card.insert(predicate.to_string(), cardinality);
         }
     }
-    
+
     /// Cache join selectivity
     pub fn cache_join_selectivity(&self, pattern_pair: &str, selectivity: f64) {
         if let Ok(mut cache) = self.join_selectivity_cache.write() {
             cache.insert(pattern_pair.to_string(), selectivity);
         }
     }
-    
+
     /// Get cached join selectivity
     pub fn get_join_selectivity(&self, pattern_pair: &str) -> Option<f64> {
         if let Ok(cache) = self.join_selectivity_cache.read() {
@@ -128,7 +129,7 @@ pub enum FilterExpression {
     GreaterThan(Variable, Term),
     /// String regex match
     Regex(Variable, String),
-    /// In list 
+    /// In list
     In(Variable, Vec<Term>),
     /// Logical AND
     And(Box<FilterExpression>, Box<FilterExpression>),
@@ -169,11 +170,7 @@ impl PatternOptimizer {
     pub fn new(index_stats: Arc<IndexStats>) -> Self {
         Self {
             index_stats,
-            available_indexes: vec![
-                IndexType::SPO,
-                IndexType::POS,
-                IndexType::OSP,
-            ],
+            available_indexes: vec![IndexType::SPO, IndexType::POS, IndexType::OSP],
         }
     }
 
@@ -202,14 +199,16 @@ impl PatternOptimizer {
 
         // Sort patterns by their best selectivity
         pattern_strategies.sort_by(|a, b| {
-            let best_a = a.1.iter()
-                .map(|s| s.selectivity)
-                .min_by(|x, y| x.partial_cmp(y).unwrap())
-                .unwrap_or(1.0);
-            let best_b = b.1.iter()
-                .map(|s| s.selectivity)
-                .min_by(|x, y| x.partial_cmp(y).unwrap())
-                .unwrap_or(1.0);
+            let best_a =
+                a.1.iter()
+                    .map(|s| s.selectivity)
+                    .min_by(|x, y| x.partial_cmp(y).unwrap())
+                    .unwrap_or(1.0);
+            let best_b =
+                b.1.iter()
+                    .map(|s| s.selectivity)
+                    .min_by(|x, y| x.partial_cmp(y).unwrap())
+                    .unwrap_or(1.0);
             best_a.partial_cmp(&best_b).unwrap()
         });
 
@@ -223,7 +222,7 @@ impl PatternOptimizer {
         let (first_idx, first_strategies) = &pattern_strategies[0];
         let first_pattern = &patterns[*first_idx];
         let first_strategy = self.select_best_strategy(first_strategies, &bound_vars)?;
-        
+
         ordered_patterns.push((first_pattern.clone(), first_strategy.clone()));
         bound_vars.extend(first_strategy.bound_vars.clone());
         binding_order.push(bound_vars.clone());
@@ -231,7 +230,7 @@ impl PatternOptimizer {
 
         // Process remaining patterns
         let mut remaining: Vec<_> = pattern_strategies[1..].to_vec();
-        
+
         while !remaining.is_empty() {
             // Find pattern with best cost considering current bindings
             let (best_pos, best_idx, best_strategy) = remaining
@@ -239,11 +238,8 @@ impl PatternOptimizer {
                 .enumerate()
                 .map(|(pos, (idx, strategies))| {
                     let pattern = &patterns[*idx];
-                    let strategy = self.select_strategy_with_bindings(
-                        pattern,
-                        strategies,
-                        &bound_vars,
-                    );
+                    let strategy =
+                        self.select_strategy_with_bindings(pattern, strategies, &bound_vars);
                     (pos, idx, strategy)
                 })
                 .min_by(|(_, _, a), (_, _, b)| {
@@ -256,7 +252,7 @@ impl PatternOptimizer {
             bound_vars.extend(best_strategy.bound_vars.clone());
             binding_order.push(bound_vars.clone());
             total_cost += best_strategy.estimated_cost;
-            
+
             remaining.remove(best_pos);
         }
 
@@ -278,13 +274,8 @@ impl PatternOptimizer {
 
         // Generate strategies for each index type
         for &index_type in &self.available_indexes {
-            let (cost, selectivity) = self.estimate_index_cost(
-                index_type,
-                s_bound,
-                p_bound,
-                o_bound,
-                pattern,
-            );
+            let (cost, selectivity) =
+                self.estimate_index_cost(index_type, s_bound, p_bound, o_bound, pattern);
 
             let bound_vars = self.extract_bound_vars(pattern);
 
@@ -358,8 +349,11 @@ impl PatternOptimizer {
     fn estimate_selectivity(&self, pattern: &AlgebraTriplePattern) -> f64 {
         // Base selectivity
         let mut selectivity: f64 = 1.0;
-        let total_triples = self.index_stats.total_triples.load(std::sync::atomic::Ordering::Relaxed) as f64;
-        
+        let total_triples = self
+            .index_stats
+            .total_triples
+            .load(std::sync::atomic::Ordering::Relaxed) as f64;
+
         if total_triples == 0.0 {
             return 0.001; // Default for empty dataset
         }
@@ -488,13 +482,8 @@ impl PatternOptimizer {
         let mut best_cost = f64::MAX;
 
         for strategy in strategies {
-            let (adjusted_cost, _) = self.estimate_index_cost(
-                strategy.index_type,
-                s_bound,
-                p_bound,
-                o_bound,
-                pattern,
-            );
+            let (adjusted_cost, _) =
+                self.estimate_index_cost(strategy.index_type, s_bound, p_bound, o_bound, pattern);
 
             if adjusted_cost < best_cost {
                 best_cost = adjusted_cost;
@@ -505,7 +494,7 @@ impl PatternOptimizer {
 
         best_strategy
     }
-    
+
     /// Estimate join selectivity between two patterns
     pub fn estimate_join_selectivity(
         &self,
@@ -514,44 +503,45 @@ impl PatternOptimizer {
     ) -> f64 {
         // Create cache key for this pattern pair
         let cache_key = format!("{:?}|{:?}", left, right);
-        
+
         // Check cache first
         if let Some(cached) = self.index_stats.get_join_selectivity(&cache_key) {
             return cached;
         }
-        
+
         // Find common variables
         let left_vars = self.extract_bound_vars(left);
         let right_vars = self.extract_bound_vars(right);
         let common_vars: HashSet<_> = left_vars.intersection(&right_vars).cloned().collect();
-        
+
         let selectivity = if common_vars.is_empty() {
             // Cartesian product - very expensive
             1.0
         } else {
             // Estimate based on type of join variables
             let mut join_selectivity = 1.0;
-            
+
             for var in common_vars.iter() {
                 // Estimate selectivity based on variable position and pattern types
                 let var_selectivity = self.estimate_variable_join_selectivity(var, left, right);
                 join_selectivity *= var_selectivity;
             }
-            
+
             // Apply correlation factor for multiple join variables
             if common_vars.len() > 1 {
                 join_selectivity *= 0.1_f64.powf(common_vars.len() as f64 - 1.0);
             }
-            
+
             join_selectivity
         };
-        
+
         // Cache the result
-        self.index_stats.cache_join_selectivity(&cache_key, selectivity);
-        
+        self.index_stats
+            .cache_join_selectivity(&cache_key, selectivity);
+
         selectivity.max(0.00001).min(1.0)
     }
-    
+
     /// Estimate selectivity for a variable join
     fn estimate_variable_join_selectivity(
         &self,
@@ -562,7 +552,7 @@ impl PatternOptimizer {
         // Find position of variable in each pattern
         let left_pos = self.find_variable_position(var, left);
         let right_pos = self.find_variable_position(var, right);
-        
+
         match (left_pos, right_pos) {
             (Some(pos1), Some(pos2)) => {
                 // Subject-subject joins are usually more selective than object-object
@@ -577,9 +567,13 @@ impl PatternOptimizer {
             _ => 1.0, // No actual join
         }
     }
-    
+
     /// Find position of variable in pattern
-    fn find_variable_position(&self, var: &Variable, pattern: &AlgebraTriplePattern) -> Option<VarPosition> {
+    fn find_variable_position(
+        &self,
+        var: &Variable,
+        pattern: &AlgebraTriplePattern,
+    ) -> Option<VarPosition> {
         if let TermPattern::Variable(v) = &pattern.subject {
             if v == var {
                 return Some(VarPosition::Subject);
@@ -597,7 +591,7 @@ impl PatternOptimizer {
         }
         None
     }
-    
+
     /// Optimize filter expressions and determine pushdown opportunities
     pub fn optimize_filters(
         &self,
@@ -605,33 +599,37 @@ impl PatternOptimizer {
         filters: &[FilterExpression],
     ) -> Vec<(usize, Vec<FilterExpression>)> {
         let mut pushdown_map = Vec::new();
-        
+
         for (pattern_idx, pattern) in patterns.iter().enumerate() {
             let mut pattern_filters = Vec::new();
-            
+
             // Find filters that can be pushed down to this pattern
             for filter in filters {
                 if self.can_pushdown_filter(filter, pattern) {
                     pattern_filters.push(filter.clone());
                 }
             }
-            
+
             if !pattern_filters.is_empty() {
                 pushdown_map.push((pattern_idx, pattern_filters));
             }
         }
-        
+
         pushdown_map
     }
-    
+
     /// Check if filter can be pushed down to pattern
-    fn can_pushdown_filter(&self, filter: &FilterExpression, pattern: &AlgebraTriplePattern) -> bool {
+    fn can_pushdown_filter(
+        &self,
+        filter: &FilterExpression,
+        pattern: &AlgebraTriplePattern,
+    ) -> bool {
         match filter {
-            FilterExpression::Equals(var, _) |
-            FilterExpression::LessThan(var, _) |
-            FilterExpression::GreaterThan(var, _) |
-            FilterExpression::Regex(var, _) |
-            FilterExpression::In(var, _) => {
+            FilterExpression::Equals(var, _)
+            | FilterExpression::LessThan(var, _)
+            | FilterExpression::GreaterThan(var, _)
+            | FilterExpression::Regex(var, _)
+            | FilterExpression::In(var, _) => {
                 // Can push down if pattern binds this variable
                 self.pattern_binds_variable(var, pattern)
             }
@@ -643,26 +641,24 @@ impl PatternOptimizer {
                 // Can only push down if both sides can be pushed down
                 self.can_pushdown_filter(left, pattern) && self.can_pushdown_filter(right, pattern)
             }
-            FilterExpression::Not(inner) => {
-                self.can_pushdown_filter(inner, pattern)
-            }
+            FilterExpression::Not(inner) => self.can_pushdown_filter(inner, pattern),
         }
     }
-    
+
     /// Check if pattern binds variable
     fn pattern_binds_variable(&self, var: &Variable, pattern: &AlgebraTriplePattern) -> bool {
-        matches!(&pattern.subject, TermPattern::Variable(v) if v == var) ||
-        matches!(&pattern.predicate, TermPattern::Variable(v) if v == var) ||
-        matches!(&pattern.object, TermPattern::Variable(v) if v == var)
+        matches!(&pattern.subject, TermPattern::Variable(v) if v == var)
+            || matches!(&pattern.predicate, TermPattern::Variable(v) if v == var)
+            || matches!(&pattern.object, TermPattern::Variable(v) if v == var)
     }
-    
+
     /// Estimate filter selectivity
     pub fn estimate_filter_selectivity(&self, filter: &FilterExpression) -> f64 {
         match filter {
-            FilterExpression::Equals(_, _) => 0.1,      // Equality is selective
-            FilterExpression::LessThan(_, _) => 0.3,    // Range filters moderately selective
+            FilterExpression::Equals(_, _) => 0.1, // Equality is selective
+            FilterExpression::LessThan(_, _) => 0.3, // Range filters moderately selective
             FilterExpression::GreaterThan(_, _) => 0.3,
-            FilterExpression::Regex(_, _) => 0.2,       // String matches moderately selective
+            FilterExpression::Regex(_, _) => 0.2, // String matches moderately selective
             FilterExpression::In(_, values) => {
                 // Selectivity depends on number of values
                 (values.len() as f64 * 0.1).min(0.9)
@@ -691,25 +687,19 @@ impl PatternOptimizer {
         bound_vars: &HashSet<Variable>,
     ) -> IndexType {
         // Check which components are bound
-        let s_bound = pattern.subject.as_ref().map_or(false, |s| {
-            match s {
-                SubjectPattern::Variable(v) => bound_vars.contains(v),
-                _ => true,
-            }
+        let s_bound = pattern.subject.as_ref().map_or(false, |s| match s {
+            SubjectPattern::Variable(v) => bound_vars.contains(v),
+            _ => true,
         });
 
-        let p_bound = pattern.predicate.as_ref().map_or(false, |p| {
-            match p {
-                PredicatePattern::Variable(v) => bound_vars.contains(v),
-                _ => true,
-            }
+        let p_bound = pattern.predicate.as_ref().map_or(false, |p| match p {
+            PredicatePattern::Variable(v) => bound_vars.contains(v),
+            _ => true,
         });
 
-        let o_bound = pattern.object.as_ref().map_or(false, |o| {
-            match o {
-                ObjectPattern::Variable(v) => bound_vars.contains(v),
-                _ => true,
-            }
+        let o_bound = pattern.object.as_ref().map_or(false, |o| match o {
+            ObjectPattern::Variable(v) => bound_vars.contains(v),
+            _ => true,
         });
 
         // Select index based on bound components
@@ -768,23 +758,30 @@ impl PatternExecutor {
         for binding in bindings {
             // Convert algebra pattern to model pattern with bindings
             let bound_pattern = self.bind_pattern(pattern, &binding)?;
-            
+
             // Convert pattern types to concrete types for query
-            let subject = bound_pattern.subject.as_ref().and_then(|s| self.subject_pattern_to_subject(s));
-            let predicate = bound_pattern.predicate.as_ref().and_then(|p| self.predicate_pattern_to_predicate(p));
-            let object = bound_pattern.object.as_ref().and_then(|o| self.object_pattern_to_object(o));
-            
+            let subject = bound_pattern
+                .subject
+                .as_ref()
+                .and_then(|s| self.subject_pattern_to_subject(s));
+            let predicate = bound_pattern
+                .predicate
+                .as_ref()
+                .and_then(|p| self.predicate_pattern_to_predicate(p));
+            let object = bound_pattern
+                .object
+                .as_ref()
+                .and_then(|o| self.object_pattern_to_object(o));
+
             // Query using selected index
-            let matches = self.graph.query(
-                subject.as_ref(),
-                predicate.as_ref(),
-                object.as_ref(),
-            );
+            let matches = self
+                .graph
+                .query(subject.as_ref(), predicate.as_ref(), object.as_ref());
 
             // Extend bindings with new matches
             for triple in matches {
                 let mut new_binding = binding.clone();
-                
+
                 // Bind variables from matched triple
                 if let TermPattern::Variable(v) = &pattern.subject {
                     new_binding.insert(v.clone(), Term::from(triple.subject().clone()));
@@ -795,7 +792,7 @@ impl PatternExecutor {
                 if let TermPattern::Variable(v) = &pattern.object {
                     new_binding.insert(v.clone(), Term::from(triple.object().clone()));
                 }
-                
+
                 new_results.push(new_binding);
             }
         }
@@ -875,10 +872,12 @@ impl PatternExecutor {
             Term::NamedNode(n) => Ok(ObjectPattern::NamedNode(n.clone())),
             Term::BlankNode(b) => Ok(ObjectPattern::BlankNode(b.clone())),
             Term::Literal(l) => Ok(ObjectPattern::Literal(l.clone())),
-            _ => Err(OxirsError::Query("Invalid term for object pattern".to_string())),
+            _ => Err(OxirsError::Query(
+                "Invalid term for object pattern".to_string(),
+            )),
         }
     }
-    
+
     /// Convert subject pattern to subject
     fn subject_pattern_to_subject(&self, pattern: &SubjectPattern) -> Option<Subject> {
         match pattern {
@@ -887,7 +886,7 @@ impl PatternExecutor {
             SubjectPattern::Variable(_) => None,
         }
     }
-    
+
     /// Convert predicate pattern to predicate
     fn predicate_pattern_to_predicate(&self, pattern: &PredicatePattern) -> Option<Predicate> {
         match pattern {
@@ -895,7 +894,7 @@ impl PatternExecutor {
             PredicatePattern::Variable(_) => None,
         }
     }
-    
+
     /// Convert object pattern to object
     fn object_pattern_to_object(&self, pattern: &ObjectPattern) -> Option<Object> {
         match pattern {
@@ -915,7 +914,7 @@ mod tests {
     fn test_pattern_optimizer_creation() {
         let stats = Arc::new(IndexStats::new());
         let optimizer = PatternOptimizer::new(stats);
-        
+
         assert_eq!(optimizer.available_indexes.len(), 3);
     }
 
@@ -923,17 +922,19 @@ mod tests {
     fn test_index_selection() {
         let stats = Arc::new(IndexStats::new());
         let optimizer = PatternOptimizer::new(stats);
-        
+
         // Pattern with bound subject
         let pattern = TriplePattern::new(
-            Some(SubjectPattern::NamedNode(NamedNode::new("http://example.org/s").unwrap())),
+            Some(SubjectPattern::NamedNode(
+                NamedNode::new("http://example.org/s").unwrap(),
+            )),
             None,
             None,
         );
-        
+
         let bound_vars = HashSet::new();
         let index = optimizer.get_optimal_index(&pattern, &bound_vars);
-        
+
         assert_eq!(index, IndexType::SPO);
     }
 
@@ -941,15 +942,15 @@ mod tests {
     fn test_selectivity_estimation() {
         let stats = Arc::new(IndexStats::new());
         let optimizer = PatternOptimizer::new(stats);
-        
+
         let pattern = AlgebraTriplePattern {
             subject: TermPattern::Variable(Variable::new("s").unwrap()),
             predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/type").unwrap()),
             object: TermPattern::Literal(Literal::new("test")),
         };
-        
+
         let selectivity = optimizer.estimate_selectivity(&pattern);
-        
+
         // Literal object should give low selectivity
         assert!(selectivity < 0.2);
     }
@@ -958,124 +959,129 @@ mod tests {
     fn test_pattern_optimization() {
         let stats = Arc::new(IndexStats::new());
         let optimizer = PatternOptimizer::new(stats);
-        
+
         let patterns = vec![
             AlgebraTriplePattern {
                 subject: TermPattern::Variable(Variable::new("s").unwrap()),
-                predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/type").unwrap()),
-                object: TermPattern::NamedNode(NamedNode::new("http://example.org/Person").unwrap()),
+                predicate: TermPattern::NamedNode(
+                    NamedNode::new("http://example.org/type").unwrap(),
+                ),
+                object: TermPattern::NamedNode(
+                    NamedNode::new("http://example.org/Person").unwrap(),
+                ),
             },
             AlgebraTriplePattern {
                 subject: TermPattern::Variable(Variable::new("s").unwrap()),
-                predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/name").unwrap()),
+                predicate: TermPattern::NamedNode(
+                    NamedNode::new("http://example.org/name").unwrap(),
+                ),
                 object: TermPattern::Variable(Variable::new("name").unwrap()),
             },
         ];
-        
+
         let plan = optimizer.optimize_patterns(&patterns).unwrap();
-        
+
         assert_eq!(plan.patterns.len(), 2);
         assert!(plan.total_cost > 0.0);
         assert_eq!(plan.binding_order.len(), 2);
     }
-    
+
     #[test]
     fn test_advanced_selectivity_estimation() {
         let stats = Arc::new(IndexStats::new());
-        
+
         // Setup some statistics
         stats.set_total_triples(100000);
         stats.update_predicate_count("http://example.org/type", 5000);
         stats.update_subject_cardinality("http://example.org/type", 1000);
         stats.update_object_cardinality("http://example.org/name", 10000);
-        
+
         let optimizer = PatternOptimizer::new(stats);
-        
+
         // Pattern with literal object should be very selective
         let literal_pattern = AlgebraTriplePattern {
             subject: TermPattern::Variable(Variable::new("s").unwrap()),
             predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/name").unwrap()),
             object: TermPattern::Literal(Literal::new("John")),
         };
-        
+
         let selectivity = optimizer.estimate_selectivity(&literal_pattern);
-        assert!(selectivity < 0.1, "Literal pattern should be highly selective");
-        
+        assert!(
+            selectivity < 0.1,
+            "Literal pattern should be highly selective"
+        );
+
         // Pattern with known predicate should use statistics
         let known_pred_pattern = AlgebraTriplePattern {
             subject: TermPattern::Variable(Variable::new("s").unwrap()),
             predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/type").unwrap()),
             object: TermPattern::Variable(Variable::new("o").unwrap()),
         };
-        
+
         let pred_selectivity = optimizer.estimate_selectivity(&known_pred_pattern);
         assert!(pred_selectivity > 0.0 && pred_selectivity < 1.0);
     }
-    
+
     #[test]
     fn test_join_selectivity_estimation() {
         let stats = Arc::new(IndexStats::new());
         let optimizer = PatternOptimizer::new(stats);
-        
+
         let pattern1 = AlgebraTriplePattern {
             subject: TermPattern::Variable(Variable::new("s").unwrap()),
             predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/type").unwrap()),
             object: TermPattern::NamedNode(NamedNode::new("http://example.org/Person").unwrap()),
         };
-        
+
         let pattern2 = AlgebraTriplePattern {
             subject: TermPattern::Variable(Variable::new("s").unwrap()),
             predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/name").unwrap()),
             object: TermPattern::Variable(Variable::new("name").unwrap()),
         };
-        
+
         // Subject-subject join should be selective
         let join_sel = optimizer.estimate_join_selectivity(&pattern1, &pattern2);
         assert!(join_sel < 0.5, "Subject-subject join should be selective");
-        
+
         // Test caching
         let cached_sel = optimizer.estimate_join_selectivity(&pattern1, &pattern2);
         assert_eq!(join_sel, cached_sel, "Should return cached value");
     }
-    
+
     #[test]
     fn test_filter_optimization() {
         let stats = Arc::new(IndexStats::new());
         let optimizer = PatternOptimizer::new(stats);
-        
-        let patterns = vec![
-            AlgebraTriplePattern {
-                subject: TermPattern::Variable(Variable::new("s").unwrap()),
-                predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/name").unwrap()),
-                object: TermPattern::Variable(Variable::new("name").unwrap()),
-            },
-        ];
-        
-        let filters = vec![
-            FilterExpression::Equals(
-                Variable::new("name").unwrap(),
-                Term::Literal(Literal::new("John")),
-            ),
-        ];
-        
+
+        let patterns = vec![AlgebraTriplePattern {
+            subject: TermPattern::Variable(Variable::new("s").unwrap()),
+            predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/name").unwrap()),
+            object: TermPattern::Variable(Variable::new("name").unwrap()),
+        }];
+
+        let filters = vec![FilterExpression::Equals(
+            Variable::new("name").unwrap(),
+            Term::Literal(Literal::new("John")),
+        )];
+
         let pushdown_map = optimizer.optimize_filters(&patterns, &filters);
-        
+
         // Filter should be pushed down to the pattern that binds the variable
         assert_eq!(pushdown_map.len(), 1);
         assert_eq!(pushdown_map[0].0, 0); // Pattern index 0
         assert_eq!(pushdown_map[0].1.len(), 1); // One filter
     }
-    
+
     #[test]
     fn test_filter_selectivity() {
         let stats = Arc::new(IndexStats::new());
         let optimizer = PatternOptimizer::new(stats);
-        
+
         let eq_filter = FilterExpression::Equals(
             Variable::new("x").unwrap(),
             Term::Literal(Literal::new("test")),
         );
-        
+
         let and_filter = FilterExpression::And(
             Box::new(eq_filter.clone()),
             Box::new(FilterExpression::LessThan(
@@ -1083,10 +1089,10 @@ mod tests {
                 Term::Literal(Literal::new("10")),
             )),
         );
-        
+
         let eq_sel = optimizer.estimate_filter_selectivity(&eq_filter);
         let and_sel = optimizer.estimate_filter_selectivity(&and_filter);
-        
+
         assert!(eq_sel > 0.0 && eq_sel < 1.0);
         assert!(and_sel < eq_sel, "AND filter should be more selective");
     }

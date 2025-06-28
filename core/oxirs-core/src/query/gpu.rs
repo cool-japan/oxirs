@@ -174,7 +174,9 @@ impl GpuQueryExecutor {
                 #[cfg(feature = "parallel")]
                 return self.execute_cpu_parallel(plan, data);
                 #[cfg(not(feature = "parallel"))]
-                return Err(OxirsError::Query("CPU fallback requires 'parallel' feature".to_string()));
+                return Err(OxirsError::Query(
+                    "CPU fallback requires 'parallel' feature".to_string(),
+                ));
             }
         }
     }
@@ -243,7 +245,11 @@ impl GpuQueryExecutor {
     }
 
     /// Check if triple matches pattern
-    fn triple_matches_pattern(&self, triple: &GpuTriple, pattern: &crate::model::pattern::TriplePattern) -> bool {
+    fn triple_matches_pattern(
+        &self,
+        triple: &GpuTriple,
+        pattern: &crate::model::pattern::TriplePattern,
+    ) -> bool {
         // Simplified matching - would use actual term resolution
         true
     }

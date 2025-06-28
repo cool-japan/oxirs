@@ -4,19 +4,17 @@
 //! concurrent access to RDF graphs, using epoch-based memory reclamation
 //! and atomic operations.
 
+pub mod batch_builder;
 pub mod epoch;
 pub mod lock_free_graph;
 pub mod parallel_batch;
-pub mod batch_builder;
 
+pub use batch_builder::{BatchBuilder, BatchBuilderConfig, BatchBuilderStats, CoalescingStrategy};
 pub use epoch::{EpochManager, HazardPointer, VersionedPointer};
 pub use lock_free_graph::{ConcurrentGraph, GraphStats};
 pub use parallel_batch::{
-    ParallelBatchProcessor, BatchOperation, BatchConfig, BatchStats, BatchStatsSummary,
+    BatchConfig, BatchOperation, BatchStats, BatchStatsSummary, ParallelBatchProcessor,
     ProgressCallback,
-};
-pub use batch_builder::{
-    BatchBuilder, BatchBuilderConfig, BatchBuilderStats, CoalescingStrategy,
 };
 
 /// Re-export crossbeam epoch types for convenience
@@ -25,7 +23,7 @@ pub use crossbeam_epoch::{pin, Guard};
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{NamedNode, Subject, Object, Predicate, Triple};
+    use crate::model::{NamedNode, Object, Predicate, Subject, Triple};
     use std::sync::Arc;
     use std::thread;
     use std::time::Instant;
@@ -85,10 +83,7 @@ mod tests {
         }
 
         // Wait for readers
-        let total_reads: usize = reader_handles
-            .into_iter()
-            .map(|h| h.join().unwrap())
-            .sum();
+        let total_reads: usize = reader_handles.into_iter().map(|h| h.join().unwrap()).sum();
 
         let duration = start.elapsed();
 
@@ -155,11 +150,7 @@ mod tests {
                             1 => {
                                 // Query
                                 let _ = graph.contains(&triple);
-                                let _ = graph.match_pattern(
-                                    Some(triple.subject()),
-                                    None,
-                                    None,
-                                );
+                                let _ = graph.match_pattern(Some(triple.subject()), None, None);
                             }
                             2 => {
                                 // Remove (might fail if not inserted)
@@ -175,10 +166,7 @@ mod tests {
             })
             .collect();
 
-        let total_net_insertions: i32 = handles
-            .into_iter()
-            .map(|h| h.join().unwrap())
-            .sum();
+        let total_net_insertions: i32 = handles.into_iter().map(|h| h.join().unwrap()).sum();
 
         println!("Mixed operations test:");
         println!("  Net insertions: {}", total_net_insertions);
@@ -207,7 +195,7 @@ mod tests {
         }
 
         let final_stats = graph.stats();
-        
+
         assert!(final_stats.operation_count > initial_stats.operation_count);
         assert!(final_stats.current_epoch > initial_stats.current_epoch);
         assert_eq!(final_stats.triple_count, 0);

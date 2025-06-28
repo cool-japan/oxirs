@@ -6,7 +6,7 @@
 //! - Hierarchical graph search patterns
 //! - Cross-graph similarity analysis
 
-use crate::{Vector, VectorStore, similarity::SimilarityMetric};
+use crate::{similarity::SimilarityMetric, Vector, VectorStore};
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -193,7 +193,8 @@ impl GraphAwareSearch {
         let mut all_results = Vec::new();
 
         for graph_uri in &target_graphs {
-            let graph_results = self.search_single_graph(vector_store, query_text, graph_uri, limit * 2)?;
+            let graph_results =
+                self.search_single_graph(vector_store, query_text, graph_uri, limit * 2)?;
             all_results.extend(graph_results);
         }
 
@@ -252,7 +253,12 @@ impl GraphAwareSearch {
             }
             GraphSearchScope::IncludeChildren => {
                 // Add child graphs if hierarchy is configured
-                if let Some(children) = self.config.graph_hierarchy.parent_child.get(&context.primary_graph) {
+                if let Some(children) = self
+                    .config
+                    .graph_hierarchy
+                    .parent_child
+                    .get(&context.primary_graph)
+                {
                     target_graphs.extend(children.clone());
                 }
             }
@@ -290,7 +296,7 @@ impl GraphAwareSearch {
         // Add children recursively
         self.add_children_recursive(graph_uri, &mut branch_graphs);
 
-        // Add parents recursively  
+        // Add parents recursively
         self.add_parents_recursive(graph_uri, &mut branch_graphs);
 
         branch_graphs
@@ -349,7 +355,10 @@ impl GraphAwareSearch {
         let context_weight = 0.3;
 
         // Apply graph-specific boosting
-        let graph_boost = self.config.graph_hierarchy.graph_weights
+        let graph_boost = self
+            .config
+            .graph_hierarchy
+            .graph_weights
             .get(graph_uri)
             .unwrap_or(&1.0);
 
@@ -386,7 +395,10 @@ impl GraphAwareSearch {
     }
 
     /// Apply diversity filtering to ensure results from multiple graphs
-    fn apply_diversity_filtering(&self, results: Vec<GraphAwareSearchResult>) -> Vec<GraphAwareSearchResult> {
+    fn apply_diversity_filtering(
+        &self,
+        results: Vec<GraphAwareSearchResult>,
+    ) -> Vec<GraphAwareSearchResult> {
         let mut filtered_results = Vec::new();
         let mut graph_counts: HashMap<String, usize> = HashMap::new();
         let max_per_graph = 3; // Maximum results per graph
@@ -450,7 +462,8 @@ impl GraphAwareSearch {
         }
 
         // Verify resources exist in specified graphs
-        if !self.resource_in_graph(resource1, graph1) || !self.resource_in_graph(resource2, graph2) {
+        if !self.resource_in_graph(resource1, graph1) || !self.resource_in_graph(resource2, graph2)
+        {
             return Err(anyhow!("Resources not found in specified graphs"));
         }
 
@@ -485,7 +498,7 @@ impl GraphAwareSearch {
         // Check if graphs are of the same type
         if let (Some(type1), Some(type2)) = (
             self.config.graph_hierarchy.graph_types.get(graph1),
-            self.config.graph_hierarchy.graph_types.get(graph2)
+            self.config.graph_hierarchy.graph_types.get(graph2),
         ) {
             if type1 == type2 {
                 return 0.8; // Same type, moderate boost
@@ -532,8 +545,12 @@ mod tests {
             vec!["http://example.org/graph1".to_string()],
         );
 
-        assert!(search.resource_in_graph("http://example.org/resource1", "http://example.org/graph1"));
-        assert!(!search.resource_in_graph("http://example.org/resource1", "http://example.org/graph2"));
+        assert!(
+            search.resource_in_graph("http://example.org/resource1", "http://example.org/graph1")
+        );
+        assert!(
+            !search.resource_in_graph("http://example.org/resource1", "http://example.org/graph2")
+        );
     }
 
     #[test]
@@ -541,7 +558,10 @@ mod tests {
         let mut config = GraphAwareConfig::default();
         config.graph_hierarchy.parent_child.insert(
             "http://example.org/parent".to_string(),
-            vec!["http://example.org/child1".to_string(), "http://example.org/child2".to_string()],
+            vec![
+                "http://example.org/child1".to_string(),
+                "http://example.org/child2".to_string(),
+            ],
         );
 
         let search = GraphAwareSearch::new(config);

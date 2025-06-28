@@ -7,13 +7,15 @@ use std::collections::HashMap;
 
 use oxirs_core::{
     model::{BlankNode, Literal, NamedNode, RdfTerm, Term, Triple, Variable},
-    Store,
-    OxirsError,
+    OxirsError, Store,
 };
 
 use crate::{
-    constraints::{ConstraintContext, ConstraintEvaluationResult, ConstraintEvaluator, ConstraintValidator}, 
-    vocabulary::SHACL_PREFIXES, Result, Severity, ShaclError,
+    constraints::{
+        ConstraintContext, ConstraintEvaluationResult, ConstraintEvaluator, ConstraintValidator,
+    },
+    vocabulary::SHACL_PREFIXES,
+    Result, Severity, ShaclError,
 };
 
 /// SPARQL-based constraint
@@ -168,7 +170,7 @@ impl ConstraintValidator for SparqlConstraint {
 
         // Additional SPARQL syntax validation
         let query_text = self.query.trim().to_lowercase();
-        
+
         // Check for basic query structure (relaxed validation)
         if self.is_select_query() {
             if !query_text.contains("select") {
@@ -189,7 +191,7 @@ impl ConstraintValidator for SparqlConstraint {
                 ));
             }
         }
-        
+
         // Check for balanced braces
         let open_braces = query_text.matches('{').count();
         let close_braces = query_text.matches('}').count();
@@ -198,14 +200,15 @@ impl ConstraintValidator for SparqlConstraint {
                 "Query has unbalanced braces".to_string(),
             ));
         }
-        
+
         // Check for dangerous operations (basic security check)
         let dangerous_keywords = ["drop", "clear", "insert", "delete", "load", "create"];
         for keyword in &dangerous_keywords {
             if query_text.contains(keyword) {
-                return Err(ShaclError::ConstraintValidation(
-                    format!("Query contains potentially dangerous keyword: {}", keyword),
-                ));
+                return Err(ShaclError::ConstraintValidation(format!(
+                    "Query contains potentially dangerous keyword: {}",
+                    keyword
+                )));
             }
         }
 
@@ -221,16 +224,15 @@ impl ConstraintEvaluator for SparqlConstraint {
     ) -> Result<ConstraintEvaluationResult> {
         // Create the SPARQL executor
         let executor = SparqlConstraintExecutor::new();
-        
+
         // Create bindings from the context
-        let mut bindings = SparqlBindings::new()
-            .with_this(context.focus_node.clone());
-        
+        let mut bindings = SparqlBindings::new().with_this(context.focus_node.clone());
+
         // Add value binding if we have values to check
         if context.values.len() == 1 {
             bindings = bindings.with_value(context.values[0].clone());
         }
-        
+
         // Add path binding if available
         if let Some(path) = &context.path {
             // Convert property path to SPARQL path string
@@ -239,23 +241,18 @@ impl ConstraintEvaluator for SparqlConstraint {
                 bindings = bindings.with_path(format!("<{}>", pred.as_str()));
             }
         }
-        
+
         // Add current shape binding
-        bindings = bindings.with_current_shape(
-            Term::NamedNode(NamedNode::new(context.shape_id.as_str()).unwrap())
-        );
-        
+        bindings = bindings.with_current_shape(Term::NamedNode(
+            NamedNode::new(context.shape_id.as_str()).unwrap(),
+        ));
+
         // Note: Graph name would need to be passed separately as it's not in ConstraintContext
         let graph_name: Option<&str> = None;
-        
+
         // Execute the constraint
-        let result = executor.execute_constraint(
-            store,
-            self,
-            &bindings,
-            graph_name,
-        )?;
-        
+        let result = executor.execute_constraint(store, self, &bindings, graph_name)?;
+
         // Convert SPARQL result to constraint evaluation result
         if result.is_violation() {
             let message = self.message.clone().unwrap_or_else(|| {
@@ -264,7 +261,7 @@ impl ConstraintEvaluator for SparqlConstraint {
                     result.violation_count()
                 )
             });
-            
+
             match result {
                 SparqlConstraintResult::Ask(_) => {
                     Ok(ConstraintEvaluationResult::violated(None, Some(message)))
@@ -272,11 +269,13 @@ impl ConstraintEvaluator for SparqlConstraint {
                 SparqlConstraintResult::Select { solutions, .. } => {
                     // For SELECT queries, we can provide more detailed information
                     // Use the first solution's ?value binding if available
-                    let violating_value = solutions.first()
-                        .and_then(|sol| sol.get("value"))
-                        .cloned();
-                    
-                    Ok(ConstraintEvaluationResult::violated(violating_value, Some(message)))
+                    let violating_value =
+                        solutions.first().and_then(|sol| sol.get("value")).cloned();
+
+                    Ok(ConstraintEvaluationResult::violated(
+                        violating_value,
+                        Some(message),
+                    ))
                 }
             }
         } else {
@@ -518,11 +517,11 @@ impl SparqlConstraintExecutor {
             self.wrap_construct_query_in_graph(query_trimmed, graph_name)
         } else {
             Err(ShaclError::SparqlExecution(
-                "Unsupported query type for graph wrapping".to_string()
+                "Unsupported query type for graph wrapping".to_string(),
             ))
         }
     }
-    
+
     /// Wrap ASK query in GRAPH clause
     fn wrap_ask_query_in_graph(&self, query: &str, graph_name: &str) -> Result<String> {
         if let Some(where_pos) = query.to_uppercase().find("WHERE") {
@@ -533,16 +532,16 @@ impl SparqlConstraintExecutor {
                 let inner = &where_clause[1..where_clause.len() - 1];
                 return Ok(format!(
                     "{} {{ GRAPH <{}> {{ {} }} }}",
-                        prefix, graph_name, inner
-                    ));
-                }
+                    prefix, graph_name, inner
+                ));
             }
-        
+        }
+
         Err(ShaclError::SparqlExecution(
-            "Invalid ASK query structure for graph wrapping".to_string()
+            "Invalid ASK query structure for graph wrapping".to_string(),
         ))
     }
-    
+
     /// Wrap SELECT query in GRAPH clause
     fn wrap_select_query_in_graph(&self, query: &str, graph_name: &str) -> Result<String> {
         if let Some(where_pos) = query.to_uppercase().find("WHERE") {
@@ -557,12 +556,12 @@ impl SparqlConstraintExecutor {
                 ));
             }
         }
-        
+
         Err(ShaclError::SparqlExecution(
-            "Invalid SELECT query structure for graph wrapping".to_string()
+            "Invalid SELECT query structure for graph wrapping".to_string(),
         ))
     }
-    
+
     /// Wrap CONSTRUCT query in GRAPH clause
     fn wrap_construct_query_in_graph(&self, query: &str, graph_name: &str) -> Result<String> {
         if let Some(where_pos) = query.to_uppercase().find("WHERE") {
@@ -577,9 +576,9 @@ impl SparqlConstraintExecutor {
                 ));
             }
         }
-        
+
         Err(ShaclError::SparqlExecution(
-            "Invalid CONSTRUCT query structure for graph wrapping".to_string()
+            "Invalid CONSTRUCT query structure for graph wrapping".to_string(),
         ))
     }
 }
@@ -639,11 +638,11 @@ fn format_term_for_sparql(term: &Term) -> Result<String> {
         Term::Literal(literal) => {
             let value = literal.as_str();
             let escaped_value = value.replace("\\", "\\\\").replace("\"", "\\\"");
-            
+
             // Check for language tag
             if let Some(language) = literal.language() {
                 Ok(format!("\"{}\"@{}", escaped_value, language))
-            } 
+            }
             // Check for datatype
             else if let datatype = literal.datatype() {
                 let datatype_iri = datatype.as_str();
@@ -659,7 +658,7 @@ fn format_term_for_sparql(term: &Term) -> Result<String> {
         }
         Term::Variable(var) => Ok(format!("?{}", var.name())),
         Term::QuotedTriple(_) => Err(ShaclError::SparqlExecution(
-            "Quoted triples not supported in SPARQL constraints".to_string()
+            "Quoted triples not supported in SPARQL constraints".to_string(),
         )),
     }
 }

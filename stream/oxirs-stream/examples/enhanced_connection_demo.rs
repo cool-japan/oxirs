@@ -6,19 +6,19 @@
 //! - Load balancing across connections
 //! - Failover mechanisms for high availability
 
+use anyhow::Result;
 use oxirs_stream::connection_pool::{
-    ConnectionFactory, ConnectionPool, PoolConfig, PooledConnection,
-    LoadBalancingStrategy, FailoverConfig,
+    ConnectionFactory, ConnectionPool, FailoverConfig, LoadBalancingStrategy, PoolConfig,
+    PooledConnection,
 };
+use oxirs_stream::failover::FailoverEvent;
 use oxirs_stream::health_monitor::{HealthCheckConfig, HealthEvent};
 use oxirs_stream::reconnect::{ReconnectConfig, ReconnectEvent};
-use oxirs_stream::failover::FailoverEvent;
-use anyhow::Result;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 
 /// Demo connection that can simulate failures
 #[derive(Debug)]
@@ -45,18 +45,25 @@ impl DemoConnection {
 
     fn simulate_operation(&self) -> Result<String> {
         let count = self.operation_count.fetch_add(1, Ordering::SeqCst);
-        
+
         // Simulate failure after certain operations
         if let Some(fail_after) = self.fail_after_count {
             if count >= fail_after {
                 self.healthy.store(false, Ordering::SeqCst);
-                return Err(anyhow::anyhow!("Connection {} failed after {} operations", self.id, count));
+                return Err(anyhow::anyhow!(
+                    "Connection {} failed after {} operations",
+                    self.id,
+                    count
+                ));
             }
         }
 
         // Simulate some work
         std::thread::sleep(Duration::from_millis(10));
-        Ok(format!("Operation {} completed on connection {}", count, self.id))
+        Ok(format!(
+            "Operation {} completed on connection {}",
+            count, self.id
+        ))
     }
 }
 
@@ -105,10 +112,10 @@ impl DemoConnectionFactory {
 impl ConnectionFactory<DemoConnection> for DemoConnectionFactory {
     async fn create_connection(&self) -> Result<DemoConnection> {
         let id = self.counter.fetch_add(1, Ordering::SeqCst);
-        
+
         // Simulate connection creation delay
         sleep(Duration::from_millis(50)).await;
-        
+
         // Randomly fail based on failure rate
         if rand::random::<f32>() < self.failure_rate {
             return Err(anyhow::anyhow!("Failed to create connection {}", id));
@@ -165,7 +172,7 @@ async fn main() -> Result<()> {
             secondary_factory,
             failover_config,
         )
-        .await?
+        .await?,
     );
 
     // Subscribe to health events
@@ -173,15 +180,24 @@ async fn main() -> Result<()> {
     tokio::spawn(async move {
         while let Ok(event) = health_events.recv().await {
             match event {
-                HealthEvent::ConnectionDead { connection_id, reason } => {
+                HealthEvent::ConnectionDead {
+                    connection_id,
+                    reason,
+                } => {
                     error!("Connection {} died: {}", connection_id, reason);
                 }
                 HealthEvent::ConnectionRecovered { connection_id } => {
                     info!("Connection {} recovered", connection_id);
                 }
-                HealthEvent::StatusChanged { connection_id, old_status, new_status } => {
-                    warn!("Connection {} status changed from {:?} to {:?}", 
-                        connection_id, old_status, new_status);
+                HealthEvent::StatusChanged {
+                    connection_id,
+                    old_status,
+                    new_status,
+                } => {
+                    warn!(
+                        "Connection {} status changed from {:?} to {:?}",
+                        connection_id, old_status, new_status
+                    );
                 }
                 _ => {}
             }
@@ -193,13 +209,25 @@ async fn main() -> Result<()> {
     tokio::spawn(async move {
         while let Ok(event) = reconnect_events.recv().await {
             match event {
-                ReconnectEvent::AttemptSucceeded { connection_id, attempt, total_time } => {
-                    info!("Reconnection succeeded for {} after {} attempts in {:?}", 
-                        connection_id, attempt, total_time);
+                ReconnectEvent::AttemptSucceeded {
+                    connection_id,
+                    attempt,
+                    total_time,
+                } => {
+                    info!(
+                        "Reconnection succeeded for {} after {} attempts in {:?}",
+                        connection_id, attempt, total_time
+                    );
                 }
-                ReconnectEvent::ReconnectionExhausted { connection_id, total_attempts, .. } => {
-                    error!("Reconnection exhausted for {} after {} attempts", 
-                        connection_id, total_attempts);
+                ReconnectEvent::ReconnectionExhausted {
+                    connection_id,
+                    total_attempts,
+                    ..
+                } => {
+                    error!(
+                        "Reconnection exhausted for {} after {} attempts",
+                        connection_id, total_attempts
+                    );
                 }
                 _ => {}
             }
@@ -209,13 +237,17 @@ async fn main() -> Result<()> {
     // Register a failure callback
     pool.register_failure_callback(|conn_id, error, attempt| {
         Box::pin(async move {
-            warn!("Connection {} failed (attempt {}): {}", conn_id, attempt, error);
+            warn!(
+                "Connection {} failed (attempt {}): {}",
+                conn_id, attempt, error
+            );
         })
-    }).await;
+    })
+    .await;
 
     // Simulate workload
     info!("Starting workload simulation...");
-    
+
     let pool_clone = pool.clone();
     let workload_handle = tokio::spawn(async move {
         for i in 0..100 {
@@ -238,7 +270,7 @@ async fn main() -> Result<()> {
                     error!("Failed to get connection: {}", e);
                 }
             }
-            
+
             sleep(Duration::from_millis(100)).await;
         }
     });
@@ -248,7 +280,7 @@ async fn main() -> Result<()> {
     let status_handle = tokio::spawn(async move {
         loop {
             sleep(Duration::from_secs(10)).await;
-            
+
             let status = pool_clone.status().await;
             info!("Pool Status:");
             info!("  Total connections: {}", status.total_connections);
@@ -256,29 +288,54 @@ async fn main() -> Result<()> {
             info!("  Idle connections: {}", status.idle_connections);
             info!("  Pending requests: {}", status.pending_requests);
             info!("  Utilization: {:.1}%", status.utilization_percent);
-            info!("  Health: {}", if status.is_healthy { "HEALTHY" } else { "UNHEALTHY" });
-            info!("  Circuit breaker: {}", if status.circuit_breaker_open { "OPEN" } else { "CLOSED" });
-            
+            info!(
+                "  Health: {}",
+                if status.is_healthy {
+                    "HEALTHY"
+                } else {
+                    "UNHEALTHY"
+                }
+            );
+            info!(
+                "  Circuit breaker: {}",
+                if status.circuit_breaker_open {
+                    "OPEN"
+                } else {
+                    "CLOSED"
+                }
+            );
+
             let health_stats = pool_clone.get_health_statistics().await;
             info!("Health Statistics:");
-            info!("  Healthy connections: {}/{}", 
-                health_stats.healthy_connections, health_stats.total_connections);
+            info!(
+                "  Healthy connections: {}/{}",
+                health_stats.healthy_connections, health_stats.total_connections
+            );
             info!("  Success rate: {:.1}%", health_stats.success_rate);
-            info!("  Avg response time: {:.2}ms", health_stats.avg_response_time_ms);
-            
+            info!(
+                "  Avg response time: {:.2}ms",
+                health_stats.avg_response_time_ms
+            );
+
             if pool_clone.has_failover() {
                 if let Some(failover_stats) = pool_clone.get_failover_statistics().await {
                     info!("Failover Statistics:");
                     info!("  Total failovers: {}", failover_stats.total_failovers);
-                    info!("  Successful failovers: {}", failover_stats.successful_failovers);
+                    info!(
+                        "  Successful failovers: {}",
+                        failover_stats.successful_failovers
+                    );
                     info!("  Current state: {:?}", failover_stats.current_state);
                 }
             }
-            
+
             let reconnect_stats = pool_clone.get_reconnection_statistics().await;
             info!("Reconnection Statistics:");
             info!("  Total attempts: {}", reconnect_stats.total_attempts);
-            info!("  Successful reconnects: {}", reconnect_stats.successful_reconnects);
+            info!(
+                "  Successful reconnects: {}",
+                reconnect_stats.successful_reconnects
+            );
             info!("  Current streak: {}", reconnect_stats.current_streak);
         }
     });
@@ -294,7 +351,7 @@ async fn main() -> Result<()> {
 
     // Wait for workload to complete
     workload_handle.await?;
-    
+
     info!("Demo completed");
     Ok(())
 }

@@ -7,19 +7,19 @@
 //! - Change Data Capture (CDC)
 //! - Real-time analytics pipelines
 
+pub mod cdc;
 pub mod kafka;
 pub mod nats;
-pub mod cdc;
 pub mod pipeline;
 
-use std::{collections::HashMap, sync::Arc, time::Duration};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::sync::{mpsc, RwLock};
 use url::Url;
 
 use crate::error::FusekiResult;
-use oxirs_core::{Triple, Quad, Dataset};
+use oxirs_core::{Dataset, Quad, Triple};
 
 /// Streaming configuration
 #[derive(Debug, Clone)]
@@ -217,10 +217,7 @@ pub enum RDFEvent {
         timestamp: i64,
     },
     /// Graph cleared
-    GraphCleared {
-        graph: String,
-        timestamp: i64,
-    },
+    GraphCleared { graph: String, timestamp: i64 },
     /// Transaction event
     Transaction {
         id: String,
@@ -279,10 +276,10 @@ mod quad_serde {
 pub trait StreamProducer: Send + Sync {
     /// Send a single event
     async fn send(&self, event: RDFEvent) -> Result<()>;
-    
+
     /// Send a batch of events
     async fn send_batch(&self, events: Vec<RDFEvent>) -> Result<()>;
-    
+
     /// Flush any pending events
     async fn flush(&self) -> Result<()>;
 }
@@ -292,10 +289,10 @@ pub trait StreamProducer: Send + Sync {
 pub trait StreamConsumer: Send + Sync {
     /// Subscribe to events
     async fn subscribe(&self, handler: Box<dyn EventHandler>) -> Result<()>;
-    
+
     /// Unsubscribe from events
     async fn unsubscribe(&self) -> Result<()>;
-    
+
     /// Commit processed offsets (for Kafka)
     async fn commit(&self) -> Result<()>;
 }
@@ -305,7 +302,7 @@ pub trait StreamConsumer: Send + Sync {
 pub trait EventHandler: Send + Sync {
     /// Handle an RDF event
     async fn handle(&self, event: RDFEvent) -> Result<()>;
-    
+
     /// Handle errors
     async fn on_error(&self, error: Box<dyn std::error::Error + Send + Sync>) {
         tracing::error!("Event handler error: {}", error);
@@ -325,7 +322,7 @@ impl StreamingManager {
     /// Create a new streaming manager
     pub fn new(config: StreamingConfig) -> Self {
         let (tx, rx) = mpsc::channel(10000);
-        
+
         Self {
             config,
             producers: Arc::new(RwLock::new(HashMap::new())),
@@ -340,12 +337,14 @@ impl StreamingManager {
         // Initialize Kafka if configured
         if let Some(kafka_config) = &self.config.kafka {
             tracing::info!("Initializing Kafka streaming");
-            let producer = crate::streaming::kafka::KafkaProducer::new(kafka_config.clone()).await?;
-            let consumer = crate::streaming::kafka::KafkaConsumer::new(kafka_config.clone()).await?;
-            
+            let producer =
+                crate::streaming::kafka::KafkaProducer::new(kafka_config.clone()).await?;
+            let consumer =
+                crate::streaming::kafka::KafkaConsumer::new(kafka_config.clone()).await?;
+
             let mut producers = self.producers.write().await;
             let mut consumers = self.consumers.write().await;
-            
+
             producers.insert("kafka".to_string(), Box::new(producer));
             consumers.insert("kafka".to_string(), Box::new(consumer));
         }
@@ -355,10 +354,10 @@ impl StreamingManager {
             tracing::info!("Initializing NATS streaming");
             let producer = crate::streaming::nats::NatsProducer::new(nats_config.clone()).await?;
             let consumer = crate::streaming::nats::NatsConsumer::new(nats_config.clone()).await?;
-            
+
             let mut producers = self.producers.write().await;
             let mut consumers = self.consumers.write().await;
-            
+
             producers.insert("nats".to_string(), Box::new(producer));
             consumers.insert("nats".to_string(), Box::new(consumer));
         }
@@ -372,9 +371,11 @@ impl StreamingManager {
     /// Send an RDF event to all configured streams
     pub async fn send_event(&self, event: RDFEvent) -> crate::error::Result<()> {
         // Buffer the event
-        self.event_buffer.send(event.clone()).await
+        self.event_buffer
+            .send(event.clone())
+            .await
             .map_err(|_| crate::error::Error::Custom("Event buffer full".to_string()))?;
-        
+
         Ok(())
     }
 
@@ -383,11 +384,11 @@ impl StreamingManager {
         let receiver = self.event_receiver.clone();
         let producers = self.producers.clone();
         let config = self.config.clone();
-        
+
         tokio::spawn(async move {
             let mut batch = Vec::new();
             let mut interval = tokio::time::interval(Duration::from_millis(100));
-            
+
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
@@ -402,7 +403,7 @@ impl StreamingManager {
                     } => {
                         if let Some(event) = event {
                             batch.push(event);
-                            
+
                             // Send immediately if batch is full
                             if batch.len() >= config.cdc.batch_size {
                                 Self::send_batch(&producers, batch.clone()).await;
@@ -422,9 +423,12 @@ impl StreamingManager {
     }
 
     /// Send a batch of events to all producers
-    async fn send_batch(producers: &Arc<RwLock<HashMap<String, Box<dyn StreamProducer>>>>, batch: Vec<RDFEvent>) {
+    async fn send_batch(
+        producers: &Arc<RwLock<HashMap<String, Box<dyn StreamProducer>>>>,
+        batch: Vec<RDFEvent>,
+    ) {
         let producers = producers.read().await;
-        
+
         for (name, producer) in producers.iter() {
             if let Err(e) = producer.send_batch(batch.clone()).await {
                 tracing::error!("Failed to send batch to {}: {}", name, e);
@@ -461,12 +465,12 @@ mod tests {
     #[test]
     fn test_rdf_event_serialization() {
         use chrono::Utc;
-        
+
         let event = RDFEvent::GraphCleared {
             graph: "http://example.com/graph".to_string(),
             timestamp: Utc::now().timestamp_millis(),
         };
-        
+
         let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains("GraphCleared"));
         assert!(json.contains("http://example.com/graph"));

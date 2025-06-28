@@ -16,15 +16,24 @@ fn test_vec_similar_function() {
         .expect("Failed to create vector service");
 
     // Add some test resources
-    let content1 = EmbeddableContent::Text("Machine learning and artificial intelligence".to_string());
+    let content1 =
+        EmbeddableContent::Text("Machine learning and artificial intelligence".to_string());
     let content2 = EmbeddableContent::Text("Deep learning neural networks".to_string());
     let content3 = EmbeddableContent::Text("Natural language processing".to_string());
     let content4 = EmbeddableContent::Text("Computer vision and image recognition".to_string());
 
-    service.add_resource_embedding("http://example.org/ml1", &content1).unwrap();
-    service.add_resource_embedding("http://example.org/ml2", &content2).unwrap();
-    service.add_resource_embedding("http://example.org/nlp", &content3).unwrap();
-    service.add_resource_embedding("http://example.org/cv", &content4).unwrap();
+    service
+        .add_resource_embedding("http://example.org/ml1", &content1)
+        .unwrap();
+    service
+        .add_resource_embedding("http://example.org/ml2", &content2)
+        .unwrap();
+    service
+        .add_resource_embedding("http://example.org/nlp", &content3)
+        .unwrap();
+    service
+        .add_resource_embedding("http://example.org/cv", &content4)
+        .unwrap();
 
     // Test vec:similar function
     let args = vec![
@@ -58,9 +67,15 @@ fn test_vec_similarity_function() {
     let content2 = EmbeddableContent::Text("Machine learning techniques".to_string());
     let content3 = EmbeddableContent::Text("Cooking recipes and food".to_string());
 
-    service.add_resource_embedding("http://example.org/ml1", &content1).unwrap();
-    service.add_resource_embedding("http://example.org/ml2", &content2).unwrap();
-    service.add_resource_embedding("http://example.org/cooking", &content3).unwrap();
+    service
+        .add_resource_embedding("http://example.org/ml1", &content1)
+        .unwrap();
+    service
+        .add_resource_embedding("http://example.org/ml2", &content2)
+        .unwrap();
+    service
+        .add_resource_embedding("http://example.org/cooking", &content3)
+        .unwrap();
 
     // Test similarity between similar resources
     let args_similar = vec![
@@ -68,14 +83,19 @@ fn test_vec_similarity_function() {
         VectorServiceArg::IRI("http://example.org/ml2".to_string()),
     ];
 
-    let result_similar = service.execute_function("similarity", &args_similar).unwrap();
+    let result_similar = service
+        .execute_function("similarity", &args_similar)
+        .unwrap();
 
     match result_similar {
         VectorServiceResult::Number(similarity) => {
             // With hash-based embeddings, we can't guarantee semantic similarity
             // Just verify we get a number between -1 and 1
-            assert!(similarity >= -1.0 && similarity <= 1.0, 
-                    "Similarity should be between -1 and 1, got: {}", similarity);
+            assert!(
+                similarity >= -1.0 && similarity <= 1.0,
+                "Similarity should be between -1 and 1, got: {}",
+                similarity
+            );
         }
         _ => panic!("Expected Number result"),
     }
@@ -86,14 +106,19 @@ fn test_vec_similarity_function() {
         VectorServiceArg::IRI("http://example.org/cooking".to_string()),
     ];
 
-    let result_dissimilar = service.execute_function("similarity", &args_dissimilar).unwrap();
+    let result_dissimilar = service
+        .execute_function("similarity", &args_dissimilar)
+        .unwrap();
 
     match result_dissimilar {
         VectorServiceResult::Number(similarity) => {
             // With hash-based embeddings, we can't guarantee semantic similarity
             // Just verify we get a number between -1 and 1
-            assert!(similarity >= -1.0 && similarity <= 1.0, 
-                    "Similarity should be between -1 and 1, got: {}", similarity);
+            assert!(
+                similarity >= -1.0 && similarity <= 1.0,
+                "Similarity should be between -1 and 1, got: {}",
+                similarity
+            );
         }
         _ => panic!("Expected Number result"),
     }
@@ -106,9 +131,9 @@ fn test_vec_embed_text_function() {
         .expect("Failed to create vector service");
 
     // Test embedding text
-    let args = vec![
-        VectorServiceArg::String("This is a test document about vectors".to_string()),
-    ];
+    let args = vec![VectorServiceArg::String(
+        "This is a test document about vectors".to_string(),
+    )];
 
     let result = service.execute_function("embed_text", &args).unwrap();
 
@@ -131,9 +156,15 @@ fn test_vec_search_text_function() {
 
     // Add some documents
     let docs = vec![
-        ("http://example.org/doc1", "Information retrieval and search engines"),
+        (
+            "http://example.org/doc1",
+            "Information retrieval and search engines",
+        ),
         ("http://example.org/doc2", "Database management systems"),
-        ("http://example.org/doc3", "Search algorithms and data structures"),
+        (
+            "http://example.org/doc3",
+            "Search algorithms and data structures",
+        ),
     ];
 
     for (uri, text) in docs {
@@ -177,11 +208,16 @@ fn test_vector_similarity_function() {
         VectorServiceArg::Vector(vec2.clone()),
     ];
 
-    let result_orthogonal = service.execute_function("vector_similarity", &args_orthogonal).unwrap();
+    let result_orthogonal = service
+        .execute_function("vector_similarity", &args_orthogonal)
+        .unwrap();
 
     match result_orthogonal {
         VectorServiceResult::Number(similarity) => {
-            assert!((similarity - 0.0).abs() < 0.001, "Orthogonal vectors should have 0 similarity");
+            assert!(
+                (similarity - 0.0).abs() < 0.001,
+                "Orthogonal vectors should have 0 similarity"
+            );
         }
         _ => panic!("Expected Number result"),
     }
@@ -192,11 +228,16 @@ fn test_vector_similarity_function() {
         VectorServiceArg::Vector(vec3.clone()),
     ];
 
-    let result_identical = service.execute_function("vector_similarity", &args_identical).unwrap();
+    let result_identical = service
+        .execute_function("vector_similarity", &args_identical)
+        .unwrap();
 
     match result_identical {
         VectorServiceResult::Number(similarity) => {
-            assert!((similarity - 1.0).abs() < 0.001, "Identical vectors should have 1.0 similarity");
+            assert!(
+                (similarity - 1.0).abs() < 0.001,
+                "Identical vectors should have 1.0 similarity"
+            );
         }
         _ => panic!("Expected Number result"),
     }

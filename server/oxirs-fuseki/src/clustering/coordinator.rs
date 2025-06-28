@@ -1,21 +1,21 @@
 //! Query coordination for distributed execution
 
+use async_trait::async_trait;
+use futures::{future::join_all, stream, StreamExt};
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     sync::Arc,
     time::{Duration, Instant},
 };
-use async_trait::async_trait;
-use futures::{future::join_all, stream, StreamExt};
-use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, RwLock};
 
 use crate::{
-    error::{Error, Result},
+    clustering::{ConsistencyLevel, NodeInfo, ReplicationConfig},
+    error::{FusekiError, FusekiResult},
     store::Store,
-    clustering::{ConsistencyLevel, ReplicationConfig, NodeInfo},
 };
-use oxirs_core::{Triple, Quad, query::QueryResults};
+use oxirs_core::{query::QueryResults, Quad, Triple};
 
 /// Query result for distributed operations
 pub type QueryResult = QueryResults;
@@ -69,9 +69,15 @@ pub struct DistributedWrite {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum WriteOperation {
     /// Add triple
-    AddTriple { triple: Triple, graph: Option<String> },
+    AddTriple {
+        triple: Triple,
+        graph: Option<String>,
+    },
     /// Remove triple
-    RemoveTriple { triple: Triple, graph: Option<String> },
+    RemoveTriple {
+        triple: Triple,
+        graph: Option<String>,
+    },
     /// Add quad
     AddQuad { quad: Quad },
     /// Remove quad
@@ -150,34 +156,39 @@ impl QueryCoordinator {
     /// Execute a distributed query
     pub async fn execute_query(&self, query: DistributedQuery) -> Result<QueryResult> {
         let start_time = Instant::now();
-        
+
         // Get nodes for the partitions
         let nodes = self.get_nodes_for_partitions(&query.partitions).await?;
-        
+
         if nodes.is_empty() {
-            return Err(Error::Custom("No nodes available for query execution".to_string()));
+            return Err(Error::Custom(
+                "No nodes available for query execution".to_string(),
+            ));
         }
 
         // Calculate required responses based on consistency level
         let required_responses = self.calculate_required_responses(nodes.len(), query.consistency);
-        
+
         // Track request
         let mut tracker = self.request_tracker.write().await;
-        tracker.insert(query.id.clone(), RequestStatus {
-            start_time,
-            expected_responses: nodes.len(),
-            responses: Vec::new(),
-            completed: false,
-        });
+        tracker.insert(
+            query.id.clone(),
+            RequestStatus {
+                start_time,
+                expected_responses: nodes.len(),
+                responses: Vec::new(),
+                completed: false,
+            },
+        );
         drop(tracker);
 
         // Send query to nodes
         let mut response_futures = Vec::new();
-        
+
         for node_id in nodes {
             let query_clone = query.clone();
             let coordinator = self.clone();
-            
+
             response_futures.push(tokio::spawn(async move {
                 coordinator.send_query_to_node(&node_id, query_clone).await
             }));
@@ -186,8 +197,10 @@ impl QueryCoordinator {
         // Wait for responses with timeout
         let responses = match tokio::time::timeout(
             query.timeout,
-            self.collect_responses(&query.id, required_responses)
-        ).await {
+            self.collect_responses(&query.id, required_responses),
+        )
+        .await
+        {
             Ok(responses) => responses?,
             Err(_) => {
                 return Err(Error::Custom("Query timeout".to_string()));
@@ -207,34 +220,39 @@ impl QueryCoordinator {
     /// Execute a distributed write
     pub async fn execute_write(&self, write: DistributedWrite) -> Result<()> {
         let start_time = Instant::now();
-        
+
         // Get nodes for the partitions
         let nodes = self.get_nodes_for_partitions(&write.partitions).await?;
-        
+
         if nodes.is_empty() {
-            return Err(Error::Custom("No nodes available for write operation".to_string()));
+            return Err(Error::Custom(
+                "No nodes available for write operation".to_string(),
+            ));
         }
 
         // Calculate required responses based on consistency level
         let required_responses = self.calculate_required_responses(nodes.len(), write.consistency);
-        
+
         // Track request
         let mut tracker = self.request_tracker.write().await;
-        tracker.insert(write.id.clone(), RequestStatus {
-            start_time,
-            expected_responses: nodes.len(),
-            responses: Vec::new(),
-            completed: false,
-        });
+        tracker.insert(
+            write.id.clone(),
+            RequestStatus {
+                start_time,
+                expected_responses: nodes.len(),
+                responses: Vec::new(),
+                completed: false,
+            },
+        );
         drop(tracker);
 
         // Send write to nodes
         let mut response_futures = Vec::new();
-        
+
         for node_id in nodes {
             let write_clone = write.clone();
             let coordinator = self.clone();
-            
+
             response_futures.push(tokio::spawn(async move {
                 coordinator.send_write_to_node(&node_id, write_clone).await
             }));
@@ -243,8 +261,10 @@ impl QueryCoordinator {
         // Wait for responses with timeout
         let responses = match tokio::time::timeout(
             write.timeout,
-            self.collect_responses(&write.id, required_responses)
-        ).await {
+            self.collect_responses(&write.id, required_responses),
+        )
+        .await
+        {
             Ok(responses) => responses?,
             Err(_) => {
                 return Err(Error::Custom("Write timeout".to_string()));
@@ -252,7 +272,8 @@ impl QueryCoordinator {
         };
 
         // Check if write succeeded
-        let successful_count = responses.iter()
+        let successful_count = responses
+            .iter()
             .filter(|r| match r {
                 CoordinatorResponse::Write(w) => w.success,
                 _ => false,
@@ -281,13 +302,17 @@ impl QueryCoordinator {
     }
 
     /// Calculate required responses based on consistency level
-    fn calculate_required_responses(&self, total_nodes: usize, consistency: ConsistencyLevel) -> usize {
+    fn calculate_required_responses(
+        &self,
+        total_nodes: usize,
+        consistency: ConsistencyLevel,
+    ) -> usize {
         match consistency {
             ConsistencyLevel::One => 1,
             ConsistencyLevel::Quorum => (total_nodes / 2) + 1,
             ConsistencyLevel::All => total_nodes,
             ConsistencyLevel::LocalQuorum => (total_nodes / 2) + 1, // Simplified
-            ConsistencyLevel::EachQuorum => total_nodes, // Simplified
+            ConsistencyLevel::EachQuorum => total_nodes,            // Simplified
         }
     }
 
@@ -296,9 +321,9 @@ impl QueryCoordinator {
         // TODO: Implement actual network communication
         // For now, execute locally
         let start = Instant::now();
-        
+
         let result = self.execute_local_query(&query).await?;
-        
+
         let response = QueryResponse {
             node_id: node_id.to_string(),
             result,
@@ -321,11 +346,15 @@ impl QueryCoordinator {
         // TODO: Implement actual network communication
         // For now, execute locally
         let success = self.execute_local_write(&write).await.is_ok();
-        
+
         let response = WriteResponse {
             node_id: node_id.to_string(),
             success,
-            error: if success { None } else { Some("Write failed".to_string()) },
+            error: if success {
+                None
+            } else {
+                Some("Write failed".to_string())
+            },
         };
 
         // Track response
@@ -350,13 +379,17 @@ impl QueryCoordinator {
     }
 
     /// Collect responses up to required count
-    async fn collect_responses(&self, request_id: &str, required: usize) -> Result<Vec<CoordinatorResponse>> {
+    async fn collect_responses(
+        &self,
+        request_id: &str,
+        required: usize,
+    ) -> Result<Vec<CoordinatorResponse>> {
         let check_interval = Duration::from_millis(10);
         let mut collected = Vec::new();
 
         loop {
             tokio::time::sleep(check_interval).await;
-            
+
             let tracker = self.request_tracker.read().await;
             if let Some(status) = tracker.get(request_id) {
                 if status.responses.len() >= required {
@@ -374,7 +407,7 @@ impl QueryCoordinator {
     /// Merge query results from multiple nodes
     fn merge_query_results(&self, responses: Vec<CoordinatorResponse>) -> Result<QueryResult> {
         let mut results = Vec::new();
-        
+
         for response in responses {
             if let CoordinatorResponse::Query(query_resp) = response {
                 if query_resp.success {
@@ -418,10 +451,10 @@ impl ReadRepair {
     pub async fn repair(&self, key: &str, responses: Vec<QueryResponse>) -> Result<()> {
         // Find the most recent value
         let latest = self.find_latest_value(&responses)?;
-        
+
         // Identify nodes with stale data
         let stale_nodes = self.find_stale_nodes(&responses, &latest);
-        
+
         if !stale_nodes.is_empty() {
             // Repair stale nodes
             self.repair_nodes(&stale_nodes, &latest).await?;
@@ -432,7 +465,8 @@ impl ReadRepair {
 
     /// Find the latest value from responses
     fn find_latest_value(&self, responses: &[QueryResponse]) -> Result<QueryResponse> {
-        responses.iter()
+        responses
+            .iter()
             .filter(|r| r.success)
             .max_by_key(|r| r.execution_time)
             .cloned()
@@ -441,7 +475,8 @@ impl ReadRepair {
 
     /// Find nodes with stale data
     fn find_stale_nodes(&self, responses: &[QueryResponse], latest: &QueryResponse) -> Vec<String> {
-        responses.iter()
+        responses
+            .iter()
             .filter(|r| r.success && !self.results_equal(&r.result, &latest.result))
             .map(|r| r.node_id.clone())
             .collect()
@@ -469,12 +504,27 @@ mod tests {
         let config = ReplicationConfig::default();
         let store = Arc::new(Store::new_memory());
         let coordinator = QueryCoordinator::new(config, store);
-        
-        assert_eq!(coordinator.calculate_required_responses(3, ConsistencyLevel::One), 1);
-        assert_eq!(coordinator.calculate_required_responses(3, ConsistencyLevel::Quorum), 2);
-        assert_eq!(coordinator.calculate_required_responses(3, ConsistencyLevel::All), 3);
-        
-        assert_eq!(coordinator.calculate_required_responses(5, ConsistencyLevel::Quorum), 3);
-        assert_eq!(coordinator.calculate_required_responses(7, ConsistencyLevel::Quorum), 4);
+
+        assert_eq!(
+            coordinator.calculate_required_responses(3, ConsistencyLevel::One),
+            1
+        );
+        assert_eq!(
+            coordinator.calculate_required_responses(3, ConsistencyLevel::Quorum),
+            2
+        );
+        assert_eq!(
+            coordinator.calculate_required_responses(3, ConsistencyLevel::All),
+            3
+        );
+
+        assert_eq!(
+            coordinator.calculate_required_responses(5, ConsistencyLevel::Quorum),
+            3
+        );
+        assert_eq!(
+            coordinator.calculate_required_responses(7, ConsistencyLevel::Quorum),
+            4
+        );
     }
 }

@@ -17,10 +17,7 @@ use tokio::time::interval;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use crate::{
-    StreamEvent, EventMetadata, StreamConfig,
-    StreamProducer, StreamConsumer,
-};
+use crate::{EventMetadata, StreamConfig, StreamConsumer, StreamEvent, StreamProducer};
 
 /// Message queue bridge manager
 pub struct MessageBridgeManager {
@@ -130,10 +127,7 @@ pub enum ExternalSystemType {
         subscription: Option<String>,
     },
     /// Redis Pub/Sub
-    RedisPubSub {
-        url: String,
-        channels: Vec<String>,
-    },
+    RedisPubSub { url: String, channels: Vec<String> },
     /// HTTP REST API
     HttpRest {
         base_url: String,
@@ -141,10 +135,7 @@ pub enum ExternalSystemType {
         headers: HashMap<String, String>,
     },
     /// WebSocket
-    WebSocket {
-        url: String,
-        protocols: Vec<String>,
-    },
+    WebSocket { url: String, protocols: Vec<String> },
     /// File system
     FileSystem {
         directory: String,
@@ -249,13 +240,34 @@ pub struct SecurityConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AuthenticationMethod {
     None,
-    BasicAuth { username: String, password: String },
-    BearerToken { token: String },
-    ApiKey { key: String, header: String },
-    OAuth2 { client_id: String, client_secret: String, token_url: String },
-    SaslPlain { username: String, password: String },
-    SaslScramSha256 { username: String, password: String },
-    Certificate { cert_path: String, key_path: String },
+    BasicAuth {
+        username: String,
+        password: String,
+    },
+    BearerToken {
+        token: String,
+    },
+    ApiKey {
+        key: String,
+        header: String,
+    },
+    OAuth2 {
+        client_id: String,
+        client_secret: String,
+        token_url: String,
+    },
+    SaslPlain {
+        username: String,
+        password: String,
+    },
+    SaslScramSha256 {
+        username: String,
+        password: String,
+    },
+    Certificate {
+        cert_path: String,
+        key_path: String,
+    },
 }
 
 /// Encryption configuration
@@ -305,7 +317,10 @@ pub enum RuleCondition {
     /// Custom expression
     Expression { expr: String },
     /// Composite condition
-    Composite { operator: LogicalOperator, conditions: Vec<RuleCondition> },
+    Composite {
+        operator: LogicalOperator,
+        conditions: Vec<RuleCondition>,
+    },
 }
 
 /// Logical operators
@@ -416,19 +431,27 @@ pub enum BridgeNotification {
     /// Bridge failed
     BridgeFailed { id: String, reason: String },
     /// Message processed
-    MessageProcessed { bridge_id: String, message_id: String, duration: Duration },
+    MessageProcessed {
+        bridge_id: String,
+        message_id: String,
+        duration: Duration,
+    },
     /// Message failed
-    MessageFailed { bridge_id: String, message_id: String, error: String },
+    MessageFailed {
+        bridge_id: String,
+        message_id: String,
+        error: String,
+    },
 }
 
 /// Message transformer trait
 pub trait MessageTransformer {
     /// Transform message from source format to target format
     fn transform(&self, message: &ExternalMessage) -> Result<ExternalMessage>;
-    
+
     /// Get transformer name
     fn name(&self) -> &str;
-    
+
     /// Get supported formats
     fn supported_formats(&self) -> (MessageFormat, MessageFormat);
 }
@@ -464,7 +487,7 @@ impl MessageBridgeManager {
     /// Create a new message bridge manager
     pub async fn new() -> Result<Self> {
         let (tx, _) = broadcast::channel(1000);
-        
+
         Ok(Self {
             bridges: Arc::new(RwLock::new(HashMap::new())),
             configs: Arc::new(RwLock::new(HashMap::new())),
@@ -474,14 +497,17 @@ impl MessageBridgeManager {
             event_notifier: tx,
         })
     }
-    
+
     /// Register a message transformer
-    pub async fn register_transformer(&self, transformer: Box<dyn MessageTransformer + Send + Sync>) {
+    pub async fn register_transformer(
+        &self,
+        transformer: Box<dyn MessageTransformer + Send + Sync>,
+    ) {
         let name = transformer.name().to_string();
         self.transformers.write().await.insert(name, transformer);
         info!("Registered message transformer");
     }
-    
+
     /// Create a message bridge
     pub async fn create_bridge(
         &self,
@@ -496,10 +522,10 @@ impl MessageBridgeManager {
         if !self.transformers.read().await.contains_key(&transformer) {
             return Err(anyhow!("Transformer not found: {}", transformer));
         }
-        
+
         // Generate bridge ID
         let bridge_id = Uuid::new_v4().to_string();
-        
+
         // Create bridge
         let bridge = MessageBridge {
             id: bridge_id.clone(),
@@ -513,26 +539,26 @@ impl MessageBridgeManager {
             created_at: Instant::now(),
             last_activity: None,
         };
-        
+
         // Register bridge
         self.bridges.write().await.insert(bridge_id.clone(), bridge);
         self.configs.write().await.insert(bridge_id.clone(), config);
-        
+
         // Update statistics
         let mut stats = self.stats.write().await;
         stats.total_bridges += 1;
         drop(stats);
-        
+
         // Notify
         let _ = self.event_notifier.send(BridgeNotification::BridgeCreated {
             id: bridge_id.clone(),
             bridge_type,
         });
-        
+
         info!("Created message bridge: {}", bridge_id);
         Ok(bridge_id)
     }
-    
+
     /// Start a bridge
     pub async fn start_bridge(&self, bridge_id: &str) -> Result<()> {
         let bridge_exists = {
@@ -544,90 +570,95 @@ impl MessageBridgeManager {
                 false
             }
         };
-        
+
         if !bridge_exists {
             return Err(anyhow!("Bridge not found"));
         }
-        
+
         // Start bridge processing
         self.start_bridge_processing(bridge_id).await?;
-        
+
         // Update statistics
         self.stats.write().await.active_bridges += 1;
-        
+
         // Notify
         let _ = self.event_notifier.send(BridgeNotification::BridgeStarted {
             id: bridge_id.to_string(),
         });
-        
+
         info!("Started bridge: {}", bridge_id);
         Ok(())
     }
-    
+
     /// Stop a bridge
     pub async fn stop_bridge(&self, bridge_id: &str) -> Result<()> {
         let mut bridges = self.bridges.write().await;
-        let bridge = bridges.get_mut(bridge_id)
+        let bridge = bridges
+            .get_mut(bridge_id)
             .ok_or_else(|| anyhow!("Bridge not found"))?;
-        
+
         bridge.status = BridgeStatus::Stopped;
-        
+
         // Update statistics
-        self.stats.write().await.active_bridges = 
-            bridges.values().filter(|b| b.status == BridgeStatus::Active).count();
-        
+        self.stats.write().await.active_bridges = bridges
+            .values()
+            .filter(|b| b.status == BridgeStatus::Active)
+            .count();
+
         // Notify
         let _ = self.event_notifier.send(BridgeNotification::BridgeStopped {
             id: bridge_id.to_string(),
         });
-        
+
         info!("Stopped bridge: {}", bridge_id);
         Ok(())
     }
-    
+
     /// Start bridge processing
     async fn start_bridge_processing(&self, bridge_id: &str) -> Result<()> {
         let (bridge, config) = {
             let bridges = self.bridges.read().await;
             let configs = self.configs.read().await;
-            
-            let bridge = bridges.get(bridge_id)
+
+            let bridge = bridges
+                .get(bridge_id)
                 .ok_or_else(|| anyhow!("Bridge not found"))?
                 .clone();
-            let config = configs.get(bridge_id)
+            let config = configs
+                .get(bridge_id)
                 .ok_or_else(|| anyhow!("Bridge config not found"))?
                 .clone();
-            
+
             (bridge, config)
         };
-        
+
         let bridges = self.bridges.clone();
         let transformers = self.transformers.clone();
         let router = self.router.clone();
         let stats = self.stats.clone();
         let event_notifier = self.event_notifier.clone();
         let bridge_id = bridge_id.to_string();
-        
+
         tokio::spawn(async move {
             let mut interval = interval(config.processing_interval);
             let mut message_queue = VecDeque::new();
-            
+
             loop {
                 interval.tick().await;
-                
+
                 // Check if bridge is still active
                 let status = {
                     let bridges_guard = bridges.read().await;
                     bridges_guard.get(&bridge_id).map(|b| b.status.clone())
                 };
-                
+
                 if let Some(BridgeStatus::Active) = status {
                     // Process messages from source
                     match Self::receive_messages(&bridge.source, &config).await {
                         Ok(messages) => {
                             for message in messages {
                                 message_queue.push_back(message);
-                                
+
                                 // Limit queue size
                                 if message_queue.len() > config.max_queue_size {
                                     message_queue.pop_front();
@@ -639,50 +670,55 @@ impl MessageBridgeManager {
                             error!("Failed to receive messages for bridge {}: {}", bridge_id, e);
                         }
                     }
-                    
+
                     // Process queued messages in batches
                     let batch_size = config.batch_size.min(message_queue.len());
                     if batch_size > 0 {
                         let batch: Vec<_> = message_queue.drain(..batch_size).collect();
-                        
+
                         for message in batch {
                             let start_time = Instant::now();
-                            
-                            match Self::process_message(
-                                &bridge,
-                                &message,
-                                &transformers,
-                                &router,
-                            ).await {
+
+                            match Self::process_message(&bridge, &message, &transformers, &router)
+                                .await
+                            {
                                 Ok(_) => {
                                     let duration = start_time.elapsed();
-                                    
+
                                     // Update bridge statistics
-                                    Self::update_bridge_stats(&bridges, &bridge_id, true, duration).await;
+                                    Self::update_bridge_stats(&bridges, &bridge_id, true, duration)
+                                        .await;
                                     stats.write().await.total_messages += 1;
-                                    
-                                    let _ = event_notifier.send(BridgeNotification::MessageProcessed {
-                                        bridge_id: bridge_id.clone(),
-                                        message_id: message.id.clone(),
-                                        duration,
-                                    });
+
+                                    let _ =
+                                        event_notifier.send(BridgeNotification::MessageProcessed {
+                                            bridge_id: bridge_id.clone(),
+                                            message_id: message.id.clone(),
+                                            duration,
+                                        });
                                 }
                                 Err(e) => {
                                     let duration = start_time.elapsed();
-                                    
-                                    error!("Failed to process message {} in bridge {}: {}", 
-                                        message.id, bridge_id, e);
-                                    
+
+                                    error!(
+                                        "Failed to process message {} in bridge {}: {}",
+                                        message.id, bridge_id, e
+                                    );
+
                                     // Update bridge statistics
-                                    Self::update_bridge_stats(&bridges, &bridge_id, false, duration).await;
+                                    Self::update_bridge_stats(
+                                        &bridges, &bridge_id, false, duration,
+                                    )
+                                    .await;
                                     stats.write().await.failed_messages += 1;
-                                    
-                                    let _ = event_notifier.send(BridgeNotification::MessageFailed {
-                                        bridge_id: bridge_id.clone(),
-                                        message_id: message.id.clone(),
-                                        error: e.to_string(),
-                                    });
-                                    
+
+                                    let _ =
+                                        event_notifier.send(BridgeNotification::MessageFailed {
+                                            bridge_id: bridge_id.clone(),
+                                            message_id: message.id.clone(),
+                                            error: e.to_string(),
+                                        });
+
                                     // Send to dead letter queue if enabled
                                     if config.enable_dlq {
                                         // This would implement DLQ logic
@@ -698,38 +734,47 @@ impl MessageBridgeManager {
                 }
             }
         });
-        
+
         Ok(())
     }
-    
+
     /// Receive messages from external system
     async fn receive_messages(
         source: &ExternalSystemConfig,
         config: &BridgeConfig,
     ) -> Result<Vec<ExternalMessage>> {
         match &source.system_type {
-            ExternalSystemType::Kafka { brokers, topics, consumer_group } => {
-                Self::receive_kafka_messages(brokers, topics, consumer_group, config).await
-            }
-            ExternalSystemType::RabbitMQ { url, exchange, routing_key, queue } => {
-                Self::receive_rabbitmq_messages(url, exchange, routing_key, queue, config).await
-            }
+            ExternalSystemType::Kafka {
+                brokers,
+                topics,
+                consumer_group,
+            } => Self::receive_kafka_messages(brokers, topics, consumer_group, config).await,
+            ExternalSystemType::RabbitMQ {
+                url,
+                exchange,
+                routing_key,
+                queue,
+            } => Self::receive_rabbitmq_messages(url, exchange, routing_key, queue, config).await,
             ExternalSystemType::RedisPubSub { url, channels } => {
                 Self::receive_redis_messages(url, channels, config).await
             }
-            ExternalSystemType::HttpRest { base_url, endpoints, headers } => {
-                Self::receive_http_messages(base_url, endpoints, headers, config).await
-            }
-            ExternalSystemType::FileSystem { directory, pattern, watch_mode } => {
-                Self::receive_file_messages(directory, pattern, *watch_mode, config).await
-            }
+            ExternalSystemType::HttpRest {
+                base_url,
+                endpoints,
+                headers,
+            } => Self::receive_http_messages(base_url, endpoints, headers, config).await,
+            ExternalSystemType::FileSystem {
+                directory,
+                pattern,
+                watch_mode,
+            } => Self::receive_file_messages(directory, pattern, *watch_mode, config).await,
             _ => {
                 warn!("Message receiving not implemented for this system type");
                 Ok(vec![])
             }
         }
     }
-    
+
     /// Receive messages from Kafka
     async fn receive_kafka_messages(
         _brokers: &[String],
@@ -741,7 +786,7 @@ impl MessageBridgeManager {
         // For now, return empty to avoid compilation errors
         Ok(vec![])
     }
-    
+
     /// Receive messages from RabbitMQ
     async fn receive_rabbitmq_messages(
         _url: &str,
@@ -753,7 +798,7 @@ impl MessageBridgeManager {
         // This would implement RabbitMQ consumer logic
         Ok(vec![])
     }
-    
+
     /// Receive messages from Redis
     async fn receive_redis_messages(
         _url: &str,
@@ -763,7 +808,7 @@ impl MessageBridgeManager {
         // This would implement Redis Pub/Sub consumer logic
         Ok(vec![])
     }
-    
+
     /// Receive messages from HTTP endpoints
     async fn receive_http_messages(
         _base_url: &str,
@@ -774,7 +819,7 @@ impl MessageBridgeManager {
         // This would implement HTTP polling logic
         Ok(vec![])
     }
-    
+
     /// Receive messages from file system
     async fn receive_file_messages(
         _directory: &str,
@@ -785,7 +830,7 @@ impl MessageBridgeManager {
         // This would implement file system watching logic
         Ok(vec![])
     }
-    
+
     /// Process a message through the bridge
     async fn process_message(
         bridge: &MessageBridge,
@@ -794,8 +839,10 @@ impl MessageBridgeManager {
         router: &Arc<RoutingEngine>,
     ) -> Result<()> {
         // Apply routing rules
-        let action = router.evaluate_rules(&bridge.routing_rules, message).await?;
-        
+        let action = router
+            .evaluate_rules(&bridge.routing_rules, message)
+            .await?;
+
         match action {
             RuleAction::Drop => {
                 debug!("Message dropped by routing rule: {}", message.id);
@@ -808,11 +855,12 @@ impl MessageBridgeManager {
                 // Apply specific transformer
                 let transformed = {
                     let transformers_guard = transformers.read().await;
-                    let transformer = transformers_guard.get(&transformer)
+                    let transformer = transformers_guard
+                        .get(&transformer)
                         .ok_or_else(|| anyhow!("Transformer not found: {}", transformer))?;
                     transformer.transform(message)?
                 };
-                
+
                 return Self::send_message(&bridge.target, &transformed).await;
             }
             _ => {
@@ -820,37 +868,40 @@ impl MessageBridgeManager {
                 warn!("Routing action not implemented: {:?}", action);
             }
         }
-        
+
         // Apply default transformation
         let transformed = {
             let transformers_guard = transformers.read().await;
-            let transformer = transformers_guard.get(&bridge.transformer)
+            let transformer = transformers_guard
+                .get(&bridge.transformer)
                 .ok_or_else(|| anyhow!("Transformer not found: {}", bridge.transformer))?;
             transformer.transform(message)?
         };
-        
+
         // Send to target
         Self::send_message(&bridge.target, &transformed).await
     }
-    
+
     /// Send message to external system
-    async fn send_message(
-        target: &ExternalSystemConfig,
-        message: &ExternalMessage,
-    ) -> Result<()> {
+    async fn send_message(target: &ExternalSystemConfig, message: &ExternalMessage) -> Result<()> {
         match &target.system_type {
-            ExternalSystemType::Kafka { brokers, topics, .. } => {
-                Self::send_kafka_message(brokers, topics, message).await
-            }
-            ExternalSystemType::RabbitMQ { url, exchange, routing_key, .. } => {
-                Self::send_rabbitmq_message(url, exchange, routing_key, message).await
-            }
+            ExternalSystemType::Kafka {
+                brokers, topics, ..
+            } => Self::send_kafka_message(brokers, topics, message).await,
+            ExternalSystemType::RabbitMQ {
+                url,
+                exchange,
+                routing_key,
+                ..
+            } => Self::send_rabbitmq_message(url, exchange, routing_key, message).await,
             ExternalSystemType::RedisPubSub { url, channels } => {
                 Self::send_redis_message(url, channels, message).await
             }
-            ExternalSystemType::HttpRest { base_url, endpoints, headers } => {
-                Self::send_http_message(base_url, endpoints, headers, message).await
-            }
+            ExternalSystemType::HttpRest {
+                base_url,
+                endpoints,
+                headers,
+            } => Self::send_http_message(base_url, endpoints, headers, message).await,
             ExternalSystemType::FileSystem { directory, .. } => {
                 Self::send_file_message(directory, message).await
             }
@@ -860,7 +911,7 @@ impl MessageBridgeManager {
             }
         }
     }
-    
+
     /// Send message to Kafka
     async fn send_kafka_message(
         _brokers: &[String],
@@ -870,7 +921,7 @@ impl MessageBridgeManager {
         // This would implement Kafka producer logic
         Ok(())
     }
-    
+
     /// Send message to RabbitMQ
     async fn send_rabbitmq_message(
         _url: &str,
@@ -881,7 +932,7 @@ impl MessageBridgeManager {
         // This would implement RabbitMQ publisher logic
         Ok(())
     }
-    
+
     /// Send message to Redis
     async fn send_redis_message(
         _url: &str,
@@ -891,7 +942,7 @@ impl MessageBridgeManager {
         // This would implement Redis Pub/Sub publisher logic
         Ok(())
     }
-    
+
     /// Send message via HTTP
     async fn send_http_message(
         _base_url: &str,
@@ -902,16 +953,13 @@ impl MessageBridgeManager {
         // This would implement HTTP POST logic
         Ok(())
     }
-    
+
     /// Send message to file system
-    async fn send_file_message(
-        _directory: &str,
-        _message: &ExternalMessage,
-    ) -> Result<()> {
+    async fn send_file_message(_directory: &str, _message: &ExternalMessage) -> Result<()> {
         // This would implement file writing logic
         Ok(())
     }
-    
+
     /// Update bridge statistics
     async fn update_bridge_stats(
         bridges: &Arc<RwLock<HashMap<String, MessageBridge>>>,
@@ -922,56 +970,62 @@ impl MessageBridgeManager {
         let mut bridges_guard = bridges.write().await;
         if let Some(bridge) = bridges_guard.get_mut(bridge_id) {
             bridge.last_activity = Some(Instant::now());
-            
+
             if success {
                 bridge.stats.messages_sent += 1;
             } else {
                 bridge.stats.messages_failed += 1;
             }
-            
+
             // Update average processing time
             let total_messages = bridge.stats.messages_sent + bridge.stats.messages_failed;
             if total_messages > 0 {
                 let avg_nanos = bridge.stats.avg_processing_time.as_nanos() as u64;
                 let duration_nanos = duration.as_nanos() as u64;
-                let new_avg_nanos = (avg_nanos * (total_messages - 1) + duration_nanos) / total_messages;
+                let new_avg_nanos =
+                    (avg_nanos * (total_messages - 1) + duration_nanos) / total_messages;
                 bridge.stats.avg_processing_time = Duration::from_nanos(new_avg_nanos);
             }
         }
     }
-    
+
     /// Get bridge statistics
     pub async fn get_bridge_stats(&self, bridge_id: &str) -> Result<BridgeStatistics> {
         let bridges = self.bridges.read().await;
-        let bridge = bridges.get(bridge_id)
+        let bridge = bridges
+            .get(bridge_id)
             .ok_or_else(|| anyhow!("Bridge not found"))?;
-        
+
         Ok(bridge.stats.clone())
     }
-    
+
     /// Get manager statistics
     pub async fn get_stats(&self) -> BridgeStats {
         self.stats.read().await.clone()
     }
-    
+
     /// List all bridges
     pub async fn list_bridges(&self) -> Vec<BridgeInfo> {
         let bridges = self.bridges.read().await;
-        bridges.values().map(|b| BridgeInfo {
-            id: b.id.clone(),
-            bridge_type: b.bridge_type.clone(),
-            status: format!("{:?}", b.status),
-            created_at: b.created_at.elapsed(),
-            last_activity: b.last_activity.map(|t| t.elapsed()),
-            messages_processed: b.stats.messages_sent + b.stats.messages_failed,
-            success_rate: if b.stats.messages_sent + b.stats.messages_failed > 0 {
-                b.stats.messages_sent as f64 / (b.stats.messages_sent + b.stats.messages_failed) as f64
-            } else {
-                0.0
-            },
-        }).collect()
+        bridges
+            .values()
+            .map(|b| BridgeInfo {
+                id: b.id.clone(),
+                bridge_type: b.bridge_type.clone(),
+                status: format!("{:?}", b.status),
+                created_at: b.created_at.elapsed(),
+                last_activity: b.last_activity.map(|t| t.elapsed()),
+                messages_processed: b.stats.messages_sent + b.stats.messages_failed,
+                success_rate: if b.stats.messages_sent + b.stats.messages_failed > 0 {
+                    b.stats.messages_sent as f64
+                        / (b.stats.messages_sent + b.stats.messages_failed) as f64
+                } else {
+                    0.0
+                },
+            })
+            .collect()
     }
-    
+
     /// Subscribe to bridge notifications
     pub fn subscribe(&self) -> broadcast::Receiver<BridgeNotification> {
         self.event_notifier.subscribe()
@@ -998,7 +1052,7 @@ impl RoutingEngine {
             rule_cache: Arc::new(RwLock::new(HashMap::new())),
         }
     }
-    
+
     /// Evaluate routing rules for a message
     async fn evaluate_rules(
         &self,
@@ -1008,18 +1062,18 @@ impl RoutingEngine {
         // Sort rules by priority
         let mut sorted_rules = rules.to_vec();
         sorted_rules.sort_by_key(|r| r.priority);
-        
+
         // Evaluate rules in priority order
         for rule in sorted_rules.iter().filter(|r| r.enabled) {
             if self.evaluate_condition(&rule.condition, message).await? {
                 return Ok(rule.action.clone());
             }
         }
-        
+
         // Default action is forward
         Ok(RuleAction::Forward)
     }
-    
+
     /// Evaluate a rule condition
     fn evaluate_condition<'a>(
         &'a self,
@@ -1027,51 +1081,61 @@ impl RoutingEngine {
         message: &'a ExternalMessage,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<bool>> + Send + 'a>> {
         Box::pin(async move {
-        match condition {
-            RuleCondition::Always => Ok(true),
-            RuleCondition::EventType { types } => {
-                let unknown = "unknown".to_string();
-                let event_type = message.headers.get("event_type")
-                    .or_else(|| message.metadata.get("event_type"))
-                    .unwrap_or(&unknown);
-                Ok(types.contains(event_type))
-            }
-            RuleCondition::Graph { patterns } => {
-                let graph = message.headers.get("graph")
-                    .or_else(|| message.metadata.get("graph"));
-                if let Some(g) = graph {
-                    Ok(patterns.iter().any(|p| g.contains(p)))
-                } else {
+            match condition {
+                RuleCondition::Always => Ok(true),
+                RuleCondition::EventType { types } => {
+                    let unknown = "unknown".to_string();
+                    let event_type = message
+                        .headers
+                        .get("event_type")
+                        .or_else(|| message.metadata.get("event_type"))
+                        .unwrap_or(&unknown);
+                    Ok(types.contains(event_type))
+                }
+                RuleCondition::Graph { patterns } => {
+                    let graph = message
+                        .headers
+                        .get("graph")
+                        .or_else(|| message.metadata.get("graph"));
+                    if let Some(g) = graph {
+                        Ok(patterns.iter().any(|p| g.contains(p)))
+                    } else {
+                        Ok(false)
+                    }
+                }
+                RuleCondition::SubjectPattern { regex } => {
+                    let subject = message
+                        .headers
+                        .get("subject")
+                        .or_else(|| message.metadata.get("subject"));
+                    if let Some(s) = subject {
+                        let re = regex::Regex::new(regex)
+                            .map_err(|e| anyhow!("Invalid regex: {}", e))?;
+                        Ok(re.is_match(s))
+                    } else {
+                        Ok(false)
+                    }
+                }
+                RuleCondition::Predicate { predicates } => {
+                    let predicate = message
+                        .headers
+                        .get("predicate")
+                        .or_else(|| message.metadata.get("predicate"));
+                    if let Some(p) = predicate {
+                        Ok(predicates.contains(p))
+                    } else {
+                        Ok(false)
+                    }
+                }
+                RuleCondition::Expression { expr } => {
+                    // This would implement expression evaluation
+                    warn!("Expression evaluation not implemented: {}", expr);
                     Ok(false)
                 }
-            }
-            RuleCondition::SubjectPattern { regex } => {
-                let subject = message.headers.get("subject")
-                    .or_else(|| message.metadata.get("subject"));
-                if let Some(s) = subject {
-                    let re = regex::Regex::new(regex)
-                        .map_err(|e| anyhow!("Invalid regex: {}", e))?;
-                    Ok(re.is_match(s))
-                } else {
-                    Ok(false)
-                }
-            }
-            RuleCondition::Predicate { predicates } => {
-                let predicate = message.headers.get("predicate")
-                    .or_else(|| message.metadata.get("predicate"));
-                if let Some(p) = predicate {
-                    Ok(predicates.contains(p))
-                } else {
-                    Ok(false)
-                }
-            }
-            RuleCondition::Expression { expr } => {
-                // This would implement expression evaluation
-                warn!("Expression evaluation not implemented: {}", expr);
-                Ok(false)
-            }
-            RuleCondition::Composite { operator, conditions } => {
-                match operator {
+                RuleCondition::Composite {
+                    operator,
+                    conditions,
+                } => match operator {
                     LogicalOperator::And => {
                         for cond in conditions {
                             if !self.evaluate_condition(cond, message).await? {
@@ -1094,9 +1158,8 @@ impl RoutingEngine {
                         }
                         Ok(!self.evaluate_condition(&conditions[0], message).await?)
                     }
-                }
+                },
             }
-        }
         })
     }
 }
@@ -1109,11 +1172,11 @@ impl MessageTransformer for JsonTransformer {
         // This would implement JSON transformation logic
         Ok(message.clone())
     }
-    
+
     fn name(&self) -> &str {
         "json"
     }
-    
+
     fn supported_formats(&self) -> (MessageFormat, MessageFormat) {
         (MessageFormat::Json, MessageFormat::Json)
     }
@@ -1127,17 +1190,17 @@ impl MessageTransformer for RdfToJsonTransformer {
         // This would implement RDF to JSON transformation
         let mut transformed = message.clone();
         transformed.format = MessageFormat::Json;
-        
+
         // Transform payload from RDF to JSON
         // For now, just pass through
-        
+
         Ok(transformed)
     }
-    
+
     fn name(&self) -> &str {
         "rdf-to-json"
     }
-    
+
     fn supported_formats(&self) -> (MessageFormat, MessageFormat) {
         (MessageFormat::Text, MessageFormat::Json) // Assuming RDF as text
     }
@@ -1146,11 +1209,11 @@ impl MessageTransformer for RdfToJsonTransformer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_bridge_creation() {
         let manager = MessageBridgeManager::new().await.unwrap();
-        
+
         let source = ExternalSystemConfig {
             system_type: ExternalSystemType::Kafka {
                 brokers: vec!["localhost:9092".to_string()],
@@ -1188,32 +1251,37 @@ mod tests {
                 },
             },
         };
-        
+
         let target = source.clone(); // Same config for simplicity
-        
+
         // Register transformer
-        manager.register_transformer(Box::new(JsonTransformer)).await;
-        
-        let bridge_id = manager.create_bridge(
-            BridgeType::SourceToTarget,
-            source,
-            target,
-            "json".to_string(),
-            vec![],
-            BridgeConfig::default(),
-        ).await.unwrap();
-        
+        manager
+            .register_transformer(Box::new(JsonTransformer))
+            .await;
+
+        let bridge_id = manager
+            .create_bridge(
+                BridgeType::SourceToTarget,
+                source,
+                target,
+                "json".to_string(),
+                vec![],
+                BridgeConfig::default(),
+            )
+            .await
+            .unwrap();
+
         assert!(!bridge_id.is_empty());
-        
+
         let bridges = manager.list_bridges().await;
         assert_eq!(bridges.len(), 1);
         assert_eq!(bridges[0].id, bridge_id);
     }
-    
+
     #[tokio::test]
     async fn test_routing_rules() {
         let engine = RoutingEngine::new();
-        
+
         let rule = RoutingRule {
             name: "test-rule".to_string(),
             condition: RuleCondition::EventType {
@@ -1223,7 +1291,7 @@ mod tests {
             priority: 1,
             enabled: true,
         };
-        
+
         let mut message = ExternalMessage {
             id: "test".to_string(),
             headers: HashMap::new(),
@@ -1233,9 +1301,11 @@ mod tests {
             source: "test".to_string(),
             metadata: HashMap::new(),
         };
-        
-        message.headers.insert("event_type".to_string(), "triple_added".to_string());
-        
+
+        message
+            .headers
+            .insert("event_type".to_string(), "triple_added".to_string());
+
         let action = engine.evaluate_rules(&[rule], &message).await.unwrap();
         assert!(matches!(action, RuleAction::Forward));
     }

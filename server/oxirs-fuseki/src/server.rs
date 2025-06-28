@@ -120,15 +120,17 @@ impl Runtime {
         info!("Initializing WebSocket subscription manager");
         let ws_config = WebSocketConfig::default();
         let store = Arc::new(self.store.clone());
-        let metrics = self.metrics_service.clone().unwrap_or_else(|| Arc::new(MetricsService::new(self.config.monitoring.clone()).unwrap()));
+        let metrics = self.metrics_service.clone().unwrap_or_else(|| {
+            Arc::new(MetricsService::new(self.config.monitoring.clone()).unwrap())
+        });
         let subscription_manager = SubscriptionManager::new(store, metrics, ws_config);
-        
+
         // Start the subscription manager
         let manager_clone = subscription_manager.clone();
         tokio::spawn(async move {
             manager_clone.start().await;
         });
-        
+
         self.subscription_manager = Some(Arc::new(subscription_manager));
 
         // Initialize federation manager

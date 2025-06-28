@@ -47,15 +47,15 @@ impl NamedDimensionVector {
 
     /// Get value by dimension name
     pub fn get_by_name(&self, name: &str) -> Option<f32> {
-        self.dimension_names.get(name).and_then(|&idx| {
-            match &self.vector.values {
+        self.dimension_names
+            .get(name)
+            .and_then(|&idx| match &self.vector.values {
                 VectorData::F32(values) => values.get(idx).copied(),
                 _ => {
                     let f32_values = self.vector.as_f32();
                     f32_values.get(idx).copied()
                 }
-            }
-        })
+            })
     }
 
     /// Set value by dimension name
@@ -70,7 +70,9 @@ impl NamedDimensionVector {
                         Err(anyhow::anyhow!("Index out of bounds"))
                     }
                 }
-                _ => Err(anyhow::anyhow!("Vector type must be F32 for direct modification"))
+                _ => Err(anyhow::anyhow!(
+                    "Vector type must be F32 for direct modification"
+                )),
             }
         } else {
             Err(anyhow::anyhow!("Unknown dimension name: {}", name))
@@ -79,7 +81,8 @@ impl NamedDimensionVector {
 
     /// Get dimension names in order
     pub fn dimension_names_ordered(&self) -> Vec<String> {
-        let mut names: Vec<(String, usize)> = self.dimension_names
+        let mut names: Vec<(String, usize)> = self
+            .dimension_names
             .iter()
             .map(|(name, &idx)| (name.clone(), idx))
             .collect();
@@ -126,7 +129,8 @@ impl HierarchicalVector {
 
     /// Get vector by level name
     pub fn get_level_by_name(&self, name: &str) -> Option<&Vector> {
-        self.level_names.iter()
+        self.level_names
+            .iter()
             .position(|n| n == name)
             .and_then(|idx| self.levels.get(idx))
     }
@@ -141,19 +145,27 @@ impl HierarchicalVector {
     }
 
     /// Compute similarity at specific level
-    pub fn cosine_similarity_at_level(&self, other: &HierarchicalVector, level: usize) -> Result<f32> {
-        let self_vec = self.get_level(level)
+    pub fn cosine_similarity_at_level(
+        &self,
+        other: &HierarchicalVector,
+        level: usize,
+    ) -> Result<f32> {
+        let self_vec = self
+            .get_level(level)
             .ok_or_else(|| anyhow::anyhow!("Level {} not found in self", level))?;
-        let other_vec = other.get_level(level)
+        let other_vec = other
+            .get_level(level)
             .ok_or_else(|| anyhow::anyhow!("Level {} not found in other", level))?;
-        
+
         self_vec.cosine_similarity(other_vec)
     }
 
     /// Compute weighted similarity across all levels
     pub fn weighted_similarity(&self, other: &HierarchicalVector, weights: &[f32]) -> Result<f32> {
         if self.levels.len() != other.levels.len() {
-            return Err(anyhow::anyhow!("Hierarchical vectors must have same number of levels"));
+            return Err(anyhow::anyhow!(
+                "Hierarchical vectors must have same number of levels"
+            ));
         }
 
         if weights.len() != self.levels.len() {
@@ -238,15 +250,15 @@ impl TemporalVector {
     /// Get time-decayed similarity
     pub fn decayed_similarity(&self, other: &TemporalVector) -> Result<f32> {
         let base_similarity = self.vector.cosine_similarity(&other.vector)?;
-        
+
         // Apply time decay based on age difference
         let self_age = self.timestamp.elapsed().unwrap_or_default().as_secs_f32();
         let other_age = other.timestamp.elapsed().unwrap_or_default().as_secs_f32();
         let age_diff = (self_age - other_age).abs();
-        
+
         // Exponential decay based on age difference
         let decay = (-age_diff * (1.0 - self.decay_factor) / 3600.0).exp(); // Hourly decay
-        
+
         Ok(base_similarity * decay)
     }
 }
@@ -308,24 +320,29 @@ impl WeightedDimensionVector {
         let other_values = other.vector.as_f32();
 
         // Combine weights (e.g., by averaging)
-        let combined_weights: Vec<f32> = self.weights.iter()
+        let combined_weights: Vec<f32> = self
+            .weights
+            .iter()
             .zip(&other.weights)
             .map(|(w1, w2)| (w1 + w2) / 2.0)
             .collect();
 
-        let weighted_dot: f32 = self_values.iter()
+        let weighted_dot: f32 = self_values
+            .iter()
             .zip(&other_values)
             .zip(&combined_weights)
             .map(|((a, b), w)| a * b * w)
             .sum();
 
-        let self_magnitude: f32 = self_values.iter()
+        let self_magnitude: f32 = self_values
+            .iter()
             .zip(&self.weights)
             .map(|(v, w)| v * v * w)
             .sum::<f32>()
             .sqrt();
 
-        let other_magnitude: f32 = other_values.iter()
+        let other_magnitude: f32 = other_values
+            .iter()
             .zip(&other.weights)
             .map(|(v, w)| v * v * w)
             .sum::<f32>()
@@ -340,7 +357,9 @@ impl WeightedDimensionVector {
 
     /// Get the most important dimensions
     pub fn top_dimensions(&self, k: usize) -> Vec<(usize, f32, f32)> {
-        let mut indexed: Vec<(usize, f32, f32)> = self.vector.as_f32()
+        let mut indexed: Vec<(usize, f32, f32)> = self
+            .vector
+            .as_f32()
             .iter()
             .zip(&self.weights)
             .enumerate()
@@ -368,15 +387,20 @@ impl ConfidenceScoredVector {
     /// Create a new confidence-scored vector
     pub fn new(mean_values: Vec<f32>, confidence_scores: Vec<f32>) -> Result<Self> {
         if mean_values.len() != confidence_scores.len() {
-            return Err(anyhow::anyhow!("Mean values and confidence scores must have same length"));
+            return Err(anyhow::anyhow!(
+                "Mean values and confidence scores must have same length"
+            ));
         }
 
         // Validate confidence scores
         if confidence_scores.iter().any(|&c| c < 0.0 || c > 1.0) {
-            return Err(anyhow::anyhow!("Confidence scores must be between 0.0 and 1.0"));
+            return Err(anyhow::anyhow!(
+                "Confidence scores must be between 0.0 and 1.0"
+            ));
         }
 
-        let overall_confidence = confidence_scores.iter().sum::<f32>() / confidence_scores.len() as f32;
+        let overall_confidence =
+            confidence_scores.iter().sum::<f32>() / confidence_scores.len() as f32;
 
         Ok(Self {
             mean: Vector::new(mean_values),
@@ -405,19 +429,22 @@ impl ConfidenceScoredVector {
         let other_values = other.mean.as_f32();
 
         // Use confidence scores as weights
-        let weighted_dot: f32 = self_values.iter()
+        let weighted_dot: f32 = self_values
+            .iter()
             .zip(&other_values)
             .zip(self.confidence.iter().zip(&other.confidence))
             .map(|((a, b), (c1, c2))| a * b * c1 * c2)
             .sum();
 
-        let self_magnitude: f32 = self_values.iter()
+        let self_magnitude: f32 = self_values
+            .iter()
             .zip(&self.confidence)
             .map(|(v, c)| v * v * c)
             .sum::<f32>()
             .sqrt();
 
-        let other_magnitude: f32 = other_values.iter()
+        let other_magnitude: f32 = other_values
+            .iter()
             .zip(&other.confidence)
             .map(|(v, c)| v * v * c)
             .sum::<f32>()
@@ -428,15 +455,15 @@ impl ConfidenceScoredVector {
         }
 
         let similarity = weighted_dot / (self_magnitude * other_magnitude);
-        
+
         // Scale by overall confidence
         Ok(similarity * self.overall_confidence * other.overall_confidence)
     }
 
     /// Sample vector from confidence distribution (assuming Gaussian)
     pub fn sample(&self) -> Vector {
-        use rand_distr::{Distribution, Normal};
         use rand::thread_rng;
+        use rand_distr::{Distribution, Normal};
 
         let mut rng = thread_rng();
         let values = self.mean.as_f32();
@@ -457,7 +484,8 @@ impl ConfidenceScoredVector {
 
     /// Get dimensions with low confidence
     pub fn low_confidence_dimensions(&self, threshold: f32) -> Vec<(usize, f32, f32)> {
-        self.mean.as_f32()
+        self.mean
+            .as_f32()
             .iter()
             .zip(&self.confidence)
             .enumerate()
@@ -475,13 +503,13 @@ mod tests {
     fn test_named_dimension_vector() {
         let names = vec!["age".to_string(), "income".to_string(), "score".to_string()];
         let values = vec![25.0, 50000.0, 0.85];
-        
+
         let mut named_vec = NamedDimensionVector::new(names, values).unwrap();
-        
+
         assert_eq!(named_vec.get_by_name("age"), Some(25.0));
         assert_eq!(named_vec.get_by_name("income"), Some(50000.0));
         assert_eq!(named_vec.get_by_name("unknown"), None);
-        
+
         named_vec.set_by_name("score", 0.95).unwrap();
         assert_eq!(named_vec.get_by_name("score"), Some(0.95));
     }
@@ -491,12 +519,16 @@ mod tests {
         let level1 = Vector::new(vec![1.0, 2.0]);
         let level2 = Vector::new(vec![1.0, 2.0, 3.0, 4.0]);
         let level3 = Vector::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
-        
+
         let levels = vec![level1, level2, level3];
-        let names = vec!["coarse".to_string(), "medium".to_string(), "fine".to_string()];
-        
+        let names = vec![
+            "coarse".to_string(),
+            "medium".to_string(),
+            "fine".to_string(),
+        ];
+
         let hier_vec = HierarchicalVector::new(levels, names).unwrap();
-        
+
         assert_eq!(hier_vec.levels.len(), 3);
         assert!(hier_vec.get_level_by_name("medium").is_some());
         assert_eq!(hier_vec.get_level_by_name("medium").unwrap().dimensions, 4);
@@ -508,7 +540,7 @@ mod tests {
         let temporal = TemporalVector::new(vec)
             .with_validity(3600) // 1 hour
             .with_decay(0.9);
-        
+
         assert!(temporal.is_valid());
         assert_eq!(temporal.decay_factor, 0.9);
     }
@@ -517,13 +549,13 @@ mod tests {
     fn test_weighted_dimension_vector() {
         let values = vec![1.0, 2.0, 3.0];
         let weights = vec![0.1, 0.3, 0.6];
-        
+
         let mut weighted = WeightedDimensionVector::new(values, weights).unwrap();
         weighted.normalize_weights();
-        
+
         let sum: f32 = weighted.weights.iter().sum();
         assert!((sum - 1.0).abs() < 1e-6);
-        
+
         let top = weighted.top_dimensions(2);
         assert_eq!(top.len(), 2);
         assert_eq!(top[0].0, 2); // Index of highest weight
@@ -533,11 +565,11 @@ mod tests {
     fn test_confidence_scored_vector() {
         let values = vec![1.0, 2.0, 3.0];
         let confidence = vec![0.9, 0.8, 0.95];
-        
+
         let conf_vec = ConfidenceScoredVector::new(values, confidence).unwrap();
-        
+
         assert!(conf_vec.overall_confidence > 0.8);
-        
+
         let low_conf = conf_vec.low_confidence_dimensions(0.85);
         assert_eq!(low_conf.len(), 1);
         assert_eq!(low_conf[0].0, 1); // Index with 0.8 confidence

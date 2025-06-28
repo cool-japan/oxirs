@@ -17,7 +17,7 @@ use crate::{
     llm::{ChatMessage, ChatRole, LLMManager, LLMRequest, Priority, UseCase},
     rag::{ExtractedEntity, ExtractedRelationship, QueryContext, QueryIntent},
 };
-use oxirs_core::{Store, query::QueryResult};
+use oxirs_core::{query::QueryResult, Store};
 
 /// NL2SPARQL system configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -420,11 +420,11 @@ impl NL2SPARQLSystem {
         system.initialize_templates()?;
         Ok(system)
     }
-    
+
     pub fn with_store(
-        config: NL2SPARQLConfig, 
+        config: NL2SPARQLConfig,
         llm_manager: Option<Arc<LLMManager>>,
-        store: Arc<Store>
+        store: Arc<Store>,
     ) -> Result<Self> {
         let mut system = Self {
             config,
@@ -484,25 +484,28 @@ impl NL2SPARQLSystem {
     pub async fn execute_sparql_query(&self, query: &str) -> Result<SPARQLExecutionResult> {
         if let Some(ref store) = self.store {
             let start_time = std::time::Instant::now();
-            
+
             info!("Executing SPARQL query: {}", query);
-            
+
             match store.query(query) {
                 Ok(results) => {
                     let execution_time = start_time.elapsed();
-                    
+
                     let mut bindings = Vec::new();
                     let mut result_count = 0;
-                    
+
                     // Process query results
                     // Note: OxirsQueryResults is currently a placeholder
                     // TODO: Implement proper SPARQL result processing when Store.query() returns actual results
                     let _results = results; // Currently just a placeholder
                     result_count = 0; // No real results from placeholder implementation
-                    
-                    info!("Query executed successfully: {} results in {}ms", 
-                          result_count, execution_time.as_millis());
-                    
+
+                    info!(
+                        "Query executed successfully: {} results in {}ms",
+                        result_count,
+                        execution_time.as_millis()
+                    );
+
                     Ok(SPARQLExecutionResult {
                         bindings,
                         result_count,
@@ -737,7 +740,7 @@ LIMIT {{limit}}
         query_context: &QueryContext,
     ) -> Result<SPARQLGenerationResult> {
         let system_prompt = self.create_sparql_generation_prompt();
-        
+
         if let Some(ref llm_manager) = self.llm_manager {
             let user_message = format!(
                 "Convert this natural language query to SPARQL: {}",
@@ -1402,7 +1405,7 @@ impl SPARQLOptimizer {
 /// Determine the type of SPARQL query
 fn determine_query_type(query: &str) -> SPARQLQueryType {
     let query_upper = query.trim().to_uppercase();
-    
+
     if query_upper.starts_with("SELECT") {
         SPARQLQueryType::Select
     } else if query_upper.starts_with("CONSTRUCT") {
@@ -1411,10 +1414,11 @@ fn determine_query_type(query: &str) -> SPARQLQueryType {
         SPARQLQueryType::Ask
     } else if query_upper.starts_with("DESCRIBE") {
         SPARQLQueryType::Describe
-    } else if query_upper.starts_with("INSERT") || 
-              query_upper.starts_with("DELETE") || 
-              query_upper.starts_with("LOAD") ||
-              query_upper.starts_with("CLEAR") {
+    } else if query_upper.starts_with("INSERT")
+        || query_upper.starts_with("DELETE")
+        || query_upper.starts_with("LOAD")
+        || query_upper.starts_with("CLEAR")
+    {
         SPARQLQueryType::Update
     } else {
         SPARQLQueryType::Unknown

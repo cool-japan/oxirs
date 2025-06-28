@@ -7,9 +7,7 @@
 //! Reference: Trouillon et al. "Complex Embeddings for Simple Link Prediction" (2016)
 
 use crate::models::{common::*, BaseModel};
-use crate::{
-    EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector,
-};
+use crate::{EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use ndarray::Array2;

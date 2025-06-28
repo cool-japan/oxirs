@@ -1,10 +1,10 @@
 //! RDF Dataset Federation for SPARQL endpoint integration
 
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
+use futures_util::future;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
-use serde::{Deserialize, Serialize};
-use futures_util::future;
 
 /// RDF dataset federation manager
 pub struct DatasetFederation {
@@ -47,7 +47,7 @@ impl Default for EndpointStatistics {
 }
 
 mod duration_serde {
-    use serde::{Deserializer, Serializer, Deserialize};
+    use serde::{Deserialize, Deserializer, Serializer};
     use std::time::Duration;
 
     pub fn serialize<S>(duration: &Duration, serializer: S) -> Result<S::Ok, S::Error>
@@ -67,7 +67,7 @@ mod duration_serde {
 }
 
 mod instant_serde {
-    use serde::{Deserializer, Serializer, Deserialize};
+    use serde::{Deserialize, Deserializer, Serializer};
     use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
     pub fn serialize<S>(instant: &Instant, serializer: S) -> Result<S::Ok, S::Error>
@@ -126,24 +126,24 @@ impl DatasetFederation {
             join_optimizer: JoinOptimizer::new(),
         }
     }
-    
+
     pub fn add_endpoint(&mut self, endpoint: SparqlEndpoint) {
         self.endpoints.push(endpoint);
     }
-    
+
     /// Federate a SPARQL query across multiple endpoints
     pub async fn federate_sparql_query(&self, query: &str) -> Result<serde_json::Value> {
         // Parse and analyze the query
         let query_plan = self.plan_federated_query(query).await?;
-        
+
         // Execute the plan
         self.execute_federated_plan(&query_plan).await
     }
-    
+
     /// Plan execution across multiple SPARQL endpoints
     async fn plan_federated_query(&self, query: &str) -> Result<Vec<FederatedStep>> {
         let mut steps = Vec::new();
-        
+
         // Simple implementation: determine which endpoints can contribute
         for endpoint in &self.endpoints {
             if self.endpoint_can_contribute(endpoint, query).await? {
@@ -155,97 +155,110 @@ impl DatasetFederation {
                 });
             }
         }
-        
+
         // Optimize join order
         self.join_optimizer.optimize_joins(&mut steps);
-        
+
         Ok(steps)
     }
-    
+
     /// Check if an endpoint can contribute to the query
-    async fn endpoint_can_contribute(&self, endpoint: &SparqlEndpoint, query: &str) -> Result<bool> {
+    async fn endpoint_can_contribute(
+        &self,
+        endpoint: &SparqlEndpoint,
+        query: &str,
+    ) -> Result<bool> {
         // Simple heuristic: check if endpoint supports required features
         // In practice, this would involve more sophisticated capability assessment
-        
+
         if query.contains("FILTER") && !endpoint.supported_features.contains("filters") {
             return Ok(false);
         }
-        
+
         if query.contains("GROUP BY") && !endpoint.supported_features.contains("aggregation") {
             return Ok(false);
         }
-        
+
         Ok(true)
     }
-    
+
     /// Adapt a query for a specific endpoint
     fn adapt_query_for_endpoint(&self, query: &str, endpoint: &SparqlEndpoint) -> Result<String> {
         // Simple adaptation - in practice this would be much more sophisticated
         let mut adapted = query.to_string();
-        
+
         // Add SERVICE clause if needed
         if !adapted.contains("SERVICE") {
-            adapted = format!("SELECT * WHERE {{ SERVICE <{}> {{ {} }} }}", endpoint.url, adapted);
+            adapted = format!(
+                "SELECT * WHERE {{ SERVICE <{}> {{ {} }} }}",
+                endpoint.url, adapted
+            );
         }
-        
+
         Ok(adapted)
     }
-    
+
     /// Execute a federated query plan
     async fn execute_federated_plan(&self, plan: &[FederatedStep]) -> Result<serde_json::Value> {
         let mut results: Vec<serde_json::Value> = Vec::new();
-        
+
         // Execute steps in parallel where possible
-        let futures: Vec<_> = plan.iter()
+        let futures: Vec<_> = plan
+            .iter()
             .map(|step| self.execute_federated_step(step))
             .collect();
-            
+
         let step_results = future::try_join_all(futures).await?;
-        
+
         // Merge results
         self.merge_federated_results(&step_results)
     }
-    
+
     /// Execute a single federated step
     async fn execute_federated_step(&self, step: &FederatedStep) -> Result<serde_json::Value> {
-        let endpoint = self.endpoints.iter()
+        let endpoint = self
+            .endpoints
+            .iter()
             .find(|ep| ep.id == step.endpoint_id)
             .ok_or_else(|| anyhow::anyhow!("Endpoint not found: {}", step.endpoint_id))?;
-            
+
         let client = reqwest::Client::new();
-        
-        let mut request = client.post(&endpoint.url)
+
+        let mut request = client
+            .post(&endpoint.url)
             .header("Content-Type", "application/sparql-query")
             .body(step.sparql_query.clone());
-            
+
         if let Some(auth) = &endpoint.auth_header {
             request = request.header("Authorization", auth);
         }
-        
+
         let response = request
             .timeout(Duration::from_secs(endpoint.timeout_secs))
             .send()
             .await
             .context("Failed to execute SPARQL query")?;
-            
+
         if !response.status().is_success() {
             return Err(anyhow::anyhow!(
                 "SPARQL query failed with status: {}",
                 response.status()
             ));
         }
-        
-        let result = response.json().await
+
+        let result = response
+            .json()
+            .await
             .context("Failed to parse SPARQL response")?;
-            
+
         Ok(result)
     }
-    
+
     /// Merge results from federated execution
     fn merge_federated_results(&self, results: &[serde_json::Value]) -> Result<serde_json::Value> {
         // Simple merge - combine all bindings
         let mut merged_bindings = Vec::new();
-        
+
         for result in results {
             if let Some(result_obj) = result.as_object() {
                 if let Some(results_obj) = result_obj.get("results") {
@@ -255,7 +268,7 @@ impl DatasetFederation {
                 }
             }
         }
-        
+
         Ok(serde_json::json!({
             "head": {
                 "vars": []
@@ -265,44 +278,52 @@ impl DatasetFederation {
             }
         }))
     }
-    
+
     /// Update endpoint statistics
     pub async fn update_endpoint_statistics(&mut self, endpoint_id: &str) -> Result<()> {
-        let endpoint_idx = self.endpoints.iter()
+        let endpoint_idx = self
+            .endpoints
+            .iter()
             .position(|ep| ep.id == endpoint_id)
             .ok_or_else(|| anyhow::anyhow!("Endpoint not found: {}", endpoint_id))?;
-            
+
         // Perform capability assessment
-        let stats = self.assess_endpoint_capabilities(&self.endpoints[endpoint_idx]).await?;
+        let stats = self
+            .assess_endpoint_capabilities(&self.endpoints[endpoint_idx])
+            .await?;
         self.endpoints[endpoint_idx].statistics = Some(stats);
-        
+
         Ok(())
     }
-    
+
     /// Assess endpoint capabilities and performance
-    async fn assess_endpoint_capabilities(&self, endpoint: &SparqlEndpoint) -> Result<EndpointStatistics> {
+    async fn assess_endpoint_capabilities(
+        &self,
+        endpoint: &SparqlEndpoint,
+    ) -> Result<EndpointStatistics> {
         let start_time = Instant::now();
-        
+
         // Simple capability test query
         let test_query = "SELECT (COUNT(*) as ?count) WHERE { ?s ?p ?o }";
-        
+
         let client = reqwest::Client::new();
-        let mut request = client.post(&endpoint.url)
+        let mut request = client
+            .post(&endpoint.url)
             .header("Content-Type", "application/sparql-query")
             .body(test_query);
-            
+
         if let Some(auth) = &endpoint.auth_header {
             request = request.header("Authorization", auth);
         }
-        
+
         let response = request
             .timeout(Duration::from_secs(endpoint.timeout_secs))
             .send()
             .await
             .context("Failed to assess endpoint capabilities")?;
-            
+
         let response_time = start_time.elapsed();
-        
+
         let mut triple_count = None;
         if response.status().is_success() {
             if let Ok(result) = response.json::<serde_json::Value>().await {
@@ -313,7 +334,7 @@ impl DatasetFederation {
                 }
             }
         }
-        
+
         Ok(EndpointStatistics {
             avg_response_time: response_time,
             triple_count,
@@ -333,7 +354,7 @@ impl JoinOptimizer {
             },
         }
     }
-    
+
     /// Optimize join order for federated steps
     pub fn optimize_joins(&self, steps: &mut Vec<FederatedStep>) {
         // Simple optimization: prioritize endpoints with better statistics
@@ -347,15 +368,16 @@ impl JoinOptimizer {
             }
         });
     }
-    
+
     /// Identify potential join patterns
     pub fn identify_join_patterns(&self, steps: &[FederatedStep]) -> Vec<JoinPattern> {
         let mut patterns = Vec::new();
-        
+
         // Simple pattern detection: look for common variables in queries
         for (i, step_a) in steps.iter().enumerate() {
             for (j, step_b) in steps.iter().enumerate().skip(i + 1) {
-                let common_vars = self.find_common_variables(&step_a.sparql_query, &step_b.sparql_query);
+                let common_vars =
+                    self.find_common_variables(&step_a.sparql_query, &step_b.sparql_query);
                 if !common_vars.is_empty() {
                     patterns.push(JoinPattern {
                         left_step: i,
@@ -365,23 +387,25 @@ impl JoinOptimizer {
                 }
             }
         }
-        
+
         patterns
     }
-    
+
     /// Find common variables between two SPARQL queries
     fn find_common_variables(&self, query_a: &str, query_b: &str) -> Vec<String> {
         // Simple regex-based variable extraction
         let var_regex = regex::Regex::new(r"\?(\w+)").unwrap();
-        
-        let vars_a: HashSet<String> = var_regex.captures_iter(query_a)
+
+        let vars_a: HashSet<String> = var_regex
+            .captures_iter(query_a)
             .map(|cap| cap[1].to_string())
             .collect();
-            
-        let vars_b: HashSet<String> = var_regex.captures_iter(query_b)
+
+        let vars_b: HashSet<String> = var_regex
+            .captures_iter(query_b)
             .map(|cap| cap[1].to_string())
             .collect();
-            
+
         vars_a.intersection(&vars_b).cloned().collect()
     }
 }

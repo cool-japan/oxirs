@@ -2,9 +2,9 @@
 
 use crate::Vector;
 use anyhow::{anyhow, Result};
+use oxirs_core::simd::SimdOps;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use oxirs_core::simd::SimdOps;
 
 /// Similarity measurement configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -137,11 +137,8 @@ impl SemanticSimilarity {
     pub fn similarity(&self, a: &Vector, b: &Vector) -> Result<f32> {
         let a_f32 = a.as_f32();
         let b_f32 = b.as_f32();
-        
-        let mut similarity = self
-            .config
-            .primary_metric
-            .similarity(&a_f32, &b_f32)?;
+
+        let mut similarity = self.config.primary_metric.similarity(&a_f32, &b_f32)?;
 
         // Apply feature weighting if available
         if let Some(ref weights) = self.feature_weights {
@@ -164,7 +161,7 @@ impl SemanticSimilarity {
 
         let a_f32 = a.as_f32();
         let b_f32 = b.as_f32();
-        
+
         let mut weighted_sum = 0.0;
         let mut total_weight = 0.0;
 
@@ -402,7 +399,7 @@ fn minkowski_similarity(a: &[f32], b: &[f32], p: f32) -> f32 {
         // Handle edge case
         return euclidean_similarity(a, b);
     }
-    
+
     let distance: f32 = a
         .iter()
         .zip(b)

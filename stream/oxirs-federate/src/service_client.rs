@@ -5,25 +5,29 @@
 
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use backoff::{ExponentialBackoff, backoff::Backoff, retry};
+use backoff::{backoff::Backoff, retry, ExponentialBackoff};
 use bytes::Bytes;
-use governor::{Quota, RateLimiter, state::{InMemoryState, NotKeyed}, clock::DefaultClock};
+use governor::{
+    clock::DefaultClock,
+    state::{InMemoryState, NotKeyed},
+    Quota, RateLimiter,
+};
 use reqwest::{
-    Client, Response, StatusCode,
     header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE, USER_AGENT},
+    Client, Response, StatusCode,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{RwLock, Semaphore};
-use tower::ServiceBuilder;
 use tower::limit::ConcurrencyLimitLayer;
+use tower::ServiceBuilder;
 use tracing::{debug, error, info, warn};
 
 use crate::{
-    AuthConfig, AuthType, AuthCredentials, FederatedService,
-    executor::{SparqlResults, GraphQLResponse},
+    executor::{GraphQLResponse, SparqlResults},
+    AuthConfig, AuthCredentials, AuthType, FederatedService,
 };
 
 /// Trait for service clients
@@ -31,15 +35,33 @@ use crate::{
 pub trait ServiceClient: Send + Sync {
     /// Execute a query against the service
     async fn execute_query(&self, query: &str) -> Result<QueryResponse>;
-    
+
     /// Execute an update against the service (SPARQL only)
     async fn execute_update(&self, update: &str) -> Result<()>;
-    
+
     /// Check if the service is healthy
     async fn health_check(&self) -> Result<bool>;
-    
+
     /// Get client statistics
     async fn get_stats(&self) -> ClientStats;
+}
+
+/// OAuth2 token information with expiration tracking
+#[derive(Debug, Clone)]
+struct OAuth2TokenInfo {
+    access_token: String,
+    token_type: String,
+    expires_at: Instant,
+    scope: Option<String>,
+}
+
+/// OAuth2 token response from authorization server
+#[derive(Debug, Deserialize)]
+struct OAuth2TokenResponse {
+    access_token: String,
+    token_type: String,
+    expires_in: Option<u64>,
+    scope: Option<String>,
 }
 
 /// SPARQL service client
@@ -51,6 +73,7 @@ pub struct SparqlClient {
     rate_limiter: Option<Arc<RateLimiter<NotKeyed, InMemoryState, DefaultClock>>>,
     circuit_breaker: Arc<RwLock<CircuitBreaker>>,
     stats: Arc<RwLock<ClientStats>>,
+    oauth2_token: Arc<RwLock<Option<OAuth2TokenInfo>>>,
 }
 
 impl SparqlClient {
@@ -68,7 +91,7 @@ impl SparqlClient {
         let rate_limiter = if let Some(rate_limit) = &service.performance.rate_limit {
             let quota = Quota::per_minute(
                 std::num::NonZeroU32::new(rate_limit.requests_per_minute as u32)
-                    .unwrap_or(std::num::NonZeroU32::new(60).unwrap())
+                    .unwrap_or(std::num::NonZeroU32::new(60).unwrap()),
             );
             Some(Arc::new(RateLimiter::direct(quota)))
         } else {
@@ -88,6 +111,7 @@ impl SparqlClient {
             rate_limiter,
             circuit_breaker,
             stats: Arc::new(RwLock::new(ClientStats::default())),
+            oauth2_token: Arc::new(RwLock::new(None)),
         })
     }
 
@@ -100,7 +124,10 @@ impl SparqlClient {
             let breaker = self.circuit_breaker.read().await;
             if breaker.is_open() {
                 self.record_error("circuit_breaker_open").await;
-                return Err(anyhow!("Circuit breaker is open for service {}", self.service.id));
+                return Err(anyhow!(
+                    "Circuit breaker is open for service {}",
+                    self.service.id
+                ));
             }
         }
 
@@ -108,7 +135,10 @@ impl SparqlClient {
         if let Some(limiter) = &self.rate_limiter {
             if limiter.check().is_err() {
                 self.record_error("rate_limit_exceeded").await;
-                return Err(anyhow!("Rate limit exceeded for service {}", self.service.id));
+                return Err(anyhow!(
+                    "Rate limit exceeded for service {}",
+                    self.service.id
+                ));
             }
         }
 
@@ -273,8 +303,10 @@ impl SparqlClient {
                 }
             }
             AuthType::OAuth2 => {
-                // TODO: Implement OAuth2 token refresh
-                if let Some(token) = &auth.credentials.token {
+                // Check if token needs refresh and refresh if necessary
+                let refreshed_token = self.ensure_fresh_oauth2_token(auth).await?;
+
+                if let Some(token) = refreshed_token {
                     let auth_value = format!("Bearer {}", token);
                     headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value)?);
                 }
@@ -305,8 +337,127 @@ impl SparqlClient {
         let mut stats = self.stats.write().await;
         stats.total_requests += 1;
         stats.failed_requests += 1;
-        *stats.error_counts.entry(error_type.to_string()).or_insert(0) += 1;
+        *stats
+            .error_counts
+            .entry(error_type.to_string())
+            .or_insert(0) += 1;
         stats.last_error_time = Some(Instant::now());
+    }
+
+    /// Ensure OAuth2 token is fresh and return the token if available
+    async fn ensure_fresh_oauth2_token(&self, auth: &AuthConfig) -> Result<Option<String>> {
+        let current_token = {
+            let token_guard = self.oauth2_token.read().await;
+            token_guard.clone()
+        };
+
+        // Check if we have a valid token that hasn't expired (with 60s buffer)
+        if let Some(token_info) = current_token {
+            if token_info.expires_at > Instant::now() + Duration::from_secs(60) {
+                return Ok(Some(token_info.access_token));
+            }
+        }
+
+        // Token is expired or missing, need to refresh
+        if let Some(refresh_token) = &auth.credentials.refresh_token {
+            match self.refresh_oauth2_token(auth, refresh_token).await {
+                Ok(new_token) => {
+                    let mut token_guard = self.oauth2_token.write().await;
+                    *token_guard = Some(new_token.clone());
+                    Ok(Some(new_token.access_token))
+                }
+                Err(e) => {
+                    warn!("Failed to refresh OAuth2 token: {}", e);
+                    // Fall back to existing token if available
+                    if let Some(token_info) = current_token {
+                        Ok(Some(token_info.access_token))
+                    } else {
+                        Err(e)
+                    }
+                }
+            }
+        } else {
+            // No refresh token available, use existing token if any
+            if let Some(token_info) = current_token {
+                Ok(Some(token_info.access_token))
+            } else {
+                Err(anyhow!("No OAuth2 token or refresh token available"))
+            }
+        }
+    }
+
+    /// Refresh OAuth2 token using refresh token
+    async fn refresh_oauth2_token(
+        &self,
+        auth: &AuthConfig,
+        refresh_token: &str,
+    ) -> Result<OAuth2TokenInfo> {
+        let token_endpoint = auth
+            .credentials
+            .token_endpoint
+            .as_ref()
+            .ok_or_else(|| anyhow!("OAuth2 token endpoint not configured"))?;
+
+        let client_id = auth
+            .credentials
+            .client_id
+            .as_ref()
+            .ok_or_else(|| anyhow!("OAuth2 client ID not configured"))?;
+
+        let client_secret = auth
+            .credentials
+            .client_secret
+            .as_ref()
+            .ok_or_else(|| anyhow!("OAuth2 client secret not configured"))?;
+
+        // Prepare request body for token refresh
+        let mut form_data = HashMap::new();
+        form_data.insert("grant_type", "refresh_token");
+        form_data.insert("refresh_token", refresh_token);
+        form_data.insert("client_id", client_id);
+        form_data.insert("client_secret", client_secret);
+
+        // Add scope if configured
+        if let Some(scope) = &auth.credentials.scope {
+            form_data.insert("scope", scope);
+        }
+
+        debug!("Refreshing OAuth2 token at endpoint: {}", token_endpoint);
+
+        let response = self
+            .http_client
+            .post(token_endpoint)
+            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .form(&form_data)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(anyhow!(
+                "OAuth2 token refresh failed with status {}: {}",
+                response.status(),
+                error_text
+            ));
+        }
+
+        let token_response: OAuth2TokenResponse = response.json().await?;
+
+        // Calculate expiration time (default to 1 hour if not provided)
+        let expires_in = token_response.expires_in.unwrap_or(3600);
+        let expires_at = Instant::now() + Duration::from_secs(expires_in);
+
+        info!(
+            "Successfully refreshed OAuth2 token, expires in {} seconds",
+            expires_in
+        );
+
+        Ok(OAuth2TokenInfo {
+            access_token: token_response.access_token,
+            token_type: token_response.token_type,
+            expires_at,
+            scope: token_response.scope,
+        })
     }
 }
 
@@ -360,7 +511,7 @@ impl GraphQLClient {
         let rate_limiter = if let Some(rate_limit) = &service.performance.rate_limit {
             let quota = Quota::per_minute(
                 std::num::NonZeroU32::new(rate_limit.requests_per_minute as u32)
-                    .unwrap_or(std::num::NonZeroU32::new(60).unwrap())
+                    .unwrap_or(std::num::NonZeroU32::new(60).unwrap()),
             );
             Some(Arc::new(RateLimiter::direct(quota)))
         } else {
@@ -544,7 +695,10 @@ impl GraphQLClient {
         let mut stats = self.stats.write().await;
         stats.total_requests += 1;
         stats.failed_requests += 1;
-        *stats.error_counts.entry(error_type.to_string()).or_insert(0) += 1;
+        *stats
+            .error_counts
+            .entry(error_type.to_string())
+            .or_insert(0) += 1;
         stats.last_error_time = Some(Instant::now());
     }
 }
@@ -713,7 +867,10 @@ impl CircuitBreaker {
                 if self.failure_count >= self.failure_threshold {
                     // Transition to open
                     self.state = CircuitBreakerState::Open;
-                    warn!("Circuit breaker opened after {} failures", self.failure_count);
+                    warn!(
+                        "Circuit breaker opened after {} failures",
+                        self.failure_count
+                    );
                 }
             }
             CircuitBreakerState::HalfOpen => {
@@ -759,14 +916,13 @@ impl ClientStats {
 }
 
 /// Create a service client based on service type
-pub fn create_client(service: FederatedService, config: ClientConfig) -> Result<Box<dyn ServiceClient>> {
+pub fn create_client(
+    service: FederatedService,
+    config: ClientConfig,
+) -> Result<Box<dyn ServiceClient>> {
     match service.service_type {
-        crate::ServiceType::Sparql => {
-            Ok(Box::new(SparqlClient::new(service, config)?))
-        }
-        crate::ServiceType::GraphQL => {
-            Ok(Box::new(GraphQLClient::new(service, config)?))
-        }
+        crate::ServiceType::Sparql => Ok(Box::new(SparqlClient::new(service, config)?)),
+        crate::ServiceType::GraphQL => Ok(Box::new(GraphQLClient::new(service, config)?)),
         crate::ServiceType::Hybrid => {
             // For hybrid services, default to SPARQL client
             // Could be enhanced to select based on query type
@@ -797,21 +953,21 @@ mod tests {
     #[test]
     fn test_circuit_breaker() {
         let mut breaker = CircuitBreaker::new(3, Duration::from_secs(60));
-        
+
         assert!(!breaker.is_open());
-        
+
         // Record failures
         breaker.record_failure();
         breaker.record_failure();
         breaker.record_failure();
-        
+
         // Should be open now
         assert!(breaker.is_open());
-        
+
         // Success in half-open state
         breaker.state = CircuitBreakerState::HalfOpen;
         breaker.record_success();
-        
+
         // Should be closed now
         assert!(!breaker.is_open());
         assert_eq!(breaker.state, CircuitBreakerState::Closed);
@@ -823,7 +979,7 @@ mod tests {
         stats.total_requests = 100;
         stats.successful_requests = 95;
         stats.failed_requests = 5;
-        
+
         assert_eq!(stats.success_rate(), 0.95);
     }
 }

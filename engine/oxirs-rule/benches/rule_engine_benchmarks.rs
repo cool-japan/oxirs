@@ -426,42 +426,52 @@ fn benchmark_concurrent_execution(c: &mut Criterion) {
 /// Benchmark W3C RDFS test suite compliance
 fn benchmark_w3c_rdfs_compliance(c: &mut Criterion) {
     let mut group = c.benchmark_group("w3c_rdfs_compliance");
-    
+
     // RDFS test cases based on W3C test suite
     let rdfs_test_cases = vec![
         // rdfs2: (aaa rdfs:domain xxx), (yyy aaa zzz) -> (yyy rdf:type xxx)
-        ("rdfs2", vec![
-            RuleAtom::Triple {
-                subject: Term::Constant("http://example.org/property".to_string()),
-                predicate: Term::Constant("http://www.w3.org/2000/01/rdf-schema#domain".to_string()),
-                object: Term::Constant("http://example.org/DomainClass".to_string()),
-            },
-            RuleAtom::Triple {
-                subject: Term::Constant("http://example.org/subject".to_string()),
-                predicate: Term::Constant("http://example.org/property".to_string()),
-                object: Term::Constant("http://example.org/object".to_string()),
-            },
-        ]),
+        (
+            "rdfs2",
+            vec![
+                RuleAtom::Triple {
+                    subject: Term::Constant("http://example.org/property".to_string()),
+                    predicate: Term::Constant(
+                        "http://www.w3.org/2000/01/rdf-schema#domain".to_string(),
+                    ),
+                    object: Term::Constant("http://example.org/DomainClass".to_string()),
+                },
+                RuleAtom::Triple {
+                    subject: Term::Constant("http://example.org/subject".to_string()),
+                    predicate: Term::Constant("http://example.org/property".to_string()),
+                    object: Term::Constant("http://example.org/object".to_string()),
+                },
+            ],
+        ),
         // rdfs7: (aaa rdfs:subPropertyOf bbb), (xxx aaa yyy) -> (xxx bbb yyy)
-        ("rdfs7", vec![
-            RuleAtom::Triple {
-                subject: Term::Constant("http://example.org/subProperty".to_string()),
-                predicate: Term::Constant("http://www.w3.org/2000/01/rdf-schema#subPropertyOf".to_string()),
-                object: Term::Constant("http://example.org/superProperty".to_string()),
-            },
-            RuleAtom::Triple {
-                subject: Term::Constant("http://example.org/subject".to_string()),
-                predicate: Term::Constant("http://example.org/subProperty".to_string()),
-                object: Term::Constant("http://example.org/object".to_string()),
-            },
-        ]),
+        (
+            "rdfs7",
+            vec![
+                RuleAtom::Triple {
+                    subject: Term::Constant("http://example.org/subProperty".to_string()),
+                    predicate: Term::Constant(
+                        "http://www.w3.org/2000/01/rdf-schema#subPropertyOf".to_string(),
+                    ),
+                    object: Term::Constant("http://example.org/superProperty".to_string()),
+                },
+                RuleAtom::Triple {
+                    subject: Term::Constant("http://example.org/subject".to_string()),
+                    predicate: Term::Constant("http://example.org/subProperty".to_string()),
+                    object: Term::Constant("http://example.org/object".to_string()),
+                },
+            ],
+        ),
     ];
 
     for (test_name, facts) in rdfs_test_cases {
         group.bench_function(test_name, |b| {
             b.iter(|| {
                 let mut engine = RuleEngine::new();
-                
+
                 // Add basic reasoning rule
                 engine.add_rule(Rule {
                     name: "basic_inference".to_string(),
@@ -476,13 +486,13 @@ fn benchmark_w3c_rdfs_compliance(c: &mut Criterion) {
                         object: Term::Variable("Y".to_string()),
                     }],
                 });
-                
+
                 // Execute reasoning
                 engine.forward_chain(&facts).unwrap();
             });
         });
     }
-    
+
     group.finish();
 }
 
@@ -490,42 +500,40 @@ fn benchmark_w3c_rdfs_compliance(c: &mut Criterion) {
 fn benchmark_large_scale_performance(c: &mut Criterion) {
     let mut group = c.benchmark_group("large_scale_performance");
     group.sample_size(10); // Fewer samples for large-scale tests
-    
+
     // Test with datasets of different sizes
     for size in [1_000, 5_000, 10_000].iter() {
         group.throughput(Throughput::Elements(*size as u64));
-        group.bench_with_input(
-            BenchmarkId::new("large_dataset", size),
-            size,
-            |b, &size| {
-                b.iter(|| {
-                    let mut engine = RuleEngine::new();
-                    
-                    // Add basic reasoning rules
-                    engine.add_rule(Rule {
-                        name: "type_inference".to_string(),
-                        body: vec![RuleAtom::Triple {
-                            subject: Term::Variable("X".to_string()),
-                            predicate: Term::Constant("http://example.org/hasAge".to_string()),
-                            object: Term::Variable("Age".to_string()),
-                        }],
-                        head: vec![RuleAtom::Triple {
-                            subject: Term::Variable("X".to_string()),
-                            predicate: Term::Constant("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string()),
-                            object: Term::Constant("http://example.org/AgedEntity".to_string()),
-                        }],
-                    });
-                    
-                    // Generate large dataset
-                    let facts = generate_test_facts(size);
-                    
-                    // Perform reasoning
-                    engine.forward_chain(&facts).unwrap();
+        group.bench_with_input(BenchmarkId::new("large_dataset", size), size, |b, &size| {
+            b.iter(|| {
+                let mut engine = RuleEngine::new();
+
+                // Add basic reasoning rules
+                engine.add_rule(Rule {
+                    name: "type_inference".to_string(),
+                    body: vec![RuleAtom::Triple {
+                        subject: Term::Variable("X".to_string()),
+                        predicate: Term::Constant("http://example.org/hasAge".to_string()),
+                        object: Term::Variable("Age".to_string()),
+                    }],
+                    head: vec![RuleAtom::Triple {
+                        subject: Term::Variable("X".to_string()),
+                        predicate: Term::Constant(
+                            "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
+                        ),
+                        object: Term::Constant("http://example.org/AgedEntity".to_string()),
+                    }],
                 });
-            },
-        );
+
+                // Generate large dataset
+                let facts = generate_test_facts(size);
+
+                // Perform reasoning
+                engine.forward_chain(&facts).unwrap();
+            });
+        });
     }
-    
+
     group.finish();
 }
 

@@ -80,7 +80,10 @@ impl RdfFormat {
 
     /// Check if this format supports named graphs
     pub fn supports_graphs(&self) -> bool {
-        matches!(self, RdfFormat::TriG | RdfFormat::NQuads | RdfFormat::JsonLd)
+        matches!(
+            self,
+            RdfFormat::TriG | RdfFormat::NQuads | RdfFormat::JsonLd
+        )
     }
 
     /// Check if this is a line-based format
@@ -113,7 +116,11 @@ pub struct FormatDetector;
 
 impl FormatDetector {
     /// Detect format from file path, content, and MIME type
-    pub fn detect(path: Option<&Path>, content: Option<&str>, mime_type: Option<&str>) -> Vec<FormatDetection> {
+    pub fn detect(
+        path: Option<&Path>,
+        content: Option<&str>,
+        mime_type: Option<&str>,
+    ) -> Vec<FormatDetection> {
         let mut detections = Vec::new();
 
         // Extension-based detection
@@ -137,7 +144,7 @@ impl FormatDetector {
 
         // Sort by confidence (highest first)
         detections.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
-        
+
         // Remove duplicates, keeping highest confidence
         let mut seen = std::collections::HashSet::new();
         detections.retain(|d| seen.insert(d.format));
@@ -148,7 +155,7 @@ impl FormatDetector {
     /// Detect format from file extension
     fn detect_by_extension(path: &Path) -> Option<FormatDetection> {
         let ext = path.extension()?.to_str()?.to_lowercase();
-        
+
         for format in &[
             RdfFormat::Turtle,
             RdfFormat::NTriples,
@@ -175,7 +182,7 @@ impl FormatDetector {
     /// Detect format from MIME type
     fn detect_by_mime_type(mime: &str) -> Option<FormatDetection> {
         let mime_lower = mime.to_lowercase();
-        
+
         for format in &[
             RdfFormat::Turtle,
             RdfFormat::NTriples,
@@ -206,7 +213,10 @@ impl FormatDetector {
         let first_lines: Vec<&str> = trimmed.lines().take(20).collect();
 
         // Check for Turtle/N3 prefixes
-        if first_lines.iter().any(|line| line.starts_with("@prefix") || line.starts_with("@base")) {
+        if first_lines
+            .iter()
+            .any(|line| line.starts_with("@prefix") || line.starts_with("@base"))
+        {
             detections.push(FormatDetection {
                 format: RdfFormat::Turtle,
                 confidence: 0.95,
@@ -216,8 +226,9 @@ impl FormatDetector {
 
         // Check for N-Triples patterns
         if first_lines.iter().all(|line| {
-            line.is_empty() || line.starts_with('#') || 
-            (line.contains(" .") && (line.starts_with('<') || line.starts_with('_')))
+            line.is_empty()
+                || line.starts_with('#')
+                || (line.contains(" .") && (line.starts_with('<') || line.starts_with('_')))
         }) {
             let confidence = if trimmed.contains(" .") { 0.85 } else { 0.6 };
             detections.push(FormatDetection {
@@ -237,7 +248,9 @@ impl FormatDetector {
         }
 
         // Check for JSON-LD
-        if trimmed.starts_with('{') && (trimmed.contains("\"@context\"") || trimmed.contains("'@context'")) {
+        if trimmed.starts_with('{')
+            && (trimmed.contains("\"@context\"") || trimmed.contains("'@context'"))
+        {
             detections.push(FormatDetection {
                 format: RdfFormat::JsonLd,
                 confidence: 0.95,
@@ -246,7 +259,10 @@ impl FormatDetector {
         }
 
         // Check for TriG (graphs)
-        if first_lines.iter().any(|line| line.trim().starts_with("GRAPH") || line.contains(" {")) {
+        if first_lines
+            .iter()
+            .any(|line| line.trim().starts_with("GRAPH") || line.contains(" {"))
+        {
             detections.push(FormatDetection {
                 format: RdfFormat::TriG,
                 confidence: 0.8,
@@ -276,9 +292,9 @@ impl FormatDetector {
         let mut buffer = vec![0; 4096];
         let bytes_read = file.read(&mut buffer)?;
         buffer.truncate(bytes_read);
-        
+
         let content = String::from_utf8_lossy(&buffer);
-        
+
         Ok(Self::detect(Some(path), Some(&content), None))
     }
 }
@@ -287,7 +303,7 @@ impl FormatDetector {
 pub trait FormatConverter {
     /// Convert from one format to another
     fn convert(&self, input: &str, from: RdfFormat, to: RdfFormat) -> ToolResult<String>;
-    
+
     /// Check if conversion is supported
     fn supports_conversion(&self, from: RdfFormat, to: RdfFormat) -> bool;
 }
@@ -299,10 +315,11 @@ impl FormatConverter for BasicFormatConverter {
     fn convert(&self, _input: &str, from: RdfFormat, to: RdfFormat) -> ToolResult<String> {
         // For now, return a placeholder - actual implementation would use RDF parsing/serialization
         Err(format!(
-            "Conversion from {} to {} not yet implemented", 
-            from.name(), 
+            "Conversion from {} to {} not yet implemented",
+            from.name(),
             to.name()
-        ).into())
+        )
+        .into())
     }
 
     fn supports_conversion(&self, _from: RdfFormat, _to: RdfFormat) -> bool {
@@ -374,12 +391,16 @@ impl FormatValidator {
 
     fn validate_turtle(_content: &str, result: &mut ValidationResult) {
         // Basic Turtle validation would go here
-        result.warnings.push("Turtle validation not fully implemented".to_string());
+        result
+            .warnings
+            .push("Turtle validation not fully implemented".to_string());
     }
 
     fn validate_rdf_xml(_content: &str, result: &mut ValidationResult) {
         // RDF/XML validation would go here
-        result.warnings.push("RDF/XML validation not fully implemented".to_string());
+        result
+            .warnings
+            .push("RDF/XML validation not fully implemented".to_string());
     }
 
     fn validate_json_ld(content: &str, result: &mut ValidationResult) {
@@ -387,7 +408,9 @@ impl FormatValidator {
         match serde_json::from_str::<serde_json::Value>(content) {
             Ok(_) => {
                 // TODO: Check for JSON-LD specific requirements
-                result.warnings.push("JSON-LD semantic validation not implemented".to_string());
+                result
+                    .warnings
+                    .push("JSON-LD semantic validation not implemented".to_string());
             }
             Err(e) => {
                 result.errors.push(ValidationError {
@@ -437,11 +460,7 @@ mod tests {
 
     #[test]
     fn test_format_detection_by_extension() {
-        let detections = FormatDetector::detect(
-            Some(Path::new("test.ttl")),
-            None,
-            None
-        );
+        let detections = FormatDetector::detect(Some(Path::new("test.ttl")), None, None);
         assert!(!detections.is_empty());
         assert_eq!(detections[0].format, RdfFormat::Turtle);
     }
@@ -461,12 +480,14 @@ mod tests {
 
     #[test]
     fn test_ntriples_validation() {
-        let valid_content = "<http://example.org/s> <http://example.org/p> <http://example.org/o> .\n";
+        let valid_content =
+            "<http://example.org/s> <http://example.org/p> <http://example.org/o> .\n";
         let result = FormatValidator::validate(valid_content, RdfFormat::NTriples).unwrap();
         assert!(result.valid);
         assert_eq!(result.stats.triple_count, 1);
 
-        let invalid_content = "<http://example.org/s> <http://example.org/p> <http://example.org/o>\n";
+        let invalid_content =
+            "<http://example.org/s> <http://example.org/p> <http://example.org/o>\n";
         let result = FormatValidator::validate(invalid_content, RdfFormat::NTriples).unwrap();
         assert!(!result.valid);
         assert!(!result.errors.is_empty());

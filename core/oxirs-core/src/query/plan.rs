@@ -17,47 +17,61 @@ pub fn convert_triple_pattern(pattern: &algebra::TriplePattern) -> TriplePattern
         algebra::TermPattern::Variable(v) => Some(SubjectPattern::Variable(v.clone())),
         algebra::TermPattern::Literal(_) => None, // Literals can't be subjects in RDF
     };
-    
+
     let predicate = match &pattern.predicate {
         algebra::TermPattern::NamedNode(nn) => Some(PredicatePattern::NamedNode(nn.clone())),
         algebra::TermPattern::Variable(v) => Some(PredicatePattern::Variable(v.clone())),
         _ => None, // Only named nodes and variables can be predicates in RDF
     };
-    
+
     let object = match &pattern.object {
         algebra::TermPattern::NamedNode(nn) => Some(ObjectPattern::NamedNode(nn.clone())),
         algebra::TermPattern::BlankNode(bn) => Some(ObjectPattern::BlankNode(bn.clone())),
         algebra::TermPattern::Literal(lit) => Some(ObjectPattern::Literal(lit.clone())),
         algebra::TermPattern::Variable(v) => Some(ObjectPattern::Variable(v.clone())),
     };
-    
+
     TriplePattern::new(subject, predicate, object)
 }
 
 /// Convert model TriplePattern to algebra TriplePattern
 /// This function provides the reverse conversion for compatibility
-pub fn convert_to_algebra_pattern(pattern: &TriplePattern) -> Result<algebra::TriplePattern, OxirsError> {
+pub fn convert_to_algebra_pattern(
+    pattern: &TriplePattern,
+) -> Result<algebra::TriplePattern, OxirsError> {
     let subject = match pattern.subject() {
         Some(SubjectPattern::NamedNode(nn)) => algebra::TermPattern::NamedNode(nn.clone()),
         Some(SubjectPattern::BlankNode(bn)) => algebra::TermPattern::BlankNode(bn.clone()),
         Some(SubjectPattern::Variable(v)) => algebra::TermPattern::Variable(v.clone()),
-        None => return Err(OxirsError::Query("Subject pattern is required in algebra representation".to_string())),
+        None => {
+            return Err(OxirsError::Query(
+                "Subject pattern is required in algebra representation".to_string(),
+            ))
+        }
     };
-    
+
     let predicate = match pattern.predicate() {
         Some(PredicatePattern::NamedNode(nn)) => algebra::TermPattern::NamedNode(nn.clone()),
         Some(PredicatePattern::Variable(v)) => algebra::TermPattern::Variable(v.clone()),
-        None => return Err(OxirsError::Query("Predicate pattern is required in algebra representation".to_string())),
+        None => {
+            return Err(OxirsError::Query(
+                "Predicate pattern is required in algebra representation".to_string(),
+            ))
+        }
     };
-    
+
     let object = match pattern.object() {
         Some(ObjectPattern::NamedNode(nn)) => algebra::TermPattern::NamedNode(nn.clone()),
         Some(ObjectPattern::BlankNode(bn)) => algebra::TermPattern::BlankNode(bn.clone()),
         Some(ObjectPattern::Literal(lit)) => algebra::TermPattern::Literal(lit.clone()),
         Some(ObjectPattern::Variable(v)) => algebra::TermPattern::Variable(v.clone()),
-        None => return Err(OxirsError::Query("Object pattern is required in algebra representation".to_string())),
+        None => {
+            return Err(OxirsError::Query(
+                "Object pattern is required in algebra representation".to_string(),
+            ))
+        }
     };
-    
+
     Ok(algebra::TriplePattern {
         subject,
         predicate,
@@ -69,7 +83,9 @@ pub fn convert_to_algebra_pattern(pattern: &TriplePattern) -> Result<algebra::Tr
 #[derive(Debug, Clone)]
 pub enum ExecutionPlan {
     /// Scan all triples matching a pattern
-    TripleScan { pattern: crate::model::pattern::TriplePattern },
+    TripleScan {
+        pattern: crate::model::pattern::TriplePattern,
+    },
     /// Join two sub-plans
     HashJoin {
         left: Box<ExecutionPlan>,
@@ -176,7 +192,10 @@ impl QueryPlanner {
     }
 
     /// Plans a graph pattern
-    fn plan_graph_pattern(&self, pattern: &algebra::GraphPattern) -> Result<ExecutionPlan, OxirsError> {
+    fn plan_graph_pattern(
+        &self,
+        pattern: &algebra::GraphPattern,
+    ) -> Result<ExecutionPlan, OxirsError> {
         match pattern {
             algebra::GraphPattern::Bgp(patterns) => {
                 if patterns.is_empty() {

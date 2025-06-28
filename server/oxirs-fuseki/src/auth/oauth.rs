@@ -581,9 +581,10 @@ fn generate_code_verifier() -> String {
 
 /// Generate code challenge for PKCE using S256 method
 fn generate_code_challenge(code_verifier: &str) -> String {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
     use sha2::{Digest, Sha256};
     let digest = Sha256::digest(code_verifier.as_bytes());
-    base64::encode_config(digest, base64::URL_SAFE_NO_PAD)
+    URL_SAFE_NO_PAD.encode(digest)
 }
 
 /// URL encoding helper

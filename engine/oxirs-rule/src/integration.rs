@@ -296,7 +296,11 @@ impl RuleIntegration {
     }
 
     /// Enhanced dataset integration with named graphs
-    pub fn process_named_graph(&mut self, graph_name: &GraphName, triples: Vec<Triple>) -> Result<ProcessingStats> {
+    pub fn process_named_graph(
+        &mut self,
+        graph_name: &GraphName,
+        triples: Vec<Triple>,
+    ) -> Result<ProcessingStats> {
         let start_time = std::time::Instant::now();
         let mut processed = 0;
         let mut derived = 0;
@@ -305,11 +309,11 @@ impl RuleIntegration {
         for triple in triples {
             let quad = Quad::new(
                 triple.subject().clone(),
-                triple.predicate().clone(), 
+                triple.predicate().clone(),
                 triple.object().clone(),
                 graph_name.clone(),
             );
-            
+
             if self.store.insert_quad(quad)? {
                 processed += 1;
             }
@@ -321,8 +325,11 @@ impl RuleIntegration {
         let after_rules = self.store.len()?;
         derived = after_rules - before_rules;
 
-        info!("Processed {} triples in named graph, derived {} new facts", processed, derived);
-        
+        info!(
+            "Processed {} triples in named graph, derived {} new facts",
+            processed, derived
+        );
+
         Ok(ProcessingStats {
             processed_count: processed,
             derived_count: derived,
@@ -335,7 +342,7 @@ impl RuleIntegration {
         // Check for common IRI patterns and normalize
         let normalized = if iri_str.starts_with('<') && iri_str.ends_with('>') {
             // Remove angle brackets
-            &iri_str[1..iri_str.len()-1]
+            &iri_str[1..iri_str.len() - 1]
         } else if iri_str.contains(':') && !iri_str.starts_with("http") {
             // Might be a prefixed IRI
             return self.expand_prefixed_iri(iri_str).and_then(|expanded| {
@@ -346,7 +353,10 @@ impl RuleIntegration {
         };
 
         // Validate IRI format
-        if !normalized.starts_with("http://") && !normalized.starts_with("https://") && !normalized.starts_with("urn:") {
+        if !normalized.starts_with("http://")
+            && !normalized.starts_with("https://")
+            && !normalized.starts_with("urn:")
+        {
             return Err(anyhow::anyhow!("Invalid IRI format: {}", iri_str));
         }
 
@@ -354,29 +364,35 @@ impl RuleIntegration {
     }
 
     /// Enhanced datatype validation and conversion
-    pub fn validate_and_convert_literal(&self, value: &str, datatype_iri: Option<&str>) -> Result<Literal> {
+    pub fn validate_and_convert_literal(
+        &self,
+        value: &str,
+        datatype_iri: Option<&str>,
+    ) -> Result<Literal> {
         let literal = if let Some(dt_iri) = datatype_iri {
             let datatype = NamedNode::new(dt_iri)?;
-            
+
             // Validate value against datatype
             match dt_iri {
                 "http://www.w3.org/2001/XMLSchema#integer" => {
-                    value.parse::<i64>()
+                    value
+                        .parse::<i64>()
                         .map_err(|_| anyhow::anyhow!("Invalid integer value: {}", value))?;
                 }
                 "http://www.w3.org/2001/XMLSchema#decimal" => {
-                    value.parse::<f64>()
+                    value
+                        .parse::<f64>()
                         .map_err(|_| anyhow::anyhow!("Invalid decimal value: {}", value))?;
                 }
-                "http://www.w3.org/2001/XMLSchema#boolean" => {
-                    match value {
-                        "true" | "false" | "1" | "0" => {},
-                        _ => return Err(anyhow::anyhow!("Invalid boolean value: {}", value)),
-                    }
-                }
+                "http://www.w3.org/2001/XMLSchema#boolean" => match value {
+                    "true" | "false" | "1" | "0" => {}
+                    _ => return Err(anyhow::anyhow!("Invalid boolean value: {}", value)),
+                },
                 "http://www.w3.org/2001/XMLSchema#dateTime" => {
                     // Basic ISO 8601 validation
-                    if !value.contains('T') || (!value.contains('Z') && !value.contains('+') && !value.contains('-')) {
+                    if !value.contains('T')
+                        || (!value.contains('Z') && !value.contains('+') && !value.contains('-'))
+                    {
                         return Err(anyhow::anyhow!("Invalid dateTime format: {}", value));
                     }
                 }
@@ -385,7 +401,7 @@ impl RuleIntegration {
                     debug!("Unknown datatype {}, accepting value as-is", dt_iri);
                 }
             }
-            
+
             Literal::new_typed_literal(value, datatype)
         } else {
             Literal::new(value)
@@ -395,7 +411,11 @@ impl RuleIntegration {
     }
 
     /// Enhanced bulk processing with transaction support
-    pub fn bulk_process_with_transactions(&mut self, triples: Vec<Triple>, batch_size: usize) -> Result<BulkProcessingStats> {
+    pub fn bulk_process_with_transactions(
+        &mut self,
+        triples: Vec<Triple>,
+        batch_size: usize,
+    ) -> Result<BulkProcessingStats> {
         let start_time = std::time::Instant::now();
         let mut total_processed = 0;
         let mut total_derived = 0;
@@ -404,7 +424,7 @@ impl RuleIntegration {
         for triple_batch in triples.chunks(batch_size) {
             // Begin transaction (conceptual - oxirs-core may not have transactions yet)
             let batch_start = self.store.len()?;
-            
+
             // Process batch
             for triple in triple_batch {
                 if self.store.insert_triple(triple.clone())? {
@@ -417,7 +437,12 @@ impl RuleIntegration {
             total_derived += derived_count;
             batch_count += 1;
 
-            info!("Processed batch {}: {} triples, {} derived", batch_count, triple_batch.len(), derived_count);
+            info!(
+                "Processed batch {}: {} triples, {} derived",
+                batch_count,
+                triple_batch.len(),
+                derived_count
+            );
         }
 
         Ok(BulkProcessingStats {
@@ -429,7 +454,10 @@ impl RuleIntegration {
     }
 
     /// Enhanced error recovery and partial processing
-    pub fn process_with_error_recovery(&mut self, triples: Vec<Result<Triple, OxirsError>>) -> Result<ErrorRecoveryStats> {
+    pub fn process_with_error_recovery(
+        &mut self,
+        triples: Vec<Result<Triple, OxirsError>>,
+    ) -> Result<ErrorRecoveryStats> {
         let mut successful = 0;
         let mut failed = 0;
         let mut derived = 0;
@@ -437,19 +465,17 @@ impl RuleIntegration {
 
         for (index, triple_result) in triples.into_iter().enumerate() {
             match triple_result {
-                Ok(triple) => {
-                    match self.store.insert_triple(triple) {
-                        Ok(inserted) => {
-                            if inserted {
-                                successful += 1;
-                            }
-                        }
-                        Err(e) => {
-                            failed += 1;
-                            error_details.push(format!("Triple {}: {}", index, e));
+                Ok(triple) => match self.store.insert_triple(triple) {
+                    Ok(inserted) => {
+                        if inserted {
+                            successful += 1;
                         }
                     }
-                }
+                    Err(e) => {
+                        failed += 1;
+                        error_details.push(format!("Triple {}: {}", index, e));
+                    }
+                },
                 Err(e) => {
                     failed += 1;
                     error_details.push(format!("Parse error {}: {}", index, e));

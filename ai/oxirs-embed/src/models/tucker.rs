@@ -6,9 +6,7 @@
 //! Reference: Balažević et al. "TuckER: Tensor Factorization for Knowledge Graph Completion" (2019)
 
 use crate::models::{common::*, BaseModel};
-use crate::{
-    EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector,
-};
+use crate::{EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use ndarray::{Array1, Array2, Array3};
@@ -50,20 +48,41 @@ impl TuckER {
         let base = BaseModel::new(config.clone());
 
         // Get TuckER-specific parameters from model_params
-        let entity_dim = config.model_params.get("entity_dim")
-            .map(|&v| v as usize).unwrap_or(config.dimensions);
-        let relation_dim = config.model_params.get("relation_dim")
-            .map(|&v| v as usize).unwrap_or(config.dimensions);
-        let core_dim1 = config.model_params.get("core_dim1")
-            .map(|&v| v as usize).unwrap_or(config.dimensions);
-        let core_dim2 = config.model_params.get("core_dim2")
-            .map(|&v| v as usize).unwrap_or(config.dimensions);
-        let core_dim3 = config.model_params.get("core_dim3")
-            .map(|&v| v as usize).unwrap_or(config.dimensions);
-        let dropout_rate = config.model_params.get("dropout_rate")
-            .copied().unwrap_or(0.3);
-        let batch_norm = config.model_params.get("batch_norm")
-            .map(|&v| v > 0.0).unwrap_or(true);
+        let entity_dim = config
+            .model_params
+            .get("entity_dim")
+            .map(|&v| v as usize)
+            .unwrap_or(config.dimensions);
+        let relation_dim = config
+            .model_params
+            .get("relation_dim")
+            .map(|&v| v as usize)
+            .unwrap_or(config.dimensions);
+        let core_dim1 = config
+            .model_params
+            .get("core_dim1")
+            .map(|&v| v as usize)
+            .unwrap_or(config.dimensions);
+        let core_dim2 = config
+            .model_params
+            .get("core_dim2")
+            .map(|&v| v as usize)
+            .unwrap_or(config.dimensions);
+        let core_dim3 = config
+            .model_params
+            .get("core_dim3")
+            .map(|&v| v as usize)
+            .unwrap_or(config.dimensions);
+        let dropout_rate = config
+            .model_params
+            .get("dropout_rate")
+            .copied()
+            .unwrap_or(0.3);
+        let batch_norm = config
+            .model_params
+            .get("batch_norm")
+            .map(|&v| v > 0.0)
+            .unwrap_or(true);
 
         Self {
             base,
@@ -117,7 +136,7 @@ impl TuckER {
         // Initialize core tensor with Xavier initialization
         let total_elements = self.core_dims.0 * self.core_dims.1 * self.core_dims.2;
         let std_dev = (2.0 / total_elements as f64).sqrt();
-        
+
         for elem in self.core_tensor.iter_mut() {
             *elem = rng.gen_range(-std_dev..std_dev);
         }
@@ -151,7 +170,7 @@ impl TuckER {
         // Compute Tucker decomposition score
         // score = Σ_i,j,k h_i * r_j * t_k * W_ijk
         let mut score = 0.0;
-        
+
         for i in 0..self.core_dims.0.min(h.len()) {
             for j in 0..self.core_dims.1.min(r.len()) {
                 for k in 0..self.core_dims.2.min(t.len()) {
@@ -184,7 +203,7 @@ impl TuckER {
         // Logistic loss gradient
         let pos_sigmoid = 1.0 / (1.0 + (-pos_score).exp());
         let neg_sigmoid = 1.0 / (1.0 + (-neg_score).exp());
-        
+
         let pos_grad = pos_sigmoid - 1.0;
         let neg_grad = neg_sigmoid;
 
@@ -219,7 +238,7 @@ impl TuckER {
         core_grads: &mut Array3<f64>,
     ) {
         let (s, p, o) = triple;
-        
+
         let h = self.entity_embeddings.row(s);
         let r = self.relation_embeddings.row(p);
         let t = self.entity_embeddings.row(o);
@@ -296,8 +315,10 @@ impl TuckER {
 
                 for neg_triple in neg_samples {
                     // Compute scores
-                    let pos_score = self.score_triple_ids(pos_triple.0, pos_triple.1, pos_triple.2)?;
-                    let neg_score = self.score_triple_ids(neg_triple.0, neg_triple.1, neg_triple.2)?;
+                    let pos_score =
+                        self.score_triple_ids(pos_triple.0, pos_triple.1, pos_triple.2)?;
+                    let neg_score =
+                        self.score_triple_ids(neg_triple.0, neg_triple.1, neg_triple.2)?;
 
                     // Logistic loss
                     let pos_loss = -(1.0 / (1.0 + (-pos_score).exp())).ln();
@@ -308,7 +329,7 @@ impl TuckER {
                     // Compute and accumulate gradients
                     let (entity_grads, relation_grads, core_grads) =
                         self.compute_gradients(pos_triple, neg_triple, learning_rate)?;
-                    
+
                     batch_entity_grads += &entity_grads;
                     batch_relation_grads += &relation_grads;
                     batch_core_grads += &core_grads;
@@ -332,7 +353,11 @@ impl TuckER {
                 );
 
                 // Update core tensor
-                for ((i, j, k), grad) in self.core_tensor.indexed_iter_mut().zip(batch_core_grads.iter()) {
+                for ((i, j, k), grad) in self
+                    .core_tensor
+                    .indexed_iter_mut()
+                    .zip(batch_core_grads.iter())
+                {
                     let reg_term = self.base.config.l2_reg * *grad;
                     *grad -= learning_rate * (grad + reg_term);
                 }
@@ -617,7 +642,7 @@ mod tests {
             .with_dimensions(50)
             .with_max_epochs(10)
             .with_seed(42);
-        
+
         // Add TuckER-specific parameters
         config.model_params.insert("entity_dim".to_string(), 50.0);
         config.model_params.insert("relation_dim".to_string(), 50.0);

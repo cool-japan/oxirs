@@ -6,9 +6,7 @@
 //! Reference: Bordes et al. "Translating Embeddings for Modeling Multi-relational Data" (2013)
 
 use crate::models::{common::*, BaseModel};
-use crate::{
-    EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector,
-};
+use crate::{EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use ndarray::{Array1, Array2};

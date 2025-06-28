@@ -59,6 +59,7 @@ use oxirs_shacl::{
 
 pub mod ai_orchestrator;
 pub mod analytics;
+pub mod error_handling;
 pub mod insights;
 pub mod learning;
 pub mod ml;
@@ -72,10 +73,22 @@ pub mod shape;
 // Re-export key types for convenience with explicit imports to avoid ambiguity
 pub use ai_orchestrator::*;
 pub use analytics::*;
+pub use error_handling::{
+    ErrorClassificationResult, ErrorHandlingConfig, ErrorSeverity, ErrorType,
+    IntelligentErrorHandler, RepairSuggestion, RepairType, SmartErrorAnalysis,
+};
 pub use insights::*;
-pub use learning::{ShapeLearner, LearningConfig, LearningStatistics, ShapeTrainingData as LearningTrainingData, ShapeExample};
-pub use ml::{ShapeLearningModel, ModelParams, ModelMetrics, ModelError, ShapeTrainingData as MlTrainingData, LearnedShape, LearnedConstraint};
-pub use neural_patterns::{NeuralPatternRecognizer, NeuralPattern, NeuralPatternConfig, LearnedConstraintPattern};
+pub use learning::{
+    LearningConfig, LearningStatistics, ShapeExample, ShapeLearner,
+    ShapeTrainingData as LearningTrainingData,
+};
+pub use ml::{
+    LearnedConstraint, LearnedShape, ModelError, ModelMetrics, ModelParams, ShapeLearningModel,
+    ShapeTrainingData as MlTrainingData,
+};
+pub use neural_patterns::{
+    LearnedConstraintPattern, NeuralPattern, NeuralPatternConfig, NeuralPatternRecognizer,
+};
 pub use optimization::*;
 pub use patterns::*;
 pub use prediction::*;
@@ -280,6 +293,9 @@ pub struct ShaclAiAssistant {
     /// AI orchestrator for comprehensive learning
     ai_orchestrator: Arc<Mutex<AiOrchestrator>>,
 
+    /// Intelligent error handler
+    error_handler: Arc<Mutex<IntelligentErrorHandler>>,
+
     /// Configuration
     config: ShaclAiConfig,
 }
@@ -294,17 +310,28 @@ impl ShaclAiAssistant {
     /// Create a new SHACL-AI assistant with custom configuration
     pub fn with_config(config: ShaclAiConfig) -> Self {
         Self {
-            shape_learner: Arc::new(Mutex::new(ShapeLearner::with_config(config.learning.clone()))),
-            quality_assessor: Arc::new(Mutex::new(QualityAssessor::with_config(config.quality.clone()))),
+            shape_learner: Arc::new(Mutex::new(ShapeLearner::with_config(
+                config.learning.clone(),
+            ))),
+            quality_assessor: Arc::new(Mutex::new(QualityAssessor::with_config(
+                config.quality.clone(),
+            ))),
             validation_predictor: Arc::new(Mutex::new(ValidationPredictor::with_config(
                 config.prediction.clone(),
             ))),
             optimization_engine: Arc::new(Mutex::new(OptimizationEngine::with_config(
                 config.optimization.clone(),
             ))),
-            pattern_analyzer: Arc::new(Mutex::new(PatternAnalyzer::with_config(config.patterns.clone()))),
-            analytics_engine: Arc::new(Mutex::new(AnalyticsEngine::with_config(config.analytics.clone()))),
+            pattern_analyzer: Arc::new(Mutex::new(PatternAnalyzer::with_config(
+                config.patterns.clone(),
+            ))),
+            analytics_engine: Arc::new(Mutex::new(AnalyticsEngine::with_config(
+                config.analytics.clone(),
+            ))),
             ai_orchestrator: Arc::new(Mutex::new(AiOrchestrator::new())),
+            error_handler: Arc::new(Mutex::new(IntelligentErrorHandler::with_config(
+                ErrorHandlingConfig::default(),
+            ))),
             config,
         }
     }
@@ -317,7 +344,9 @@ impl ShaclAiAssistant {
         let patterns = self
             .pattern_analyzer
             .lock()
-            .map_err(|e| ShaclAiError::ShapeLearning(format!("Failed to lock pattern analyzer: {}", e)))?
+            .map_err(|e| {
+                ShaclAiError::ShapeLearning(format!("Failed to lock pattern analyzer: {}", e))
+            })?
             .analyze_graph_patterns(store, graph_name)?;
         tracing::debug!("Discovered {} patterns in graph", patterns.len());
 
@@ -325,7 +354,9 @@ impl ShaclAiAssistant {
         let learned_shapes = self
             .shape_learner
             .lock()
-            .map_err(|e| ShaclAiError::ShapeLearning(format!("Failed to lock shape learner: {}", e)))?
+            .map_err(|e| {
+                ShaclAiError::ShapeLearning(format!("Failed to lock shape learner: {}", e))
+            })?
             .learn_shapes_from_patterns(store, &patterns, graph_name)?;
         tracing::info!("Learned {} shapes from data", learned_shapes.len());
 
@@ -333,7 +364,9 @@ impl ShaclAiAssistant {
         let optimized_shapes = self
             .optimization_engine
             .lock()
-            .map_err(|e| ShaclAiError::Optimization(format!("Failed to lock optimization engine: {}", e)))?
+            .map_err(|e| {
+                ShaclAiError::Optimization(format!("Failed to lock optimization engine: {}", e))
+            })?
             .optimize_shapes(&learned_shapes, store)?;
         tracing::info!("Optimized shapes using AI recommendations");
 
@@ -341,18 +374,31 @@ impl ShaclAiAssistant {
     }
 
     /// Comprehensive AI-powered shape learning using orchestrator (Ultrathink Mode)
-    pub fn learn_shapes_comprehensive(&mut self, store: &Store, graph_name: Option<&str>) -> Result<ComprehensiveLearningResult> {
+    pub fn learn_shapes_comprehensive(
+        &mut self,
+        store: &Store,
+        graph_name: Option<&str>,
+    ) -> Result<ComprehensiveLearningResult> {
         tracing::info!("Starting comprehensive AI-powered shape learning (Ultrathink Mode)");
-        
+
         self.ai_orchestrator
             .lock()
-            .map_err(|e| ShaclAiError::ShapeLearning(format!("Failed to lock AI orchestrator: {}", e)))?
+            .map_err(|e| {
+                ShaclAiError::ShapeLearning(format!("Failed to lock AI orchestrator: {}", e))
+            })?
             .comprehensive_learning(store, graph_name)
     }
 
     /// Extract high-quality shapes from comprehensive learning result
-    pub fn extract_shapes_from_comprehensive_result(&self, result: &ComprehensiveLearningResult) -> Vec<Shape> {
-        result.learned_shapes.iter().map(|cs| cs.shape.clone()).collect()
+    pub fn extract_shapes_from_comprehensive_result(
+        &self,
+        result: &ComprehensiveLearningResult,
+    ) -> Vec<Shape> {
+        result
+            .learned_shapes
+            .iter()
+            .map(|cs| cs.shape.clone())
+            .collect()
     }
 
     /// Assess data quality with AI insights
@@ -362,14 +408,18 @@ impl ShaclAiAssistant {
         let report = self
             .quality_assessor
             .lock()
-            .map_err(|e| ShaclAiError::QualityAssessment(format!("Failed to lock quality assessor: {}", e)))?
+            .map_err(|e| {
+                ShaclAiError::QualityAssessment(format!("Failed to lock quality assessor: {}", e))
+            })?
             .assess_comprehensive_quality(store, shapes)?;
 
         // Add AI insights to the report
         let insights = self
             .analytics_engine
             .lock()
-            .map_err(|e| ShaclAiError::Analytics(format!("Failed to lock analytics engine: {}", e)))?
+            .map_err(|e| {
+                ShaclAiError::Analytics(format!("Failed to lock analytics engine: {}", e))
+            })?
             .generate_quality_insights(store, shapes, &report)?;
 
         Ok(QualityReport {
@@ -408,7 +458,9 @@ impl ShaclAiAssistant {
 
         self.optimization_engine
             .lock()
-            .map_err(|e| ShaclAiError::Optimization(format!("Failed to lock optimization engine: {}", e)))?
+            .map_err(|e| {
+                ShaclAiError::Optimization(format!("Failed to lock optimization engine: {}", e))
+            })?
             .optimize_validation_strategy(store, shapes)
     }
 
@@ -423,8 +475,29 @@ impl ShaclAiAssistant {
 
         self.analytics_engine
             .lock()
-            .map_err(|e| ShaclAiError::Analytics(format!("Failed to lock analytics engine: {}", e)))?
+            .map_err(|e| {
+                ShaclAiError::Analytics(format!("Failed to lock analytics engine: {}", e))
+            })?
             .generate_comprehensive_insights(store, shapes, validation_history)
+    }
+
+    /// Process validation errors with intelligent error handling and repair suggestions
+    pub fn process_validation_errors(
+        &self,
+        validation_report: &ValidationReport,
+        store: &Store,
+        shapes: &[Shape],
+    ) -> Result<SmartErrorAnalysis> {
+        tracing::info!(
+            "Processing validation errors with intelligent analysis and repair suggestions"
+        );
+
+        self.error_handler
+            .lock()
+            .map_err(|e| {
+                ShaclAiError::DataProcessing(format!("Failed to lock error handler: {}", e))
+            })?
+            .process_validation_errors(validation_report, store, shapes)
     }
 
     /// Train models on validation data for improved predictions
@@ -438,7 +511,9 @@ impl ShaclAiAssistant {
             let shape_result = self
                 .shape_learner
                 .lock()
-                .map_err(|e| ShaclAiError::ModelTraining(format!("Failed to lock shape learner: {}", e)))?
+                .map_err(|e| {
+                    ShaclAiError::ModelTraining(format!("Failed to lock shape learner: {}", e))
+                })?
                 .train_model(&training_data.shape_data)?;
             results.push(("shape_learning".to_string(), shape_result));
         }
@@ -448,7 +523,9 @@ impl ShaclAiAssistant {
             let quality_result = self
                 .quality_assessor
                 .lock()
-                .map_err(|e| ShaclAiError::ModelTraining(format!("Failed to lock quality assessor: {}", e)))?
+                .map_err(|e| {
+                    ShaclAiError::ModelTraining(format!("Failed to lock quality assessor: {}", e))
+                })?
                 .train_model(&training_data.quality_data)?;
             results.push(("quality_assessment".to_string(), quality_result));
         }
@@ -486,13 +563,19 @@ impl ShaclAiAssistant {
             shapes_learned: self
                 .shape_learner
                 .lock()
-                .map_err(|e| ShaclAiError::Analytics(format!("Failed to lock shape learner: {}", e)))?
-                .get_statistics().total_shapes_learned,
+                .map_err(|e| {
+                    ShaclAiError::Analytics(format!("Failed to lock shape learner: {}", e))
+                })?
+                .get_statistics()
+                .total_shapes_learned,
             quality_assessments: self
                 .quality_assessor
                 .lock()
-                .map_err(|e| ShaclAiError::Analytics(format!("Failed to lock quality assessor: {}", e)))?
-                .get_statistics().total_assessments,
+                .map_err(|e| {
+                    ShaclAiError::Analytics(format!("Failed to lock quality assessor: {}", e))
+                })?
+                .get_statistics()
+                .total_assessments,
             predictions_made: self
                 .validation_predictor
                 .lock()
@@ -504,19 +587,25 @@ impl ShaclAiAssistant {
             optimizations_performed: self
                 .optimization_engine
                 .lock()
-                .map_err(|e| ShaclAiError::Analytics(format!("Failed to lock optimization engine: {}", e)))?
+                .map_err(|e| {
+                    ShaclAiError::Analytics(format!("Failed to lock optimization engine: {}", e))
+                })?
                 .get_statistics()
                 .total_optimizations,
             patterns_analyzed: self
                 .pattern_analyzer
                 .lock()
-                .map_err(|e| ShaclAiError::Analytics(format!("Failed to lock pattern analyzer: {}", e)))?
+                .map_err(|e| {
+                    ShaclAiError::Analytics(format!("Failed to lock pattern analyzer: {}", e))
+                })?
                 .get_statistics()
                 .total_analyses,
             insights_generated: self
                 .analytics_engine
                 .lock()
-                .map_err(|e| ShaclAiError::Analytics(format!("Failed to lock analytics engine: {}", e)))?
+                .map_err(|e| {
+                    ShaclAiError::Analytics(format!("Failed to lock analytics engine: {}", e))
+                })?
                 .get_statistics()
                 .total_insights_generated,
         })
@@ -852,7 +941,10 @@ impl PerformanceTrend {
 
     pub fn to_map(&self) -> HashMap<String, String> {
         let mut map = HashMap::new();
-        map.insert("degradation_percentage".to_string(), self.degradation_percentage.to_string());
+        map.insert(
+            "degradation_percentage".to_string(),
+            self.degradation_percentage.to_string(),
+        );
         map.insert("significance".to_string(), self.significance.to_string());
         map.insert("sample_size".to_string(), self.sample_size.to_string());
         map
@@ -872,7 +964,10 @@ impl ExecutionTimeTrend {
 
     pub fn to_map(&self) -> HashMap<String, String> {
         let mut map = HashMap::new();
-        map.insert("increase_percentage".to_string(), self.increase_percentage.to_string());
+        map.insert(
+            "increase_percentage".to_string(),
+            self.increase_percentage.to_string(),
+        );
         map.insert("significance".to_string(), self.significance.to_string());
         map
     }
@@ -891,7 +986,10 @@ impl ThroughputTrend {
 
     pub fn to_map(&self) -> HashMap<String, String> {
         let mut map = HashMap::new();
-        map.insert("decline_percentage".to_string(), self.decline_percentage.to_string());
+        map.insert(
+            "decline_percentage".to_string(),
+            self.decline_percentage.to_string(),
+        );
         map.insert("significance".to_string(), self.significance.to_string());
         map
     }

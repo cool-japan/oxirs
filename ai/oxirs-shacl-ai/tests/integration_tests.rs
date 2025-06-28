@@ -3,7 +3,7 @@
 //! This module contains comprehensive integration tests for the AI-powered
 //! SHACL validation and shape generation system.
 
-use oxirs_core::model::{Literal, NamedNode, Term, Triple, Quad};
+use oxirs_core::model::{Literal, NamedNode, Quad, Term, Triple};
 use oxirs_core::Store;
 use oxirs_shacl::Shape;
 use oxirs_shacl_ai::*;
@@ -184,8 +184,7 @@ fn test_error_handling() {
     let empty_store = Store::new();
 
     // Test error handling with empty store
-    let result =
-        assistant.learn_shapes(&empty_store, None);
+    let result = assistant.learn_shapes(&empty_store, None);
 
     // Should handle empty store gracefully
     match result {
@@ -300,14 +299,15 @@ fn test_performance_benchmarks() {
 
     // Benchmark shape learning
     let start = Instant::now();
-    let _shapes =
-        assistant.learn_shapes(&store, None)
-            .expect("Shape learning failed");
+    let _shapes = assistant
+        .learn_shapes(&store, None)
+        .expect("Shape learning failed");
     let shape_learning_duration = start.elapsed();
 
     // Benchmark pattern discovery
     let start = Instant::now();
-    let _patterns = assistant.learn_shapes(&store, None)
+    let _patterns = assistant
+        .learn_shapes(&store, None)
         .expect("Pattern discovery failed");
     let pattern_discovery_duration = start.elapsed();
 

@@ -17,69 +17,67 @@ use crate::{StarConfig, StarError, StarResult, StarStatistics};
 mod conversion {
     use super::*;
     use oxirs_core::model::{
-        Literal as CoreLiteral, NamedNode as CoreNamedNode, BlankNode as CoreBlankNode, 
-        Triple, Term, Subject, Predicate, Object
+        BlankNode as CoreBlankNode, Literal as CoreLiteral, NamedNode as CoreNamedNode, Object,
+        Predicate, Subject, Term, Triple,
     };
-    
+
     pub fn star_term_to_subject(term: &StarTerm) -> StarResult<Subject> {
         match term {
             StarTerm::NamedNode(nn) => {
-                let named_node = CoreNamedNode::new(&nn.iri)
-                    .map_err(|e| StarError::CoreError(e))?;
+                let named_node =
+                    CoreNamedNode::new(&nn.iri).map_err(|e| StarError::CoreError(e))?;
                 Ok(Subject::NamedNode(named_node))
             }
             StarTerm::BlankNode(bn) => {
-                let blank_node = CoreBlankNode::new(&bn.id)
-                    .map_err(|e| StarError::CoreError(e))?;
+                let blank_node = CoreBlankNode::new(&bn.id).map_err(|e| StarError::CoreError(e))?;
                 Ok(Subject::BlankNode(blank_node))
             }
-            StarTerm::Literal(_) => {
-                Err(StarError::InvalidTermType("Literal cannot be used as subject".to_string()))
-            }
-            StarTerm::QuotedTriple(_) => {
-                Err(StarError::InvalidTermType("Quoted triple cannot be converted to core RDF subject".to_string()))
-            }
-            StarTerm::Variable(_) => {
-                Err(StarError::InvalidTermType("Variable cannot be converted to core RDF subject".to_string()))
-            }
+            StarTerm::Literal(_) => Err(StarError::InvalidTermType(
+                "Literal cannot be used as subject".to_string(),
+            )),
+            StarTerm::QuotedTriple(_) => Err(StarError::InvalidTermType(
+                "Quoted triple cannot be converted to core RDF subject".to_string(),
+            )),
+            StarTerm::Variable(_) => Err(StarError::InvalidTermType(
+                "Variable cannot be converted to core RDF subject".to_string(),
+            )),
         }
     }
-    
+
     pub fn star_term_to_predicate(term: &StarTerm) -> StarResult<Predicate> {
         match term {
             StarTerm::NamedNode(nn) => {
-                let named_node = CoreNamedNode::new(&nn.iri)
-                    .map_err(|e| StarError::CoreError(e))?;
+                let named_node =
+                    CoreNamedNode::new(&nn.iri).map_err(|e| StarError::CoreError(e))?;
                 Ok(Predicate::NamedNode(named_node))
             }
-            _ => {
-                Err(StarError::InvalidTermType("Only IRIs can be used as predicates".to_string()))
-            }
+            _ => Err(StarError::InvalidTermType(
+                "Only IRIs can be used as predicates".to_string(),
+            )),
         }
     }
-    
+
     pub fn star_term_to_object(term: &StarTerm) -> StarResult<Object> {
         match term {
             StarTerm::NamedNode(nn) => {
-                let named_node = CoreNamedNode::new(&nn.iri)
-                    .map_err(|e| StarError::CoreError(e))?;
+                let named_node =
+                    CoreNamedNode::new(&nn.iri).map_err(|e| StarError::CoreError(e))?;
                 Ok(Object::NamedNode(named_node))
             }
             StarTerm::BlankNode(bn) => {
-                let blank_node = CoreBlankNode::new(&bn.id)
-                    .map_err(|e| StarError::CoreError(e))?;
+                let blank_node = CoreBlankNode::new(&bn.id).map_err(|e| StarError::CoreError(e))?;
                 Ok(Object::BlankNode(blank_node))
             }
             StarTerm::Literal(lit) => {
                 let literal = CoreLiteral::new(&lit.value);
                 Ok(Object::Literal(literal))
             }
-            StarTerm::QuotedTriple(_) => {
-                Err(StarError::InvalidTermType("Quoted triple cannot be converted to core RDF object".to_string()))
-            }
-            StarTerm::Variable(_) => {
-                Err(StarError::InvalidTermType("Variable cannot be converted to core RDF object".to_string()))
-            }
+            StarTerm::QuotedTriple(_) => Err(StarError::InvalidTermType(
+                "Quoted triple cannot be converted to core RDF object".to_string(),
+            )),
+            StarTerm::Variable(_) => Err(StarError::InvalidTermType(
+                "Variable cannot be converted to core RDF object".to_string(),
+            )),
         }
     }
 }
@@ -202,21 +200,22 @@ impl StarStore {
 
         // Convert StarTriple to core RDF triple
         let core_triple = self.convert_to_core_triple(triple)?;
-        
+
         // Insert into core store
         let mut core_store = self.core_store.write().unwrap();
-        core_store.insert_triple(core_triple)
+        core_store
+            .insert_triple(core_triple)
             .map_err(|e| StarError::CoreError(e))?;
 
         Ok(())
     }
-    
+
     /// Convert a StarTriple (without quoted triples) to a core RDF Triple
     fn convert_to_core_triple(&self, triple: &StarTriple) -> StarResult<oxirs_core::model::Triple> {
         let subject = conversion::star_term_to_subject(&triple.subject)?;
         let predicate = conversion::star_term_to_predicate(&triple.predicate)?;
         let object = conversion::star_term_to_object(&triple.object)?;
-        
+
         Ok(oxirs_core::model::Triple::new(subject, predicate, object))
     }
 
@@ -308,7 +307,7 @@ impl StarStore {
                 .entry(qt_subject_key)
                 .or_insert_with(BTreeSet::new)
                 .insert(triple_index);
-                
+
             let qt_object_key = format!("OBJ:{}", qt.object);
             index
                 .object_index
@@ -345,7 +344,7 @@ impl StarStore {
                 .entry(qt_subject_key)
                 .or_insert_with(BTreeSet::new)
                 .insert(triple_index);
-                
+
             let qt_predicate_key = format!("PRED:{}", qt.predicate);
             index
                 .predicate_index
@@ -368,13 +367,13 @@ impl StarStore {
     fn update_indices_after_removal(indices: &mut BTreeSet<usize>, pos: usize) {
         // Remove the item at pos
         indices.remove(&pos);
-        
+
         // Create a new set with updated indices
         let updated: BTreeSet<usize> = indices
             .iter()
             .map(|&idx| if idx > pos { idx - 1 } else { idx })
             .collect();
-        
+
         // Replace the old set with the updated one
         *indices = updated;
     }
@@ -463,7 +462,7 @@ impl StarStore {
                 }
             }
         }
-        
+
         Ok(false)
     }
 
@@ -474,7 +473,7 @@ impl StarStore {
         if star_triples.contains(triple) {
             return true;
         }
-        
+
         // Then check regular triples in core store
         if !triple.contains_quoted_triples() {
             let core_store = self.core_store.read().unwrap();
@@ -486,20 +485,20 @@ impl StarStore {
                 }
             }
         }
-        
+
         false
     }
 
     /// Get all triples in the store
     pub fn triples(&self) -> Vec<StarTriple> {
         let mut all_triples = Vec::new();
-        
+
         // Add star triples (clone to release lock quickly)
         {
             let star_triples = self.star_triples.read().unwrap();
             all_triples.extend(star_triples.clone());
         }
-        
+
         // Add regular triples from core store (release lock quickly)
         {
             let core_store = self.core_store.read().unwrap();
@@ -512,10 +511,9 @@ impl StarStore {
                 }
             }
         }
-        
+
         all_triples
     }
-
 
     /// Find triples that contain a specific quoted triple
     pub fn find_triples_containing_quoted(&self, quoted_triple: &StarTriple) -> Vec<StarTriple> {
@@ -661,11 +659,11 @@ impl StarStore {
     pub fn len(&self) -> usize {
         let star_triples = self.star_triples.read().unwrap();
         let core_store = self.core_store.read().unwrap();
-        
+
         // Count both star triples and regular triples from core store
         let regular_count = core_store.len().unwrap_or(0);
         let star_count = star_triples.len();
-        
+
         regular_count + star_count
     }
 
@@ -673,7 +671,7 @@ impl StarStore {
     pub fn is_empty(&self) -> bool {
         let star_triples = self.star_triples.read().unwrap();
         let core_store = self.core_store.read().unwrap();
-        
+
         // Empty only if both stores are empty
         star_triples.is_empty() && core_store.is_empty().unwrap_or(true)
     }
@@ -782,7 +780,7 @@ impl StarStore {
         object: Option<&StarTerm>,
     ) -> StarResult<Vec<StarTriple>> {
         let mut results = Vec::new();
-        
+
         // Query star triples
         let star_triples = self.star_triples.read().unwrap();
         for triple in star_triples.iter() {
@@ -790,21 +788,21 @@ impl StarStore {
                 results.push(triple.clone());
             }
         }
-        
+
         // If no quoted triple patterns, also query core store
         let has_quoted_pattern = [subject, predicate, object]
             .iter()
             .any(|term| term.map_or(false, |t| t.is_quoted_triple()));
-            
+
         if !has_quoted_pattern {
             // Convert patterns to core RDF terms and query core store
             let core_results = self.query_core_store(subject, predicate, object)?;
             results.extend(core_results);
         }
-        
+
         Ok(results)
     }
-    
+
     /// Query the core store with converted patterns
     fn query_core_store(
         &self,
@@ -813,110 +811,99 @@ impl StarStore {
         object: Option<&StarTerm>,
     ) -> StarResult<Vec<StarTriple>> {
         let core_store = self.core_store.read().unwrap();
-        
+
         // Convert patterns to core types
         let core_subject = match subject {
             Some(term) => Some(conversion::star_term_to_subject(term)?),
             None => None,
         };
-        
+
         let core_predicate = match predicate {
             Some(term) => Some(conversion::star_term_to_predicate(term)?),
             None => None,
         };
-        
+
         let core_object = match object {
             Some(term) => Some(conversion::star_term_to_object(term)?),
             None => None,
         };
-        
+
         // Query core store
-        let core_triples = core_store.query_triples(
-            core_subject.as_ref(),
-            core_predicate.as_ref(),
-            core_object.as_ref(),
-        ).map_err(|e| StarError::CoreError(e))?;
-        
+        let core_triples = core_store
+            .query_triples(
+                core_subject.as_ref(),
+                core_predicate.as_ref(),
+                core_object.as_ref(),
+            )
+            .map_err(|e| StarError::CoreError(e))?;
+
         // Convert results back to StarTriples
         let mut results = Vec::new();
         for triple in core_triples {
             let star_triple = self.convert_from_core_triple(&triple)?;
             results.push(star_triple);
         }
-        
+
         Ok(results)
     }
-    
+
     /// Convert a core RDF Triple to a StarTriple
-    fn convert_from_core_triple(&self, triple: &oxirs_core::model::Triple) -> StarResult<StarTriple> {
+    fn convert_from_core_triple(
+        &self,
+        triple: &oxirs_core::model::Triple,
+    ) -> StarResult<StarTriple> {
         let subject = self.convert_subject_from_core(triple.subject())?;
         let predicate = self.convert_predicate_from_core(triple.predicate())?;
         let object = self.convert_object_from_core(triple.object())?;
-        
+
         Ok(StarTriple::new(subject, predicate, object))
     }
-    
+
     /// Convert core Subject to StarTerm
-    fn convert_subject_from_core(&self, subject: &oxirs_core::model::Subject) -> StarResult<StarTerm> {
+    fn convert_subject_from_core(
+        &self,
+        subject: &oxirs_core::model::Subject,
+    ) -> StarResult<StarTerm> {
         match subject {
-            oxirs_core::model::Subject::NamedNode(nn) => {
-                Ok(StarTerm::iri(nn.as_str())?)
-            }
-            oxirs_core::model::Subject::BlankNode(bn) => {
-                Ok(StarTerm::blank_node(bn.as_str())?)
-            }
-            oxirs_core::model::Subject::Variable(_) => {
-                Err(StarError::InvalidTermType(
-                    "Variables are not supported in subjects for RDF-star storage".to_string()
-                ))
-            }
-            oxirs_core::model::Subject::QuotedTriple(_) => {
-                Err(StarError::InvalidTermType(
-                    "Quoted triples from core are not yet supported".to_string()
-                ))
-            }
+            oxirs_core::model::Subject::NamedNode(nn) => Ok(StarTerm::iri(nn.as_str())?),
+            oxirs_core::model::Subject::BlankNode(bn) => Ok(StarTerm::blank_node(bn.as_str())?),
+            oxirs_core::model::Subject::Variable(_) => Err(StarError::InvalidTermType(
+                "Variables are not supported in subjects for RDF-star storage".to_string(),
+            )),
+            oxirs_core::model::Subject::QuotedTriple(_) => Err(StarError::InvalidTermType(
+                "Quoted triples from core are not yet supported".to_string(),
+            )),
         }
     }
-    
+
     /// Convert core Predicate to StarTerm
-    fn convert_predicate_from_core(&self, predicate: &oxirs_core::model::Predicate) -> StarResult<StarTerm> {
+    fn convert_predicate_from_core(
+        &self,
+        predicate: &oxirs_core::model::Predicate,
+    ) -> StarResult<StarTerm> {
         match predicate {
-            oxirs_core::model::Predicate::NamedNode(nn) => {
-                Ok(StarTerm::iri(nn.as_str())?)
-            }
-            oxirs_core::model::Predicate::Variable(_) => {
-                Err(StarError::InvalidTermType(
-                    "Variables are not supported in predicates for RDF-star storage".to_string()
-                ))
-            }
+            oxirs_core::model::Predicate::NamedNode(nn) => Ok(StarTerm::iri(nn.as_str())?),
+            oxirs_core::model::Predicate::Variable(_) => Err(StarError::InvalidTermType(
+                "Variables are not supported in predicates for RDF-star storage".to_string(),
+            )),
         }
     }
-    
+
     /// Convert core Object to StarTerm
     fn convert_object_from_core(&self, object: &oxirs_core::model::Object) -> StarResult<StarTerm> {
         match object {
-            oxirs_core::model::Object::NamedNode(nn) => {
-                Ok(StarTerm::iri(nn.as_str())?)
-            }
-            oxirs_core::model::Object::BlankNode(bn) => {
-                Ok(StarTerm::blank_node(bn.as_str())?)
-            }
-            oxirs_core::model::Object::Literal(lit) => {
-                Ok(StarTerm::literal(lit.value())?)
-            }
-            oxirs_core::model::Object::Variable(_) => {
-                Err(StarError::InvalidTermType(
-                    "Variables are not supported in objects for RDF-star storage".to_string()
-                ))
-            }
-            oxirs_core::model::Object::QuotedTriple(_) => {
-                Err(StarError::InvalidTermType(
-                    "Quoted triples from core are not yet supported".to_string()
-                ))
-            }
+            oxirs_core::model::Object::NamedNode(nn) => Ok(StarTerm::iri(nn.as_str())?),
+            oxirs_core::model::Object::BlankNode(bn) => Ok(StarTerm::blank_node(bn.as_str())?),
+            oxirs_core::model::Object::Literal(lit) => Ok(StarTerm::literal(lit.value())?),
+            oxirs_core::model::Object::Variable(_) => Err(StarError::InvalidTermType(
+                "Variables are not supported in objects for RDF-star storage".to_string(),
+            )),
+            oxirs_core::model::Object::QuotedTriple(_) => Err(StarError::InvalidTermType(
+                "Quoted triples from core are not yet supported".to_string(),
+            )),
         }
     }
-    
+
     /// Check if a triple matches the given pattern
     fn triple_matches(
         &self,
@@ -1010,25 +997,20 @@ impl<'a> StreamingTripleIterator<'a> {
 
     fn load_next_chunk(&mut self) -> bool {
         let star_triples = self.store.star_triples.read().unwrap();
-        
+
         // Calculate the range for the next chunk
         let start = self.total_processed;
         let end = (start + self.chunk_size).min(star_triples.len());
-        
+
         if start >= star_triples.len() {
             return false;
         }
-        
+
         // Load the chunk
         self.current_chunk.clear();
-        self.current_chunk.extend(
-            star_triples
-                .iter()
-                .skip(start)
-                .take(end - start)
-                .cloned()
-        );
-        
+        self.current_chunk
+            .extend(star_triples.iter().skip(start).take(end - start).cloned());
+
         self.current_index = 0;
         !self.current_chunk.is_empty()
     }
@@ -1044,7 +1026,7 @@ impl<'a> Iterator for StreamingTripleIterator<'a> {
                 return None;
             }
         }
-        
+
         // Return the next triple from the current chunk
         let triple = self.current_chunk.get(self.current_index).cloned();
         if triple.is_some() {
@@ -1083,11 +1065,13 @@ mod tests {
         assert!(store.contains(&triple));
 
         // Query
-        let results = store.query_triples(
-            Some(&StarTerm::iri("http://example.org/alice").unwrap()),
-            None,
-            None,
-        ).unwrap();
+        let results = store
+            .query_triples(
+                Some(&StarTerm::iri("http://example.org/alice").unwrap()),
+                None,
+                None,
+            )
+            .unwrap();
         assert_eq!(results.len(), 1);
 
         // Remove
@@ -1212,7 +1196,7 @@ mod tests {
     #[test]
     fn test_streaming_iterator() {
         let store = StarStore::new();
-        
+
         // Insert multiple triples
         for i in 0..100 {
             let triple = StarTriple::new(
@@ -1222,24 +1206,28 @@ mod tests {
             );
             store.insert(&triple).unwrap();
         }
-        
+
         // Test streaming iterator with different chunk sizes
         let chunk_sizes = vec![1, 10, 50, 100, 200];
-        
+
         for chunk_size in chunk_sizes {
             let mut count = 0;
             for _triple in store.streaming_iter(chunk_size) {
                 count += 1;
             }
-            assert_eq!(count, 100, "Streaming iterator with chunk size {} should return all triples", chunk_size);
+            assert_eq!(
+                count, 100,
+                "Streaming iterator with chunk size {} should return all triples",
+                chunk_size
+            );
         }
-        
+
         // Test that streaming iterator returns the same triples as regular iterator
         let regular_triples: Vec<_> = store.iter().collect();
         let streaming_triples: Vec<_> = store.streaming_iter(25).collect();
-        
+
         assert_eq!(regular_triples.len(), streaming_triples.len());
-        
+
         // Both iterators should contain the same triples (though possibly in different order)
         for triple in &regular_triples {
             assert!(streaming_triples.contains(triple));

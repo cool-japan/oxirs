@@ -346,9 +346,7 @@ impl Assembler {
                 }
             }
 
-            OperationType::Checkpoint => {
-                Operation::Checkpoint
-            }
+            OperationType::Checkpoint => Operation::Checkpoint,
 
             _ => {
                 return Err(anyhow!(

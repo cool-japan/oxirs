@@ -11,47 +11,47 @@ pub trait SimdOps {
     fn add(a: &[Self], b: &[Self]) -> Vec<Self>
     where
         Self: Sized;
-    
+
     /// Subtract two slices element-wise
     fn sub(a: &[Self], b: &[Self]) -> Vec<Self>
     where
         Self: Sized;
-    
+
     /// Multiply two slices element-wise
     fn mul(a: &[Self], b: &[Self]) -> Vec<Self>
     where
         Self: Sized;
-    
+
     /// Compute dot product
     fn dot(a: &[Self], b: &[Self]) -> Self
     where
         Self: Sized;
-    
+
     /// Compute cosine distance (1 - cosine_similarity)
     fn cosine_distance(a: &[Self], b: &[Self]) -> Self
     where
         Self: Sized;
-    
+
     /// Compute Euclidean distance
     fn euclidean_distance(a: &[Self], b: &[Self]) -> Self
     where
         Self: Sized;
-    
+
     /// Compute Manhattan distance
     fn manhattan_distance(a: &[Self], b: &[Self]) -> Self
     where
         Self: Sized;
-    
+
     /// Compute L2 norm
     fn norm(a: &[Self]) -> Self
     where
         Self: Sized;
-    
+
     /// Sum all elements
     fn sum(a: &[Self]) -> Self
     where
         Self: Sized;
-    
+
     /// Compute mean
     fn mean(a: &[Self]) -> Self
     where
@@ -82,11 +82,7 @@ pub use scalar::*;
 // Fallback to scalar on unsupported platforms
 #[cfg(all(
     feature = "simd",
-    not(any(
-        target_arch = "x86",
-        target_arch = "x86_64",
-        target_arch = "aarch64"
-    ))
+    not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64"))
 ))]
 pub use scalar::*;
 
@@ -101,7 +97,7 @@ impl SimdOps for f32 {
         #[cfg(not(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd")))]
         scalar::add_f32(a, b)
     }
-    
+
     fn sub(a: &[Self], b: &[Self]) -> Vec<Self> {
         debug_assert_eq!(a.len(), b.len());
         #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd"))]
@@ -111,7 +107,7 @@ impl SimdOps for f32 {
         #[cfg(not(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd")))]
         scalar::sub_f32(a, b)
     }
-    
+
     fn mul(a: &[Self], b: &[Self]) -> Vec<Self> {
         debug_assert_eq!(a.len(), b.len());
         #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd"))]
@@ -121,7 +117,7 @@ impl SimdOps for f32 {
         #[cfg(not(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd")))]
         scalar::mul_f32(a, b)
     }
-    
+
     fn dot(a: &[Self], b: &[Self]) -> Self {
         debug_assert_eq!(a.len(), b.len());
         #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd"))]
@@ -131,7 +127,7 @@ impl SimdOps for f32 {
         #[cfg(not(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd")))]
         scalar::dot_f32(a, b)
     }
-    
+
     fn cosine_distance(a: &[Self], b: &[Self]) -> Self {
         debug_assert_eq!(a.len(), b.len());
         #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd"))]
@@ -141,7 +137,7 @@ impl SimdOps for f32 {
         #[cfg(not(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd")))]
         scalar::cosine_distance_f32(a, b)
     }
-    
+
     fn euclidean_distance(a: &[Self], b: &[Self]) -> Self {
         debug_assert_eq!(a.len(), b.len());
         #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd"))]
@@ -151,7 +147,7 @@ impl SimdOps for f32 {
         #[cfg(not(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd")))]
         scalar::euclidean_distance_f32(a, b)
     }
-    
+
     fn manhattan_distance(a: &[Self], b: &[Self]) -> Self {
         debug_assert_eq!(a.len(), b.len());
         #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd"))]
@@ -161,7 +157,7 @@ impl SimdOps for f32 {
         #[cfg(not(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd")))]
         scalar::manhattan_distance_f32(a, b)
     }
-    
+
     fn norm(a: &[Self]) -> Self {
         #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd"))]
         unsafe {
@@ -170,7 +166,7 @@ impl SimdOps for f32 {
         #[cfg(not(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd")))]
         scalar::norm_f32(a)
     }
-    
+
     fn sum(a: &[Self]) -> Self {
         #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd"))]
         unsafe {
@@ -179,7 +175,7 @@ impl SimdOps for f32 {
         #[cfg(not(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd")))]
         scalar::sum_f32(a)
     }
-    
+
     fn mean(a: &[Self]) -> Self {
         if a.is_empty() {
             return 0.0;
@@ -199,7 +195,7 @@ impl SimdOps for f64 {
         #[cfg(not(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd")))]
         scalar::add_f64(a, b)
     }
-    
+
     fn sub(a: &[Self], b: &[Self]) -> Vec<Self> {
         debug_assert_eq!(a.len(), b.len());
         #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd"))]
@@ -209,7 +205,7 @@ impl SimdOps for f64 {
         #[cfg(not(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd")))]
         scalar::sub_f64(a, b)
     }
-    
+
     fn mul(a: &[Self], b: &[Self]) -> Vec<Self> {
         debug_assert_eq!(a.len(), b.len());
         #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd"))]
@@ -219,7 +215,7 @@ impl SimdOps for f64 {
         #[cfg(not(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd")))]
         scalar::mul_f64(a, b)
     }
-    
+
     fn dot(a: &[Self], b: &[Self]) -> Self {
         debug_assert_eq!(a.len(), b.len());
         #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd"))]
@@ -229,7 +225,7 @@ impl SimdOps for f64 {
         #[cfg(not(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd")))]
         scalar::dot_f64(a, b)
     }
-    
+
     fn cosine_distance(a: &[Self], b: &[Self]) -> Self {
         debug_assert_eq!(a.len(), b.len());
         #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd"))]
@@ -239,7 +235,7 @@ impl SimdOps for f64 {
         #[cfg(not(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd")))]
         scalar::cosine_distance_f64(a, b)
     }
-    
+
     fn euclidean_distance(a: &[Self], b: &[Self]) -> Self {
         debug_assert_eq!(a.len(), b.len());
         #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd"))]
@@ -249,7 +245,7 @@ impl SimdOps for f64 {
         #[cfg(not(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd")))]
         scalar::euclidean_distance_f64(a, b)
     }
-    
+
     fn manhattan_distance(a: &[Self], b: &[Self]) -> Self {
         debug_assert_eq!(a.len(), b.len());
         #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd"))]
@@ -259,7 +255,7 @@ impl SimdOps for f64 {
         #[cfg(not(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd")))]
         scalar::manhattan_distance_f64(a, b)
     }
-    
+
     fn norm(a: &[Self]) -> Self {
         #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd"))]
         unsafe {
@@ -268,7 +264,7 @@ impl SimdOps for f64 {
         #[cfg(not(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd")))]
         scalar::norm_f64(a)
     }
-    
+
     fn sum(a: &[Self]) -> Self {
         #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd"))]
         unsafe {
@@ -277,7 +273,7 @@ impl SimdOps for f64 {
         #[cfg(not(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "simd")))]
         scalar::sum_f64(a)
     }
-    
+
     fn mean(a: &[Self]) -> Self {
         if a.is_empty() {
             return 0.0;

@@ -184,10 +184,11 @@ impl ModelRegistry {
         metrics: HashMap<String, f64>,
     ) -> Result<Uuid> {
         let version_id = Uuid::new_v4();
-        
+
         // Verify model exists
         let mut models = self.models.write().await;
-        let model = models.get_mut(&model_id)
+        let model = models
+            .get_mut(&model_id)
             .ok_or_else(|| anyhow!("Model not found: {}", model_id))?;
 
         let version = ModelVersion {
@@ -206,7 +207,7 @@ impl ModelRegistry {
 
         model.versions.push(version_id);
         model.updated_at = Utc::now();
-        
+
         self.versions.write().await.insert(version_id, version);
         Ok(version_id)
     }
@@ -234,11 +235,14 @@ impl ModelRegistry {
             rollback_version: None,
         };
 
-        self.deployments.write().await.insert(deployment_id, deployment);
-        
+        self.deployments
+            .write()
+            .await
+            .insert(deployment_id, deployment);
+
         // Start deployment process (in real implementation)
         self.start_deployment(deployment_id).await?;
-        
+
         Ok(deployment_id)
     }
 
@@ -250,34 +254,39 @@ impl ModelRegistry {
         // 3. Start serving infrastructure
         // 4. Configure load balancer
         // 5. Run health checks
-        
+
         // For now, simulate deployment
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-        
+
         let mut deployments = self.deployments.write().await;
         if let Some(deployment) = deployments.get_mut(&deployment_id) {
             deployment.status = DeploymentStatus::Deployed;
             deployment.deployed_at = Some(Utc::now());
             deployment.endpoint = Some(format!("https://api.oxirs.ai/v1/embed/{}", deployment_id));
-            deployment.health_check_url = Some(format!("https://api.oxirs.ai/v1/embed/{}/health", deployment_id));
+            deployment.health_check_url = Some(format!(
+                "https://api.oxirs.ai/v1/embed/{}/health",
+                deployment_id
+            ));
         }
-        
+
         Ok(())
     }
 
     /// Promote version to production
     pub async fn promote_to_production(&self, version_id: Uuid) -> Result<()> {
         let versions = self.versions.read().await;
-        let version = versions.get(&version_id)
+        let version = versions
+            .get(&version_id)
             .ok_or_else(|| anyhow!("Version not found: {}", version_id))?;
-        
+
         let model_id = version.model_id;
         drop(versions);
-        
+
         let mut models = self.models.write().await;
-        let model = models.get_mut(&model_id)
+        let model = models
+            .get_mut(&model_id)
             .ok_or_else(|| anyhow!("Model not found: {}", model_id))?;
-        
+
         // Mark previous production version as non-production
         if let Some(prev_prod) = model.production_version {
             let mut versions = self.versions.write().await;
@@ -285,15 +294,15 @@ impl ModelRegistry {
                 prev_version.is_production = false;
             }
         }
-        
+
         model.production_version = Some(version_id);
         model.updated_at = Utc::now();
-        
+
         let mut versions = self.versions.write().await;
         if let Some(version) = versions.get_mut(&version_id) {
             version.is_production = true;
         }
-        
+
         Ok(())
     }
 
@@ -316,11 +325,11 @@ impl ModelRegistry {
             return Err(anyhow!("Version B not found: {}", version_b));
         }
         drop(versions);
-        
+
         if !(0.0..=1.0).contains(&traffic_split) {
             return Err(anyhow!("Traffic split must be between 0.0 and 1.0"));
         }
-        
+
         let test_id = Uuid::new_v4();
         let ab_test = ABTestConfig {
             test_id,
@@ -338,7 +347,7 @@ impl ModelRegistry {
             ],
             is_active: true,
         };
-        
+
         self.ab_tests.write().await.insert(test_id, ab_test);
         Ok(test_id)
     }
@@ -350,23 +359,26 @@ impl ModelRegistry {
         metrics: PerformanceMetrics,
     ) -> Result<()> {
         let mut history = self.performance_history.write().await;
-        history.entry(version_id)
+        history
+            .entry(version_id)
             .or_insert_with(Vec::new)
             .push(metrics);
-        
+
         // Keep only last 1000 metrics per version
         if let Some(vec) = history.get_mut(&version_id) {
             if vec.len() > 1000 {
                 vec.drain(0..vec.len() - 1000);
             }
         }
-        
+
         Ok(())
     }
 
     /// Get model metadata
     pub async fn get_model(&self, model_id: Uuid) -> Result<ModelMetadata> {
-        self.models.read().await
+        self.models
+            .read()
+            .await
             .get(&model_id)
             .cloned()
             .ok_or_else(|| anyhow!("Model not found: {}", model_id))
@@ -374,7 +386,9 @@ impl ModelRegistry {
 
     /// Get version info
     pub async fn get_version(&self, version_id: Uuid) -> Result<ModelVersion> {
-        self.versions.read().await
+        self.versions
+            .read()
+            .await
             .get(&version_id)
             .cloned()
             .ok_or_else(|| anyhow!("Version not found: {}", version_id))
@@ -382,7 +396,9 @@ impl ModelRegistry {
 
     /// Get deployment info
     pub async fn get_deployment(&self, deployment_id: Uuid) -> Result<ModelDeployment> {
-        self.deployments.read().await
+        self.deployments
+            .read()
+            .await
             .get(&deployment_id)
             .cloned()
             .ok_or_else(|| anyhow!("Deployment not found: {}", deployment_id))
@@ -395,12 +411,13 @@ impl ModelRegistry {
         limit: Option<usize>,
     ) -> Result<Vec<PerformanceMetrics>> {
         let history = self.performance_history.read().await;
-        let metrics = history.get(&version_id)
+        let metrics = history
+            .get(&version_id)
             .ok_or_else(|| anyhow!("No performance history for version: {}", version_id))?;
-        
+
         let limit = limit.unwrap_or(100);
         let start = metrics.len().saturating_sub(limit);
-        
+
         Ok(metrics[start..].to_vec())
     }
 
@@ -408,25 +425,27 @@ impl ModelRegistry {
     pub async fn rollback_deployment(&self, deployment_id: Uuid) -> Result<()> {
         let (rollback_version, resource_allocation) = {
             let deployments = self.deployments.read().await;
-            let deployment = deployments.get(&deployment_id)
+            let deployment = deployments
+                .get(&deployment_id)
                 .ok_or_else(|| anyhow!("Deployment not found: {}", deployment_id))?;
-            
+
             if let Some(rollback_version) = deployment.rollback_version {
                 (rollback_version, deployment.resource_allocation.clone())
             } else {
                 return Err(anyhow!("No rollback version configured"));
             }
         };
-        
+
         // Deploy the rollback version
-        self.deploy_version(rollback_version, resource_allocation).await?;
-        
+        self.deploy_version(rollback_version, resource_allocation)
+            .await?;
+
         // Mark current deployment as retired
         let mut deployments = self.deployments.write().await;
         if let Some(deployment) = deployments.get_mut(&deployment_id) {
             deployment.status = DeploymentStatus::Retired;
         }
-        
+
         Ok(())
     }
 
@@ -438,27 +457,30 @@ impl ModelRegistry {
     /// List versions for a model
     pub async fn list_versions(&self, model_id: Uuid) -> Result<Vec<ModelVersion>> {
         let models = self.models.read().await;
-        let model = models.get(&model_id)
+        let model = models
+            .get(&model_id)
             .ok_or_else(|| anyhow!("Model not found: {}", model_id))?;
-        
+
         let version_ids = model.versions.clone();
         drop(models);
-        
+
         let versions = self.versions.read().await;
         let mut result = Vec::new();
-        
+
         for version_id in version_ids {
             if let Some(version) = versions.get(&version_id) {
                 result.push(version.clone());
             }
         }
-        
+
         Ok(result)
     }
 
     /// Get active A/B tests
     pub async fn get_active_ab_tests(&self) -> Vec<ABTestConfig> {
-        self.ab_tests.read().await
+        self.ab_tests
+            .read()
+            .await
             .values()
             .filter(|test| test.is_active)
             .cloned()
@@ -468,12 +490,13 @@ impl ModelRegistry {
     /// End A/B test
     pub async fn end_ab_test(&self, test_id: Uuid) -> Result<()> {
         let mut ab_tests = self.ab_tests.write().await;
-        let test = ab_tests.get_mut(&test_id)
+        let test = ab_tests
+            .get_mut(&test_id)
             .ok_or_else(|| anyhow!("A/B test not found: {}", test_id))?;
-        
+
         test.is_active = false;
         test.ends_at = Some(Utc::now());
-        
+
         Ok(())
     }
 }
@@ -505,7 +528,7 @@ impl ModelServer {
     /// Warm up model with sample inputs
     pub async fn warm_up_model(&self, version_id: Uuid, samples: Vec<String>) -> Result<()> {
         self.warm_up_cache.write().await.insert(version_id, samples);
-        
+
         // In real implementation, run inference on samples to warm up caches
         Ok(())
     }
@@ -519,9 +542,10 @@ impl ModelServer {
     /// Route request based on A/B test
     pub async fn route_request(&self, test_id: Uuid) -> Result<Uuid> {
         let ab_tests = self.registry.ab_tests.read().await;
-        let test = ab_tests.get(&test_id)
+        let test = ab_tests
+            .get(&test_id)
             .ok_or_else(|| anyhow!("A/B test not found: {}", test_id))?;
-        
+
         // Simple random routing based on traffic split
         let random = rand::random::<f32>();
         Ok(if random < test.traffic_split {
@@ -541,46 +565,52 @@ mod tests {
     async fn test_model_registry_lifecycle() {
         let temp_dir = tempdir().unwrap();
         let registry = ModelRegistry::new(temp_dir.path().to_path_buf());
-        
+
         // Register model
-        let model_id = registry.register_model(
-            "test-model".to_string(),
-            "TransformerEmbedding".to_string(),
-            "test-user".to_string(),
-            "Test model".to_string(),
-        ).await.unwrap();
-        
+        let model_id = registry
+            .register_model(
+                "test-model".to_string(),
+                "TransformerEmbedding".to_string(),
+                "test-user".to_string(),
+                "Test model".to_string(),
+            )
+            .await
+            .unwrap();
+
         // Register version
         let config = ModelConfig::default();
         let mut metrics = HashMap::new();
         metrics.insert("accuracy".to_string(), 0.95);
-        
-        let version_id = registry.register_version(
-            model_id,
-            "1.0.0".to_string(),
-            "test-user".to_string(),
-            "Initial version".to_string(),
-            config,
-            metrics,
-        ).await.unwrap();
-        
+
+        let version_id = registry
+            .register_version(
+                model_id,
+                "1.0.0".to_string(),
+                "test-user".to_string(),
+                "Initial version".to_string(),
+                config,
+                metrics,
+            )
+            .await
+            .unwrap();
+
         // Deploy version
-        let deployment_id = registry.deploy_version(
-            version_id,
-            ResourceAllocation::default(),
-        ).await.unwrap();
-        
+        let deployment_id = registry
+            .deploy_version(version_id, ResourceAllocation::default())
+            .await
+            .unwrap();
+
         // Wait for deployment
         tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-        
+
         // Check deployment status
         let deployment = registry.get_deployment(deployment_id).await.unwrap();
         assert_eq!(deployment.status, DeploymentStatus::Deployed);
         assert!(deployment.endpoint.is_some());
-        
+
         // Promote to production
         registry.promote_to_production(version_id).await.unwrap();
-        
+
         let model = registry.get_model(model_id).await.unwrap();
         assert_eq!(model.production_version, Some(version_id));
     }
@@ -589,51 +619,63 @@ mod tests {
     async fn test_ab_testing() {
         let temp_dir = tempdir().unwrap();
         let registry = ModelRegistry::new(temp_dir.path().to_path_buf());
-        
+
         // Register model and two versions
-        let model_id = registry.register_model(
-            "ab-test-model".to_string(),
-            "GNNEmbedding".to_string(),
-            "test-user".to_string(),
-            "AB test model".to_string(),
-        ).await.unwrap();
-        
-        let version_a = registry.register_version(
-            model_id,
-            "1.0.0".to_string(),
-            "test-user".to_string(),
-            "Version A".to_string(),
-            ModelConfig::default(),
-            HashMap::new(),
-        ).await.unwrap();
-        
-        let version_b = registry.register_version(
-            model_id,
-            "1.1.0".to_string(),
-            "test-user".to_string(),
-            "Version B".to_string(),
-            ModelConfig::default(),
-            HashMap::new(),
-        ).await.unwrap();
-        
+        let model_id = registry
+            .register_model(
+                "ab-test-model".to_string(),
+                "GNNEmbedding".to_string(),
+                "test-user".to_string(),
+                "AB test model".to_string(),
+            )
+            .await
+            .unwrap();
+
+        let version_a = registry
+            .register_version(
+                model_id,
+                "1.0.0".to_string(),
+                "test-user".to_string(),
+                "Version A".to_string(),
+                ModelConfig::default(),
+                HashMap::new(),
+            )
+            .await
+            .unwrap();
+
+        let version_b = registry
+            .register_version(
+                model_id,
+                "1.1.0".to_string(),
+                "test-user".to_string(),
+                "Version B".to_string(),
+                ModelConfig::default(),
+                HashMap::new(),
+            )
+            .await
+            .unwrap();
+
         // Create A/B test
-        let test_id = registry.create_ab_test(
-            "Performance test".to_string(),
-            "Testing new model version".to_string(),
-            version_a,
-            version_b,
-            0.3, // 30% traffic to version B
-            Some(24), // 24 hour test
-        ).await.unwrap();
-        
+        let test_id = registry
+            .create_ab_test(
+                "Performance test".to_string(),
+                "Testing new model version".to_string(),
+                version_a,
+                version_b,
+                0.3,      // 30% traffic to version B
+                Some(24), // 24 hour test
+            )
+            .await
+            .unwrap();
+
         // Check active tests
         let active_tests = registry.get_active_ab_tests().await;
         assert_eq!(active_tests.len(), 1);
         assert_eq!(active_tests[0].test_id, test_id);
-        
+
         // End test
         registry.end_ab_test(test_id).await.unwrap();
-        
+
         let active_tests = registry.get_active_ab_tests().await;
         assert_eq!(active_tests.len(), 0);
     }

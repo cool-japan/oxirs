@@ -11,16 +11,37 @@ fn debug_qualified_cardinality_min_violation() {
 
     let alice = NamedNode::new("http://example.org/alice").unwrap();
     let charlie = NamedNode::new("http://example.org/charlie").unwrap();
-    
+
     let knows_pred = NamedNode::new("http://example.org/knows").unwrap();
     let type_pred = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
     let person_type = NamedNode::new("http://example.org/Person").unwrap();
     let friend_type = NamedNode::new("http://example.org/Friend").unwrap();
 
     // Alice knows Charlie (who is NOT a Friend)
-    store.insert_quad(Quad::new(alice.clone(), knows_pred.clone(), charlie.clone(), GraphName::DefaultGraph)).unwrap();
-    store.insert_quad(Quad::new(alice.clone(), type_pred.clone(), person_type.clone(), GraphName::DefaultGraph)).unwrap();
-    store.insert_quad(Quad::new(charlie.clone(), type_pred.clone(), person_type.clone(), GraphName::DefaultGraph)).unwrap();
+    store
+        .insert_quad(Quad::new(
+            alice.clone(),
+            knows_pred.clone(),
+            charlie.clone(),
+            GraphName::DefaultGraph,
+        ))
+        .unwrap();
+    store
+        .insert_quad(Quad::new(
+            alice.clone(),
+            type_pred.clone(),
+            person_type.clone(),
+            GraphName::DefaultGraph,
+        ))
+        .unwrap();
+    store
+        .insert_quad(Quad::new(
+            charlie.clone(),
+            type_pred.clone(),
+            person_type.clone(),
+            GraphName::DefaultGraph,
+        ))
+        .unwrap();
     // Charlie is NOT a Friend - no rdf:type Friend triple
 
     // Friend shape - requires rdf:type Friend
@@ -67,11 +88,11 @@ fn debug_qualified_cardinality_min_violation() {
 
     // Validate
     let report = validator.validate_store(&store, None).unwrap();
-    
+
     println!("=== Validation Report ===");
     println!("Conforms: {}", report.conforms());
     println!("Violations: {}", report.violation_count());
-    
+
     for (i, violation) in report.violations.iter().enumerate() {
         println!("Violation {}: {:?}", i, violation);
     }
@@ -80,7 +101,9 @@ fn debug_qualified_cardinality_min_violation() {
     // But let's see what actually happens
     if report.conforms() {
         println!("WARNING: Report says conforms=true but we expected false!");
-        println!("Alice knows Charlie who is NOT a Friend, so qualified min count 1 should be violated");
+        println!(
+            "Alice knows Charlie who is NOT a Friend, so qualified min count 1 should be violated"
+        );
     } else {
         println!("SUCCESS: Report correctly identifies violation");
     }

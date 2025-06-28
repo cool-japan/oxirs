@@ -5,10 +5,19 @@ use zstd;
 #[derive(Debug, Clone)]
 pub enum CompressionMethod {
     None,
-    Zstd { level: i32 },
-    Quantization { bits: u8 },
-    ProductQuantization { subvectors: usize, codebook_size: usize },
-    Pca { components: usize },
+    Zstd {
+        level: i32,
+    },
+    Quantization {
+        bits: u8,
+    },
+    ProductQuantization {
+        subvectors: usize,
+        codebook_size: usize,
+    },
+    Pca {
+        components: usize,
+    },
 }
 
 impl Default for CompressionMethod {
@@ -29,7 +38,9 @@ pub struct ZstdCompressor {
 
 impl ZstdCompressor {
     pub fn new(level: i32) -> Self {
-        Self { level: level.clamp(1, 22) }
+        Self {
+            level: level.clamp(1, 22),
+        }
     }
 }
 
@@ -41,8 +52,8 @@ impl VectorCompressor for ZstdCompressor {
     }
 
     fn decompress(&self, data: &[u8], dimensions: usize) -> Result<Vector, VectorError> {
-        let decompressed = zstd::decode_all(data)
-            .map_err(|e| VectorError::CompressionError(e.to_string()))?;
+        let decompressed =
+            zstd::decode_all(data).map_err(|e| VectorError::CompressionError(e.to_string()))?;
         bytes_to_vector(&decompressed, dimensions)
     }
 
@@ -83,7 +94,9 @@ impl ScalarQuantizer {
 
     pub fn train(&mut self, vectors: &[Vector]) -> Result<(), VectorError> {
         if vectors.is_empty() {
-            return Err(VectorError::InvalidDimensions("No vectors to train on".to_string()));
+            return Err(VectorError::InvalidDimensions(
+                "No vectors to train on".to_string(),
+            ));
         }
 
         let mut min = f32::INFINITY;
@@ -113,8 +126,7 @@ impl ScalarQuantizer {
     }
 
     fn quantize_value(&self, value: f32) -> u16 {
-        let normalized = ((value - self.min_val) / (self.max_val - self.min_val))
-            .clamp(0.0, 1.0);
+        let normalized = ((value - self.min_val) / (self.max_val - self.min_val)).clamp(0.0, 1.0);
         let max_quant_val = (1u32 << self.bits) - 1;
         (normalized * max_quant_val as f32).round() as u16
     }
@@ -131,18 +143,20 @@ impl VectorCompressor for ScalarQuantizer {
         let values = match &vector.values {
             VectorData::F32(v) => v.clone(),
             VectorData::F64(v) => v.iter().map(|&x| x as f32).collect(),
-            _ => return Err(VectorError::UnsupportedOperation(
-                "Quantization only supports float vectors".to_string()
-            )),
+            _ => {
+                return Err(VectorError::UnsupportedOperation(
+                    "Quantization only supports float vectors".to_string(),
+                ))
+            }
         };
 
         let mut compressed = Vec::new();
-        
+
         // Write header: bits, min_val, max_val
         compressed.write_all(&self.bits.to_le_bytes())?;
         compressed.write_all(&self.min_val.to_le_bytes())?;
         compressed.write_all(&self.max_val.to_le_bytes())?;
-        
+
         // Quantize and pack values
         if self.bits <= 8 {
             for val in values {
@@ -161,30 +175,30 @@ impl VectorCompressor for ScalarQuantizer {
 
     fn decompress(&self, data: &[u8], dimensions: usize) -> Result<Vector, VectorError> {
         let mut cursor = std::io::Cursor::new(data);
-        
+
         // Read header
         let mut bits_buf = [0u8; 1];
         cursor.read_exact(&mut bits_buf)?;
         let bits = bits_buf[0];
-        
+
         let mut min_buf = [0u8; 4];
         cursor.read_exact(&mut min_buf)?;
         let min_val = f32::from_le_bytes(min_buf);
-        
+
         let mut max_buf = [0u8; 4];
         cursor.read_exact(&mut max_buf)?;
         let max_val = f32::from_le_bytes(max_buf);
-        
+
         // Create temporary quantizer with loaded params
         let quantizer = ScalarQuantizer {
             bits,
             min_val,
             max_val,
         };
-        
+
         // Dequantize values
         let mut values = Vec::with_capacity(dimensions);
-        
+
         if bits <= 8 {
             let mut buf = [0u8; 1];
             for _ in 0..dimensions {
@@ -227,16 +241,19 @@ impl PcaCompressor {
 
     pub fn train(&mut self, vectors: &[Vector]) -> Result<(), VectorError> {
         if vectors.is_empty() {
-            return Err(VectorError::InvalidDimensions("No vectors to train on".to_string()));
+            return Err(VectorError::InvalidDimensions(
+                "No vectors to train on".to_string(),
+            ));
         }
 
         // Convert all vectors to f32
-        let data: Vec<Vec<f32>> = vectors.iter()
+        let data: Vec<Vec<f32>> = vectors
+            .iter()
             .map(|v| match &v.values {
                 VectorData::F32(vals) => Ok(vals.clone()),
                 VectorData::F64(vals) => Ok(vals.iter().map(|&x| x as f32).collect()),
                 _ => Err(VectorError::UnsupportedOperation(
-                    "PCA only supports float vectors".to_string()
+                    "PCA only supports float vectors".to_string(),
                 )),
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -268,22 +285,22 @@ impl PcaCompressor {
         self.components_matrix = Vec::with_capacity(self.components);
         use rand::{Rng, SeedableRng};
         let mut rng = rand::rngs::StdRng::seed_from_u64(42);
-        
+
         for _ in 0..self.components {
             let mut component = vec![0.0; n_features];
             let mut norm = 0.0f32;
-            
+
             for val in &mut component {
                 *val = rng.gen_range(-1.0..1.0);
                 norm += *val * *val;
             }
-            
+
             // Normalize
             norm = norm.sqrt();
             for val in &mut component {
                 *val /= norm;
             }
-            
+
             self.components_matrix.push(component);
         }
 
@@ -331,17 +348,19 @@ impl VectorCompressor for PcaCompressor {
         let values = match &vector.values {
             VectorData::F32(v) => v.clone(),
             VectorData::F64(v) => v.iter().map(|&x| x as f32).collect(),
-            _ => return Err(VectorError::UnsupportedOperation(
-                "PCA only supports float vectors".to_string()
-            )),
+            _ => {
+                return Err(VectorError::UnsupportedOperation(
+                    "PCA only supports float vectors".to_string(),
+                ))
+            }
         };
 
         let projected = self.project(&values);
-        
+
         let mut compressed = Vec::new();
         // Write header with components count
         compressed.write_all(&(self.components as u32).to_le_bytes())?;
-        
+
         // Write projected values
         for val in projected {
             compressed.write_all(&val.to_le_bytes())?;
@@ -352,16 +371,16 @@ impl VectorCompressor for PcaCompressor {
 
     fn decompress(&self, data: &[u8], _dimensions: usize) -> Result<Vector, VectorError> {
         let mut cursor = std::io::Cursor::new(data);
-        
+
         // Read header
         let mut components_buf = [0u8; 4];
         cursor.read_exact(&mut components_buf)?;
         let components = u32::from_le_bytes(components_buf) as usize;
-        
+
         // Read projected values
         let mut projected = Vec::with_capacity(components);
         let mut val_buf = [0u8; 4];
-        
+
         for _ in 0..components {
             cursor.read_exact(&mut val_buf)?;
             projected.push(f32::from_le_bytes(val_buf));
@@ -412,7 +431,7 @@ impl VectorCompressor for NoOpCompressor {
 
 fn vector_to_bytes(vector: &Vector) -> Result<Vec<u8>, VectorError> {
     let mut bytes = Vec::new();
-    
+
     // Write type indicator
     let type_byte = match &vector.values {
         VectorData::F32(_) => 0u8,
@@ -461,46 +480,56 @@ fn bytes_to_vector(data: &[u8], dimensions: usize) -> Result<Vector, VectorError
     let data = &data[1..];
 
     match type_byte {
-        0 => { // F32
+        0 => {
+            // F32
             let mut values = Vec::with_capacity(dimensions);
             let mut cursor = std::io::Cursor::new(data);
             let mut buf = [0u8; 4];
-            
+
             for _ in 0..dimensions {
                 cursor.read_exact(&mut buf)?;
                 values.push(f32::from_le_bytes(buf));
             }
             Ok(Vector::new(values))
         }
-        1 => { // F64
+        1 => {
+            // F64
             let mut values = Vec::with_capacity(dimensions);
             let mut cursor = std::io::Cursor::new(data);
             let mut buf = [0u8; 8];
-            
+
             for _ in 0..dimensions {
                 cursor.read_exact(&mut buf)?;
                 values.push(f64::from_le_bytes(buf));
             }
             Ok(Vector::f64(values))
         }
-        2 => { // F16
+        2 => {
+            // F16
             let mut values = Vec::with_capacity(dimensions);
             let mut cursor = std::io::Cursor::new(data);
             let mut buf = [0u8; 2];
-            
+
             for _ in 0..dimensions {
                 cursor.read_exact(&mut buf)?;
                 values.push(u16::from_le_bytes(buf));
             }
             Ok(Vector::f16(values))
         }
-        3 => { // I8
-            Ok(Vector::i8(data[..dimensions].iter().map(|&b| b as i8).collect()))
+        3 => {
+            // I8
+            Ok(Vector::i8(
+                data[..dimensions].iter().map(|&b| b as i8).collect(),
+            ))
         }
-        4 => { // Binary
+        4 => {
+            // Binary
             Ok(Vector::binary(data[..dimensions].to_vec()))
         }
-        _ => Err(VectorError::InvalidData(format!("Unknown vector type: {}", type_byte))),
+        _ => Err(VectorError::InvalidData(format!(
+            "Unknown vector type: {}",
+            type_byte
+        ))),
     }
 }
 
@@ -512,10 +541,10 @@ mod tests {
     fn test_zstd_compression() {
         let vector = Vector::new(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
         let compressor = ZstdCompressor::new(3);
-        
+
         let compressed = compressor.compress(&vector).unwrap();
         let decompressed = compressor.decompress(&compressed, 5).unwrap();
-        
+
         let orig = vector.as_f32();
         let dec = decompressed.as_f32();
         assert_eq!(orig.len(), dec.len());
@@ -529,13 +558,13 @@ mod tests {
         let vector = Vector::new(vec![0.1, 0.5, 0.9, 0.3, 0.7]);
         let mut quantizer = ScalarQuantizer::new(8);
         quantizer.train(&[vector.clone()]).unwrap();
-        
+
         let compressed = quantizer.compress(&vector).unwrap();
         let decompressed = quantizer.decompress(&compressed, 5).unwrap();
-        
+
         // Check compression ratio
         assert!(compressed.len() < 20); // Should be much smaller than original
-        
+
         let orig = vector.as_f32();
         let dec = decompressed.as_f32();
         assert_eq!(orig.len(), dec.len());
@@ -552,13 +581,13 @@ mod tests {
             Vector::new(vec![2.0, 3.0, 4.0, 5.0, 6.0]),
             Vector::new(vec![3.0, 4.0, 5.0, 6.0, 7.0]),
         ];
-        
+
         let mut pca = PcaCompressor::new(3);
         pca.train(&vectors).unwrap();
-        
+
         let compressed = pca.compress(&vectors[0]).unwrap();
         let decompressed = pca.decompress(&compressed, 5).unwrap();
-        
+
         let dec = decompressed.as_f32();
         assert_eq!(dec.len(), 5);
     }

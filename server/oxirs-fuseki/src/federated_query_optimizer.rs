@@ -89,10 +89,22 @@ pub struct RateLimit {
 /// Authentication configuration for endpoints
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum EndpointAuth {
-    Basic { username: String, password: String },
-    Bearer { token: String },
-    ApiKey { key: String, header_name: String },
-    OAuth2 { client_id: String, client_secret: String, token_url: String },
+    Basic {
+        username: String,
+        password: String,
+    },
+    Bearer {
+        token: String,
+    },
+    ApiKey {
+        key: String,
+        header_name: String,
+    },
+    OAuth2 {
+        client_id: String,
+        client_secret: String,
+        token_url: String,
+    },
 }
 
 /// Health status of an endpoint
@@ -311,7 +323,11 @@ pub struct ClientPool {
 pub trait ExecutionStrategy: Send + Sync {
     fn name(&self) -> &str;
     fn applicable(&self, plan: &ExecutionPlan) -> bool;
-    async fn execute(&self, plan: &ExecutionPlan, executor: &FederatedExecutor) -> FusekiResult<QueryResults>;
+    async fn execute(
+        &self,
+        plan: &ExecutionPlan,
+        executor: &FederatedExecutor,
+    ) -> FusekiResult<QueryResults>;
 }
 
 /// Execution plan for federated query
@@ -393,11 +409,15 @@ impl FederatedQueryOptimizer {
         self.check_endpoint_health(&service_patterns).await?;
 
         // Plan query execution
-        let plan = self.planner.create_execution_plan(query, &service_patterns).await?;
+        let plan = self
+            .planner
+            .create_execution_plan(query, &service_patterns)
+            .await?;
 
         // Estimate costs
         let cost_estimate = self.cost_estimator.estimate_cost(&plan).await?;
-        self.metrics.record_histogram("federated_query.estimated_cost", cost_estimate);
+        self.metrics
+            .record_histogram("federated_query.estimated_cost", cost_estimate);
 
         // Execute with timeout
         let results = timeout(
@@ -409,7 +429,10 @@ impl FederatedQueryOptimizer {
 
         // Record metrics
         let duration = start.elapsed();
-        self.metrics.record_histogram("federated_query.execution_time", duration.as_millis() as f64);
+        self.metrics.record_histogram(
+            "federated_query.execution_time",
+            duration.as_millis() as f64,
+        );
         self.metrics.increment_counter("federated_query.total", 1);
 
         Ok(results)
@@ -425,7 +448,7 @@ impl FederatedQueryOptimizer {
 
         for line in query.lines() {
             let trimmed = line.trim();
-            
+
             if trimmed.starts_with("SERVICE") {
                 in_service = true;
                 // Extract URL from SERVICE <url> or SERVICE SILENT <url>
@@ -477,9 +500,10 @@ impl FederatedQueryOptimizer {
                 let health_check = endpoints.check_endpoint_health(endpoint.clone());
                 futures.push(health_check);
             } else if !pattern.is_silent {
-                return Err(FusekiError::bad_request(
-                    format!("Unknown endpoint: {}", endpoint_url)
-                ));
+                return Err(FusekiError::bad_request(format!(
+                    "Unknown endpoint: {}",
+                    endpoint_url
+                )));
             }
         }
 
@@ -546,11 +570,10 @@ impl EndpointRegistry {
                 );
                 Ok(())
             }
-            Ok(resp) => {
-                Err(FusekiError::bad_request(
-                    format!("Endpoint returned status: {}", resp.status())
-                ))
-            }
+            Ok(resp) => Err(FusekiError::bad_request(format!(
+                "Endpoint returned status: {}",
+                resp.status()
+            ))),
             Err(e) => {
                 self.health_cache.insert(
                     endpoint.url.clone(),
@@ -620,9 +643,7 @@ impl QueryPlanner {
             DecompositionRule {
                 name: "UnionDecomposition".to_string(),
                 pattern: "union".to_string(),
-                applicability_check: Box::new(|query| {
-                    query.to_uppercase().contains("UNION")
-                }),
+                applicability_check: Box::new(|query| query.to_uppercase().contains("UNION")),
                 decompose: Box::new(|query| {
                     // Split UNION branches for parallel execution
                     vec![]
@@ -632,9 +653,7 @@ impl QueryPlanner {
             DecompositionRule {
                 name: "OptionalDecomposition".to_string(),
                 pattern: "optional".to_string(),
-                applicability_check: Box::new(|query| {
-                    query.to_uppercase().contains("OPTIONAL")
-                }),
+                applicability_check: Box::new(|query| query.to_uppercase().contains("OPTIONAL")),
                 decompose: Box::new(|query| {
                     // Handle OPTIONAL patterns
                     vec![]
@@ -709,14 +728,14 @@ impl JoinOrderOptimizer {
     pub async fn optimize_joins(&self, fragments: &[QueryFragment]) -> FusekiResult<JoinPlan> {
         // Use dynamic programming to find optimal join order
         let cache_key = self.compute_cache_key(fragments);
-        
+
         if let Some(cached_plan) = self.dp_cache.get(&cache_key) {
             return Ok(cached_plan.clone());
         }
 
         // Compute optimal plan
         let plan = self.compute_optimal_plan(fragments).await?;
-        
+
         // Cache the result
         self.dp_cache.insert(cache_key, plan.clone());
 
@@ -736,7 +755,7 @@ impl JoinOrderOptimizer {
     async fn compute_optimal_plan(&self, fragments: &[QueryFragment]) -> FusekiResult<JoinPlan> {
         // Simplified join planning
         let mut steps = Vec::new();
-        
+
         if fragments.len() > 1 {
             // Create pairwise joins
             for i in 0..fragments.len() - 1 {
@@ -803,7 +822,10 @@ impl CostEstimator {
         }
 
         // Otherwise use cardinality estimation
-        let cardinality = self.cardinality.estimate_cardinality(&fragment.sparql).await?;
+        let cardinality = self
+            .cardinality
+            .estimate_cardinality(&fragment.sparql)
+            .await?;
         Ok(cardinality as f64 * 0.001) // 1ms per 1000 results
     }
 
@@ -888,7 +910,7 @@ impl FederatedExecutor {
     pub async fn execute_plan(&self, plan: &ExecutionPlan) -> FusekiResult<QueryResults> {
         // Select appropriate strategy
         let strategy = self.select_strategy(plan);
-        
+
         // Execute with selected strategy
         strategy.execute(plan, self).await
     }
@@ -900,7 +922,7 @@ impl FederatedExecutor {
                 return strategy.clone();
             }
         }
-        
+
         // Default to sequential
         self.strategies[1].clone()
     }
@@ -911,14 +933,20 @@ impl FederatedExecutor {
         fragment: &QueryFragment,
         endpoint_url: &str,
     ) -> FusekiResult<QueryResults> {
-        let _permit = self.semaphore.acquire().await
+        let _permit = self
+            .semaphore
+            .acquire()
+            .await
             .map_err(|_| FusekiError::internal("Semaphore error".into()))?;
 
         let client = self.client_pool.get_client(endpoint_url).await?;
-        
+
         let mut retries = 0;
         loop {
-            match self.send_query(&client, endpoint_url, &fragment.sparql).await {
+            match self
+                .send_query(&client, endpoint_url, &fragment.sparql)
+                .await
+            {
                 Ok(results) => return Ok(results),
                 Err(e) if retries < self.retry_policy.max_retries => {
                     retries += 1;
@@ -947,12 +975,15 @@ impl FederatedExecutor {
             .map_err(|e| FusekiError::internal(format!("Request failed: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(FusekiError::bad_request(
-                format!("Endpoint returned status: {}", response.status())
-            ));
+            return Err(FusekiError::bad_request(format!(
+                "Endpoint returned status: {}",
+                response.status()
+            )));
         }
 
-        let json: serde_json::Value = response.json().await
+        let json: serde_json::Value = response
+            .json()
+            .await
             .map_err(|e| FusekiError::internal(format!("JSON parse error: {}", e)))?;
 
         // Parse SPARQL results
@@ -970,7 +1001,10 @@ impl FederatedExecutor {
     }
 
     /// Parse SPARQL JSON results
-    fn parse_sparql_results(&self, json: serde_json::Value) -> FusekiResult<Vec<HashMap<String, serde_json::Value>>> {
+    fn parse_sparql_results(
+        &self,
+        json: serde_json::Value,
+    ) -> FusekiResult<Vec<HashMap<String, serde_json::Value>>> {
         let results = json
             .get("results")
             .and_then(|r| r.get("bindings"))
@@ -994,8 +1028,9 @@ impl FederatedExecutor {
     /// Calculate backoff duration
     fn calculate_backoff(&self, attempt: u32) -> Duration {
         let backoff_ms = (self.retry_policy.initial_backoff_ms as f64
-            * self.retry_policy.exponential_base.powi(attempt as i32)) as u64;
-        
+            * self.retry_policy.exponential_base.powi(attempt as i32))
+            as u64;
+
         Duration::from_millis(backoff_ms.min(self.retry_policy.max_backoff_ms))
     }
 }
@@ -1020,7 +1055,8 @@ impl ClientPool {
             .build()
             .map_err(|e| FusekiError::internal(format!("Client creation failed: {}", e)))?;
 
-        self.clients.insert(endpoint_url.to_string(), client.clone());
+        self.clients
+            .insert(endpoint_url.to_string(), client.clone());
         Ok(client)
     }
 }
@@ -1049,7 +1085,11 @@ impl ExecutionStrategy for ParallelExecutionStrategy {
         plan.fragments.len() > 1 && plan.fragments.iter().all(|f| f.dependencies.is_empty())
     }
 
-    async fn execute(&self, plan: &ExecutionPlan, executor: &FederatedExecutor) -> FusekiResult<QueryResults> {
+    async fn execute(
+        &self,
+        plan: &ExecutionPlan,
+        executor: &FederatedExecutor,
+    ) -> FusekiResult<QueryResults> {
         let mut futures = FuturesUnordered::new();
 
         // Execute all fragments in parallel
@@ -1058,9 +1098,11 @@ impl ExecutionStrategy for ParallelExecutionStrategy {
                 let fragment_clone = fragment.clone();
                 let endpoint_clone = endpoint.clone();
                 let executor_clone = executor.clone();
-                
+
                 futures.push(async move {
-                    executor_clone.execute_fragment(&fragment_clone, &endpoint_clone).await
+                    executor_clone
+                        .execute_fragment(&fragment_clone, &endpoint_clone)
+                        .await
                 });
             }
         }
@@ -1089,7 +1131,11 @@ impl ExecutionStrategy for SequentialExecutionStrategy {
         true // Always applicable as fallback
     }
 
-    async fn execute(&self, plan: &ExecutionPlan, executor: &FederatedExecutor) -> FusekiResult<QueryResults> {
+    async fn execute(
+        &self,
+        plan: &ExecutionPlan,
+        executor: &FederatedExecutor,
+    ) -> FusekiResult<QueryResults> {
         let mut all_results = Vec::new();
 
         // Execute fragments sequentially
@@ -1118,13 +1164,21 @@ impl ExecutionStrategy for AdaptiveExecutionStrategy {
         plan.fragments.len() > 2
     }
 
-    async fn execute(&self, plan: &ExecutionPlan, executor: &FederatedExecutor) -> FusekiResult<QueryResults> {
+    async fn execute(
+        &self,
+        plan: &ExecutionPlan,
+        executor: &FederatedExecutor,
+    ) -> FusekiResult<QueryResults> {
         // Group fragments by dependencies
-        let independent: Vec<_> = plan.fragments.iter()
+        let independent: Vec<_> = plan
+            .fragments
+            .iter()
             .filter(|f| f.dependencies.is_empty())
             .collect();
-        
-        let dependent: Vec<_> = plan.fragments.iter()
+
+        let dependent: Vec<_> = plan
+            .fragments
+            .iter()
             .filter(|f| !f.dependencies.is_empty())
             .collect();
 
@@ -1138,9 +1192,11 @@ impl ExecutionStrategy for AdaptiveExecutionStrategy {
                     let fragment_clone = fragment.clone();
                     let endpoint_clone = endpoint.clone();
                     let executor_clone = executor.clone();
-                    
+
                     futures.push(async move {
-                        executor_clone.execute_fragment(&fragment_clone, &endpoint_clone).await
+                        executor_clone
+                            .execute_fragment(&fragment_clone, &endpoint_clone)
+                            .await
                     });
                 }
             }
@@ -1174,9 +1230,18 @@ impl ResultMerger {
     /// Create merge strategies
     fn create_merge_strategies() -> HashMap<String, Arc<dyn MergeStrategy>> {
         let mut strategies = HashMap::new();
-        strategies.insert("union".to_string(), Arc::new(UnionMergeStrategy) as Arc<dyn MergeStrategy>);
-        strategies.insert("join".to_string(), Arc::new(JoinMergeStrategy) as Arc<dyn MergeStrategy>);
-        strategies.insert("distinct".to_string(), Arc::new(DistinctMergeStrategy) as Arc<dyn MergeStrategy>);
+        strategies.insert(
+            "union".to_string(),
+            Arc::new(UnionMergeStrategy) as Arc<dyn MergeStrategy>,
+        );
+        strategies.insert(
+            "join".to_string(),
+            Arc::new(JoinMergeStrategy) as Arc<dyn MergeStrategy>,
+        );
+        strategies.insert(
+            "distinct".to_string(),
+            Arc::new(DistinctMergeStrategy) as Arc<dyn MergeStrategy>,
+        );
         strategies
     }
 
@@ -1247,7 +1312,9 @@ impl MergeStrategy for JoinMergeStrategy {
 
     async fn merge(&self, results: Vec<QueryResults>) -> FusekiResult<QueryResults> {
         if results.len() != 2 {
-            return Err(FusekiError::internal("Join requires exactly 2 result sets".into()));
+            return Err(FusekiError::internal(
+                "Join requires exactly 2 result sets".into(),
+            ));
         }
 
         let left = &results[0];
@@ -1258,7 +1325,8 @@ impl MergeStrategy for JoinMergeStrategy {
         for left_binding in &left.bindings {
             for right_binding in &right.bindings {
                 // Find common variables
-                let common_vars: Vec<_> = left_binding.keys()
+                let common_vars: Vec<_> = left_binding
+                    .keys()
                     .filter(|k| right_binding.contains_key(*k))
                     .collect();
 
@@ -1285,7 +1353,8 @@ impl MergeStrategy for JoinMergeStrategy {
         Ok(QueryResults {
             bindings: joined_bindings,
             metadata: ResultMetadata {
-                total_execution_time_ms: left.metadata.total_execution_time_ms + right.metadata.total_execution_time_ms,
+                total_execution_time_ms: left.metadata.total_execution_time_ms
+                    + right.metadata.total_execution_time_ms,
                 endpoint_times: {
                     let mut times = left.metadata.endpoint_times.clone();
                     times.extend(right.metadata.endpoint_times.clone());
@@ -1340,15 +1409,15 @@ impl DistinctMergeStrategy {
     fn hash_binding(binding: &HashMap<String, serde_json::Value>) -> u64 {
         use std::hash::{Hash, Hasher};
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        
+
         let mut items: Vec<_> = binding.iter().collect();
         items.sort_by_key(|(k, _)| k.as_str());
-        
+
         for (k, v) in items {
             k.hash(&mut hasher);
             v.to_string().hash(&mut hasher);
         }
-        
+
         hasher.finish()
     }
 }
@@ -1356,14 +1425,15 @@ impl DistinctMergeStrategy {
 /// UUID generation for query IDs
 mod uuid {
     pub struct Uuid;
-    
+
     impl Uuid {
         pub fn new_v4() -> Self {
             Uuid
         }
-        
+
         pub fn to_string(&self) -> String {
-            format!("{:x}-{:x}-{:x}-{:x}", 
+            format!(
+                "{:x}-{:x}-{:x}-{:x}",
                 rand::random::<u32>(),
                 rand::random::<u16>(),
                 rand::random::<u16>(),
@@ -1375,14 +1445,16 @@ mod uuid {
 
 /// Random number generation
 mod rand {
-    pub fn random<T>() -> T 
+    pub fn random<T>() -> T
     where
-        T: From<u32>
+        T: From<u32>,
     {
-        T::from(std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos() as u32)
+        T::from(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos() as u32,
+        )
     }
 }
 
@@ -1393,7 +1465,7 @@ mod tests {
     #[tokio::test]
     async fn test_extract_service_patterns() {
         let optimizer = FederatedQueryOptimizer::new(Arc::new(MetricsService::new()));
-        
+
         let query = r#"
             PREFIX foaf: <http://xmlns.com/foaf/0.1/>
             SELECT ?person ?name ?friend
@@ -1414,7 +1486,7 @@ mod tests {
     #[tokio::test]
     async fn test_multiple_service_patterns() {
         let optimizer = FederatedQueryOptimizer::new(Arc::new(MetricsService::new()));
-        
+
         let query = r#"
             SELECT ?s ?p ?o
             WHERE {
@@ -1436,28 +1508,30 @@ mod tests {
     #[tokio::test]
     async fn test_query_planner() {
         let planner = QueryPlanner::new();
-        let service_patterns = vec![
-            ServicePattern {
-                service_url: "http://test.org/sparql".to_string(),
-                pattern: "?s ?p ?o".to_string(),
-                is_silent: false,
-                is_optional: false,
-            }
-        ];
+        let service_patterns = vec![ServicePattern {
+            service_url: "http://test.org/sparql".to_string(),
+            pattern: "?s ?p ?o".to_string(),
+            is_silent: false,
+            is_optional: false,
+        }];
 
-        let plan = planner.create_execution_plan("SELECT * WHERE { ?s ?p ?o }", &service_patterns).await.unwrap();
+        let plan = planner
+            .create_execution_plan("SELECT * WHERE { ?s ?p ?o }", &service_patterns)
+            .await
+            .unwrap();
         assert!(!plan.fragments.is_empty());
     }
 
     #[tokio::test]
     async fn test_result_merger_union() {
         let merger = ResultMerger::new();
-        
+
         let results = vec![
             QueryResults {
-                bindings: vec![
-                    HashMap::from([("x".to_string(), serde_json::json!("value1"))]),
-                ],
+                bindings: vec![HashMap::from([(
+                    "x".to_string(),
+                    serde_json::json!("value1"),
+                )])],
                 metadata: ResultMetadata {
                     total_execution_time_ms: 100,
                     endpoint_times: HashMap::new(),
@@ -1466,9 +1540,10 @@ mod tests {
                 },
             },
             QueryResults {
-                bindings: vec![
-                    HashMap::from([("x".to_string(), serde_json::json!("value2"))]),
-                ],
+                bindings: vec![HashMap::from([(
+                    "x".to_string(),
+                    serde_json::json!("value2"),
+                )])],
                 metadata: ResultMetadata {
                     total_execution_time_ms: 150,
                     endpoint_times: HashMap::new(),

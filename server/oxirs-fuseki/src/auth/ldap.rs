@@ -121,7 +121,7 @@ impl LdapService {
             connection_pool: Arc::new(RwLock::new(connection_pool)),
             user_cache: Arc::new(RwLock::new(HashMap::new())),
         };
-        
+
         Ok(service)
     }
 

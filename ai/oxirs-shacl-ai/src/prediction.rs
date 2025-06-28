@@ -15,7 +15,7 @@ use oxirs_shacl::{
     constraints::*, Constraint, Severity, Shape, ShapeId, ValidationConfig, ValidationReport,
 };
 
-use crate::{patterns::Pattern, Result, ShaclAiError, ModelTrainingResult};
+use crate::{patterns::Pattern, ModelTrainingResult, Result, ShaclAiError};
 
 /// Training data for prediction models
 #[derive(Debug, Clone)]
@@ -52,7 +52,6 @@ pub struct PredictionTrainingMetadata {
     pub total_examples: usize,
     pub feature_descriptions: std::collections::HashMap<String, String>,
 }
-
 
 /// Configuration for validation prediction
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -185,16 +184,23 @@ impl ValidationPredictor {
     }
 
     /// Predict validation outcome (simplified API for tests)
-    pub fn predict_validation(&mut self, store: &Store, shapes: &[Shape]) -> Result<ValidationPrediction> {
+    pub fn predict_validation(
+        &mut self,
+        store: &Store,
+        shapes: &[Shape],
+    ) -> Result<ValidationPrediction> {
         // Convert our simplified shapes to SHACL validation config
         let validation_config = ValidationConfig::default();
         self.predict_validation_outcome(store, shapes, &validation_config)
     }
 
     /// Train the prediction model on validation data
-    pub fn train_model(&mut self, training_data: &PredictionTrainingData) -> Result<ModelTrainingResult> {
+    pub fn train_model(
+        &mut self,
+        training_data: &PredictionTrainingData,
+    ) -> Result<ModelTrainingResult> {
         tracing::info!("Training validation prediction model");
-        
+
         let start_time = std::time::Instant::now();
         let mut success = true;
         let mut accuracy = 0.0;
@@ -207,7 +213,7 @@ impl ValidationPredictor {
             // Simulate training epoch
             let epoch_loss = self.simulate_training_epoch(training_data)?;
             loss += epoch_loss;
-            
+
             // Simulate early stopping
             if epoch_loss < 0.01 {
                 break;
@@ -221,7 +227,11 @@ impl ValidationPredictor {
         self.model_state.training_epochs += epochs_trained;
         self.model_state.accuracy = accuracy;
 
-        tracing::info!("Training completed: accuracy={:.3}, loss={:.3}", accuracy, loss);
+        tracing::info!(
+            "Training completed: accuracy={:.3}, loss={:.3}",
+            accuracy,
+            loss
+        );
 
         Ok(ModelTrainingResult {
             success,
@@ -366,8 +376,6 @@ impl ValidationPredictor {
         self.stats.feedback_received += 1;
         Ok(())
     }
-
-
 
     /// Clear prediction cache
     pub fn clear_cache(&mut self) {
@@ -1435,7 +1443,6 @@ pub struct PredictionStatistics {
     pub feedback_accuracy: f64,
     pub model_trained: bool,
 }
-
 
 #[cfg(test)]
 mod tests {

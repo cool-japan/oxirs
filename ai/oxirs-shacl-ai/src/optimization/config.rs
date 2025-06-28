@@ -65,7 +65,7 @@ pub struct OptimizationAlgorithms {
 
     /// Enable machine learning optimization
     pub enable_ml_optimization: bool,
-    
+
     /// Shape merge threshold (similarity threshold for merging shapes)
     pub shape_merge_threshold: f64,
 }

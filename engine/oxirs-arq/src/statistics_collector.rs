@@ -3,9 +3,10 @@
 //! This module provides sophisticated statistics collection capabilities
 //! for accurate cardinality estimation and query optimization.
 
-use crate::algebra::{Algebra, Iri, Literal, Term, TriplePattern, Variable};
+use crate::algebra::{Algebra, Literal, Term, TriplePattern, Variable};
 use crate::optimizer::{IndexStatistics, IndexType, Statistics};
 use anyhow::Result;
+use oxirs_core::model::NamedNode;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::time::{Duration, Instant};
 
@@ -39,7 +40,7 @@ impl Histogram {
     /// Add a value to the histogram
     pub fn add_value(&mut self, value: &str) {
         self.total_count += 1;
-        
+
         // Update bucket counts (simplified for now)
         let bucket = self.find_bucket(value);
         if bucket < self.frequencies.len() {
@@ -49,7 +50,8 @@ impl Histogram {
 
     /// Find the bucket index for a value
     fn find_bucket(&self, value: &str) -> usize {
-        self.boundaries.binary_search(&value.to_string())
+        self.boundaries
+            .binary_search(&value.to_string())
             .unwrap_or_else(|pos| pos.saturating_sub(1))
     }
 
@@ -84,9 +86,12 @@ impl Histogram {
         }
 
         let start_bucket = start.map(|s| self.find_bucket(s)).unwrap_or(0);
-        let end_bucket = end.map(|e| self.find_bucket(e)).unwrap_or(self.frequencies.len());
+        let end_bucket = end
+            .map(|e| self.find_bucket(e))
+            .unwrap_or(self.frequencies.len());
 
-        let count: usize = self.frequencies[start_bucket..=end_bucket.min(self.frequencies.len() - 1)]
+        let count: usize = self.frequencies
+            [start_bucket..=end_bucket.min(self.frequencies.len() - 1)]
             .iter()
             .sum();
 
@@ -151,7 +156,11 @@ impl StatisticsCollector {
         // Count pattern occurrences
         for pattern in patterns {
             let pattern_key = format!("{}", pattern);
-            *self.stats.pattern_cardinality.entry(pattern_key).or_insert(0) += 1;
+            *self
+                .stats
+                .pattern_cardinality
+                .entry(pattern_key)
+                .or_insert(0) += 1;
 
             // Update term statistics
             self.update_term_statistics(&pattern.subject, TermPosition::Subject)?;
@@ -174,11 +183,19 @@ impl StatisticsCollector {
             Term::Iri(iri) => {
                 match position {
                     TermPosition::Subject => {
-                        *self.stats.subject_cardinality.entry(iri.as_str().to_string()).or_insert(0) += 1;
+                        *self
+                            .stats
+                            .subject_cardinality
+                            .entry(iri.as_str().to_string())
+                            .or_insert(0) += 1;
                     }
                     TermPosition::Predicate => {
-                        *self.stats.predicate_frequency.entry(iri.as_str().to_string()).or_insert(0) += 1;
-                        
+                        *self
+                            .stats
+                            .predicate_frequency
+                            .entry(iri.as_str().to_string())
+                            .or_insert(0) += 1;
+
                         // Create histogram for this predicate if needed
                         if !self.histograms.contains_key(iri.as_str()) {
                             self.histograms.insert(
@@ -188,7 +205,11 @@ impl StatisticsCollector {
                         }
                     }
                     TermPosition::Object => {
-                        *self.stats.object_cardinality.entry(iri.as_str().to_string()).or_insert(0) += 1;
+                        *self
+                            .stats
+                            .object_cardinality
+                            .entry(iri.as_str().to_string())
+                            .or_insert(0) += 1;
                     }
                 }
             }
@@ -205,8 +226,15 @@ impl StatisticsCollector {
             }
             Term::Variable(var) => {
                 // Track variable selectivity
-                let current = self.stats.variable_selectivity.get(var).copied().unwrap_or(1.0);
-                self.stats.variable_selectivity.insert(var.clone(), current * 0.9);
+                let current = self
+                    .stats
+                    .variable_selectivity
+                    .get(var)
+                    .copied()
+                    .unwrap_or(1.0);
+                self.stats
+                    .variable_selectivity
+                    .insert(var.clone(), current * 0.9);
             }
             _ => {}
         }
@@ -216,11 +244,16 @@ impl StatisticsCollector {
     /// Update variable statistics
     fn update_variable_statistics(&mut self, pattern: &TriplePattern) -> Result<()> {
         let vars = self.extract_variables(pattern);
-        
+
         for var in vars {
             // Update variable occurrence count
-            let current = self.stats.variable_selectivity.get(&var).copied().unwrap_or(0.5);
-            
+            let current = self
+                .stats
+                .variable_selectivity
+                .get(&var)
+                .copied()
+                .unwrap_or(0.5);
+
             // Adjust selectivity based on position
             let position_factor = match (&pattern.subject, &pattern.predicate, &pattern.object) {
                 (Term::Variable(v), _, _) if v == &var => 0.8, // Subject position
@@ -228,20 +261,19 @@ impl StatisticsCollector {
                 (_, _, Term::Variable(v)) if v == &var => 0.9, // Object position
                 _ => 1.0,
             };
-            
-            self.stats.variable_selectivity.insert(
-                var,
-                (current * position_factor).clamp(0.001, 1.0),
-            );
+
+            self.stats
+                .variable_selectivity
+                .insert(var, (current * position_factor).clamp(0.001, 1.0));
         }
-        
+
         Ok(())
     }
 
     /// Extract variables from a pattern
     fn extract_variables(&self, pattern: &TriplePattern) -> HashSet<Variable> {
         let mut vars = HashSet::new();
-        
+
         if let Term::Variable(v) = &pattern.subject {
             vars.insert(v.clone());
         }
@@ -251,7 +283,7 @@ impl StatisticsCollector {
         if let Term::Variable(v) = &pattern.object {
             vars.insert(v.clone());
         }
-        
+
         vars
     }
 
@@ -259,13 +291,13 @@ impl StatisticsCollector {
     fn compute_derived_statistics(&mut self) -> Result<()> {
         // Compute join selectivities
         self.compute_join_selectivities()?;
-        
+
         // Update index statistics
         self.update_index_statistics()?;
-        
+
         // Compute correlations
         self.compute_correlations()?;
-        
+
         Ok(())
     }
 
@@ -273,24 +305,34 @@ impl StatisticsCollector {
     fn compute_join_selectivities(&mut self) -> Result<()> {
         // Analyze co-occurrence of predicates to estimate join selectivity
         let predicates: Vec<_> = self.stats.predicate_frequency.keys().cloned().collect();
-        
+
         for i in 0..predicates.len() {
             for j in i + 1..predicates.len() {
                 let pred1 = &predicates[i];
                 let pred2 = &predicates[j];
-                
+
                 // Estimate selectivity based on frequencies
-                let freq1 = self.stats.predicate_frequency.get(pred1).copied().unwrap_or(1) as f64;
-                let freq2 = self.stats.predicate_frequency.get(pred2).copied().unwrap_or(1) as f64;
+                let freq1 = self
+                    .stats
+                    .predicate_frequency
+                    .get(pred1)
+                    .copied()
+                    .unwrap_or(1) as f64;
+                let freq2 = self
+                    .stats
+                    .predicate_frequency
+                    .get(pred2)
+                    .copied()
+                    .unwrap_or(1) as f64;
                 let total = self.stats.predicate_frequency.values().sum::<usize>() as f64;
-                
+
                 let selectivity = (freq1.min(freq2) / total).sqrt();
-                
+
                 let join_key = format!("{}_{}", pred1, pred2);
                 self.stats.join_selectivity.insert(join_key, selectivity);
             }
         }
-        
+
         Ok(())
     }
 
@@ -298,36 +340,43 @@ impl StatisticsCollector {
     fn update_index_statistics(&mut self) -> Result<()> {
         // Determine which indexes would be most beneficial
         let total_patterns = self.stats.pattern_cardinality.values().sum::<usize>() as f64;
-        
+
         // Subject-Predicate index benefit
-        let sp_benefit = self.stats.predicate_frequency.values()
+        let sp_benefit = self
+            .stats
+            .predicate_frequency
+            .values()
             .filter(|&&freq| freq > 10)
-            .count() as f64 / self.stats.predicate_frequency.len().max(1) as f64;
-        
-        self.stats.index_stats.index_selectivity.insert(
-            IndexType::SubjectPredicate,
-            sp_benefit,
-        );
-        
+            .count() as f64
+            / self.stats.predicate_frequency.len().max(1) as f64;
+
+        self.stats
+            .index_stats
+            .index_selectivity
+            .insert(IndexType::SubjectPredicate, sp_benefit);
+
         // Predicate-Object index benefit
-        let po_benefit = self.histograms.values()
+        let po_benefit = self
+            .histograms
+            .values()
             .map(|h| h.distinct_count as f64 / h.total_count.max(1) as f64)
-            .sum::<f64>() / self.histograms.len().max(1) as f64;
-        
-        self.stats.index_stats.index_selectivity.insert(
-            IndexType::PredicateObject,
-            po_benefit,
-        );
-        
+            .sum::<f64>()
+            / self.histograms.len().max(1) as f64;
+
+        self.stats
+            .index_stats
+            .index_selectivity
+            .insert(IndexType::PredicateObject, po_benefit);
+
         // Update access costs based on selectivity
         for (index_type, selectivity) in &self.stats.index_stats.index_selectivity {
             let cost = (1.0 - selectivity) * 10.0 + 1.0;
-            self.stats.index_stats.index_access_cost.insert(
-                index_type.clone(),
-                cost,
-            );
+            self.stats
+                .index_stats
+                .index_access_cost
+                .insert(index_type.clone(), cost);
         }
-        
+
         Ok(())
     }
 
@@ -335,9 +384,9 @@ impl StatisticsCollector {
     fn compute_correlations(&mut self) -> Result<()> {
         // Simplified correlation computation
         // In practice, this would analyze co-occurrence patterns
-        
+
         let predicates: Vec<_> = self.stats.predicate_frequency.keys().cloned().collect();
-        
+
         for i in 0..predicates.len().min(20) {
             for j in i + 1..predicates.len().min(20) {
                 let correlation = CorrelationStats {
@@ -345,14 +394,12 @@ impl StatisticsCollector {
                     joint_distribution: HashMap::new(),
                     functional_dependency: 0.0,
                 };
-                
-                self.correlations.insert(
-                    (predicates[i].clone(), predicates[j].clone()),
-                    correlation,
-                );
+
+                self.correlations
+                    .insert((predicates[i].clone(), predicates[j].clone()), correlation);
             }
         }
-        
+
         Ok(())
     }
 
@@ -374,16 +421,16 @@ impl StatisticsCollector {
     /// Estimate cardinality for a triple pattern
     pub fn estimate_pattern_cardinality(&self, pattern: &TriplePattern) -> usize {
         let pattern_key = format!("{}", pattern);
-        
+
         // Use exact count if available
         if let Some(&count) = self.stats.pattern_cardinality.get(&pattern_key) {
             return count;
         }
-        
+
         // Otherwise estimate based on term selectivities
         let base_cardinality = 1_000_000; // Default assumption
         let mut selectivity = 1.0;
-        
+
         // Apply subject selectivity
         match &pattern.subject {
             Term::Iri(iri) => {
@@ -397,7 +444,7 @@ impl StatisticsCollector {
             Term::Literal(_) => selectivity *= 0.0001,
             _ => selectivity *= 0.01,
         }
-        
+
         // Apply predicate selectivity
         match &pattern.predicate {
             Term::Iri(iri) => {
@@ -410,7 +457,7 @@ impl StatisticsCollector {
             Term::Variable(_) => selectivity *= 0.1, // Variable predicates are rare
             _ => selectivity *= 0.001,
         }
-        
+
         // Apply object selectivity
         match &pattern.object {
             Term::Iri(iri) => {
@@ -424,7 +471,7 @@ impl StatisticsCollector {
             Term::Literal(_) => selectivity *= 0.0001,
             _ => selectivity *= 0.01,
         }
-        
+
         (base_cardinality as f64 * selectivity).ceil() as usize
     }
 
@@ -439,15 +486,22 @@ impl StatisticsCollector {
             // Cartesian product
             return left_cardinality * right_cardinality;
         }
-        
+
         // Use variable selectivity to estimate join reduction
         let avg_selectivity: f64 = join_vars
             .iter()
-            .map(|var| self.stats.variable_selectivity.get(var).copied().unwrap_or(0.1))
-            .sum::<f64>() / join_vars.len() as f64;
-        
+            .map(|var| {
+                self.stats
+                    .variable_selectivity
+                    .get(var)
+                    .copied()
+                    .unwrap_or(0.1)
+            })
+            .sum::<f64>()
+            / join_vars.len() as f64;
+
         let join_factor = (avg_selectivity * join_vars.len() as f64).min(1.0);
-        
+
         ((left_cardinality * right_cardinality) as f64 * join_factor).ceil() as usize
     }
 
@@ -512,19 +566,19 @@ impl DynamicStatisticsUpdater {
         } else {
             1.0
         };
-        
+
         // Update pattern cardinalities
         self.update_pattern_statistics(&record.algebra, record.actual_cardinality, stats)?;
-        
+
         // Update variable selectivities
         self.update_variable_selectivities(&record.algebra, error_ratio, stats)?;
-        
+
         // Store execution record
         self.execution_history.push(record);
         if self.execution_history.len() > self.max_history {
             self.execution_history.remove(0);
         }
-        
+
         Ok(())
     }
 
@@ -539,13 +593,17 @@ impl DynamicStatisticsUpdater {
             Algebra::Bgp(patterns) => {
                 for pattern in patterns {
                     let pattern_key = format!("{}", pattern);
-                    let current = stats.pattern_cardinality.get(&pattern_key).copied().unwrap_or(1000);
-                    
+                    let current = stats
+                        .pattern_cardinality
+                        .get(&pattern_key)
+                        .copied()
+                        .unwrap_or(1000);
+
                     // Exponential moving average update
                     let updated = (current as f64 * (1.0 - self.learning_rate)
                         + actual_cardinality as f64 * self.learning_rate / patterns.len() as f64)
                         .round() as usize;
-                    
+
                     stats.pattern_cardinality.insert(pattern_key, updated);
                 }
             }
@@ -553,7 +611,7 @@ impl DynamicStatisticsUpdater {
                 // Recursively process nested algebra
             }
         }
-        
+
         Ok(())
     }
 
@@ -565,10 +623,10 @@ impl DynamicStatisticsUpdater {
         stats: &mut Statistics,
     ) -> Result<()> {
         let variables = algebra.variables();
-        
+
         for var in variables {
             let current = stats.variable_selectivity.get(&var).copied().unwrap_or(0.1);
-            
+
             // Adjust selectivity based on error
             let adjustment = if error_ratio > 1.0 {
                 // We underestimated, increase selectivity
@@ -577,41 +635,43 @@ impl DynamicStatisticsUpdater {
                 // We overestimated, decrease selectivity
                 1.0 - self.learning_rate * (1.0 - error_ratio).min(0.5)
             };
-            
+
             let updated = (current * adjustment).clamp(0.001, 1.0);
             stats.variable_selectivity.insert(var, updated);
         }
-        
+
         Ok(())
     }
 
     /// Analyze historical patterns for optimization opportunities
     pub fn analyze_patterns(&self) -> Vec<OptimizationHint> {
         let mut hints = Vec::new();
-        
+
         // Analyze frequently mis-estimated queries
-        let mis_estimates: Vec<_> = self.execution_history
+        let mis_estimates: Vec<_> = self
+            .execution_history
             .iter()
             .filter(|r| {
                 let ratio = r.actual_cardinality as f64 / r.estimated_cardinality.max(1) as f64;
                 ratio < 0.1 || ratio > 10.0
             })
             .collect();
-        
+
         if mis_estimates.len() > 10 {
             hints.push(OptimizationHint::CollectMoreStatistics);
         }
-        
+
         // Analyze slow queries
-        let slow_queries: Vec<_> = self.execution_history
+        let slow_queries: Vec<_> = self
+            .execution_history
             .iter()
             .filter(|r| r.execution_time > Duration::from_secs(1))
             .collect();
-        
+
         if slow_queries.len() > 5 {
             hints.push(OptimizationHint::ConsiderIndexing);
         }
-        
+
         hints
     }
 }
@@ -635,14 +695,14 @@ mod tests {
     #[test]
     fn test_histogram_operations() {
         let mut histogram = Histogram::new(10);
-        
+
         // Add some values
         for i in 0..100 {
             histogram.add_value(&format!("value_{}", i));
             histogram.total_count = i + 1;
         }
         histogram.distinct_count = 100;
-        
+
         // Test selectivity estimation
         let selectivity = histogram.estimate_selectivity("value_50");
         assert!(selectivity > 0.0 && selectivity < 1.0);
@@ -651,16 +711,16 @@ mod tests {
     #[test]
     fn test_statistics_collection() {
         let mut collector = StatisticsCollector::new();
-        
+
         let patterns = vec![
             TriplePattern {
-                subject: Term::Variable("s".to_string()),
-                predicate: Term::Iri(Iri("http://example.org/type".to_string())),
-                object: Term::Variable("o".to_string()),
+                subject: Term::Variable(Variable::new("s").unwrap()),
+                predicate: Term::Iri(NamedNode::new("http://example.org/type").unwrap()),
+                object: Term::Variable(Variable::new("o").unwrap()),
             },
             TriplePattern {
-                subject: Term::Variable("s".to_string()),
-                predicate: Term::Iri(Iri("http://example.org/name".to_string())),
+                subject: Term::Variable(Variable::new("s").unwrap()),
+                predicate: Term::Iri(NamedNode::new("http://example.org/name").unwrap()),
                 object: Term::Literal(Literal {
                     value: "Test".to_string(),
                     language: None,
@@ -668,25 +728,31 @@ mod tests {
                 }),
             },
         ];
-        
+
         collector.collect_from_patterns(&patterns).unwrap();
-        
+
         let stats = collector.get_statistics();
-        assert!(stats.predicate_frequency.contains_key("http://example.org/type"));
-        assert!(stats.predicate_frequency.contains_key("http://example.org/name"));
-        assert!(stats.variable_selectivity.contains_key("s"));
+        assert!(stats
+            .predicate_frequency
+            .contains_key("http://example.org/type"));
+        assert!(stats
+            .predicate_frequency
+            .contains_key("http://example.org/name"));
+        assert!(stats
+            .variable_selectivity
+            .contains_key(&Variable::new("s").unwrap()));
     }
 
     #[test]
     fn test_cardinality_estimation() {
         let collector = StatisticsCollector::new();
-        
+
         let pattern = TriplePattern {
-            subject: Term::Iri(Iri("http://example.org/subject".to_string())),
-            predicate: Term::Iri(Iri("http://example.org/predicate".to_string())),
-            object: Term::Variable("o".to_string()),
+            subject: Term::Iri(NamedNode::new("http://example.org/subject").unwrap()),
+            predicate: Term::Iri(NamedNode::new("http://example.org/predicate").unwrap()),
+            object: Term::Variable(Variable::new("o").unwrap()),
         };
-        
+
         let cardinality = collector.estimate_pattern_cardinality(&pattern);
         assert!(cardinality > 0);
     }
@@ -695,23 +761,21 @@ mod tests {
     fn test_dynamic_updates() {
         let mut updater = DynamicStatisticsUpdater::new();
         let mut stats = Statistics::new();
-        
+
         let record = QueryExecutionRecord {
-            algebra: Algebra::Bgp(vec![
-                TriplePattern {
-                    subject: Term::Variable("s".to_string()),
-                    predicate: Term::Iri(Iri("http://example.org/type".to_string())),
-                    object: Term::Variable("o".to_string()),
-                },
-            ]),
+            algebra: Algebra::Bgp(vec![TriplePattern {
+                subject: Term::Variable(Variable::new("s").unwrap()),
+                predicate: Term::Iri(NamedNode::new("http://example.org/type").unwrap()),
+                object: Term::Variable(Variable::new("o").unwrap()),
+            }]),
             estimated_cardinality: 1000,
             actual_cardinality: 5000,
             execution_time: Duration::from_millis(100),
             timestamp: Instant::now(),
         };
-        
+
         updater.update_from_execution(record, &mut stats).unwrap();
-        
+
         // Check that statistics were updated
         assert!(!stats.pattern_cardinality.is_empty());
         assert!(!stats.variable_selectivity.is_empty());

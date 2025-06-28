@@ -1,12 +1,11 @@
 //! SPARQL Algebra Phase 2 Extraction Demo
-//! 
+//!
 //! Demonstrates the enhanced SPARQL algebra extracted from OxiGraph spargebra.
 
-use oxirs_core::model::{NamedNode, Variable, Literal};
+use oxirs_core::model::{Literal, NamedNode, Variable};
 use oxirs_core::query::{
-    Query, GraphPattern, TriplePattern, TermPattern, 
-    Expression, PropertyPathExpression, BuiltInFunction, FunctionExpression,
-    OrderExpression, AggregateExpression, QueryDataset
+    AggregateExpression, BuiltInFunction, Expression, FunctionExpression, GraphPattern,
+    OrderExpression, PropertyPathExpression, Query, QueryDataset, TermPattern, TriplePattern,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -18,23 +17,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let subject = TermPattern::Variable(Variable::new("person")?);
     let predicate = TermPattern::NamedNode(NamedNode::new("http://xmlns.com/foaf/0.1/name")?);
     let object = TermPattern::Variable(Variable::new("name")?);
-    
+
     let triple = TriplePattern::new(subject, predicate, object);
     println!("   Created triple pattern: {}", triple);
 
     // Test basic graph pattern (BGP)
     println!("\n✅ Basic Graph Pattern:");
-    let bgp = GraphPattern::Bgp { patterns: vec![triple] };
+    let bgp = GraphPattern::Bgp {
+        patterns: vec![triple],
+    };
     println!("   BGP: {}", bgp);
-    
+
     // Test property path expression
     println!("\n✅ Property Path Expression:");
     let prop1 = NamedNode::new("http://example.org/knows")?;
     let prop2 = NamedNode::new("http://example.org/worksFor")?;
-    
+
     let path = PropertyPathExpression::Sequence(
         Box::new(PropertyPathExpression::NamedNode(prop1)),
-        Box::new(PropertyPathExpression::NamedNode(prop2))
+        Box::new(PropertyPathExpression::NamedNode(prop2)),
     );
     println!("   Property path: {}", path);
 
@@ -57,42 +58,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let age_var = Expression::Variable(Variable::new("age")?);
     let eighteen = Expression::Literal(Literal::new("18").into());
     let condition = Expression::Greater(Box::new(age_var), Box::new(eighteen));
-    
-    let simple_bgp = GraphPattern::Bgp { 
+
+    let simple_bgp = GraphPattern::Bgp {
         patterns: vec![TriplePattern::new(
             TermPattern::Variable(Variable::new("person")?),
             TermPattern::NamedNode(NamedNode::new("http://example.org/age")?),
-            TermPattern::Variable(Variable::new("age")?)
-        )]
+            TermPattern::Variable(Variable::new("age")?),
+        )],
     };
-    
+
     let filter_pattern = GraphPattern::Filter {
         expr: condition,
-        inner: Box::new(simple_bgp)
+        inner: Box::new(simple_bgp),
     };
     println!("   Filter pattern: {}", filter_pattern);
 
     // Test UNION pattern
     println!("\n✅ Union Pattern:");
-    let left_pattern = GraphPattern::Bgp { 
+    let left_pattern = GraphPattern::Bgp {
         patterns: vec![TriplePattern::new(
             TermPattern::Variable(Variable::new("x")?),
             TermPattern::NamedNode(NamedNode::new("http://example.org/type")?),
-            TermPattern::NamedNode(NamedNode::new("http://example.org/Person")?)
-        )]
+            TermPattern::NamedNode(NamedNode::new("http://example.org/Person")?),
+        )],
     };
-    
-    let right_pattern = GraphPattern::Bgp { 
+
+    let right_pattern = GraphPattern::Bgp {
         patterns: vec![TriplePattern::new(
             TermPattern::Variable(Variable::new("x")?),
             TermPattern::NamedNode(NamedNode::new("http://example.org/type")?),
-            TermPattern::NamedNode(NamedNode::new("http://example.org/Organization")?)
-        )]
+            TermPattern::NamedNode(NamedNode::new("http://example.org/Organization")?),
+        )],
     };
-    
+
     let union_pattern = GraphPattern::Union {
         left: Box::new(left_pattern),
-        right: Box::new(right_pattern)
+        right: Box::new(right_pattern),
     };
     println!("   Union pattern: {}", union_pattern);
 
@@ -100,9 +101,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n✅ Complete SELECT Query:");
     let select_pattern = GraphPattern::Project {
         inner: Box::new(union_pattern.clone()),
-        variables: vec![Variable::new("x")?]
+        variables: vec![Variable::new("x")?],
     };
-    
+
     let query = Query::select(select_pattern);
     println!("   Query: {}", query);
 
@@ -115,7 +116,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut dataset = QueryDataset::new();
     dataset.add_default_graph(NamedNode::new("http://example.org/default")?);
     dataset.add_named_graph(NamedNode::new("http://example.org/named")?);
-    
+
     let query_with_dataset = query.with_dataset(dataset);
     println!("   Query with dataset: {}", query_with_dataset);
 
@@ -123,15 +124,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n✅ Aggregate Expression:");
     let count_agg = AggregateExpression::Count {
         expr: Some(Box::new(Expression::Variable(Variable::new("person")?))),
-        distinct: true
+        distinct: true,
     };
     println!("   Aggregate: {}", count_agg);
 
     // Test order expression
     println!("\n✅ Order Expression:");
-    let order_expr = OrderExpression::Desc(
-        Expression::Variable(Variable::new("age")?)
-    );
+    let order_expr = OrderExpression::Desc(Expression::Variable(Variable::new("age")?));
     println!("   Order by: {}", order_expr);
 
     println!("\n🎉 Phase 2 SPARQL Algebra Extraction Complete!");

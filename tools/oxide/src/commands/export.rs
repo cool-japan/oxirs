@@ -1,7 +1,7 @@
 //! Data export command
 
-use super::CommandResult;
 use super::stubs::Store;
+use super::CommandResult;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;

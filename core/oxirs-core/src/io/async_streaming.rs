@@ -138,8 +138,8 @@ pub struct AsyncStreamingConfig {
 impl Default for AsyncStreamingConfig {
     fn default() -> Self {
         AsyncStreamingConfig {
-            chunk_size: 8192,      // 8KB chunks
-            buffer_size: 65536,    // 64KB buffer
+            chunk_size: 8192,   // 8KB chunks
+            buffer_size: 65536, // 64KB buffer
             ignore_errors: false,
             max_errors: None,
             base_iri: None,
@@ -222,7 +222,8 @@ impl AsyncStreamingParser {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Interrupted,
                     "Operation cancelled",
-                ).into());
+                )
+                .into());
             }
         }
         Ok(())
@@ -279,7 +280,7 @@ impl AsyncStreamingParser {
             // Process complete lines
             while let Some(newline_pos) = accumulated.iter().position(|&b| b == b'\n') {
                 let line_bytes = accumulated.drain(..=newline_pos).collect::<Vec<_>>();
-                
+
                 // Convert to string, handling UTF-8 errors gracefully
                 match String::from_utf8(line_bytes) {
                     Ok(mut line) => {
@@ -290,9 +291,9 @@ impl AsyncStreamingParser {
                                 line.pop();
                             }
                         }
-                        
+
                         line_buffer.push_str(&line);
-                        
+
                         // Try to parse the line
                         match self.parse_single_line(&parser, &line_buffer) {
                             Ok(Some(quad)) => {
@@ -426,7 +427,7 @@ impl AsyncStreamingParser {
 
         // Parse the document and collect quads
         let quads = parser.parse_str_to_quads(&document)?;
-        
+
         // Process each quad with the async handler
         for quad in quads {
             Self::check_cancelled(&cancel_token)?;
@@ -452,7 +453,7 @@ impl AsyncRdfParser for AsyncStreamingParser {
     {
         Box::pin(async move {
             let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-            
+
             // Spawn a task to collect quads
             let collector = tokio::spawn(async move {
                 let mut quads = Vec::new();
@@ -461,31 +462,35 @@ impl AsyncRdfParser for AsyncStreamingParser {
                 }
                 quads
             });
-            
+
             // Parse with handler that sends quads to the channel
-            let parse_result = self.parse_with_handler_async(
-                reader,
-                |quad| {
-                    let tx = tx.clone();
-                    async move {
-                        tx.send(quad).map_err(|_| OxirsError::Parse("Channel send error".to_string()))?;
-                        Ok(())
-                    }
-                },
-                config,
-                progress,
-                cancel_token,
-            )
-            .await;
-            
+            let parse_result = self
+                .parse_with_handler_async(
+                    reader,
+                    |quad| {
+                        let tx = tx.clone();
+                        async move {
+                            tx.send(quad)
+                                .map_err(|_| OxirsError::Parse("Channel send error".to_string()))?;
+                            Ok(())
+                        }
+                    },
+                    config,
+                    progress,
+                    cancel_token,
+                )
+                .await;
+
             // Close the channel
             drop(tx);
-            
+
             // Check for parse errors
             parse_result?;
-            
+
             // Collect the quads
-            let quads = collector.await.map_err(|_| OxirsError::Parse("Failed to collect quads".to_string()))?;
+            let quads = collector
+                .await
+                .map_err(|_| OxirsError::Parse("Failed to collect quads".to_string()))?;
             Ok(quads)
         })
     }
@@ -536,7 +541,8 @@ impl AsyncStreamingSerializer {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Interrupted,
                     "Operation cancelled",
-                ).into());
+                )
+                .into());
             }
         }
         Ok(())
@@ -606,7 +612,8 @@ impl AsyncRdfSerializer for AsyncStreamingSerializer {
                 // Update progress
                 let elapsed = start_time.elapsed().as_secs_f64();
                 if elapsed > 0.0 {
-                    progress_info.items_per_second = Some(progress_info.items_processed as f64 / elapsed);
+                    progress_info.items_per_second =
+                        Some(progress_info.items_processed as f64 / elapsed);
                 }
 
                 if let Some(ref callback) = progress {
@@ -618,7 +625,7 @@ impl AsyncRdfSerializer for AsyncStreamingSerializer {
             if !buffer.is_empty() {
                 writer.write_all(buffer.as_bytes()).await?;
                 progress_info.bytes_processed += buffer.len();
-                
+
                 // Report final progress
                 if let Some(ref callback) = progress {
                     callback(&progress_info);
@@ -688,7 +695,7 @@ impl<R: AsyncRead + Unpin> AsyncRead for BackpressureReader<R> {
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> Poll<std::io::Result<()>> {
         let me = self.get_mut();
-        
+
         // If we have data in the buffer, return it
         if me.available() > 0 {
             let to_read = std::cmp::min(buf.remaining(), me.available());
@@ -744,7 +751,7 @@ mod tests {
 
         let parser = AsyncStreamingParser::new(RdfFormat::NTriples);
         let reader = std::io::Cursor::new(ntriples_data.as_bytes());
-        
+
         let quads = parser
             .parse_async(reader, AsyncStreamingConfig::default(), None, None)
             .await
@@ -764,10 +771,10 @@ mod tests {
 
         let parser = AsyncStreamingParser::new(RdfFormat::NTriples);
         let reader = std::io::Cursor::new(ntriples_data.as_bytes());
-        
+
         let progress_count = Arc::new(AtomicUsize::new(0));
         let progress_count_clone = progress_count.clone();
-        
+
         let progress_callback = Box::new(move |progress: &StreamingProgress| {
             progress_count_clone.fetch_add(1, Ordering::Relaxed);
             assert!(progress.bytes_processed > 0);
@@ -797,7 +804,7 @@ mod tests {
 
         let parser = AsyncStreamingParser::new(RdfFormat::NTriples);
         let reader = std::io::Cursor::new(ntriples_data.as_bytes());
-        
+
         let cancel_token = Arc::new(AtomicBool::new(false));
         let cancel_token_clone = cancel_token.clone();
 
@@ -832,7 +839,7 @@ mod tests {
     #[tokio::test]
     async fn test_async_ntriples_serialization() {
         let mut quads = Vec::new();
-        
+
         let alice = NamedNode::new("http://example.org/alice").unwrap();
         let name_pred = NamedNode::new("http://xmlns.com/foaf/0.1/name").unwrap();
         let alice_name = Literal::new("Alice");
@@ -846,7 +853,7 @@ mod tests {
 
         let serializer = AsyncStreamingSerializer::new(RdfFormat::NTriples);
         let mut output = Vec::new();
-        
+
         serializer
             .serialize_quads_async(
                 &mut output,
@@ -868,7 +875,7 @@ mod tests {
     #[tokio::test]
     async fn test_async_serialization_with_progress() {
         let mut triples = Vec::new();
-        
+
         for i in 0..10 {
             let subject = NamedNode::new(&format!("http://example.org/item{}", i)).unwrap();
             let pred = NamedNode::new("http://example.org/value").unwrap();
@@ -878,12 +885,12 @@ mod tests {
 
         let serializer = AsyncStreamingSerializer::new(RdfFormat::NTriples);
         let mut output = Vec::new();
-        
+
         let progress_count = Arc::new(AtomicUsize::new(0));
         let progress_count_clone = progress_count.clone();
         let last_bytes = Arc::new(AtomicUsize::new(0));
         let last_bytes_clone = last_bytes.clone();
-        
+
         let progress_callback = Box::new(move |progress: &StreamingProgress| {
             progress_count_clone.fetch_add(1, Ordering::Relaxed);
             assert!(progress.items_processed <= 10);
@@ -916,10 +923,10 @@ INVALID LINE HERE
 
         let parser = AsyncStreamingParser::new(RdfFormat::NTriples);
         let reader = std::io::Cursor::new(invalid_ntriples.as_bytes());
-        
+
         let mut config = AsyncStreamingConfig::default();
         config.ignore_errors = true;
-        
+
         let quads = parser
             .parse_async(reader, config, None, None)
             .await
@@ -949,7 +956,7 @@ INVALID LINE HERE
 
         let parser = AsyncStreamingParser::new(RdfFormat::NQuads);
         let reader = std::io::Cursor::new(nquads_data.as_bytes());
-        
+
         let quads = parser
             .parse_async(reader, AsyncStreamingConfig::default(), None, None)
             .await
@@ -973,10 +980,10 @@ INVALID LINE HERE
 
         let parser = AsyncStreamingParser::new(RdfFormat::NTriples);
         let reader = std::io::Cursor::new(ntriples_data.as_bytes());
-        
+
         let mut config = AsyncStreamingConfig::default();
         config.chunk_size = 1024; // Small chunks to test buffering
-        
+
         let quads = parser
             .parse_async(reader, config, None, None)
             .await
@@ -992,10 +999,10 @@ ex:alice ex:knows ex:bob ."#;
 
         let parser = AsyncStreamingParser::new(RdfFormat::Turtle);
         let reader = std::io::Cursor::new(turtle_data.as_bytes());
-        
+
         let mut config = AsyncStreamingConfig::default();
         config.base_iri = Some("http://example.org/".to_string());
-        
+
         let quads = parser
             .parse_async(reader, config, None, None)
             .await
@@ -1003,7 +1010,7 @@ ex:alice ex:knows ex:bob ."#;
 
         assert_eq!(quads.len(), 1);
         let triple = quads[0].to_triple();
-        
+
         // Should contain the example.org namespace
         if let Subject::NamedNode(subj) = triple.subject() {
             assert!(subj.as_str().contains("example.org"));

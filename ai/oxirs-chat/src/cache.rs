@@ -15,8 +15,8 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 use crate::{
-    rag::{AssembledContext, RetrievedKnowledge},
     llm::LLMResponse,
+    rag::{AssembledContext, RetrievedKnowledge},
     Message,
 };
 
@@ -144,7 +144,7 @@ impl<T> CacheEntry<T> {
 struct CacheTier<T: Clone> {
     config: CacheTierConfig,
     entries: HashMap<String, CacheEntry<T>>,
-    access_order: VecDeque<String>, // For LRU
+    access_order: VecDeque<String>,        // For LRU
     frequency_map: HashMap<String, usize>, // For LFU
     total_size: usize,
 }
@@ -162,8 +162,11 @@ impl<T: Clone> CacheTier<T> {
 
     fn get(&mut self, key: &str) -> Option<T> {
         // Check if entry exists and is not expired
-        let is_expired = self.entries.get(key).map_or(true, |entry| entry.is_expired());
-        
+        let is_expired = self
+            .entries
+            .get(key)
+            .map_or(true, |entry| entry.is_expired());
+
         if is_expired {
             self.remove(key);
             return None;
@@ -243,7 +246,9 @@ impl<T: Clone> CacheTier<T> {
         self.cleanup_expired();
 
         // If still not enough space, evict according to policy
-        while self.total_size + needed_bytes > self.config.max_size * 1024 && !self.entries.is_empty() {
+        while self.total_size + needed_bytes > self.config.max_size * 1024
+            && !self.entries.is_empty()
+        {
             match self.config.eviction_policy {
                 EvictionPolicy::LRU => self.evict_lru()?,
                 EvictionPolicy::LFU => self.evict_lfu()?,
@@ -506,11 +511,7 @@ impl AdvancedCacheManager {
     }
 
     /// Cache assembled context
-    pub async fn cache_context(
-        &self,
-        key: String,
-        context: &AssembledContext,
-    ) -> Result<()> {
+    pub async fn cache_context(&self, key: String, context: &AssembledContext) -> Result<()> {
         let cached_context = CachedContext {
             context_text: context.context_text.clone(),
             quality_score: context.quality_score,
@@ -619,16 +620,24 @@ impl AdvancedCacheManager {
     /// Get detailed cache tier statistics
     pub async fn get_detailed_stats(&self) -> HashMap<String, CacheTierStats> {
         let mut stats = HashMap::new();
-        
-        stats.insert("response".to_string(), 
-                    self.response_cache.read().await.get_stats());
-        stats.insert("context".to_string(), 
-                    self.context_cache.read().await.get_stats());
-        stats.insert("embedding".to_string(), 
-                    self.embedding_cache.read().await.get_stats());
-        stats.insert("query".to_string(), 
-                    self.query_cache.read().await.get_stats());
-        
+
+        stats.insert(
+            "response".to_string(),
+            self.response_cache.read().await.get_stats(),
+        );
+        stats.insert(
+            "context".to_string(),
+            self.context_cache.read().await.get_stats(),
+        );
+        stats.insert(
+            "embedding".to_string(),
+            self.embedding_cache.read().await.get_stats(),
+        );
+        stats.insert(
+            "query".to_string(),
+            self.query_cache.read().await.get_stats(),
+        );
+
         stats
     }
 
@@ -659,12 +668,12 @@ impl AdvancedCacheManager {
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(300)); // Every 5 minutes
-            
+
             loop {
                 interval.tick().await;
-                
+
                 let mut total_cleaned = 0;
-                
+
                 // Cleanup expired entries in all tiers
                 {
                     let mut cache = response_cache.write().await;
@@ -682,7 +691,7 @@ impl AdvancedCacheManager {
                     let mut cache = query_cache.write().await;
                     total_cleaned += cache.cleanup_expired();
                 }
-                
+
                 if total_cleaned > 0 {
                     info!("Cache cleanup: removed {} expired entries", total_cleaned);
                 }
@@ -701,20 +710,23 @@ impl AdvancedCacheManager {
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(900)); // Every 15 minutes
-            // Create a temporary cache manager for warming
+                                                                                // Create a temporary cache manager for warming
             let cache_config = CacheConfig::default();
             let cache_manager = Arc::new(AdvancedCacheManager::new(cache_config));
             let mut warming_service = CacheWarmingService::new(cache_manager, strategies.clone());
-            
+
             loop {
                 interval.tick().await;
-                
+
                 for strategy in &strategies {
                     match strategy {
                         WarmingStrategy::FrequentQueries => {
                             // Use some sample frequent queries for warming
                             let frequent_queries = vec!["sample query".to_string()];
-                            if let Err(e) = warming_service.warm_frequent_queries(frequent_queries).await {
+                            if let Err(e) = warming_service
+                                .warm_frequent_queries(frequent_queries)
+                                .await
+                            {
                                 warn!("Failed to warm frequent queries: {}", e);
                             }
                         }
@@ -732,42 +744,45 @@ impl AdvancedCacheManager {
                         }
                     }
                 }
-                
+
                 info!("Cache warming cycle completed");
             }
         });
-        
-        info!("Cache warming task started with strategies: {:?}", self.config.warming_strategies);
+
+        info!(
+            "Cache warming task started with strategies: {:?}",
+            self.config.warming_strategies
+        );
     }
 
     /// Optimize cache configuration based on usage patterns
     pub async fn optimize_configuration(&self) -> Result<CacheConfig> {
         let stats = self.get_cache_stats().await;
         let detailed_stats = self.get_detailed_stats().await;
-        
+
         let mut optimized_config = self.config.clone();
-        
+
         // Adjust cache sizes based on hit rates
         if let Some(response_stats) = detailed_stats.get("response") {
             if stats.response_hits > 0 && stats.hit_rate() > 0.8 {
                 // High hit rate - increase cache size
-                optimized_config.response_cache.max_size = 
+                optimized_config.response_cache.max_size =
                     (optimized_config.response_cache.max_size as f32 * 1.2) as usize;
             } else if stats.hit_rate() < 0.3 {
                 // Low hit rate - decrease cache size
-                optimized_config.response_cache.max_size = 
+                optimized_config.response_cache.max_size =
                     (optimized_config.response_cache.max_size as f32 * 0.8) as usize;
             }
         }
-        
+
         // Adjust TTL based on access patterns
         if stats.cache_hits > 100 && stats.average_hit_time_ms > 0.0 {
             // If cache is being used effectively, extend TTL
             optimized_config.response_cache.ttl = Duration::from_secs(
-                (optimized_config.response_cache.ttl.as_secs() as f32 * 1.1) as u64
+                (optimized_config.response_cache.ttl.as_secs() as f32 * 1.1) as u64,
             );
         }
-        
+
         info!("Cache configuration optimized based on usage patterns");
         Ok(optimized_config)
     }
@@ -790,21 +805,27 @@ impl CacheWarmingService {
     /// Warm cache with frequent queries
     pub async fn warm_frequent_queries(&self, queries: Vec<String>) -> Result<usize> {
         let mut warmed_count = 0;
-        
+
         for query in queries {
             // Generate embeddings and cache them
-            let embedding_key = format!("embedding_{}", 
-                AdvancedCacheManager::generate_cache_key(&query, None));
-            
+            let embedding_key = format!(
+                "embedding_{}",
+                AdvancedCacheManager::generate_cache_key(&query, None)
+            );
+
             // This would ideally generate actual embeddings
             // For now, we'll create a placeholder
             let dummy_embedding = vec![0.0f32; 768]; // Typical embedding size
-            
-            if let Ok(_) = self.cache_manager.cache_embedding(embedding_key, dummy_embedding).await {
+
+            if let Ok(_) = self
+                .cache_manager
+                .cache_embedding(embedding_key, dummy_embedding)
+                .await
+            {
                 warmed_count += 1;
             }
         }
-        
+
         info!("Cache warming completed: {} entries warmed", warmed_count);
         Ok(warmed_count)
     }

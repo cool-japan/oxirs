@@ -19,33 +19,30 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct IRI(pub String);
 
-#[juniper::graphql_scalar(description = "An RDF IRI (Internationalized Resource Identifier)")]
-impl<S> GraphQLScalar<S> for IRI
-where
-    S: ScalarValue,
-{
-    fn resolve(&self) -> Value<S> {
+juniper::graphql_scalar!(IRI as "IRI" where Scalar = <S> {
+    description: "An RDF IRI (Internationalized Resource Identifier)"
+
+    resolve(&self) -> Value {
         Value::scalar(self.0.clone())
     }
 
-    fn from_input_value(value: &juniper::InputValue<S>) -> Result<IRI, String> {
-        match value.as_string_value() {
-            Some(s) => {
+    from_input_value(v: &InputValue) -> Result<IRI, String> {
+        v.as_string_value()
+            .ok_or_else(|| format!("Expected `String`, found: {}", v))
+            .and_then(|s| {
                 // Basic IRI validation
                 if s.starts_with("http://") || s.starts_with("https://") || s.starts_with("urn:") {
                     Ok(IRI(s.to_string()))
                 } else {
                     Err(format!("Invalid IRI format: {}", s))
                 }
-            }
-            None => Err("Expected string value for IRI".to_string()),
-        }
+            })
     }
 
-    fn from_str<'a>(value: juniper::ScalarToken<'a>) -> juniper::ParseScalarResult<'a, S> {
-        <String as juniper::ParseScalarValue<S>>::from_str(value)
+    from_str<'a>(value: ScalarToken<'a>) -> ParseScalarResult<'a, S> {
+        <String as ParseScalarValue<S>>::from_str(value)
     }
-}
+});
 
 /// Custom scalar type for RDF Literals with optional language tags and datatypes
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -55,12 +52,10 @@ pub struct RdfLiteral {
     pub datatype: Option<String>,
 }
 
-#[juniper::graphql_scalar(description = "An RDF Literal with optional language tag and datatype")]
-impl<S> GraphQLScalar<S> for RdfLiteral
-where
-    S: ScalarValue,
-{
-    fn resolve(&self) -> Value<S> {
+juniper::graphql_scalar!(RdfLiteral as "RdfLiteral" where Scalar = <S> {
+    description: "An RDF Literal with optional language tag and datatype"
+
+    resolve(&self) -> Value {
         Value::scalar(format!(
             "{}{}{}",
             self.value,
@@ -69,9 +64,10 @@ where
         ))
     }
 
-    fn from_input_value(value: &juniper::InputValue<S>) -> Result<RdfLiteral, String> {
-        match value.as_string_value() {
-            Some(s) => {
+    from_input_value(v: &InputValue) -> Result<RdfLiteral, String> {
+        v.as_string_value()
+            .ok_or_else(|| format!("Expected `String`, found: {}", v))
+            .and_then(|s| {
                 // Simple parsing for now - in production, use proper RDF literal parsing
                 if let Some(lang_pos) = s.rfind('@') {
                     let (value, lang) = s.split_at(lang_pos);
@@ -94,15 +90,13 @@ where
                         datatype: None,
                     })
                 }
-            }
-            None => Err("Expected string value for RdfLiteral".to_string()),
-        }
+            })
     }
 
-    fn from_str<'a>(value: juniper::ScalarToken<'a>) -> juniper::ParseScalarResult<'a, S> {
-        <String as juniper::ParseScalarValue<S>>::from_str(value)
+    from_str<'a>(value: ScalarToken<'a>) -> ParseScalarResult<'a, S> {
+        <String as ParseScalarValue<S>>::from_str(value)
     }
-}
+});
 
 /// RDF Term union type representing any RDF term (IRI, Literal, or Blank Node)
 #[derive(Debug, Clone, GraphQLUnion)]

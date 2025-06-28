@@ -6,7 +6,10 @@
 //! outer joins, temporal joins, and windowed joins. Optimized for high-throughput
 //! scenarios with proper memory management and late data handling.
 
-use crate::{StreamEvent, EventMetadata, processing::{WindowType, Watermark}};
+use crate::{
+    processing::{Watermark, WindowType},
+    EventMetadata, StreamEvent,
+};
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -36,7 +39,8 @@ pub type JoinKeyExtractor = Arc<dyn Fn(&StreamEvent) -> Option<String> + Send + 
 pub type JoinCondition = Arc<dyn Fn(&StreamEvent, &StreamEvent) -> bool + Send + Sync>;
 
 /// Result transformer for joined events
-pub type JoinResultTransformer = Arc<dyn Fn(&StreamEvent, Option<&StreamEvent>) -> Result<StreamEvent> + Send + Sync>;
+pub type JoinResultTransformer =
+    Arc<dyn Fn(&StreamEvent, Option<&StreamEvent>) -> Result<StreamEvent> + Send + Sync>;
 
 /// Configuration for stream join operations
 #[derive(Clone)]
@@ -137,7 +141,7 @@ impl StreamJoinProcessor {
     /// Process an event from the left stream
     pub async fn process_left(&self, event: StreamEvent) -> Result<Vec<StreamEvent>> {
         let event_time = event.timestamp();
-        
+
         // Check if event is too late
         if self.is_late_event(event_time).await {
             self.statistics.write().await.late_events_dropped += 1;
@@ -157,10 +161,11 @@ impl StreamJoinProcessor {
         // Add to left buffer
         {
             let mut left_buffer = self.left_buffer.write().await;
-            left_buffer.entry(key.clone())
+            left_buffer
+                .entry(key.clone())
                 .or_insert_with(VecDeque::new)
                 .push_back(event.clone());
-            
+
             // Trim buffer if needed
             if let Some(events) = left_buffer.get_mut(&key) {
                 while events.len() > self.config.buffer_size {
@@ -173,7 +178,11 @@ impl StreamJoinProcessor {
         {
             let mut stats = self.statistics.write().await;
             stats.left_events_processed += 1;
-            stats.buffer_size_left = self.left_buffer.read().await.values()
+            stats.buffer_size_left = self
+                .left_buffer
+                .read()
+                .await
+                .values()
                 .map(|v| v.len())
                 .sum();
         }
@@ -185,7 +194,7 @@ impl StreamJoinProcessor {
     /// Process an event from the right stream
     pub async fn process_right(&self, event: StreamEvent) -> Result<Vec<StreamEvent>> {
         let event_time = event.timestamp();
-        
+
         // Check if event is too late
         if self.is_late_event(event_time).await {
             self.statistics.write().await.late_events_dropped += 1;
@@ -205,10 +214,11 @@ impl StreamJoinProcessor {
         // Add to right buffer
         {
             let mut right_buffer = self.right_buffer.write().await;
-            right_buffer.entry(key.clone())
+            right_buffer
+                .entry(key.clone())
                 .or_insert_with(VecDeque::new)
                 .push_back(event.clone());
-            
+
             // Trim buffer if needed
             if let Some(events) = right_buffer.get_mut(&key) {
                 while events.len() > self.config.buffer_size {
@@ -221,7 +231,11 @@ impl StreamJoinProcessor {
         {
             let mut stats = self.statistics.write().await;
             stats.right_events_processed += 1;
-            stats.buffer_size_right = self.right_buffer.read().await.values()
+            stats.buffer_size_right = self
+                .right_buffer
+                .read()
+                .await
+                .values()
                 .map(|v| v.len())
                 .sum();
         }
@@ -234,10 +248,10 @@ impl StreamJoinProcessor {
     pub async fn update_watermark(&self, watermark: DateTime<Utc>) -> Result<()> {
         self.watermark.write().await.update(watermark);
         self.statistics.write().await.last_watermark = Some(watermark);
-        
+
         // Clean expired events from buffers
         self.clean_expired_events().await?;
-        
+
         Ok(())
     }
 
@@ -247,10 +261,14 @@ impl StreamJoinProcessor {
     }
 
     /// Join left event with matching right events
-    async fn join_with_right(&self, key: &str, left_event: &StreamEvent) -> Result<Vec<StreamEvent>> {
+    async fn join_with_right(
+        &self,
+        key: &str,
+        left_event: &StreamEvent,
+    ) -> Result<Vec<StreamEvent>> {
         let mut results = Vec::new();
         let right_buffer = self.right_buffer.read().await;
-        
+
         if let Some(right_events) = right_buffer.get(key) {
             for right_event in right_events {
                 if self.should_join(left_event, right_event).await {
@@ -262,7 +280,12 @@ impl StreamJoinProcessor {
         }
 
         // Handle outer joins
-        if results.is_empty() && matches!(self.config.join_type, JoinType::LeftOuter | JoinType::FullOuter) {
+        if results.is_empty()
+            && matches!(
+                self.config.join_type,
+                JoinType::LeftOuter | JoinType::FullOuter
+            )
+        {
             let joined = (self.config.result_transformer)(left_event, None)?;
             results.push(joined);
             self.statistics.write().await.unmatched_left += 1;
@@ -272,10 +295,14 @@ impl StreamJoinProcessor {
     }
 
     /// Join right event with matching left events
-    async fn join_with_left(&self, key: &str, right_event: &StreamEvent) -> Result<Vec<StreamEvent>> {
+    async fn join_with_left(
+        &self,
+        key: &str,
+        right_event: &StreamEvent,
+    ) -> Result<Vec<StreamEvent>> {
         let mut results = Vec::new();
         let left_buffer = self.left_buffer.read().await;
-        
+
         if let Some(left_events) = left_buffer.get(key) {
             for left_event in left_events {
                 if self.should_join(left_event, right_event).await {
@@ -287,14 +314,19 @@ impl StreamJoinProcessor {
         }
 
         // Handle outer joins
-        if results.is_empty() && matches!(self.config.join_type, JoinType::RightOuter | JoinType::FullOuter) {
+        if results.is_empty()
+            && matches!(
+                self.config.join_type,
+                JoinType::RightOuter | JoinType::FullOuter
+            )
+        {
             // For right outer join, we need to swap the events in the transformer
             let joined = match &self.config.join_type {
                 JoinType::RightOuter => {
                     // Create a temporary left event with None
                     create_null_joined_event(right_event, true)?
                 }
-                _ => (self.config.result_transformer)(right_event, None)?
+                _ => (self.config.result_transformer)(right_event, None)?,
             };
             results.push(joined);
             self.statistics.write().await.unmatched_right += 1;
@@ -325,7 +357,7 @@ impl StreamJoinProcessor {
     async fn is_late_event(&self, event_time: DateTime<Utc>) -> bool {
         let watermark = self.watermark.read().await;
         let watermark_time = watermark.current();
-        
+
         event_time < watermark_time - self.config.allowed_lateness
     }
 
@@ -361,21 +393,29 @@ fn create_null_joined_event(event: &StreamEvent, is_right_null: bool) -> Result<
     // This is a simplified implementation - in production you'd want more sophisticated handling
     let mut metadata = event.metadata().clone();
     metadata.properties.insert(
-        "join_type".to_string(), 
-        if is_right_null { "right_null".to_string() } else { "left_null".to_string() }
+        "join_type".to_string(),
+        if is_right_null {
+            "right_null".to_string()
+        } else {
+            "left_null".to_string()
+        },
     );
-    
+
     match event {
-        StreamEvent::TripleAdded { subject, predicate, object, graph, metadata: _ } => {
-            Ok(StreamEvent::TripleAdded {
-                subject: subject.clone(),
-                predicate: predicate.clone(),
-                object: object.clone(),
-                graph: graph.clone(),
-                metadata: metadata.clone(),
-            })
-        }
-        _ => Ok(event.clone())
+        StreamEvent::TripleAdded {
+            subject,
+            predicate,
+            object,
+            graph,
+            metadata: _,
+        } => Ok(StreamEvent::TripleAdded {
+            subject: subject.clone(),
+            predicate: predicate.clone(),
+            object: object.clone(),
+            graph: graph.clone(),
+            metadata: metadata.clone(),
+        }),
+        _ => Ok(event.clone()),
     }
 }
 
@@ -451,12 +491,15 @@ impl JoinBuilder {
         let config = JoinConfig {
             join_type: self.join_type,
             window: self.window,
-            left_key_extractor: self.left_key_extractor
+            left_key_extractor: self
+                .left_key_extractor
                 .ok_or_else(|| anyhow!("Left key extractor is required"))?,
-            right_key_extractor: self.right_key_extractor
+            right_key_extractor: self
+                .right_key_extractor
                 .ok_or_else(|| anyhow!("Right key extractor is required"))?,
             join_condition: self.join_condition,
-            result_transformer: self.result_transformer
+            result_transformer: self
+                .result_transformer
                 .ok_or_else(|| anyhow!("Result transformer is required"))?,
             temporal_tolerance: self.temporal_tolerance,
             buffer_size: self.buffer_size,
@@ -475,34 +518,29 @@ pub mod patterns {
 
     /// Create a subject-based join extractor
     pub fn subject_key_extractor() -> JoinKeyExtractor {
-        Arc::new(|event: &StreamEvent| {
-            match event {
-                StreamEvent::TripleAdded { subject, .. } |
-                StreamEvent::TripleRemoved { subject, .. } => Some(subject.clone()),
-                _ => None,
-            }
+        Arc::new(|event: &StreamEvent| match event {
+            StreamEvent::TripleAdded { subject, .. }
+            | StreamEvent::TripleRemoved { subject, .. } => Some(subject.clone()),
+            _ => None,
         })
     }
 
     /// Create a predicate-based join extractor
     pub fn predicate_key_extractor() -> JoinKeyExtractor {
-        Arc::new(|event: &StreamEvent| {
-            match event {
-                StreamEvent::TripleAdded { predicate, .. } |
-                StreamEvent::TripleRemoved { predicate, .. } => Some(predicate.clone()),
-                _ => None,
-            }
+        Arc::new(|event: &StreamEvent| match event {
+            StreamEvent::TripleAdded { predicate, .. }
+            | StreamEvent::TripleRemoved { predicate, .. } => Some(predicate.clone()),
+            _ => None,
         })
     }
 
     /// Create a graph-based join extractor
     pub fn graph_key_extractor() -> JoinKeyExtractor {
-        Arc::new(|event: &StreamEvent| {
-            match event {
-                StreamEvent::TripleAdded { graph, .. } |
-                StreamEvent::TripleRemoved { graph, .. } => graph.clone(),
-                _ => None,
+        Arc::new(|event: &StreamEvent| match event {
+            StreamEvent::TripleAdded { graph, .. } | StreamEvent::TripleRemoved { graph, .. } => {
+                graph.clone()
             }
+            _ => None,
         })
     }
 
@@ -510,29 +548,39 @@ pub mod patterns {
     pub fn merge_transformer() -> JoinResultTransformer {
         Arc::new(|left: &StreamEvent, right: Option<&StreamEvent>| {
             let mut metadata = left.metadata().clone();
-            
+
             if let Some(right_event) = right {
                 // Merge metadata from both events
                 for (k, v) in right_event.metadata().properties.iter() {
-                    metadata.properties.insert(format!("right_{}", k), v.clone());
+                    metadata
+                        .properties
+                        .insert(format!("right_{}", k), v.clone());
                 }
-                metadata.properties.insert("join_result".to_string(), "matched".to_string());
+                metadata
+                    .properties
+                    .insert("join_result".to_string(), "matched".to_string());
             } else {
-                metadata.properties.insert("join_result".to_string(), "unmatched".to_string());
+                metadata
+                    .properties
+                    .insert("join_result".to_string(), "unmatched".to_string());
             }
 
             // Return modified left event with merged metadata
             match left {
-                StreamEvent::TripleAdded { subject, predicate, object, graph, .. } => {
-                    Ok(StreamEvent::TripleAdded {
-                        subject: subject.clone(),
-                        predicate: predicate.clone(),
-                        object: object.clone(),
-                        graph: graph.clone(),
-                        metadata,
-                    })
-                }
-                _ => Ok(left.clone())
+                StreamEvent::TripleAdded {
+                    subject,
+                    predicate,
+                    object,
+                    graph,
+                    ..
+                } => Ok(StreamEvent::TripleAdded {
+                    subject: subject.clone(),
+                    predicate: predicate.clone(),
+                    object: object.clone(),
+                    graph: graph.clone(),
+                    metadata,
+                }),
+                _ => Ok(left.clone()),
             }
         })
     }
@@ -566,10 +614,11 @@ mod tests {
             .unwrap();
 
         let now = Utc::now();
-        
+
         // Process events from both streams
         let left_event = create_test_event("http://example.org/subject1", now);
-        let right_event = create_test_event("http://example.org/subject1", now + Duration::seconds(1));
+        let right_event =
+            create_test_event("http://example.org/subject1", now + Duration::seconds(1));
 
         // Process left event first - should produce no results yet
         let results = processor.process_left(left_event.clone()).await.unwrap();
@@ -597,14 +646,14 @@ mod tests {
             .unwrap();
 
         let now = Utc::now();
-        
+
         // Process non-matching left event
         let left_event = create_test_event("http://example.org/subject1", now);
         let results = processor.process_left(left_event).await.unwrap();
-        
+
         // Left outer join should produce result even without match
         assert_eq!(results.len(), 1);
-        
+
         let stats = processor.get_statistics().await;
         assert_eq!(stats.unmatched_left, 1);
     }
@@ -622,18 +671,20 @@ mod tests {
             .unwrap();
 
         let now = Utc::now();
-        
+
         // Add left event
         let left_event = create_test_event("http://example.org/subject1", now);
         processor.process_left(left_event).await.unwrap();
 
         // Add matching right event within tolerance
-        let right_event1 = create_test_event("http://example.org/subject1", now + Duration::seconds(3));
+        let right_event1 =
+            create_test_event("http://example.org/subject1", now + Duration::seconds(3));
         let results = processor.process_right(right_event1).await.unwrap();
         assert_eq!(results.len(), 1);
 
         // Add matching right event outside tolerance
-        let right_event2 = create_test_event("http://example.org/subject1", now + Duration::seconds(10));
+        let right_event2 =
+            create_test_event("http://example.org/subject1", now + Duration::seconds(10));
         let results = processor.process_right(right_event2).await.unwrap();
         assert_eq!(results.len(), 0);
 
@@ -654,12 +705,13 @@ mod tests {
             .unwrap();
 
         let now = Utc::now();
-        
+
         // Update watermark
         processor.update_watermark(now).await.unwrap();
 
         // Process late event
-        let late_event = create_test_event("http://example.org/subject1", now - Duration::minutes(2));
+        let late_event =
+            create_test_event("http://example.org/subject1", now - Duration::minutes(2));
         let results = processor.process_left(late_event).await.unwrap();
         assert_eq!(results.len(), 0);
 

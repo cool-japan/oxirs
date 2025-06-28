@@ -5,8 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 use std::fs;
+use std::path::{Path, PathBuf};
 use toml;
 
 use crate::cli::error::{CliError, CliResult};
@@ -27,19 +27,19 @@ pub struct OxideConfig {
     /// General settings
     #[serde(default)]
     pub general: GeneralConfig,
-    
+
     /// Server settings
     #[serde(default)]
     pub server: ServerConfig,
-    
+
     /// Dataset configurations
     #[serde(default)]
     pub datasets: HashMap<String, DatasetConfig>,
-    
+
     /// Tool-specific settings
     #[serde(default)]
     pub tools: ToolsConfig,
-    
+
     /// Environment-specific overrides
     #[serde(default)]
     pub env: HashMap<String, toml::Value>,
@@ -50,23 +50,23 @@ pub struct GeneralConfig {
     /// Default RDF format
     #[serde(default = "default_format")]
     pub default_format: String,
-    
+
     /// Default output directory
     #[serde(default)]
     pub output_dir: Option<PathBuf>,
-    
+
     /// Enable progress bars
     #[serde(default = "default_true")]
     pub show_progress: bool,
-    
+
     /// Enable colored output
     #[serde(default = "default_true")]
     pub colored_output: bool,
-    
+
     /// Default timeout in seconds
     #[serde(default = "default_timeout")]
     pub timeout: u64,
-    
+
     /// Log level
     #[serde(default = "default_log_level")]
     pub log_level: String,
@@ -77,19 +77,19 @@ pub struct ServerConfig {
     /// Default host
     #[serde(default = "default_host")]
     pub host: String,
-    
+
     /// Default port
     #[serde(default = "default_port")]
     pub port: u16,
-    
+
     /// Enable admin interface
     #[serde(default)]
     pub admin_enabled: bool,
-    
+
     /// CORS settings
     #[serde(default)]
     pub cors: CorsConfig,
-    
+
     /// Authentication settings
     #[serde(default)]
     pub auth: AuthConfig,
@@ -114,14 +114,14 @@ pub struct AuthConfig {
 pub struct DatasetConfig {
     /// Dataset type (tdb2, memory, remote)
     pub dataset_type: String,
-    
+
     /// Location (path or URL)
     pub location: String,
-    
+
     /// Read-only mode
     #[serde(default)]
     pub read_only: bool,
-    
+
     /// Dataset-specific options
     #[serde(default)]
     pub options: HashMap<String, toml::Value>,
@@ -132,15 +132,15 @@ pub struct ToolsConfig {
     /// RDF I/O settings
     #[serde(default)]
     pub riot: RiotConfig,
-    
+
     /// Query settings
     #[serde(default)]
     pub query: QueryConfig,
-    
+
     /// TDB settings
     #[serde(default)]
     pub tdb: TdbConfig,
-    
+
     /// Validation settings
     #[serde(default)]
     pub validation: ValidationConfig,
@@ -179,7 +179,7 @@ impl ConfigManager {
     /// Create a new configuration manager
     pub fn new() -> CliResult<Self> {
         let config_dir = Self::get_config_dir()?;
-        
+
         Ok(Self {
             config_dir,
             active_profile: "default".to_string(),
@@ -209,7 +209,7 @@ impl ConfigManager {
         let config = self.load_config_cascade(profile)?;
         self.configs.insert(profile.to_string(), config);
         self.active_profile = profile.to_string();
-        
+
         Ok(&self.configs[profile])
     }
 
@@ -244,7 +244,7 @@ impl ConfigManager {
     fn load_config_file(&self, path: &Path) -> CliResult<OxideConfig> {
         let content = fs::read_to_string(path)
             .map_err(|e| CliError::config_error(format!("Cannot read config file: {}", e)))?;
-        
+
         toml::from_str(&content)
             .map_err(|e| CliError::config_error(format!("Invalid TOML in config file: {}", e)))
     }
@@ -258,7 +258,7 @@ impl ConfigManager {
         if overlay.general.output_dir.is_some() {
             base.general.output_dir = overlay.general.output_dir;
         }
-        
+
         // Merge server settings
         if overlay.server.host != default_host() {
             base.server.host = overlay.server.host;
@@ -266,13 +266,13 @@ impl ConfigManager {
         if overlay.server.port != default_port() {
             base.server.port = overlay.server.port;
         }
-        
+
         // Merge datasets
         base.datasets.extend(overlay.datasets);
-        
+
         // Deep merge tools config
         base.tools = overlay.tools;
-        
+
         base
     }
 
@@ -310,17 +310,19 @@ impl ConfigManager {
 
     /// Get active configuration
     pub fn get_config(&self) -> CliResult<&OxideConfig> {
-        self.configs.get(&self.active_profile)
+        self.configs
+            .get(&self.active_profile)
             .ok_or_else(|| CliError::config_error("No configuration loaded"))
     }
 
     /// Save configuration to file
     pub fn save_config(&self, config: &OxideConfig, profile: Option<&str>) -> CliResult<()> {
         let profile = profile.unwrap_or(&self.active_profile);
-        
+
         // Ensure config directory exists
-        fs::create_dir_all(&self.config_dir)
-            .map_err(|e| CliError::config_error(format!("Cannot create config directory: {}", e)))?;
+        fs::create_dir_all(&self.config_dir).map_err(|e| {
+            CliError::config_error(format!("Cannot create config directory: {}", e))
+        })?;
 
         let path = if profile == "default" {
             self.config_dir.join("config.toml")
@@ -345,14 +347,14 @@ impl ConfigManager {
             for entry in fs::read_dir(&self.config_dir)? {
                 let entry = entry?;
                 let path = entry.path();
-                
+
                 if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
                     if name.starts_with("config.") && name.ends_with(".toml") {
                         let profile = name
                             .strip_prefix("config.")
                             .and_then(|n| n.strip_suffix(".toml"))
                             .unwrap_or("");
-                        
+
                         if !profile.is_empty() {
                             profiles.push(profile.to_string());
                         }
@@ -372,7 +374,6 @@ impl ConfigManager {
         self.save_config(&config, Some("default"))
     }
 }
-
 
 impl Default for GeneralConfig {
     fn default() -> Self {
@@ -400,12 +401,24 @@ impl Default for ServerConfig {
 }
 
 // Default value functions for serde
-fn default_format() -> String { "turtle".to_string() }
-fn default_true() -> bool { true }
-fn default_timeout() -> u64 { 30 }
-fn default_log_level() -> String { "info".to_string() }
-fn default_host() -> String { "localhost".to_string() }
-fn default_port() -> u16 { 3030 }
+fn default_format() -> String {
+    "turtle".to_string()
+}
+fn default_true() -> bool {
+    true
+}
+fn default_timeout() -> u64 {
+    30
+}
+fn default_log_level() -> String {
+    "info".to_string()
+}
+fn default_host() -> String {
+    "localhost".to_string()
+}
+fn default_port() -> u16 {
+    3030
+}
 
 #[cfg(test)]
 mod tests {

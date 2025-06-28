@@ -1,15 +1,15 @@
 //! Benchmarks for parallel batch processing
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId, Throughput};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_core::concurrent::{
-    ParallelBatchProcessor, BatchOperation, BatchConfig, BatchBuilder,
-    BatchBuilderConfig, CoalescingStrategy,
+    BatchBuilder, BatchBuilderConfig, BatchConfig, BatchOperation, CoalescingStrategy,
+    ParallelBatchProcessor,
 };
-use oxirs_core::store::IndexedGraph;
 use oxirs_core::graph::Graph;
-use oxirs_core::model::{Triple, Subject, Predicate, Object, NamedNode};
-use std::sync::Arc;
+use oxirs_core::model::{NamedNode, Object, Predicate, Subject, Triple};
+use oxirs_core::store::IndexedGraph;
 use rayon::prelude::*;
+use std::sync::Arc;
 
 fn create_test_triple(id: usize) -> Triple {
     Triple::new(
@@ -25,12 +25,12 @@ fn create_dataset(size: usize) -> Vec<Triple> {
 
 fn bench_parallel_vs_sequential_insert(c: &mut Criterion) {
     let mut group = c.benchmark_group("insert_comparison");
-    
+
     for size in [1000, 10000, 100000] {
         let dataset = create_dataset(size);
-        
+
         group.throughput(Throughput::Elements(size as u64));
-        
+
         group.bench_with_input(
             BenchmarkId::new("sequential", size),
             &dataset,
@@ -43,7 +43,7 @@ fn bench_parallel_vs_sequential_insert(c: &mut Criterion) {
                 });
             },
         );
-        
+
         group.bench_with_input(
             BenchmarkId::new("parallel", size),
             &dataset,
@@ -54,7 +54,7 @@ fn bench_parallel_vs_sequential_insert(c: &mut Criterion) {
                 });
             },
         );
-        
+
         group.bench_with_input(
             BenchmarkId::new("batch_processor", size),
             &dataset,
@@ -62,34 +62,38 @@ fn bench_parallel_vs_sequential_insert(c: &mut Criterion) {
                 b.iter(|| {
                     let graph = Arc::new(IndexedGraph::new());
                     let processor = ParallelBatchProcessor::new(BatchConfig::default());
-                    
+
                     // Submit in batches
                     for chunk in dataset.chunks(1000) {
-                        processor.submit(BatchOperation::insert(chunk.to_vec())).unwrap();
+                        processor
+                            .submit(BatchOperation::insert(chunk.to_vec()))
+                            .unwrap();
                     }
-                    
+
                     let graph_clone = graph.clone();
-                    processor.process(move |op| match op {
-                        BatchOperation::Insert(triples) => {
-                            for triple in triples {
-                                graph_clone.insert(&triple);
+                    processor
+                        .process(move |op| match op {
+                            BatchOperation::Insert(triples) => {
+                                for triple in triples {
+                                    graph_clone.insert(&triple);
+                                }
+                                Ok(())
                             }
-                            Ok(())
-                        }
-                        _ => Ok(()),
-                    }).unwrap();
+                            _ => Ok(()),
+                        })
+                        .unwrap();
                 });
             },
         );
     }
-    
+
     group.finish();
 }
 
 fn bench_batch_builder_strategies(c: &mut Criterion) {
     let mut group = c.benchmark_group("batch_builder_strategies");
     let dataset = create_dataset(10000);
-    
+
     for strategy in [
         CoalescingStrategy::None,
         CoalescingStrategy::Deduplicate,
@@ -106,23 +110,23 @@ fn bench_batch_builder_strategies(c: &mut Criterion) {
                         auto_flush: false,
                         ..Default::default()
                     });
-                    
+
                     for triple in dataset {
                         builder.insert(black_box(triple.clone())).unwrap();
                     }
-                    
+
                     builder.flush().unwrap()
                 });
             },
         );
     }
-    
+
     group.finish();
 }
 
 fn bench_parallel_query_patterns(c: &mut Criterion) {
     let mut group = c.benchmark_group("parallel_query");
-    
+
     // Setup graph with data
     let graph = Arc::new(IndexedGraph::new());
     for i in 0..10000 {
@@ -135,20 +139,22 @@ fn bench_parallel_query_patterns(c: &mut Criterion) {
             graph.insert(&triple);
         }
     }
-    
+
     for num_patterns in [10, 100, 1000] {
         let patterns: Vec<_> = (0..num_patterns)
             .map(|i| {
                 (
-                    Some(Subject::NamedNode(NamedNode::new(&format!("http://s/{}", i)).unwrap())),
+                    Some(Subject::NamedNode(
+                        NamedNode::new(&format!("http://s/{}", i)).unwrap(),
+                    )),
                     None,
                     None,
                 )
             })
             .collect();
-        
+
         group.throughput(Throughput::Elements(num_patterns as u64));
-        
+
         group.bench_with_input(
             BenchmarkId::new("sequential", num_patterns),
             &patterns,
@@ -162,31 +168,29 @@ fn bench_parallel_query_patterns(c: &mut Criterion) {
                 });
             },
         );
-        
+
         group.bench_with_input(
             BenchmarkId::new("parallel", num_patterns),
             &patterns,
             |b, patterns| {
-                b.iter(|| {
-                    black_box(graph.par_query_batch(patterns.clone()))
-                });
+                b.iter(|| black_box(graph.par_query_batch(patterns.clone())));
             },
         );
     }
-    
+
     group.finish();
 }
 
 fn bench_work_stealing_efficiency(c: &mut Criterion) {
     let mut group = c.benchmark_group("work_stealing");
-    
+
     // Create uneven workload
     let mut operations = Vec::new();
     for i in 0..1000 {
         let size = if i % 10 == 0 { 100 } else { 10 };
         operations.push(BatchOperation::insert(create_dataset(size)));
     }
-    
+
     for num_threads in [1, 2, 4, 8] {
         group.bench_with_input(
             BenchmarkId::new("threads", num_threads),
@@ -197,76 +201,70 @@ fn bench_work_stealing_efficiency(c: &mut Criterion) {
                         num_threads: Some(num_threads),
                         ..Default::default()
                     });
-                    
+
                     for op in operations {
                         processor.submit(op.clone()).unwrap();
                     }
-                    
-                    processor.process(|op| match op {
-                        BatchOperation::Insert(triples) => {
-                            // Simulate work proportional to batch size
-                            std::thread::sleep(std::time::Duration::from_micros(triples.len() as u64));
-                            Ok(())
-                        }
-                        _ => Ok(()),
-                    }).unwrap()
+
+                    processor
+                        .process(|op| match op {
+                            BatchOperation::Insert(triples) => {
+                                // Simulate work proportional to batch size
+                                std::thread::sleep(std::time::Duration::from_micros(
+                                    triples.len() as u64
+                                ));
+                                Ok(())
+                            }
+                            _ => Ok(()),
+                        })
+                        .unwrap()
                 });
             },
         );
     }
-    
+
     group.finish();
 }
 
 fn bench_parallel_transform(c: &mut Criterion) {
     let mut group = c.benchmark_group("parallel_transform");
-    
+
     for size in [1000, 10000, 50000] {
         let graph = Arc::new(IndexedGraph::new());
         let dataset = create_dataset(size);
         graph.par_insert_batch(dataset);
-        
+
         group.throughput(Throughput::Elements(size as u64));
-        
-        group.bench_with_input(
-            BenchmarkId::new("transform", size),
-            &graph,
-            |b, graph| {
-                b.iter(|| {
-                    black_box(graph.par_transform(|triple| {
-                        Some(Triple::new(
-                            triple.subject().clone(),
-                            Predicate::NamedNode(NamedNode::new("http://new-predicate").unwrap()),
-                            triple.object().clone(),
-                        ))
-                    }))
-                });
-            },
-        );
-        
-        group.bench_with_input(
-            BenchmarkId::new("filter", size),
-            &graph,
-            |b, graph| {
-                b.iter(|| {
-                    black_box(graph.par_filter(|triple| {
-                        match triple.subject() {
-                            Subject::NamedNode(node) => node.as_str().ends_with('0'),
-                            _ => false,
-                        }
-                    }))
-                });
-            },
-        );
+
+        group.bench_with_input(BenchmarkId::new("transform", size), &graph, |b, graph| {
+            b.iter(|| {
+                black_box(graph.par_transform(|triple| {
+                    Some(Triple::new(
+                        triple.subject().clone(),
+                        Predicate::NamedNode(NamedNode::new("http://new-predicate").unwrap()),
+                        triple.object().clone(),
+                    ))
+                }))
+            });
+        });
+
+        group.bench_with_input(BenchmarkId::new("filter", size), &graph, |b, graph| {
+            b.iter(|| {
+                black_box(graph.par_filter(|triple| match triple.subject() {
+                    Subject::NamedNode(node) => node.as_str().ends_with('0'),
+                    _ => false,
+                }))
+            });
+        });
     }
-    
+
     group.finish();
 }
 
 fn bench_batch_size_impact(c: &mut Criterion) {
     let mut group = c.benchmark_group("batch_size_impact");
     let dataset = create_dataset(100000);
-    
+
     for batch_size in [100, 1000, 5000, 10000] {
         group.bench_with_input(
             BenchmarkId::new("batch_size", batch_size),
@@ -277,29 +275,33 @@ fn bench_batch_size_impact(c: &mut Criterion) {
                         batch_size,
                         ..Default::default()
                     });
-                    
+
                     // Submit all at once
                     for chunk in dataset.chunks(batch_size) {
-                        processor.submit(BatchOperation::insert(chunk.to_vec())).unwrap();
+                        processor
+                            .submit(BatchOperation::insert(chunk.to_vec()))
+                            .unwrap();
                     }
-                    
-                    processor.process_rayon(|op| match op {
-                        BatchOperation::Insert(triples) => Ok(triples.len()),
-                        _ => Ok(0),
-                    }).unwrap()
+
+                    processor
+                        .process_rayon(|op| match op {
+                            BatchOperation::Insert(triples) => Ok(triples.len()),
+                            _ => Ok(0),
+                        })
+                        .unwrap()
                 });
             },
         );
     }
-    
+
     group.finish();
 }
 
 fn bench_memory_efficiency(c: &mut Criterion) {
     let mut group = c.benchmark_group("memory_efficiency");
-    
+
     let dataset = create_dataset(50000);
-    
+
     group.bench_function("with_deduplication", |b| {
         b.iter(|| {
             let mut builder = BatchBuilder::new(BatchBuilderConfig {
@@ -307,18 +309,18 @@ fn bench_memory_efficiency(c: &mut Criterion) {
                 auto_flush: false,
                 ..Default::default()
             });
-            
+
             // Add duplicates
             for triple in &dataset[..10000] {
                 builder.insert(triple.clone()).unwrap();
                 builder.insert(triple.clone()).unwrap(); // Duplicate
             }
-            
+
             let batches = builder.flush().unwrap();
             black_box(batches)
         });
     });
-    
+
     group.bench_function("without_deduplication", |b| {
         b.iter(|| {
             let mut builder = BatchBuilder::new(BatchBuilderConfig {
@@ -326,29 +328,29 @@ fn bench_memory_efficiency(c: &mut Criterion) {
                 auto_flush: false,
                 ..Default::default()
             });
-            
+
             // Add duplicates
             for triple in &dataset[..10000] {
                 builder.insert(triple.clone()).unwrap();
                 builder.insert(triple.clone()).unwrap(); // Duplicate
             }
-            
+
             let batches = builder.flush().unwrap();
             black_box(batches)
         });
     });
-    
+
     group.finish();
 }
 
 fn bench_graph_parallel_methods(c: &mut Criterion) {
     let mut group = c.benchmark_group("graph_parallel_methods");
-    
+
     for size in [1000, 10000, 50000] {
         let dataset = create_dataset(size);
-        
+
         group.throughput(Throughput::Elements(size as u64));
-        
+
         // Benchmark parallel insert
         group.bench_with_input(
             BenchmarkId::new("graph_par_insert", size),
@@ -360,7 +362,7 @@ fn bench_graph_parallel_methods(c: &mut Criterion) {
                 });
             },
         );
-        
+
         // Benchmark sequential insert for comparison
         group.bench_with_input(
             BenchmarkId::new("graph_seq_insert", size),
@@ -375,77 +377,75 @@ fn bench_graph_parallel_methods(c: &mut Criterion) {
                 });
             },
         );
-        
+
         // Setup graph for query benchmarks
         let mut query_graph = Graph::new();
         query_graph.extend(dataset.clone());
-        
+
         // Benchmark parallel query
         let queries: Vec<_> = (0..100)
             .map(|i| {
                 (
-                    Some(Subject::NamedNode(NamedNode::new(&format!("http://s/{}", i)).unwrap())),
+                    Some(Subject::NamedNode(
+                        NamedNode::new(&format!("http://s/{}", i)).unwrap(),
+                    )),
                     None,
                     None,
                 )
             })
             .collect();
-        
+
         group.bench_with_input(
             BenchmarkId::new("graph_par_query", size),
             &queries,
             |b, queries| {
-                b.iter(|| {
-                    black_box(query_graph.par_query_batch(queries.clone()).unwrap())
-                });
+                b.iter(|| black_box(query_graph.par_query_batch(queries.clone()).unwrap()));
             },
         );
-        
+
         // Benchmark parallel count patterns
         let patterns: Vec<_> = (0..50)
             .map(|i| {
                 (
                     None,
-                    Some(Predicate::NamedNode(NamedNode::new(&format!("http://p/{}", i)).unwrap())),
+                    Some(Predicate::NamedNode(
+                        NamedNode::new(&format!("http://p/{}", i)).unwrap(),
+                    )),
                     None,
                 )
             })
             .collect();
-        
+
         group.bench_with_input(
             BenchmarkId::new("graph_par_count", size),
             &patterns,
             |b, patterns| {
-                b.iter(|| {
-                    black_box(query_graph.par_count_patterns(patterns.clone()))
-                });
+                b.iter(|| black_box(query_graph.par_count_patterns(patterns.clone())));
             },
         );
-        
+
         // Benchmark parallel unique terms
         group.bench_with_input(
             BenchmarkId::new("graph_par_unique", size),
             &query_graph,
             |b, graph| {
-                b.iter(|| {
-                    black_box(graph.par_unique_terms())
-                });
+                b.iter(|| black_box(graph.par_unique_terms()));
             },
         );
     }
-    
+
     group.finish();
 }
 
 fn bench_graph_parallel_transform(c: &mut Criterion) {
     let mut group = c.benchmark_group("graph_parallel_transform");
-    
+
     for size in [5000, 20000] {
         let mut graph = Graph::new();
         graph.extend(create_dataset(size));
-        
+
         group.throughput(Throughput::Elements(size as u64));
-        
+
         // Benchmark transformation that modifies predicates
         group.bench_with_input(
             BenchmarkId::new("modify_predicates", size),
@@ -453,18 +453,20 @@ fn bench_graph_parallel_transform(c: &mut Criterion) {
             |b, graph| {
                 let mut test_graph = graph.clone();
                 b.iter(|| {
-                    let (transformed, removed) = test_graph.par_transform(|triple| {
-                        Some(Triple::new(
-                            triple.subject().clone(),
-                            Predicate::NamedNode(NamedNode::new("http://p/modified").unwrap()),
-                            triple.object().clone(),
-                        ))
-                    }).unwrap();
+                    let (transformed, removed) = test_graph
+                        .par_transform(|triple| {
+                            Some(Triple::new(
+                                triple.subject().clone(),
+                                Predicate::NamedNode(NamedNode::new("http://p/modified").unwrap()),
+                                triple.object().clone(),
+                            ))
+                        })
+                        .unwrap();
                     black_box((transformed, removed))
                 });
             },
         );
-        
+
         // Benchmark filtering transformation
         group.bench_with_input(
             BenchmarkId::new("filter_evens", size),
@@ -472,36 +474,38 @@ fn bench_graph_parallel_transform(c: &mut Criterion) {
             |b, graph| {
                 let mut test_graph = graph.clone();
                 b.iter(|| {
-                    let (transformed, removed) = test_graph.par_transform(|triple| {
-                        if let Subject::NamedNode(node) = triple.subject() {
-                            if let Some(id_str) = node.as_str().strip_prefix("http://s/") {
-                                if let Ok(id) = id_str.parse::<usize>() {
-                                    if id % 2 == 0 {
-                                        return None; // Remove even subjects
+                    let (transformed, removed) = test_graph
+                        .par_transform(|triple| {
+                            if let Subject::NamedNode(node) = triple.subject() {
+                                if let Some(id_str) = node.as_str().strip_prefix("http://s/") {
+                                    if let Ok(id) = id_str.parse::<usize>() {
+                                        if id % 2 == 0 {
+                                            return None; // Remove even subjects
+                                        }
                                     }
                                 }
                             }
-                        }
-                        Some(triple.clone())
-                    }).unwrap();
+                            Some(triple.clone())
+                        })
+                        .unwrap();
                     black_box((transformed, removed))
                 });
             },
         );
     }
-    
+
     group.finish();
 }
 
 fn bench_graph_parallel_iterator(c: &mut Criterion) {
     let mut group = c.benchmark_group("graph_parallel_iterator");
-    
+
     for size in [10000, 50000] {
         let mut graph = Graph::new();
         graph.extend(create_dataset(size));
-        
+
         group.throughput(Throughput::Elements(size as u64));
-        
+
         // Benchmark parallel iteration with complex filtering
         group.bench_with_input(
             BenchmarkId::new("par_iter_filter", size),
@@ -510,13 +514,11 @@ fn bench_graph_parallel_iterator(c: &mut Criterion) {
                 b.iter(|| {
                     let result: Vec<_> = graph
                         .par_iter()
-                        .filter(|triple| {
-                            match (triple.subject(), triple.object()) {
-                                (Subject::NamedNode(s), Object::NamedNode(o)) => {
-                                    s.as_str().ends_with("0") || o.as_str().ends_with("5")
-                                }
-                                _ => false,
+                        .filter(|triple| match (triple.subject(), triple.object()) {
+                            (Subject::NamedNode(s), Object::NamedNode(o)) => {
+                                s.as_str().ends_with("0") || o.as_str().ends_with("5")
                             }
+                            _ => false,
                         })
                         .cloned()
                         .collect();
@@ -524,7 +526,7 @@ fn bench_graph_parallel_iterator(c: &mut Criterion) {
                 });
             },
         );
-        
+
         // Benchmark sequential iteration for comparison
         group.bench_with_input(
             BenchmarkId::new("seq_iter_filter", size),
@@ -533,13 +535,11 @@ fn bench_graph_parallel_iterator(c: &mut Criterion) {
                 b.iter(|| {
                     let result: Vec<_> = graph
                         .iter_triples()
-                        .filter(|triple| {
-                            match (triple.subject(), triple.object()) {
-                                (Subject::NamedNode(s), Object::NamedNode(o)) => {
-                                    s.as_str().ends_with("0") || o.as_str().ends_with("5")
-                                }
-                                _ => false,
+                        .filter(|triple| match (triple.subject(), triple.object()) {
+                            (Subject::NamedNode(s), Object::NamedNode(o)) => {
+                                s.as_str().ends_with("0") || o.as_str().ends_with("5")
                             }
+                            _ => false,
                         })
                         .cloned()
                         .collect();
@@ -548,7 +548,7 @@ fn bench_graph_parallel_iterator(c: &mut Criterion) {
             },
         );
     }
-    
+
     group.finish();
 }
 

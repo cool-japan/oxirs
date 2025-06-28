@@ -8,9 +8,9 @@ use crate::execution::{ExecutionContext, FieldResolver};
 use crate::RdfStore;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
+use oxirs_core::query::QueryResults;
 use std::collections::HashMap;
 use std::sync::Arc;
-use oxirs_core::query::QueryResults;
 
 /// RDF-based resolver that executes SPARQL queries
 pub struct RdfResolver {
@@ -177,7 +177,7 @@ impl RdfResolver {
                 // Collect all solutions synchronously
                 for solution in solutions {
                     let mut row = HashMap::new();
-                    
+
                     // TODO: Solution doesn't have iter() method
                     // For now, we'll return empty rows until we can properly iterate
                     // This needs to be fixed when the Solution API is clarified

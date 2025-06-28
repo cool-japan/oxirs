@@ -21,10 +21,7 @@ use tokio::{
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use crate::{
-    analytics::ConversationAnalytics,
-    ChatConfig, Message, SessionMetrics,
-};
+use crate::{analytics::ConversationAnalytics, ChatConfig, Message, SessionMetrics};
 
 // Define PersistentChatSession for persistence - different from the main ChatSession
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -174,11 +171,11 @@ pub struct TopicTransition {
 /// Transition types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TransitionType {
-    Natural,        // Logical progression
-    UserInitiated,  // User changed topic
-    Clarification,  // Seeking clarification
-    Digression,     // Side topic
-    Return,         // Back to previous topic
+    Natural,       // Logical progression
+    UserInitiated, // User changed topic
+    Clarification, // Seeking clarification
+    Digression,    // Side topic
+    Return,        // Back to previous topic
 }
 
 /// Interaction patterns
@@ -263,7 +260,10 @@ impl SessionPersistenceManager {
             manager.load_all_sessions().await?;
         }
 
-        info!("Session persistence manager initialized with storage at {:?}", config.storage_path);
+        info!(
+            "Session persistence manager initialized with storage at {:?}",
+            config.storage_path
+        );
         Ok(manager)
     }
 
@@ -320,9 +320,9 @@ impl SessionPersistenceManager {
         {
             let mut stats = self.persistence_stats.write().await;
             stats.total_sessions_saved += 1;
-            stats.average_save_time_ms = 
-                (stats.average_save_time_ms * (stats.total_sessions_saved - 1) as f64 + save_time) / 
-                stats.total_sessions_saved as f64;
+            stats.average_save_time_ms =
+                (stats.average_save_time_ms * (stats.total_sessions_saved - 1) as f64 + save_time)
+                    / stats.total_sessions_saved as f64;
         }
 
         debug!("Session {} saved in {:.2}ms", session_id, save_time);
@@ -342,7 +342,9 @@ impl SessionPersistenceManager {
             let active = self.active_sessions.read().await;
             if let Some(persisted_session) = active.get(session_id) {
                 let session = persisted_session.read().await;
-                return Ok(Some(self.convert_to_persistent_chat_session(&session).await?));
+                return Ok(Some(
+                    self.convert_to_persistent_chat_session(&session).await?,
+                ));
             }
         }
 
@@ -365,7 +367,10 @@ impl SessionPersistenceManager {
 
         // Verify checksum
         if !self.verify_checksum(&persisted).await? {
-            warn!("Checksum verification failed for session {}, attempting recovery", session_id);
+            warn!(
+                "Checksum verification failed for session {}, attempting recovery",
+                session_id
+            );
             return self.attempt_recovery(session_id).await;
         }
 
@@ -383,9 +388,9 @@ impl SessionPersistenceManager {
         {
             let mut stats = self.persistence_stats.write().await;
             stats.total_sessions_loaded += 1;
-            stats.average_load_time_ms = 
-                (stats.average_load_time_ms * (stats.total_sessions_loaded - 1) as f64 + load_time) / 
-                stats.total_sessions_loaded as f64;
+            stats.average_load_time_ms =
+                (stats.average_load_time_ms * (stats.total_sessions_loaded - 1) as f64 + load_time)
+                    / stats.total_sessions_loaded as f64;
         }
 
         debug!("Session {} loaded in {:.2}ms", session_id, load_time);
@@ -468,16 +473,22 @@ impl SessionPersistenceManager {
     }
 
     /// Attempt to recover a corrupted session
-    pub async fn attempt_recovery(&self, session_id: &str) -> Result<Option<PersistentChatSession>> {
+    pub async fn attempt_recovery(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<PersistentChatSession>> {
         warn!("Attempting recovery for session {}", session_id);
 
         let recovery_info = self.analyze_recovery_options(session_id).await?;
-        
+
         for strategy in &recovery_info.recovery_strategies {
             match strategy {
                 RecoveryStrategy::LoadFromCheckpoint => {
                     if let Ok(Some(session)) = self.load_from_checkpoint(session_id).await {
-                        info!("Successfully recovered session {} from checkpoint", session_id);
+                        info!(
+                            "Successfully recovered session {} from checkpoint",
+                            session_id
+                        );
                         return Ok(Some(session));
                     }
                 }
@@ -494,7 +505,10 @@ impl SessionPersistenceManager {
                     }
                 }
                 RecoveryStrategy::CreateNew => {
-                    warn!("Creating new session to replace corrupted session {}", session_id);
+                    warn!(
+                        "Creating new session to replace corrupted session {}",
+                        session_id
+                    );
                     return Ok(Some(self.create_emergency_session(session_id).await?));
                 }
             }
@@ -530,7 +544,10 @@ impl SessionPersistenceManager {
         for session_info in sessions {
             if session_info.modified_at < cutoff_time {
                 if let Err(e) = self.delete_session(&session_info.session_id).await {
-                    warn!("Failed to delete expired session {}: {}", session_info.session_id, e);
+                    warn!(
+                        "Failed to delete expired session {}: {}",
+                        session_info.session_id, e
+                    );
                 } else {
                     cleaned_count += 1;
                 }
@@ -546,7 +563,10 @@ impl SessionPersistenceManager {
 
     // Private helper methods
 
-    async fn extract_conversation_state(&self, session: &PersistentChatSession) -> ConversationState {
+    async fn extract_conversation_state(
+        &self,
+        session: &PersistentChatSession,
+    ) -> ConversationState {
         // TODO: Extract actual conversation state from session
         ConversationState::default()
     }
@@ -558,8 +578,13 @@ impl SessionPersistenceManager {
         let mut hasher = DefaultHasher::new();
         session.session_id.hash(&mut hasher);
         session.messages.len().hash(&mut hasher);
-        session.created_at.duration_since(UNIX_EPOCH).unwrap_or(Duration::ZERO).as_secs().hash(&mut hasher);
-        
+        session
+            .created_at
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or(Duration::ZERO)
+            .as_secs()
+            .hash(&mut hasher);
+
         Ok(format!("{:x}", hasher.finish()))
     }
 
@@ -580,7 +605,10 @@ impl SessionPersistenceManager {
         bincode::deserialize(data).map_err(Into::into)
     }
 
-    async fn convert_to_persistent_chat_session(&self, persisted: &PersistedSession) -> Result<PersistentChatSession> {
+    async fn convert_to_persistent_chat_session(
+        &self,
+        persisted: &PersistedSession,
+    ) -> Result<PersistentChatSession> {
         Ok(PersistentChatSession {
             session_id: persisted.session_id.clone(),
             config: persisted.config.clone(),
@@ -593,39 +621,43 @@ impl SessionPersistenceManager {
     }
 
     fn get_session_file_path(&self, session_id: &str) -> PathBuf {
-        self.config.storage_path.join(format!("{}.session", session_id))
+        self.config
+            .storage_path
+            .join(format!("{}.session", session_id))
     }
 
     fn get_backup_file_path(&self, session_id: &str) -> PathBuf {
-        self.config.backup_path.join(format!("{}.backup", session_id))
+        self.config
+            .backup_path
+            .join(format!("{}.backup", session_id))
     }
 
     async fn load_all_sessions(&self) -> Result<()> {
         let sessions = self.list_sessions().await?;
         info!("Found {} existing sessions", sessions.len());
-        
+
         // Limit to max_sessions
         let sessions_to_load = sessions.into_iter().take(self.config.max_sessions);
-        
+
         for session_info in sessions_to_load {
             if let Err(e) = self.load_session(&session_info.session_id).await {
                 warn!("Failed to load session {}: {}", session_info.session_id, e);
             }
         }
-        
+
         Ok(())
     }
 
     async fn start_auto_save_task(&self) {
         let active_sessions = Arc::clone(&self.active_sessions);
         let config = self.config.clone();
-        
+
         tokio::spawn(async move {
             let mut interval = interval(config.auto_save_interval);
-            
+
             loop {
                 interval.tick().await;
-                
+
                 let sessions = active_sessions.read().await;
                 for (session_id, session) in sessions.iter() {
                     // Check if session needs saving (has been modified)
@@ -639,13 +671,13 @@ impl SessionPersistenceManager {
 
     async fn start_cleanup_task(&self) {
         let manager = self.clone();
-        
+
         tokio::spawn(async move {
             let mut interval = interval(Duration::from_secs(3600)); // Cleanup every hour
-            
+
             loop {
                 interval.tick().await;
-                
+
                 if let Err(e) = manager.cleanup_expired_sessions().await {
                     error!("Failed to cleanup expired sessions: {}", e);
                 }
@@ -656,13 +688,13 @@ impl SessionPersistenceManager {
     async fn start_checkpoint_task(&self) {
         let active_sessions = Arc::clone(&self.active_sessions);
         let config = self.config.clone();
-        
+
         tokio::spawn(async move {
             let mut interval = interval(config.checkpoint_interval);
-            
+
             loop {
                 interval.tick().await;
-                
+
                 let sessions = active_sessions.read().await;
                 for session_id in sessions.keys() {
                     // Create checkpoint/backup
@@ -692,7 +724,10 @@ impl SessionPersistenceManager {
         })
     }
 
-    async fn load_from_checkpoint(&self, _session_id: &str) -> Result<Option<PersistentChatSession>> {
+    async fn load_from_checkpoint(
+        &self,
+        _session_id: &str,
+    ) -> Result<Option<PersistentChatSession>> {
         // TODO: Implement checkpoint loading
         Ok(None)
     }
@@ -713,10 +748,15 @@ impl SessionPersistenceManager {
             bincode::deserialize(&data)?
         };
 
-        Ok(Some(self.convert_to_persistent_chat_session(&persisted).await?))
+        Ok(Some(
+            self.convert_to_persistent_chat_session(&persisted).await?,
+        ))
     }
 
-    async fn attempt_partial_recovery(&self, _session_id: &str) -> Result<Option<PersistentChatSession>> {
+    async fn attempt_partial_recovery(
+        &self,
+        _session_id: &str,
+    ) -> Result<Option<PersistentChatSession>> {
         // TODO: Implement partial recovery
         Ok(None)
     }

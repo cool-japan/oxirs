@@ -11,7 +11,7 @@ use thiserror::Error;
 pub struct TextPosition {
     /// Line number (1-based)
     pub line: usize,
-    /// Column number (1-based) 
+    /// Column number (1-based)
     pub column: usize,
     /// Byte offset from start of document
     pub offset: usize,
@@ -26,14 +26,18 @@ impl Default for TextPosition {
 impl TextPosition {
     /// Create a new text position
     pub fn new(line: usize, column: usize, offset: usize) -> Self {
-        Self { line, column, offset }
+        Self {
+            line,
+            column,
+            offset,
+        }
     }
-    
+
     /// Initial position at start of document
     pub fn start() -> Self {
         Self::new(1, 1, 0)
     }
-    
+
     /// Advance position by one character
     pub fn advance_char(&mut self, ch: char) {
         if ch == '\n' {
@@ -44,7 +48,7 @@ impl TextPosition {
         }
         self.offset += ch.len_utf8();
     }
-    
+
     /// Advance position by multiple bytes
     pub fn advance_bytes(&mut self, bytes: &[u8]) {
         for &byte in bytes {
@@ -76,14 +80,14 @@ pub enum TurtleSyntaxError {
         /// Position where error occurred
         position: TextPosition,
     },
-    
+
     /// Unexpected end of input
     #[error("Unexpected end of input at {position}")]
     UnexpectedEof {
         /// Position where EOF was encountered
         position: TextPosition,
     },
-    
+
     /// Invalid IRI
     #[error("Invalid IRI '{iri}' at {position}: {reason}")]
     InvalidIri {
@@ -94,7 +98,7 @@ pub enum TurtleSyntaxError {
         /// Position of the IRI
         position: TextPosition,
     },
-    
+
     /// Invalid language tag
     #[error("Invalid language tag '{tag}' at {position}: {reason}")]
     InvalidLanguageTag {
@@ -105,7 +109,7 @@ pub enum TurtleSyntaxError {
         /// Position of the tag
         position: TextPosition,
     },
-    
+
     /// Invalid literal
     #[error("Invalid literal '{literal}' at {position}: {reason}")]
     InvalidLiteral {
@@ -116,7 +120,7 @@ pub enum TurtleSyntaxError {
         /// Position of the literal
         position: TextPosition,
     },
-    
+
     /// Invalid escape sequence
     #[error("Invalid escape sequence '\\{sequence}' at {position}")]
     InvalidEscape {
@@ -125,7 +129,7 @@ pub enum TurtleSyntaxError {
         /// Position of the escape
         position: TextPosition,
     },
-    
+
     /// Invalid Unicode code point
     #[error("Invalid Unicode code point U+{codepoint:04X} at {position}")]
     InvalidUnicode {
@@ -134,7 +138,7 @@ pub enum TurtleSyntaxError {
         /// Position of the code point
         position: TextPosition,
     },
-    
+
     /// Invalid blank node identifier
     #[error("Invalid blank node identifier '{id}' at {position}")]
     InvalidBlankNode {
@@ -143,7 +147,7 @@ pub enum TurtleSyntaxError {
         /// Position of the identifier
         position: TextPosition,
     },
-    
+
     /// Undefined prefix
     #[error("Undefined prefix '{prefix}' at {position}")]
     UndefinedPrefix {
@@ -152,7 +156,7 @@ pub enum TurtleSyntaxError {
         /// Position where prefix was used
         position: TextPosition,
     },
-    
+
     /// Invalid prefix declaration
     #[error("Invalid prefix declaration for '{prefix}' at {position}: {reason}")]
     InvalidPrefix {
@@ -163,7 +167,7 @@ pub enum TurtleSyntaxError {
         /// Position of the declaration
         position: TextPosition,
     },
-    
+
     /// Invalid base IRI declaration
     #[error("Invalid base IRI '{iri}' at {position}: {reason}")]
     InvalidBase {
@@ -174,7 +178,7 @@ pub enum TurtleSyntaxError {
         /// Position of the declaration
         position: TextPosition,
     },
-    
+
     /// Generic syntax error
     #[error("Syntax error at {position}: {message}")]
     Generic {
@@ -191,15 +195,15 @@ pub enum TurtleParseError {
     /// Syntax error in the input
     #[error("Syntax error: {0}")]
     Syntax(#[from] TurtleSyntaxError),
-    
+
     /// I/O error while reading
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     /// RDF model error (invalid terms, etc.)
     #[error("RDF model error: {0}")]
     Model(#[from] oxirs_core::OxirsError),
-    
+
     /// Multiple errors (for batch processing)
     #[error("Multiple errors occurred ({} errors)", .errors.len())]
     Multiple {
@@ -217,11 +221,11 @@ pub enum TokenRecognizerError {
     /// Unexpected character
     #[error("Unexpected character: {0}")]
     UnexpectedCharacter(char),
-    
+
     /// Unexpected end of input
     #[error("Unexpected end of input")]
     UnexpectedEof,
-    
+
     /// Invalid token
     #[error("Invalid token: {0}")]
     Invalid(String),
@@ -233,11 +237,11 @@ pub enum RuleRecognizerError {
     /// Unexpected token
     #[error("Unexpected token: {0}")]
     UnexpectedToken(String),
-    
+
     /// Missing required token
     #[error("Missing required token: {0}")]
     MissingToken(String),
-    
+
     /// Invalid rule application
     #[error("Invalid rule: {0}")]
     InvalidRule(String),
@@ -248,22 +252,22 @@ impl TurtleParseError {
     pub fn syntax(error: TurtleSyntaxError) -> Self {
         Self::Syntax(error)
     }
-    
+
     /// Create a new I/O error
     pub fn io(error: std::io::Error) -> Self {
         Self::Io(error)
     }
-    
+
     /// Create a new model error
     pub fn model(error: oxirs_core::OxirsError) -> Self {
         Self::Model(error)
     }
-    
+
     /// Combine multiple errors
     pub fn multiple(errors: Vec<TurtleParseError>) -> Self {
         Self::Multiple { errors }
     }
-    
+
     /// Get the position of this error, if available
     pub fn position(&self) -> Option<TextPosition> {
         match self {

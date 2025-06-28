@@ -1,12 +1,12 @@
 //! Data import command
 
-use super::CommandResult;
 use super::stubs::Store;
-use crate::cli::{ArgumentValidator, CliContext, progress::helpers};
-use crate::cli::validation::MultiValidator;
-use crate::cli::validation::{dataset_validation, fs_validation, validate_rdf_format};
+use super::CommandResult;
 use crate::cli::error::helpers as error_helpers;
 use crate::cli::logging::{DataLogger, PerfLogger};
+use crate::cli::validation::MultiValidator;
+use crate::cli::validation::{dataset_validation, fs_validation, validate_rdf_format};
+use crate::cli::{progress::helpers, ArgumentValidator, CliContext};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -20,41 +20,41 @@ pub async fn run(
 ) -> CommandResult {
     // Create CLI context for proper output formatting
     let ctx = CliContext::new();
-    
+
     // Validate arguments using the advanced validation framework
     let mut validator = MultiValidator::new();
-    
+
     // Validate dataset name
     validator.add(
         ArgumentValidator::new("dataset", Some(&dataset))
             .required()
-            .custom(|d| !d.trim().is_empty(), "Dataset name cannot be empty")
+            .custom(|d| !d.trim().is_empty(), "Dataset name cannot be empty"),
     );
     dataset_validation::validate_dataset_name(&dataset)?;
-    
+
     // Validate input file
     validator.add(
         ArgumentValidator::new("file", Some(file.to_str().unwrap_or("")))
             .required()
-            .is_file()
+            .is_file(),
     );
-    
+
     // Complete validation
     validator.finish()?;
-    
+
     // Validate file size (limit to 1GB for now)
     fs_validation::validate_file_size(&file, Some(1_073_741_824))?;
-    
+
     // Validate format if specified
     if let Some(ref fmt) = format {
         validate_rdf_format(fmt)?;
     }
-    
+
     // Validate graph URI if specified
     if let Some(ref g) = graph {
         dataset_validation::validate_graph_uri(g)?;
     }
-    
+
     ctx.info(&format!("Importing data into dataset '{}'", dataset));
     ctx.info(&format!("Source file: {}", file.display()));
 
@@ -85,7 +85,7 @@ pub async fn run(
     // Start import with progress tracking and logging
     let start_time = Instant::now();
     ctx.info("Import Progress");
-    
+
     // Initialize data logger
     let mut data_logger = DataLogger::new("import", &dataset);
     let mut perf_logger = PerfLogger::new(format!("import_{}", detected_format));
@@ -94,36 +94,36 @@ pub async fn run(
     if let Some(ref g) = graph {
         perf_logger.add_metadata("graph", g);
     }
-    
+
     // Get file size for progress bar
     let file_metadata = fs::metadata(&file)?;
     let file_size = file_metadata.len();
-    
+
     // Create progress bar for file reading
     let read_progress = helpers::download_progress(file_size, &file.display().to_string());
     read_progress.set_message("Reading file");
-    
+
     // Read file with progress updates
     let content = fs::read_to_string(&file)?;
     read_progress.finish_with_message("File read complete");
     data_logger.update_progress(file_size, 0);
-    
+
     // Create progress spinner for parsing
     let parse_progress = helpers::query_progress();
     parse_progress.set_message("Parsing RDF data");
-    
+
     // Parse and import with progress
     let (triple_count, error_count) =
         parse_and_import(&mut store, &content, &detected_format, graph.as_deref())?;
-    
+
     parse_progress.finish_with_message("Import complete");
-    
+
     let duration = start_time.elapsed();
-    
+
     // Update data logger with final stats
     data_logger.update_progress(file_size, triple_count as u64);
     data_logger.complete();
-    
+
     // Complete performance logging
     perf_logger.add_metadata("triple_count", triple_count);
     perf_logger.add_metadata("error_count", error_count);
@@ -131,13 +131,16 @@ pub async fn run(
 
     // Report statistics with formatted output
     ctx.info("Import Statistics");
-    ctx.success(&format!("Import completed in {:.2} seconds", duration.as_secs_f64()));
+    ctx.success(&format!(
+        "Import completed in {:.2} seconds",
+        duration.as_secs_f64()
+    ));
     ctx.info(&format!("Triples imported: {}", triple_count));
-    
+
     if error_count > 0 {
         ctx.warn(&format!("Errors encountered: {}", error_count));
     }
-    
+
     ctx.info(&format!(
         "Average rate: {:.0} triples/second",
         triple_count as f64 / duration.as_secs_f64()
@@ -219,8 +222,10 @@ fn parse_and_import(
             // For other formats, we'd need proper parsers
             return Err(error_helpers::invalid_rdf_format_error(
                 format,
-                &["turtle", "ttl", "ntriples", "nt"]
-            ).with_context("Import operation failed").into());
+                &["turtle", "ttl", "ntriples", "nt"],
+            )
+            .with_context("Import operation failed")
+            .into());
         }
     }
 

@@ -1027,25 +1027,25 @@ pub struct InsightGenerator {
 pub struct InsightGenerationConfig {
     /// Minimum confidence threshold for insights
     pub min_confidence_threshold: f64,
-    
+
     /// Enable validation insights
     pub enable_validation_insights: bool,
-    
+
     /// Enable quality insights
     pub enable_quality_insights: bool,
-    
+
     /// Enable performance insights
     pub enable_performance_insights: bool,
-    
+
     /// Enable shape insights
     pub enable_shape_insights: bool,
-    
+
     /// Enable data insights
     pub enable_data_insights: bool,
-    
+
     /// Maximum insights per category
     pub max_insights_per_category: usize,
-    
+
     /// Time window for trend analysis (in seconds)
     pub trend_analysis_window: u64,
 }
@@ -1098,7 +1098,10 @@ impl InsightGenerator {
                 Ok(mut insights) => {
                     insights.truncate(self.config.max_insights_per_category);
                     collection.validation_insights = insights;
-                    tracing::debug!("Generated {} validation insights", collection.validation_insights.len());
+                    tracing::debug!(
+                        "Generated {} validation insights",
+                        collection.validation_insights.len()
+                    );
                 }
                 Err(e) => tracing::warn!("Failed to generate validation insights: {}", e),
             }
@@ -1110,7 +1113,10 @@ impl InsightGenerator {
                 Ok(mut insights) => {
                     insights.truncate(self.config.max_insights_per_category);
                     collection.quality_insights = insights;
-                    tracing::debug!("Generated {} quality insights", collection.quality_insights.len());
+                    tracing::debug!(
+                        "Generated {} quality insights",
+                        collection.quality_insights.len()
+                    );
                 }
                 Err(e) => tracing::warn!("Failed to generate quality insights: {}", e),
             }
@@ -1122,7 +1128,10 @@ impl InsightGenerator {
                 Ok(mut insights) => {
                     insights.truncate(self.config.max_insights_per_category);
                     collection.performance_insights = insights;
-                    tracing::debug!("Generated {} performance insights", collection.performance_insights.len());
+                    tracing::debug!(
+                        "Generated {} performance insights",
+                        collection.performance_insights.len()
+                    );
                 }
                 Err(e) => tracing::warn!("Failed to generate performance insights: {}", e),
             }
@@ -1134,7 +1143,10 @@ impl InsightGenerator {
                 Ok(mut insights) => {
                     insights.truncate(self.config.max_insights_per_category);
                     collection.shape_insights = insights;
-                    tracing::debug!("Generated {} shape insights", collection.shape_insights.len());
+                    tracing::debug!(
+                        "Generated {} shape insights",
+                        collection.shape_insights.len()
+                    );
                 }
                 Err(e) => tracing::warn!("Failed to generate shape insights: {}", e),
             }
@@ -1230,9 +1242,12 @@ impl ValidationInsightAnalyzer {
         Ok(insights)
     }
 
-    fn analyze_success_rates(&self, data: &crate::ValidationData) -> crate::Result<Option<ValidationInsight>> {
+    fn analyze_success_rates(
+        &self,
+        data: &crate::ValidationData,
+    ) -> crate::Result<Option<ValidationInsight>> {
         let success_rate = data.calculate_success_rate();
-        
+
         if success_rate < 0.7 {
             let severity = if success_rate < 0.3 {
                 InsightSeverity::Critical
@@ -1272,12 +1287,17 @@ impl ValidationInsightAnalyzer {
         }
     }
 
-    fn analyze_violation_patterns(&self, data: &crate::ValidationData) -> crate::Result<Vec<ValidationInsight>> {
+    fn analyze_violation_patterns(
+        &self,
+        data: &crate::ValidationData,
+    ) -> crate::Result<Vec<ValidationInsight>> {
         let mut insights = Vec::new();
         let patterns = data.extract_violation_patterns();
 
         for pattern in patterns {
-            if pattern.frequency >= 0.1 && pattern.confidence >= self.config.min_confidence_threshold {
+            if pattern.frequency >= 0.1
+                && pattern.confidence >= self.config.min_confidence_threshold
+            {
                 let insight = ValidationInsight {
                     insight_type: ValidationInsightType::ViolationPattern,
                     title: format!("Recurring Violation Pattern: {}", pattern.pattern_type),
@@ -1304,9 +1324,12 @@ impl ValidationInsightAnalyzer {
         Ok(insights)
     }
 
-    fn analyze_performance_trends(&self, data: &crate::ValidationData) -> crate::Result<Option<ValidationInsight>> {
+    fn analyze_performance_trends(
+        &self,
+        data: &crate::ValidationData,
+    ) -> crate::Result<Option<ValidationInsight>> {
         let trend = data.calculate_performance_trend();
-        
+
         if trend.is_degrading() && trend.significance > 0.8 {
             let insight = ValidationInsight {
                 insight_type: ValidationInsightType::PerformanceDegradation,
@@ -1348,7 +1371,10 @@ impl QualityInsightAnalyzer {
         self.config = config;
     }
 
-    fn analyze(&self, data: &crate::quality::QualityAssessmentData) -> crate::Result<Vec<QualityInsight>> {
+    fn analyze(
+        &self,
+        data: &crate::quality::QualityAssessmentData,
+    ) -> crate::Result<Vec<QualityInsight>> {
         let mut insights = Vec::new();
 
         // Analyze each quality dimension
@@ -1367,7 +1393,10 @@ impl QualityInsightAnalyzer {
         Ok(insights)
     }
 
-    fn analyze_quality_dimension(&self, dimension: &crate::quality::QualityDimension) -> crate::Result<Option<QualityInsight>> {
+    fn analyze_quality_dimension(
+        &self,
+        dimension: &crate::quality::QualityDimension,
+    ) -> crate::Result<Option<QualityInsight>> {
         if dimension.score < 0.6 {
             let insight_type = match dimension.dimension_type.as_str() {
                 "completeness" => QualityInsightType::Completeness,
@@ -1407,7 +1436,10 @@ impl QualityInsightAnalyzer {
         }
     }
 
-    fn analyze_quality_trends(&self, data: &crate::quality::QualityAssessmentData) -> crate::Result<Vec<QualityInsight>> {
+    fn analyze_quality_trends(
+        &self,
+        data: &crate::quality::QualityAssessmentData,
+    ) -> crate::Result<Vec<QualityInsight>> {
         let mut insights = Vec::new();
 
         // Analyze overall quality trend
@@ -1478,9 +1510,12 @@ impl PerformanceInsightAnalyzer {
         Ok(insights)
     }
 
-    fn analyze_execution_times(&self, data: &crate::PerformanceData) -> crate::Result<Option<PerformanceInsight>> {
+    fn analyze_execution_times(
+        &self,
+        data: &crate::PerformanceData,
+    ) -> crate::Result<Option<PerformanceInsight>> {
         let execution_trend = data.calculate_execution_time_trend();
-        
+
         if execution_trend.is_increasing() && execution_trend.significance > 0.75 {
             let insight = PerformanceInsight {
                 insight_type: PerformanceInsightType::DegradingPerformance,
@@ -1512,7 +1547,10 @@ impl PerformanceInsightAnalyzer {
         }
     }
 
-    fn analyze_memory_usage(&self, data: &crate::PerformanceData) -> crate::Result<Option<PerformanceInsight>> {
+    fn analyze_memory_usage(
+        &self,
+        data: &crate::PerformanceData,
+    ) -> crate::Result<Option<PerformanceInsight>> {
         if data.peak_memory_usage > data.memory_threshold {
             let insight = PerformanceInsight {
                 insight_type: PerformanceInsightType::MemoryIssue,
@@ -1534,7 +1572,10 @@ impl PerformanceInsightAnalyzer {
                 ],
                 supporting_data: {
                     let mut map = HashMap::new();
-                    map.insert("peak_memory".to_string(), data.peak_memory_usage.to_string());
+                    map.insert(
+                        "peak_memory".to_string(),
+                        data.peak_memory_usage.to_string(),
+                    );
                     map.insert("threshold".to_string(), data.memory_threshold.to_string());
                     map
                 },
@@ -1546,9 +1587,12 @@ impl PerformanceInsightAnalyzer {
         }
     }
 
-    fn analyze_throughput(&self, data: &crate::PerformanceData) -> crate::Result<Option<PerformanceInsight>> {
+    fn analyze_throughput(
+        &self,
+        data: &crate::PerformanceData,
+    ) -> crate::Result<Option<PerformanceInsight>> {
         let throughput_trend = data.calculate_throughput_trend();
-        
+
         if throughput_trend.is_declining() && throughput_trend.significance > 0.8 {
             let insight = PerformanceInsight {
                 insight_type: PerformanceInsightType::ThroughputIssue,
@@ -1611,7 +1655,10 @@ impl ShapeInsightAnalyzer {
         Ok(insights)
     }
 
-    fn analyze_shape_complexity(&self, analysis: &crate::ShapeAnalysis) -> crate::Result<Option<ShapeInsight>> {
+    fn analyze_shape_complexity(
+        &self,
+        analysis: &crate::ShapeAnalysis,
+    ) -> crate::Result<Option<ShapeInsight>> {
         if analysis.complexity_metrics.overall_complexity >= ComplexityLevel::High {
             let insight = ShapeInsight {
                 insight_type: ShapeInsightType::OverlyComplex,
@@ -1633,8 +1680,14 @@ impl ShapeInsightAnalyzer {
                 ],
                 supporting_data: {
                     let mut map = HashMap::new();
-                    map.insert("constraint_count".to_string(), analysis.complexity_metrics.constraint_count.to_string());
-                    map.insert("nesting_depth".to_string(), analysis.complexity_metrics.nesting_depth.to_string());
+                    map.insert(
+                        "constraint_count".to_string(),
+                        analysis.complexity_metrics.constraint_count.to_string(),
+                    );
+                    map.insert(
+                        "nesting_depth".to_string(),
+                        analysis.complexity_metrics.nesting_depth.to_string(),
+                    );
                     map
                 },
             };
@@ -1645,7 +1698,10 @@ impl ShapeInsightAnalyzer {
         }
     }
 
-    fn analyze_shape_effectiveness(&self, analysis: &crate::ShapeAnalysis) -> crate::Result<Option<ShapeInsight>> {
+    fn analyze_shape_effectiveness(
+        &self,
+        analysis: &crate::ShapeAnalysis,
+    ) -> crate::Result<Option<ShapeInsight>> {
         if analysis.effectiveness_score < 0.6 {
             let insight = ShapeInsight {
                 insight_type: ShapeInsightType::EffectivenessAnalysis,
@@ -1666,7 +1722,10 @@ impl ShapeInsightAnalyzer {
                 ],
                 supporting_data: {
                     let mut map = HashMap::new();
-                    map.insert("effectiveness_score".to_string(), analysis.effectiveness_score.to_string());
+                    map.insert(
+                        "effectiveness_score".to_string(),
+                        analysis.effectiveness_score.to_string(),
+                    );
                     map
                 },
             };
@@ -1717,7 +1776,7 @@ impl DataInsightAnalyzer {
 
     fn analyze_missing_data(&self, data: &crate::RdfData) -> crate::Result<Option<DataInsight>> {
         let missing_data_percentage = data.calculate_missing_data_percentage();
-        
+
         if missing_data_percentage > 0.15 {
             let insight = DataInsight {
                 insight_type: DataInsightType::MissingData,
@@ -1757,7 +1816,10 @@ impl DataInsightAnalyzer {
         }
     }
 
-    fn analyze_data_inconsistencies(&self, data: &crate::RdfData) -> crate::Result<Vec<DataInsight>> {
+    fn analyze_data_inconsistencies(
+        &self,
+        data: &crate::RdfData,
+    ) -> crate::Result<Vec<DataInsight>> {
         let mut insights = Vec::new();
         let inconsistencies = data.detect_inconsistencies();
 
@@ -1789,9 +1851,12 @@ impl DataInsightAnalyzer {
         Ok(insights)
     }
 
-    fn analyze_data_distribution(&self, data: &crate::RdfData) -> crate::Result<Option<DataInsight>> {
+    fn analyze_data_distribution(
+        &self,
+        data: &crate::RdfData,
+    ) -> crate::Result<Option<DataInsight>> {
         let distribution_analysis = data.analyze_distribution();
-        
+
         if distribution_analysis.has_significant_anomalies() {
             let insight = DataInsight {
                 insight_type: DataInsightType::DistributionAnomalies,

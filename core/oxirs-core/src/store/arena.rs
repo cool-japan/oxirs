@@ -4,7 +4,7 @@
 //! in contiguous memory blocks, reducing memory fragmentation and improving
 //! cache locality.
 
-use crate::model::{Term, Triple, NamedNode, BlankNode, Literal, Variable};
+use crate::model::{BlankNode, Literal, NamedNode, Term, Triple, Variable};
 use crate::OxirsError;
 use bumpalo::Bump;
 use crossbeam_utils::thread;
@@ -114,7 +114,7 @@ impl LocalArena {
             crate::model::Subject::Variable(v) => Term::Variable(v.clone()),
             crate::model::Subject::QuotedTriple(_) => panic!("QuotedTriple not supported"),
         };
-        
+
         // Convert object to term
         let object_term = match triple.object() {
             crate::model::Object::NamedNode(n) => Term::NamedNode(n.clone()),
@@ -123,13 +123,13 @@ impl LocalArena {
             crate::model::Object::Variable(v) => Term::Variable(v.clone()),
             crate::model::Object::QuotedTriple(_) => panic!("QuotedTriple not supported"),
         };
-        
+
         // Get predicate string
         let predicate_str = match triple.predicate() {
             crate::model::Predicate::NamedNode(n) => n.as_str(),
             crate::model::Predicate::Variable(v) => v.as_str(),
         };
-        
+
         ArenaTriple {
             subject: self.alloc_term(&subject_term),
             predicate: self.alloc_str(predicate_str),
@@ -168,17 +168,17 @@ impl ConcurrentArena {
     /// Allocate a string in the arena using thread-local storage
     pub fn alloc_str(&self, s: &str) -> &'static str {
         let len = s.len();
-        
+
         THREAD_ARENA.with(|arena_cell| {
             let mut arena_opt = arena_cell.borrow_mut();
             if arena_opt.is_none() {
                 *arena_opt = Some(Bump::with_capacity(self.arena_size.max(len * 2)));
             }
-            
+
             let arena = arena_opt.as_ref().unwrap();
             let allocated = arena.alloc_str(s);
             *self.total_allocated.lock() += len;
-            
+
             // Unsafe: We're extending the lifetime to 'static
             // This is safe as long as the arena lives as long as the references
             unsafe { std::mem::transmute(allocated) }
@@ -192,9 +192,15 @@ impl ConcurrentArena {
 
     /// Get the number of thread-local arenas (simplified to 1 for thread-local impl)
     pub fn arena_count(&self) -> usize {
-        THREAD_ARENA.with(|arena_cell| {
-            if arena_cell.borrow().is_some() { 1 } else { 0 }
-        })
+        THREAD_ARENA.with(
+            |arena_cell| {
+                if arena_cell.borrow().is_some() {
+                    1
+                } else {
+                    0
+                }
+            },
+        )
     }
 }
 
@@ -230,7 +236,7 @@ impl<'arena> GraphArena<'arena> {
         if let Some(&cached) = cache.get(term) {
             return cached;
         }
-        
+
         let allocated = self.local_arena.alloc_term(term);
         cache.insert(term.clone(), allocated);
         allocated
@@ -272,7 +278,7 @@ impl<'parent> ScopedArena<'parent> {
     }
 
     /// Allocate a string in the scoped arena
-    pub fn alloc_str<'a>(&'a self, s: &str) -> ArenaStr<'a> 
+    pub fn alloc_str<'a>(&'a self, s: &str) -> ArenaStr<'a>
     where
         'parent: 'a,
     {
@@ -307,13 +313,13 @@ mod tests {
     #[test]
     fn test_local_arena() {
         let arena = LocalArena::new();
-        
+
         // Test string allocation
         let s1 = arena.alloc_str("hello");
         let s2 = arena.alloc_str("world");
         assert_eq!(s1.as_str(), "hello");
         assert_eq!(s2.as_str(), "world");
-        
+
         // Test term allocation
         let term = Term::NamedNode(NamedNode::new("http://example.org/test").unwrap());
         let arena_term = arena.alloc_term(&term);
@@ -321,20 +327,20 @@ mod tests {
             ArenaTerm::NamedNode(s) => assert_eq!(s.as_str(), "http://example.org/test"),
             _ => panic!("Wrong term type"),
         }
-        
+
         assert!(arena.allocated_bytes() > 0);
     }
 
     #[test]
     fn test_triple_allocation() {
         let arena = LocalArena::new();
-        
+
         let triple = Triple::new(
             NamedNode::new("http://s").unwrap(),
             NamedNode::new("http://p").unwrap(),
             Literal::new("object"),
         );
-        
+
         let arena_triple = arena.alloc_triple(&triple);
         match arena_triple.subject {
             ArenaTerm::NamedNode(s) => assert_eq!(s.as_str(), "http://s"),
@@ -350,7 +356,7 @@ mod tests {
     #[test]
     fn test_concurrent_arena() {
         let arena = Arc::new(ConcurrentArena::new(1024));
-        
+
         // Test concurrent allocation
         thread::scope(|s| {
             let handles: Vec<_> = (0..4)
@@ -365,12 +371,13 @@ mod tests {
                     })
                 })
                 .collect();
-            
+
             for handle in handles {
                 handle.join().unwrap();
             }
-        }).unwrap();
-        
+        })
+        .unwrap();
+
         assert!(arena.total_allocated() > 0);
         assert!(arena.arena_count() >= 1);
     }
@@ -378,14 +385,14 @@ mod tests {
     #[test]
     fn test_graph_arena() {
         let arena = GraphArena::new();
-        
+
         // Test term caching
         let term1 = Term::NamedNode(NamedNode::new("http://example.org/same").unwrap());
         let term2 = term1.clone();
-        
+
         let allocated1 = arena.alloc_term(&term1);
         let allocated2 = arena.alloc_term(&term2);
-        
+
         // Should be the same due to caching
         assert_eq!(allocated1, allocated2);
         assert_eq!(arena.cached_terms(), 1);
@@ -395,13 +402,13 @@ mod tests {
     fn test_scoped_arena() {
         let parent = LocalArena::new();
         let initial = parent.allocated_bytes();
-        
+
         {
             let scoped = ScopedArena::new(&parent);
             scoped.alloc_str("temporary");
             assert!(scoped.scope_allocated() > 0);
         }
-        
+
         // Allocation persists after scope ends (simplified implementation)
         assert!(parent.allocated_bytes() > initial);
     }
@@ -409,12 +416,12 @@ mod tests {
     #[test]
     fn test_arena_reset() {
         let arena = LocalArena::new();
-        
+
         arena.alloc_str("test1");
         arena.alloc_str("test2");
         let allocated = arena.allocated_bytes();
         assert!(allocated > 0);
-        
+
         arena.reset();
         assert_eq!(arena.allocated_bytes(), 0);
     }

@@ -26,21 +26,21 @@ pub mod executor_submodule;
 pub mod parallel;
 pub mod path;
 pub use builtin_fixed as builtin;
+pub mod expression;
 pub mod query;
 pub mod statistics_collector;
 pub mod term;
-pub mod expression;
 pub mod update;
 
 // Re-export main types for convenience
 pub use algebra::*;
 pub use executor::*;
+pub use expression::*;
 pub use extensions::*;
 pub use optimizer::*;
 pub use path::*;
 pub use query::*;
 pub use term::*;
-pub use expression::*;
 pub use update::*;
 
 /// SPARQL Query Engine - High-level interface

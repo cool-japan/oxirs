@@ -105,9 +105,8 @@ pub struct ReconnectStatistics {
 }
 
 /// Callback for connection failures
-pub type ConnectionFailureCallback = Arc<
-    dyn Fn(String, String, u32) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync,
->;
+pub type ConnectionFailureCallback =
+    Arc<dyn Fn(String, String, u32) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
 
 /// Automatic reconnection manager
 pub struct ReconnectManager<T: PooledConnection> {
@@ -123,7 +122,7 @@ impl<T: PooledConnection> ReconnectManager<T> {
     /// Create a new reconnection manager
     pub fn new(config: ReconnectConfig, strategy: ReconnectStrategy) -> Self {
         let (event_sender, _) = broadcast::channel(1000);
-        
+
         Self {
             config,
             strategy,
@@ -143,86 +142,86 @@ impl<T: PooledConnection> ReconnectManager<T> {
         let start_time = Instant::now();
         let mut attempt = 0;
         let mut current_delay = self.config.initial_delay;
-        
+
         loop {
             attempt += 1;
-            
+
             // Check max attempts
             if self.config.max_attempts > 0 && attempt > self.config.max_attempts {
                 let total_time = start_time.elapsed();
-                
-                let _ = self.event_sender.send(ReconnectEvent::ReconnectionExhausted {
-                    connection_id: connection_id.clone(),
-                    total_attempts: attempt - 1,
-                    total_time,
-                });
-                
+
+                let _ = self
+                    .event_sender
+                    .send(ReconnectEvent::ReconnectionExhausted {
+                        connection_id: connection_id.clone(),
+                        total_attempts: attempt - 1,
+                        total_time,
+                    });
+
                 // Update statistics
                 let mut stats = self.statistics.write().await;
                 stats.failed_reconnects += 1;
                 stats.current_streak = 0;
-                
+
                 // Call failure callbacks
                 if self.config.enable_callbacks {
                     self.invoke_failure_callbacks(
                         connection_id.clone(),
                         "Maximum retry attempts exhausted".to_string(),
                         attempt - 1,
-                    ).await;
+                    )
+                    .await;
                 }
-                
+
                 return Err(anyhow!(
                     "Failed to reconnect after {} attempts",
                     self.config.max_attempts
                 ));
             }
-            
+
             // Calculate delay with jitter
             let jittered_delay = self.apply_jitter(current_delay);
-            
+
             if attempt > 1 {
                 info!(
                     "Reconnection attempt {} for {} in {:?}",
                     attempt, connection_id, jittered_delay
                 );
-                
+
                 let _ = self.event_sender.send(ReconnectEvent::AttemptStarted {
                     connection_id: connection_id.clone(),
                     attempt,
                     delay: jittered_delay,
                 });
-                
+
                 sleep(jittered_delay).await;
             }
-            
+
             // Update statistics
             {
                 let mut stats = self.statistics.write().await;
                 stats.total_attempts += 1;
                 stats.last_reconnect_attempt = Some(Instant::now());
             }
-            
+
             // Attempt connection with timeout
-            match tokio::time::timeout(
-                self.config.connection_timeout,
-                factory.create_connection(),
-            )
-            .await
+            match tokio::time::timeout(self.config.connection_timeout, factory.create_connection())
+                .await
             {
                 Ok(Ok(connection)) => {
                     let total_time = start_time.elapsed();
-                    
+
                     info!(
                         "Successfully reconnected {} after {} attempts in {:?}",
                         connection_id, attempt, total_time
                     );
-                    
+
                     let _ = self.event_sender.send(ReconnectEvent::AttemptSucceeded {
                         connection_id: connection_id.clone(),
                         attempt,
                         total_time,
                     });
-                    
+
                     // Update statistics
                     let mut stats = self.statistics.write().await;
                     stats.successful_reconnects += 1;
@@ -230,12 +229,12 @@ impl<T: PooledConnection> ReconnectManager<T> {
                     stats.longest_streak = stats.longest_streak.max(stats.current_streak);
                     stats.total_reconnect_time += total_time;
                     stats.last_successful_reconnect = Some(Instant::now());
-                    
+
                     if stats.successful_reconnects > 0 {
-                        stats.avg_reconnect_time = 
+                        stats.avg_reconnect_time =
                             stats.total_reconnect_time / stats.successful_reconnects as u32;
                     }
-                    
+
                     return Ok(connection);
                 }
                 Ok(Err(e)) => {
@@ -243,7 +242,7 @@ impl<T: PooledConnection> ReconnectManager<T> {
                         "Reconnection attempt {} for {} failed: {}",
                         attempt, connection_id, e
                     );
-                    
+
                     // Calculate next delay
                     current_delay = self.calculate_next_delay(current_delay, attempt);
                     let next_delay = if attempt < self.config.max_attempts {
@@ -251,21 +250,22 @@ impl<T: PooledConnection> ReconnectManager<T> {
                     } else {
                         None
                     };
-                    
+
                     let _ = self.event_sender.send(ReconnectEvent::AttemptFailed {
                         connection_id: connection_id.clone(),
                         attempt,
                         error: e.to_string(),
                         next_delay,
                     });
-                    
+
                     // Call failure callbacks for each attempt if enabled
                     if self.config.enable_callbacks && attempt % 3 == 0 {
                         self.invoke_failure_callbacks(
                             connection_id.clone(),
                             e.to_string(),
                             attempt,
-                        ).await;
+                        )
+                        .await;
                     }
                 }
                 Err(_) => {
@@ -273,9 +273,9 @@ impl<T: PooledConnection> ReconnectManager<T> {
                         "Reconnection attempt {} for {} timed out",
                         attempt, connection_id
                     );
-                    
+
                     current_delay = self.calculate_next_delay(current_delay, attempt);
-                    
+
                     let _ = self.event_sender.send(ReconnectEvent::AttemptFailed {
                         connection_id: connection_id.clone(),
                         attempt,
@@ -312,18 +312,21 @@ impl<T: PooledConnection> ReconnectManager<T> {
         if self.config.jitter_factor <= 0.0 {
             return delay;
         }
-        
+
         let jitter_range = delay.as_millis() as f64 * self.config.jitter_factor;
         let jitter = (fastrand::f64() - 0.5) * 2.0 * jitter_range;
         let jittered_millis = (delay.as_millis() as f64 + jitter).max(0.0) as u64;
-        
+
         Duration::from_millis(jittered_millis)
     }
 
     /// Register a connection failure callback
     pub async fn register_failure_callback<F>(&self, callback: F)
     where
-        F: Fn(String, String, u32) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync + 'static,
+        F: Fn(String, String, u32) -> Pin<Box<dyn Future<Output = ()> + Send>>
+            + Send
+            + Sync
+            + 'static,
     {
         let mut callbacks = self.failure_callbacks.write().await;
         callbacks.push(Arc::new(callback));
@@ -332,7 +335,7 @@ impl<T: PooledConnection> ReconnectManager<T> {
     /// Invoke all registered failure callbacks
     async fn invoke_failure_callbacks(&self, connection_id: String, error: String, attempt: u32) {
         let callbacks = self.failure_callbacks.read().await;
-        
+
         for callback in callbacks.iter() {
             let fut = callback(connection_id.clone(), error.clone(), attempt);
             tokio::spawn(async move {
@@ -374,7 +377,7 @@ impl<T: PooledConnection> ResilientConnection<T> {
         reconnect_manager: Arc<ReconnectManager<T>>,
     ) -> Result<Self> {
         let connection = factory.create_connection().await?;
-        
+
         Ok(Self {
             connection: Some(connection),
             connection_id,
@@ -391,18 +394,24 @@ impl<T: PooledConnection> ResilientConnection<T> {
                 return Ok(conn);
             }
         }
-        
+
         // Connection is unhealthy or missing, attempt reconnection
-        info!("Connection {} is unhealthy, attempting reconnection", self.connection_id);
-        
-        match self.reconnect_manager.reconnect(
-            self.connection_id.clone(),
-            self.factory.clone(),
-        ).await {
+        info!(
+            "Connection {} is unhealthy, attempting reconnection",
+            self.connection_id
+        );
+
+        match self
+            .reconnect_manager
+            .reconnect(self.connection_id.clone(), self.factory.clone())
+            .await
+        {
             Ok(new_conn) => {
                 self.connection = Some(new_conn);
                 self.last_error = None;
-                self.connection.as_mut().ok_or_else(|| anyhow!("Connection unexpectedly None"))
+                self.connection
+                    .as_mut()
+                    .ok_or_else(|| anyhow!("Connection unexpectedly None"))
             }
             Err(e) => {
                 self.last_error = Some(e.to_string());
@@ -427,16 +436,16 @@ impl<T: PooledConnection> ResilientConnection<T> {
 
     /// Manually trigger reconnection
     pub async fn reconnect(&mut self) -> Result<()> {
-        let new_conn = self.reconnect_manager.reconnect(
-            self.connection_id.clone(),
-            self.factory.clone(),
-        ).await?;
-        
+        let new_conn = self
+            .reconnect_manager
+            .reconnect(self.connection_id.clone(), self.factory.clone())
+            .await?;
+
         // Close old connection if exists
         if let Some(mut old_conn) = self.connection.take() {
             let _ = old_conn.close().await;
         }
-        
+
         self.connection = Some(new_conn);
         self.last_error = None;
         Ok(())
@@ -485,12 +494,12 @@ mod tests {
     impl ConnectionFactory<TestConnection> for TestConnectionFactory {
         async fn create_connection(&self) -> Result<TestConnection> {
             let current_fails = self.fail_count.load(Ordering::Relaxed);
-            
+
             if self.should_fail.load(Ordering::Relaxed) && current_fails > 0 {
                 self.fail_count.fetch_sub(1, Ordering::Relaxed);
                 return Err(anyhow!("Simulated connection failure"));
             }
-            
+
             let id = self.counter.fetch_add(1, Ordering::Relaxed);
             Ok(TestConnection {
                 id,
@@ -510,28 +519,26 @@ mod tests {
             jitter_factor: 0.0,
             ..Default::default()
         };
-        
-        let manager = ReconnectManager::<TestConnection>::new(
-            config,
-            ReconnectStrategy::ExponentialBackoff,
-        );
-        
+
+        let manager =
+            ReconnectManager::<TestConnection>::new(config, ReconnectStrategy::ExponentialBackoff);
+
         let factory = Arc::new(TestConnectionFactory {
             counter: Arc::new(AtomicU32::new(0)),
             should_fail: Arc::new(AtomicBool::new(true)),
             fail_count: Arc::new(AtomicU32::new(3)), // Fail first 3 attempts
         });
-        
+
         let start = Instant::now();
         let result = manager.reconnect("test-conn".to_string(), factory).await;
         let elapsed = start.elapsed();
-        
+
         assert!(result.is_ok());
-        
+
         // Should have delays: 0ms, 10ms, 20ms, 40ms (total ~70ms)
         assert!(elapsed >= Duration::from_millis(60));
         assert!(elapsed < Duration::from_millis(150));
-        
+
         let stats = manager.get_statistics().await;
         assert_eq!(stats.total_attempts, 4);
         assert_eq!(stats.successful_reconnects, 1);
@@ -544,21 +551,19 @@ mod tests {
             max_attempts: 3,
             ..Default::default()
         };
-        
-        let manager = ReconnectManager::<TestConnection>::new(
-            config,
-            ReconnectStrategy::ExponentialBackoff,
-        );
-        
+
+        let manager =
+            ReconnectManager::<TestConnection>::new(config, ReconnectStrategy::ExponentialBackoff);
+
         let factory = Arc::new(TestConnectionFactory {
             counter: Arc::new(AtomicU32::new(0)),
             should_fail: Arc::new(AtomicBool::new(true)),
             fail_count: Arc::new(AtomicU32::new(100)), // Always fail
         });
-        
+
         let result = manager.reconnect("test-conn".to_string(), factory).await;
         assert!(result.is_err());
-        
+
         let stats = manager.get_statistics().await;
         assert_eq!(stats.total_attempts, 3);
         assert_eq!(stats.failed_reconnects, 1);
@@ -572,33 +577,35 @@ mod tests {
             enable_callbacks: true,
             ..Default::default()
         };
-        
+
         let manager = ReconnectManager::<TestConnection>::new(
             config,
             ReconnectStrategy::FixedDelay(Duration::from_millis(1)),
         );
-        
+
         let callback_called = Arc::new(AtomicBool::new(false));
         let callback_called_clone = callback_called.clone();
-        
-        manager.register_failure_callback(move |_id, _error, _attempt| {
-            let called = callback_called_clone.clone();
-            Box::pin(async move {
-                called.store(true, Ordering::Relaxed);
+
+        manager
+            .register_failure_callback(move |_id, _error, _attempt| {
+                let called = callback_called_clone.clone();
+                Box::pin(async move {
+                    called.store(true, Ordering::Relaxed);
+                })
             })
-        }).await;
-        
+            .await;
+
         let factory = Arc::new(TestConnectionFactory {
             counter: Arc::new(AtomicU32::new(0)),
             should_fail: Arc::new(AtomicBool::new(true)),
             fail_count: Arc::new(AtomicU32::new(100)),
         });
-        
+
         let _ = manager.reconnect("test-conn".to_string(), factory).await;
-        
+
         // Give callback time to execute
         tokio::time::sleep(Duration::from_millis(10)).await;
-        
+
         assert!(callback_called.load(Ordering::Relaxed));
     }
 
@@ -609,20 +616,18 @@ mod tests {
             config,
             ReconnectStrategy::ExponentialBackoff,
         ));
-        
+
         let healthy_flag = Arc::new(AtomicBool::new(true));
         let factory = Arc::new(TestConnectionFactory {
             counter: Arc::new(AtomicU32::new(0)),
             should_fail: Arc::new(AtomicBool::new(false)),
             fail_count: Arc::new(AtomicU32::new(0)),
         });
-        
-        let mut resilient = ResilientConnection::new(
-            "test-conn".to_string(),
-            factory,
-            manager,
-        ).await.unwrap();
-        
+
+        let mut resilient = ResilientConnection::new("test-conn".to_string(), factory, manager)
+            .await
+            .unwrap();
+
         // Should work normally
         assert!(resilient.is_healthy().await);
         let conn = resilient.get_connection().await.unwrap();

@@ -495,16 +495,16 @@ pub enum StorageError {
 pub trait StorageBackend: Send + Sync {
     /// Create a new shard
     async fn create_shard(&self, shard_id: ShardId) -> Result<()>;
-    
+
     /// Delete a shard
     async fn delete_shard(&self, shard_id: ShardId) -> Result<()>;
-    
+
     /// Insert a triple into a specific shard
     async fn insert_triple_to_shard(&self, shard_id: ShardId, triple: Triple) -> Result<()>;
-    
+
     /// Delete a triple from a specific shard
     async fn delete_triple_from_shard(&self, shard_id: ShardId, triple: &Triple) -> Result<()>;
-    
+
     /// Query triples from a specific shard
     async fn query_shard(
         &self,
@@ -513,16 +513,16 @@ pub trait StorageBackend: Send + Sync {
         predicate: Option<&str>,
         object: Option<&str>,
     ) -> Result<Vec<Triple>>;
-    
+
     /// Get shard size in bytes
     async fn get_shard_size(&self, shard_id: ShardId) -> Result<u64>;
-    
+
     /// Get shard triple count
     async fn get_shard_triple_count(&self, shard_id: ShardId) -> Result<usize>;
-    
+
     /// Export shard data for migration
     async fn export_shard(&self, shard_id: ShardId) -> Result<Vec<Triple>>;
-    
+
     /// Import shard data during migration
     async fn import_shard(&self, shard_id: ShardId, triples: Vec<Triple>) -> Result<()>;
 }
@@ -531,30 +531,30 @@ pub trait StorageBackend: Send + Sync {
 pub mod mock {
     use super::*;
     use std::collections::HashMap;
-    
+
     #[derive(Debug, Default)]
     pub struct MockStorageBackend {
         shards: Arc<RwLock<HashMap<ShardId, Vec<Triple>>>>,
     }
-    
+
     impl MockStorageBackend {
         pub fn new() -> Self {
             Self::default()
         }
     }
-    
+
     #[async_trait]
     impl StorageBackend for MockStorageBackend {
         async fn create_shard(&self, shard_id: ShardId) -> Result<()> {
             self.shards.write().await.insert(shard_id, Vec::new());
             Ok(())
         }
-        
+
         async fn delete_shard(&self, shard_id: ShardId) -> Result<()> {
             self.shards.write().await.remove(&shard_id);
             Ok(())
         }
-        
+
         async fn insert_triple_to_shard(&self, shard_id: ShardId, triple: Triple) -> Result<()> {
             let mut shards = self.shards.write().await;
             if let Some(shard) = shards.get_mut(&shard_id) {
@@ -562,7 +562,7 @@ pub mod mock {
             }
             Ok(())
         }
-        
+
         async fn delete_triple_from_shard(&self, shard_id: ShardId, triple: &Triple) -> Result<()> {
             let mut shards = self.shards.write().await;
             if let Some(shard) = shards.get_mut(&shard_id) {
@@ -570,7 +570,7 @@ pub mod mock {
             }
             Ok(())
         }
-        
+
         async fn query_shard(
             &self,
             shard_id: ShardId,
@@ -580,11 +580,12 @@ pub mod mock {
         ) -> Result<Vec<Triple>> {
             let shards = self.shards.read().await;
             if let Some(shard) = shards.get(&shard_id) {
-                let results: Vec<Triple> = shard.iter()
+                let results: Vec<Triple> = shard
+                    .iter()
                     .filter(|triple| {
-                        subject.map_or(true, |s| triple.subject().to_string() == s) &&
-                        predicate.map_or(true, |p| triple.predicate().to_string() == p) &&
-                        object.map_or(true, |o| triple.object().to_string() == o)
+                        subject.map_or(true, |s| triple.subject().to_string() == s)
+                            && predicate.map_or(true, |p| triple.predicate().to_string() == p)
+                            && object.map_or(true, |o| triple.object().to_string() == o)
                     })
                     .cloned()
                     .collect();
@@ -593,7 +594,7 @@ pub mod mock {
                 Ok(Vec::new())
             }
         }
-        
+
         async fn get_shard_size(&self, shard_id: ShardId) -> Result<u64> {
             let shards = self.shards.read().await;
             if let Some(shard) = shards.get(&shard_id) {
@@ -603,17 +604,17 @@ pub mod mock {
                 Ok(0)
             }
         }
-        
+
         async fn get_shard_triple_count(&self, shard_id: ShardId) -> Result<usize> {
             let shards = self.shards.read().await;
             Ok(shards.get(&shard_id).map_or(0, |s| s.len()))
         }
-        
+
         async fn export_shard(&self, shard_id: ShardId) -> Result<Vec<Triple>> {
             let shards = self.shards.read().await;
             Ok(shards.get(&shard_id).cloned().unwrap_or_default())
         }
-        
+
         async fn import_shard(&self, shard_id: ShardId, triples: Vec<Triple>) -> Result<()> {
             self.shards.write().await.insert(shard_id, triples);
             Ok(())

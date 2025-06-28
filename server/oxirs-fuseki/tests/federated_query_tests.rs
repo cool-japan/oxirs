@@ -5,14 +5,14 @@ use oxirs_fuseki::{
     federated_query_optimizer::*,
     metrics::MetricsService,
 };
-use std::sync::Arc;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 #[tokio::test]
 async fn test_service_pattern_extraction() {
     let metrics = Arc::new(MetricsService::new());
     let optimizer = FederatedQueryOptimizer::new(metrics);
-    
+
     let query = r#"
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
         SELECT ?person ?name ?friend
@@ -34,7 +34,7 @@ async fn test_service_pattern_extraction() {
 async fn test_multiple_service_patterns() {
     let metrics = Arc::new(MetricsService::new());
     let optimizer = FederatedQueryOptimizer::new(metrics);
-    
+
     let query = r#"
         SELECT ?s ?p ?o
         WHERE {
@@ -57,7 +57,7 @@ async fn test_multiple_service_patterns() {
 async fn test_nested_service_patterns() {
     let metrics = Arc::new(MetricsService::new());
     let optimizer = FederatedQueryOptimizer::new(metrics);
-    
+
     let query = r#"
         SELECT ?person ?name ?friend ?friendName
         WHERE {
@@ -80,7 +80,7 @@ async fn test_nested_service_patterns() {
 #[tokio::test]
 async fn test_endpoint_health_check() {
     let mut registry = EndpointRegistry::new();
-    
+
     let endpoint = EndpointInfo {
         url: "http://test.example.org/sparql".to_string(),
         name: "Test Endpoint".to_string(),
@@ -102,9 +102,9 @@ async fn test_endpoint_health_check() {
         max_retries: 3,
         priority: 1,
     };
-    
+
     registry.register_endpoint(endpoint.clone());
-    
+
     // Health check will fail for non-existent endpoint, but should handle gracefully
     let result = registry.check_endpoint_health(endpoint).await;
     assert!(result.is_err());
@@ -113,7 +113,7 @@ async fn test_endpoint_health_check() {
 #[tokio::test]
 async fn test_query_decomposition() {
     let planner = QueryPlanner::new();
-    
+
     let service_patterns = vec![
         ServicePattern {
             service_url: "http://endpoint1.org/sparql".to_string(),
@@ -121,7 +121,8 @@ async fn test_query_decomposition() {
                 SERVICE <http://endpoint1.org/sparql> {
                     ?person foaf:knows ?friend .
                 }
-            "#.to_string(),
+            "#
+            .to_string(),
             is_silent: false,
             is_optional: false,
         },
@@ -131,12 +132,13 @@ async fn test_query_decomposition() {
                 SERVICE <http://endpoint2.org/sparql> {
                     ?friend foaf:name ?name .
                 }
-            "#.to_string(),
+            "#
+            .to_string(),
             is_silent: false,
             is_optional: false,
         },
     ];
-    
+
     let query = r#"
         SELECT ?person ?friend ?name
         WHERE {
@@ -149,9 +151,12 @@ async fn test_query_decomposition() {
             }
         }
     "#;
-    
-    let plan = planner.create_execution_plan(query, &service_patterns).await.unwrap();
-    
+
+    let plan = planner
+        .create_execution_plan(query, &service_patterns)
+        .await
+        .unwrap();
+
     assert!(!plan.fragments.is_empty());
     assert_eq!(plan.fragments.len(), service_patterns.len());
 }
@@ -159,7 +164,7 @@ async fn test_query_decomposition() {
 #[tokio::test]
 async fn test_join_optimization() {
     let optimizer = JoinOrderOptimizer::new();
-    
+
     let fragments = vec![
         QueryFragment {
             fragment_id: "f1".to_string(),
@@ -186,9 +191,9 @@ async fn test_join_optimization() {
             is_optional: false,
         },
     ];
-    
+
     let join_plan = optimizer.optimize_joins(&fragments).await.unwrap();
-    
+
     assert!(!join_plan.steps.is_empty());
     assert_eq!(join_plan.steps.len(), fragments.len() - 1);
 }
@@ -196,19 +201,17 @@ async fn test_join_optimization() {
 #[tokio::test]
 async fn test_cost_estimation() {
     let estimator = CostEstimator::new();
-    
+
     let plan = ExecutionPlan {
         query_id: "test-query-1".to_string(),
-        fragments: vec![
-            QueryFragment {
-                fragment_id: "f1".to_string(),
-                sparql: "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 100".to_string(),
-                target_endpoints: vec!["http://endpoint1.org/sparql".to_string()],
-                dependencies: vec![],
-                estimated_cost: 1.0,
-                is_optional: false,
-            },
-        ],
+        fragments: vec![QueryFragment {
+            fragment_id: "f1".to_string(),
+            sparql: "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 100".to_string(),
+            target_endpoints: vec!["http://endpoint1.org/sparql".to_string()],
+            dependencies: vec![],
+            estimated_cost: 1.0,
+            is_optional: false,
+        }],
         join_plan: JoinPlan {
             steps: vec![],
             estimated_cost: 0.0,
@@ -217,7 +220,7 @@ async fn test_cost_estimation() {
         timeout_ms: 30000,
         optimization_hints: HashMap::new(),
     };
-    
+
     let cost = estimator.estimate_cost(&plan).await.unwrap();
     assert!(cost > 0.0);
 }
@@ -225,7 +228,7 @@ async fn test_cost_estimation() {
 #[tokio::test]
 async fn test_result_merger_union() {
     let merger = ResultMerger::new();
-    
+
     let results = vec![
         QueryResults {
             bindings: vec![
@@ -240,31 +243,25 @@ async fn test_result_merger_union() {
             ],
             metadata: ResultMetadata {
                 total_execution_time_ms: 100,
-                endpoint_times: HashMap::from([
-                    ("endpoint1".to_string(), 100),
-                ]),
+                endpoint_times: HashMap::from([("endpoint1".to_string(), 100)]),
                 result_count: 2,
                 partial_results: false,
             },
         },
         QueryResults {
-            bindings: vec![
-                HashMap::from([
-                    ("x".to_string(), serde_json::json!("value3")),
-                    ("y".to_string(), serde_json::json!(3)),
-                ]),
-            ],
+            bindings: vec![HashMap::from([
+                ("x".to_string(), serde_json::json!("value3")),
+                ("y".to_string(), serde_json::json!(3)),
+            ])],
             metadata: ResultMetadata {
                 total_execution_time_ms: 50,
-                endpoint_times: HashMap::from([
-                    ("endpoint2".to_string(), 50),
-                ]),
+                endpoint_times: HashMap::from([("endpoint2".to_string(), 50)]),
                 result_count: 1,
                 partial_results: false,
             },
         },
     ];
-    
+
     let merged = merger.merge_results(results).await.unwrap();
     assert_eq!(merged.bindings.len(), 3);
     assert_eq!(merged.metadata.total_execution_time_ms, 150);
@@ -274,7 +271,7 @@ async fn test_result_merger_union() {
 async fn test_result_merger_join() {
     let merger = ResultMerger::new();
     let join_strategy = merger.strategies.get("join").unwrap();
-    
+
     let results = vec![
         QueryResults {
             bindings: vec![
@@ -313,12 +310,12 @@ async fn test_result_merger_join() {
             },
         },
     ];
-    
+
     let joined = join_strategy.merge(results).await.unwrap();
-    
+
     // Should join on common "person" variable
     assert_eq!(joined.bindings.len(), 2);
-    
+
     // Check that joined results have all variables
     for binding in &joined.bindings {
         assert!(binding.contains_key("person"));
@@ -331,7 +328,7 @@ async fn test_result_merger_join() {
 async fn test_result_merger_distinct() {
     let merger = ResultMerger::new();
     let distinct_strategy = merger.strategies.get("distinct").unwrap();
-    
+
     let results = vec![
         QueryResults {
             bindings: vec![
@@ -359,9 +356,9 @@ async fn test_result_merger_distinct() {
             },
         },
     ];
-    
+
     let distinct = distinct_strategy.merge(results).await.unwrap();
-    
+
     // Should remove duplicates
     assert_eq!(distinct.bindings.len(), 3); // value1, value2, value3
 }
@@ -369,7 +366,7 @@ async fn test_result_merger_distinct() {
 #[tokio::test]
 async fn test_parallel_execution_strategy() {
     let strategy = ParallelExecutionStrategy;
-    
+
     let plan = ExecutionPlan {
         query_id: "test-parallel".to_string(),
         fragments: vec![
@@ -398,7 +395,7 @@ async fn test_parallel_execution_strategy() {
         timeout_ms: 30000,
         optimization_hints: HashMap::new(),
     };
-    
+
     assert!(strategy.applicable(&plan));
     assert_eq!(strategy.name(), "ParallelExecution");
 }
@@ -406,7 +403,7 @@ async fn test_parallel_execution_strategy() {
 #[tokio::test]
 async fn test_adaptive_execution_strategy() {
     let strategy = AdaptiveExecutionStrategy;
-    
+
     let plan = ExecutionPlan {
         query_id: "test-adaptive".to_string(),
         fragments: vec![
@@ -443,7 +440,7 @@ async fn test_adaptive_execution_strategy() {
         timeout_ms: 30000,
         optimization_hints: HashMap::new(),
     };
-    
+
     assert!(strategy.applicable(&plan));
     assert_eq!(strategy.name(), "AdaptiveExecution");
 }
@@ -451,27 +448,33 @@ async fn test_adaptive_execution_strategy() {
 #[tokio::test]
 async fn test_cardinality_estimation() {
     let estimator = CardinalityEstimator::new();
-    
+
     // Test query with LIMIT
     let query_with_limit = "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 42";
-    let cardinality = estimator.estimate_cardinality(query_with_limit).await.unwrap();
+    let cardinality = estimator
+        .estimate_cardinality(query_with_limit)
+        .await
+        .unwrap();
     assert_eq!(cardinality, 42);
-    
+
     // Test query without LIMIT
     let query_no_limit = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
-    let cardinality = estimator.estimate_cardinality(query_no_limit).await.unwrap();
+    let cardinality = estimator
+        .estimate_cardinality(query_no_limit)
+        .await
+        .unwrap();
     assert_eq!(cardinality, 1000); // Default estimate
 }
 
 #[tokio::test]
 async fn test_retry_policy() {
     let executor = FederatedExecutor::new();
-    
+
     // Test backoff calculation
     assert_eq!(executor.calculate_backoff(1).as_millis(), 200);
     assert_eq!(executor.calculate_backoff(2).as_millis(), 400);
     assert_eq!(executor.calculate_backoff(3).as_millis(), 800);
-    
+
     // Should be capped at max_backoff_ms
     assert!(executor.calculate_backoff(10).as_millis() <= 5000);
 }
@@ -480,7 +483,7 @@ async fn test_retry_policy() {
 async fn test_full_federated_query_flow() {
     let metrics = Arc::new(MetricsService::new());
     let optimizer = FederatedQueryOptimizer::new(metrics);
-    
+
     let query = r#"
         PREFIX foaf: <http://xmlns.com/foaf/0.1/>
         PREFIX ex: <http://example.org/>
@@ -499,7 +502,7 @@ async fn test_full_federated_query_flow() {
         ORDER BY ?name
         LIMIT 10
     "#;
-    
+
     // Test will fail with network error, but validates the flow
     let result = optimizer.process_federated_query(query, 5000).await;
     assert!(result.is_err());

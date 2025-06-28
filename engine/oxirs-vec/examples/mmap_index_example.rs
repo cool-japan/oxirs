@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use oxirs_vec::{
-    Vector, VectorIndex, MemoryMappedVectorIndex, IndexConfig, IndexType, DistanceMetric
+    DistanceMetric, IndexConfig, IndexType, MemoryMappedVectorIndex, Vector, VectorIndex,
 };
 use std::time::Instant;
 
@@ -37,12 +37,12 @@ fn main() -> Result<()> {
             let value = ((i * j) as f32 % 100.0) / 100.0 - 0.5;
             values.push(value);
         }
-        
+
         let vector = Vector::new(values);
         let uri = format!("http://example.org/vector/{}", i);
-        
+
         index.insert(uri, vector)?;
-        
+
         if (i + 1) % 1000 == 0 {
             println!("  Indexed {} vectors...", i + 1);
         }
@@ -75,7 +75,11 @@ fn main() -> Result<()> {
     let results = index.search_knn(&query_vector, k)?;
     let search_time = search_start.elapsed();
 
-    println!("  Found {} nearest neighbors in {:?}:", results.len(), search_time);
+    println!(
+        "  Found {} nearest neighbors in {:?}:",
+        results.len(),
+        search_time
+    );
     for (i, (uri, distance)) in results.iter().enumerate() {
         println!("    {}. {} (distance: {:.4})", i + 1, uri, distance);
     }
@@ -88,14 +92,14 @@ fn main() -> Result<()> {
     // Load existing index
     let loaded_index = MemoryMappedVectorIndex::load(index_path, config)?;
     let loaded_stats = loaded_index.stats();
-    
+
     println!("  Loaded index with {} vectors", loaded_stats.vector_count);
-    
+
     // Perform search on loaded index
     let search_start = Instant::now();
     let loaded_results = loaded_index.search_knn(&query_vector, k)?;
     let search_time = search_start.elapsed();
-    
+
     println!("  Search on loaded index completed in {:?}", search_time);
     println!("  Results match: {}\n", results == loaded_results);
 
@@ -103,9 +107,12 @@ fn main() -> Result<()> {
     println!("5. Threshold search example...");
     let threshold = 0.3; // Find all vectors with distance < 0.3
     let threshold_results = loaded_index.search_threshold(&query_vector, threshold)?;
-    
-    println!("  Found {} vectors within distance threshold {}", 
-             threshold_results.len(), threshold);
+
+    println!(
+        "  Found {} vectors within distance threshold {}",
+        threshold_results.len(),
+        threshold
+    );
     if threshold_results.len() <= 20 {
         for (uri, distance) in &threshold_results {
             println!("    {} (distance: {:.4})", uri, distance);
@@ -122,7 +129,7 @@ fn main() -> Result<()> {
     let in_memory_size = num_vectors * dimensions * std::mem::size_of::<f32>();
     let mmap_memory = loaded_stats.memory_usage;
     let savings = (1.0 - (mmap_memory as f64 / in_memory_size as f64)) * 100.0;
-    
+
     println!("  In-memory storage would use: {} bytes", in_memory_size);
     println!("  Memory-mapped index uses: {} bytes", mmap_memory);
     println!("  Memory savings: {:.1}%", savings);

@@ -450,7 +450,8 @@ impl VirtualStorage {
             })),
             cache: Arc::new(RwLock::new(StorageCache {
                 triple_cache: lru::LruCache::new(
-                    std::num::NonZeroUsize::new(cache_size).unwrap_or(std::num::NonZeroUsize::new(10000).unwrap())
+                    std::num::NonZeroUsize::new(cache_size)
+                        .unwrap_or(std::num::NonZeroUsize::new(10000).unwrap()),
                 ),
                 query_cache: lru::LruCache::new(std::num::NonZeroUsize::new(1000).unwrap()),
                 stats: CacheStats::default(),
@@ -1043,8 +1044,8 @@ impl StorageEngine for VirtualStorage {
         // Load metadata
         let metadata_path = path.join("virtual_metadata.json");
         let metadata_json = std::fs::read_to_string(metadata_path)?;
-        let metadata: VirtualStorageMetadata = serde_json::from_str(&metadata_json)
-            .map_err(|e| OxirsError::Parse(e.to_string()))?;
+        let metadata: VirtualStorageMetadata =
+            serde_json::from_str(&metadata_json).map_err(|e| OxirsError::Parse(e.to_string()))?;
 
         let backends = self.backends.read().await;
 
@@ -1088,17 +1089,19 @@ mod tests {
 
     #[tokio::test]
     async fn test_virtual_storage() {
-        let test_dir = format!("/tmp/oxirs_virtual_test_{}", 
+        let test_dir = format!(
+            "/tmp/oxirs_virtual_test_{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
-                .as_millis());
-            
+                .as_millis()
+        );
+
         let mut config = VirtualStorageConfig {
             path: PathBuf::from(&test_dir),
             ..Default::default()
         };
-        
+
         // Update backend config with test-specific paths
         if let Some(backend) = config.backends.get_mut(0) {
             backend.config = serde_json::json!({

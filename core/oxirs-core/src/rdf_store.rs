@@ -298,7 +298,12 @@ impl Store {
     }
 
     /// Insert a triple into the store (legacy string interface)
-    pub fn insert_string_triple(&mut self, subject: &str, predicate: &str, object: &str) -> Result<bool> {
+    pub fn insert_string_triple(
+        &mut self,
+        subject: &str,
+        predicate: &str,
+        object: &str,
+    ) -> Result<bool> {
         let subject_node = NamedNode::new(subject)?;
         let predicate_node = NamedNode::new(predicate)?;
         let object_literal = Literal::new(object);
@@ -466,23 +471,23 @@ impl Store {
         let _sparql = sparql;
         Ok(OxirsQueryResults::new())
     }
-    
+
     /// Insert a quad (compatibility alias for insert_quad)
     pub fn insert(&mut self, quad: &Quad) -> Result<()> {
         self.insert_quad(quad.clone())?;
         Ok(())
     }
-    
+
     /// Remove a quad (compatibility alias for remove_quad)
     pub fn remove(&mut self, quad: &Quad) -> Result<bool> {
         self.remove_quad(quad)
     }
-    
+
     /// Get all quads in the store
     pub fn quads(&self) -> Result<Vec<Quad>> {
         self.iter_quads()
     }
-    
+
     /// Get all quads from named graphs only
     pub fn named_graph_quads(&self) -> Result<Vec<Quad>> {
         match &self.backend {
@@ -511,62 +516,63 @@ impl Store {
             }
         }
     }
-    
+
     /// Get all quads from the default graph only
     pub fn default_graph_quads(&self) -> Result<Vec<Quad>> {
         let default_graph = GraphName::DefaultGraph;
         self.query_quads(None, None, None, Some(&default_graph))
     }
-    
+
     /// Get quads from a specific graph
     pub fn graph_quads(&self, graph: Option<&NamedNode>) -> Result<Vec<Quad>> {
-        let graph_name = graph.map(|g| GraphName::NamedNode(g.clone()))
+        let graph_name = graph
+            .map(|g| GraphName::NamedNode(g.clone()))
             .unwrap_or(GraphName::DefaultGraph);
         self.query_quads(None, None, None, Some(&graph_name))
     }
-    
+
     /// Clear all data from all graphs
     pub fn clear_all(&mut self) -> Result<usize> {
         let count = self.len()?;
         self.clear()?;
         Ok(count)
     }
-    
+
     /// Clear all named graphs (but not the default graph)
     pub fn clear_named_graphs(&mut self) -> Result<usize> {
         let mut deleted = 0;
         let graphs = self.named_graphs()?;
-        
+
         for graph in graphs {
             let graph_name = GraphName::NamedNode(graph);
             deleted += self.clear_graph(Some(&graph_name))?;
         }
-        
+
         Ok(deleted)
     }
-    
+
     /// Clear the default graph only
     pub fn clear_default_graph(&mut self) -> Result<usize> {
         self.clear_graph(None)
     }
-    
+
     /// Clear a specific graph
     pub fn clear_graph(&mut self, graph: Option<&GraphName>) -> Result<usize> {
         let graph_name = graph.cloned().unwrap_or(GraphName::DefaultGraph);
         let quads = self.query_quads(None, None, None, Some(&graph_name))?;
         let count = quads.len();
-        
+
         for quad in quads {
             self.remove_quad(&quad)?;
         }
-        
+
         Ok(count)
     }
-    
+
     /// Get all graphs (including default if it contains data)
     pub fn graphs(&self) -> Result<Vec<NamedNode>> {
         let mut graphs = self.named_graphs()?;
-        
+
         // Check if default graph has any data
         let default_graph = GraphName::DefaultGraph;
         let default_quads = self.query_quads(None, None, None, Some(&default_graph))?;
@@ -576,10 +582,10 @@ impl Store {
                 graphs.push(default_marker);
             }
         }
-        
+
         Ok(graphs)
     }
-    
+
     /// Get all named graphs
     pub fn named_graphs(&self) -> Result<Vec<NamedNode>> {
         match &self.backend {
@@ -602,7 +608,7 @@ impl Store {
             }
         }
     }
-    
+
     /// Create a new graph (if it doesn't exist)
     pub fn create_graph(&mut self, graph: Option<&NamedNode>) -> Result<()> {
         if let Some(graph_name) = graph {
@@ -620,11 +626,11 @@ impl Store {
         }
         Ok(())
     }
-    
+
     /// Drop a graph (remove the graph and all its quads)
     pub fn drop_graph(&mut self, graph: Option<&GraphName>) -> Result<()> {
         self.clear_graph(graph)?;
-        
+
         // Remove from named graphs set if it's a named graph
         if let Some(GraphName::NamedNode(graph_name)) = graph {
             match &self.backend {
@@ -639,15 +645,18 @@ impl Store {
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Load data from a URL into a graph
     pub fn load_from_url(&mut self, url: &str, graph: Option<&NamedNode>) -> Result<usize> {
         // TODO: Implement HTTP fetching and parsing
         // For now, return an error
-        Err(OxirsError::Store(format!("Loading from URL not yet implemented: {}", url)))
+        Err(OxirsError::Store(format!(
+            "Loading from URL not yet implemented: {}",
+            url
+        )))
     }
 }
 
@@ -791,7 +800,12 @@ mod tests {
             object2.clone(),
             graph2.clone(),
         );
-        let quad3 = Quad::new(subject2, predicate1.clone(), object2.clone(), graph2.clone());
+        let quad3 = Quad::new(
+            subject2,
+            predicate1.clone(),
+            object2.clone(),
+            graph2.clone(),
+        );
 
         // Insert test data
         store.insert_quad(quad1).unwrap();

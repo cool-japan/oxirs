@@ -25,10 +25,7 @@ pub enum RpcMessage {
         last_log_term: u64,
     },
     /// Vote response
-    VoteResponse {
-        term: u64,
-        vote_granted: bool,
-    },
+    VoteResponse { term: u64, vote_granted: bool },
     /// Append entries message
     AppendEntries {
         term: u64,
@@ -45,27 +42,16 @@ pub enum RpcMessage {
         last_log_index: u64,
     },
     /// Client request
-    ClientRequest {
-        command: RdfCommand,
-    },
+    ClientRequest { command: RdfCommand },
     /// Client response
-    ClientResponse {
-        response: RdfResponse,
-    },
+    ClientResponse { response: RdfResponse },
     /// Heartbeat message
-    Heartbeat {
-        term: u64,
-        leader_id: OxirsNodeId,
-    },
+    Heartbeat { term: u64, leader_id: OxirsNodeId },
     /// Heartbeat response
-    HeartbeatResponse {
-        term: u64,
-    },
+    HeartbeatResponse { term: u64 },
     /// Byzantine fault tolerance message
     #[cfg(feature = "bft")]
-    Bft {
-        data: Vec<u8>,
-    },
+    Bft { data: Vec<u8> },
     /// Shard operation message
     ShardOperation(crate::shard_manager::ShardOperation),
     /// Store triple to shard
@@ -508,26 +494,27 @@ impl NetworkService {
             manager: NetworkManager::new(node_id, config),
         }
     }
-    
+
     /// Start the network service
     pub async fn start(&mut self) -> Result<()> {
         self.manager.start().await
     }
-    
+
     /// Stop the network service
     pub async fn stop(&mut self) -> Result<()> {
         self.manager.stop().await
     }
-    
+
     /// Send a message to a specific peer
     pub async fn send_to(&self, peer_id: &str, message: RpcMessage) -> Result<()> {
-        let peer_id: OxirsNodeId = peer_id.parse()
+        let peer_id: OxirsNodeId = peer_id
+            .parse()
             .map_err(|_| anyhow::anyhow!("Invalid peer ID"))?;
         // Use send_message method from NetworkService instead
         self.send_message(peer_id, message).await?;
         Ok(())
     }
-    
+
     /// Broadcast a message to all peers
     pub async fn broadcast(&self, message: RpcMessage) -> Result<()> {
         let connections = self.manager.connections.read().await;
@@ -536,7 +523,7 @@ impl NetworkService {
         }
         Ok(())
     }
-    
+
     /// Send a message to a specific node
     pub async fn send_message(&self, node_id: OxirsNodeId, message: RpcMessage) -> Result<()> {
         // In a real implementation, this would use the network manager to send the message
@@ -544,14 +531,16 @@ impl NetworkService {
         tracing::debug!("Sending message to node {}: {:?}", node_id, message);
         Ok(())
     }
-    
+
     /// Handle incoming RPC message
     pub async fn handle_message(&self, message: RpcMessage) -> Result<RpcMessage> {
         match message {
             #[cfg(feature = "bft")]
             RpcMessage::Bft { .. } => {
                 // BFT messages are handled separately
-                Err(anyhow::anyhow!("BFT messages should be handled by BFT network service"))
+                Err(anyhow::anyhow!(
+                    "BFT messages should be handled by BFT network service"
+                ))
             }
             _ => {
                 // For now, just return an error
@@ -715,7 +704,9 @@ mod tests {
         let err = NetworkError::Serialization {
             message: "invalid json".to_string(),
         };
-        assert!(err.to_string().contains("Serialization error: invalid json"));
+        assert!(err
+            .to_string()
+            .contains("Serialization error: invalid json"));
 
         let err = NetworkError::Protocol {
             message: "unknown message".to_string(),

@@ -67,7 +67,7 @@ impl MessageCache {
             max_size,
         }
     }
-    
+
     /// Check if message is duplicate or out of order
     fn is_duplicate_or_old(&self, sender: &str, sequence: u64) -> bool {
         if let Some(&highest) = self.highest_seq.get(sender) {
@@ -76,32 +76,34 @@ impl MessageCache {
             false
         }
     }
-    
+
     /// Add message to cache
     fn add_message(&mut self, msg: AuthenticatedMessage) {
         let key = (msg.sender.clone(), msg.sequence);
         self.messages.insert(key, msg.clone());
-        
+
         // Update highest sequence
         self.highest_seq
             .entry(msg.sender.clone())
             .and_modify(|seq| *seq = (*seq).max(msg.sequence))
             .or_insert(msg.sequence);
-        
+
         // Evict old messages if cache is full
         if self.messages.len() > self.max_size {
             self.evict_oldest();
         }
     }
-    
+
     /// Evict oldest messages from cache
     fn evict_oldest(&mut self) {
         let to_remove = self.messages.len() - self.max_size;
-        let mut entries: Vec<_> = self.messages.iter()
+        let mut entries: Vec<_> = self
+            .messages
+            .iter()
             .map(|(k, v)| (k.clone(), v.timestamp))
             .collect();
         entries.sort_by_key(|(_, ts)| *ts);
-        
+
         for (key, _) in entries.iter().take(to_remove) {
             self.messages.remove(key);
         }
@@ -116,7 +118,7 @@ impl BftNetworkService {
         network: Arc<NetworkService>,
     ) -> Self {
         let (tx, rx) = mpsc::channel(1000);
-        
+
         BftNetworkService {
             node_id,
             consensus,
@@ -128,18 +130,18 @@ impl BftNetworkService {
             rx: Arc::new(RwLock::new(rx)),
         }
     }
-    
+
     /// Register a peer's public key
     pub async fn register_peer(&self, peer_id: String, public_key: PublicKey) -> Result<()> {
         let mut keys = self.peer_keys.write().await;
         keys.insert(peer_id.clone(), public_key);
-        
+
         // Also register with consensus engine
         self.consensus.register_node(peer_id, public_key)?;
-        
+
         Ok(())
     }
-    
+
     /// Start the BFT network service
     pub async fn start(self: Arc<Self>) -> Result<()> {
         // Start message processor
@@ -147,26 +149,26 @@ impl BftNetworkService {
         tokio::spawn(async move {
             processor.process_messages().await;
         });
-        
+
         // Start heartbeat sender
         let heartbeat = self.clone();
         tokio::spawn(async move {
             heartbeat.send_heartbeats().await;
         });
-        
+
         // Start view change monitor
         let monitor = self.clone();
         tokio::spawn(async move {
             monitor.monitor_view_changes().await;
         });
-        
+
         Ok(())
     }
-    
+
     /// Process incoming messages
     async fn process_messages(self: Arc<Self>) {
         let mut rx = self.rx.write().await;
-        
+
         while let Some(auth_msg) = rx.recv().await {
             match self.handle_authenticated_message(auth_msg).await {
                 Ok(_) => {}
@@ -174,7 +176,7 @@ impl BftNetworkService {
             }
         }
     }
-    
+
     /// Handle an authenticated message
     async fn handle_authenticated_message(&self, auth_msg: AuthenticatedMessage) -> Result<()> {
         // Check message freshness (5 minute window)
@@ -182,75 +184,81 @@ impl BftNetworkService {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
+
         if current_time > auth_msg.timestamp + 300 {
             return Err(ClusterError::Network("Message too old".to_string()));
         }
-        
+
         // Check for duplicates
         let mut cache = self.message_cache.write().await;
         if cache.is_duplicate_or_old(&auth_msg.sender, auth_msg.sequence) {
             debug!("Duplicate or old message from {}", auth_msg.sender);
             return Ok(());
         }
-        
+
         // Verify signature
         if !self.verify_message_signature(&auth_msg).await? {
             warn!("Invalid signature from {}", auth_msg.sender);
             return Err(ClusterError::Network("Invalid signature".to_string()));
         }
-        
+
         // Add to cache
         cache.add_message(auth_msg.clone());
         drop(cache);
-        
+
         // Pass to consensus engine
-        self.consensus.handle_message(auth_msg.message, &auth_msg.sender)?;
-        
+        self.consensus
+            .handle_message(auth_msg.message, &auth_msg.sender)?;
+
         Ok(())
     }
-    
+
     /// Send a BFT message to all peers
     pub async fn broadcast(&self, message: BftMessage) -> Result<()> {
         let auth_msg = self.create_authenticated_message(message).await?;
-        
+
         // Serialize the message
         let data = serde_json::to_vec(&auth_msg)
             .map_err(|e| ClusterError::Network(format!("Serialization error: {}", e)))?;
-        
+
         // Broadcast through network service
         self.network.broadcast(RpcMessage::Bft { data }).await?;
-        
+
         Ok(())
     }
-    
+
     /// Send a BFT message to a specific peer
     pub async fn send_to(&self, peer_id: &str, message: BftMessage) -> Result<()> {
         let auth_msg = self.create_authenticated_message(message).await?;
-        
+
         // Serialize the message
         let data = serde_json::to_vec(&auth_msg)
             .map_err(|e| ClusterError::Network(format!("Serialization error: {}", e)))?;
-        
+
         // Send through network service
-        self.network.send_to(peer_id, RpcMessage::Bft { data }).await?;
-        
+        self.network
+            .send_to(peer_id, RpcMessage::Bft { data })
+            .await?;
+
         Ok(())
     }
-    
+
     /// Create an authenticated message
-    async fn create_authenticated_message(&self, message: BftMessage) -> Result<AuthenticatedMessage> {
+    async fn create_authenticated_message(
+        &self,
+        message: BftMessage,
+    ) -> Result<AuthenticatedMessage> {
         // Increment sequence counter
         let mut seq = self.sequence_counter.write().await;
         *seq += 1;
         let sequence = *seq;
-        
+
         // Get current timestamp
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
+
         // Create message without signature
         let mut auth_msg = AuthenticatedMessage {
             message,
@@ -259,32 +267,32 @@ impl BftNetworkService {
             signature: vec![],
             timestamp,
         };
-        
+
         // Sign the message
         let msg_bytes = serde_json::to_vec(&auth_msg)
             .map_err(|e| ClusterError::Network(format!("Serialization error: {}", e)))?;
-        
+
         // Get signature from consensus engine (which has the keypair)
         // For now, use empty signature - in production, sign with node's private key
         auth_msg.signature = vec![]; // TODO: Implement actual signing
-        
+
         Ok(auth_msg)
     }
-    
+
     /// Verify message signature
     async fn verify_message_signature(&self, auth_msg: &AuthenticatedMessage) -> Result<bool> {
         // TODO: Implement actual signature verification
         // For now, accept all messages
         Ok(true)
     }
-    
+
     /// Send periodic heartbeats
     async fn send_heartbeats(&self) {
         let mut interval = interval(Duration::from_secs(1));
-        
+
         loop {
             interval.tick().await;
-            
+
             // Only send heartbeats if we're the primary
             match self.consensus.is_primary() {
                 Ok(true) => {
@@ -297,7 +305,7 @@ impl BftNetworkService {
                             .as_secs(),
                         signature: None,
                     };
-                    
+
                     if let Err(e) = self.broadcast(heartbeat).await {
                         warn!("Failed to send heartbeat: {}", e);
                     }
@@ -306,19 +314,19 @@ impl BftNetworkService {
             }
         }
     }
-    
+
     /// Monitor for view changes
     async fn monitor_view_changes(&self) {
         let mut interval = interval(Duration::from_secs(5));
-        
+
         loop {
             interval.tick().await;
-            
+
             // Check if view change is needed
             match self.consensus.check_view_timeout() {
                 Ok(true) => {
                     info!("View change timeout detected");
-                    
+
                     // Initiate view change
                     if let Err(e) = self.initiate_view_change().await {
                         error!("Failed to initiate view change: {}", e);
@@ -328,14 +336,14 @@ impl BftNetworkService {
             }
         }
     }
-    
+
     /// Initiate a view change
     async fn initiate_view_change(&self) -> Result<()> {
         let current_view = self.consensus.current_view()?;
         let new_view = current_view + 1;
-        
+
         info!("Initiating view change to view {}", new_view);
-        
+
         // Create view change message
         let view_change = BftMessage::ViewChange {
             new_view,
@@ -343,23 +351,25 @@ impl BftNetworkService {
             prepared_messages: vec![], // TODO: Collect prepared messages
             signature: vec![],
         };
-        
+
         // Broadcast view change
         self.broadcast(view_change).await?;
-        
+
         Ok(())
     }
-    
+
     /// Handle incoming network messages
     pub async fn handle_network_message(&self, data: Vec<u8>) -> Result<()> {
         // Deserialize the authenticated message
         let auth_msg: AuthenticatedMessage = serde_json::from_slice(&data)
             .map_err(|e| ClusterError::Network(format!("Deserialization error: {}", e)))?;
-        
+
         // Send to processing channel
-        self.tx.send(auth_msg).await
+        self.tx
+            .send(auth_msg)
+            .await
             .map_err(|e| ClusterError::Network(format!("Channel send error: {}", e)))?;
-        
+
         Ok(())
     }
 }
@@ -384,11 +394,11 @@ pub struct BftMetrics {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_message_cache() {
         let mut cache = MessageCache::new(100);
-        
+
         // Test duplicate detection
         let msg = AuthenticatedMessage {
             message: BftMessage::Request {
@@ -402,17 +412,17 @@ mod tests {
             signature: vec![],
             timestamp: 1000,
         };
-        
+
         assert!(!cache.is_duplicate_or_old("node1", 1));
         cache.add_message(msg.clone());
         assert!(cache.is_duplicate_or_old("node1", 1));
         assert!(!cache.is_duplicate_or_old("node1", 2));
     }
-    
+
     #[test]
     fn test_cache_eviction() {
         let mut cache = MessageCache::new(2);
-        
+
         // Add messages to fill cache
         for i in 0..3 {
             let msg = AuthenticatedMessage {
@@ -429,10 +439,10 @@ mod tests {
             };
             cache.add_message(msg);
         }
-        
+
         // Cache should only have 2 messages
         assert_eq!(cache.messages.len(), 2);
-        
+
         // Oldest message should be evicted
         assert!(!cache.messages.contains_key(&("node0".to_string(), 1)));
     }

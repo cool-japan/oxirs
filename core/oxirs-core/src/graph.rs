@@ -1,7 +1,7 @@
 //! RDF graph abstraction and operations
 
+use crate::concurrent::{BatchConfig, BatchOperation, ParallelBatchProcessor};
 use crate::model::*;
-use crate::concurrent::{ParallelBatchProcessor, BatchOperation, BatchConfig};
 use crate::Result;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
@@ -176,19 +176,19 @@ impl Graph {
         let config = BatchConfig::auto();
         let batch_size = config.batch_size;
         let processor = ParallelBatchProcessor::new(config);
-        
+
         // Split triples into batches
         let operations: Vec<_> = triples
             .par_chunks(batch_size)
             .map(|chunk| BatchOperation::insert(chunk.to_vec()))
             .collect();
-        
+
         // Submit all operations
         processor.submit_batch(operations)?;
-        
+
         // Process operations and collect results
         let all_triples = Arc::new(parking_lot::Mutex::new(Vec::new()));
-        
+
         let all_triples_clone = all_triples.clone();
         processor.process(move |op| -> Result<()> {
             match op {
@@ -199,7 +199,7 @@ impl Graph {
                 _ => Ok(()),
             }
         })?;
-        
+
         // Now insert all triples into the graph
         let mut inserted = 0;
         for triple in all_triples.lock().drain(..) {
@@ -207,7 +207,7 @@ impl Graph {
                 inserted += 1;
             }
         }
-        
+
         Ok(inserted)
     }
 
@@ -225,19 +225,19 @@ impl Graph {
         let config = BatchConfig::auto();
         let batch_size = config.batch_size;
         let processor = ParallelBatchProcessor::new(config);
-        
+
         // Split triples into batches
         let operations: Vec<_> = triples
             .par_chunks(batch_size)
             .map(|chunk| BatchOperation::remove(chunk.to_vec()))
             .collect();
-        
+
         // Submit all operations
         processor.submit_batch(operations)?;
-        
+
         // Process operations and collect results
         let triples_to_remove = Arc::new(parking_lot::Mutex::new(Vec::new()));
-        
+
         let triples_clone = triples_to_remove.clone();
         processor.process(move |op| -> Result<()> {
             match op {
@@ -248,7 +248,7 @@ impl Graph {
                 _ => Ok(()),
             }
         })?;
-        
+
         // Now remove all triples from the graph
         let mut removed = 0;
         for triple in triples_to_remove.lock().drain(..) {
@@ -256,7 +256,7 @@ impl Graph {
                 removed += 1;
             }
         }
-        
+
         Ok(removed)
     }
 
@@ -275,22 +275,26 @@ impl Graph {
 
         let config = BatchConfig::auto();
         let processor = ParallelBatchProcessor::new(config);
-        
+
         // Convert queries to operations
         let operations: Vec<_> = queries
             .into_iter()
             .map(|(s, p, o)| BatchOperation::query(s, p, o))
             .collect();
-        
+
         // Submit all operations
         processor.submit_batch(operations)?;
-        
+
         // Clone the triples for processing
         let triples = self.triples.clone();
-        
+
         let results = processor.process(move |op| -> Result<Vec<Triple>> {
             match op {
-                BatchOperation::Query { subject, predicate, object } => {
+                BatchOperation::Query {
+                    subject,
+                    predicate,
+                    object,
+                } => {
                     let matching: Vec<Triple> = triples
                         .iter()
                         .filter(|triple| {
@@ -307,7 +311,7 @@ impl Graph {
                 _ => Ok(vec![]),
             }
         })?;
-        
+
         Ok(results)
     }
 
@@ -327,7 +331,7 @@ impl Graph {
         }
 
         let transform_fn = Arc::new(transform_fn);
-        
+
         // Process triples in parallel
         let results: Vec<(Option<Triple>, Triple)> = triples
             .par_iter()
@@ -336,11 +340,11 @@ impl Graph {
                 (result, triple.clone())
             })
             .collect();
-        
+
         // Apply transformations
         let mut transformed = 0;
         let mut removed = 0;
-        
+
         for (new_triple, old_triple) in results {
             match new_triple {
                 Some(new) if new != old_triple => {
@@ -355,7 +359,7 @@ impl Graph {
                 _ => {} // No change
             }
         }
-        
+
         Ok((transformed, removed))
     }
 
@@ -408,17 +412,17 @@ impl Graph {
                 )
             })
             .collect();
-        
+
         let mut subjects = BTreeSet::new();
         let mut predicates = BTreeSet::new();
         let mut objects = BTreeSet::new();
-        
+
         for (s, p, o) in terms {
             subjects.insert(s);
             predicates.insert(p);
             objects.insert(o);
         }
-        
+
         (subjects, predicates, objects)
     }
 }
@@ -497,15 +501,15 @@ mod tests {
     fn test_par_insert_batch() {
         let mut graph = Graph::new();
         let triples = create_test_triples(10000);
-        
+
         let start = Instant::now();
         let inserted = graph.par_insert_batch(triples.clone()).unwrap();
         let duration = start.elapsed();
-        
+
         println!("Parallel insert of 10000 triples took: {:?}", duration);
         assert_eq!(inserted, 10000);
         assert_eq!(graph.len(), 10000);
-        
+
         // Verify all triples are present
         for triple in &triples {
             assert!(graph.contains_triple(triple));
@@ -518,9 +522,9 @@ mod tests {
         let mut triples = create_test_triples(5000);
         // Add duplicates
         triples.extend(create_test_triples(2500));
-        
+
         let inserted = graph.par_insert_batch(triples).unwrap();
-        
+
         // Should only insert unique triples
         assert_eq!(inserted, 5000);
         assert_eq!(graph.len(), 5000);
@@ -531,18 +535,18 @@ mod tests {
         let mut graph = Graph::new();
         let triples = create_test_triples(10000);
         graph.extend(triples.clone());
-        
+
         // Remove half of them
         let to_remove: Vec<Triple> = triples.iter().step_by(2).cloned().collect();
-        
+
         let start = Instant::now();
         let removed = graph.par_remove_batch(to_remove.clone()).unwrap();
         let duration = start.elapsed();
-        
+
         println!("Parallel remove of 5000 triples took: {:?}", duration);
         assert_eq!(removed, 5000);
         assert_eq!(graph.len(), 5000);
-        
+
         // Verify correct triples were removed
         for (i, triple) in triples.iter().enumerate() {
             if i % 2 == 0 {
@@ -558,25 +562,27 @@ mod tests {
         let mut graph = Graph::new();
         let triples = create_test_triples(1000);
         graph.extend(triples);
-        
+
         // Create multiple query patterns
         let queries: Vec<_> = (0..100)
             .map(|i| {
                 (
-                    Some(Subject::NamedNode(NamedNode::new(&format!("http://subject/{}", i)).unwrap())),
+                    Some(Subject::NamedNode(
+                        NamedNode::new(&format!("http://subject/{}", i)).unwrap(),
+                    )),
                     None,
                     None,
                 )
             })
             .collect();
-        
+
         let start = Instant::now();
         let results = graph.par_query_batch(queries).unwrap();
         let duration = start.elapsed();
-        
+
         println!("Parallel query of 100 patterns took: {:?}", duration);
         assert_eq!(results.len(), 100);
-        
+
         // Each query should match exactly one triple
         for (i, result) in results.iter().enumerate() {
             if i < 1000 {
@@ -592,7 +598,7 @@ mod tests {
         let mut graph = Graph::new();
         let triples = create_test_triples(1000);
         graph.extend(triples);
-        
+
         // Transform function: change predicate for even subjects
         let transform_fn = |triple: &Triple| -> Option<Triple> {
             if let Subject::NamedNode(node) = triple.subject() {
@@ -603,7 +609,9 @@ mod tests {
                             // Transform: change predicate
                             return Some(Triple::new(
                                 triple.subject().clone(),
-                                Predicate::NamedNode(NamedNode::new("http://predicate/transformed").unwrap()),
+                                Predicate::NamedNode(
+                                    NamedNode::new("http://predicate/transformed").unwrap(),
+                                ),
                                 triple.object().clone(),
                             ));
                         } else if id % 3 == 0 {
@@ -615,49 +623,58 @@ mod tests {
             }
             Some(triple.clone())
         };
-        
+
         let start = Instant::now();
         let (transformed, removed) = graph.par_transform(transform_fn).unwrap();
         let duration = start.elapsed();
-        
+
         println!("Parallel transform took: {:?}", duration);
         println!("Transformed: {}, Removed: {}", transformed, removed);
-        
+
         // Verify transformations
-        let transformed_predicate = Predicate::NamedNode(NamedNode::new("http://predicate/transformed").unwrap());
-        let transformed_count = graph.query_triples(None, Some(&transformed_predicate), None).len();
+        let transformed_predicate =
+            Predicate::NamedNode(NamedNode::new("http://predicate/transformed").unwrap());
+        let transformed_count = graph
+            .query_triples(None, Some(&transformed_predicate), None)
+            .len();
         assert!(transformed_count > 0);
     }
 
     #[test]
     fn test_par_count_patterns() {
         let mut graph = Graph::new();
-        
+
         // Create triples with different patterns
         for i in 0..100 {
             for j in 0..10 {
                 let triple = Triple::new(
                     Subject::NamedNode(NamedNode::new(&format!("http://subject/{}", i)).unwrap()),
-                    Predicate::NamedNode(NamedNode::new(&format!("http://predicate/{}", j)).unwrap()),
-                    Object::NamedNode(NamedNode::new(&format!("http://object/{}", i * 10 + j)).unwrap()),
+                    Predicate::NamedNode(
+                        NamedNode::new(&format!("http://predicate/{}", j)).unwrap(),
+                    ),
+                    Object::NamedNode(
+                        NamedNode::new(&format!("http://object/{}", i * 10 + j)).unwrap(),
+                    ),
                 );
                 graph.add_triple(triple);
             }
         }
-        
+
         // Count patterns
         let patterns: Vec<_> = (0..10)
             .map(|i| {
                 (
                     None,
-                    Some(Predicate::NamedNode(NamedNode::new(&format!("http://predicate/{}", i)).unwrap())),
+                    Some(Predicate::NamedNode(
+                        NamedNode::new(&format!("http://predicate/{}", i)).unwrap(),
+                    )),
                     None,
                 )
             })
             .collect();
-        
+
         let counts = graph.par_count_patterns(patterns);
-        
+
         // Each predicate should appear 100 times
         for count in counts {
             assert_eq!(count, 100);
@@ -669,13 +686,13 @@ mod tests {
         let mut graph = Graph::new();
         let triples = create_test_triples(1000);
         graph.extend(triples);
-        
+
         let start = Instant::now();
         let (subjects, predicates, objects) = graph.par_unique_terms();
         let duration = start.elapsed();
-        
+
         println!("Parallel unique terms extraction took: {:?}", duration);
-        
+
         assert_eq!(subjects.len(), 1000);
         assert_eq!(predicates.len(), 1000);
         assert_eq!(objects.len(), 1000);
@@ -686,11 +703,11 @@ mod tests {
         let mut graph = Graph::new();
         let triples = create_test_triples(1000);
         graph.extend(triples);
-        
+
         // Count triples using parallel iterator
         let count = graph.par_iter().count();
         assert_eq!(count, 1000);
-        
+
         // Filter using parallel iterator
         let filtered: Vec<_> = graph
             .par_iter()
@@ -703,7 +720,7 @@ mod tests {
             })
             .cloned()
             .collect();
-        
+
         assert_eq!(filtered.len(), 100);
     }
 
@@ -711,7 +728,7 @@ mod tests {
     fn test_parallel_performance_comparison() {
         let triple_count = 50000;
         let triples = create_test_triples(triple_count);
-        
+
         // Sequential insert
         let mut graph1 = Graph::new();
         let start = Instant::now();
@@ -719,37 +736,40 @@ mod tests {
             graph1.add_triple(triple.clone());
         }
         let seq_duration = start.elapsed();
-        
+
         // Parallel insert
         let mut graph2 = Graph::new();
         let start = Instant::now();
         graph2.par_insert_batch(triples.clone()).unwrap();
         let par_duration = start.elapsed();
-        
+
         println!("Performance comparison for {} triples:", triple_count);
         println!("  Sequential insert: {:?}", seq_duration);
         println!("  Parallel insert: {:?}", par_duration);
-        println!("  Speedup: {:.2}x", seq_duration.as_secs_f64() / par_duration.as_secs_f64());
-        
+        println!(
+            "  Speedup: {:.2}x",
+            seq_duration.as_secs_f64() / par_duration.as_secs_f64()
+        );
+
         assert_eq!(graph1.len(), graph2.len());
     }
 
     #[test]
     fn test_empty_operations() {
         let mut graph = Graph::new();
-        
+
         // Test empty insert
         let inserted = graph.par_insert_batch(vec![]).unwrap();
         assert_eq!(inserted, 0);
-        
+
         // Test empty remove
         let removed = graph.par_remove_batch(vec![]).unwrap();
         assert_eq!(removed, 0);
-        
+
         // Test empty query
         let results = graph.par_query_batch(vec![]).unwrap();
         assert!(results.is_empty());
-        
+
         // Test empty transform
         let (transformed, removed) = graph.par_transform(|t| Some(t.clone())).unwrap();
         assert_eq!(transformed, 0);

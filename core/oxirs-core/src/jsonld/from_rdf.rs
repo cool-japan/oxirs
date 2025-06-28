@@ -9,14 +9,14 @@ use json_event_parser::{JsonEvent, WriterJsonSerializer};
 // use oxrdf::{
 //     GraphName, GraphNameRef, NamedNode, NamedOrBlankNode, NamedOrBlankNodeRef, QuadRef, TermRef,
 // };
-use crate::model::*;
 use crate::model::iri::{Iri, IriParseError, NamedNodeRef};
-use crate::model::term::{BlankNodeRef};
-use crate::model::triple::{PredicateRef, SubjectRef, ObjectRef};
-use crate::model::quad::GraphNameRef;
 use crate::model::node::NamedOrBlankNodeRef;
-use crate::vocab::xsd;
+use crate::model::quad::GraphNameRef;
+use crate::model::term::BlankNodeRef;
+use crate::model::triple::{ObjectRef, PredicateRef, SubjectRef};
+use crate::model::*;
 use crate::optimization::TermRef;
+use crate::vocab::xsd;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io;
@@ -373,48 +373,35 @@ impl InnerJsonLdWriter {
             self.current_subject = None;
             self.current_predicate = None;
             self.emitted_predicates.clear();
-        } else if self
-            .current_subject
-            .as_ref()
-            .is_some_and(|subject| {
-                match quad.subject() {
-                    SubjectRef::NamedNode(n) => subject != &NamedOrBlankNode::NamedNode(n.to_owned()),
-                    SubjectRef::BlankNode(b) => subject != &NamedOrBlankNode::BlankNode(b.to_owned()),
-                    _ => true, // Variable and QuotedTriple are not supported in JSON-LD
-                }
-            })
-            || self
-                .current_predicate
-                .as_ref()
-                .is_some_and(|predicate| {
-                    match quad.predicate() {
-                        PredicateRef::NamedNode(n) => predicate != &n.to_owned(),
-                        _ => true, // Variable predicates are not supported in JSON-LD
-                    }
-                })
-                && {
-                    let pred_str = match quad.predicate() {
-                        PredicateRef::NamedNode(n) => n.as_str(),
-                        PredicateRef::Variable(v) => v.as_str(),
-                    };
-                    self.emitted_predicates.contains(pred_str)
-                }
-        {
+        } else if self.current_subject.as_ref().is_some_and(|subject| {
+            match quad.subject() {
+                SubjectRef::NamedNode(n) => subject != &NamedOrBlankNode::NamedNode(n.to_owned()),
+                SubjectRef::BlankNode(b) => subject != &NamedOrBlankNode::BlankNode(b.to_owned()),
+                _ => true, // Variable and QuotedTriple are not supported in JSON-LD
+            }
+        }) || self.current_predicate.as_ref().is_some_and(|predicate| {
+            match quad.predicate() {
+                PredicateRef::NamedNode(n) => predicate != &n.to_owned(),
+                _ => true, // Variable predicates are not supported in JSON-LD
+            }
+        }) && {
+            let pred_str = match quad.predicate() {
+                PredicateRef::NamedNode(n) => n.as_str(),
+                PredicateRef::Variable(v) => v.as_str(),
+            };
+            self.emitted_predicates.contains(pred_str)
+        } {
             output.push(JsonEvent::EndArray);
             output.push(JsonEvent::EndObject);
             self.current_subject = None;
             self.emitted_predicates.clear();
             self.current_predicate = None;
-        } else if self
-            .current_predicate
-            .as_ref()
-            .is_some_and(|predicate| {
-                match quad.predicate() {
-                    PredicateRef::NamedNode(n) => predicate != &n.to_owned(),
-                    _ => true, // Variable predicates are not supported in JSON-LD
-                }
-            })
-        {
+        } else if self.current_predicate.as_ref().is_some_and(|predicate| {
+            match quad.predicate() {
+                PredicateRef::NamedNode(n) => predicate != &n.to_owned(),
+                _ => true, // Variable predicates are not supported in JSON-LD
+            }
+        }) {
             output.push(JsonEvent::EndArray);
             if let Some(current_predicate) = self.current_predicate.take() {
                 self.emitted_predicates
@@ -477,7 +464,8 @@ impl InnerJsonLdWriter {
                 match quad.predicate() {
                     PredicateRef::NamedNode(n) => n.as_str(),
                     PredicateRef::Variable(v) => v.as_str(),
-                }.into(), // TODO: prefixes including @vocab
+                }
+                .into(), // TODO: prefixes including @vocab
             ));
             output.push(JsonEvent::StartArray);
             self.current_predicate = Some(match quad.predicate() {
@@ -496,10 +484,12 @@ impl InnerJsonLdWriter {
             ObjectRef::BlankNode(b) => TermRef::BlankNode(b.as_str()),
             ObjectRef::Literal(l) => TermRef::from_literal(l),
             ObjectRef::Variable(v) => TermRef::Variable(v.as_str()),
-            _ => return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "JSON-LD does not support quoted triples as objects",
-            )),
+            _ => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "JSON-LD does not support quoted triples as objects",
+                ))
+            }
         };
         self.serialize_term(object_ref, output)
     }
@@ -604,9 +594,10 @@ impl InnerJsonLdWriter {
                 if let Ok(relative) = base_iri.relativize(&Iri::parse_unchecked(id)) {
                     let relative = relative.into_inner();
                     // We check the relative IRI is not considered as absolute by IRI expansion
-                    if !relative.split_once(':').is_some_and(|(prefix, suffix)| {
-                        prefix == "_" || suffix.starts_with("//")
-                    }) {
+                    if !relative
+                        .split_once(':')
+                        .is_some_and(|(prefix, suffix)| prefix == "_" || suffix.starts_with("//"))
+                    {
                         return relative.into();
                     }
                 }

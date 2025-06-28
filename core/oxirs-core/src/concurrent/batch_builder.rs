@@ -3,12 +3,12 @@
 //! This module provides a builder pattern for accumulating operations into
 //! optimal batches based on system resources and operation types.
 
-use crate::model::{Triple, Subject, Predicate, Object};
-use crate::concurrent::parallel_batch::{BatchOperation, BatchConfig};
+use crate::concurrent::parallel_batch::{BatchConfig, BatchOperation};
+use crate::model::{Object, Predicate, Subject, Triple};
 use crate::OxirsError;
+use parking_lot::Mutex;
 use std::collections::HashSet;
 use std::sync::Arc;
-use parking_lot::Mutex;
 
 /// Operation coalescing strategy
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,7 +43,7 @@ impl Default for BatchBuilderConfig {
         let total_memory = sys_info::mem_info()
             .map(|info| info.total * 1024) // Convert to bytes
             .unwrap_or(8 * 1024 * 1024 * 1024); // 8GB default
-        
+
         BatchBuilderConfig {
             max_batch_size: 10000,
             max_memory_usage: (total_memory as usize) / 10, // Use up to 10% of system memory
@@ -59,12 +59,14 @@ impl BatchBuilderConfig {
     pub fn auto() -> Self {
         let num_cpus = num_cpus::get();
         let mem_info = sys_info::mem_info().ok();
-        
+
         let (max_batch_size, max_memory_usage) = if let Some(info) = mem_info {
             let total_mb = info.total / 1024;
-            if total_mb > 16384 { // > 16GB
+            if total_mb > 16384 {
+                // > 16GB
                 (50000, (info.total * 1024 / 8) as usize) // Large batches, use 1/8 of memory
-            } else if total_mb > 8192 { // > 8GB
+            } else if total_mb > 8192 {
+                // > 8GB
                 (20000, (info.total * 1024 / 10) as usize) // Medium batches, use 1/10 of memory
             } else {
                 (5000, (info.total * 1024 / 20) as usize) // Small batches, use 1/20 of memory
@@ -72,7 +74,7 @@ impl BatchBuilderConfig {
         } else {
             (10000, 1024 * 1024 * 1024) // 1GB default
         };
-        
+
         BatchBuilderConfig {
             max_batch_size: max_batch_size * num_cpus / 4, // Scale with CPU count
             max_memory_usage,
@@ -147,7 +149,7 @@ impl BatchBuilder {
     /// Add an insert operation
     pub fn insert(&mut self, triple: Triple) -> Result<(), OxirsError> {
         self.stats.total_operations += 1;
-        
+
         // Apply coalescing
         match self.config.coalescing_strategy {
             CoalescingStrategy::None => {
@@ -170,7 +172,7 @@ impl BatchBuilder {
                 }
             }
         }
-        
+
         self.check_flush()?;
         Ok(())
     }
@@ -186,7 +188,7 @@ impl BatchBuilder {
     /// Add a remove operation
     pub fn remove(&mut self, triple: Triple) -> Result<(), OxirsError> {
         self.stats.total_operations += 1;
-        
+
         // Apply coalescing
         match self.config.coalescing_strategy {
             CoalescingStrategy::None => {
@@ -208,7 +210,7 @@ impl BatchBuilder {
                 }
             }
         }
-        
+
         self.check_flush()?;
         Ok(())
     }
@@ -223,7 +225,7 @@ impl BatchBuilder {
         self.stats.total_operations += 1;
         self.query_buffer.push((subject, predicate, object));
         self.estimated_memory += 128; // Rough estimate for query pattern
-        
+
         self.check_flush()?;
         Ok(())
     }
@@ -236,7 +238,7 @@ impl BatchBuilder {
         self.stats.total_operations += 1;
         self.transform_buffer.push(Arc::new(f));
         self.estimated_memory += 64; // Rough estimate for closure
-        
+
         self.check_flush()?;
         Ok(())
     }
@@ -248,18 +250,18 @@ impl BatchBuilder {
 
     /// Get the current number of pending operations
     pub fn pending_operations(&self) -> usize {
-        self.insert_buffer.len() + 
-        self.remove_buffer.len() + 
-        self.query_buffer.len() + 
-        self.transform_buffer.len()
+        self.insert_buffer.len()
+            + self.remove_buffer.len()
+            + self.query_buffer.len()
+            + self.transform_buffer.len()
     }
 
     /// Check if we should flush based on size or memory constraints
     fn check_flush(&mut self) -> Result<(), OxirsError> {
         if self.config.auto_flush {
-            let should_flush = self.pending_operations() >= self.config.max_batch_size ||
-                             self.estimated_memory >= self.config.max_memory_usage;
-            
+            let should_flush = self.pending_operations() >= self.config.max_batch_size
+                || self.estimated_memory >= self.config.max_memory_usage;
+
             if should_flush {
                 self.flush()?;
             }
@@ -269,13 +271,13 @@ impl BatchBuilder {
 
     /// Estimate the memory size of a triple
     fn estimate_triple_size(&self, triple: &Triple) -> usize {
-        // Rough estimation: 
+        // Rough estimation:
         // - Each IRI/blank node: ~100 bytes
         // - Each literal: string length + 50 bytes overhead
         // - Triple structure: 24 bytes
-        24 + self.estimate_term_size(triple.subject()) +
-             self.estimate_term_size(triple.predicate()) +
-             self.estimate_object_size(triple.object())
+        24 + self.estimate_term_size(triple.subject())
+            + self.estimate_term_size(triple.predicate())
+            + self.estimate_object_size(triple.object())
     }
 
     fn estimate_term_size(&self, _term: &impl std::fmt::Display) -> usize {
@@ -289,31 +291,31 @@ impl BatchBuilder {
     /// Flush all pending operations into batch operations
     pub fn flush(&mut self) -> Result<Vec<BatchOperation>, OxirsError> {
         let mut operations = Vec::new();
-        
+
         if self.config.coalescing_strategy == CoalescingStrategy::Merge {
             self.apply_merge_coalescing();
         }
-        
+
         // Group operations by type if configured
         if self.config.group_by_type {
             // Optimize order if requested
             if self.config.coalescing_strategy == CoalescingStrategy::OptimizeOrder {
                 self.optimize_operation_order();
             }
-            
+
             // Create batches from buffers
             if !self.insert_buffer.is_empty() {
                 operations.extend(self.create_insert_batches());
             }
-            
+
             if !self.remove_buffer.is_empty() {
                 operations.extend(self.create_remove_batches());
             }
-            
+
             if !self.query_buffer.is_empty() {
                 operations.extend(self.create_query_batches());
             }
-            
+
             if !self.transform_buffer.is_empty() {
                 operations.extend(self.create_transform_batches());
             }
@@ -321,19 +323,19 @@ impl BatchBuilder {
             // Mix operation types in batches
             operations = self.create_mixed_batches();
         }
-        
+
         // Update statistics
         self.stats.batches_created += operations.len();
         self.stats.estimated_memory_usage = self.estimated_memory;
-        
+
         // Clear buffers
         self.clear();
-        
+
         // Call flush callback if set
         if let Some(callback) = &*self.flush_callback.lock() {
             callback(operations.clone());
         }
-        
+
         Ok(operations)
     }
 
@@ -343,14 +345,16 @@ impl BatchBuilder {
         if !self.insert_buffer.is_empty() && !self.remove_buffer.is_empty() {
             let remove_set = &self.remove_set;
             let original_len = self.insert_buffer.len();
-            self.insert_buffer.retain(|triple| !remove_set.contains(triple));
+            self.insert_buffer
+                .retain(|triple| !remove_set.contains(triple));
             let coalesced = original_len - self.insert_buffer.len();
-            
+
             if coalesced > 0 {
                 self.stats.coalesced_operations += coalesced;
                 // Also remove from remove buffer
                 let insert_set = &self.insert_set;
-                self.remove_buffer.retain(|triple| !insert_set.contains(triple));
+                self.remove_buffer
+                    .retain(|triple| !insert_set.contains(triple));
             }
         }
     }
@@ -358,31 +362,29 @@ impl BatchBuilder {
     /// Optimize operation order for better cache locality
     fn optimize_operation_order(&mut self) {
         // Sort by subject for better cache locality
-        self.insert_buffer.sort_by(|a, b| {
-            a.subject().to_string().cmp(&b.subject().to_string())
-        });
-        
-        self.remove_buffer.sort_by(|a, b| {
-            a.subject().to_string().cmp(&b.subject().to_string())
-        });
+        self.insert_buffer
+            .sort_by(|a, b| a.subject().to_string().cmp(&b.subject().to_string()));
+
+        self.remove_buffer
+            .sort_by(|a, b| a.subject().to_string().cmp(&b.subject().to_string()));
     }
 
     /// Create insert batches respecting max batch size
     fn create_insert_batches(&mut self) -> Vec<BatchOperation> {
         let mut batches = Vec::new();
         let mut current_batch = Vec::new();
-        
+
         for triple in self.insert_buffer.drain(..) {
             current_batch.push(triple);
             if current_batch.len() >= self.config.max_batch_size {
                 batches.push(BatchOperation::Insert(std::mem::take(&mut current_batch)));
             }
         }
-        
+
         if !current_batch.is_empty() {
             batches.push(BatchOperation::Insert(current_batch));
         }
-        
+
         batches
     }
 
@@ -390,24 +392,25 @@ impl BatchBuilder {
     fn create_remove_batches(&mut self) -> Vec<BatchOperation> {
         let mut batches = Vec::new();
         let mut current_batch = Vec::new();
-        
+
         for triple in self.remove_buffer.drain(..) {
             current_batch.push(triple);
             if current_batch.len() >= self.config.max_batch_size {
                 batches.push(BatchOperation::Remove(std::mem::take(&mut current_batch)));
             }
         }
-        
+
         if !current_batch.is_empty() {
             batches.push(BatchOperation::Remove(current_batch));
         }
-        
+
         batches
     }
 
     /// Create query batches
     fn create_query_batches(&mut self) -> Vec<BatchOperation> {
-        self.query_buffer.drain(..)
+        self.query_buffer
+            .drain(..)
             .map(|(s, p, o)| BatchOperation::Query {
                 subject: s,
                 predicate: p,
@@ -418,7 +421,8 @@ impl BatchBuilder {
 
     /// Create transform batches
     fn create_transform_batches(&mut self) -> Vec<BatchOperation> {
-        self.transform_buffer.drain(..)
+        self.transform_buffer
+            .drain(..)
             .map(BatchOperation::Transform)
             .collect()
     }
@@ -428,12 +432,12 @@ impl BatchBuilder {
         // This is a simplified implementation
         // In a real scenario, you might want to interleave operations more intelligently
         let mut operations = Vec::new();
-        
+
         operations.extend(self.create_insert_batches());
         operations.extend(self.create_remove_batches());
         operations.extend(self.create_query_batches());
         operations.extend(self.create_transform_batches());
-        
+
         operations
     }
 
@@ -479,16 +483,16 @@ mod tests {
             auto_flush: false,
             ..Default::default()
         };
-        
+
         let mut builder = BatchBuilder::new(config);
-        
+
         // Add operations
         for i in 0..25 {
             builder.insert(create_test_triple(i)).unwrap();
         }
-        
+
         assert_eq!(builder.pending_operations(), 25);
-        
+
         // Flush and check batches
         let batches = builder.flush().unwrap();
         assert_eq!(batches.len(), 3); // 10 + 10 + 5
@@ -502,15 +506,15 @@ mod tests {
             auto_flush: false,
             ..Default::default()
         };
-        
+
         let mut builder = BatchBuilder::new(config);
-        
+
         // Add duplicate triples
         let triple = create_test_triple(1);
         for _ in 0..5 {
             builder.insert(triple.clone()).unwrap();
         }
-        
+
         assert_eq!(builder.pending_operations(), 1);
         assert_eq!(builder.stats().deduplicated_operations, 4);
     }
@@ -522,14 +526,14 @@ mod tests {
             auto_flush: false,
             ..Default::default()
         };
-        
+
         let mut builder = BatchBuilder::new(config);
-        
+
         // Add insert then remove same triple
         let triple = create_test_triple(1);
         builder.insert(triple.clone()).unwrap();
         builder.remove(triple).unwrap();
-        
+
         // After merge, both should be eliminated
         let batches = builder.flush().unwrap();
         assert_eq!(batches.len(), 0);
@@ -543,20 +547,20 @@ mod tests {
             auto_flush: true,
             ..Default::default()
         };
-        
+
         let flushed_batches = Arc::new(Mutex::new(Vec::new()));
         let flushed_clone = flushed_batches.clone();
-        
+
         let mut builder = BatchBuilder::new(config);
         builder.on_flush(move |batches| {
             flushed_clone.lock().extend(batches);
         });
-        
+
         // Add operations that trigger auto-flush
         for i in 0..12 {
             builder.insert(create_test_triple(i)).unwrap();
         }
-        
+
         // Should have auto-flushed twice
         assert_eq!(flushed_batches.lock().len(), 2);
         assert_eq!(builder.pending_operations(), 2); // 12 % 5
@@ -569,16 +573,16 @@ mod tests {
             auto_flush: false,
             ..Default::default()
         };
-        
+
         let mut builder = BatchBuilder::new(config);
-        
+
         // Add different operation types
         builder.insert(create_test_triple(1)).unwrap();
         builder.remove(create_test_triple(2)).unwrap();
         builder.query(None, None, None).unwrap();
-        
+
         let batches = builder.flush().unwrap();
-        
+
         // Should have 3 batches (one per type)
         assert_eq!(batches.len(), 3);
     }
@@ -590,9 +594,9 @@ mod tests {
             auto_flush: true,
             ..Default::default()
         };
-        
+
         let mut builder = BatchBuilder::new(config);
-        
+
         // Add operations until memory limit
         let mut added = 0;
         for i in 0..100 {
@@ -603,7 +607,7 @@ mod tests {
                 break;
             }
         }
-        
+
         // Should have flushed before adding all 100
         assert!(added < 100);
         assert_eq!(builder.stats().batches_created, 1);

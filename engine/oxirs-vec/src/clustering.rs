@@ -7,12 +7,12 @@
 //! - Spectral clustering
 //! - Community detection for graph clustering
 
-use crate::{Vector, similarity::SimilarityMetric};
+use crate::{similarity::SimilarityMetric, Vector};
 use anyhow::{anyhow, Result};
+use rand::seq::SliceRandom;
+use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
-use rand::{Rng, SeedableRng};
-use rand::seq::SliceRandom;
 
 /// Clustering algorithm types
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -150,10 +150,7 @@ impl ClusteringEngine {
     }
 
     /// Cluster a set of resources with their embeddings
-    pub fn cluster(
-        &self,
-        resources: &[(String, Vector)],
-    ) -> Result<ClusteringResult> {
+    pub fn cluster(&self, resources: &[(String, Vector)]) -> Result<ClusteringResult> {
         if resources.is_empty() {
             return Ok(ClusteringResult {
                 clusters: Vec::new(),
@@ -178,7 +175,9 @@ impl ClusteringEngine {
     fn kmeans_clustering(&self, resources: &[(String, Vector)]) -> Result<ClusteringResult> {
         let k = self.config.num_clusters.unwrap_or(3);
         if k >= resources.len() {
-            return Err(anyhow!("Number of clusters must be less than number of resources"));
+            return Err(anyhow!(
+                "Number of clusters must be less than number of resources"
+            ));
         }
 
         let mut rng = if let Some(seed) = self.config.random_seed {
@@ -230,7 +229,10 @@ impl ClusteringEngine {
             prev_assignments = assignments.clone();
 
             if iteration > 0 && iteration % 10 == 0 {
-                println!("K-means iteration {}/{}", iteration, self.config.max_iterations);
+                println!(
+                    "K-means iteration {}/{}",
+                    iteration, self.config.max_iterations
+                );
             }
         }
 
@@ -253,7 +255,7 @@ impl ClusteringEngine {
                     .collect();
 
                 let stats = self.compute_cluster_stats(&cluster_vectors)?;
-                
+
                 clusters.push(Cluster {
                     id: cluster_id,
                     members,
@@ -291,7 +293,7 @@ impl ClusteringEngine {
             visited[i] = true;
 
             let neighbors = self.find_neighbors(resources, i, eps)?;
-            
+
             if neighbors.len() < min_pts {
                 noise_points.push(resources[i].0.clone());
             } else {
@@ -301,7 +303,7 @@ impl ClusteringEngine {
 
                 while let Some(point_idx) = cluster_queue.pop_front() {
                     let point_neighbors = self.find_neighbors(resources, point_idx, eps)?;
-                    
+
                     if point_neighbors.len() >= min_pts {
                         for &neighbor_idx in &point_neighbors {
                             if !visited[neighbor_idx] {
@@ -366,23 +368,28 @@ impl ClusteringEngine {
     /// Hierarchical clustering implementation (agglomerative)
     fn hierarchical_clustering(&self, resources: &[(String, Vector)]) -> Result<ClusteringResult> {
         let target_clusters = self.config.num_clusters.unwrap_or(3);
-        
+
         // Initialize each point as its own cluster
         let mut clusters: Vec<Vec<usize>> = (0..resources.len()).map(|i| vec![i]).collect();
-        
+
         // Compute initial distance matrix
         let mut distance_matrix = self.compute_distance_matrix(resources)?;
-        
+
         // Merge clusters until we reach the target number
         while clusters.len() > target_clusters {
             let (min_i, min_j) = self.find_closest_clusters(&clusters, &distance_matrix)?;
-            
+
             // Merge clusters
             let cluster_j = clusters.remove(min_j.max(min_i));
             clusters[min_i.min(min_j)].extend(cluster_j);
-            
+
             // Update distance matrix
-            self.update_distance_matrix(&mut distance_matrix, &clusters, min_i.min(min_j), resources)?;
+            self.update_distance_matrix(
+                &mut distance_matrix,
+                &clusters,
+                min_i.min(min_j),
+                resources,
+            )?;
         }
 
         // Build final cluster results
@@ -436,7 +443,9 @@ impl ClusteringEngine {
     fn community_detection(&self, resources: &[(String, Vector)]) -> Result<ClusteringResult> {
         // For now, fall back to similarity clustering
         // TODO: Implement graph-based community detection algorithms like Louvain
-        println!("Community detection not yet fully implemented, falling back to similarity clustering");
+        println!(
+            "Community detection not yet fully implemented, falling back to similarity clustering"
+        );
         self.similarity_clustering(resources)
     }
 
@@ -516,7 +525,7 @@ impl ClusteringEngine {
         rng: &mut impl Rng,
     ) -> Result<Vec<Vector>> {
         let mut centroids = Vec::new();
-        
+
         // Choose first centroid randomly
         let first_idx = rng.gen_range(0..resources.len());
         centroids.push(resources[first_idx].1.clone());
@@ -529,7 +538,10 @@ impl ClusteringEngine {
             for (_, vector) in resources {
                 let min_dist_sq = centroids
                     .iter()
-                    .map(|centroid| self.calculate_distance(vector, centroid).unwrap_or(f32::INFINITY))
+                    .map(|centroid| {
+                        self.calculate_distance(vector, centroid)
+                            .unwrap_or(f32::INFINITY)
+                    })
                     .fold(f32::INFINITY, f32::min)
                     .powi(2);
                 distances.push(min_dist_sq);
@@ -538,7 +550,7 @@ impl ClusteringEngine {
 
             let target = rng.gen::<f32>() * total_distance;
             let mut cumulative = 0.0;
-            
+
             for (i, &dist) in distances.iter().enumerate() {
                 cumulative += dist;
                 if cumulative >= target {
@@ -568,17 +580,22 @@ impl ClusteringEngine {
             SimilarityMetric::Euclidean => {
                 let dist = v1.euclidean_distance(v2)?;
                 Ok(1.0 / (1.0 + dist))
-            },
+            }
             SimilarityMetric::Manhattan => {
                 let dist = v1.manhattan_distance(v2)?;
                 Ok(1.0 / (1.0 + dist))
-            },
+            }
             _ => v1.cosine_similarity(v2), // Default to cosine
         }
     }
 
     /// Find neighbors within distance eps
-    fn find_neighbors(&self, resources: &[(String, Vector)], point_idx: usize, eps: f32) -> Result<Vec<usize>> {
+    fn find_neighbors(
+        &self,
+        resources: &[(String, Vector)],
+        point_idx: usize,
+        eps: f32,
+    ) -> Result<Vec<usize>> {
         let mut neighbors = Vec::new();
         let point = &resources[point_idx].1;
 
@@ -652,7 +669,7 @@ impl ClusteringEngine {
             size,
             avg_intra_similarity,
             density: avg_intra_similarity, // Simplified density measure
-            silhouette_score: 0.0, // TODO: Implement proper silhouette calculation
+            silhouette_score: 0.0,         // TODO: Implement proper silhouette calculation
         })
     }
 
@@ -695,17 +712,24 @@ impl ClusteringEngine {
     }
 
     /// Calculate distance between clusters based on linkage criterion
-    fn cluster_distance(&self, cluster1: &[usize], cluster2: &[usize], distance_matrix: &[Vec<f32>]) -> f32 {
+    fn cluster_distance(
+        &self,
+        cluster1: &[usize],
+        cluster2: &[usize],
+        distance_matrix: &[Vec<f32>],
+    ) -> f32 {
         match self.config.linkage {
             LinkageCriterion::Single => {
                 // Minimum distance
-                cluster1.iter()
+                cluster1
+                    .iter()
                     .flat_map(|&i| cluster2.iter().map(move |&j| distance_matrix[i][j]))
                     .fold(f32::INFINITY, f32::min)
             }
             LinkageCriterion::Complete => {
                 // Maximum distance
-                cluster1.iter()
+                cluster1
+                    .iter()
                     .flat_map(|&i| cluster2.iter().map(move |&j| distance_matrix[i][j]))
                     .fold(0.0, f32::max)
             }
@@ -719,7 +743,11 @@ impl ClusteringEngine {
                         count += 1;
                     }
                 }
-                if count > 0 { total / count as f32 } else { 0.0 }
+                if count > 0 {
+                    total / count as f32
+                } else {
+                    0.0
+                }
             }
             LinkageCriterion::Ward => {
                 // Simplified Ward linkage (should consider cluster variance)
@@ -754,10 +782,14 @@ impl ClusteringEngine {
 
         for cluster in clusters {
             if cluster.members.len() > 1 {
-                let cluster_vectors: Vec<&Vector> = cluster.members
+                let cluster_vectors: Vec<&Vector> = cluster
+                    .members
                     .iter()
                     .filter_map(|member| {
-                        resources.iter().find(|(id, _)| id == member).map(|(_, v)| v)
+                        resources
+                            .iter()
+                            .find(|(id, _)| id == member)
+                            .map(|(_, v)| v)
                     })
                     .collect();
 
@@ -778,7 +810,7 @@ impl ClusteringEngine {
 
         Ok(ClusteringQualityMetrics {
             silhouette_score,
-            davies_bouldin_index: 0.0, // TODO: Implement
+            davies_bouldin_index: 0.0,    // TODO: Implement
             calinski_harabasz_index: 0.0, // TODO: Implement
             within_cluster_ss,
             between_cluster_ss: 0.0, // TODO: Implement

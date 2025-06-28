@@ -7,9 +7,9 @@
 //! - Reliability: 99.99% delivery success rate
 //! - Scalability: Linear scaling to 1000+ partitions
 
-use oxirs_stream::*;
 use anyhow::Result;
 use chrono::Utc;
+use oxirs_stream::*;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -144,7 +144,7 @@ fn create_performance_stream_config(backend: StreamBackend) -> StreamConfig {
     StreamConfig {
         backend,
         topic: format!("perf-test-{}", Uuid::new_v4()),
-        batch_size: 100, // Large batches for throughput
+        batch_size: 100,       // Large batches for throughput
         flush_interval_ms: 10, // Fast flushing for low latency
         max_connections: 20,
         connection_timeout: Duration::from_secs(5),
@@ -213,15 +213,24 @@ mod throughput_tests {
         println!("  Total events sent: {}", metrics.total_events_sent);
         println!("  Total events received: {}", metrics.total_events_received);
         println!("  Success rate: {:.4}%", metrics.success_rate() * 100.0);
-        println!("  Average throughput: {:.0} events/sec", metrics.average_throughput());
-        
+        println!(
+            "  Average throughput: {:.0} events/sec",
+            metrics.average_throughput()
+        );
+
         if let Some(p99) = metrics.latency_p99() {
             println!("  P99 latency: {:?}", p99);
         }
 
         // Verify performance targets
-        assert!(metrics.success_rate() >= 0.99, "Success rate should be >= 99%");
-        assert!(metrics.average_throughput() >= 5_000.0, "Throughput should be >= 5K events/sec");
+        assert!(
+            metrics.success_rate() >= 0.99,
+            "Success rate should be >= 99%"
+        );
+        assert!(
+            metrics.average_throughput() >= 5_000.0,
+            "Throughput should be >= 5K events/sec"
+        );
 
         Ok(())
     }
@@ -233,7 +242,7 @@ mod throughput_tests {
             brokers: vec!["localhost:9092".to_string()],
             group_id: "perf-test-group".to_string(),
         });
-        
+
         let test_config = PerformanceTestConfig {
             event_count: 100_000,
             concurrent_producers: 10,
@@ -247,12 +256,21 @@ mod throughput_tests {
 
         println!("Kafka Backend Throughput Test Results:");
         println!("  Total events sent: {}", metrics.total_events_sent);
-        println!("  Average throughput: {:.0} events/sec", metrics.average_throughput());
+        println!(
+            "  Average throughput: {:.0} events/sec",
+            metrics.average_throughput()
+        );
         println!("  Success rate: {:.4}%", metrics.success_rate() * 100.0);
 
         // Kafka should handle high throughput
-        assert!(metrics.average_throughput() >= 25_000.0, "Kafka throughput should be >= 25K events/sec");
-        assert!(metrics.success_rate() >= 0.995, "Kafka success rate should be >= 99.5%");
+        assert!(
+            metrics.average_throughput() >= 25_000.0,
+            "Kafka throughput should be >= 25K events/sec"
+        );
+        assert!(
+            metrics.success_rate() >= 0.995,
+            "Kafka success rate should be >= 99.5%"
+        );
 
         Ok(())
     }
@@ -293,7 +311,8 @@ mod throughput_tests {
                 }
 
                 let producer_duration = producer_start.elapsed();
-                let producer_throughput = events_per_producer as f64 / producer_duration.as_secs_f64();
+                let producer_throughput =
+                    events_per_producer as f64 / producer_duration.as_secs_f64();
 
                 {
                     let mut m = metrics.lock().unwrap();
@@ -319,7 +338,8 @@ mod throughput_tests {
                 let consumer_start = Instant::now();
 
                 while consumer_start.elapsed() < test_duration {
-                    if let Ok(Some(_)) = timeout(Duration::from_millis(100), stream.consume()).await {
+                    if let Ok(Some(_)) = timeout(Duration::from_millis(100), stream.consume()).await
+                    {
                         let mut m = metrics.lock().unwrap();
                         m.total_events_received += 1;
                     }
@@ -375,7 +395,7 @@ mod latency_tests {
 
         for i in 0..test_count {
             let start = Instant::now();
-            
+
             let event = StreamEvent::TripleAdded {
                 subject: format!("http://latency.test/subject_{}", i),
                 predicate: "http://latency.test/predicate".to_string(),
@@ -392,7 +412,10 @@ mod latency_tests {
                     properties: {
                         let mut props = HashMap::new();
                         props.insert("test_index".to_string(), i.to_string());
-                        props.insert("start_time_nanos".to_string(), start.elapsed().as_nanos().to_string());
+                        props.insert(
+                            "start_time_nanos".to_string(),
+                            start.elapsed().as_nanos().to_string(),
+                        );
                         props
                     },
                     checksum: None,
@@ -432,8 +455,14 @@ mod latency_tests {
             println!("  Max: {:?}", max);
 
             // Verify latency targets (relaxed for memory backend)
-            assert!(p99 < Duration::from_millis(100), "P99 latency should be under 100ms for memory backend");
-            assert!(p95 < Duration::from_millis(50), "P95 latency should be under 50ms for memory backend");
+            assert!(
+                p99 < Duration::from_millis(100),
+                "P99 latency should be under 100ms for memory backend"
+            );
+            assert!(
+                p95 < Duration::from_millis(50),
+                "P95 latency should be under 50ms for memory backend"
+            );
         }
 
         Ok(())
@@ -458,16 +487,16 @@ mod latency_tests {
 
         let load_generator = tokio::spawn(async move {
             let mut load_stream = Stream::new(background_config).await?;
-            
+
             for i in 0..10_000 {
                 let event = create_performance_test_events(1, i)[0].clone();
                 let _ = load_stream.publish(event).await;
-                
+
                 if i % 100 == 0 {
                     tokio::time::sleep(Duration::from_millis(1)).await;
                 }
             }
-            
+
             load_stream.close().await?;
             Ok::<(), anyhow::Error>(())
         });
@@ -480,7 +509,7 @@ mod latency_tests {
 
         for i in 0..latency_test_count {
             let start = Instant::now();
-            
+
             let event = StreamEvent::TripleAdded {
                 subject: format!("http://kafka.latency.test/subject_{}", i),
                 predicate: "http://kafka.latency.test/predicate".to_string(),
@@ -528,8 +557,14 @@ mod latency_tests {
             println!("  P99: {:?}", p99);
 
             // Kafka under load should still maintain reasonable latencies
-            assert!(p99 < Duration::from_millis(1000), "P99 latency should be under 1s even under load");
-            assert!(p95 < Duration::from_millis(500), "P95 latency should be under 500ms under load");
+            assert!(
+                p99 < Duration::from_millis(1000),
+                "P99 latency should be under 1s even under load"
+            );
+            assert!(
+                p95 < Duration::from_millis(500),
+                "P95 latency should be under 500ms under load"
+            );
         }
 
         Ok(())
@@ -543,7 +578,7 @@ mod scalability_tests {
     #[tokio::test]
     async fn test_concurrent_producers_scaling() -> Result<()> {
         let base_config = create_performance_stream_config(StreamBackend::Memory);
-        
+
         // Test with increasing numbers of concurrent producers
         let producer_counts = vec![1, 2, 5, 10, 20];
         let mut results = Vec::new();
@@ -558,10 +593,11 @@ mod scalability_tests {
             };
 
             let metrics = run_throughput_test(base_config.clone(), test_config).await?;
-            
-            println!("Producers: {}, Throughput: {:.0} events/sec, Success: {:.2}%", 
-                producer_count, 
-                metrics.average_throughput(), 
+
+            println!(
+                "Producers: {}, Throughput: {:.0} events/sec, Success: {:.2}%",
+                producer_count,
+                metrics.average_throughput(),
                 metrics.success_rate() * 100.0
             );
 
@@ -572,12 +608,16 @@ mod scalability_tests {
         let single_producer_throughput = results[0].1;
         let max_producer_throughput = results.last().unwrap().1;
 
-        assert!(max_producer_throughput > single_producer_throughput, 
-            "Throughput should increase with more producers");
+        assert!(
+            max_producer_throughput > single_producer_throughput,
+            "Throughput should increase with more producers"
+        );
 
         // Should at least get 2x improvement with 20x producers (memory backend limitations)
-        assert!(max_producer_throughput >= single_producer_throughput * 2.0,
-            "Should see significant throughput improvement with many producers");
+        assert!(
+            max_producer_throughput >= single_producer_throughput * 2.0,
+            "Should see significant throughput improvement with many producers"
+        );
 
         Ok(())
     }
@@ -585,7 +625,7 @@ mod scalability_tests {
     #[tokio::test]
     async fn test_message_size_scaling() -> Result<()> {
         let config = create_performance_stream_config(StreamBackend::Memory);
-        
+
         // Test with different message sizes
         let message_sizes = vec![100, 1_000, 10_000, 50_000]; // bytes
         let mut results = Vec::new();
@@ -631,8 +671,10 @@ mod scalability_tests {
             let throughput = received as f64 / duration.as_secs_f64();
             let bytes_per_second = (received * size) as f64 / duration.as_secs_f64();
 
-            println!("Message size: {} bytes, Throughput: {:.0} msg/sec, {:.0} bytes/sec", 
-                size, throughput, bytes_per_second);
+            println!(
+                "Message size: {} bytes, Throughput: {:.0} msg/sec, {:.0} bytes/sec",
+                size, throughput, bytes_per_second
+            );
 
             results.push((size, throughput, bytes_per_second));
 
@@ -642,7 +684,11 @@ mod scalability_tests {
 
         // Verify that we can handle different message sizes
         for (size, throughput, _) in &results {
-            assert!(*throughput > 0.0, "Should handle messages of size {} bytes", size);
+            assert!(
+                *throughput > 0.0,
+                "Should handle messages of size {} bytes",
+                size
+            );
         }
 
         Ok(())
@@ -658,7 +704,7 @@ mod scalability_tests {
         for &partitions in &partition_counts {
             // This would require creating Kafka topics with different partition counts
             let topic_name = format!("partition-scale-test-{}", partitions);
-            
+
             let config = create_performance_stream_config(StreamBackend::Kafka {
                 brokers: vec!["localhost:9092".to_string()],
                 group_id: format!("partition-test-{}", partitions),
@@ -673,9 +719,12 @@ mod scalability_tests {
             };
 
             let metrics = run_throughput_test(config, test_config).await?;
-            
-            println!("Partitions: {}, Throughput: {:.0} events/sec", 
-                partitions, metrics.average_throughput());
+
+            println!(
+                "Partitions: {}, Throughput: {:.0} events/sec",
+                partitions,
+                metrics.average_throughput()
+            );
 
             results.push((partitions, metrics.average_throughput()));
         }
@@ -684,8 +733,10 @@ mod scalability_tests {
         let single_partition_throughput = results[0].1;
         let max_partition_throughput = results.last().unwrap().1;
 
-        assert!(max_partition_throughput > single_partition_throughput,
-            "Throughput should increase with more partitions");
+        assert!(
+            max_partition_throughput > single_partition_throughput,
+            "Throughput should increase with more partitions"
+        );
 
         Ok(())
     }
@@ -849,7 +900,7 @@ mod reliability_tests {
         // Rapidly send events to create backpressure
         for i in 0..1000 {
             let event = create_performance_test_events(1, i)[0].clone();
-            
+
             match timeout(Duration::from_millis(100), producer.publish(event)).await {
                 Ok(Ok(_)) => successful_sends += 1,
                 Ok(Err(_)) => failed_sends += 1,
@@ -857,8 +908,12 @@ mod reliability_tests {
             }
 
             if i % 100 == 0 {
-                println!("Sent {} events, {} successful, {} failed", 
-                    i + 1, successful_sends, failed_sends);
+                println!(
+                    "Sent {} events, {} successful, {} failed",
+                    i + 1,
+                    successful_sends,
+                    failed_sends
+                );
             }
         }
 
@@ -879,7 +934,10 @@ mod reliability_tests {
         println!("  Received count: {}", received_count);
 
         // System should handle backpressure gracefully
-        assert!(successful_sends > 0, "Should send some events despite backpressure");
+        assert!(
+            successful_sends > 0,
+            "Should send some events despite backpressure"
+        );
         assert!(received_count > 0, "Should receive some events");
 
         producer.close().await?;
@@ -902,14 +960,14 @@ mod resource_usage_tests {
         // Create monitoring task
         let memory_monitor = tokio::spawn(async move {
             let mut samples = Vec::new();
-            
+
             for _ in 0..60 {
                 // In a real implementation, we'd use system APIs to get actual memory usage
                 let memory_usage = get_process_memory_usage();
                 samples.push(memory_usage);
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
-            
+
             samples
         });
 
@@ -917,7 +975,7 @@ mod resource_usage_tests {
         let events_per_batch = 1000;
         for batch in 0..100 {
             let events = create_performance_test_events(events_per_batch, batch);
-            
+
             for event in events {
                 producer.publish(event).await?;
             }
@@ -935,7 +993,7 @@ mod resource_usage_tests {
         }
 
         let memory_samples = memory_monitor.await?;
-        
+
         producer.close().await?;
         consumer.close().await?;
 
@@ -952,7 +1010,10 @@ mod resource_usage_tests {
 
             // Verify memory doesn't grow unbounded
             let memory_growth = max_memory - min_memory;
-            assert!(memory_growth < 500 * 1024 * 1024, "Memory growth should be under 500MB");
+            assert!(
+                memory_growth < 500 * 1024 * 1024,
+                "Memory growth should be under 500MB"
+            );
         }
 
         Ok(())

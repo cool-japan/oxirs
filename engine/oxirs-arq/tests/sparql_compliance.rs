@@ -3,11 +3,11 @@
 //! This module provides basic SPARQL compliance testing while we work
 //! towards full W3C test suite integration.
 
-use oxirs_arq::{
-    Algebra, BinaryOperator, Expression, Iri, Literal, QueryExecutor, Solution,
-    TriplePattern, Variable,
-};
 use oxirs_arq::algebra::Term;
+use oxirs_arq::{
+    Algebra, BinaryOperator, Expression, Iri, Literal, QueryExecutor, Solution, TriplePattern,
+    Variable,
+};
 use std::collections::HashMap;
 
 /// Mock dataset for testing
@@ -28,10 +28,7 @@ impl MockDataset {
 }
 
 impl oxirs_arq::Dataset for MockDataset {
-    fn find_triples(
-        &self,
-        pattern: &TriplePattern,
-    ) -> anyhow::Result<Vec<(Term, Term, Term)>> {
+    fn find_triples(&self, pattern: &TriplePattern) -> anyhow::Result<Vec<(Term, Term, Term)>> {
         let mut results = Vec::new();
 
         for (s, p, o) in &self.triples {
@@ -78,25 +75,33 @@ impl oxirs_arq::Dataset for MockDataset {
 
         Ok(results)
     }
-    
-    fn contains_triple(&self, subject: &Term, predicate: &Term, object: &Term) -> anyhow::Result<bool> {
-        Ok(self.triples.iter().any(|(s, p, o)| s == subject && p == predicate && o == object))
+
+    fn contains_triple(
+        &self,
+        subject: &Term,
+        predicate: &Term,
+        object: &Term,
+    ) -> anyhow::Result<bool> {
+        Ok(self
+            .triples
+            .iter()
+            .any(|(s, p, o)| s == subject && p == predicate && o == object))
     }
-    
+
     fn subjects(&self) -> anyhow::Result<Vec<Term>> {
         let mut subjects: Vec<Term> = self.triples.iter().map(|(s, _, _)| s.clone()).collect();
         subjects.sort();
         subjects.dedup();
         Ok(subjects)
     }
-    
+
     fn predicates(&self) -> anyhow::Result<Vec<Term>> {
         let mut predicates: Vec<Term> = self.triples.iter().map(|(_, p, _)| p.clone()).collect();
         predicates.sort();
         predicates.dedup();
         Ok(predicates)
     }
-    
+
     fn objects(&self) -> anyhow::Result<Vec<Term>> {
         let mut objects: Vec<Term> = self.triples.iter().map(|(_, _, o)| o.clone()).collect();
         objects.sort();
@@ -205,9 +210,7 @@ mod basic_tests {
                 right: Box::new(Expression::Literal(Literal {
                     value: "25".to_string(),
                     language: None,
-                    datatype: Some(Iri(
-                        "http://www.w3.org/2001/XMLSchema#integer".to_string(),
-                    )),
+                    datatype: Some(Iri("http://www.w3.org/2001/XMLSchema#integer".to_string())),
                 })),
             },
         };
@@ -301,9 +304,7 @@ mod basic_tests {
                 object: Term::Literal(Literal {
                     value: "25".to_string(),
                     language: None,
-                    datatype: Some(Iri(
-                        "http://www.w3.org/2001/XMLSchema#integer".to_string(),
-                    )),
+                    datatype: Some(Iri("http://www.w3.org/2001/XMLSchema#integer".to_string())),
                 }),
             }])),
         };
@@ -481,7 +482,7 @@ mod aggregation_tests {
         };
 
         let (solution, _stats) = executor.execute(&algebra, &dataset).unwrap();
-        
+
         println!("Solution length: {}", solution.len());
         for (i, binding) in solution.iter().enumerate() {
             println!("Binding {}: {:?}", i, binding);

@@ -8,8 +8,14 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use oxirs_core::{model::{Triple, NamedNode}, Store};
-use oxirs_shacl::{Shape, ShapeId, ValidationConfig, ValidationReport, Constraint, Severity, PropertyPath, ConstraintComponentId, constraints::*};
+use oxirs_core::{
+    model::{NamedNode, Triple},
+    Store,
+};
+use oxirs_shacl::{
+    constraints::*, Constraint, ConstraintComponentId, PropertyPath, Severity, Shape, ShapeId,
+    ValidationConfig, ValidationReport,
+};
 
 use crate::{
     analytics::AnalyticsEngine,
@@ -19,7 +25,7 @@ use crate::{
         gnn::GraphNeuralNetwork, GraphData, ModelEnsemble, ShapeLearningModel, ShapeTrainingData,
         VotingStrategy,
     },
-    neural_patterns::{NeuralPatternRecognizer, NeuralPattern},
+    neural_patterns::{NeuralPattern, NeuralPatternRecognizer},
     optimization::OptimizationEngine,
     patterns::{Pattern, PatternAnalyzer},
     prediction::ValidationPredictor,
@@ -389,26 +395,42 @@ impl AiOrchestrator {
         let discovered_patterns = self.discover_comprehensive_patterns(store, graph_name)?;
         let neural_patterns = self.discover_neural_patterns(store, graph_name)?;
         let pattern_discovery_time = pattern_start.elapsed();
-        tracing::info!("Discovered {} traditional patterns and {} neural patterns", 
-                      discovered_patterns.len(), neural_patterns.len());
+        tracing::info!(
+            "Discovered {} traditional patterns and {} neural patterns",
+            discovered_patterns.len(),
+            neural_patterns.len()
+        );
 
         // Stage 2: Multi-Model Shape Learning with Adaptive Coordination
         tracing::info!("Stage 2: Multi-model shape learning with adaptive coordination");
         let model_start = Instant::now();
         let learned_shapes = if self.config.enable_ensemble_learning {
-            self.ensemble_shape_learning_adaptive(store, &discovered_patterns, &neural_patterns, graph_name)?
+            self.ensemble_shape_learning_adaptive(
+                store,
+                &discovered_patterns,
+                &neural_patterns,
+                graph_name,
+            )?
         } else {
             self.traditional_shape_learning(store, &discovered_patterns, graph_name)?
         };
         let model_coordination_time = model_start.elapsed();
-        tracing::info!("Generated {} shapes with ensemble coordination", learned_shapes.len());
+        tracing::info!(
+            "Generated {} shapes with ensemble coordination",
+            learned_shapes.len()
+        );
 
         // Stage 3: Quality Assessment and Optimization with AI Insights
         tracing::info!("Stage 3: Quality assessment and optimization with AI insights");
         let quality_start = Instant::now();
         let quality_analysis = self.comprehensive_quality_assessment(store, &learned_shapes)?;
         let optimized_shapes = if self.config.enable_quality_optimization {
-            self.quality_driven_optimization_adaptive(store, learned_shapes, &quality_analysis, &neural_patterns)?
+            self.quality_driven_optimization_adaptive(
+                store,
+                learned_shapes,
+                &quality_analysis,
+                &neural_patterns,
+            )?
         } else {
             learned_shapes
         };
@@ -429,20 +451,24 @@ impl AiOrchestrator {
 
         // Stage 5: Optimization Recommendations
         tracing::info!("Stage 5: Generating optimization recommendations");
-        let optimization_recommendations =
-            self.generate_optimization_recommendations(store, &optimized_shapes, &quality_analysis)?;
+        let optimization_recommendations = self.generate_optimization_recommendations(
+            store,
+            &optimized_shapes,
+            &quality_analysis,
+        )?;
 
         // Stage 6: Adaptive Learning and Performance Analysis
         tracing::info!("Stage 6: Adaptive learning analysis and performance monitoring");
         let neural_processing_time = std::time::Duration::from_millis(100); // Placeholder - would be actual neural processing time
         let learning_duration = start_time.elapsed();
-        
+
         // Generate ensemble confidence scores
         let ensemble_confidence = self.calculate_ensemble_confidence(&optimized_shapes)?;
-        
+
         // Generate adaptive learning insights
-        let adaptive_insights = self.generate_adaptive_insights(&optimized_shapes, &quality_analysis)?;
-        
+        let adaptive_insights =
+            self.generate_adaptive_insights(&optimized_shapes, &quality_analysis)?;
+
         // Create comprehensive performance metrics
         let performance_metrics = OrchestrationMetrics {
             total_execution_time: learning_duration,
@@ -450,12 +476,14 @@ impl AiOrchestrator {
             pattern_discovery_time,
             neural_processing_time,
             quality_assessment_time,
-            ensemble_agreement_score: ensemble_confidence.values().sum::<f64>() / ensemble_confidence.len().max(1) as f64,
-            throughput_shapes_per_second: optimized_shapes.len() as f64 / learning_duration.as_secs_f64(),
+            ensemble_agreement_score: ensemble_confidence.values().sum::<f64>()
+                / ensemble_confidence.len().max(1) as f64,
+            throughput_shapes_per_second: optimized_shapes.len() as f64
+                / learning_duration.as_secs_f64(),
             memory_usage_mb: self.estimate_memory_usage()?,
             cpu_utilization_percent: self.estimate_cpu_utilization()?,
         };
-        
+
         // Update statistics
         self.stats.total_orchestrations += 1;
         self.stats.shapes_generated += optimized_shapes.len();
@@ -463,10 +491,7 @@ impl AiOrchestrator {
         self.stats.total_orchestration_time += learning_duration;
 
         // Calculate average confidence
-        let avg_confidence = optimized_shapes
-            .iter()
-            .map(|s| s.confidence)
-            .sum::<f64>()
+        let avg_confidence = optimized_shapes.iter().map(|s| s.confidence).sum::<f64>()
             / optimized_shapes.len().max(1) as f64;
         self.stats.average_shape_confidence = avg_confidence;
 
@@ -514,17 +539,24 @@ impl AiOrchestrator {
         graph_name: Option<&str>,
     ) -> Result<Vec<NeuralPattern>> {
         tracing::debug!("Discovering neural patterns using deep learning");
-        
-        // Simplified implementation - would analyze RDF store for neural patterns  
+
+        // Simplified implementation - would analyze RDF store for neural patterns
         let patterns = self
             .pattern_analyzer
             .lock()
-            .map_err(|e| ShaclAiError::PatternRecognition(format!("Failed to lock pattern analyzer: {}", e)))?
+            .map_err(|e| {
+                ShaclAiError::PatternRecognition(format!("Failed to lock pattern analyzer: {}", e))
+            })?
             .analyze_graph_patterns(store, graph_name)?;
-            
+
         self.neural_pattern_recognizer
             .lock()
-            .map_err(|e| ShaclAiError::ShapeLearning(format!("Failed to lock neural pattern recognizer: {}", e)))?
+            .map_err(|e| {
+                ShaclAiError::ShapeLearning(format!(
+                    "Failed to lock neural pattern recognizer: {}",
+                    e
+                ))
+            })?
             .discover_neural_patterns(store, &patterns)
     }
 
@@ -537,16 +569,16 @@ impl AiOrchestrator {
         graph_name: Option<&str>,
     ) -> Result<Vec<ConfidentShape>> {
         tracing::debug!("Performing adaptive ensemble shape learning");
-        
+
         // Traditional ensemble learning
         let traditional_shapes = self.ensemble_shape_learning(store, patterns, graph_name)?;
-        
+
         // Neural pattern-based shapes
         let neural_shapes = self.generate_shapes_from_neural_patterns(neural_patterns, store)?;
-        
+
         // Combine and optimize using adaptive weighting
         let combined_shapes = self.adaptive_shape_combination(traditional_shapes, neural_shapes)?;
-        
+
         Ok(combined_shapes)
     }
 
@@ -559,37 +591,65 @@ impl AiOrchestrator {
         neural_patterns: &[NeuralPattern],
     ) -> Result<Vec<ConfidentShape>> {
         tracing::debug!("Performing quality-driven optimization with neural insights");
-        
+
         // Traditional optimization
         let optimized_shapes = self.quality_driven_optimization(store, shapes, quality_analysis)?;
-        
+
         // Apply neural pattern insights for further optimization
-        let neural_optimized = self.apply_neural_optimization_insights(&optimized_shapes, neural_patterns)?;
-        
+        let neural_optimized =
+            self.apply_neural_optimization_insights(&optimized_shapes, neural_patterns)?;
+
         Ok(neural_optimized)
     }
 
     /// Calculate ensemble confidence scores for all models
-    fn calculate_ensemble_confidence(&self, shapes: &[ConfidentShape]) -> Result<HashMap<String, f64>> {
+    fn calculate_ensemble_confidence(
+        &self,
+        shapes: &[ConfidentShape],
+    ) -> Result<HashMap<String, f64>> {
         let mut confidence_scores = HashMap::new();
-        
+
         // Calculate confidence for each model type
-        confidence_scores.insert("GraphNeuralNetwork".to_string(), 
-                               shapes.iter().filter(|s| s.generation_method.contains("GNN"))
-                                     .map(|s| s.confidence).sum::<f64>() / shapes.len().max(1) as f64);
-        
-        confidence_scores.insert("DecisionTree".to_string(),
-                               shapes.iter().filter(|s| s.generation_method.contains("DecisionTree"))
-                                     .map(|s| s.confidence).sum::<f64>() / shapes.len().max(1) as f64);
-        
-        confidence_scores.insert("AssociationRules".to_string(),
-                               shapes.iter().filter(|s| s.generation_method.contains("AssociationRules"))
-                                     .map(|s| s.confidence).sum::<f64>() / shapes.len().max(1) as f64);
-        
-        confidence_scores.insert("NeuralPatterns".to_string(),
-                               shapes.iter().filter(|s| s.generation_method.contains("Neural"))
-                                     .map(|s| s.confidence).sum::<f64>() / shapes.len().max(1) as f64);
-        
+        confidence_scores.insert(
+            "GraphNeuralNetwork".to_string(),
+            shapes
+                .iter()
+                .filter(|s| s.generation_method.contains("GNN"))
+                .map(|s| s.confidence)
+                .sum::<f64>()
+                / shapes.len().max(1) as f64,
+        );
+
+        confidence_scores.insert(
+            "DecisionTree".to_string(),
+            shapes
+                .iter()
+                .filter(|s| s.generation_method.contains("DecisionTree"))
+                .map(|s| s.confidence)
+                .sum::<f64>()
+                / shapes.len().max(1) as f64,
+        );
+
+        confidence_scores.insert(
+            "AssociationRules".to_string(),
+            shapes
+                .iter()
+                .filter(|s| s.generation_method.contains("AssociationRules"))
+                .map(|s| s.confidence)
+                .sum::<f64>()
+                / shapes.len().max(1) as f64,
+        );
+
+        confidence_scores.insert(
+            "NeuralPatterns".to_string(),
+            shapes
+                .iter()
+                .filter(|s| s.generation_method.contains("Neural"))
+                .map(|s| s.confidence)
+                .sum::<f64>()
+                / shapes.len().max(1) as f64,
+        );
+
         Ok(confidence_scores)
     }
 
@@ -624,7 +684,7 @@ impl AiOrchestrator {
             optimization_effectiveness: HashMap::new(),
             resource_utilization_efficiency: 0.87,
         };
-        
+
         Ok(insights)
     }
 
@@ -652,7 +712,9 @@ impl AiOrchestrator {
         let graph_patterns = self
             .pattern_analyzer
             .lock()
-            .map_err(|e| ShaclAiError::PatternRecognition(format!("Failed to lock pattern analyzer: {}", e)))?
+            .map_err(|e| {
+                ShaclAiError::PatternRecognition(format!("Failed to lock pattern analyzer: {}", e))
+            })?
             .analyze_graph_patterns(store, graph_name)?;
         all_patterns.extend(graph_patterns.clone());
 
@@ -661,14 +723,22 @@ impl AiOrchestrator {
         let neural_patterns = self
             .neural_pattern_recognizer
             .lock()
-            .map_err(|e| ShaclAiError::PatternRecognition(format!("Failed to lock neural pattern recognizer: {}", e)))?
+            .map_err(|e| {
+                ShaclAiError::PatternRecognition(format!(
+                    "Failed to lock neural pattern recognizer: {}",
+                    e
+                ))
+            })?
             .discover_neural_patterns(store, &graph_patterns)?;
 
         // Convert neural patterns to regular patterns for integration
         let converted_neural_patterns = self.convert_neural_to_regular_patterns(neural_patterns)?;
         all_patterns.extend(converted_neural_patterns);
 
-        tracing::info!("Discovered {} total patterns (including neural)", all_patterns.len());
+        tracing::info!(
+            "Discovered {} total patterns (including neural)",
+            all_patterns.len()
+        );
 
         // TODO: Add more pattern discovery methods
         // - Temporal patterns if temporal analysis is enabled
@@ -679,16 +749,25 @@ impl AiOrchestrator {
     }
 
     /// Convert neural patterns to regular patterns for integration
-    fn convert_neural_to_regular_patterns(&self, neural_patterns: Vec<NeuralPattern>) -> Result<Vec<Pattern>> {
+    fn convert_neural_to_regular_patterns(
+        &self,
+        neural_patterns: Vec<NeuralPattern>,
+    ) -> Result<Vec<Pattern>> {
         let mut regular_patterns = Vec::new();
 
         for neural_pattern in neural_patterns {
             // Convert neural pattern to appropriate regular pattern type based on semantic meaning
-            let pattern = if neural_pattern.semantic_meaning.contains("class") || neural_pattern.semantic_meaning.contains("structural") {
+            let pattern = if neural_pattern.semantic_meaning.contains("class")
+                || neural_pattern.semantic_meaning.contains("structural")
+            {
                 // Create a class usage pattern
-                let class_iri = oxirs_core::model::NamedNode::new("http://example.org/neurally_discovered_class")
-                    .map_err(|e| ShaclAiError::PatternRecognition(format!("Failed to create class IRI: {}", e)))?;
-                
+                let class_iri = oxirs_core::model::NamedNode::new(
+                    "http://example.org/neurally_discovered_class",
+                )
+                .map_err(|e| {
+                    ShaclAiError::PatternRecognition(format!("Failed to create class IRI: {}", e))
+                })?;
+
                 Pattern::ClassUsage {
                     class: class_iri,
                     instance_count: neural_pattern.evidence_count as u32,
@@ -696,11 +775,20 @@ impl AiOrchestrator {
                     confidence: neural_pattern.confidence,
                     pattern_type: crate::patterns::PatternType::Structural,
                 }
-            } else if neural_pattern.semantic_meaning.contains("usage") || neural_pattern.semantic_meaning.contains("property") {
+            } else if neural_pattern.semantic_meaning.contains("usage")
+                || neural_pattern.semantic_meaning.contains("property")
+            {
                 // Create a property usage pattern
-                let property_iri = oxirs_core::model::NamedNode::new("http://example.org/neurally_discovered_property")
-                    .map_err(|e| ShaclAiError::PatternRecognition(format!("Failed to create property IRI: {}", e)))?;
-                
+                let property_iri = oxirs_core::model::NamedNode::new(
+                    "http://example.org/neurally_discovered_property",
+                )
+                .map_err(|e| {
+                    ShaclAiError::PatternRecognition(format!(
+                        "Failed to create property IRI: {}",
+                        e
+                    ))
+                })?;
+
                 Pattern::PropertyUsage {
                     property: property_iri,
                     usage_count: neural_pattern.evidence_count as u32,
@@ -710,11 +798,23 @@ impl AiOrchestrator {
                 }
             } else {
                 // Default to hierarchy pattern for other cases
-                let class1_iri = oxirs_core::model::NamedNode::new("http://example.org/neural_subclass")
-                    .map_err(|e| ShaclAiError::PatternRecognition(format!("Failed to create subclass IRI: {}", e)))?;
-                let class2_iri = oxirs_core::model::NamedNode::new("http://example.org/neural_superclass")
-                    .map_err(|e| ShaclAiError::PatternRecognition(format!("Failed to create superclass IRI: {}", e)))?;
-                
+                let class1_iri =
+                    oxirs_core::model::NamedNode::new("http://example.org/neural_subclass")
+                        .map_err(|e| {
+                            ShaclAiError::PatternRecognition(format!(
+                                "Failed to create subclass IRI: {}",
+                                e
+                            ))
+                        })?;
+                let class2_iri =
+                    oxirs_core::model::NamedNode::new("http://example.org/neural_superclass")
+                        .map_err(|e| {
+                            ShaclAiError::PatternRecognition(format!(
+                                "Failed to create superclass IRI: {}",
+                                e
+                            ))
+                        })?;
+
                 Pattern::Hierarchy {
                     subclass: class1_iri,
                     superclass: class2_iri,
@@ -729,7 +829,10 @@ impl AiOrchestrator {
             regular_patterns.push(pattern);
         }
 
-        tracing::debug!("Converted {} neural patterns to regular patterns", regular_patterns.len());
+        tracing::debug!(
+            "Converted {} neural patterns to regular patterns",
+            regular_patterns.len()
+        );
         Ok(regular_patterns)
     }
 
@@ -749,7 +852,9 @@ impl AiOrchestrator {
         let ensemble_predictions = self
             .gnn_ensemble
             .lock()
-            .map_err(|e| ShaclAiError::ModelTraining(format!("Failed to lock GNN ensemble: {}", e)))?
+            .map_err(|e| {
+                ShaclAiError::ModelTraining(format!("Failed to lock GNN ensemble: {}", e))
+            })?
             .predict_ensemble(&graph_data)?;
 
         // Convert ML predictions to SHACL shapes
@@ -757,7 +862,7 @@ impl AiOrchestrator {
             if learned_shape.confidence >= self.config.min_shape_confidence {
                 // Create actual SHACL shape from learned representation
                 let shape = self.learned_shape_to_shacl(&learned_shape)?;
-                
+
                 confident_shapes.push(ConfidentShape {
                     shape,
                     confidence: learned_shape.confidence,
@@ -786,7 +891,9 @@ impl AiOrchestrator {
         let shapes = self
             .shape_learner
             .lock()
-            .map_err(|e| ShaclAiError::ShapeLearning(format!("Failed to lock shape learner: {}", e)))?
+            .map_err(|e| {
+                ShaclAiError::ShapeLearning(format!("Failed to lock shape learner: {}", e))
+            })?
             .learn_shapes_from_patterns(store, patterns, graph_name)?;
 
         let confident_shapes = shapes
@@ -895,11 +1002,13 @@ impl AiOrchestrator {
         shapes: &[ConfidentShape],
     ) -> Result<QualityAnalysis> {
         let shacl_shapes: Vec<_> = shapes.iter().map(|cs| cs.shape.clone()).collect();
-        
+
         let quality_report = self
             .quality_assessor
             .lock()
-            .map_err(|e| ShaclAiError::QualityAssessment(format!("Failed to lock quality assessor: {}", e)))?
+            .map_err(|e| {
+                ShaclAiError::QualityAssessment(format!("Failed to lock quality assessor: {}", e))
+            })?
             .assess_comprehensive_quality(store, &shacl_shapes)?;
 
         Ok(QualityAnalysis {
@@ -907,7 +1016,11 @@ impl AiOrchestrator {
             completeness_score: quality_report.completeness_score,
             consistency_score: quality_report.consistency_score,
             accuracy_score: quality_report.accuracy_score,
-            recommendations: quality_report.recommendations.iter().map(|r| r.description.clone()).collect(),
+            recommendations: quality_report
+                .recommendations
+                .iter()
+                .map(|r| r.description.clone())
+                .collect(),
         })
     }
 
@@ -920,11 +1033,13 @@ impl AiOrchestrator {
     ) -> Result<Vec<ConfidentShape>> {
         // Extract SHACL shapes for optimization
         let shacl_shapes: Vec<_> = shapes.iter().map(|cs| cs.shape.clone()).collect();
-        
+
         let optimized_shacl_shapes = self
             .optimization_engine
             .lock()
-            .map_err(|e| ShaclAiError::Optimization(format!("Failed to lock optimization engine: {}", e)))?
+            .map_err(|e| {
+                ShaclAiError::Optimization(format!("Failed to lock optimization engine: {}", e))
+            })?
             .optimize_shapes(&shacl_shapes, store)?;
 
         // Convert back to confident shapes with updated quality scores
@@ -949,18 +1064,31 @@ impl AiOrchestrator {
     ) -> Result<PredictiveInsights> {
         let shacl_shapes: Vec<_> = shapes.iter().map(|cs| cs.shape.clone()).collect();
         let validation_config = ValidationConfig::default();
-        
+
         let prediction = self
             .validation_predictor
             .lock()
-            .map_err(|e| ShaclAiError::ValidationPrediction(format!("Failed to lock validation predictor: {}", e)))?
+            .map_err(|e| {
+                ShaclAiError::ValidationPrediction(format!(
+                    "Failed to lock validation predictor: {}",
+                    e
+                ))
+            })?
             .predict_validation_outcome(store, &shacl_shapes, &validation_config)?;
 
         Ok(PredictiveInsights {
-            validation_performance_prediction: prediction.performance.estimated_duration.as_secs_f64(),
-            potential_issues: prediction.errors.predicted_errors.iter().map(|e| format!("{:?}", e.error_type)).collect(),
+            validation_performance_prediction: prediction
+                .performance
+                .estimated_duration
+                .as_secs_f64(),
+            potential_issues: prediction
+                .errors
+                .predicted_errors
+                .iter()
+                .map(|e| format!("{:?}", e.error_type))
+                .collect(),
             recommended_validation_strategy: "parallel".to_string(), // Simplified default
-            confidence_intervals: HashMap::new(), // Simplified
+            confidence_intervals: HashMap::new(),                    // Simplified
         })
     }
 
@@ -977,7 +1105,9 @@ impl AiOrchestrator {
         if quality_analysis.completeness_score < 0.8 {
             recommendations.push(OptimizationRecommendation {
                 recommendation_type: "completeness_improvement".to_string(),
-                description: "Add more comprehensive constraints to improve data completeness validation".to_string(),
+                description:
+                    "Add more comprehensive constraints to improve data completeness validation"
+                        .to_string(),
                 expected_improvement: (0.8 - quality_analysis.completeness_score) * 100.0,
                 implementation_effort: ImplementationEffort::Medium,
             });
@@ -996,7 +1126,9 @@ impl AiOrchestrator {
         if shapes.len() > 50 {
             recommendations.push(OptimizationRecommendation {
                 recommendation_type: "performance_optimization".to_string(),
-                description: "Consider consolidating similar shapes to improve validation performance".to_string(),
+                description:
+                    "Consider consolidating similar shapes to improve validation performance"
+                        .to_string(),
                 expected_improvement: 25.0,
                 implementation_effort: ImplementationEffort::Low,
             });
@@ -1025,11 +1157,8 @@ impl AiOrchestrator {
         &self,
         shapes: &[ConfidentShape],
     ) -> Result<ConvergenceMetrics> {
-        let avg_confidence = shapes
-            .iter()
-            .map(|s| s.confidence)
-            .sum::<f64>()
-            / shapes.len().max(1) as f64;
+        let avg_confidence =
+            shapes.iter().map(|s| s.confidence).sum::<f64>() / shapes.len().max(1) as f64;
 
         Ok(ConvergenceMetrics {
             ensemble_agreement: avg_confidence,
@@ -1054,17 +1183,20 @@ impl AiOrchestrator {
         neural_patterns: &[NeuralPattern],
         store: &Store,
     ) -> Result<Vec<ConfidentShape>> {
-        tracing::debug!("Generating shapes from {} neural patterns", neural_patterns.len());
-        
+        tracing::debug!(
+            "Generating shapes from {} neural patterns",
+            neural_patterns.len()
+        );
+
         let mut neural_shapes = Vec::new();
-        
+
         for (i, neural_pattern) in neural_patterns.iter().enumerate() {
             // Convert neural pattern to SHACL shape
             let shape_id = ShapeId::new(format!("http://example.org/shapes/neural_{}", i));
-            
+
             // Create shape with neural pattern insights
             let mut shape = Shape::node_shape(shape_id);
-            
+
             // Convert learned constraints to SHACL constraints
             for learned_constraint in &neural_pattern.learned_constraints {
                 match learned_constraint.constraint_type.as_str() {
@@ -1086,8 +1218,11 @@ impl AiOrchestrator {
                     }
                     "datatype" => {
                         // Add datatype constraint based on neural analysis
-                        if let Ok(datatype_iri) = NamedNode::new("http://www.w3.org/2001/XMLSchema#string") {
-                            let constraint = Constraint::Datatype(DatatypeConstraint { datatype_iri });
+                        if let Ok(datatype_iri) =
+                            NamedNode::new("http://www.w3.org/2001/XMLSchema#string")
+                        {
+                            let constraint =
+                                Constraint::Datatype(DatatypeConstraint { datatype_iri });
                             let component_id = ConstraintComponentId("datatype".to_string());
                             shape.add_constraint(component_id, constraint);
                         }
@@ -1102,7 +1237,7 @@ impl AiOrchestrator {
                     }
                 }
             }
-            
+
             // Create confident shape with neural metadata
             let confident_shape = ConfidentShape {
                 shape,
@@ -1111,11 +1246,14 @@ impl AiOrchestrator {
                 supporting_patterns: vec![neural_pattern.semantic_meaning.clone()],
                 quality_score: neural_pattern.confidence * 0.9, // Quality slightly lower than confidence
             };
-            
+
             neural_shapes.push(confident_shape);
         }
-        
-        tracing::info!("Generated {} shapes from neural patterns", neural_shapes.len());
+
+        tracing::info!(
+            "Generated {} shapes from neural patterns",
+            neural_shapes.len()
+        );
         Ok(neural_shapes)
     }
 
@@ -1126,13 +1264,13 @@ impl AiOrchestrator {
         neural_shapes: Vec<ConfidentShape>,
     ) -> Result<Vec<ConfidentShape>> {
         tracing::debug!(
-            "Combining {} traditional shapes with {} neural shapes", 
-            traditional_shapes.len(), 
+            "Combining {} traditional shapes with {} neural shapes",
+            traditional_shapes.len(),
             neural_shapes.len()
         );
-        
+
         let mut combined_shapes = Vec::new();
-        
+
         // Add all traditional shapes with weighted confidence
         for mut shape in traditional_shapes {
             // Boost confidence for high-quality traditional shapes
@@ -1142,7 +1280,7 @@ impl AiOrchestrator {
             shape.generation_method = format!("Traditional+{}", shape.generation_method);
             combined_shapes.push(shape);
         }
-        
+
         // Add neural shapes with adaptive weighting
         for mut neural_shape in neural_shapes {
             // Check for conflicts with existing shapes
@@ -1153,31 +1291,37 @@ impl AiOrchestrator {
                     break;
                 }
             }
-            
+
             if !has_conflict {
                 // Boost neural pattern confidence if no conflicts
                 neural_shape.confidence = (neural_shape.confidence * 1.05).min(1.0);
-                neural_shape.generation_method = format!("Neural+{}", neural_shape.generation_method);
+                neural_shape.generation_method =
+                    format!("Neural+{}", neural_shape.generation_method);
                 combined_shapes.push(neural_shape);
             } else {
                 // Reduce confidence for conflicting neural patterns
                 neural_shape.confidence *= 0.8;
                 if neural_shape.confidence >= self.config.min_shape_confidence {
-                    neural_shape.generation_method = format!("Neural-Conflict+{}", neural_shape.generation_method);
+                    neural_shape.generation_method =
+                        format!("Neural-Conflict+{}", neural_shape.generation_method);
                     combined_shapes.push(neural_shape);
                 }
             }
         }
-        
+
         // Sort by confidence and limit to max shapes
-        combined_shapes.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+        combined_shapes.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         combined_shapes.truncate(self.config.max_shapes_generated);
-        
+
         // Filter by minimum confidence threshold
         combined_shapes.retain(|shape| shape.confidence >= self.config.min_shape_confidence);
-        
+
         tracing::info!(
-            "Combined into {} high-quality shapes with adaptive weighting", 
+            "Combined into {} high-quality shapes with adaptive weighting",
             combined_shapes.len()
         );
         Ok(combined_shapes)
@@ -1190,54 +1334,61 @@ impl AiOrchestrator {
         neural_patterns: &[NeuralPattern],
     ) -> Result<Vec<ConfidentShape>> {
         tracing::debug!(
-            "Applying neural optimization insights to {} shapes using {} neural patterns", 
-            shapes.len(), 
+            "Applying neural optimization insights to {} shapes using {} neural patterns",
+            shapes.len(),
             neural_patterns.len()
         );
-        
+
         let mut optimized_shapes = Vec::new();
-        
+
         for shape in shapes {
             let mut optimized_shape = shape.clone();
-            
+
             // Find relevant neural patterns for this shape
             let relevant_patterns: Vec<_> = neural_patterns
                 .iter()
                 .filter(|pattern| {
                     // Check if neural pattern is relevant to this shape
-                    pattern.semantic_meaning.contains(&shape.generation_method) ||
-                    pattern.confidence > 0.8 ||
-                    shape.supporting_patterns.iter().any(|sp| pattern.semantic_meaning.contains(sp))
+                    pattern.semantic_meaning.contains(&shape.generation_method)
+                        || pattern.confidence > 0.8
+                        || shape
+                            .supporting_patterns
+                            .iter()
+                            .any(|sp| pattern.semantic_meaning.contains(sp))
                 })
                 .collect();
-            
+
             if !relevant_patterns.is_empty() {
                 // Apply neural insights
-                let neural_confidence_boost = relevant_patterns
-                    .iter()
-                    .map(|p| p.confidence)
-                    .sum::<f64>() / relevant_patterns.len() as f64;
-                
+                let neural_confidence_boost =
+                    relevant_patterns.iter().map(|p| p.confidence).sum::<f64>()
+                        / relevant_patterns.len() as f64;
+
                 // Boost confidence based on neural pattern agreement
-                optimized_shape.confidence = (
-                    optimized_shape.confidence * (1.0 + neural_confidence_boost * 0.1)
-                ).min(1.0);
-                
+                optimized_shape.confidence =
+                    (optimized_shape.confidence * (1.0 + neural_confidence_boost * 0.1)).min(1.0);
+
                 // Enhance quality score with neural insights
-                optimized_shape.quality_score = (
-                    optimized_shape.quality_score * (1.0 + neural_confidence_boost * 0.05)
-                ).min(1.0);
-                
+                optimized_shape.quality_score = (optimized_shape.quality_score
+                    * (1.0 + neural_confidence_boost * 0.05))
+                    .min(1.0);
+
                 // Update generation method to reflect neural optimization
-                optimized_shape.generation_method = format!("NeuralOptimized+{}", optimized_shape.generation_method);
-                
+                optimized_shape.generation_method =
+                    format!("NeuralOptimized+{}", optimized_shape.generation_method);
+
                 // Add neural pattern insights to supporting patterns
                 for pattern in &relevant_patterns {
-                    if !optimized_shape.supporting_patterns.contains(&pattern.semantic_meaning) {
-                        optimized_shape.supporting_patterns.push(pattern.semantic_meaning.clone());
+                    if !optimized_shape
+                        .supporting_patterns
+                        .contains(&pattern.semantic_meaning)
+                    {
+                        optimized_shape
+                            .supporting_patterns
+                            .push(pattern.semantic_meaning.clone());
                     }
                 }
-                
+
                 tracing::debug!(
                     "Enhanced shape {} with {} neural patterns, confidence: {:.3} -> {:.3}",
                     optimized_shape.generation_method,
@@ -1246,27 +1397,31 @@ impl AiOrchestrator {
                     optimized_shape.confidence
                 );
             }
-            
+
             optimized_shapes.push(optimized_shape);
         }
-        
+
         // Sort by optimized confidence
-        optimized_shapes.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
-        
+        optimized_shapes.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
         tracing::info!(
             "Applied neural optimization insights to {} shapes, average confidence improvement: {:.3}",
             optimized_shapes.len(),
             optimized_shapes.iter().map(|s| s.confidence).sum::<f64>() / optimized_shapes.len().max(1) as f64 -
             shapes.iter().map(|s| s.confidence).sum::<f64>() / shapes.len().max(1) as f64
         );
-        
+
         Ok(optimized_shapes)
     }
 
     /// Check if two shapes have conflicting constraints
     fn shapes_have_conflict(&self, shape1: &Shape, shape2: &Shape) -> bool {
         // Simplified conflict detection - in production would use more sophisticated analysis
-        
+
         // Check for conflicting constraint types on same properties
         for (_, constraint1) in &shape1.constraints {
             for (_, constraint2) in &shape2.constraints {
@@ -1275,7 +1430,7 @@ impl AiOrchestrator {
                 }
             }
         }
-        
+
         false
     }
 

@@ -6,9 +6,11 @@
 //! schemas, enabling modern GraphQL clients to query knowledge graphs.
 
 use anyhow::Result;
-use std::sync::Arc;
-use oxirs_core::model::{BlankNode, Literal as OxiLiteral, NamedNode, Subject, Term, Triple, Quad, GraphName, Variable};
+use oxirs_core::model::{
+    BlankNode, GraphName, Literal as OxiLiteral, NamedNode, Quad, Subject, Term, Triple, Variable,
+};
 use oxirs_core::Store;
+use std::sync::Arc;
 
 // Re-export QueryResults for other modules
 pub use oxirs_core::query::QueryResults;
@@ -43,9 +45,36 @@ impl RdfStore {
 
     /// Execute a SPARQL query and return results
     pub fn query(&self, query: &str) -> Result<QueryResults> {
-        // TODO: Implement actual SPARQL query execution
-        // For now, return empty results
-        Ok(QueryResults::Solutions(Vec::new()))
+        use oxirs_core::query::{QueryEngine, QueryResult};
+
+        let engine = QueryEngine::new();
+        let result = engine
+            .query(query, &self.store)
+            .map_err(|e| anyhow::anyhow!("SPARQL query error: {}", e))?;
+
+        match result {
+            QueryResult::Select {
+                variables,
+                bindings,
+            } => {
+                let mut solutions = Vec::new();
+                for binding in bindings {
+                    let mut solution = oxirs_core::query::Solution::new();
+                    for (var_name, term) in binding {
+                        if let Ok(var) = oxirs_core::model::Variable::new(&var_name) {
+                            solution.bind(var, term);
+                        }
+                    }
+                    solutions.push(solution);
+                }
+                Ok(QueryResults::Solutions(solutions))
+            }
+            QueryResult::Ask(result) => Ok(QueryResults::Boolean(result)),
+            QueryResult::Construct(triples) => {
+                // Return triples directly (not quads)
+                Ok(QueryResults::Graph(triples))
+            }
+        }
     }
 
     /// Get count of triples in the store
@@ -54,7 +83,8 @@ impl RdfStore {
         match self.query(query)? {
             QueryResults::Solutions(solutions) => {
                 if let Some(solution) = solutions.first() {
-                    if let Some(Term::Literal(lit)) = solution.get(&Variable::new("count").unwrap()) {
+                    if let Some(Term::Literal(lit)) = solution.get(&Variable::new("count").unwrap())
+                    {
                         if let Ok(count) = lit.value().parse::<usize>() {
                             return Ok(count);
                         }
@@ -168,19 +198,14 @@ impl RdfStore {
             Term::NamedNode(NamedNode::new(object)?)
         };
 
-        let quad = Quad::new(
-            subject,
-            predicate,
-            object,
-            GraphName::DefaultGraph,
-        );
+        let quad = Quad::new(subject, predicate, object, GraphName::DefaultGraph);
         self.store.insert_quad(quad)?;
         Ok(())
     }
 
     /// Load data from a file
     pub fn load_file<P: AsRef<std::path::Path>>(&mut self, path: P, format: &str) -> Result<()> {
-        use oxirs_core::parser::{RdfFormat, Parser};
+        use oxirs_core::parser::{Parser, RdfFormat};
         use std::fs;
 
         let format = match format.to_lowercase().as_str() {
@@ -193,11 +218,11 @@ impl RdfStore {
 
         // Read file content
         let content = fs::read_to_string(path)?;
-        
+
         // Parse content to quads
         let parser = Parser::new(format);
         let quads = parser.parse_str_to_quads(&content)?;
-        
+
         // Insert quads into store
         for quad in quads {
             self.store.insert_quad(quad)?;
@@ -244,9 +269,14 @@ pub mod features;
 pub mod networking;
 pub mod rdf;
 
-// New Juniper-based implementation (temporarily disabled due to compilation issues)
+// Juniper-based implementation with proper RDF integration (WIP - disabled due to complex integration issues)
 // pub mod juniper_schema;
-// pub mod juniper_server;
+// pub mod juniper_server; // Complex Hyper v1 version - disabled for now
+// pub mod simple_juniper_server; // Simplified version
+
+// Future Juniper integration - comprehensive RDF GraphQL support planned
+// pub use juniper_schema::{Schema as JuniperSchema, GraphQLContext, create_schema};
+// pub use simple_juniper_server::{JuniperGraphQLServer, GraphQLServerConfig, GraphQLServerBuilder, start_graphql_server, start_graphql_server_with_config};
 
 #[cfg(test)]
 mod tests;

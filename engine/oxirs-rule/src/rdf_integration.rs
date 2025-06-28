@@ -7,8 +7,8 @@
 use crate::{Rule, RuleAtom, Term as RuleTerm};
 use anyhow::{anyhow, Result};
 use oxirs_core::model::{
-    BlankNode, GraphName, GraphNameTerm, Literal, NamedNode, Object, Predicate, Subject, Quad,
-    RdfTerm as RdfTermTrait, Term, Triple, Variable,
+    BlankNode, GraphName, GraphNameTerm, Literal, NamedNode, Object, Predicate, Quad,
+    RdfTerm as RdfTermTrait, Subject, Term, Triple, Variable,
 };
 use oxirs_core::{OxirsError, Store};
 use std::collections::{HashMap, HashSet};
@@ -31,10 +31,7 @@ pub enum RdfRuleAtom {
         graph: Option<RdfTerm>,
     },
     /// Built-in predicate
-    Builtin {
-        name: String,
-        args: Vec<RdfTerm>,
-    },
+    Builtin { name: String, args: Vec<RdfTerm> },
 }
 
 /// Enhanced RDF-aware term wrapper
@@ -74,7 +71,9 @@ impl RdfTerm {
             GraphName::NamedNode(n) => Ok(RdfTerm::NamedNode(n.clone())),
             GraphName::BlankNode(b) => Ok(RdfTerm::BlankNode(b.clone())),
             GraphName::Variable(v) => Ok(RdfTerm::Variable(v.clone())),
-            GraphName::DefaultGraph => Err(anyhow!("Default graph cannot be represented as RdfTerm")),
+            GraphName::DefaultGraph => {
+                Err(anyhow!("Default graph cannot be represented as RdfTerm"))
+            }
         }
     }
 
@@ -113,15 +112,30 @@ impl NamespaceManager {
     /// Create a new namespace manager
     pub fn new() -> Self {
         let mut prefixes = HashMap::new();
-        
+
         // Add common prefixes
-        prefixes.insert("rdf".to_string(), "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string());
-        prefixes.insert("rdfs".to_string(), "http://www.w3.org/2000/01/rdf-schema#".to_string());
-        prefixes.insert("owl".to_string(), "http://www.w3.org/2002/07/owl#".to_string());
-        prefixes.insert("xsd".to_string(), "http://www.w3.org/2001/XMLSchema#".to_string());
+        prefixes.insert(
+            "rdf".to_string(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string(),
+        );
+        prefixes.insert(
+            "rdfs".to_string(),
+            "http://www.w3.org/2000/01/rdf-schema#".to_string(),
+        );
+        prefixes.insert(
+            "owl".to_string(),
+            "http://www.w3.org/2002/07/owl#".to_string(),
+        );
+        prefixes.insert(
+            "xsd".to_string(),
+            "http://www.w3.org/2001/XMLSchema#".to_string(),
+        );
         prefixes.insert("foaf".to_string(), "http://xmlns.com/foaf/0.1/".to_string());
-        prefixes.insert("dc".to_string(), "http://purl.org/dc/elements/1.1/".to_string());
-        
+        prefixes.insert(
+            "dc".to_string(),
+            "http://purl.org/dc/elements/1.1/".to_string(),
+        );
+
         Self {
             prefixes,
             base_iri: None,
@@ -167,11 +181,15 @@ impl NamespaceManager {
 /// Convert legacy RuleAtom to RDF-aware RdfRuleAtom
 pub fn convert_rule_atom(atom: &RuleAtom, namespaces: &NamespaceManager) -> Result<RdfRuleAtom> {
     match atom {
-        RuleAtom::Triple { subject, predicate, object } => {
+        RuleAtom::Triple {
+            subject,
+            predicate,
+            object,
+        } => {
             let subj = convert_term(subject, namespaces)?;
             let pred = convert_term(predicate, namespaces)?;
             let obj = convert_term(object, namespaces)?;
-            
+
             Ok(RdfRuleAtom::Triple {
                 subject: subj,
                 predicate: pred,
@@ -183,7 +201,7 @@ pub fn convert_rule_atom(atom: &RuleAtom, namespaces: &NamespaceManager) -> Resu
                 .iter()
                 .map(|arg| convert_term(arg, namespaces))
                 .collect::<Result<Vec<_>>>()?;
-            
+
             Ok(RdfRuleAtom::Builtin {
                 name: name.clone(),
                 args: converted_args,
@@ -202,10 +220,13 @@ pub fn convert_term(term: &RuleTerm, namespaces: &NamespaceManager) -> Result<Rd
         RuleTerm::Constant(value) => {
             // Try to parse as IRI
             let expanded = namespaces.expand(value)?;
-            
+
             // Check if it looks like an IRI
-            if expanded.starts_with("http://") || expanded.starts_with("https://") || 
-               expanded.starts_with("urn:") || expanded.starts_with("file://") {
+            if expanded.starts_with("http://")
+                || expanded.starts_with("https://")
+                || expanded.starts_with("urn:")
+                || expanded.starts_with("file://")
+            {
                 let node = NamedNode::new(&expanded)?;
                 Ok(RdfTerm::NamedNode(node))
             } else if expanded.starts_with("_:") {
@@ -241,14 +262,21 @@ pub fn convert_term(term: &RuleTerm, namespaces: &NamespaceManager) -> Result<Rd
 /// Convert RdfRuleAtom back to legacy RuleAtom
 pub fn convert_rdf_atom_to_legacy(atom: &RdfRuleAtom, namespaces: &NamespaceManager) -> RuleAtom {
     match atom {
-        RdfRuleAtom::Triple { subject, predicate, object } => {
-            RuleAtom::Triple {
-                subject: convert_rdf_term_to_legacy(subject, namespaces),
-                predicate: convert_rdf_term_to_legacy(predicate, namespaces),
-                object: convert_rdf_term_to_legacy(object, namespaces),
-            }
-        }
-        RdfRuleAtom::Quad { subject, predicate, object, .. } => {
+        RdfRuleAtom::Triple {
+            subject,
+            predicate,
+            object,
+        } => RuleAtom::Triple {
+            subject: convert_rdf_term_to_legacy(subject, namespaces),
+            predicate: convert_rdf_term_to_legacy(predicate, namespaces),
+            object: convert_rdf_term_to_legacy(object, namespaces),
+        },
+        RdfRuleAtom::Quad {
+            subject,
+            predicate,
+            object,
+            ..
+        } => {
             // Convert quad to triple for legacy compatibility
             RuleAtom::Triple {
                 subject: convert_rdf_term_to_legacy(subject, namespaces),
@@ -256,12 +284,13 @@ pub fn convert_rdf_atom_to_legacy(atom: &RdfRuleAtom, namespaces: &NamespaceMana
                 object: convert_rdf_term_to_legacy(object, namespaces),
             }
         }
-        RdfRuleAtom::Builtin { name, args } => {
-            RuleAtom::Builtin {
-                name: name.clone(),
-                args: args.iter().map(|arg| convert_rdf_term_to_legacy(arg, namespaces)).collect(),
-            }
-        }
+        RdfRuleAtom::Builtin { name, args } => RuleAtom::Builtin {
+            name: name.clone(),
+            args: args
+                .iter()
+                .map(|arg| convert_rdf_term_to_legacy(arg, namespaces))
+                .collect(),
+        },
     }
 }
 
@@ -273,9 +302,7 @@ pub fn convert_rdf_term_to_legacy(term: &RdfTerm, namespaces: &NamespaceManager)
             let compact = namespaces.compact(node.as_str());
             RuleTerm::Constant(compact)
         }
-        RdfTerm::BlankNode(blank) => {
-            RuleTerm::Constant(format!("_:{}", blank.as_str()))
-        }
+        RdfTerm::BlankNode(blank) => RuleTerm::Constant(format!("_:{}", blank.as_str())),
         RdfTerm::Literal(lit) => {
             if let Some(lang) = lit.language() {
                 RuleTerm::Literal(format!("{}@{}", lit.value(), lang))
@@ -324,22 +351,24 @@ impl RdfRuleEngine {
 
     /// Add a rule (converting from legacy format)
     pub fn add_rule(&mut self, rule: Rule) -> Result<()> {
-        let body = rule.body
+        let body = rule
+            .body
             .iter()
             .map(|atom| convert_rule_atom(atom, &self.namespaces))
             .collect::<Result<Vec<_>>>()?;
-        
-        let head = rule.head
+
+        let head = rule
+            .head
             .iter()
             .map(|atom| convert_rule_atom(atom, &self.namespaces))
             .collect::<Result<Vec<_>>>()?;
-        
+
         self.rules.push(RdfRule {
             name: rule.name,
             body,
             head,
         });
-        
+
         Ok(())
     }
 
@@ -351,13 +380,13 @@ impl RdfRuleEngine {
     /// Load facts from the store
     pub fn load_facts_from_store(&self) -> Result<Vec<RdfRuleAtom>> {
         let mut facts = Vec::new();
-        
+
         // Iterate through all quads in the store
         for quad in self.store.query_quads(None, None, None, None)? {
             let subject = RdfTerm::from_term(quad.subject().clone().into())?;
             let predicate = RdfTerm::from_term(quad.predicate().clone().into())?;
             let object = RdfTerm::from_term(quad.object().clone().into())?;
-            
+
             let graph = quad.graph_name();
             facts.push(RdfRuleAtom::Quad {
                 subject,
@@ -366,7 +395,7 @@ impl RdfRuleEngine {
                 graph: Some(RdfTerm::from_graph_name(graph)?),
             });
         }
-        
+
         Ok(facts)
     }
 
@@ -374,7 +403,11 @@ impl RdfRuleEngine {
     pub fn add_inferred_to_store(&self, inferred: Vec<RdfRuleAtom>) -> Result<()> {
         for atom in inferred {
             match atom {
-                RdfRuleAtom::Triple { subject, predicate, object } => {
+                RdfRuleAtom::Triple {
+                    subject,
+                    predicate,
+                    object,
+                } => {
                     // Convert RdfTerms to proper RDF terms for the store
                     // Convert RdfTerms to proper types for the store
                     let subject_term: Subject = match subject {
@@ -382,13 +415,13 @@ impl RdfRuleEngine {
                         RdfTerm::BlankNode(b) => Subject::BlankNode(b.clone()),
                         _ => continue, // Skip variables and literals as subjects
                     };
-                    
+
                     // Convert predicate (must be NamedNode)
                     let predicate_term: NamedNode = match predicate {
                         RdfTerm::NamedNode(n) => n.clone(),
                         _ => continue, // Skip non-IRI predicates
                     };
-                    
+
                     // Convert RdfTerms to proper object types
                     let object_term: Object = match object {
                         RdfTerm::NamedNode(n) => Object::NamedNode(n.clone()),
@@ -396,44 +429,54 @@ impl RdfRuleEngine {
                         RdfTerm::Literal(l) => Object::Literal(l.clone()),
                         _ => continue, // Skip variables
                     };
-                    
+
                     // Create quad (store insertion removed to avoid Arc mutability issues)
-                    let _quad = Quad::new(subject_term, predicate_term, object_term, GraphName::DefaultGraph);
+                    let _quad = Quad::new(
+                        subject_term,
+                        predicate_term,
+                        object_term,
+                        GraphName::DefaultGraph,
+                    );
                     // self.store.insert(&quad)?; // Would require mutable store
                 }
-                RdfRuleAtom::Quad { subject, predicate, object, graph } => {
+                RdfRuleAtom::Quad {
+                    subject,
+                    predicate,
+                    object,
+                    graph,
+                } => {
                     // Handle quads similarly
                     let subj: Subject = match subject {
                         RdfTerm::NamedNode(n) => Subject::NamedNode(n.clone()),
                         RdfTerm::BlankNode(b) => Subject::BlankNode(b.clone()),
                         _ => continue,
                     };
-                    
+
                     let pred: NamedNode = match predicate {
                         RdfTerm::NamedNode(n) => n.clone(),
                         _ => continue,
                     };
-                    
+
                     let obj: Object = match object {
                         RdfTerm::NamedNode(n) => Object::NamedNode(n.clone()),
                         RdfTerm::BlankNode(b) => Object::BlankNode(b.clone()),
                         RdfTerm::Literal(l) => Object::Literal(l.clone()),
                         _ => continue,
                     };
-                    
+
                     let graph_name = match graph {
                         Some(RdfTerm::NamedNode(n)) => GraphName::NamedNode(n.clone()),
                         Some(RdfTerm::BlankNode(b)) => GraphName::BlankNode(b.clone()),
                         _ => GraphName::DefaultGraph,
                     };
-                    
+
                     let _quad = Quad::new(subj, pred, obj, graph_name);
                     // self.store.insert(&quad)?; // Would require mutable store
                 }
                 _ => {} // Skip builtins
             }
         }
-        
+
         Ok(())
     }
 }
@@ -454,21 +497,29 @@ pub mod datatype {
         if dt.as_str() == expected_type {
             Ok(())
         } else {
-            Err(anyhow!("Expected datatype {} but got {}", expected_type, dt.as_str()))
+            Err(anyhow!(
+                "Expected datatype {} but got {}",
+                expected_type,
+                dt.as_str()
+            ))
         }
     }
 
     /// Validate integer literal
     pub fn validate_integer(literal: &Literal) -> Result<i64> {
         validate_datatype(literal, XSD_INTEGER)?;
-        literal.value().parse::<i64>()
+        literal
+            .value()
+            .parse::<i64>()
             .map_err(|e| anyhow!("Invalid integer value: {}", e))
     }
 
     /// Validate decimal literal
     pub fn validate_decimal(literal: &Literal) -> Result<f64> {
         validate_datatype(literal, XSD_DECIMAL)?;
-        literal.value().parse::<f64>()
+        literal
+            .value()
+            .parse::<f64>()
             .map_err(|e| anyhow!("Invalid decimal value: {}", e))
     }
 
@@ -497,30 +548,36 @@ mod tests {
     fn test_namespace_management() {
         let mut ns = NamespaceManager::new();
         ns.add_prefix("ex".to_string(), "http://example.org/".to_string());
-        
+
         // Test expansion
         assert_eq!(ns.expand("ex:Person").unwrap(), "http://example.org/Person");
-        assert_eq!(ns.expand("rdf:type").unwrap(), "http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
-        
+        assert_eq!(
+            ns.expand("rdf:type").unwrap(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+        );
+
         // Test compaction
         assert_eq!(ns.compact("http://example.org/Person"), "ex:Person");
-        assert_eq!(ns.compact("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"), "rdf:type");
+        assert_eq!(
+            ns.compact("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+            "rdf:type"
+        );
     }
 
     #[test]
     fn test_term_conversion() {
         let ns = NamespaceManager::new();
-        
+
         // Test variable conversion
         let var_term = RuleTerm::Variable("x".to_string());
         let rdf_var = convert_term(&var_term, &ns).unwrap();
         assert!(matches!(rdf_var, RdfTerm::Variable(_)));
-        
+
         // Test IRI conversion
         let iri_term = RuleTerm::Constant("http://example.org/Person".to_string());
         let rdf_iri = convert_term(&iri_term, &ns).unwrap();
         assert!(matches!(rdf_iri, RdfTerm::NamedNode(_)));
-        
+
         // Test literal conversion
         let lit_term = RuleTerm::Literal("42^^xsd:integer".to_string());
         let rdf_lit = convert_term(&lit_term, &ns).unwrap();
@@ -530,17 +587,21 @@ mod tests {
     #[test]
     fn test_rule_atom_conversion() {
         let ns = NamespaceManager::new();
-        
+
         let atom = RuleAtom::Triple {
             subject: RuleTerm::Variable("x".to_string()),
             predicate: RuleTerm::Constant("rdf:type".to_string()),
             object: RuleTerm::Constant("foaf:Person".to_string()),
         };
-        
+
         let rdf_atom = convert_rule_atom(&atom, &ns).unwrap();
-        
+
         match rdf_atom {
-            RdfRuleAtom::Triple { subject, predicate, object } => {
+            RdfRuleAtom::Triple {
+                subject,
+                predicate,
+                object,
+            } => {
                 assert!(subject.is_variable());
                 assert!(matches!(predicate, RdfTerm::NamedNode(_)));
                 assert!(matches!(object, RdfTerm::NamedNode(_)));
@@ -552,11 +613,11 @@ mod tests {
     #[test]
     fn test_datatype_validation() {
         use datatype::*;
-        
+
         // Test integer validation
         let int_lit = typed_literal(42, XSD_INTEGER).unwrap();
         assert_eq!(validate_integer(&int_lit).unwrap(), 42);
-        
+
         // Test boolean validation
         let bool_lit = typed_literal("true", XSD_BOOLEAN).unwrap();
         assert!(validate_boolean(&bool_lit).unwrap());

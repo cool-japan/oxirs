@@ -7,32 +7,25 @@
 //! - Batch operations for improved performance
 //! - Memory-mapped storage for datasets larger than RAM
 
-pub mod indexed_graph;
-pub mod term_interner;
-pub mod mmap_store;
-pub mod mmap_index;
-pub mod arena;
-pub mod encoding;
-pub mod binary;
 pub mod adaptive_index;
+pub mod arena;
+pub mod binary;
+pub mod encoding;
+pub mod indexed_graph;
+pub mod mmap_index;
+pub mod mmap_store;
+pub mod term_interner;
 
-pub use indexed_graph::{IndexedGraph, IndexStats, MemoryUsage, IndexType};
-pub use term_interner::{TermInterner, InternerStats};
-pub use mmap_store::{MmapStore, StoreStats};
-pub use mmap_index::{MmapIndex, IndexEntry};
+pub use adaptive_index::{AdaptiveConfig, AdaptiveIndexManager, AdaptiveIndexStats, QueryPattern};
 pub use arena::{
-    LocalArena, ConcurrentArena, GraphArena, ScopedArena,
-    ArenaStr, ArenaTerm, ArenaTriple,
+    ArenaStr, ArenaTerm, ArenaTriple, ConcurrentArena, GraphArena, LocalArena, ScopedArena,
 };
-pub use encoding::{
-    EncodedTerm, EncodedTriple, EncodedQuad, StrHash, SmallString,
-};
-pub use binary::{
-    encode_term, decode_term, QuadEncoding, WRITTEN_TERM_MAX_SIZE,
-};
-pub use adaptive_index::{
-    AdaptiveIndexManager, AdaptiveConfig, QueryPattern, AdaptiveIndexStats,
-};
+pub use binary::{decode_term, encode_term, QuadEncoding, WRITTEN_TERM_MAX_SIZE};
+pub use encoding::{EncodedQuad, EncodedTerm, EncodedTriple, SmallString, StrHash};
+pub use indexed_graph::{IndexStats, IndexType, IndexedGraph, MemoryUsage};
+pub use mmap_index::{IndexEntry, MmapIndex};
+pub use mmap_store::{MmapStore, StoreStats};
+pub use term_interner::{InternerStats, TermInterner};
 
 /// Re-export commonly used types
 pub use indexed_graph::InternedTriple;

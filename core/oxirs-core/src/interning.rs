@@ -218,7 +218,7 @@ lazy_static::lazy_static! {
 
     /// Global interner for language tags
     pub static ref LANGUAGE_INTERNER: StringInterner = StringInterner::new();
-    
+
     /// Global interner for general strings (JSON-LD processing)
     pub static ref STRING_INTERNER: StringInterner = StringInterner::new();
 }

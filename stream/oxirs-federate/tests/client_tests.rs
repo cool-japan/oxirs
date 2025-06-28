@@ -6,7 +6,7 @@ use std::time::Duration;
 #[tokio::test]
 async fn test_client_config() {
     let config = ClientConfig::default();
-    
+
     assert_eq!(config.user_agent, "oxirs-federate-client/1.0");
     assert_eq!(config.request_timeout, Duration::from_secs(30));
     assert_eq!(config.max_connections, 50);
@@ -21,10 +21,10 @@ async fn test_sparql_client_creation() {
         "SPARQL Client Test".to_string(),
         "http://example.com/sparql".to_string(),
     );
-    
+
     let config = ClientConfig::default();
     let client = create_client(service, config);
-    
+
     assert!(client.is_ok());
 }
 
@@ -35,10 +35,10 @@ async fn test_graphql_client_creation() {
         "GraphQL Client Test".to_string(),
         "http://example.com/graphql".to_string(),
     );
-    
+
     let config = ClientConfig::default();
     let client = create_client(service, config);
-    
+
     assert!(client.is_ok());
 }
 
@@ -49,7 +49,7 @@ async fn test_client_with_basic_auth() {
         "Auth Client Test".to_string(),
         "http://example.com/sparql".to_string(),
     );
-    
+
     service.auth = Some(AuthConfig {
         auth_type: AuthType::Basic,
         credentials: AuthCredentials {
@@ -60,10 +60,10 @@ async fn test_client_with_basic_auth() {
             oauth_config: None,
         },
     });
-    
+
     let config = ClientConfig::default();
     let client = create_client(service, config);
-    
+
     assert!(client.is_ok());
 }
 
@@ -74,7 +74,7 @@ async fn test_client_with_bearer_auth() {
         "Bearer Client Test".to_string(),
         "http://example.com/graphql".to_string(),
     );
-    
+
     service.auth = Some(AuthConfig {
         auth_type: AuthType::Bearer,
         credentials: AuthCredentials {
@@ -85,10 +85,10 @@ async fn test_client_with_bearer_auth() {
             oauth_config: None,
         },
     });
-    
+
     let config = ClientConfig::default();
     let client = create_client(service, config);
-    
+
     assert!(client.is_ok());
 }
 
@@ -99,7 +99,7 @@ async fn test_client_with_api_key_auth() {
         "API Key Client Test".to_string(),
         "http://example.com/sparql".to_string(),
     );
-    
+
     service.auth = Some(AuthConfig {
         auth_type: AuthType::ApiKey,
         credentials: AuthCredentials {
@@ -110,27 +110,27 @@ async fn test_client_with_api_key_auth() {
             oauth_config: None,
         },
     });
-    
+
     let config = ClientConfig::default();
     let client = create_client(service, config);
-    
+
     assert!(client.is_ok());
 }
 
 #[tokio::test]
 async fn test_client_stats() {
     let mut stats = ClientStats::default();
-    
+
     // Update stats
     stats.total_requests = 100;
     stats.successful_requests = 95;
     stats.failed_requests = 5;
     stats.total_response_time = Duration::from_secs(10);
-    
+
     // Test calculations
     assert_eq!(stats.success_rate(), 0.95);
     assert_eq!(stats.avg_response_time(), Duration::from_millis(105)); // 10000ms / 95
-    
+
     // Test with no requests
     let empty_stats = ClientStats::default();
     assert_eq!(empty_stats.success_rate(), 0.0);
@@ -144,15 +144,15 @@ async fn test_client_with_rate_limiting() {
         "Rate Limited Client".to_string(),
         "http://example.com/sparql".to_string(),
     );
-    
+
     service.performance.rate_limit = Some(RateLimit {
         requests_per_minute: 60,
         burst_limit: 10,
     });
-    
+
     let config = ClientConfig::default();
     let client = create_client(service, config);
-    
+
     assert!(client.is_ok());
 }
 
@@ -163,12 +163,12 @@ async fn test_hybrid_service_client() {
         "Hybrid Client Test".to_string(),
         "http://example.com/endpoint".to_string(),
     );
-    
+
     service.service_type = ServiceType::Hybrid;
-    
+
     let config = ClientConfig::default();
     let client = create_client(service, config);
-    
+
     // Should create a SPARQL client for hybrid services
     assert!(client.is_ok());
 }
@@ -176,12 +176,12 @@ async fn test_hybrid_service_client() {
 #[tokio::test]
 async fn test_client_error_tracking() {
     let mut stats = ClientStats::default();
-    
+
     // Track different error types
     stats.error_counts.insert("timeout".to_string(), 5);
     stats.error_counts.insert("network".to_string(), 3);
     stats.error_counts.insert("auth".to_string(), 1);
-    
+
     assert_eq!(*stats.error_counts.get("timeout").unwrap(), 5);
     assert_eq!(*stats.error_counts.get("network").unwrap(), 3);
     assert_eq!(*stats.error_counts.get("auth").unwrap(), 1);
@@ -200,7 +200,7 @@ async fn test_custom_client_config() {
         circuit_breaker_threshold: 10,
         circuit_breaker_timeout: Duration::from_secs(120),
     };
-    
+
     assert_eq!(config.user_agent, "custom-agent/2.0");
     assert_eq!(config.request_timeout, Duration::from_secs(60));
     assert_eq!(config.max_connections, 100);
@@ -215,14 +215,14 @@ async fn test_sparql_client_health_check() {
         "Health Check Test".to_string(),
         "http://localhost:9999/sparql".to_string(), // Non-existent endpoint
     );
-    
+
     let config = ClientConfig {
         request_timeout: Duration::from_secs(1), // Short timeout for test
         ..ClientConfig::default()
     };
-    
+
     let client = create_client(service, config).unwrap();
-    
+
     // Health check should fail for non-existent service
     let health = client.health_check().await.unwrap_or(true);
     assert!(!health);
@@ -235,14 +235,14 @@ async fn test_graphql_client_health_check() {
         "GraphQL Health Test".to_string(),
         "http://localhost:9998/graphql".to_string(), // Non-existent endpoint
     );
-    
+
     let config = ClientConfig {
         request_timeout: Duration::from_secs(1), // Short timeout for test
         ..ClientConfig::default()
     };
-    
+
     let client = create_client(service, config).unwrap();
-    
+
     // Health check should fail for non-existent service
     let health = client.health_check().await.unwrap_or(true);
     assert!(!health);
@@ -255,10 +255,10 @@ async fn test_client_stats_tracking() {
         "Stats Tracking Test".to_string(),
         "http://localhost:9997/sparql".to_string(),
     );
-    
+
     let config = ClientConfig::default();
     let client = create_client(service, config).unwrap();
-    
+
     // Get initial stats
     let stats = client.get_stats().await;
     assert_eq!(stats.total_requests, 0);

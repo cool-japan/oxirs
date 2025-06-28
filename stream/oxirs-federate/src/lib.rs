@@ -42,6 +42,7 @@ pub mod integration;
 pub mod k8s_discovery;
 pub mod metadata;
 pub mod monitoring;
+pub mod nats_federation;
 pub mod planner;
 pub mod query_decomposition;
 pub mod service;
@@ -59,6 +60,7 @@ pub use integration::*;
 pub use k8s_discovery::*;
 pub use metadata::*;
 pub use monitoring::*;
+pub use nats_federation::*;
 pub use planner::*;
 pub use query_decomposition::*;
 pub use service::*;
@@ -326,9 +328,7 @@ impl FederationEngine {
                                             crate::executor::SparqlValue {
                                                 value_type: "literal".to_string(),
                                                 value: literal.value().to_string(),
-                                                datatype: Some(literal
-                                                    .datatype()
-                                                    .to_string()),
+                                                datatype: Some(literal.datatype().to_string()),
                                                 lang: None,
                                             }
                                         }
@@ -352,10 +352,12 @@ impl FederationEngine {
                                     &oxirs_core::Term::QuotedTriple(ref triple) => {
                                         crate::executor::SparqlValue {
                                             value_type: "quoted_triple".to_string(),
-                                            value: format!("<<{} {} {}>>", 
-                                                triple.subject(), 
-                                                triple.predicate(), 
-                                                triple.object()),
+                                            value: format!(
+                                                "<<{} {} {}>>",
+                                                triple.subject(),
+                                                triple.predicate(),
+                                                triple.object()
+                                            ),
                                             datatype: None,
                                             lang: None,
                                         }
@@ -491,27 +493,29 @@ impl FederationEngine {
     pub async fn cleanup_cache(&self) {
         self.cache.cleanup_expired().await;
     }
-    
+
     /// Start automatic service discovery
     pub async fn start_auto_discovery(&self, config: AutoDiscoveryConfig) -> Result<()> {
         let mut auto_discovery_guard = self.auto_discovery.write().await;
-        
+
         if auto_discovery_guard.is_some() {
             return Err(anyhow!("Auto-discovery is already running"));
         }
-        
+
         let mut discovery = AutoDiscovery::new(config);
         let mut receiver = discovery.start().await?;
-        
+
         let registry = self.service_registry.clone();
         let service_discovery = ServiceDiscovery::new();
-        
+
         // Spawn task to handle discovered services
         tokio::spawn(async move {
             while let Some(discovered) = receiver.recv().await {
-                info!("Auto-discovered service: {} via {:?}", 
-                      discovered.url, discovered.discovery_method);
-                
+                info!(
+                    "Auto-discovered service: {} via {:?}",
+                    discovered.url, discovered.discovery_method
+                );
+
                 // Register the discovered service
                 if let Ok(Some(service)) = service_discovery
                     .discover_service_at_endpoint(&discovered.url)
@@ -524,16 +528,16 @@ impl FederationEngine {
                 }
             }
         });
-        
+
         *auto_discovery_guard = Some(discovery);
         info!("Auto-discovery started");
         Ok(())
     }
-    
+
     /// Stop automatic service discovery
     pub async fn stop_auto_discovery(&self) -> Result<()> {
         let mut auto_discovery_guard = self.auto_discovery.write().await;
-        
+
         if let Some(mut discovery) = auto_discovery_guard.take() {
             discovery.stop().await;
             info!("Auto-discovery stopped");
@@ -542,18 +546,18 @@ impl FederationEngine {
             Err(anyhow!("Auto-discovery is not running"))
         }
     }
-    
+
     /// Get auto-discovered services
     pub async fn get_auto_discovered_services(&self) -> Result<Vec<DiscoveredEndpoint>> {
         let auto_discovery_guard = self.auto_discovery.read().await;
-        
+
         if let Some(ref discovery) = *auto_discovery_guard {
             Ok(discovery.get_discovered_services().await)
         } else {
             Err(anyhow!("Auto-discovery is not running"))
         }
     }
-    
+
     /// Assess capabilities of a registered service
     pub async fn assess_service_capabilities(&self, service_id: &str) -> Result<AssessmentResult> {
         let registry = self.service_registry.read().await;
@@ -562,34 +566,43 @@ impl FederationEngine {
             .ok_or_else(|| anyhow!("Service {} not found", service_id))?
             .clone();
         drop(registry);
-        
+
         let assessor = CapabilityAssessor::new();
         let assessment = assessor.assess_service(&service).await?;
-        
+
         // Update service with enhanced capabilities
         let mut registry = self.service_registry.write().await;
         if let Some(service) = registry.services.get_mut(service_id) {
             // Update capabilities based on assessment
-            service.capabilities.extend(assessment.detected_capabilities.clone());
-            
+            service
+                .capabilities
+                .extend(assessment.detected_capabilities.clone());
+
             // Update extended metadata if available
             if let Some(ref mut extended) = service.extended_metadata {
-                extended.capability_details.extend(assessment.capability_details.clone());
-                extended.query_patterns.extend(assessment.query_patterns.clone());
+                extended
+                    .capability_details
+                    .extend(assessment.capability_details.clone());
+                extended
+                    .query_patterns
+                    .extend(assessment.query_patterns.clone());
             }
         }
-        
-        info!("Capability assessment completed for service: {}", service_id);
+
+        info!(
+            "Capability assessment completed for service: {}",
+            service_id
+        );
         Ok(assessment)
     }
-    
+
     /// Assess all registered services
     pub async fn assess_all_services(&self) -> Result<Vec<AssessmentResult>> {
         let service_ids: Vec<String> = {
             let registry = self.service_registry.read().await;
             registry.services.keys().cloned().collect()
         };
-        
+
         let mut results = Vec::new();
         for service_id in service_ids {
             match self.assess_service_capabilities(&service_id).await {
@@ -597,7 +610,7 @@ impl FederationEngine {
                 Err(e) => warn!("Failed to assess service {}: {}", service_id, e),
             }
         }
-        
+
         Ok(results)
     }
 }

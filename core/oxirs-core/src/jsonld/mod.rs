@@ -21,8 +21,8 @@ pub use from_rdf::{JsonLdSerializer, WriterJsonLdSerializer};
 pub use profile::JsonLdProcessingMode;
 pub use profile::{JsonLdProfile, JsonLdProfileSet};
 pub use streaming::{
-    UltraStreamingJsonLdParser, StreamingConfig, StreamingSink, StreamingStatistics,
-    MemoryStreamingSink, ZeroCopyLevel, SinkStatistics
+    MemoryStreamingSink, SinkStatistics, StreamingConfig, StreamingSink, StreamingStatistics,
+    UltraStreamingJsonLdParser, ZeroCopyLevel,
 };
 #[cfg(feature = "async")]
 pub use to_rdf::TokioAsyncReaderJsonLdParser;

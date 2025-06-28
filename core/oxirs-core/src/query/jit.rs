@@ -3,9 +3,9 @@
 //! This module provides JIT compilation of frequently executed SPARQL queries
 //! to native machine code for maximum performance.
 
-use crate::model::{Triple, Subject, Predicate, Object, Variable, Term};
-use crate::query::algebra::TermPattern;
 use crate::model::pattern::TriplePattern;
+use crate::model::{Object, Predicate, Subject, Term, Triple, Variable};
+use crate::query::algebra::TermPattern;
 use crate::query::plan::ExecutionPlan;
 use crate::OxirsError;
 use std::collections::HashMap;
@@ -366,7 +366,9 @@ impl JitCompiler {
                     true
                 }
             }
-            PredicatePattern::NamedNode(n) => matches!(predicate, Predicate::NamedNode(nn) if nn == n),
+            PredicatePattern::NamedNode(n) => {
+                matches!(predicate, Predicate::NamedNode(nn) if nn == n)
+            }
         }
     }
 
@@ -506,7 +508,10 @@ impl JitCompiler {
     }
 
     /// Compile triple scan to native code
-    fn compile_triple_scan(&self, pattern: &crate::model::pattern::TriplePattern) -> Result<QueryFunction, OxirsError> {
+    fn compile_triple_scan(
+        &self,
+        pattern: &crate::model::pattern::TriplePattern,
+    ) -> Result<QueryFunction, OxirsError> {
         // Generate specialized matching function
         let pattern = pattern.clone();
 
@@ -514,7 +519,9 @@ impl JitCompiler {
             let mut results = Vec::new();
 
             // Optimized scanning based on pattern
-            if let Some(crate::model::pattern::PredicatePattern::NamedNode(pred)) = &pattern.predicate {
+            if let Some(crate::model::pattern::PredicatePattern::NamedNode(pred)) =
+                &pattern.predicate
+            {
                 // Use predicate index
                 if let Some(indices) = context.data.indexes.by_predicate.get(&pred.clone().into()) {
                     for &idx in indices {
@@ -735,9 +742,15 @@ mod tests {
 
         let plan = ExecutionPlan::TripleScan {
             pattern: crate::model::pattern::TriplePattern::new(
-                Some(crate::model::pattern::SubjectPattern::Variable(Variable::new("?s").unwrap())),
-                Some(crate::model::pattern::PredicatePattern::Variable(Variable::new("?p").unwrap())),
-                Some(crate::model::pattern::ObjectPattern::Variable(Variable::new("?o").unwrap())),
+                Some(crate::model::pattern::SubjectPattern::Variable(
+                    Variable::new("?s").unwrap(),
+                )),
+                Some(crate::model::pattern::PredicatePattern::Variable(
+                    Variable::new("?p").unwrap(),
+                )),
+                Some(crate::model::pattern::ObjectPattern::Variable(
+                    Variable::new("?o").unwrap(),
+                )),
             ),
         };
 

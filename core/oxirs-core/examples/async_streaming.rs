@@ -128,8 +128,15 @@ async fn parse_with_cancellation() -> Result<(), Box<dyn std::error::Error>> {
         .await;
 
     match result {
-        Ok(()) => println!("Parsing completed. Processed {} items", processed.load(Ordering::Relaxed)),
-        Err(e) => println!("Parsing cancelled or failed: {}. Processed {} items", e, processed.load(Ordering::Relaxed)),
+        Ok(()) => println!(
+            "Parsing completed. Processed {} items",
+            processed.load(Ordering::Relaxed)
+        ),
+        Err(e) => println!(
+            "Parsing cancelled or failed: {}. Processed {} items",
+            e,
+            processed.load(Ordering::Relaxed)
+        ),
     }
 
     Ok(())
@@ -188,7 +195,7 @@ ANOTHER INVALID LINE
     // Configure to ignore errors
     let mut config = AsyncStreamingConfig::default();
     config.ignore_errors = true;
-    config.chunk_size = 1024;  // Small chunks for demonstration
+    config.chunk_size = 1024; // Small chunks for demonstration
     config.buffer_size = 4096;
 
     let progress_callback: ProgressCallback = Box::new(|progress: &StreamingProgress| {

@@ -91,14 +91,12 @@ impl<T> VersionedPointer<T> {
         current: Shared<'g, VersionedNode<T>>,
         new: Owned<VersionedNode<T>>,
         guard: &'g Guard,
-    ) -> Result<Shared<'g, VersionedNode<T>>, (Shared<'g, VersionedNode<T>>, Owned<VersionedNode<T>>)> {
-        match self.ptr.compare_exchange(
-            current,
-            new,
-            Ordering::Release,
-            Ordering::Acquire,
-            guard,
-        ) {
+    ) -> Result<Shared<'g, VersionedNode<T>>, (Shared<'g, VersionedNode<T>>, Owned<VersionedNode<T>>)>
+    {
+        match self
+            .ptr
+            .compare_exchange(current, new, Ordering::Release, Ordering::Acquire, guard)
+        {
             Ok(shared) => Ok(shared),
             Err(e) => Err((e.current, e.new)),
         }
@@ -107,7 +105,7 @@ impl<T> VersionedPointer<T> {
     /// Update the value with a new version
     pub fn update(&self, data: T, version: usize, guard: &Guard) -> bool {
         let current = self.ptr.load(Ordering::Acquire, guard);
-        
+
         // Check version before attempting swap
         if let Some(current_node) = unsafe { current.as_ref() } {
             if current_node.version >= version {
@@ -115,7 +113,7 @@ impl<T> VersionedPointer<T> {
                 return false;
             }
         }
-        
+
         let new_node = VersionedNode { data, version };
         let new = Owned::new(new_node);
 
@@ -173,13 +171,10 @@ impl<T> HazardPointer<T> {
         new: Owned<T>,
         guard: &'g Guard,
     ) -> Result<Shared<'g, T>, (Shared<'g, T>, Owned<T>)> {
-        match self.inner.compare_exchange(
-            current,
-            new,
-            Ordering::Release,
-            Ordering::Acquire,
-            guard,
-        ) {
+        match self
+            .inner
+            .compare_exchange(current, new, Ordering::Release, Ordering::Acquire, guard)
+        {
             Ok(shared) => Ok(shared),
             Err(e) => Err((e.current, e.new)),
         }

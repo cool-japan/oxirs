@@ -6,16 +6,16 @@
 //! stream processing, including state stores, checkpointing, recovery, and
 //! distributed state synchronization.
 
-use crate::{StreamEvent, EventMetadata};
+use crate::{EventMetadata, StreamEvent};
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, BTreeMap};
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::sync::{RwLock, Mutex};
 use tokio::fs;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
@@ -137,28 +137,28 @@ pub struct StateStatistics {
 pub trait StateStore: Send + Sync {
     /// Get a value by key
     async fn get(&self, key: &str) -> Result<Option<StateValue>>;
-    
+
     /// Put a value
     async fn put(&self, key: &str, value: StateValue) -> Result<()>;
-    
+
     /// Delete a value
     async fn delete(&self, key: &str) -> Result<()>;
-    
+
     /// Get multiple values
     async fn multi_get(&self, keys: &[String]) -> Result<HashMap<String, StateValue>>;
-    
+
     /// Scan a key range
     async fn scan(&self, prefix: &str, limit: Option<usize>) -> Result<Vec<(String, StateValue)>>;
-    
+
     /// Clear all state
     async fn clear(&self) -> Result<()>;
-    
+
     /// Create a checkpoint
     async fn checkpoint(&self) -> Result<String>;
-    
+
     /// Restore from checkpoint
     async fn restore(&self, checkpoint_id: &str) -> Result<()>;
-    
+
     /// Get statistics
     async fn statistics(&self) -> Result<StateStatistics>;
 }
@@ -222,7 +222,7 @@ impl StateStore for MemoryStateStore {
 
     async fn put(&self, key: &str, value: StateValue) -> Result<()> {
         self.statistics.write().await.writes += 1;
-        
+
         // Add timestamp for TTL
         let mut value_with_ts = value;
         if self.config.ttl.is_some() {
@@ -231,15 +231,19 @@ impl StateStore for MemoryStateStore {
             }
         }
 
-        self.data.write().await.insert(key.to_string(), value_with_ts.clone());
-        
+        self.data
+            .write()
+            .await
+            .insert(key.to_string(), value_with_ts.clone());
+
         self.add_to_changelog(StateOperation {
             timestamp: Utc::now(),
             key: key.to_string(),
             operation: StateOperationType::Put,
             value: Some(value_with_ts),
             metadata: HashMap::new(),
-        }).await;
+        })
+        .await;
 
         // Check size limit
         if let Some(max_size) = self.config.max_size {
@@ -262,14 +266,15 @@ impl StateStore for MemoryStateStore {
     async fn delete(&self, key: &str) -> Result<()> {
         self.statistics.write().await.deletes += 1;
         self.data.write().await.remove(key);
-        
+
         self.add_to_changelog(StateOperation {
             timestamp: Utc::now(),
             key: key.to_string(),
             operation: StateOperationType::Delete,
             value: None,
             metadata: HashMap::new(),
-        }).await;
+        })
+        .await;
 
         Ok(())
     }
@@ -281,7 +286,7 @@ impl StateStore for MemoryStateStore {
 
         let data = self.data.read().await;
         let mut result = HashMap::new();
-        
+
         for key in keys {
             if let Some(value) = data.get(key) {
                 result.insert(key.clone(), value.clone());
@@ -293,7 +298,7 @@ impl StateStore for MemoryStateStore {
 
     async fn scan(&self, prefix: &str, limit: Option<usize>) -> Result<Vec<(String, StateValue)>> {
         self.statistics.write().await.reads += 1;
-        
+
         let data = self.data.read().await;
         let iter = data
             .range(prefix.to_string()..)
@@ -309,34 +314,38 @@ impl StateStore for MemoryStateStore {
 
     async fn clear(&self) -> Result<()> {
         self.data.write().await.clear();
-        
+
         self.add_to_changelog(StateOperation {
             timestamp: Utc::now(),
             key: String::new(),
             operation: StateOperationType::Clear,
             value: None,
             metadata: HashMap::new(),
-        }).await;
+        })
+        .await;
 
         Ok(())
     }
 
     async fn checkpoint(&self) -> Result<String> {
         let checkpoint_id = Uuid::new_v4().to_string();
-        
+
         if let Some(ref checkpoint_path) = self.config.checkpoint_path {
             let checkpoint_file = checkpoint_path.join(format!("{}.checkpoint", checkpoint_id));
-            
+
             // Serialize state
             let data = self.data.read().await;
             let checkpoint_data = serde_json::to_vec(&*data)?;
-            
+
             // Write to file
             let mut file = fs::File::create(&checkpoint_file).await?;
             file.write_all(&checkpoint_data).await?;
             file.sync_all().await?;
-            
-            info!("Created checkpoint {} at {:?}", checkpoint_id, checkpoint_file);
+
+            info!(
+                "Created checkpoint {} at {:?}",
+                checkpoint_id, checkpoint_file
+            );
         }
 
         let mut stats = self.statistics.write().await;
@@ -349,16 +358,17 @@ impl StateStore for MemoryStateStore {
     async fn restore(&self, checkpoint_id: &str) -> Result<()> {
         if let Some(ref checkpoint_path) = self.config.checkpoint_path {
             let checkpoint_file = checkpoint_path.join(format!("{}.checkpoint", checkpoint_id));
-            
+
             // Read checkpoint file
             let mut file = fs::File::open(&checkpoint_file).await?;
             let mut checkpoint_data = Vec::new();
             file.read_to_end(&mut checkpoint_data).await?;
-            
+
             // Deserialize and restore
-            let restored_data: BTreeMap<String, StateValue> = serde_json::from_slice(&checkpoint_data)?;
+            let restored_data: BTreeMap<String, StateValue> =
+                serde_json::from_slice(&checkpoint_data)?;
             *self.data.write().await = restored_data;
-            
+
             info!("Restored from checkpoint {}", checkpoint_id);
         } else {
             return Err(anyhow!("No checkpoint path configured"));
@@ -369,11 +379,11 @@ impl StateStore for MemoryStateStore {
 
     async fn statistics(&self) -> Result<StateStatistics> {
         self.apply_ttl().await;
-        
+
         let mut stats = self.statistics.write().await.clone();
         let data = self.data.read().await;
         stats.total_keys = data.len();
-        
+
         // Estimate size
         stats.total_size_bytes = data
             .values()
@@ -395,7 +405,7 @@ pub struct StateProcessor {
 impl StateProcessor {
     pub fn new(config: StateConfig) -> Self {
         let default_store = Arc::new(MemoryStateStore::new(config.clone())) as Arc<dyn StateStore>;
-        
+
         Self {
             stores: HashMap::new(),
             default_store: default_store.clone(),
@@ -408,13 +418,13 @@ impl StateProcessor {
     pub async fn start_checkpointing(&mut self) {
         let store = self.default_store.clone();
         let interval = self.config.checkpoint_interval;
-        
+
         let task = tokio::spawn(async move {
             let mut interval_timer = tokio::time::interval(interval.to_std().unwrap());
-            
+
             loop {
                 interval_timer.tick().await;
-                
+
                 match store.checkpoint().await {
                     Ok(checkpoint_id) => {
                         info!("Automatic checkpoint created: {}", checkpoint_id);
@@ -463,10 +473,10 @@ impl StateProcessor {
     {
         // Get current state
         let current_state = self.default_store.get(state_key).await?;
-        
+
         // Process event with state
         let (result, new_state) = processor(event, current_state)?;
-        
+
         // Update state if changed
         if let Some(state) = new_state {
             self.default_store.put(state_key, state).await?;
@@ -522,7 +532,7 @@ impl StateProcessorBuilder {
 
     pub fn build(self) -> StateProcessor {
         let mut processor = StateProcessor::new(self.config);
-        
+
         for (name, store) in self.stores {
             processor.register_store(name, store);
         }
@@ -546,7 +556,7 @@ pub mod patterns {
             Some(StateValue::Counter(n)) => n + increment,
             _ => increment,
         };
-        
+
         store.put(key, StateValue::Counter(new_value)).await?;
         Ok(new_value)
     }
@@ -562,7 +572,7 @@ pub mod patterns {
             Some(StateValue::List(l)) => l,
             _ => Vec::new(),
         };
-        
+
         list.push(value);
         store.put(key, StateValue::List(list)).await?;
         Ok(())
@@ -579,11 +589,11 @@ pub mod patterns {
             Some(StateValue::Map(m)) => m,
             _ => HashMap::new(),
         };
-        
+
         for (k, v) in updates {
             map.insert(k, v);
         }
-        
+
         store.put(key, StateValue::Map(map)).await?;
         Ok(())
     }
@@ -618,7 +628,9 @@ pub mod patterns {
             false
         });
 
-        store.put(key, StateValue::List(window_data.clone())).await?;
+        store
+            .put(key, StateValue::List(window_data.clone()))
+            .await?;
         Ok(window_data)
     }
 }
@@ -634,7 +646,10 @@ mod tests {
         let store = MemoryStateStore::new(config);
 
         // Test put and get
-        store.put("key1", StateValue::String("value1".to_string())).await.unwrap();
+        store
+            .put("key1", StateValue::String("value1".to_string()))
+            .await
+            .unwrap();
         let value = store.get("key1").await.unwrap();
         assert!(matches!(value, Some(StateValue::String(s)) if s == "value1"));
 
@@ -686,7 +701,10 @@ mod tests {
         let store = MemoryStateStore::new(config.clone());
 
         // Add some data
-        store.put("key1", StateValue::String("value1".to_string())).await.unwrap();
+        store
+            .put("key1", StateValue::String("value1".to_string()))
+            .await
+            .unwrap();
         store.put("key2", StateValue::Integer(42)).await.unwrap();
 
         // Create checkpoint
@@ -702,7 +720,7 @@ mod tests {
         // Data should be restored
         let value1 = store.get("key1").await.unwrap();
         assert!(matches!(value1, Some(StateValue::String(s)) if s == "value1"));
-        
+
         let value2 = store.get("key2").await.unwrap();
         assert!(matches!(value2, Some(StateValue::Integer(i)) if i == 42));
     }
@@ -722,32 +740,30 @@ mod tests {
         };
 
         // Process event with state
-        let result = processor.process_with_state(
-            &event,
-            "counter",
-            |_event, state| {
+        let result = processor
+            .process_with_state(&event, "counter", |_event, state| {
                 let count = match state {
                     Some(StateValue::Counter(n)) => n + 1,
                     _ => 1,
                 };
                 Ok((count, Some(StateValue::Counter(count))))
-            }
-        ).await.unwrap();
+            })
+            .await
+            .unwrap();
 
         assert_eq!(result, 1);
 
         // Process again
-        let result = processor.process_with_state(
-            &event,
-            "counter",
-            |_event, state| {
+        let result = processor
+            .process_with_state(&event, "counter", |_event, state| {
                 let count = match state {
                     Some(StateValue::Counter(n)) => n + 1,
                     _ => 1,
                 };
                 Ok((count, Some(StateValue::Counter(count))))
-            }
-        ).await.unwrap();
+            })
+            .await
+            .unwrap();
 
         assert_eq!(result, 2);
     }
@@ -758,16 +774,24 @@ mod tests {
         let store = MemoryStateStore::new(config);
 
         // Test counter pattern
-        let count = patterns::increment_counter(&store, "counter1", 5).await.unwrap();
+        let count = patterns::increment_counter(&store, "counter1", 5)
+            .await
+            .unwrap();
         assert_eq!(count, 5);
-        
-        let count = patterns::increment_counter(&store, "counter1", 3).await.unwrap();
+
+        let count = patterns::increment_counter(&store, "counter1", 3)
+            .await
+            .unwrap();
         assert_eq!(count, 8);
 
         // Test list pattern
-        patterns::append_to_list(&store, "list1", StateValue::String("item1".to_string())).await.unwrap();
-        patterns::append_to_list(&store, "list1", StateValue::String("item2".to_string())).await.unwrap();
-        
+        patterns::append_to_list(&store, "list1", StateValue::String("item1".to_string()))
+            .await
+            .unwrap();
+        patterns::append_to_list(&store, "list1", StateValue::String("item2".to_string()))
+            .await
+            .unwrap();
+
         let list = store.get("list1").await.unwrap();
         if let Some(StateValue::List(items)) = list {
             assert_eq!(items.len(), 2);
@@ -777,11 +801,14 @@ mod tests {
 
         // Test map merger pattern
         let mut updates = HashMap::new();
-        updates.insert("field1".to_string(), StateValue::String("value1".to_string()));
+        updates.insert(
+            "field1".to_string(),
+            StateValue::String("value1".to_string()),
+        );
         updates.insert("field2".to_string(), StateValue::Integer(42));
-        
+
         patterns::merge_map(&store, "map1", updates).await.unwrap();
-        
+
         let map = store.get("map1").await.unwrap();
         if let Some(StateValue::Map(m)) = map {
             assert_eq!(m.len(), 2);

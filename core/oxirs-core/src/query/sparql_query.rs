@@ -1,15 +1,21 @@
 //! SPARQL Query representation
-//! 
+//!
 //! Extracted and adapted from OxiGraph spargebra with OxiRS enhancements.
 //! Based on W3C SPARQL 1.1 Query specification:
 //! https://www.w3.org/TR/sparql11-query/
 
-use crate::model::{NamedNode, Variable};
 use super::sparql_algebra::{
-    GraphPattern, TermPattern, Expression, PropertyPathExpression, AggregateExpression,
-    OrderExpression, FunctionExpression, BuiltInFunction, 
-    TriplePattern // Import the sparql_algebra TriplePattern explicitly
+    AggregateExpression,
+    BuiltInFunction,
+    Expression,
+    FunctionExpression,
+    GraphPattern,
+    OrderExpression,
+    PropertyPathExpression,
+    TermPattern,
+    TriplePattern, // Import the sparql_algebra TriplePattern explicitly
 };
+use crate::model::{NamedNode, Variable};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -138,10 +144,22 @@ impl Query {
     pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Self {
         let base_iri = Some(base_iri.into());
         match &mut self {
-            Query::Select { base_iri: ref mut iri, .. }
-            | Query::Construct { base_iri: ref mut iri, .. }
-            | Query::Describe { base_iri: ref mut iri, .. }
-            | Query::Ask { base_iri: ref mut iri, .. } => *iri = base_iri,
+            Query::Select {
+                base_iri: ref mut iri,
+                ..
+            }
+            | Query::Construct {
+                base_iri: ref mut iri,
+                ..
+            }
+            | Query::Describe {
+                base_iri: ref mut iri,
+                ..
+            }
+            | Query::Ask {
+                base_iri: ref mut iri,
+                ..
+            } => *iri = base_iri,
         }
         self
     }
@@ -150,10 +168,22 @@ impl Query {
     pub fn with_dataset(mut self, dataset: QueryDataset) -> Self {
         let dataset = Some(dataset);
         match &mut self {
-            Query::Select { dataset: ref mut ds, .. }
-            | Query::Construct { dataset: ref mut ds, .. }
-            | Query::Describe { dataset: ref mut ds, .. }
-            | Query::Ask { dataset: ref mut ds, .. } => *ds = dataset,
+            Query::Select {
+                dataset: ref mut ds,
+                ..
+            }
+            | Query::Construct {
+                dataset: ref mut ds,
+                ..
+            }
+            | Query::Describe {
+                dataset: ref mut ds,
+                ..
+            }
+            | Query::Ask {
+                dataset: ref mut ds,
+                ..
+            } => *ds = dataset,
         }
         self
     }
@@ -488,7 +518,11 @@ impl fmt::Display for SparqlGraphRootPattern<'_> {
                     reduced = true;
                     child = inner;
                 }
-                GraphPattern::Slice { inner, start: s, length: l } => {
+                GraphPattern::Slice {
+                    inner,
+                    start: s,
+                    length: l,
+                } => {
                     start = *s;
                     length = *l;
                     child = inner;
@@ -562,46 +596,86 @@ impl fmt::Display for SparqlInnerGraphPattern<'_> {
                 }
                 Ok(())
             }
-            GraphPattern::Path { subject, path, object } => {
+            GraphPattern::Path {
+                subject,
+                path,
+                object,
+            } => {
                 write!(f, "{subject} {path} {object}")
             }
             GraphPattern::Join { left, right } => {
-                write!(f, "{} . {}", 
-                       SparqlInnerGraphPattern::new(left),
-                       SparqlInnerGraphPattern::new(right))
+                write!(
+                    f,
+                    "{} . {}",
+                    SparqlInnerGraphPattern::new(left),
+                    SparqlInnerGraphPattern::new(right)
+                )
             }
-            GraphPattern::LeftJoin { left, right, expression } => {
-                write!(f, "{} OPTIONAL {{ {}", 
-                       SparqlInnerGraphPattern::new(left),
-                       SparqlInnerGraphPattern::new(right))?;
+            GraphPattern::LeftJoin {
+                left,
+                right,
+                expression,
+            } => {
+                write!(
+                    f,
+                    "{} OPTIONAL {{ {}",
+                    SparqlInnerGraphPattern::new(left),
+                    SparqlInnerGraphPattern::new(right)
+                )?;
                 if let Some(expr) = expression {
                     write!(f, " FILTER ({expr})")?;
                 }
                 f.write_str(" }")
             }
             GraphPattern::Filter { expr, inner } => {
-                write!(f, "{} FILTER ({})",
-                       SparqlInnerGraphPattern::new(inner), expr)
+                write!(
+                    f,
+                    "{} FILTER ({})",
+                    SparqlInnerGraphPattern::new(inner),
+                    expr
+                )
             }
             GraphPattern::Union { left, right } => {
-                write!(f, "{{ {} }} UNION {{ {} }}",
-                       SparqlInnerGraphPattern::new(left),
-                       SparqlInnerGraphPattern::new(right))
+                write!(
+                    f,
+                    "{{ {} }} UNION {{ {} }}",
+                    SparqlInnerGraphPattern::new(left),
+                    SparqlInnerGraphPattern::new(right)
+                )
             }
             GraphPattern::Graph { name, inner } => {
-                write!(f, "GRAPH {} {{ {} }}", name,
-                       SparqlInnerGraphPattern::new(inner))
+                write!(
+                    f,
+                    "GRAPH {} {{ {} }}",
+                    name,
+                    SparqlInnerGraphPattern::new(inner)
+                )
             }
-            GraphPattern::Extend { inner, variable, expression } => {
-                write!(f, "{} BIND ({} AS {})",
-                       SparqlInnerGraphPattern::new(inner), expression, variable)
+            GraphPattern::Extend {
+                inner,
+                variable,
+                expression,
+            } => {
+                write!(
+                    f,
+                    "{} BIND ({} AS {})",
+                    SparqlInnerGraphPattern::new(inner),
+                    expression,
+                    variable
+                )
             }
             GraphPattern::Minus { left, right } => {
-                write!(f, "{} MINUS {{ {} }}",
-                       SparqlInnerGraphPattern::new(left),
-                       SparqlInnerGraphPattern::new(right))
+                write!(
+                    f,
+                    "{} MINUS {{ {} }}",
+                    SparqlInnerGraphPattern::new(left),
+                    SparqlInnerGraphPattern::new(right)
+                )
             }
-            GraphPattern::Values { variables, bindings } => {
+            GraphPattern::Values {
+                variables,
+                bindings,
+            } => {
                 f.write_str("VALUES ")?;
                 if variables.len() == 1 {
                     write!(f, "{}", variables[0])?;
@@ -643,16 +717,32 @@ impl fmt::Display for SparqlInnerGraphPattern<'_> {
                 }
                 f.write_str(" }")
             }
-            GraphPattern::Service { name, inner, silent } => {
+            GraphPattern::Service {
+                name,
+                inner,
+                silent,
+            } => {
                 if *silent {
-                    write!(f, "SERVICE SILENT {} {{ {} }}", name,
-                           SparqlInnerGraphPattern::new(inner))
+                    write!(
+                        f,
+                        "SERVICE SILENT {} {{ {} }}",
+                        name,
+                        SparqlInnerGraphPattern::new(inner)
+                    )
                 } else {
-                    write!(f, "SERVICE {} {{ {} }}", name,
-                           SparqlInnerGraphPattern::new(inner))
+                    write!(
+                        f,
+                        "SERVICE {} {{ {} }}",
+                        name,
+                        SparqlInnerGraphPattern::new(inner)
+                    )
                 }
             }
-            GraphPattern::Group { inner, variables: _, aggregates: _ } => {
+            GraphPattern::Group {
+                inner,
+                variables: _,
+                aggregates: _,
+            } => {
                 // For display purposes, just show the inner pattern
                 // The GROUP BY clause is handled at a higher level
                 write!(f, "{}", SparqlInnerGraphPattern::new(inner))
@@ -687,7 +777,7 @@ mod tests {
 
         let query = Query::select(pattern);
         assert!(matches!(query, Query::Select { .. }));
-        
+
         let sse = query.to_sse();
         assert!(sse.contains("bgp"));
     }
@@ -700,7 +790,7 @@ mod tests {
         let graph = NamedNode::new("http://example.org/graph").unwrap();
         dataset.add_default_graph(graph.clone());
         dataset.add_named_graph(graph);
-        
+
         assert!(!dataset.is_empty());
         assert_eq!(dataset.default.len(), 1);
         assert_eq!(dataset.named.as_ref().unwrap().len(), 1);
@@ -718,7 +808,7 @@ mod tests {
 
         let query = Query::select(pattern);
         let query_str = query.to_string();
-        
+
         assert!(query_str.contains("SELECT"));
         assert!(query_str.contains("WHERE"));
         assert!(query_str.contains("?s"));

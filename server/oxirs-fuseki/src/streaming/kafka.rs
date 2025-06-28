@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::{
-    error::{Error, Result},
-    streaming::{StreamProducer, StreamConsumer, RDFEvent, ProducerConfig, ConsumerConfig},
+    error::{FusekiError, FusekiResult},
+    streaming::{ConsumerConfig, ProducerConfig, RDFEvent, StreamConsumer, StreamProducer},
 };
 
 /// Kafka-specific configuration
@@ -49,7 +49,7 @@ impl KafkaProducer {
     /// Create a new Kafka producer
     pub async fn new(config: KafkaConfig) -> Result<Self> {
         tracing::info!("Creating Kafka producer with brokers: {:?}", config.brokers);
-        
+
         // TODO: Initialize actual Kafka producer
         Ok(Self { config })
     }
@@ -59,26 +59,26 @@ impl KafkaProducer {
 impl StreamProducer for KafkaProducer {
     async fn send(&self, event: RDFEvent) -> Result<()> {
         tracing::debug!("Sending RDF event to Kafka");
-        
+
         // TODO: Implement actual Kafka message sending
         // For now, just log the event
         tracing::info!("Would send to Kafka: {:?}", event);
-        
+
         Ok(())
     }
-    
+
     async fn send_batch(&self, events: Vec<RDFEvent>) -> Result<()> {
         tracing::debug!("Sending batch of {} RDF events to Kafka", events.len());
-        
+
         // TODO: Implement actual batch sending
         // For now, just send individually
         for event in events {
             self.send(event).await?;
         }
-        
+
         Ok(())
     }
-    
+
     async fn flush(&self) -> Result<()> {
         tracing::debug!("Flushing Kafka producer");
         // TODO: Implement actual flush
@@ -96,7 +96,7 @@ impl KafkaConsumer {
     /// Create a new Kafka consumer
     pub async fn new(config: KafkaConfig) -> Result<Self> {
         tracing::info!("Creating Kafka consumer with brokers: {:?}", config.brokers);
-        
+
         // TODO: Initialize actual Kafka consumer
         Ok(Self { config })
     }
@@ -106,19 +106,19 @@ impl KafkaConsumer {
 impl StreamConsumer for KafkaConsumer {
     async fn subscribe(&self, handler: Box<dyn crate::streaming::EventHandler>) -> Result<()> {
         tracing::info!("Subscribing to Kafka events with handler");
-        
+
         // TODO: Implement actual subscription
         // For now, just store the handler reference
         Ok(())
     }
-    
+
     async fn unsubscribe(&self) -> Result<()> {
         tracing::info!("Unsubscribing from Kafka events");
-        
+
         // TODO: Implement actual unsubscription
         Ok(())
     }
-    
+
     async fn commit(&self) -> Result<()> {
         tracing::debug!("Committing Kafka consumer offsets");
         // TODO: Implement actual commit

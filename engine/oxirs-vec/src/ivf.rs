@@ -5,7 +5,10 @@
 //! centroid. During search, only a subset of cells are examined, greatly reducing
 //! search time at the cost of some accuracy.
 
-use crate::{Vector, VectorIndex, VectorPrecision, pq::{PQConfig, PQIndex}};
+use crate::{
+    pq::{PQConfig, PQIndex},
+    Vector, VectorIndex, VectorPrecision,
+};
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -74,13 +77,13 @@ enum VectorStorage {
     Quantized(Vec<u8>),
     /// Store multi-level residual quantization codes
     MultiLevelQuantized {
-        levels: Vec<Vec<u8>>, // PQ codes for each quantization level
+        levels: Vec<Vec<u8>>,           // PQ codes for each quantization level
         final_residual: Option<Vector>, // Optional final unquantized residual
     },
     /// Store multi-codebook quantization codes
     MultiCodebook {
         codebooks: Vec<Vec<u8>>, // PQ codes from different codebooks
-        weights: Vec<f32>, // Weights for combining codebook predictions
+        weights: Vec<f32>,       // Weights for combining codebook predictions
     },
 }
 
@@ -112,7 +115,7 @@ impl InvertedList {
             codebook_weights: Vec::new(),
         }
     }
-    
+
     fn new_with_quantization(quantization: QuantizationStrategy) -> Result<Self> {
         let mut list = Self {
             vectors: Vec::new(),
@@ -122,29 +125,35 @@ impl InvertedList {
             multi_codebook_pq: Vec::new(),
             codebook_weights: Vec::new(),
         };
-        
+
         match quantization {
-            QuantizationStrategy::None => {},
+            QuantizationStrategy::None => {}
             QuantizationStrategy::ProductQuantization(pq_config) => {
                 list.pq_index = Some(PQIndex::new(pq_config));
-            },
-            QuantizationStrategy::ResidualQuantization { levels: _, ref pq_configs } => {
+            }
+            QuantizationStrategy::ResidualQuantization {
+                levels: _,
+                ref pq_configs,
+            } => {
                 for pq_config in pq_configs {
                     list.multi_level_pq.push(PQIndex::new(pq_config.clone()));
                 }
-            },
-            QuantizationStrategy::MultiCodebook { num_codebooks, ref pq_configs } => {
+            }
+            QuantizationStrategy::MultiCodebook {
+                num_codebooks,
+                ref pq_configs,
+            } => {
                 for pq_config in pq_configs {
                     list.multi_codebook_pq.push(PQIndex::new(pq_config.clone()));
                 }
                 // Initialize equal weights for all codebooks
                 list.codebook_weights = vec![1.0 / num_codebooks as f32; num_codebooks];
-            },
+            }
         }
-        
+
         Ok(list)
     }
-    
+
     // Deprecated - use new_with_quantization instead
     fn new_with_pq(pq_config: PQConfig) -> Result<Self> {
         Self::new_with_quantization(QuantizationStrategy::ProductQuantization(pq_config))
@@ -153,7 +162,7 @@ impl InvertedList {
     fn add_full(&mut self, uri: String, vector: Vector) {
         self.vectors.push((uri, VectorStorage::Full(vector)));
     }
-    
+
     fn add_residual(&mut self, uri: String, residual: Vector, centroid: &Vector) -> Result<()> {
         match &self.quantization {
             QuantizationStrategy::ProductQuantization(_) => {
@@ -163,94 +172,105 @@ impl InvertedList {
                         let training_residuals = vec![residual.clone()];
                         pq_index.train(&training_residuals)?;
                     }
-                    
+
                     let codes = pq_index.encode(&residual)?;
                     self.vectors.push((uri, VectorStorage::Quantized(codes)));
                 } else {
-                    return Err(anyhow!("PQ index not initialized for residual quantization"));
+                    return Err(anyhow!(
+                        "PQ index not initialized for residual quantization"
+                    ));
                 }
-            },
+            }
             QuantizationStrategy::ResidualQuantization { levels, .. } => {
                 self.add_multi_level_residual(uri, residual, *levels)?;
-            },
+            }
             QuantizationStrategy::MultiCodebook { .. } => {
                 self.add_multi_codebook(uri, residual)?;
-            },
+            }
             QuantizationStrategy::None => {
                 self.add_full(uri, residual);
-            },
+            }
         }
         Ok(())
     }
-    
+
     /// Add vector using multi-level residual quantization
-    fn add_multi_level_residual(&mut self, uri: String, mut residual: Vector, levels: usize) -> Result<()> {
+    fn add_multi_level_residual(
+        &mut self,
+        uri: String,
+        mut residual: Vector,
+        levels: usize,
+    ) -> Result<()> {
         let mut level_codes = Vec::new();
-        
+
         for level in 0..levels.min(self.multi_level_pq.len()) {
             // Train this level's PQ if not already trained
             if !self.multi_level_pq[level].is_trained() {
                 let training_residuals = vec![residual.clone()];
                 self.multi_level_pq[level].train(&training_residuals)?;
             }
-            
+
             // Encode residual at this level
             let codes = self.multi_level_pq[level].encode(&residual)?;
             level_codes.push(codes);
-            
+
             // Compute and subtract the quantized approximation to get next level residual
             let approximation = self.multi_level_pq[level].decode_vector(&level_codes[level])?;
             residual = residual.subtract(&approximation)?;
         }
-        
+
         // Store the final residual if we haven't exhausted all levels
         let final_residual = if level_codes.len() < levels {
             Some(residual)
         } else {
             None
         };
-        
-        self.vectors.push((uri, VectorStorage::MultiLevelQuantized {
-            levels: level_codes,
-            final_residual,
-        }));
-        
+
+        self.vectors.push((
+            uri,
+            VectorStorage::MultiLevelQuantized {
+                levels: level_codes,
+                final_residual,
+            },
+        ));
+
         Ok(())
     }
-    
+
     /// Add vector using multi-codebook quantization
     fn add_multi_codebook(&mut self, uri: String, residual: Vector) -> Result<()> {
         let mut codebook_codes = Vec::new();
-        
+
         for (i, pq_index) in self.multi_codebook_pq.iter_mut().enumerate() {
             // Train this codebook's PQ if not already trained
             if !pq_index.is_trained() {
                 let training_residuals = vec![residual.clone()];
                 pq_index.train(&training_residuals)?;
             }
-            
+
             // Encode residual with this codebook
             let codes = pq_index.encode(&residual)?;
             codebook_codes.push(codes);
         }
-        
-        self.vectors.push((uri, VectorStorage::MultiCodebook {
-            codebooks: codebook_codes,
-            weights: self.codebook_weights.clone(),
-        }));
-        
+
+        self.vectors.push((
+            uri,
+            VectorStorage::MultiCodebook {
+                codebooks: codebook_codes,
+                weights: self.codebook_weights.clone(),
+            },
+        ));
+
         Ok(())
     }
 
     fn search(&self, query: &Vector, centroid: &Vector, k: usize) -> Result<Vec<(String, f32)>> {
         let mut distances: Vec<(String, f32)> = Vec::new();
         let query_residual = query.subtract(centroid)?;
-        
+
         for (uri, storage) in &self.vectors {
             let distance = match storage {
-                VectorStorage::Full(vec) => {
-                    query.euclidean_distance(vec).unwrap_or(f32::INFINITY)
-                }
+                VectorStorage::Full(vec) => query.euclidean_distance(vec).unwrap_or(f32::INFINITY),
                 VectorStorage::Quantized(codes) => {
                     if let Some(ref pq_index) = self.pq_index {
                         pq_index.compute_distance(&query_residual, codes)?
@@ -258,9 +278,10 @@ impl InvertedList {
                         f32::INFINITY
                     }
                 }
-                VectorStorage::MultiLevelQuantized { levels, final_residual } => {
-                    self.compute_multi_level_distance(&query_residual, levels, final_residual)?
-                }
+                VectorStorage::MultiLevelQuantized {
+                    levels,
+                    final_residual,
+                } => self.compute_multi_level_distance(&query_residual, levels, final_residual)?,
                 VectorStorage::MultiCodebook { codebooks, weights } => {
                     self.compute_multi_codebook_distance(&query_residual, codebooks, weights)?
                 }
@@ -270,23 +291,23 @@ impl InvertedList {
 
         distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
         distances.truncate(k);
-        
+
         // Convert distances to similarities (1 / (1 + distance))
         Ok(distances
             .into_iter()
             .map(|(uri, dist)| (uri, 1.0 / (1.0 + dist)))
             .collect())
     }
-    
+
     /// Compute distance for multi-level residual quantization
     fn compute_multi_level_distance(
-        &self, 
-        query_residual: &Vector, 
-        level_codes: &[Vec<u8>], 
-        final_residual: &Option<Vector>
+        &self,
+        query_residual: &Vector,
+        level_codes: &[Vec<u8>],
+        final_residual: &Option<Vector>,
     ) -> Result<f32> {
         let mut reconstructed_residual = Vector::new(vec![0.0; query_residual.dimensions]);
-        
+
         // Reconstruct vector from quantized levels
         for (level, codes) in level_codes.iter().enumerate() {
             if level < self.multi_level_pq.len() {
@@ -294,35 +315,36 @@ impl InvertedList {
                 reconstructed_residual = reconstructed_residual.add(&level_reconstruction)?;
             }
         }
-        
+
         // Add final unquantized residual if present
         if let Some(final_res) = final_residual {
             reconstructed_residual = reconstructed_residual.add(final_res)?;
         }
-        
+
         // Compute distance between query residual and reconstructed residual
         query_residual.euclidean_distance(&reconstructed_residual)
     }
-    
+
     /// Compute distance for multi-codebook quantization
     fn compute_multi_codebook_distance(
-        &self, 
-        query_residual: &Vector, 
-        codebook_codes: &[Vec<u8>], 
-        weights: &[f32]
+        &self,
+        query_residual: &Vector,
+        codebook_codes: &[Vec<u8>],
+        weights: &[f32],
     ) -> Result<f32> {
         let mut weighted_distance = 0.0;
         let mut total_weight = 0.0;
-        
+
         // Compute weighted combination of distances from all codebooks
         for (i, codes) in codebook_codes.iter().enumerate() {
             if i < self.multi_codebook_pq.len() && i < weights.len() {
-                let codebook_distance = self.multi_codebook_pq[i].compute_distance(query_residual, codes)?;
+                let codebook_distance =
+                    self.multi_codebook_pq[i].compute_distance(query_residual, codes)?;
                 weighted_distance += weights[i] * codebook_distance;
                 total_weight += weights[i];
             }
         }
-        
+
         // Normalize by total weight
         if total_weight > 0.0 {
             Ok(weighted_distance / total_weight)
@@ -330,7 +352,7 @@ impl InvertedList {
             Ok(f32::INFINITY)
         }
     }
-    
+
     /// Train product quantizer on collected residuals
     fn train_pq(&mut self, residuals: &[Vector]) -> Result<()> {
         match &self.quantization {
@@ -338,26 +360,26 @@ impl InvertedList {
                 if let Some(ref mut pq_index) = self.pq_index {
                     pq_index.train(residuals)?;
                 }
-            },
+            }
             QuantizationStrategy::ResidualQuantization { levels, .. } => {
                 self.train_multi_level_pq(residuals, *levels)?;
-            },
+            }
             QuantizationStrategy::MultiCodebook { .. } => {
                 self.train_multi_codebook_pq(residuals)?;
-            },
-            QuantizationStrategy::None => {},
+            }
+            QuantizationStrategy::None => {}
         }
         Ok(())
     }
-    
+
     /// Train multi-level residual quantization
     fn train_multi_level_pq(&mut self, residuals: &[Vector], levels: usize) -> Result<()> {
         let mut current_residuals = residuals.to_vec();
-        
+
         for level in 0..levels.min(self.multi_level_pq.len()) {
             // Train PQ at this level
             self.multi_level_pq[level].train(&current_residuals)?;
-            
+
             // Compute residuals for next level by subtracting quantized approximation
             let mut next_residuals = Vec::new();
             for residual in &current_residuals {
@@ -368,54 +390,57 @@ impl InvertedList {
             }
             current_residuals = next_residuals;
         }
-        
+
         Ok(())
     }
-    
+
     /// Train multi-codebook quantization
     fn train_multi_codebook_pq(&mut self, residuals: &[Vector]) -> Result<()> {
         // Train each codebook independently on the same residuals
         for pq_index in &mut self.multi_codebook_pq {
             pq_index.train(residuals)?;
         }
-        
+
         // Optionally, optimize codebook weights based on reconstruction quality
         self.optimize_codebook_weights(residuals)?;
-        
+
         Ok(())
     }
-    
+
     /// Optimize weights for multi-codebook quantization
     fn optimize_codebook_weights(&mut self, residuals: &[Vector]) -> Result<()> {
         if self.multi_codebook_pq.is_empty() || residuals.is_empty() {
             return Ok(());
         }
-        
+
         let num_codebooks = self.multi_codebook_pq.len();
         let mut reconstruction_errors = vec![0.0; num_codebooks];
-        
+
         // Compute reconstruction error for each codebook
         for (i, pq_index) in self.multi_codebook_pq.iter().enumerate() {
             let mut total_error = 0.0;
             for residual in residuals {
                 let codes = pq_index.encode(residual)?;
                 let reconstruction = pq_index.decode_vector(&codes)?;
-                let error = residual.euclidean_distance(&reconstruction).unwrap_or(f32::INFINITY);
+                let error = residual
+                    .euclidean_distance(&reconstruction)
+                    .unwrap_or(f32::INFINITY);
                 total_error += error;
             }
             reconstruction_errors[i] = total_error / residuals.len() as f32;
         }
-        
+
         // Compute weights inversely proportional to reconstruction error
         let max_error = reconstruction_errors.iter().fold(0.0f32, |a, &b| a.max(b));
         if max_error > 0.0 {
             let mut total_weight = 0.0;
             for i in 0..num_codebooks {
                 // Higher weight for lower error
-                self.codebook_weights[i] = (max_error - reconstruction_errors[i] + 1e-6) / max_error;
+                self.codebook_weights[i] =
+                    (max_error - reconstruction_errors[i] + 1e-6) / max_error;
                 total_weight += self.codebook_weights[i];
             }
-            
+
             // Normalize weights
             if total_weight > 0.0 {
                 for weight in &mut self.codebook_weights {
@@ -423,17 +448,17 @@ impl InvertedList {
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Get statistics about this inverted list
     fn stats(&self) -> InvertedListStats {
         let mut full_vectors = 0;
         let mut quantized_vectors = 0;
         let mut multi_level_vectors = 0;
         let mut multi_codebook_vectors = 0;
-        
+
         for (_, storage) in &self.vectors {
             match storage {
                 VectorStorage::Full(_) => full_vectors += 1,
@@ -441,21 +466,21 @@ impl InvertedList {
                 VectorStorage::MultiLevelQuantized { .. } => {
                     quantized_vectors += 1;
                     multi_level_vectors += 1;
-                },
+                }
                 VectorStorage::MultiCodebook { .. } => {
                     quantized_vectors += 1;
                     multi_codebook_vectors += 1;
-                },
+                }
             }
         }
-        
+
         let total_vectors = self.vectors.len();
         let compression_ratio = if total_vectors > 0 {
             quantized_vectors as f32 / total_vectors as f32
         } else {
             0.0
         };
-        
+
         InvertedListStats {
             total_vectors,
             full_vectors,
@@ -499,20 +524,24 @@ impl IvfIndex {
     /// Create a new IVF index
     pub fn new(config: IvfConfig) -> Result<Self> {
         let mut inverted_lists = Vec::with_capacity(config.n_clusters);
-        
+
         // Determine quantization strategy (backward compatibility support)
         let quantization = if config.enable_residual_quantization {
             if let Some(ref pq_config) = config.pq_config {
                 QuantizationStrategy::ProductQuantization(pq_config.clone())
             } else {
-                return Err(anyhow!("PQ config required when residual quantization is enabled"));
+                return Err(anyhow!(
+                    "PQ config required when residual quantization is enabled"
+                ));
             }
         } else {
             config.quantization.clone()
         };
-        
+
         for _ in 0..config.n_clusters {
-            let inverted_list = Arc::new(RwLock::new(InvertedList::new_with_quantization(quantization.clone())?));
+            let inverted_list = Arc::new(RwLock::new(InvertedList::new_with_quantization(
+                quantization.clone(),
+            )?));
             inverted_lists.push(inverted_list);
         }
 
@@ -525,12 +554,12 @@ impl IvfIndex {
             is_trained: false,
         })
     }
-    
+
     /// Create a new IVF index with product quantization
     pub fn new_with_product_quantization(
-        n_clusters: usize, 
-        n_probes: usize, 
-        pq_config: PQConfig
+        n_clusters: usize,
+        n_probes: usize,
+        pq_config: PQConfig,
     ) -> Result<Self> {
         let config = IvfConfig {
             n_clusters,
@@ -540,18 +569,20 @@ impl IvfIndex {
         };
         Self::new(config)
     }
-    
+
     /// Create a new IVF index with multi-level residual quantization
     pub fn new_with_multi_level_quantization(
         n_clusters: usize,
         n_probes: usize,
         levels: usize,
-        pq_configs: Vec<PQConfig>
+        pq_configs: Vec<PQConfig>,
     ) -> Result<Self> {
         if pq_configs.len() < levels {
-            return Err(anyhow!("Number of PQ configs must be at least equal to levels"));
+            return Err(anyhow!(
+                "Number of PQ configs must be at least equal to levels"
+            ));
         }
-        
+
         let config = IvfConfig {
             n_clusters,
             n_probes,
@@ -560,32 +591,37 @@ impl IvfIndex {
         };
         Self::new(config)
     }
-    
+
     /// Create a new IVF index with multi-codebook quantization
     pub fn new_with_multi_codebook_quantization(
         n_clusters: usize,
         n_probes: usize,
         num_codebooks: usize,
-        pq_configs: Vec<PQConfig>
+        pq_configs: Vec<PQConfig>,
     ) -> Result<Self> {
         if pq_configs.len() != num_codebooks {
-            return Err(anyhow!("Number of PQ configs must equal number of codebooks"));
+            return Err(anyhow!(
+                "Number of PQ configs must equal number of codebooks"
+            ));
         }
-        
+
         let config = IvfConfig {
             n_clusters,
             n_probes,
-            quantization: QuantizationStrategy::MultiCodebook { num_codebooks, pq_configs },
+            quantization: QuantizationStrategy::MultiCodebook {
+                num_codebooks,
+                pq_configs,
+            },
             ..Default::default()
         };
         Self::new(config)
     }
-    
+
     /// Create a new IVF index with residual quantization enabled (deprecated)
     pub fn new_with_residual_quantization(
-        n_clusters: usize, 
-        n_probes: usize, 
-        pq_config: PQConfig
+        n_clusters: usize,
+        n_probes: usize,
+        pq_config: PQConfig,
     ) -> Result<Self> {
         Self::new_with_product_quantization(n_clusters, n_probes, pq_config)
     }
@@ -599,7 +635,9 @@ impl IvfIndex {
         // Validate dimensions
         let dims = training_vectors[0].dimensions;
         if !training_vectors.iter().all(|v| v.dimensions == dims) {
-            return Err(anyhow!("All training vectors must have the same dimensions"));
+            return Err(anyhow!(
+                "All training vectors must have the same dimensions"
+            ));
         }
 
         self.dimensions = Some(dims);
@@ -614,7 +652,7 @@ impl IvfIndex {
         while iteration < self.config.max_iterations {
             // Assign vectors to nearest centroids
             let mut clusters: Vec<Vec<&Vector>> = vec![Vec::new(); self.config.n_clusters];
-            
+
             for vector in training_vectors {
                 let nearest_idx = self.find_nearest_centroid(vector)?;
                 clusters[nearest_idx].push(vector);
@@ -642,35 +680,38 @@ impl IvfIndex {
         }
 
         self.is_trained = true;
-        
+
         // Train quantization if enabled
-        if !matches!(self.config.quantization, QuantizationStrategy::None) || self.config.enable_residual_quantization {
+        if !matches!(self.config.quantization, QuantizationStrategy::None)
+            || self.config.enable_residual_quantization
+        {
             self.train_residual_quantization(training_vectors)?;
         }
-        
+
         Ok(())
     }
-    
+
     /// Train residual quantization on all clusters
     fn train_residual_quantization(&mut self, training_vectors: &[Vector]) -> Result<()> {
         // Collect residuals for each cluster
         let mut cluster_residuals: Vec<Vec<Vector>> = vec![Vec::new(); self.config.n_clusters];
-        
+
         for vector in training_vectors {
             let cluster_idx = self.find_nearest_centroid(vector)?;
             let centroid = &self.centroids[cluster_idx];
             let residual = vector.subtract(centroid)?;
             cluster_residuals[cluster_idx].push(residual);
         }
-        
+
         // Train PQ for each cluster that has enough residuals
         for (cluster_idx, residuals) in cluster_residuals.iter().enumerate() {
-            if residuals.len() > 10 { // Minimum threshold for training
+            if residuals.len() > 10 {
+                // Minimum threshold for training
                 let mut list = self.inverted_lists[cluster_idx].write().unwrap();
                 list.train_pq(residuals)?;
             }
         }
-        
+
         Ok(())
     }
 
@@ -700,7 +741,7 @@ impl IvfIndex {
                     .iter()
                     .map(|c| vector.euclidean_distance(c).unwrap_or(f32::INFINITY))
                     .fold(f32::INFINITY, |a, b| a.min(b));
-                
+
                 distances.push(min_dist * min_dist); // Square for k-means++
                 sum_distances += min_dist * min_dist;
             }
@@ -779,7 +820,7 @@ impl IvfIndex {
             .collect();
 
         distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-        
+
         Ok(distances
             .into_iter()
             .take(n_probes.min(self.centroids.len()))
@@ -798,39 +839,39 @@ impl IvfIndex {
             multi_codebook_vectors: 0,
             quantization_strategy: QuantizationStrategy::None,
         };
-        
+
         let mut cluster_stats = Vec::new();
         let mut vectors_per_cluster = Vec::new();
         let mut non_empty_clusters = 0;
-        
+
         for list in &self.inverted_lists {
             let list_guard = list.read().unwrap();
             let stats = list_guard.stats();
-            
+
             total_list_stats.total_vectors += stats.total_vectors;
             total_list_stats.full_vectors += stats.full_vectors;
             total_list_stats.quantized_vectors += stats.quantized_vectors;
-            
+
             vectors_per_cluster.push(stats.total_vectors);
             if stats.total_vectors > 0 {
                 non_empty_clusters += 1;
             }
-            
+
             cluster_stats.push(stats);
         }
-        
+
         // Calculate overall compression ratio
         if total_list_stats.total_vectors > 0 {
-            total_list_stats.compression_ratio = 
+            total_list_stats.compression_ratio =
                 total_list_stats.quantized_vectors as f32 / total_list_stats.total_vectors as f32;
         }
-        
+
         let avg_vectors_per_cluster = if self.config.n_clusters > 0 {
             self.n_vectors as f32 / self.config.n_clusters as f32
         } else {
             0.0
         };
-        
+
         IvfStats {
             n_clusters: self.config.n_clusters,
             n_probes: self.config.n_probes,
@@ -851,7 +892,9 @@ impl IvfIndex {
 impl VectorIndex for IvfIndex {
     fn insert(&mut self, uri: String, vector: Vector) -> Result<()> {
         if !self.is_trained {
-            return Err(anyhow!("IVF index must be trained before inserting vectors"));
+            return Err(anyhow!(
+                "IVF index must be trained before inserting vectors"
+            ));
         }
 
         // Validate dimensions
@@ -868,9 +911,9 @@ impl VectorIndex for IvfIndex {
         // Find nearest centroid
         let cluster_idx = self.find_nearest_centroid(&vector)?;
         let centroid = &self.centroids[cluster_idx];
-        
+
         let mut list = self.inverted_lists[cluster_idx].write().unwrap();
-        
+
         // Handle quantization based on strategy
         match &self.config.quantization {
             QuantizationStrategy::None => {
@@ -881,14 +924,14 @@ impl VectorIndex for IvfIndex {
                 } else {
                     list.add_full(uri, vector);
                 }
-            },
+            }
             _ => {
                 // Use new quantization strategies
                 let residual = vector.subtract(centroid)?;
                 list.add_residual(uri, residual, centroid)?;
             }
         }
-        
+
         self.n_vectors += 1;
         Ok(())
     }
@@ -931,7 +974,7 @@ impl VectorIndex for IvfIndex {
             let list = self.inverted_lists[idx].read().unwrap();
             let centroid = &self.centroids[idx];
             let results = list.search(query, centroid, self.n_vectors)?;
-            
+
             // Filter by threshold
             for (uri, similarity) in results {
                 if similarity >= threshold {
@@ -945,7 +988,7 @@ impl VectorIndex for IvfIndex {
 
         Ok(all_results)
     }
-    
+
     fn get_vector(&self, uri: &str) -> Option<&Vector> {
         // IVF doesn't maintain a direct URI to vector mapping
         // Would need to search through all inverted lists
@@ -982,7 +1025,7 @@ mod tests {
             n_probes: 2,
             ..Default::default()
         };
-        
+
         let mut index = IvfIndex::new(config).unwrap();
 
         // Create training vectors
@@ -1009,10 +1052,10 @@ mod tests {
         // Search for nearest neighbors
         let query = Vector::new(vec![0.9, 0.1]);
         let results = index.search_knn(&query, 3).unwrap();
-        
+
         assert!(!results.is_empty());
         assert!(results.len() <= 3);
-        
+
         // The first result should be vec0 (closest to [1.0, 0.0])
         assert_eq!(results[0].0, "vec0");
     }
@@ -1024,7 +1067,7 @@ mod tests {
             n_probes: 2,
             ..Default::default()
         };
-        
+
         let mut index = IvfIndex::new(config).unwrap();
 
         // Create and train with vectors
@@ -1038,10 +1081,18 @@ mod tests {
         index.train(&training_vectors).unwrap();
 
         // Insert vectors
-        index.insert("v1".to_string(), training_vectors[0].clone()).unwrap();
-        index.insert("v2".to_string(), training_vectors[1].clone()).unwrap();
-        index.insert("v3".to_string(), training_vectors[2].clone()).unwrap();
-        index.insert("v4".to_string(), training_vectors[3].clone()).unwrap();
+        index
+            .insert("v1".to_string(), training_vectors[0].clone())
+            .unwrap();
+        index
+            .insert("v2".to_string(), training_vectors[1].clone())
+            .unwrap();
+        index
+            .insert("v3".to_string(), training_vectors[2].clone())
+            .unwrap();
+        index
+            .insert("v4".to_string(), training_vectors[3].clone())
+            .unwrap();
 
         // Search with threshold
         let query = Vector::new(vec![0.9, 0.1, 0.0]);
@@ -1061,7 +1112,7 @@ mod tests {
             n_probes: 1,
             ..Default::default()
         };
-        
+
         let mut index = IvfIndex::new(config).unwrap();
 
         // Train with simple vectors
@@ -1074,8 +1125,12 @@ mod tests {
         index.train(&training_vectors).unwrap();
 
         // Insert some vectors
-        index.insert("a".to_string(), Vector::new(vec![1.1, 0.1])).unwrap();
-        index.insert("b".to_string(), Vector::new(vec![0.1, 1.1])).unwrap();
+        index
+            .insert("a".to_string(), Vector::new(vec![1.1, 0.1]))
+            .unwrap();
+        index
+            .insert("b".to_string(), Vector::new(vec![0.1, 1.1]))
+            .unwrap();
 
         let stats = index.stats();
         assert_eq!(stats.n_vectors, 2);
@@ -1087,7 +1142,7 @@ mod tests {
     #[test]
     fn test_ivf_multi_level_quantization() {
         use crate::pq::PQConfig;
-        
+
         // Create PQ configs for different levels
         let pq_config_1 = PQConfig {
             n_subquantizers: 2,
@@ -1099,10 +1154,10 @@ mod tests {
             n_bits: 4,
             ..Default::default()
         };
-        
-        let mut index = IvfIndex::new_with_multi_level_quantization(
-            4, 2, 2, vec![pq_config_1, pq_config_2]
-        ).unwrap();
+
+        let mut index =
+            IvfIndex::new_with_multi_level_quantization(4, 2, 2, vec![pq_config_1, pq_config_2])
+                .unwrap();
 
         // Create training vectors
         let training_vectors = vec![
@@ -1126,13 +1181,16 @@ mod tests {
         // Search for nearest neighbors
         let query = Vector::new(vec![0.9, 0.1, 0.0, 0.0]);
         let results = index.search_knn(&query, 3).unwrap();
-        
+
         assert!(!results.is_empty());
         assert!(results.len() <= 3);
-        
+
         // Check stats
         let stats = index.stats();
-        assert!(matches!(stats.quantization_strategy, QuantizationStrategy::ResidualQuantization { .. }));
+        assert!(matches!(
+            stats.quantization_strategy,
+            QuantizationStrategy::ResidualQuantization { .. }
+        ));
         if let Some(compression_stats) = &stats.compression_stats {
             assert!(compression_stats.multi_level_vectors > 0);
         }
@@ -1141,7 +1199,7 @@ mod tests {
     #[test]
     fn test_ivf_multi_codebook_quantization() {
         use crate::pq::PQConfig;
-        
+
         // Create PQ configs for different codebooks
         let pq_config_1 = PQConfig {
             n_subquantizers: 2,
@@ -1149,14 +1207,14 @@ mod tests {
             ..Default::default()
         };
         let pq_config_2 = PQConfig {
-            n_subquantizers: 2,  
+            n_subquantizers: 2,
             n_bits: 8,
             ..Default::default()
         };
-        
-        let mut index = IvfIndex::new_with_multi_codebook_quantization(
-            4, 2, 2, vec![pq_config_1, pq_config_2]
-        ).unwrap();
+
+        let mut index =
+            IvfIndex::new_with_multi_codebook_quantization(4, 2, 2, vec![pq_config_1, pq_config_2])
+                .unwrap();
 
         // Create training vectors
         let training_vectors = vec![
@@ -1179,13 +1237,16 @@ mod tests {
         // Search for nearest neighbors
         let query = Vector::new(vec![0.9, 0.1, 0.0, 0.0]);
         let results = index.search_knn(&query, 2).unwrap();
-        
+
         assert!(!results.is_empty());
         assert!(results.len() <= 2);
-        
+
         // Check stats
         let stats = index.stats();
-        assert!(matches!(stats.quantization_strategy, QuantizationStrategy::MultiCodebook { .. }));
+        assert!(matches!(
+            stats.quantization_strategy,
+            QuantizationStrategy::MultiCodebook { .. }
+        ));
         if let Some(compression_stats) = &stats.compression_stats {
             assert!(compression_stats.multi_codebook_vectors > 0);
         }
@@ -1194,9 +1255,9 @@ mod tests {
     #[test]
     fn test_quantization_strategies() {
         use crate::pq::PQConfig;
-        
+
         let pq_config = PQConfig::default();
-        
+
         // Test different quantization strategies
         let strategies = vec![
             QuantizationStrategy::None,
@@ -1210,7 +1271,7 @@ mod tests {
                 pq_configs: vec![pq_config.clone(), pq_config.clone()],
             },
         ];
-        
+
         for strategy in strategies {
             let config = IvfConfig {
                 n_clusters: 2,
@@ -1218,9 +1279,13 @@ mod tests {
                 quantization: strategy.clone(),
                 ..Default::default()
             };
-            
+
             let index = IvfIndex::new(config);
-            assert!(index.is_ok(), "Failed to create index with strategy: {:?}", strategy);
+            assert!(
+                index.is_ok(),
+                "Failed to create index with strategy: {:?}",
+                strategy
+            );
         }
     }
 }

@@ -79,7 +79,7 @@ impl Vector {
                 for (byte_a, byte_b) in a.iter().zip(b) {
                     let and_result = byte_a & byte_b;
                     let or_result = byte_a | byte_b;
-                    
+
                     intersection += and_result.count_ones();
                     union += or_result.count_ones();
                 }
@@ -94,10 +94,10 @@ impl Vector {
                 // Convert to binary using threshold of 0.5
                 let a_binary = Vector::to_binary(&self.as_f32(), 0.5);
                 let b_binary = Vector::to_binary(&other.as_f32(), 0.5);
-                
+
                 let vec_a = Vector::binary(a_binary);
                 let vec_b = Vector::binary(b_binary);
-                
+
                 vec_a.jaccard_similarity(&vec_b)
             }
         }
@@ -112,22 +112,22 @@ impl Vector {
         match (&self.values, &other.values) {
             (VectorData::Binary(a), VectorData::Binary(b)) => {
                 let mut distance = 0u32;
-                
+
                 for (byte_a, byte_b) in a.iter().zip(b) {
                     let xor_result = byte_a ^ byte_b;
                     distance += xor_result.count_ones();
                 }
-                
+
                 Ok(distance)
             }
             _ => {
                 // Convert to binary and calculate
                 let a_binary = Vector::to_binary(&self.as_f32(), 0.5);
                 let b_binary = Vector::to_binary(&other.as_f32(), 0.5);
-                
+
                 let vec_a = Vector::binary(a_binary);
                 let vec_b = Vector::binary(b_binary);
-                
+
                 vec_a.hamming_distance(&vec_b)
             }
         }
@@ -173,7 +173,8 @@ impl Vector {
         let p = normalize_to_probability(&self.as_f32())?;
         let q = normalize_to_probability(&other.as_f32())?;
 
-        let sum: f32 = p.iter()
+        let sum: f32 = p
+            .iter()
             .zip(&q)
             .map(|(a, b)| (a.sqrt() - b.sqrt()).powi(2))
             .sum();
@@ -194,20 +195,17 @@ impl Vector {
         // Calculate cumulative distributions
         let mut cdf_p = vec![0.0; p.len()];
         let mut cdf_q = vec![0.0; q.len()];
-        
+
         cdf_p[0] = p[0];
         cdf_q[0] = q[0];
-        
+
         for i in 1..p.len() {
             cdf_p[i] = cdf_p[i - 1] + p[i];
             cdf_q[i] = cdf_q[i - 1] + q[i];
         }
 
         // EMD is the L1 distance between CDFs
-        let emd: f32 = cdf_p.iter()
-            .zip(&cdf_q)
-            .map(|(a, b)| (a - b).abs())
-            .sum();
+        let emd: f32 = cdf_p.iter().zip(&cdf_q).map(|(a, b)| (a - b).abs()).sum();
 
         Ok(emd)
     }
@@ -227,7 +225,8 @@ impl Vector {
         let x = self.as_f32();
         let y = other.as_f32();
 
-        let distance_sq: f32 = x.iter()
+        let distance_sq: f32 = x
+            .iter()
             .zip(&y)
             .zip(variance)
             .map(|((a, b), &var)| {
@@ -245,32 +244,29 @@ impl Vector {
 
 /// Convert values to ranks (1-based)
 fn to_ranks(values: &[f32]) -> Vec<f32> {
-    let mut indexed: Vec<(usize, f32)> = values.iter()
-        .enumerate()
-        .map(|(i, &v)| (i, v))
-        .collect();
-    
+    let mut indexed: Vec<(usize, f32)> = values.iter().enumerate().map(|(i, &v)| (i, v)).collect();
+
     indexed.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-    
+
     let mut ranks = vec![0.0; values.len()];
     let mut i = 0;
-    
+
     while i < indexed.len() {
         let mut j = i;
         // Find all equal values
         while j < indexed.len() && indexed[j].1 == indexed[i].1 {
             j += 1;
         }
-        
+
         // Assign average rank to all equal values
         let avg_rank = (i + j) as f32 / 2.0 + 0.5;
         for k in i..j {
             ranks[indexed[k].0] = avg_rank;
         }
-        
+
         i = j;
     }
-    
+
     ranks
 }
 
@@ -285,7 +281,7 @@ fn normalize_to_probability(values: &[f32]) -> Result<Vec<f32>> {
     };
 
     let sum: f32 = shifted.iter().sum();
-    
+
     if sum == 0.0 {
         // Uniform distribution if all zeros
         Ok(vec![1.0 / values.len() as f32; values.len()])
@@ -308,7 +304,7 @@ fn kl_divergence_raw(p: &[f32], q: &[f32]) -> Result<f32> {
             return Ok(f32::INFINITY);
         }
     }
-    
+
     Ok(kl)
 }
 
@@ -320,7 +316,7 @@ mod tests {
     fn test_pearson_correlation() {
         let vec1 = Vector::new(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
         let vec2 = Vector::new(vec![2.0, 4.0, 6.0, 8.0, 10.0]);
-        
+
         let correlation = vec1.pearson_correlation(&vec2).unwrap();
         assert!((correlation - 1.0).abs() < 1e-6); // Perfect correlation
     }
@@ -329,7 +325,7 @@ mod tests {
     fn test_spearman_correlation() {
         let vec1 = Vector::new(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
         let vec2 = Vector::new(vec![1.0, 4.0, 9.0, 16.0, 25.0]); // Monotonic but not linear
-        
+
         let correlation = vec1.spearman_correlation(&vec2).unwrap();
         assert!((correlation - 1.0).abs() < 1e-6); // Perfect rank correlation
     }
@@ -338,18 +334,18 @@ mod tests {
     fn test_jaccard_similarity() {
         let vec1 = Vector::binary(vec![0b11110000]);
         let vec2 = Vector::binary(vec![0b11001100]);
-        
+
         let similarity = vec1.jaccard_similarity(&vec2).unwrap();
         // Intersection: 0b11000000 (2 bits)
         // Union: 0b11111100 (6 bits)
-        assert!((similarity - 2.0/6.0).abs() < 1e-6);
+        assert!((similarity - 2.0 / 6.0).abs() < 1e-6);
     }
 
     #[test]
     fn test_hamming_distance() {
         let vec1 = Vector::binary(vec![0b11110000]);
         let vec2 = Vector::binary(vec![0b11001100]);
-        
+
         let distance = vec1.hamming_distance(&vec2).unwrap();
         // XOR: 0b00111100 (4 different bits)
         assert_eq!(distance, 4);
@@ -359,10 +355,10 @@ mod tests {
     fn test_jensen_shannon_divergence() {
         let vec1 = Vector::new(vec![0.25, 0.25, 0.25, 0.25]);
         let vec2 = Vector::new(vec![0.5, 0.3, 0.1, 0.1]);
-        
+
         let jsd = vec1.jensen_shannon_divergence(&vec2).unwrap();
         assert!(jsd >= 0.0 && jsd <= 1.0);
-        
+
         // Same distribution should have JSD = 0
         let jsd_same = vec1.jensen_shannon_divergence(&vec1).unwrap();
         assert!(jsd_same.abs() < 1e-6);
@@ -372,10 +368,10 @@ mod tests {
     fn test_hellinger_distance() {
         let vec1 = Vector::new(vec![0.25, 0.25, 0.25, 0.25]);
         let vec2 = Vector::new(vec![0.25, 0.25, 0.25, 0.25]);
-        
+
         let distance = vec1.hellinger_distance(&vec2).unwrap();
         assert!(distance.abs() < 1e-6); // Same distribution
-        
+
         let vec3 = Vector::new(vec![1.0, 0.0, 0.0, 0.0]);
         let distance2 = vec1.hellinger_distance(&vec3).unwrap();
         assert!(distance2 > 0.0);
@@ -385,10 +381,10 @@ mod tests {
     fn test_earth_movers_distance() {
         let vec1 = Vector::new(vec![1.0, 0.0, 0.0, 0.0]);
         let vec2 = Vector::new(vec![0.0, 0.0, 0.0, 1.0]);
-        
+
         let emd = vec1.earth_movers_distance(&vec2).unwrap();
         assert!(emd > 0.0); // Mass needs to be moved
-        
+
         // Same distribution
         let emd_same = vec1.earth_movers_distance(&vec1).unwrap();
         assert!(emd_same.abs() < 1e-6);
@@ -399,10 +395,10 @@ mod tests {
         let vec1 = Vector::new(vec![1.0, 2.0, 3.0]);
         let vec2 = Vector::new(vec![4.0, 5.0, 6.0]);
         let variance = vec![1.0, 2.0, 3.0];
-        
+
         let distance = vec1.mahalanobis_distance(&vec2, &variance).unwrap();
         assert!(distance > 0.0);
-        
+
         // Distance to self should be 0
         let self_distance = vec1.mahalanobis_distance(&vec1, &variance).unwrap();
         assert!(self_distance.abs() < 1e-6);

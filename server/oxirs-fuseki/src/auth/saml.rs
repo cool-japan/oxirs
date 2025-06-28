@@ -1,15 +1,19 @@
 //! SAML 2.0 authentication support
 
 #[cfg(feature = "saml")]
-use std::{collections::HashMap, sync::Arc, time::{Duration, SystemTime, UNIX_EPOCH}};
-#[cfg(feature = "saml")]
 use async_trait::async_trait;
 #[cfg(feature = "saml")]
-use base64::{Engine as _, engine::general_purpose};
+use base64::{engine::general_purpose, Engine as _};
 #[cfg(feature = "saml")]
 use chrono::{DateTime, Utc};
 #[cfg(feature = "saml")]
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "saml")]
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 #[cfg(feature = "saml")]
 use tokio::sync::RwLock;
 #[cfg(feature = "saml")]
@@ -86,8 +90,12 @@ impl Default for AttributeMapping {
     fn default() -> Self {
         Self {
             username: "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name".to_string(),
-            email: Some("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress".to_string()),
-            display_name: Some("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname".to_string()),
+            email: Some(
+                "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress".to_string(),
+            ),
+            display_name: Some(
+                "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname".to_string(),
+            ),
             groups: Some("http://schemas.xmlsoap.org/claims/Group".to_string()),
             custom: HashMap::new(),
         }
@@ -287,71 +295,76 @@ impl SamlProvider {
     pub async fn generate_login_url(&self, relay_state: Option<String>) -> FusekiResult<Url> {
         let request = AuthnRequest::new(&self.config);
         let request_xml = request.to_xml();
-        
+
         // Store pending request
         let pending = PendingRequest {
             id: request.id.clone(),
             relay_state,
             timestamp: SystemTime::now(),
         };
-        
+
         let mut pending_requests = self.pending_requests.write().await;
         pending_requests.insert(request.id.clone(), pending);
-        
+
         // Encode request
         let encoded = general_purpose::STANDARD.encode(request_xml.as_bytes());
-        
+
         // Build redirect URL
         let mut url = self.config.idp.sso_url.clone();
-        url.query_pairs_mut()
-            .append_pair("SAMLRequest", &encoded);
-        
+        url.query_pairs_mut().append_pair("SAMLRequest", &encoded);
+
         if let Some(relay) = &pending.relay_state {
-            url.query_pairs_mut()
-                .append_pair("RelayState", relay);
+            url.query_pairs_mut().append_pair("RelayState", relay);
         }
-        
+
         Ok(url)
     }
 
     /// Process SAML response
-    pub async fn process_response(&self, saml_response: &str, relay_state: Option<&str>) -> FusekiResult<User> {
+    pub async fn process_response(
+        &self,
+        saml_response: &str,
+        relay_state: Option<&str>,
+    ) -> FusekiResult<User> {
         // Decode response
-        let decoded = general_purpose::STANDARD.decode(saml_response)
+        let decoded = general_purpose::STANDARD
+            .decode(saml_response)
             .map_err(|e| FusekiError::custom(format!("Failed to decode SAML response: {}", e)))?;
-        
+
         let response_xml = String::from_utf8(decoded)
             .map_err(|e| FusekiError::custom(format!("Invalid UTF-8 in SAML response: {}", e)))?;
-        
+
         // Parse and validate response
         let response = self.parse_response(&response_xml)?;
         self.validate_response(&response)?;
-        
+
         // Extract user information
         let user = self.extract_user_info(&response)?;
-        
+
         // Create session
         let session = SamlSession {
             user: user.clone(),
-            session_index: response.assertions.first()
+            session_index: response
+                .assertions
+                .first()
                 .and_then(|a| a.authn_statement.as_ref())
                 .and_then(|s| s.session_index.clone()),
             created_at: SystemTime::now(),
             expires_at: SystemTime::now() + self.config.session.timeout,
             attributes: self.extract_attributes(&response),
         };
-        
+
         // Store session
         let session_id = Uuid::new_v4().to_string();
         let mut sessions = self.sessions.write().await;
         sessions.insert(session_id, session);
-        
+
         // Clean up pending request
         if let Some(in_response_to) = &response.in_response_to {
             let mut pending = self.pending_requests.write().await;
             pending.remove(in_response_to);
         }
-        
+
         Ok(user)
     }
 
@@ -359,7 +372,9 @@ impl SamlProvider {
     fn parse_response(&self, xml: &str) -> FusekiResult<SamlResponse> {
         // TODO: Implement proper XML parsing with xmlsec
         // For now, return a dummy response
-        Err(FusekiError::custom("SAML response parsing not yet implemented".to_string()))
+        Err(FusekiError::custom(
+            "SAML response parsing not yet implemented".to_string(),
+        ))
     }
 
     /// Validate SAML response
@@ -368,26 +383,34 @@ impl SamlProvider {
         if response.status.code != "urn:oasis:names:tc:SAML:2.0:status:Success" {
             return Err(FusekiError::custom(format!(
                 "SAML authentication failed: {}",
-                response.status.message.as_ref().unwrap_or(&"Unknown error".to_string())
+                response
+                    .status
+                    .message
+                    .as_ref()
+                    .unwrap_or(&"Unknown error".to_string())
             )));
         }
-        
+
         // Validate assertions
         if response.assertions.is_empty() {
-            return Err(FusekiError::custom("No assertions in SAML response".to_string()));
+            return Err(FusekiError::custom(
+                "No assertions in SAML response".to_string(),
+            ));
         }
-        
+
         // Check conditions
         for assertion in &response.assertions {
             if let Some(conditions) = &assertion.conditions {
                 let now = Utc::now();
-                
+
                 if let Some(not_before) = &conditions.not_before {
                     if now < *not_before {
-                        return Err(FusekiError::custom("SAML assertion not yet valid".to_string()));
+                        return Err(FusekiError::custom(
+                            "SAML assertion not yet valid".to_string(),
+                        ));
                     }
                 }
-                
+
                 if let Some(not_after) = &conditions.not_on_or_after {
                     if now >= *not_after {
                         return Err(FusekiError::custom("SAML assertion expired".to_string()));
@@ -395,17 +418,19 @@ impl SamlProvider {
                 }
             }
         }
-        
+
         // TODO: Verify signature
-        
+
         Ok(())
     }
 
     /// Extract user information from SAML response
     fn extract_user_info(&self, response: &SamlResponse) -> FusekiResult<User> {
-        let assertion = response.assertions.first()
+        let assertion = response
+            .assertions
+            .first()
             .ok_or_else(|| FusekiError::custom("No assertion found".to_string()))?;
-        
+
         let mut user = User {
             username: assertion.subject.name_id.clone(),
             email: None,
@@ -414,25 +439,25 @@ impl SamlProvider {
             last_login: Some(chrono::Utc::now()),
             permissions: vec![],
         };
-        
+
         // Map attributes
         for attr in &assertion.attributes {
             if attr.name == self.config.attribute_mapping.username && !attr.values.is_empty() {
                 user.username = attr.values[0].clone();
             }
-            
+
             if let Some(email_attr) = &self.config.attribute_mapping.email {
                 if attr.name == *email_attr && !attr.values.is_empty() {
                     user.email = Some(attr.values[0].clone());
                 }
             }
-            
+
             if let Some(display_attr) = &self.config.attribute_mapping.display_name {
                 if attr.name == *display_attr && !attr.values.is_empty() {
                     user.full_name = Some(attr.values[0].clone());
                 }
             }
-            
+
             if let Some(groups_attr) = &self.config.attribute_mapping.groups {
                 if attr.name == *groups_attr {
                     // Map groups to roles
@@ -445,23 +470,23 @@ impl SamlProvider {
                     }
                 }
             }
-            
+
             // Note: User struct doesn't have attributes field, so we skip storing them
         }
-        
+
         Ok(user)
     }
 
     /// Extract all attributes from response
     fn extract_attributes(&self, response: &SamlResponse) -> HashMap<String, Vec<String>> {
         let mut attributes = HashMap::new();
-        
+
         for assertion in &response.assertions {
             for attr in &assertion.attributes {
                 attributes.insert(attr.name.clone(), attr.values.clone());
             }
         }
-        
+
         attributes
     }
 
@@ -479,15 +504,17 @@ impl SamlProvider {
     pub async fn cleanup_sessions(&self) {
         let mut sessions = self.sessions.write().await;
         let now = SystemTime::now();
-        
+
         sessions.retain(|_, session| session.expires_at > now);
-        
+
         // Also clean up old pending requests
         let mut pending = self.pending_requests.write().await;
         let timeout = Duration::from_secs(300); // 5 minutes
-        
+
         pending.retain(|_, request| {
-            now.duration_since(request.timestamp).unwrap_or(Duration::MAX) < timeout
+            now.duration_since(request.timestamp)
+                .unwrap_or(Duration::MAX)
+                < timeout
         });
     }
 }
@@ -502,7 +529,7 @@ impl SamlProvider {
     /// Validate SAML session token
     pub async fn validate_token(&self, token: &str) -> FusekiResult<AuthResult> {
         let sessions = self.sessions.read().await;
-        
+
         if let Some(session) = sessions.get(token) {
             if session.expires_at > SystemTime::now() {
                 Ok(AuthResult::Authenticated(session.user.clone()))
@@ -545,10 +572,10 @@ mod tests {
             attribute_mapping: AttributeMapping::default(),
             session: SessionConfig::default(),
         };
-        
+
         let request = AuthnRequest::new(&config);
         let xml = request.to_xml();
-        
+
         assert!(xml.contains(&config.sp.entity_id));
         assert!(xml.contains(&config.sp.acs_url.to_string()));
     }
@@ -556,7 +583,10 @@ mod tests {
     #[test]
     fn test_attribute_mapping() {
         let mapping = AttributeMapping::default();
-        assert_eq!(mapping.username, "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name");
+        assert_eq!(
+            mapping.username,
+            "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"
+        );
         assert!(mapping.email.is_some());
     }
 }

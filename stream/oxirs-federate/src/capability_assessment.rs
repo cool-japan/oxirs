@@ -4,15 +4,18 @@
 //! for federated SPARQL and GraphQL services.
 
 use anyhow::{anyhow, Result};
-use reqwest::{Client, header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE}};
+use reqwest::{
+    header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE},
+    Client,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 use tracing::{debug, error, info, warn};
 
 use crate::{
-    AuthConfig, FederatedService, ServiceCapability, ServiceType,
     metadata::{CapabilityDetail, QueryPattern},
+    AuthConfig, FederatedService, ServiceCapability, ServiceType,
 };
 
 /// Capability assessor for detailed service analysis
@@ -65,10 +68,12 @@ impl CapabilityAssessor {
 
         match service.service_type {
             ServiceType::Sparql => {
-                self.assess_sparql_capabilities(service, &mut result).await?;
+                self.assess_sparql_capabilities(service, &mut result)
+                    .await?;
             }
             ServiceType::GraphQL => {
-                self.assess_graphql_capabilities(service, &mut result).await?;
+                self.assess_graphql_capabilities(service, &mut result)
+                    .await?;
             }
             ServiceType::Hybrid => {
                 // Assess both SPARQL and GraphQL capabilities
@@ -81,7 +86,8 @@ impl CapabilityAssessor {
             }
             ServiceType::RestRdf => {
                 // REST-RDF typically supports SPARQL-like capabilities
-                self.assess_sparql_capabilities(service, &mut result).await?;
+                self.assess_sparql_capabilities(service, &mut result)
+                    .await?;
             }
             ServiceType::Custom(_) => {
                 // For custom services, try to assess both types
@@ -111,12 +117,17 @@ impl CapabilityAssessor {
             ("SELECT", "SELECT ?s WHERE { ?s ?p ?o } LIMIT 1"),
             ("ASK", "ASK { ?s ?p ?o }"),
             ("DESCRIBE", "DESCRIBE <http://example.org/resource>"),
-            ("CONSTRUCT", "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o } LIMIT 1"),
+            (
+                "CONSTRUCT",
+                "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o } LIMIT 1",
+            ),
         ];
 
         for (feature, query) in query_features {
             if self.test_sparql_query(service, query).await.is_ok() {
-                result.detected_capabilities.insert(ServiceCapability::SparqlQuery);
+                result
+                    .detected_capabilities
+                    .insert(ServiceCapability::SparqlQuery);
                 debug!("Service supports SPARQL {} queries", feature);
             }
         }
@@ -131,7 +142,9 @@ impl CapabilityAssessor {
 
             for (feature, update) in update_features {
                 if self.test_sparql_update(service, update).await.is_ok() {
-                    result.detected_capabilities.insert(ServiceCapability::SparqlUpdate);
+                    result
+                        .detected_capabilities
+                        .insert(ServiceCapability::SparqlUpdate);
                     debug!("Service supports SPARQL {} updates", feature);
                 }
             }
@@ -140,8 +153,12 @@ impl CapabilityAssessor {
         // Test SPARQL 1.1 Federated Query (SERVICE clause)
         let service_query = "SELECT * WHERE { SERVICE <http://example.org/sparql> { ?s ?p ?o } }";
         if self.test_sparql_query(service, service_query).await.is_ok() {
-            result.detected_capabilities.insert(ServiceCapability::SparqlService);
-            result.detected_capabilities.insert(ServiceCapability::Federation);
+            result
+                .detected_capabilities
+                .insert(ServiceCapability::SparqlService);
+            result
+                .detected_capabilities
+                .insert(ServiceCapability::Federation);
         }
 
         // Test advanced SPARQL features
@@ -161,12 +178,17 @@ impl CapabilityAssessor {
     ) -> Result<()> {
         // Test aggregation functions
         let aggregation_query = "SELECT (COUNT(*) as ?count) WHERE { ?s ?p ?o }";
-        if self.test_sparql_query(service, aggregation_query).await.is_ok() {
+        if self
+            .test_sparql_query(service, aggregation_query)
+            .await
+            .is_ok()
+        {
             result.capability_details.insert(
                 "aggregation".to_string(),
                 CapabilityDetail {
                     name: "SPARQL Aggregation".to_string(),
-                    description: "Supports COUNT, SUM, AVG, MIN, MAX aggregation functions".to_string(),
+                    description: "Supports COUNT, SUM, AVG, MIN, MAX aggregation functions"
+                        .to_string(),
                     version: Some("SPARQL 1.1".to_string()),
                     limitations: vec![],
                     performance_notes: None,
@@ -184,7 +206,9 @@ impl CapabilityAssessor {
                     description: "Supports nested SELECT queries".to_string(),
                     version: Some("SPARQL 1.1".to_string()),
                     limitations: vec![],
-                    performance_notes: Some("Performance may vary with subquery complexity".to_string()),
+                    performance_notes: Some(
+                        "Performance may vary with subquery complexity".to_string(),
+                    ),
                 },
             );
         }
@@ -199,13 +223,16 @@ impl CapabilityAssessor {
                     description: "Supports FILTER expressions including REGEX".to_string(),
                     version: Some("SPARQL 1.1".to_string()),
                     limitations: vec![],
-                    performance_notes: Some("Complex filters may impact query performance".to_string()),
+                    performance_notes: Some(
+                        "Complex filters may impact query performance".to_string(),
+                    ),
                 },
             );
         }
 
         // Test property paths
-        let path_query = "SELECT ?s ?o WHERE { ?s (<http://example.org/p1>|<http://example.org/p2>)+ ?o }";
+        let path_query =
+            "SELECT ?s ?o WHERE { ?s (<http://example.org/p1>|<http://example.org/p2>)+ ?o }";
         if self.test_sparql_query(service, path_query).await.is_ok() {
             result.capability_details.insert(
                 "property_paths".to_string(),
@@ -214,7 +241,9 @@ impl CapabilityAssessor {
                     description: "Supports SPARQL 1.1 property path expressions".to_string(),
                     version: Some("SPARQL 1.1".to_string()),
                     limitations: vec![],
-                    performance_notes: Some("Complex paths may be expensive to compute".to_string()),
+                    performance_notes: Some(
+                        "Complex paths may be expensive to compute".to_string(),
+                    ),
                 },
             );
         }
@@ -301,15 +330,21 @@ impl CapabilityAssessor {
         "#;
 
         if let Ok(introspection) = self.test_graphql_query(service, introspection_query).await {
-            result.detected_capabilities.insert(ServiceCapability::GraphQLQuery);
-            
+            result
+                .detected_capabilities
+                .insert(ServiceCapability::GraphQLQuery);
+
             // Parse introspection results
             if let Some(schema) = introspection.get("__schema") {
                 if schema.get("mutationType").is_some() {
-                    result.detected_capabilities.insert(ServiceCapability::GraphQLMutation);
+                    result
+                        .detected_capabilities
+                        .insert(ServiceCapability::GraphQLMutation);
                 }
                 if schema.get("subscriptionType").is_some() {
-                    result.detected_capabilities.insert(ServiceCapability::GraphQLSubscription);
+                    result
+                        .detected_capabilities
+                        .insert(ServiceCapability::GraphQLSubscription);
                 }
             }
 
@@ -334,8 +369,14 @@ impl CapabilityAssessor {
             }
         "#;
 
-        if self.test_graphql_query(service, federation_query).await.is_ok() {
-            result.detected_capabilities.insert(ServiceCapability::Federation);
+        if self
+            .test_graphql_query(service, federation_query)
+            .await
+            .is_ok()
+        {
+            result
+                .detected_capabilities
+                .insert(ServiceCapability::Federation);
             result.capability_details.insert(
                 "apollo_federation".to_string(),
                 CapabilityDetail {
@@ -442,7 +483,10 @@ impl CapabilityAssessor {
                 Err(anyhow!("GraphQL response contains no data"))
             }
         } else {
-            Err(anyhow!("GraphQL query failed with status: {}", response.status()))
+            Err(anyhow!(
+                "GraphQL query failed with status: {}",
+                response.status()
+            ))
         }
     }
 
@@ -499,7 +543,9 @@ impl CapabilityAssessor {
             let duration = start.elapsed();
 
             if result.is_ok() {
-                profile.response_times.insert(query_type.to_string(), duration);
+                profile
+                    .response_times
+                    .insert(query_type.to_string(), duration);
 
                 // Update average response time
                 let total: u128 = profile.response_times.values().map(|d| d.as_millis()).sum();
@@ -598,13 +644,17 @@ mod tests {
     #[test]
     fn test_performance_profile() {
         let mut profile = PerformanceProfile::default();
-        profile.response_times.insert("simple".to_string(), Duration::from_millis(100));
-        profile.response_times.insert("complex".to_string(), Duration::from_millis(500));
-        
+        profile
+            .response_times
+            .insert("simple".to_string(), Duration::from_millis(100));
+        profile
+            .response_times
+            .insert("complex".to_string(), Duration::from_millis(500));
+
         let total: u128 = profile.response_times.values().map(|d| d.as_millis()).sum();
         let count = profile.response_times.len() as u128;
         let avg = Duration::from_millis((total / count) as u64);
-        
+
         assert_eq!(avg.as_millis(), 300);
     }
 }

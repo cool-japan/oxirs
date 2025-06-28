@@ -2,18 +2,26 @@
 //!
 //! This module provides dataset abstractions and implementations for query execution.
 
-use crate::algebra::{Term as AlgebraTerm, TriplePattern, PropertyPath};
-use crate::path::{PropertyPath as PathPropertyPath, PathDataset};
+use crate::algebra::{PropertyPath, Term as AlgebraTerm, TriplePattern};
+use crate::path::{PathDataset, PropertyPath as PathPropertyPath};
 use anyhow::{anyhow, Result};
 use std::collections::HashSet;
 
 /// Dataset trait for data access during query execution
 pub trait Dataset: Send + Sync {
     /// Find all triples matching the given pattern
-    fn find_triples(&self, pattern: &TriplePattern) -> Result<Vec<(AlgebraTerm, AlgebraTerm, AlgebraTerm)>>;
+    fn find_triples(
+        &self,
+        pattern: &TriplePattern,
+    ) -> Result<Vec<(AlgebraTerm, AlgebraTerm, AlgebraTerm)>>;
 
     /// Check if a triple exists in the dataset
-    fn contains_triple(&self, subject: &AlgebraTerm, predicate: &AlgebraTerm, object: &AlgebraTerm) -> Result<bool>;
+    fn contains_triple(
+        &self,
+        subject: &AlgebraTerm,
+        predicate: &AlgebraTerm,
+        object: &AlgebraTerm,
+    ) -> Result<bool>;
 
     /// Get all subjects in the dataset
     fn subjects(&self) -> Result<Vec<AlgebraTerm>>;
@@ -38,7 +46,12 @@ impl InMemoryDataset {
         }
     }
 
-    pub fn add_triple(&mut self, subject: AlgebraTerm, predicate: AlgebraTerm, object: AlgebraTerm) {
+    pub fn add_triple(
+        &mut self,
+        subject: AlgebraTerm,
+        predicate: AlgebraTerm,
+        object: AlgebraTerm,
+    ) {
         self.triples.push((subject, predicate, object));
     }
 
@@ -48,7 +61,10 @@ impl InMemoryDataset {
 }
 
 impl Dataset for InMemoryDataset {
-    fn find_triples(&self, pattern: &TriplePattern) -> Result<Vec<(AlgebraTerm, AlgebraTerm, AlgebraTerm)>> {
+    fn find_triples(
+        &self,
+        pattern: &TriplePattern,
+    ) -> Result<Vec<(AlgebraTerm, AlgebraTerm, AlgebraTerm)>> {
         let results = self
             .triples
             .iter()
@@ -62,7 +78,12 @@ impl Dataset for InMemoryDataset {
         Ok(results)
     }
 
-    fn contains_triple(&self, subject: &AlgebraTerm, predicate: &AlgebraTerm, object: &AlgebraTerm) -> Result<bool> {
+    fn contains_triple(
+        &self,
+        subject: &AlgebraTerm,
+        predicate: &AlgebraTerm,
+        object: &AlgebraTerm,
+    ) -> Result<bool> {
         Ok(self
             .triples
             .iter()
@@ -110,7 +131,11 @@ impl<'a> DatasetPathAdapter<'a> {
 }
 
 impl<'a> PathDataset for DatasetPathAdapter<'a> {
-    fn find_outgoing(&self, subject: &AlgebraTerm, predicate: &AlgebraTerm) -> Result<Vec<AlgebraTerm>> {
+    fn find_outgoing(
+        &self,
+        subject: &AlgebraTerm,
+        predicate: &AlgebraTerm,
+    ) -> Result<Vec<AlgebraTerm>> {
         let pattern = TriplePattern::new(
             subject.clone(),
             predicate.clone(),
@@ -120,7 +145,11 @@ impl<'a> PathDataset for DatasetPathAdapter<'a> {
         Ok(triples.into_iter().map(|(_, _, o)| o).collect())
     }
 
-    fn find_incoming(&self, predicate: &AlgebraTerm, object: &AlgebraTerm) -> Result<Vec<AlgebraTerm>> {
+    fn find_incoming(
+        &self,
+        predicate: &AlgebraTerm,
+        object: &AlgebraTerm,
+    ) -> Result<Vec<AlgebraTerm>> {
         let pattern = TriplePattern::new(
             AlgebraTerm::Variable(crate::algebra::Variable::new("?s")?),
             predicate.clone(),
@@ -130,7 +159,11 @@ impl<'a> PathDataset for DatasetPathAdapter<'a> {
         Ok(triples.into_iter().map(|(s, _, _)| s).collect())
     }
 
-    fn find_predicates(&self, subject: &AlgebraTerm, object: &AlgebraTerm) -> Result<Vec<AlgebraTerm>> {
+    fn find_predicates(
+        &self,
+        subject: &AlgebraTerm,
+        object: &AlgebraTerm,
+    ) -> Result<Vec<AlgebraTerm>> {
         let pattern = TriplePattern::new(
             subject.clone(),
             AlgebraTerm::Variable(crate::algebra::Variable::new("?p")?),
@@ -144,7 +177,12 @@ impl<'a> PathDataset for DatasetPathAdapter<'a> {
         self.dataset.predicates()
     }
 
-    fn contains_triple(&self, subject: &AlgebraTerm, predicate: &AlgebraTerm, object: &AlgebraTerm) -> Result<bool> {
+    fn contains_triple(
+        &self,
+        subject: &AlgebraTerm,
+        predicate: &AlgebraTerm,
+        object: &AlgebraTerm,
+    ) -> Result<bool> {
         self.dataset.contains_triple(subject, predicate, object)
     }
 }
@@ -153,7 +191,9 @@ impl<'a> PathDataset for DatasetPathAdapter<'a> {
 pub fn convert_property_path(path: &PropertyPath) -> Result<PathPropertyPath> {
     match path {
         PropertyPath::Iri(iri) => Ok(PathPropertyPath::Direct(AlgebraTerm::Iri(iri.clone()))),
-        PropertyPath::Variable(var) => Ok(PathPropertyPath::Direct(AlgebraTerm::Variable(var.clone()))),
+        PropertyPath::Variable(var) => {
+            Ok(PathPropertyPath::Direct(AlgebraTerm::Variable(var.clone())))
+        }
         PropertyPath::Inverse(inner) => {
             let inner_path = convert_property_path(inner)?;
             Ok(PathPropertyPath::Inverse(Box::new(inner_path)))
@@ -161,12 +201,18 @@ pub fn convert_property_path(path: &PropertyPath) -> Result<PathPropertyPath> {
         PropertyPath::Sequence(left, right) => {
             let left_path = convert_property_path(left)?;
             let right_path = convert_property_path(right)?;
-            Ok(PathPropertyPath::Sequence(Box::new(left_path), Box::new(right_path)))
+            Ok(PathPropertyPath::Sequence(
+                Box::new(left_path),
+                Box::new(right_path),
+            ))
         }
         PropertyPath::Alternative(left, right) => {
             let left_path = convert_property_path(left)?;
             let right_path = convert_property_path(right)?;
-            Ok(PathPropertyPath::Alternative(Box::new(left_path), Box::new(right_path)))
+            Ok(PathPropertyPath::Alternative(
+                Box::new(left_path),
+                Box::new(right_path),
+            ))
         }
         PropertyPath::ZeroOrMore(inner) => {
             let inner_path = convert_property_path(inner)?;
@@ -186,7 +232,11 @@ pub fn convert_property_path(path: &PropertyPath) -> Result<PathPropertyPath> {
                 match p {
                     PropertyPath::Iri(iri) => terms.push(AlgebraTerm::Iri(iri.clone())),
                     PropertyPath::Variable(var) => terms.push(AlgebraTerm::Variable(var.clone())),
-                    _ => return Err(anyhow!("Negated property set can only contain IRIs or variables")),
+                    _ => {
+                        return Err(anyhow!(
+                            "Negated property set can only contain IRIs or variables"
+                        ))
+                    }
                 }
             }
             Ok(PathPropertyPath::NegatedPropertySet(terms))

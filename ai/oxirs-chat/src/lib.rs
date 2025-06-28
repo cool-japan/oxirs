@@ -5,18 +5,18 @@
 //! This crate provides a conversational interface for knowledge graphs,
 //! combining retrieval-augmented generation (RAG) with SPARQL querying.
 
+use crate::rag::QueryIntent;
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, SystemTime},
 };
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, error, info, warn};
-use serde::{Serialize, Deserialize};
 use uuid::Uuid;
-use crate::rag::QueryIntent;
 
 pub mod analytics;
 pub mod cache;
@@ -171,36 +171,36 @@ impl ContextWindow {
             context_summary: None,
         }
     }
-    
+
     pub fn should_summarize(&self, total_messages: usize) -> bool {
         total_messages > self.window_size * 2
     }
-    
+
     pub fn update_summary(&mut self, summary: String) {
         self.context_summary = Some(summary);
     }
-    
+
     pub fn pin_message(&mut self, message_id: String) {
         if !self.pinned_messages.contains(&message_id) {
             self.pinned_messages.push(message_id);
         }
     }
-    
+
     pub fn unpin_message(&mut self, message_id: &str) {
         self.pinned_messages.retain(|id| id != message_id);
     }
-    
+
     pub fn get_context_messages<'a>(&self, messages: &'a [Message]) -> Vec<&'a Message> {
         // Return the last window_size messages plus any pinned messages
         let mut context_messages = Vec::new();
-        
+
         // Add pinned messages first
         for message in messages {
             if self.pinned_messages.contains(&message.id) {
                 context_messages.push(message);
             }
         }
-        
+
         // Add recent messages up to window size
         let recent_start = messages.len().saturating_sub(self.window_size);
         for message in &messages[recent_start..] {
@@ -208,7 +208,7 @@ impl ContextWindow {
                 context_messages.push(message);
             }
         }
-        
+
         context_messages
     }
 }
@@ -229,54 +229,251 @@ impl TopicTracker {
             topic_threshold: 0.7,
         }
     }
-    
-    /// Analyze a message for topic changes
+
+    /// Analyze a message for topic changes with enhanced drift detection
     pub fn analyze_message(&mut self, message: &Message) -> Option<TopicTransition> {
         let detected_topics = self.extract_topics(&message.content);
-        
+
         if detected_topics.is_empty() {
             return None;
         }
-        
-        // Check for topic transitions
-        for new_topic in &detected_topics {
-            if !self.current_topics.iter().any(|t| t.similarity(&new_topic) > self.topic_threshold) {
-                // New topic detected
+
+        // Enhanced topic drift detection
+        let drift_result = self.detect_topic_drift(&detected_topics, message);
+
+        match drift_result {
+            Some(drift) => {
                 let transition = TopicTransition {
                     id: Uuid::new_v4().to_string(),
                     from_topics: self.current_topics.clone(),
                     to_topics: detected_topics.clone(),
                     timestamp: chrono::Utc::now(),
                     trigger_message_id: message.id.clone(),
-                    confidence: 0.8, // Simplified for now
-                    transition_type: TransitionType::NewTopic,
+                    confidence: drift.confidence,
+                    transition_type: drift.transition_type,
                 };
-                
+
                 self.topic_history.push(transition.clone());
                 self.current_topics = detected_topics;
-                
+
                 return Some(transition);
             }
+            None => {
+                // Update existing topics with new mentions
+                self.update_topic_mentions(&detected_topics);
+            }
         }
-        
+
         None
     }
-    
+
+    /// Enhanced topic drift detection with multiple strategies
+    fn detect_topic_drift(&self, new_topics: &[Topic], message: &Message) -> Option<TopicDrift> {
+        if self.current_topics.is_empty() {
+            return Some(TopicDrift {
+                confidence: 0.9,
+                transition_type: TransitionType::NewTopic,
+                drift_magnitude: 1.0,
+            });
+        }
+
+        // Calculate semantic similarity between topic sets
+        let semantic_similarity =
+            self.calculate_topic_set_similarity(&self.current_topics, new_topics);
+
+        // Detect different types of drift
+        if semantic_similarity < 0.3 {
+            // Major topic shift
+            Some(TopicDrift {
+                confidence: 1.0 - semantic_similarity,
+                transition_type: TransitionType::TopicShift,
+                drift_magnitude: 1.0 - semantic_similarity,
+            })
+        } else if semantic_similarity < 0.7 {
+            // Gradual topic drift
+            let drift_strength = self.calculate_drift_strength(new_topics, message);
+            if drift_strength > 0.6 {
+                Some(TopicDrift {
+                    confidence: drift_strength,
+                    transition_type: TransitionType::TopicShift,
+                    drift_magnitude: drift_strength,
+                })
+            } else {
+                None
+            }
+        } else {
+            // Check for topic return patterns
+            self.detect_topic_return(new_topics)
+                .map(|confidence| TopicDrift {
+                    confidence,
+                    transition_type: TransitionType::TopicReturn,
+                    drift_magnitude: confidence,
+                })
+        }
+    }
+
+    /// Calculate semantic similarity between two topic sets
+    fn calculate_topic_set_similarity(&self, topics1: &[Topic], topics2: &[Topic]) -> f32 {
+        if topics1.is_empty() || topics2.is_empty() {
+            return 0.0;
+        }
+
+        let mut total_similarity = 0.0;
+        let mut pair_count = 0;
+
+        for topic1 in topics1 {
+            for topic2 in topics2 {
+                total_similarity += topic1.similarity(topic2);
+                pair_count += 1;
+            }
+        }
+
+        if pair_count > 0 {
+            total_similarity / pair_count as f32
+        } else {
+            0.0
+        }
+    }
+
+    /// Calculate drift strength based on multiple factors
+    fn calculate_drift_strength(&self, new_topics: &[Topic], message: &Message) -> f32 {
+        let mut drift_strength = 0.0;
+
+        // Factor 1: Presence of transition words/phrases
+        let transition_indicators = [
+            "but",
+            "however",
+            "on the other hand",
+            "meanwhile",
+            "speaking of",
+            "by the way",
+            "let me ask about",
+            "what about",
+            "moving on",
+            "actually",
+            "wait",
+            "hold on",
+            "before we continue",
+        ];
+
+        let content_lower = message.content.to_lowercase();
+        for indicator in &transition_indicators {
+            if content_lower.contains(indicator) {
+                drift_strength += 0.2;
+                break;
+            }
+        }
+
+        // Factor 2: Question patterns that suggest topic change
+        if content_lower.contains("?")
+            && (content_lower.starts_with("what about")
+                || content_lower.starts_with("how about")
+                || content_lower.starts_with("can we talk about")
+                || content_lower.starts_with("let's discuss"))
+        {
+            drift_strength += 0.3;
+        }
+
+        // Factor 3: Length of current topic session
+        let current_topic_duration = self
+            .current_topics
+            .iter()
+            .map(|t| chrono::Utc::now() - t.first_mentioned)
+            .min()
+            .unwrap_or_default();
+
+        if current_topic_duration > chrono::Duration::minutes(10) {
+            drift_strength += 0.2;
+        }
+
+        // Factor 4: Keyword novelty
+        let existing_keywords: HashSet<String> = self
+            .current_topics
+            .iter()
+            .flat_map(|t| t.keywords.iter())
+            .cloned()
+            .collect();
+
+        let new_keywords: HashSet<String> = new_topics
+            .iter()
+            .flat_map(|t| t.keywords.iter())
+            .cloned()
+            .collect();
+
+        let keyword_overlap = existing_keywords.intersection(&new_keywords).count();
+        let total_keywords = existing_keywords.union(&new_keywords).count();
+
+        if total_keywords > 0 {
+            let novelty = 1.0 - (keyword_overlap as f32 / total_keywords as f32);
+            drift_strength += novelty * 0.3;
+        }
+
+        drift_strength.min(1.0)
+    }
+
+    /// Detect if user is returning to a previous topic
+    fn detect_topic_return(&self, new_topics: &[Topic]) -> Option<f32> {
+        // Look through recent topic history
+        let recent_window = chrono::Duration::minutes(30);
+        let cutoff_time = chrono::Utc::now() - recent_window;
+
+        for historical_topic in self.topic_history.iter().rev().take(10) {
+            if historical_topic.timestamp < cutoff_time {
+                break;
+            }
+
+            for old_topic in &historical_topic.from_topics {
+                for new_topic in new_topics {
+                    let similarity = old_topic.similarity(new_topic);
+                    if similarity > 0.8 {
+                        return Some(similarity);
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Update mention counts and timestamps for existing topics
+    fn update_topic_mentions(&mut self, detected_topics: &[Topic]) {
+        for detected in detected_topics {
+            for current in &mut self.current_topics {
+                if current.similarity(detected) > self.topic_threshold {
+                    current.mention_count += 1;
+                    current.last_mentioned = chrono::Utc::now();
+                    // Merge keywords if new ones are found
+                    for keyword in &detected.keywords {
+                        if !current.keywords.contains(keyword) {
+                            current.keywords.push(keyword.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /// Extract topics from message content (simplified implementation)
     fn extract_topics(&self, content: &str) -> Vec<Topic> {
         let keywords = content
             .to_lowercase()
             .split_whitespace()
             .filter(|word| word.len() > 3)
-            .filter(|word| !["what", "this", "that", "have", "been", "will", "with", "from", "they", "them", "were", "said", "each", "which", "their", "time", "about"].contains(word))
+            .filter(|word| {
+                ![
+                    "what", "this", "that", "have", "been", "will", "with", "from", "they", "them",
+                    "were", "said", "each", "which", "their", "time", "about",
+                ]
+                .contains(word)
+            })
             .take(3)
             .map(|s| s.to_string())
             .collect::<Vec<_>>();
-            
+
         if keywords.is_empty() {
             return Vec::new();
         }
-        
+
         vec![Topic {
             id: Uuid::new_v4().to_string(),
             name: keywords.join(" "),
@@ -310,10 +507,10 @@ impl Topic {
     pub fn similarity(&self, other: &Topic) -> f32 {
         let self_keywords: std::collections::HashSet<_> = self.keywords.iter().collect();
         let other_keywords: std::collections::HashSet<_> = other.keywords.iter().collect();
-        
+
         let intersection = self_keywords.intersection(&other_keywords).count();
         let union = self_keywords.union(&other_keywords).count();
-        
+
         if union == 0 {
             0.0
         } else {
@@ -355,6 +552,14 @@ pub enum TransitionType {
     TopicSplit,
 }
 
+/// Topic drift analysis result
+#[derive(Debug, Clone)]
+struct TopicDrift {
+    confidence: f32,
+    transition_type: TransitionType,
+    drift_magnitude: f32,
+}
+
 /// Chat session
 pub struct ChatSession {
     pub id: String,
@@ -393,11 +598,11 @@ impl ChatSession {
         let mut context_window = ContextWindow::new(data.config.sliding_window_size);
         context_window.pinned_messages = data.pinned_messages;
         context_window.context_summary = data.context_summary;
-        
+
         let mut topic_tracker = TopicTracker::new();
         topic_tracker.current_topics = data.current_topics;
         topic_tracker.topic_history = data.topic_history;
-        
+
         Self {
             id: data.id,
             config: data.config,
@@ -454,7 +659,8 @@ impl ChatSession {
 
     /// Process a user message and generate a response
     pub async fn process_message(&mut self, user_input: String) -> Result<Message> {
-        self.process_message_with_options(user_input, None, None).await
+        self.process_message_with_options(user_input, None, None)
+            .await
     }
 
     pub async fn process_message_with_options(
@@ -493,9 +699,9 @@ impl ChatSession {
         let query_context = QueryContext {
             query: user_input.clone(),
             intent: self.classify_intent(&user_input),
-            entities: Vec::new(),      // Will be filled by RAG system's extract_query_components
+            entities: Vec::new(), // Will be filled by RAG system's extract_query_components
             relationships: Vec::new(), // Will be filled by RAG system's extract_query_components
-            constraints: Vec::new(),   // Will be filled by RAG system's extract_query_components
+            constraints: Vec::new(), // Will be filled by RAG system's extract_query_components
             conversation_history: self
                 .messages
                 .iter()
@@ -520,10 +726,15 @@ impl ChatSession {
             rag_config.clone(),
             self.store.clone(),
             embedding_config,
-        ).await {
+        )
+        .await
+        {
             Ok(system) => system,
             Err(e) => {
-                warn!("Failed to create enhanced RAG system, falling back to basic: {}", e);
+                warn!(
+                    "Failed to create enhanced RAG system, falling back to basic: {}",
+                    e
+                );
                 // Fallback to basic RAG system
                 RAGSystem::new(
                     rag_config,
@@ -556,16 +767,24 @@ impl ChatSession {
         // Step 2: Generate SPARQL query if appropriate
         if self.should_generate_sparql(&query_context.intent) {
             let nl2sparql_config = NL2SPARQLConfig::default();
-            if let Ok(mut nl2sparql_system) = NL2SPARQLSystem::with_store(nl2sparql_config, None, self.store.clone()) {
+            if let Ok(mut nl2sparql_system) =
+                NL2SPARQLSystem::with_store(nl2sparql_config, None, self.store.clone())
+            {
                 if let Ok(sparql_result) = nl2sparql_system.generate_sparql(&query_context).await {
                     sparql_query = Some(sparql_result.query.clone());
                     confidence_score = confidence_score.max(sparql_result.confidence);
-                    
+
                     // Execute the SPARQL query if it was generated successfully
                     if sparql_result.validation_result.is_valid {
-                        if let Ok(execution_result) = nl2sparql_system.execute_sparql_query(&sparql_result.query).await {
+                        if let Ok(execution_result) = nl2sparql_system
+                            .execute_sparql_query(&sparql_result.query)
+                            .await
+                        {
                             if execution_result.result_count > 0 {
-                                info!("SPARQL query returned {} results", execution_result.result_count);
+                                info!(
+                                    "SPARQL query returned {} results",
+                                    execution_result.result_count
+                                );
                                 // TODO: Format and include SPARQL results in response
                             }
                         }
@@ -621,24 +840,25 @@ impl ChatSession {
         };
 
         self.messages.push(response.clone());
-        
+
         // Update performance metrics
         self.performance_metrics.total_queries += 1;
         self.performance_metrics.successful_queries += 1;
         self.performance_metrics.total_tokens_processed += response.token_count.unwrap_or(0);
         self.performance_metrics.last_query_time = Some(chrono::Utc::now());
-        
+
         // Analyze topic transitions
         if let Some(transition) = self.topic_tracker.analyze_message(&response) {
             tracing::info!("Topic transition detected: {:?}", transition);
         }
-        
+
         // Check if we should summarize the conversation
-        if self.config.enable_context_summarization && 
-           self.context_window.should_summarize(self.messages.len()) {
+        if self.config.enable_context_summarization
+            && self.context_window.should_summarize(self.messages.len())
+        {
             self.summarize_context().await;
         }
-        
+
         Ok(response)
     }
 
@@ -746,7 +966,7 @@ impl ChatSession {
     pub fn get_reply_chain(&self, message_id: &str) -> Vec<&Message> {
         let mut chain = Vec::new();
         let mut current_id = Some(message_id.to_string());
-        
+
         while let Some(id) = current_id {
             if let Some(message) = self.messages.iter().find(|m| m.id == id) {
                 chain.push(message);
@@ -755,7 +975,7 @@ impl ChatSession {
                 break;
             }
         }
-        
+
         chain.reverse();
         chain
     }
@@ -767,20 +987,25 @@ impl ChatSession {
             .filter(|m| m.parent_message_id.as_ref() == Some(&message_id.to_string()))
             .collect()
     }
-    
+
     /// Summarize the conversation context using LLM
     async fn summarize_context(&mut self) {
         // Get messages that need to be summarized
-        let messages_to_summarize: Vec<&Message> = self.messages
+        let messages_to_summarize: Vec<&Message> = self
+            .messages
             .iter()
-            .take(self.messages.len().saturating_sub(self.config.sliding_window_size))
+            .take(
+                self.messages
+                    .len()
+                    .saturating_sub(self.config.sliding_window_size),
+            )
             .filter(|m| !self.context_window.pinned_messages.contains(&m.id))
             .collect();
-        
+
         if messages_to_summarize.is_empty() {
             return;
         }
-        
+
         // Try LLM-powered summarization first, fallback to simple if needed
         let summary = match self.create_llm_summary(&messages_to_summarize).await {
             Ok(llm_summary) => llm_summary,
@@ -789,53 +1014,58 @@ impl ChatSession {
                 self.create_fallback_summary(&messages_to_summarize)
             }
         };
-        
+
         info!(
-            "Created conversation summary: {} messages -> {} chars", 
-            messages_to_summarize.len(), 
+            "Created conversation summary: {} messages -> {} chars",
+            messages_to_summarize.len(),
             summary.len()
         );
-        
+
         self.context_window.update_summary(summary);
-        
+
         // Remove old messages from memory (keep them in persistence)
-        let keep_from = self.messages.len().saturating_sub(self.config.sliding_window_size);
+        let keep_from = self
+            .messages
+            .len()
+            .saturating_sub(self.config.sliding_window_size);
         if keep_from > 0 {
             // Keep pinned messages and recent messages
             let mut new_messages = Vec::new();
-            
+
             // Add pinned messages
             for message in &self.messages {
                 if self.context_window.pinned_messages.contains(&message.id) {
                     new_messages.push(message.clone());
                 }
             }
-            
+
             // Add recent messages
             new_messages.extend_from_slice(&self.messages[keep_from..]);
-            
+
             self.messages = new_messages;
         }
     }
 
     /// Create an LLM-powered conversation summary
     async fn create_llm_summary(&self, messages: &[&Message]) -> Result<String> {
-        use crate::llm::{ChatMessage, ChatRole, LLMConfig, LLMManager, LLMRequest, Priority, UseCase};
-        
+        use crate::llm::{
+            ChatMessage, ChatRole, LLMConfig, LLMManager, LLMRequest, Priority, UseCase,
+        };
+
         // Format messages for summarization
         let conversation_text = messages
             .iter()
             .map(|m| {
                 let role = match m.role {
                     MessageRole::User => "User",
-                    MessageRole::Assistant => "Assistant", 
+                    MessageRole::Assistant => "Assistant",
                     MessageRole::System => "System",
                 };
                 format!("{}: {}", role, m.content)
             })
             .collect::<Vec<_>>()
             .join("\n");
-        
+
         // Create summarization prompt
         let prompt = format!(
             r#"Please create a concise summary of the following conversation. 
@@ -851,11 +1081,11 @@ Conversation to summarize:
 Summary:"#,
             conversation_text
         );
-        
+
         // Initialize LLM manager
         let llm_config = LLMConfig::default();
         let llm_manager = LLMManager::new(llm_config)?;
-        
+
         // Create summarization request (use fast, cost-effective model)
         let chat_messages = vec![
             ChatMessage {
@@ -869,114 +1099,208 @@ Summary:"#,
                 metadata: None,
             },
         ];
-        
+
         let request = LLMRequest {
             messages: chat_messages,
             system_prompt: Some("Create concise, informative conversation summaries.".to_string()),
             use_case: UseCase::SimpleQuery, // Use efficient model for summarization
-            priority: Priority::Low, // Not urgent
-            max_tokens: Some(300), // Limit response length
-            temperature: 0.3f32, // Lower creativity for consistent summaries
+            priority: Priority::Low,        // Not urgent
+            max_tokens: Some(300),          // Limit response length
+            temperature: 0.3f32,            // Lower creativity for consistent summaries
             timeout: Some(Duration::from_secs(30)),
         };
-        
+
         // Send request and get summary
         let response = llm_manager.generate_response(request).await?;
-        
+
         // Add metadata to summary
         let enhanced_summary = format!(
             "Conversation Summary ({} messages from {} to {}):\n\n{}",
             messages.len(),
-            messages.first().map(|m| m.timestamp.format("%Y-%m-%d %H:%M UTC").to_string()).unwrap_or_default(),
-            messages.last().map(|m| m.timestamp.format("%Y-%m-%d %H:%M UTC").to_string()).unwrap_or_default(),
+            messages
+                .first()
+                .map(|m| m.timestamp.format("%Y-%m-%d %H:%M UTC").to_string())
+                .unwrap_or_default(),
+            messages
+                .last()
+                .map(|m| m.timestamp.format("%Y-%m-%d %H:%M UTC").to_string())
+                .unwrap_or_default(),
             response.content.trim()
         );
-        
+
         Ok(enhanced_summary)
     }
-    
+
     /// Create a fallback summary when LLM is unavailable
     fn create_fallback_summary(&self, messages: &[&Message]) -> String {
         // Analyze message patterns for better fallback summary
         let mut _topics: std::collections::HashMap<String, i32> = std::collections::HashMap::new();
         let mut user_questions = Vec::new();
         let mut key_terms = std::collections::HashMap::new();
-        
+
         for message in messages {
             let content_lower = message.content.to_lowercase();
-            
+
             // Extract questions
-            if message.role == MessageRole::User && (content_lower.contains("?") || 
-                content_lower.starts_with("what") || content_lower.starts_with("how") ||
-                content_lower.starts_with("when") || content_lower.starts_with("where") ||
-                content_lower.starts_with("why") || content_lower.starts_with("who")) {
+            if message.role == MessageRole::User
+                && (content_lower.contains("?")
+                    || content_lower.starts_with("what")
+                    || content_lower.starts_with("how")
+                    || content_lower.starts_with("when")
+                    || content_lower.starts_with("where")
+                    || content_lower.starts_with("why")
+                    || content_lower.starts_with("who"))
+            {
                 user_questions.push(message.content.clone());
             }
-            
+
             // Extract key terms (simple keyword extraction)
-            let words: Vec<&str> = content_lower.split_whitespace()
+            let words: Vec<&str> = content_lower
+                .split_whitespace()
                 .filter(|w| w.len() > 4 && !self.is_stop_word(w))
                 .collect();
-            
+
             for word in words {
                 *key_terms.entry(word.to_string()).or_insert(0) += 1;
             }
         }
-        
+
         // Get most frequent terms
         let mut frequent_terms: Vec<_> = key_terms.into_iter().collect();
         frequent_terms.sort_by(|a, b| b.1.cmp(&a.1));
         frequent_terms.truncate(5);
-        
+
         // Build structured summary
         let mut summary_parts = Vec::new();
-        
+
         summary_parts.push(format!(
             "Conversation Summary ({} messages from {} to {})",
             messages.len(),
-            messages.first().map(|m| m.timestamp.format("%Y-%m-%d %H:%M UTC").to_string()).unwrap_or_default(),
-            messages.last().map(|m| m.timestamp.format("%Y-%m-%d %H:%M UTC").to_string()).unwrap_or_default()
+            messages
+                .first()
+                .map(|m| m.timestamp.format("%Y-%m-%d %H:%M UTC").to_string())
+                .unwrap_or_default(),
+            messages
+                .last()
+                .map(|m| m.timestamp.format("%Y-%m-%d %H:%M UTC").to_string())
+                .unwrap_or_default()
         ));
-        
+
         if !user_questions.is_empty() {
             summary_parts.push("Key Questions Asked:".to_string());
             for (i, question) in user_questions.iter().take(3).enumerate() {
-                summary_parts.push(format!("{}. {}", i + 1, question.chars().take(100).collect::<String>()));
+                summary_parts.push(format!(
+                    "{}. {}",
+                    i + 1,
+                    question.chars().take(100).collect::<String>()
+                ));
             }
         }
-        
+
         if !frequent_terms.is_empty() {
-            let terms: Vec<String> = frequent_terms.iter().map(|(term, _)| term.clone()).collect();
+            let terms: Vec<String> = frequent_terms
+                .iter()
+                .map(|(term, _)| term.clone())
+                .collect();
             summary_parts.push(format!("Main Topics: {}", terms.join(", ")));
         }
-        
+
         // Add basic conversation flow
-        let user_messages = messages.iter().filter(|m| m.role == MessageRole::User).count();
-        let assistant_messages = messages.iter().filter(|m| m.role == MessageRole::Assistant).count();
+        let user_messages = messages
+            .iter()
+            .filter(|m| m.role == MessageRole::User)
+            .count();
+        let assistant_messages = messages
+            .iter()
+            .filter(|m| m.role == MessageRole::Assistant)
+            .count();
         summary_parts.push(format!(
             "Conversation Flow: {} user messages, {} assistant responses",
             user_messages, assistant_messages
         ));
-        
+
         summary_parts.join("\n")
     }
-    
+
     /// Simple stop word filter for keyword extraction
     fn is_stop_word(&self, word: &str) -> bool {
-        matches!(word, "the" | "and" | "or" | "but" | "in" | "on" | "at" | "to" | "for" | 
-                       "of" | "with" | "by" | "from" | "up" | "about" | "into" | "through" | 
-                       "during" | "before" | "after" | "above" | "below" | "between" | "among" |
-                       "this" | "that" | "these" | "those" | "i" | "you" | "he" | "she" | "it" |
-                       "we" | "they" | "me" | "him" | "her" | "us" | "them" | "my" | "your" |
-                       "his" | "its" | "our" | "their" | "am" | "is" | "are" | "was" | "were" |
-                       "be" | "been" | "being" | "have" | "has" | "had" | "do" | "does" | "did" |
-                       "will" | "would" | "could" | "should" | "may" | "might" | "must" | "can")
+        matches!(
+            word,
+            "the"
+                | "and"
+                | "or"
+                | "but"
+                | "in"
+                | "on"
+                | "at"
+                | "to"
+                | "for"
+                | "of"
+                | "with"
+                | "by"
+                | "from"
+                | "up"
+                | "about"
+                | "into"
+                | "through"
+                | "during"
+                | "before"
+                | "after"
+                | "above"
+                | "below"
+                | "between"
+                | "among"
+                | "this"
+                | "that"
+                | "these"
+                | "those"
+                | "i"
+                | "you"
+                | "he"
+                | "she"
+                | "it"
+                | "we"
+                | "they"
+                | "me"
+                | "him"
+                | "her"
+                | "us"
+                | "them"
+                | "my"
+                | "your"
+                | "his"
+                | "its"
+                | "our"
+                | "their"
+                | "am"
+                | "is"
+                | "are"
+                | "was"
+                | "were"
+                | "be"
+                | "been"
+                | "being"
+                | "have"
+                | "has"
+                | "had"
+                | "do"
+                | "does"
+                | "did"
+                | "will"
+                | "would"
+                | "could"
+                | "should"
+                | "may"
+                | "might"
+                | "must"
+                | "can"
+        )
     }
 
     /// Count messages by role
     pub fn count_messages_by_role(&self) -> HashMap<String, usize> {
         let mut counts = HashMap::new();
-        
+
         for message in &self.messages {
             let role_str = match &message.role {
                 MessageRole::User => "user",
@@ -985,10 +1309,10 @@ Summary:"#,
             };
             *counts.entry(role_str.to_string()).or_insert(0) += 1;
         }
-        
+
         counts
     }
-    
+
     /// Pin a message to keep it in context
     pub fn pin_message(&mut self, message_id: &str) -> Result<()> {
         if self.messages.iter().any(|m| m.id == message_id) {
@@ -998,48 +1322,48 @@ Summary:"#,
             Err(anyhow::anyhow!("Message not found"))
         }
     }
-    
+
     /// Unpin a message
     pub fn unpin_message(&mut self, message_id: &str) {
         self.context_window.unpin_message(message_id);
     }
-    
+
     /// Get current context messages
     pub fn get_context_messages(&self) -> Vec<&Message> {
         self.context_window.get_context_messages(&self.messages)
     }
-    
+
     /// Get current topics
     pub fn get_current_topics(&self) -> &[Topic] {
         &self.topic_tracker.current_topics
     }
-    
+
     /// Get topic history
     pub fn get_topic_history(&self) -> &[TopicTransition] {
         &self.topic_tracker.topic_history
     }
-    
+
     /// Get performance metrics
     pub fn get_performance_metrics(&self) -> &SessionMetrics {
         &self.performance_metrics
     }
-    
+
     /// Update user preference
     pub fn set_preference(&mut self, key: String, value: String) {
         self.user_preferences.insert(key, value);
     }
-    
+
     /// Get user preference
     pub fn get_preference(&self, key: &str) -> Option<&String> {
         self.user_preferences.get(key)
     }
-    
+
     /// Suspend the session
     pub fn suspend(&mut self) {
         self.session_state = SessionState::Suspended;
         self.update_activity();
     }
-    
+
     /// Resume the session
     pub fn resume(&mut self) {
         if matches!(self.session_state, SessionState::Suspended) {
@@ -1047,14 +1371,14 @@ Summary:"#,
             self.update_activity();
         }
     }
-    
+
     /// Mark session as idle
     pub fn mark_idle(&mut self) {
         if matches!(self.session_state, SessionState::Active) {
             self.session_state = SessionState::Idle;
         }
     }
-    
+
     /// Export session to JSON
     pub fn export_to_json(&self) -> Result<String> {
         let data = self.to_data();
@@ -1064,33 +1388,35 @@ Summary:"#,
     /// Get conversation threads
     pub fn get_threads(&self) -> Vec<ThreadInfo> {
         let mut threads: HashMap<String, ThreadInfo> = HashMap::new();
-        
+
         for message in &self.messages {
             if let Some(thread_id) = &message.thread_id {
-                let thread = threads.entry(thread_id.clone()).or_insert_with(|| ThreadInfo {
-                    id: thread_id.clone(),
-                    message_count: 0,
-                    first_message_time: message.timestamp,
-                    last_message_time: message.timestamp,
-                    participants: Vec::new(),
-                });
-                
+                let thread = threads
+                    .entry(thread_id.clone())
+                    .or_insert_with(|| ThreadInfo {
+                        id: thread_id.clone(),
+                        message_count: 0,
+                        first_message_time: message.timestamp,
+                        last_message_time: message.timestamp,
+                        participants: Vec::new(),
+                    });
+
                 thread.message_count += 1;
                 thread.last_message_time = thread.last_message_time.max(message.timestamp);
                 thread.first_message_time = thread.first_message_time.min(message.timestamp);
-                
+
                 let role_str = match &message.role {
                     MessageRole::User => "user",
                     MessageRole::Assistant => "assistant",
                     MessageRole::System => "system",
                 };
-                
+
                 if !thread.participants.contains(&role_str.to_string()) {
                     thread.participants.push(role_str.to_string());
                 }
             }
         }
-        
+
         threads.into_values().collect()
     }
 }
@@ -1124,13 +1450,13 @@ impl ChatManager {
             persistence: Some(Arc::new(db)),
             persistence_path: Some(persistence_path.as_ref().to_path_buf()),
         };
-        
+
         // Load existing sessions
         manager.load_sessions().await?;
-        
+
         // Start expiration checker
         manager.start_expiration_checker();
-        
+
         Ok(manager)
     }
 
@@ -1140,21 +1466,25 @@ impl ChatManager {
             let mut loaded_count = 0;
             let mut skipped_count = 0;
             let mut error_count = 0;
-            
+
             info!("Starting session recovery from persistence store");
-            
+
             for item in db.iter() {
                 match item {
                     Ok((key, value)) => {
                         let session_id = String::from_utf8_lossy(&key).to_string();
-                        
+
                         match bincode::deserialize::<SessionData>(&value) {
                             Ok(session_data) => {
                                 // Validate session data integrity
                                 if self.validate_session_data(&session_data) {
-                                    let session = ChatSession::from_data(session_data, self.store.clone());
+                                    let session =
+                                        ChatSession::from_data(session_data, self.store.clone());
                                     if !session.is_expired() {
-                                        sessions.insert(session_id.clone(), Arc::new(Mutex::new(session)));
+                                        sessions.insert(
+                                            session_id.clone(),
+                                            Arc::new(Mutex::new(session)),
+                                        );
                                         loaded_count += 1;
                                         debug!("Recovered session: {}", session_id);
                                     } else {
@@ -1178,7 +1508,7 @@ impl ChatManager {
                     }
                 }
             }
-            
+
             info!(
                 "Session recovery complete: {} loaded, {} skipped (expired), {} errors",
                 loaded_count, skipped_count, error_count
@@ -1186,25 +1516,25 @@ impl ChatManager {
         }
         Ok(())
     }
-    
+
     fn validate_session_data(&self, session_data: &SessionData) -> bool {
         // Basic validation checks
         if session_data.id.is_empty() {
             return false;
         }
-        
+
         // Check if timestamps are reasonable
         let now = chrono::Utc::now();
         if session_data.created_at > now || session_data.last_activity > now {
             return false;
         }
-        
+
         // Check if session is too old (older than 30 days)
         let max_age = chrono::Duration::days(30);
         if now - session_data.created_at > max_age {
             return false;
         }
-        
+
         true
     }
 
@@ -1214,26 +1544,29 @@ impl ChatManager {
             if let Some(session_arc) = sessions.get(session_id) {
                 let session = session_arc.lock().await;
                 let data = session.to_data();
-                
+
                 // Validate data before serialization
                 if !self.validate_session_data(&data) {
-                    return Err(anyhow::anyhow!("Invalid session data for session: {}", session_id));
+                    return Err(anyhow::anyhow!(
+                        "Invalid session data for session: {}",
+                        session_id
+                    ));
                 }
-                
+
                 match bincode::serialize(&data) {
                     Ok(serialized) => {
                         // Use a transaction-like approach with a temporary key
                         let temp_key = format!("{}_temp", session_id);
-                        
+
                         // Write to temporary key first
                         db.insert(temp_key.as_bytes(), serialized.clone())?;
                         db.flush()?;
-                        
+
                         // Then move to actual key (atomic on most filesystems)
                         db.insert(session_id.as_bytes(), serialized)?;
                         db.remove(temp_key.as_bytes())?;
                         db.flush()?;
-                        
+
                         debug!("Successfully saved session: {}", session_id);
                     }
                     Err(e) => {
@@ -1251,12 +1584,12 @@ impl ChatManager {
     pub async fn create_session(&self, session_id: String) -> Result<Arc<Mutex<ChatSession>>> {
         let session = ChatSession::new(session_id.clone(), self.store.clone());
         let session_arc = Arc::new(Mutex::new(session));
-        
+
         {
             let mut sessions = self.sessions.write().await;
             sessions.insert(session_id.clone(), session_arc.clone());
         }
-        
+
         self.save_session(&session_id).await?;
         Ok(session_arc)
     }
@@ -1266,31 +1599,34 @@ impl ChatManager {
         sessions.get(session_id).cloned()
     }
 
-    pub async fn get_or_create_session(&self, session_id: String) -> Result<Arc<Mutex<ChatSession>>> {
+    pub async fn get_or_create_session(
+        &self,
+        session_id: String,
+    ) -> Result<Arc<Mutex<ChatSession>>> {
         // Try to get existing session first
         if let Some(session) = self.get_session(&session_id).await {
             // Update activity and save
             {
                 let mut session_guard = session.lock().await;
-                
+
                 // Check if session is still valid
                 if session_guard.is_expired() {
                     warn!("Session {} has expired, creating new session", session_id);
                     drop(session_guard);
-                    
+
                     // Remove expired session and create new one
                     self.remove_session(&session_id).await?;
                     return self.create_session(session_id).await;
                 }
-                
+
                 session_guard.update_activity();
             }
-            
+
             // Save updated session asynchronously (don't block on save errors)
             if let Err(e) = self.save_session(&session_id).await {
                 warn!("Failed to save session activity update: {}", e);
             }
-            
+
             Ok(session)
         } else {
             self.create_session(session_id).await
@@ -1302,12 +1638,12 @@ impl ChatManager {
             let mut sessions = self.sessions.write().await;
             sessions.remove(session_id);
         }
-        
+
         if let Some(db) = &self.persistence {
             db.remove(session_id.as_bytes())?;
             db.flush()?;
         }
-        
+
         Ok(())
     }
 
@@ -1322,12 +1658,12 @@ impl ChatManager {
     pub async fn cleanup_expired_sessions(&self) -> Result<usize> {
         let mut expired_count = 0;
         let mut error_count = 0;
-        
+
         // Get list of expired sessions
         let expired_ids = {
             let sessions = self.sessions.read().await;
             let mut expired_ids = Vec::new();
-            
+
             for (id, session_arc) in sessions.iter() {
                 match session_arc.try_lock() {
                     Ok(session) => {
@@ -1343,9 +1679,9 @@ impl ChatManager {
             }
             expired_ids
         };
-        
+
         info!("Found {} expired sessions to clean up", expired_ids.len());
-        
+
         // Remove expired sessions
         for id in expired_ids {
             match self.remove_session(&id).await {
@@ -1359,24 +1695,28 @@ impl ChatManager {
                 }
             }
         }
-        
+
         if error_count > 0 {
-            warn!("Cleanup completed with {} errors out of {} expired sessions", error_count, expired_count + error_count);
+            warn!(
+                "Cleanup completed with {} errors out of {} expired sessions",
+                error_count,
+                expired_count + error_count
+            );
         } else if expired_count > 0 {
             info!("Successfully cleaned up {} expired sessions", expired_count);
         }
-        
+
         Ok(expired_count)
     }
 
     fn start_expiration_checker(&self) {
         let manager = self.sessions.clone();
         let persistence = self.persistence.clone();
-        
+
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(300)); // Check every 5 minutes
             let mut cleanup_interval = tokio::time::interval(Duration::from_secs(3600)); // Cleanup every hour
-            
+
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
@@ -1389,14 +1729,14 @@ impl ChatManager {
             }
         });
     }
-    
+
     async fn check_session_health(manager: &Arc<RwLock<HashMap<String, Arc<Mutex<ChatSession>>>>>) {
         let sessions = manager.read().await;
         let mut healthy_count = 0;
         let mut idle_count = 0;
         let mut expired_count = 0;
         let mut error_count = 0;
-        
+
         for (id, session_arc) in sessions.iter() {
             match session_arc.try_lock() {
                 Ok(session) => {
@@ -1406,16 +1746,21 @@ impl ChatManager {
                         SessionState::Expired => expired_count += 1,
                         SessionState::Suspended => {}
                     }
-                    
+
                     // Check for sessions with high error rates
                     let error_rate = if session.performance_metrics.total_queries > 0 {
-                        session.performance_metrics.failed_queries as f64 / session.performance_metrics.total_queries as f64
+                        session.performance_metrics.failed_queries as f64
+                            / session.performance_metrics.total_queries as f64
                     } else {
                         0.0
                     };
-                    
+
                     if error_rate > 0.5 && session.performance_metrics.total_queries > 10 {
-                        warn!("Session {} has high error rate: {:.2}%", id, error_rate * 100.0);
+                        warn!(
+                            "Session {} has high error rate: {:.2}%",
+                            id,
+                            error_rate * 100.0
+                        );
                         error_count += 1;
                     }
                 }
@@ -1424,31 +1769,34 @@ impl ChatManager {
                 }
             }
         }
-        
+
         let total_sessions = sessions.len();
         drop(sessions);
-        
+
         debug!(
             "Session health check: {} total, {} healthy, {} idle, {} expired, {} high-error",
             total_sessions, healthy_count, idle_count, expired_count, error_count
         );
-        
+
         // Log warnings for concerning patterns
         if expired_count > total_sessions / 4 {
-            warn!("High number of expired sessions: {}/{}", expired_count, total_sessions);
+            warn!(
+                "High number of expired sessions: {}/{}",
+                expired_count, total_sessions
+            );
         }
-        
+
         if error_count > 0 {
             warn!("Found {} sessions with high error rates", error_count);
         }
     }
-    
+
     async fn cleanup_expired_sessions_background(
         manager: &Arc<RwLock<HashMap<String, Arc<Mutex<ChatSession>>>>>,
         persistence: &Option<Arc<sled::Db>>,
     ) {
         let mut expired_ids = Vec::new();
-        
+
         // Collect expired session IDs
         {
             let sessions = manager.read().await;
@@ -1460,13 +1808,16 @@ impl ChatManager {
                 }
             }
         }
-        
+
         if expired_ids.is_empty() {
             return;
         }
-        
-        info!("Background cleanup removing {} expired sessions", expired_ids.len());
-        
+
+        info!(
+            "Background cleanup removing {} expired sessions",
+            expired_ids.len()
+        );
+
         // Remove expired sessions
         let mut removed_count = 0;
         for id in expired_ids {
@@ -1477,7 +1828,7 @@ impl ChatManager {
                     removed_count += 1;
                 }
             }
-            
+
             // Remove from persistence
             if let Some(db) = persistence {
                 if let Err(e) = db.remove(id.as_bytes()) {
@@ -1485,10 +1836,13 @@ impl ChatManager {
                 }
             }
         }
-        
+
         if removed_count > 0 {
-            info!("Background cleanup removed {} expired sessions", removed_count);
-            
+            info!(
+                "Background cleanup removed {} expired sessions",
+                removed_count
+            );
+
             // Flush persistence changes
             if let Some(db) = persistence {
                 if let Err(e) = db.flush() {
@@ -1507,7 +1861,7 @@ impl ChatManager {
         let sessions = self.sessions.read().await;
         let mut stats = SessionStats::default();
         stats.total_sessions = sessions.len();
-        
+
         for session_arc in sessions.values() {
             let session = session_arc.lock().await;
             match session.session_state {
@@ -1518,15 +1872,15 @@ impl ChatManager {
             }
             stats.total_messages += session.messages.len();
         }
-        
+
         stats
     }
-    
+
     /// Recover a session from error state
     pub async fn recover_session(&self, session_id: &str) -> Result<()> {
         if let Some(session_arc) = self.get_session(session_id).await {
             let mut session = session_arc.lock().await;
-            
+
             // Reset session state if it's in an error condition
             match session.session_state {
                 SessionState::Expired => {
@@ -1539,41 +1893,47 @@ impl ChatManager {
                 }
                 _ => {}
             }
-            
+
             // Clear any error flags in performance metrics
-            if session.performance_metrics.failed_queries > session.performance_metrics.successful_queries {
-                tracing::warn!("Session {} has high failure rate, resetting metrics", session_id);
+            if session.performance_metrics.failed_queries
+                > session.performance_metrics.successful_queries
+            {
+                tracing::warn!(
+                    "Session {} has high failure rate, resetting metrics",
+                    session_id
+                );
                 session.performance_metrics.failed_queries = 0;
             }
-            
+
             drop(session);
             self.save_session(session_id).await?;
         }
-        
+
         Ok(())
     }
-    
+
     /// Validate and repair persistence database
     pub async fn validate_persistence(&self) -> Result<ValidationReport> {
         let mut report = ValidationReport::default();
-        
+
         if let Some(db) = &self.persistence {
             // Check database health
             report.total_entries = db.len();
-            
+
             let mut corrupted_entries = Vec::new();
             let mut recoverable_entries = Vec::new();
-            
+
             for item in db.iter() {
                 match item {
                     Ok((key, value)) => {
                         let session_id = String::from_utf8_lossy(&key).to_string();
-                        
+
                         match bincode::deserialize::<SessionData>(&value) {
                             Ok(session_data) => {
                                 // Validate session data
-                                if session_data.messages.is_empty() && 
-                                   session_data.performance_metrics.total_queries > 0 {
+                                if session_data.messages.is_empty()
+                                    && session_data.performance_metrics.total_queries > 0
+                                {
                                     report.inconsistent_entries += 1;
                                     recoverable_entries.push(session_id.clone());
                                 }
@@ -1592,20 +1952,20 @@ impl ChatManager {
                     }
                 }
             }
-            
+
             // Remove corrupted entries
             for id in corrupted_entries {
                 db.remove(id.as_bytes())?;
                 report.removed_entries += 1;
             }
-            
+
             // Attempt to recover inconsistent entries
             for id in recoverable_entries {
                 if let Ok(Some(value)) = db.get(id.as_bytes()) {
                     if let Ok(mut session_data) = bincode::deserialize::<SessionData>(&value) {
                         // Reset inconsistent state
                         session_data.performance_metrics = SessionMetrics::default();
-                        
+
                         if let Ok(serialized) = bincode::serialize(&session_data) {
                             db.insert(id.as_bytes(), serialized)?;
                             report.recovered_entries += 1;
@@ -1613,62 +1973,74 @@ impl ChatManager {
                     }
                 }
             }
-            
+
             db.flush()?;
         }
-        
+
         Ok(report)
     }
-    
+
     /// Create a backup of all sessions with integrity checks
     pub async fn backup_sessions(&self, backup_path: impl AsRef<Path>) -> Result<BackupReport> {
         let mut report = BackupReport::default();
         let backup_dir = backup_path.as_ref();
         std::fs::create_dir_all(backup_dir)?;
-        
+
         // Create a manifest file for backup integrity
         let manifest_path = backup_dir.join("backup_manifest.json");
         let mut manifest = serde_json::Map::new();
-        manifest.insert("created_at".to_string(), serde_json::Value::String(chrono::Utc::now().to_rfc3339()));
-        manifest.insert("version".to_string(), serde_json::Value::String("1.0".to_string()));
-        
+        manifest.insert(
+            "created_at".to_string(),
+            serde_json::Value::String(chrono::Utc::now().to_rfc3339()),
+        );
+        manifest.insert(
+            "version".to_string(),
+            serde_json::Value::String("1.0".to_string()),
+        );
+
         let sessions = self.sessions.read().await;
         report.total_sessions = sessions.len();
-        
+
         let mut session_hashes = serde_json::Map::new();
-        
+
         for (session_id, session_arc) in sessions.iter() {
             match session_arc.try_lock() {
                 Ok(session) => {
                     let session_data = session.to_data();
-                    
+
                     // Validate session data before backup
                     if !self.validate_session_data(&session_data) {
                         report.failed_backups += 1;
                         error!("Invalid session data for {}, skipping backup", session_id);
                         continue;
                     }
-                    
+
                     let backup_file = backup_dir.join(format!("{}.json", session_id));
                     match serde_json::to_string_pretty(&session_data) {
                         Ok(json) => {
                             // Calculate hash for integrity checking
                             use std::collections::hash_map::DefaultHasher;
                             use std::hash::{Hash, Hasher};
-                            
+
                             let mut hasher = DefaultHasher::new();
                             json.hash(&mut hasher);
                             let hash = hasher.finish();
-                            
+
                             match std::fs::write(&backup_file, &json) {
                                 Ok(_) => {
                                     report.successful_backups += 1;
-                                    session_hashes.insert(session_id.clone(), serde_json::Value::Number(serde_json::Number::from(hash)));
+                                    session_hashes.insert(
+                                        session_id.clone(),
+                                        serde_json::Value::Number(serde_json::Number::from(hash)),
+                                    );
                                     debug!("Backed up session: {}", session_id);
                                 }
                                 Err(e) => {
                                     report.failed_backups += 1;
-                                    error!("Failed to write backup for session {}: {}", session_id, e);
+                                    error!(
+                                        "Failed to write backup for session {}: {}",
+                                        session_id, e
+                                    );
                                 }
                             }
                         }
@@ -1685,51 +2057,58 @@ impl ChatManager {
                 }
             }
         }
-        
+
         // Write manifest with session hashes
-        manifest.insert("sessions".to_string(), serde_json::Value::Object(session_hashes));
-        manifest.insert("total_sessions".to_string(), serde_json::Value::Number(serde_json::Number::from(report.successful_backups)));
-        
+        manifest.insert(
+            "sessions".to_string(),
+            serde_json::Value::Object(session_hashes),
+        );
+        manifest.insert(
+            "total_sessions".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(report.successful_backups)),
+        );
+
         if let Err(e) = std::fs::write(&manifest_path, serde_json::to_string_pretty(&manifest)?) {
             warn!("Failed to write backup manifest: {}", e);
         }
-        
+
         report.backup_path = backup_dir.to_path_buf();
         report.timestamp = chrono::Utc::now();
-        
+
         info!(
             "Backup completed: {}/{} sessions backed up successfully",
             report.successful_backups, report.total_sessions
         );
-        
+
         Ok(report)
     }
-    
+
     /// Restore sessions from backup with integrity verification
-    pub async fn restore_sessions(&mut self, backup_path: impl AsRef<Path>) -> Result<RestoreReport> {
+    pub async fn restore_sessions(
+        &mut self,
+        backup_path: impl AsRef<Path>,
+    ) -> Result<RestoreReport> {
         let mut report = RestoreReport::default();
         let backup_dir = backup_path.as_ref();
-        
+
         if !backup_dir.exists() {
             return Err(anyhow::anyhow!("Backup directory does not exist"));
         }
-        
+
         // Try to load and verify backup manifest
         let manifest_path = backup_dir.join("backup_manifest.json");
         let manifest = if manifest_path.exists() {
             match std::fs::read_to_string(&manifest_path) {
-                Ok(content) => {
-                    match serde_json::from_str::<serde_json::Value>(&content) {
-                        Ok(manifest) => {
-                            info!("Found backup manifest, verifying backup integrity");
-                            Some(manifest)
-                        }
-                        Err(e) => {
-                            warn!("Invalid backup manifest: {}", e);
-                            None
-                        }
+                Ok(content) => match serde_json::from_str::<serde_json::Value>(&content) {
+                    Ok(manifest) => {
+                        info!("Found backup manifest, verifying backup integrity");
+                        Some(manifest)
                     }
-                }
+                    Err(e) => {
+                        warn!("Invalid backup manifest: {}", e);
+                        None
+                    }
+                },
                 Err(e) => {
                     warn!("Failed to read backup manifest: {}", e);
                     None
@@ -1739,50 +2118,56 @@ impl ChatManager {
             warn!("No backup manifest found, proceeding without integrity checks");
             None
         };
-        
+
         // Get session hashes from manifest for verification
         let session_hashes = manifest
             .as_ref()
             .and_then(|m| m.get("sessions"))
             .and_then(|s| s.as_object())
             .cloned();
-        
+
         for entry in std::fs::read_dir(backup_dir)? {
             let entry = entry?;
             let path = entry.path();
-            
+
             // Skip non-JSON files and the manifest
-            if path.extension().and_then(|s| s.to_str()) != Some("json") || 
-               path.file_name().and_then(|n| n.to_str()) == Some("backup_manifest.json") {
+            if path.extension().and_then(|s| s.to_str()) != Some("json")
+                || path.file_name().and_then(|n| n.to_str()) == Some("backup_manifest.json")
+            {
                 continue;
             }
-            
+
             report.total_files += 1;
-            
+
             match std::fs::read_to_string(&path) {
                 Ok(json) => {
                     // Verify hash if manifest is available
                     if let Some(ref hashes) = session_hashes {
-                        let session_id = path.file_stem()
+                        let session_id = path
+                            .file_stem()
                             .and_then(|s| s.to_str())
                             .unwrap_or("unknown");
-                        
-                        if let Some(expected_hash) = hashes.get(session_id).and_then(|h| h.as_u64()) {
+
+                        if let Some(expected_hash) = hashes.get(session_id).and_then(|h| h.as_u64())
+                        {
                             use std::collections::hash_map::DefaultHasher;
                             use std::hash::{Hash, Hasher};
-                            
+
                             let mut hasher = DefaultHasher::new();
                             json.hash(&mut hasher);
                             let actual_hash = hasher.finish();
-                            
+
                             if actual_hash != expected_hash {
-                                error!("Hash mismatch for session {}, skipping restore", session_id);
+                                error!(
+                                    "Hash mismatch for session {}, skipping restore",
+                                    session_id
+                                );
                                 report.failed_restorations += 1;
                                 continue;
                             }
                         }
                     }
-                    
+
                     match serde_json::from_str::<SessionData>(&json) {
                         Ok(session_data) => {
                             // Validate session data before restoring
@@ -1791,23 +2176,23 @@ impl ChatManager {
                                 report.failed_restorations += 1;
                                 continue;
                             }
-                            
+
                             let session = ChatSession::from_data(session_data, self.store.clone());
                             let session_id = session.id.clone();
-                            
+
                             // Check if session already exists
                             if self.get_session(&session_id).await.is_some() {
                                 warn!("Session {} already exists, skipping restore", session_id);
                                 report.failed_restorations += 1;
                                 continue;
                             }
-                            
+
                             // Add to sessions
                             {
                                 let mut sessions = self.sessions.write().await;
                                 sessions.insert(session_id.clone(), Arc::new(Mutex::new(session)));
                             }
-                            
+
                             // Save to persistence
                             match self.save_session(&session_id).await {
                                 Ok(_) => {
@@ -1817,7 +2202,7 @@ impl ChatManager {
                                 Err(e) => {
                                     error!("Failed to save restored session {}: {}", session_id, e);
                                     report.failed_restorations += 1;
-                                    
+
                                     // Remove from memory since save failed
                                     let mut sessions = self.sessions.write().await;
                                     sessions.remove(&session_id);
@@ -1836,33 +2221,38 @@ impl ChatManager {
                 }
             }
         }
-        
+
         info!(
             "Session restore completed: {}/{} sessions restored successfully",
             report.restored_sessions, report.total_files
         );
-        
+
         Ok(report)
     }
-    
+
     /// Concurrent session creation with proper locking
-    pub async fn create_session_concurrent(&self, session_id: String) -> Result<Arc<Mutex<ChatSession>>> {
+    pub async fn create_session_concurrent(
+        &self,
+        session_id: String,
+    ) -> Result<Arc<Mutex<ChatSession>>> {
         // Use a more sophisticated approach to prevent race conditions
         // First, try to insert a placeholder
         {
             let mut sessions = self.sessions.write().await;
             if sessions.contains_key(&session_id) {
                 drop(sessions);
-                return self.get_session(&session_id).await
+                return self
+                    .get_session(&session_id)
+                    .await
                     .ok_or_else(|| anyhow::anyhow!("Session disappeared during creation"));
             }
-            
+
             // Insert a temporary placeholder to reserve the slot
             let temp_session = ChatSession::new(session_id.clone(), self.store.clone());
             let session_arc = Arc::new(Mutex::new(temp_session));
             sessions.insert(session_id.clone(), session_arc.clone());
         }
-        
+
         // Now we have exclusive access to this session ID
         // Save the session to persistence
         match self.save_session(&session_id).await {
@@ -1877,64 +2267,69 @@ impl ChatManager {
             }
         }
     }
-    
+
     /// Batch session operations for efficiency
     pub async fn save_multiple_sessions(&self, session_ids: &[String]) -> Result<Vec<String>> {
         let mut successful_saves = Vec::new();
         let mut errors = Vec::new();
-        
+
         for session_id in session_ids {
             match self.save_session(session_id).await {
                 Ok(_) => successful_saves.push(session_id.clone()),
                 Err(e) => errors.push(format!("{}: {}", session_id, e)),
             }
         }
-        
+
         if !errors.is_empty() {
             warn!("Some session saves failed: {:?}", errors);
         }
-        
-        debug!("Batch save completed: {}/{} sessions saved", successful_saves.len(), session_ids.len());
+
+        debug!(
+            "Batch save completed: {}/{} sessions saved",
+            successful_saves.len(),
+            session_ids.len()
+        );
         Ok(successful_saves)
     }
-    
+
     /// Get detailed session metrics
     pub async fn get_detailed_metrics(&self) -> DetailedSessionMetrics {
         let sessions = self.sessions.read().await;
         let mut metrics = DetailedSessionMetrics::default();
-        
+
         for (_session_id, session_arc) in sessions.iter() {
             if let Ok(session) = session_arc.try_lock() {
                 metrics.total_sessions += 1;
-                
+
                 match session.session_state {
                     SessionState::Active => metrics.active_sessions += 1,
                     SessionState::Idle => metrics.idle_sessions += 1,
                     SessionState::Expired => metrics.expired_sessions += 1,
                     SessionState::Suspended => metrics.suspended_sessions += 1,
                 }
-                
+
                 metrics.total_messages += session.messages.len();
                 metrics.total_tokens += session.performance_metrics.total_tokens_processed;
-                
+
                 if session.performance_metrics.total_queries > 0 {
-                    let error_rate = session.performance_metrics.failed_queries as f64 / 
-                                   session.performance_metrics.total_queries as f64;
+                    let error_rate = session.performance_metrics.failed_queries as f64
+                        / session.performance_metrics.total_queries as f64;
                     if error_rate > 0.1 {
                         metrics.high_error_sessions += 1;
                     }
-                    
-                    metrics.average_response_time += session.performance_metrics.average_response_time_ms;
+
+                    metrics.average_response_time +=
+                        session.performance_metrics.average_response_time_ms;
                     metrics.response_time_samples += 1;
                 }
-                
+
                 let session_age = chrono::Utc::now() - session.created_at;
                 metrics.total_session_age += session_age;
-                
+
                 if session.messages.len() > metrics.max_messages_per_session {
                     metrics.max_messages_per_session = session.messages.len();
                 }
-                
+
                 if session.context_window.pinned_messages.len() > 0 {
                     metrics.sessions_with_pinned_messages += 1;
                 }
@@ -1942,15 +2337,15 @@ impl ChatManager {
                 metrics.locked_sessions += 1;
             }
         }
-        
+
         if metrics.response_time_samples > 0 {
             metrics.average_response_time /= metrics.response_time_samples as f64;
         }
-        
+
         if metrics.total_sessions > 0 {
             metrics.average_session_age = metrics.total_session_age / metrics.total_sessions as i32;
         }
-        
+
         metrics
     }
 }
@@ -2021,4 +2416,3 @@ pub struct ThreadInfo {
     pub last_message_time: chrono::DateTime<chrono::Utc>,
     pub participants: Vec<String>,
 }
-

@@ -3,9 +3,9 @@
 //! This implementation is extracted and adapted from Oxigraph's binary_encoder.rs
 //! to provide zero-dependency binary serialization with optimal storage efficiency.
 
-use crate::store::encoding::{EncodedTerm, EncodedTriple, EncodedQuad, StrHash, SmallString};
+use crate::store::encoding::{EncodedQuad, EncodedTerm, EncodedTriple, SmallString, StrHash};
 use crate::OxirsError;
-use std::io::{Read, Write, Cursor};
+use std::io::{Cursor, Read, Write};
 use std::mem::size_of;
 
 /// Maximum size of an encoded term in bytes
@@ -117,7 +117,10 @@ pub fn encode_term(term: &EncodedTerm, buffer: &mut Vec<u8>) -> Result<(), Oxirs
             buffer.extend_from_slice(&value_id.to_be_bytes());
             encode_small_string(language, buffer);
         }
-        EncodedTerm::BigBigLangStringLiteral { value_id, language_id } => {
+        EncodedTerm::BigBigLangStringLiteral {
+            value_id,
+            language_id,
+        } => {
             buffer.push(TYPE_BIG_BIG_LANG_STRING_LITERAL);
             buffer.extend_from_slice(&value_id.to_be_bytes());
             buffer.extend_from_slice(&language_id.to_be_bytes());
@@ -137,7 +140,10 @@ pub fn encode_term(term: &EncodedTerm, buffer: &mut Vec<u8>) -> Result<(), Oxirs
             buffer.extend_from_slice(&value_id.to_be_bytes());
             encode_small_string(datatype, buffer);
         }
-        EncodedTerm::BigBigTypedLiteral { value_id, datatype_id } => {
+        EncodedTerm::BigBigTypedLiteral {
+            value_id,
+            datatype_id,
+        } => {
             buffer.push(TYPE_BIG_BIG_TYPED_LITERAL);
             buffer.extend_from_slice(&value_id.to_be_bytes());
             buffer.extend_from_slice(&datatype_id.to_be_bytes());
@@ -149,9 +155,9 @@ pub fn encode_term(term: &EncodedTerm, buffer: &mut Vec<u8>) -> Result<(), Oxirs
 /// Decodes a term from a binary representation
 pub fn decode_term(buffer: &mut Cursor<&[u8]>) -> Result<EncodedTerm, OxirsError> {
     let mut type_byte = [0u8; 1];
-    buffer.read_exact(&mut type_byte).map_err(|e| {
-        OxirsError::Store(format!("Failed to read type byte: {}", e))
-    })?;
+    buffer
+        .read_exact(&mut type_byte)
+        .map_err(|e| OxirsError::Store(format!("Failed to read type byte: {}", e)))?;
 
     match type_byte[0] {
         TYPE_DEFAULT_GRAPH => Ok(EncodedTerm::DefaultGraph),
@@ -161,9 +167,9 @@ pub fn decode_term(buffer: &mut Cursor<&[u8]>) -> Result<EncodedTerm, OxirsError
         }
         TYPE_NUMERICAL_BLANK_NODE_ID => {
             let mut id = [0u8; 16];
-            buffer.read_exact(&mut id).map_err(|e| {
-                OxirsError::Store(format!("Failed to read blank node ID: {}", e))
-            })?;
+            buffer
+                .read_exact(&mut id)
+                .map_err(|e| OxirsError::Store(format!("Failed to read blank node ID: {}", e)))?;
             Ok(EncodedTerm::NumericalBlankNode { id })
         }
         TYPE_SMALL_BLANK_NODE_ID => {
@@ -200,7 +206,10 @@ pub fn decode_term(buffer: &mut Cursor<&[u8]>) -> Result<EncodedTerm, OxirsError
         TYPE_BIG_BIG_LANG_STRING_LITERAL => {
             let value_id = read_str_hash(buffer)?;
             let language_id = read_str_hash(buffer)?;
-            Ok(EncodedTerm::BigBigLangStringLiteral { value_id, language_id })
+            Ok(EncodedTerm::BigBigLangStringLiteral {
+                value_id,
+                language_id,
+            })
         }
         TYPE_SMALL_SMALL_TYPED_LITERAL => {
             let value = decode_small_string(buffer)?;
@@ -220,7 +229,10 @@ pub fn decode_term(buffer: &mut Cursor<&[u8]>) -> Result<EncodedTerm, OxirsError
         TYPE_BIG_BIG_TYPED_LITERAL => {
             let value_id = read_str_hash(buffer)?;
             let datatype_id = read_str_hash(buffer)?;
-            Ok(EncodedTerm::BigBigTypedLiteral { value_id, datatype_id })
+            Ok(EncodedTerm::BigBigTypedLiteral {
+                value_id,
+                datatype_id,
+            })
         }
         type_byte => Err(OxirsError::Store(format!(
             "Unknown encoded term type: {}",
@@ -238,9 +250,9 @@ fn encode_small_string(small_string: &SmallString, buffer: &mut Vec<u8>) {
 /// Decodes a small string
 fn decode_small_string(buffer: &mut Cursor<&[u8]>) -> Result<SmallString, OxirsError> {
     let mut len_byte = [0u8; 1];
-    buffer.read_exact(&mut len_byte).map_err(|e| {
-        OxirsError::Store(format!("Failed to read string length: {}", e))
-    })?;
+    buffer
+        .read_exact(&mut len_byte)
+        .map_err(|e| OxirsError::Store(format!("Failed to read string length: {}", e)))?;
 
     let len = len_byte[0] as usize;
     if len > 15 {
@@ -252,26 +264,24 @@ fn decode_small_string(buffer: &mut Cursor<&[u8]>) -> Result<SmallString, OxirsE
 
     let mut data = [0u8; 16];
     if len > 0 {
-        buffer.read_exact(&mut data[..len]).map_err(|e| {
-            OxirsError::Store(format!("Failed to read string data: {}", e))
-        })?;
+        buffer
+            .read_exact(&mut data[..len])
+            .map_err(|e| OxirsError::Store(format!("Failed to read string data: {}", e)))?;
     }
 
-    let s = std::str::from_utf8(&data[..len]).map_err(|e| {
-        OxirsError::Store(format!("Invalid UTF-8 in small string: {}", e))
-    })?;
+    let s = std::str::from_utf8(&data[..len])
+        .map_err(|e| OxirsError::Store(format!("Invalid UTF-8 in small string: {}", e)))?;
 
-    SmallString::new(s).ok_or_else(|| {
-        OxirsError::Store("String too long for SmallString".to_string())
-    })
+    SmallString::new(s)
+        .ok_or_else(|| OxirsError::Store("String too long for SmallString".to_string()))
 }
 
 /// Reads a StrHash from the buffer
 fn read_str_hash(buffer: &mut Cursor<&[u8]>) -> Result<StrHash, OxirsError> {
     let mut hash_bytes = [0u8; 16];
-    buffer.read_exact(&mut hash_bytes).map_err(|e| {
-        OxirsError::Store(format!("Failed to read StrHash: {}", e))
-    })?;
+    buffer
+        .read_exact(&mut hash_bytes)
+        .map_err(|e| OxirsError::Store(format!("Failed to read StrHash: {}", e)))?;
     Ok(StrHash::from_be_bytes(hash_bytes))
 }
 

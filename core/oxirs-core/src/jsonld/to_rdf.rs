@@ -9,8 +9,8 @@ use json_event_parser::{JsonEvent, ReaderJsonParser, SliceJsonParser};
 // use oxiri::{Iri, IriParseError};
 // use oxrdf::vocab::{rdf, xsd};
 // use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, Quad};
-use crate::model::*;
 use crate::model::iri::{Iri, IriParseError};
+use crate::model::*;
 use crate::vocab::{rdf, xsd};
 use std::error::Error;
 use std::fmt::Write;
@@ -413,14 +413,14 @@ impl<R: Read> ReaderJsonLdParser<R> {
     pub fn with_load_document_callback(
         mut self,
         callback: impl Fn(
-            &str,
-            &JsonLdLoadDocumentOptions,
-        ) -> Result<JsonLdRemoteDocument, Box<dyn Error + Send + Sync>>
-        + Send
-        + Sync
-        + UnwindSafe
-        + RefUnwindSafe
-        + 'static,
+                &str,
+                &JsonLdLoadDocumentOptions,
+            ) -> Result<JsonLdRemoteDocument, Box<dyn Error + Send + Sync>>
+            + Send
+            + Sync
+            + UnwindSafe
+            + RefUnwindSafe
+            + 'static,
     ) -> Self {
         self.inner.expansion = self.inner.expansion.with_load_document_callback(callback);
         self
@@ -741,14 +741,14 @@ impl SliceJsonLdParser<'_> {
     pub fn with_load_document_callback(
         mut self,
         callback: impl Fn(
-            &str,
-            &JsonLdLoadDocumentOptions,
-        ) -> Result<JsonLdRemoteDocument, Box<dyn Error + Send + Sync>>
-        + Send
-        + Sync
-        + UnwindSafe
-        + RefUnwindSafe
-        + 'static,
+                &str,
+                &JsonLdLoadDocumentOptions,
+            ) -> Result<JsonLdRemoteDocument, Box<dyn Error + Send + Sync>>
+            + Send
+            + Sync
+            + UnwindSafe
+            + RefUnwindSafe
+            + 'static,
     ) -> Self {
         self.inner.expansion = self.inner.expansion.with_load_document_callback(callback);
         self
@@ -1144,13 +1144,28 @@ impl JsonLdToRdfConverter {
             (self.last_subject(), self.last_predicate())
         {
             results.push(if reverse {
-                Quad::new(id.clone(), predicate.to_owned(), subject.clone(), graph_name.clone())
+                Quad::new(
+                    id.clone(),
+                    predicate.to_owned(),
+                    subject.clone(),
+                    graph_name.clone(),
+                )
             } else {
-                Quad::new(subject.clone(), predicate.to_owned(), id.clone(), graph_name.clone())
+                Quad::new(
+                    subject.clone(),
+                    predicate.to_owned(),
+                    id.clone(),
+                    graph_name.clone(),
+                )
             })
         }
         for t in types {
-            results.push(Quad::new(id.clone(), rdf::TYPE.clone(), t, graph_name.clone()))
+            results.push(Quad::new(
+                id.clone(),
+                rdf::TYPE.clone(),
+                t,
+                graph_name.clone(),
+            ))
         }
     }
 
@@ -1255,7 +1270,9 @@ impl JsonLdToRdfConverter {
                 }
                 let value = canonicalize_json_number(
                     &value,
-                    r#type.as_ref().is_some_and(|t| t.as_str() == xsd::DOUBLE.as_str()),
+                    r#type
+                        .as_ref()
+                        .is_some_and(|t| t.as_str() == xsd::DOUBLE.as_str()),
                 )
                 .unwrap_or(RdfJsonNumber::Double(value));
                 match value {

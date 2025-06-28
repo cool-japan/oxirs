@@ -208,9 +208,7 @@ pub enum WsMessage {
         filter: Option<NotificationFilter>,
     },
     /// Unsubscribe from a query
-    Unsubscribe {
-        subscription_id: String,
-    },
+    Unsubscribe { subscription_id: String },
     /// Query result update
     QueryUpdate {
         subscription_id: String,
@@ -230,26 +228,18 @@ pub enum WsMessage {
         details: Option<serde_json::Value>,
     },
     /// Heartbeat/ping
-    Ping {
-        timestamp: u64,
-    },
+    Ping { timestamp: u64 },
     /// Heartbeat/pong
-    Pong {
-        timestamp: u64,
-    },
+    Pong { timestamp: u64 },
     /// Authentication
-    Auth {
-        token: String,
-    },
+    Auth { token: String },
     /// Subscription confirmation
     Subscribed {
         subscription_id: String,
         query: String,
     },
     /// Unsubscription confirmation
-    Unsubscribed {
-        subscription_id: String,
-    },
+    Unsubscribed { subscription_id: String },
 }
 
 /// Query result for WebSocket
@@ -280,7 +270,10 @@ pub struct ResultChanges {
     /// Removed bindings
     pub removed: Vec<HashMap<String, serde_json::Value>>,
     /// Modified bindings (old, new)
-    pub modified: Vec<(HashMap<String, serde_json::Value>, HashMap<String, serde_json::Value>)>,
+    pub modified: Vec<(
+        HashMap<String, serde_json::Value>,
+        HashMap<String, serde_json::Value>,
+    )>,
 }
 
 /// Query executor for subscriptions
@@ -292,13 +285,9 @@ pub struct QueryExecutor {
 }
 
 impl SubscriptionManager {
-    pub fn new(
-        store: Arc<Store>,
-        metrics: Arc<MetricsService>,
-        config: WebSocketConfig,
-    ) -> Self {
+    pub fn new(store: Arc<Store>, metrics: Arc<MetricsService>, config: WebSocketConfig) -> Self {
         let (tx, _rx) = broadcast::channel(1000);
-        
+
         Self {
             subscriptions: Arc::new(DashMap::new()),
             query_subscriptions: Arc::new(DashMap::new()),
@@ -313,13 +302,13 @@ impl SubscriptionManager {
     /// Start the subscription manager
     pub async fn start(&self) {
         info!("Starting WebSocket subscription manager");
-        
+
         // Start evaluation loop
         let manager = self.clone();
         tokio::spawn(async move {
             manager.evaluation_loop().await;
         });
-        
+
         // Start cleanup loop
         let manager = self.clone();
         tokio::spawn(async move {
@@ -328,14 +317,10 @@ impl SubscriptionManager {
     }
 
     /// Handle WebSocket upgrade request
-    pub async fn handle_websocket(
-        &self,
-        ws: WebSocketUpgrade,
-        user: Option<AuthUser>,
-    ) -> Response {
+    pub async fn handle_websocket(&self, ws: WebSocketUpgrade, user: Option<AuthUser>) -> Response {
         let connection_id = Uuid::new_v4().to_string();
         let manager = self.clone();
-        
+
         ws.on_upgrade(move |socket| async move {
             if let Err(e) = manager.handle_connection(socket, connection_id, user).await {
                 error!("WebSocket connection error: {}", e);
@@ -351,11 +336,12 @@ impl SubscriptionManager {
         user: Option<AuthUser>,
     ) -> FusekiResult<()> {
         info!("New WebSocket connection: {}", connection_id);
-        self.metrics.increment_counter("websocket.connections.total", 1);
-        
+        self.metrics
+            .increment_counter("websocket.connections.total", 1);
+
         let (sender, receiver) = ws.split();
         let (tx, rx) = mpsc::channel(100);
-        
+
         // Create connection info
         let conn_info = ConnectionInfo {
             id: connection_id.clone(),
@@ -366,27 +352,28 @@ impl SubscriptionManager {
             sender: tx,
             state: ConnectionState::Connected,
         };
-        
+
         self.connections.insert(connection_id.clone(), conn_info);
-        
+
         // Spawn sender task
         let sender_task = tokio::spawn(Self::message_sender(sender, rx));
-        
+
         // Spawn receiver task
-        let receiver_task = tokio::spawn(self.clone().message_receiver(
-            receiver,
-            connection_id.clone(),
-        ));
-        
+        let receiver_task = tokio::spawn(
+            self.clone()
+                .message_receiver(receiver, connection_id.clone()),
+        );
+
         // Wait for tasks to complete
         let _ = tokio::try_join!(sender_task, receiver_task);
-        
+
         // Cleanup connection
         self.cleanup_connection(&connection_id).await;
-        
+
         info!("WebSocket connection closed: {}", connection_id);
-        self.metrics.increment_counter("websocket.connections.closed", 1);
-        
+        self.metrics
+            .increment_counter("websocket.connections.closed", 1);
+
         Ok(())
     }
 
@@ -403,17 +390,14 @@ impl SubscriptionManager {
     }
 
     /// Message receiver task
-    async fn message_receiver(
-        self,
-        mut receiver: SplitStream<WebSocket>,
-        connection_id: String,
-    ) {
+    async fn message_receiver(self, mut receiver: SplitStream<WebSocket>, connection_id: String) {
         while let Some(result) = receiver.next().await {
             match result {
                 Ok(msg) => {
                     if let Err(e) = self.handle_message(msg, &connection_id).await {
                         error!("Error handling message: {}", e);
-                        self.send_error(&connection_id, "message_error", &e.to_string()).await;
+                        self.send_error(&connection_id, "message_error", &e.to_string())
+                            .await;
                     }
                 }
                 Err(e) => {
@@ -430,7 +414,7 @@ impl SubscriptionManager {
         if let Some(mut conn) = self.connections.get_mut(connection_id) {
             conn.last_activity = Instant::now();
         }
-        
+
         match msg {
             Message::Text(text) => {
                 let ws_msg: WsMessage = serde_json::from_str(&text)
@@ -449,7 +433,8 @@ impl SubscriptionManager {
                 }
             }
             Message::Ping(data) => {
-                self.send_message(connection_id, Message::Pong(data)).await?;
+                self.send_message(connection_id, Message::Pong(data))
+                    .await?;
             }
             Message::Pong(_) => {
                 // Handle pong for connection health
@@ -461,21 +446,28 @@ impl SubscriptionManager {
                 }
             }
         }
-        
+
         Ok(())
     }
 
     /// Handle WebSocket protocol message
     async fn handle_ws_message(&self, msg: WsMessage, connection_id: &str) -> FusekiResult<()> {
         match msg {
-            WsMessage::Subscribe { query, parameters, filter } => {
-                self.handle_subscribe(connection_id, query, parameters, filter).await?;
+            WsMessage::Subscribe {
+                query,
+                parameters,
+                filter,
+            } => {
+                self.handle_subscribe(connection_id, query, parameters, filter)
+                    .await?;
             }
             WsMessage::Unsubscribe { subscription_id } => {
-                self.handle_unsubscribe(connection_id, &subscription_id).await?;
+                self.handle_unsubscribe(connection_id, &subscription_id)
+                    .await?;
             }
             WsMessage::Ping { timestamp } => {
-                self.send_ws_message(connection_id, WsMessage::Pong { timestamp }).await?;
+                self.send_ws_message(connection_id, WsMessage::Pong { timestamp })
+                    .await?;
             }
             WsMessage::Auth { token } => {
                 self.handle_auth(connection_id, &token).await?;
@@ -484,7 +476,7 @@ impl SubscriptionManager {
                 return Err(FusekiError::bad_request("Unexpected message type"));
             }
         }
-        
+
         Ok(())
     }
 
@@ -498,10 +490,10 @@ impl SubscriptionManager {
     ) -> FusekiResult<()> {
         // Check subscription limits
         self.check_subscription_limits(connection_id)?;
-        
+
         // Validate query
         Self::validate_subscription_query(&query)?;
-        
+
         // Create subscription
         let subscription_id = Uuid::new_v4().to_string();
         let subscription = Subscription {
@@ -515,22 +507,23 @@ impl SubscriptionManager {
             last_evaluated: Instant::now(),
             notification_count: 0,
         };
-        
+
         // Store subscription
-        self.subscriptions.insert(subscription_id.clone(), subscription.clone());
-        
+        self.subscriptions
+            .insert(subscription_id.clone(), subscription.clone());
+
         // Update query index
         let query_hash = Self::hash_query(&query);
         self.query_subscriptions
             .entry(query_hash)
             .or_insert_with(HashSet::new)
             .insert(subscription_id.clone());
-        
+
         // Update connection
         if let Some(mut conn) = self.connections.get_mut(connection_id) {
             conn.subscription_ids.insert(subscription_id.clone());
         }
-        
+
         // Send confirmation
         self.send_ws_message(
             connection_id,
@@ -538,14 +531,19 @@ impl SubscriptionManager {
                 subscription_id: subscription_id.clone(),
                 query: query.clone(),
             },
-        ).await?;
-        
+        )
+        .await?;
+
         // Evaluate immediately
         self.evaluate_subscription(&subscription_id).await?;
-        
-        self.metrics.increment_counter("websocket.subscriptions.created", 1);
-        info!("Created subscription {} for connection {}", subscription_id, connection_id);
-        
+
+        self.metrics
+            .increment_counter("websocket.subscriptions.created", 1);
+        info!(
+            "Created subscription {} for connection {}",
+            subscription_id, connection_id
+        );
+
         Ok(())
     }
 
@@ -563,18 +561,19 @@ impl SubscriptionManager {
         } else {
             return Err(FusekiError::not_found("Subscription not found"));
         }
-        
+
         // Remove subscription
         self.remove_subscription(subscription_id).await;
-        
+
         // Send confirmation
         self.send_ws_message(
             connection_id,
             WsMessage::Unsubscribed {
                 subscription_id: subscription_id.to_string(),
             },
-        ).await?;
-        
+        )
+        .await?;
+
         Ok(())
     }
 
@@ -585,7 +584,7 @@ impl SubscriptionManager {
         if let Some(mut conn) = self.connections.get_mut(connection_id) {
             conn.state = ConnectionState::Authenticated;
         }
-        
+
         self.send_ws_message(
             connection_id,
             WsMessage::Ack {
@@ -593,8 +592,9 @@ impl SubscriptionManager {
                 success: true,
                 error: None,
             },
-        ).await?;
-        
+        )
+        .await?;
+
         Ok(())
     }
 
@@ -604,18 +604,18 @@ impl SubscriptionManager {
         if let Some(conn) = self.connections.get(connection_id) {
             if conn.subscription_ids.len() >= self.config.max_subscriptions_per_connection {
                 return Err(FusekiError::bad_request(
-                    "Maximum subscriptions per connection exceeded"
+                    "Maximum subscriptions per connection exceeded",
                 ));
             }
         }
-        
+
         // Check total limit
         if self.subscriptions.len() >= self.config.max_total_subscriptions {
             return Err(FusekiError::service_unavailable(
-                "Maximum total subscriptions exceeded"
+                "Maximum total subscriptions exceeded",
             ));
         }
-        
+
         Ok(())
     }
 
@@ -625,46 +625,47 @@ impl SubscriptionManager {
         if query.trim().is_empty() {
             return Err(FusekiError::bad_request("Empty query"));
         }
-        
+
         // Check for supported query types
         let query_lower = query.to_lowercase();
         if !query_lower.contains("select") && !query_lower.contains("construct") {
             return Err(FusekiError::bad_request(
-                "Only SELECT and CONSTRUCT queries supported for subscriptions"
+                "Only SELECT and CONSTRUCT queries supported for subscriptions",
             ));
         }
-        
+
         // Prevent expensive queries
         if !query_lower.contains("limit") {
             return Err(FusekiError::bad_request(
-                "Subscription queries must include LIMIT clause"
+                "Subscription queries must include LIMIT clause",
             ));
         }
-        
+
         Ok(())
     }
 
     /// Evaluation loop for subscriptions
     async fn evaluation_loop(&self) {
         let mut interval = interval(self.config.evaluation_interval);
-        
+
         loop {
             interval.tick().await;
-            
+
             // Get all subscriptions
-            let subscription_ids: Vec<String> = self.subscriptions
+            let subscription_ids: Vec<String> = self
+                .subscriptions
                 .iter()
                 .map(|entry| entry.key().clone())
                 .collect();
-            
+
             // Evaluate subscriptions in parallel
             let futures: Vec<_> = subscription_ids
                 .into_iter()
                 .map(|id: String| self.evaluate_subscription(&id))
                 .collect();
-            
+
             let results = futures::future::join_all(futures).await;
-            
+
             // Log errors
             for result in results {
                 if let Err(e) = result {
@@ -680,42 +681,48 @@ impl SubscriptionManager {
             Some(sub) => sub.clone(),
             None => return Ok(()), // Subscription removed
         };
-        
+
         // Check rate limit
         if let Some(filter) = &subscription.filter {
             if let Some(rate_limit) = filter.rate_limit {
-                let notifications_per_minute = subscription.notification_count as f64 / 
-                    subscription.created_at.elapsed().as_secs_f64() * 60.0;
+                let notifications_per_minute = subscription.notification_count as f64
+                    / subscription.created_at.elapsed().as_secs_f64()
+                    * 60.0;
                 if notifications_per_minute > rate_limit as f64 {
                     return Ok(()); // Skip due to rate limit
                 }
             }
         }
-        
+
         // Execute query
-        let result = self.query_executor
+        let result = self
+            .query_executor
             .execute_query(&subscription.query, &subscription.parameters)
             .await?;
-        
+
         // Calculate result hash
         let result_hash = Self::hash_result(&result);
-        
+
         // Check for changes
-        let has_changed = subscription.last_result_hash
+        let has_changed = subscription
+            .last_result_hash
             .map(|h| h != result_hash)
             .unwrap_or(true);
-        
+
         if !has_changed {
             return Ok(()); // No changes
         }
-        
+
         // Apply change filter
         if let Some(filter) = &subscription.filter {
-            if !self.apply_notification_filter(&subscription, &result, filter).await? {
+            if !self
+                .apply_notification_filter(&subscription, &result, filter)
+                .await?
+            {
                 return Ok(()); // Filtered out
             }
         }
-        
+
         // Calculate changes
         let changes = if subscription.last_result_hash.is_some() {
             // TODO: Calculate actual changes between results
@@ -723,7 +730,7 @@ impl SubscriptionManager {
         } else {
             None
         };
-        
+
         // Send update
         self.send_ws_message(
             &subscription.connection_id,
@@ -732,17 +739,19 @@ impl SubscriptionManager {
                 result: result.clone(),
                 changes,
             },
-        ).await?;
-        
+        )
+        .await?;
+
         // Update subscription
         if let Some(mut sub) = self.subscriptions.get_mut(subscription_id) {
             sub.last_result_hash = Some(result_hash);
             sub.last_evaluated = Instant::now();
             sub.notification_count += 1;
         }
-        
-        self.metrics.increment_counter("websocket.notifications.sent", 1);
-        
+
+        self.metrics
+            .increment_counter("websocket.notifications.sent", 1);
+
         Ok(())
     }
 
@@ -761,7 +770,7 @@ impl SubscriptionManager {
                 return Ok(false);
             }
         }
-        
+
         // Check debounce
         if let Some(debounce_ms) = filter.debounce_ms {
             let time_since_last = subscription.last_evaluated.elapsed().as_millis() as u64;
@@ -769,27 +778,28 @@ impl SubscriptionManager {
                 return Ok(false);
             }
         }
-        
+
         Ok(true)
     }
 
     /// Cleanup loop for expired connections
     async fn cleanup_loop(&self) {
         let mut interval = interval(Duration::from_secs(60));
-        
+
         loop {
             interval.tick().await;
-            
+
             let now = Instant::now();
             let timeout = self.config.connection_timeout;
-            
+
             // Find expired connections
-            let expired: Vec<String> = self.connections
+            let expired: Vec<String> = self
+                .connections
                 .iter()
                 .filter(|entry| now.duration_since(entry.last_activity) > timeout)
                 .map(|entry| entry.key().clone())
                 .collect();
-            
+
             // Clean up expired connections
             for connection_id in expired {
                 warn!("Cleaning up expired connection: {}", connection_id);
@@ -806,7 +816,7 @@ impl SubscriptionManager {
                 self.remove_subscription(sub_id).await;
             }
         }
-        
+
         // Note: Metrics service doesn't have decrement_gauge, using direct gauge update
         // In a real implementation, you'd track the current count and decrement it
     }
@@ -823,13 +833,13 @@ impl SubscriptionManager {
                     self.query_subscriptions.remove(&query_hash);
                 }
             }
-            
+
             // Remove from connection
             if let Some(mut conn) = self.connections.get_mut(&sub.connection_id) {
                 conn.subscription_ids.remove(subscription_id);
             }
         }
-        
+
         // Note: Metrics service doesn't have decrement_gauge, using direct gauge update
         // In a real implementation, you'd track the current count and decrement it
     }
@@ -837,7 +847,9 @@ impl SubscriptionManager {
     /// Send message to connection
     async fn send_message(&self, connection_id: &str, msg: Message) -> FusekiResult<()> {
         if let Some(conn) = self.connections.get(connection_id) {
-            conn.sender.send(msg).await
+            conn.sender
+                .send(msg)
+                .await
                 .map_err(|_| FusekiError::internal("Failed to send message"))?;
         }
         Ok(())
@@ -847,20 +859,22 @@ impl SubscriptionManager {
     async fn send_ws_message(&self, connection_id: &str, msg: WsMessage) -> FusekiResult<()> {
         let json = serde_json::to_string(&msg)
             .map_err(|e| FusekiError::internal(format!("Serialization error: {}", e)))?;
-        
+
         self.send_message(connection_id, Message::Text(json)).await
     }
 
     /// Send error message
     async fn send_error(&self, connection_id: &str, code: &str, message: &str) {
-        let _ = self.send_ws_message(
-            connection_id,
-            WsMessage::Error {
-                code: code.to_string(),
-                message: message.to_string(),
-                details: None,
-            },
-        ).await;
+        let _ = self
+            .send_ws_message(
+                connection_id,
+                WsMessage::Error {
+                    code: code.to_string(),
+                    message: message.to_string(),
+                    details: None,
+                },
+            )
+            .await;
     }
 
     /// Hash a query for indexing
@@ -875,7 +889,7 @@ impl SubscriptionManager {
     fn hash_result(result: &QueryResult) -> u64 {
         use std::hash::{Hash, Hasher};
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        
+
         // Hash bindings
         for binding in &result.bindings {
             for (k, v) in binding {
@@ -883,7 +897,7 @@ impl SubscriptionManager {
                 v.to_string().hash(&mut hasher);
             }
         }
-        
+
         hasher.finish()
     }
 
@@ -891,12 +905,13 @@ impl SubscriptionManager {
     fn decompress_message(data: &[u8]) -> FusekiResult<Vec<u8>> {
         use flate2::read::GzDecoder;
         use std::io::Read;
-        
+
         let mut decoder = GzDecoder::new(data);
         let mut decompressed = Vec::new();
-        decoder.read_to_end(&mut decompressed)
+        decoder
+            .read_to_end(&mut decompressed)
             .map_err(|e| FusekiError::bad_request(format!("Decompression error: {}", e)))?;
-        
+
         Ok(decompressed)
     }
 
@@ -904,15 +919,16 @@ impl SubscriptionManager {
     pub async fn handle_store_change(&self, notification: ChangeNotification) {
         // Broadcast to change listeners
         let _ = self.change_broadcaster.send(notification.clone());
-        
+
         // Find affected subscriptions
         // In a real implementation, this would analyze which queries are affected
         // For now, re-evaluate all subscriptions
-        let subscription_ids: Vec<String> = self.subscriptions
+        let subscription_ids: Vec<String> = self
+            .subscriptions
             .iter()
             .map(|entry| entry.key().clone())
             .collect();
-        
+
         for sub_id in subscription_ids {
             if let Err(e) = self.evaluate_subscription(&sub_id).await {
                 error!("Error evaluating subscription after change: {}", e);
@@ -950,11 +966,11 @@ impl QueryExecutor {
         parameters: &QueryParameters,
     ) -> FusekiResult<QueryResult> {
         let start = Instant::now();
-        
+
         // Execute query against store
         // This is a placeholder - in real implementation would use oxirs-arq
         let bindings = self.execute_sparql_query(query, parameters).await?;
-        
+
         let execution_time = start.elapsed().as_millis() as u64;
         let result_count = bindings.len();
         let result_hash = SubscriptionManager::hash_result(&QueryResult {
@@ -965,7 +981,7 @@ impl QueryExecutor {
                 result_hash: 0,
             },
         });
-        
+
         Ok(QueryResult {
             bindings,
             metadata: ResultMetadata {
@@ -987,10 +1003,10 @@ impl QueryExecutor {
         // 1. Parse the SPARQL query
         // 2. Execute against the store with specified graphs
         // 3. Format results according to requested format
-        
+
         // For now, return mock data
         let mut bindings = Vec::new();
-        
+
         if query.to_lowercase().contains("select") {
             // Mock SELECT results
             for i in 0..3 {
@@ -1010,7 +1026,7 @@ impl QueryExecutor {
                 bindings.push(binding);
             }
         }
-        
+
         Ok(bindings)
     }
 }
@@ -1027,8 +1043,9 @@ pub async fn websocket_handler(
         // Return error response if WebSocket is not configured
         (
             axum::http::StatusCode::SERVICE_UNAVAILABLE,
-            "WebSocket support not configured"
-        ).into_response()
+            "WebSocket support not configured",
+        )
+            .into_response()
     }
 }
 
@@ -1048,18 +1065,21 @@ mod tests {
         // Valid queries
         assert!(SubscriptionManager::validate_subscription_query(
             "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 100"
-        ).is_ok());
-        
+        )
+        .is_ok());
+
         assert!(SubscriptionManager::validate_subscription_query(
             "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o } LIMIT 10"
-        ).is_ok());
-        
+        )
+        .is_ok());
+
         // Invalid queries
         assert!(SubscriptionManager::validate_subscription_query("").is_err());
         assert!(SubscriptionManager::validate_subscription_query("ASK { ?s ?p ?o }").is_err());
         assert!(SubscriptionManager::validate_subscription_query(
             "SELECT ?s ?p ?o WHERE { ?s ?p ?o }"
-        ).is_err()); // No LIMIT
+        )
+        .is_err()); // No LIMIT
     }
 
     #[test]
@@ -1079,10 +1099,10 @@ mod tests {
                 rate_limit: Some(60),
             }),
         };
-        
+
         let json = serde_json::to_string(&msg).unwrap();
         let deserialized: WsMessage = serde_json::from_str(&json).unwrap();
-        
+
         match deserialized {
             WsMessage::Subscribe { query, .. } => {
                 assert!(query.contains("SELECT"));
@@ -1096,12 +1116,12 @@ mod tests {
         let query1 = "SELECT ?s WHERE { ?s ?p ?o }";
         let query2 = "SELECT ?s WHERE { ?s ?p ?o }";
         let query3 = "SELECT ?x WHERE { ?x ?y ?z }";
-        
+
         assert_eq!(
             SubscriptionManager::hash_query(query1),
             SubscriptionManager::hash_query(query2)
         );
-        
+
         assert_ne!(
             SubscriptionManager::hash_query(query1),
             SubscriptionManager::hash_query(query3)

@@ -826,16 +826,21 @@ mod tests {
         );
         graph.insert_quad(quad2).unwrap();
 
-        let serialized = serializer.serialize_to_string(&graph, StarFormat::NQuadsStar).unwrap();
-        
+        let serialized = serializer
+            .serialize_to_string(&graph, StarFormat::NQuadsStar)
+            .unwrap();
+
         // Verify each quad is on its own line
-        let lines: Vec<&str> = serialized.lines().filter(|l| !l.trim().is_empty()).collect();
+        let lines: Vec<&str> = serialized
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .collect();
         assert_eq!(lines.len(), 3);
-        
+
         // Verify graph contexts are present
         assert!(serialized.contains("<http://example.org/graph1>"));
         assert!(serialized.contains("<http://example.org/graph2>"));
-        
+
         // Verify quoted triple syntax
         assert!(serialized.contains("<< "));
         assert!(serialized.contains(" >>"));
@@ -877,19 +882,21 @@ mod tests {
         );
         graph.insert_quad(quad2).unwrap();
 
-        let serialized = serializer.serialize_to_string(&graph, StarFormat::TrigStar).unwrap();
-        
+        let serialized = serializer
+            .serialize_to_string(&graph, StarFormat::TrigStar)
+            .unwrap();
+
         // Verify prefixes are included
         assert!(serialized.contains("@prefix"));
-        
+
         // Verify default graph block
         assert!(serialized.contains("{\n"));
         assert!(serialized.contains("alice"));
-        
+
         // Verify named graph blocks
         assert!(serialized.contains("<http://example.org/preferences> {"));
         assert!(serialized.contains("<http://example.org/beliefs> {"));
-        
+
         // Verify quoted triple in TriG format
         assert!(serialized.contains("<<"));
         assert!(serialized.contains(">>"));
@@ -929,9 +936,11 @@ mod tests {
             StarFormat::TrigStar,
             StarFormat::NQuadsStar,
         ] {
-            let serialized = serializer.serialize_to_string(&original_graph, format).unwrap();
+            let serialized = serializer
+                .serialize_to_string(&original_graph, format)
+                .unwrap();
             let parsed_graph = parser.parse_str(&serialized, format).unwrap();
-            
+
             // Verify same number of triples
             assert_eq!(
                 original_graph.total_len(),

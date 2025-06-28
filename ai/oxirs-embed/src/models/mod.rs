@@ -11,10 +11,10 @@
 
 pub mod complex;
 pub mod distmult;
+pub mod gnn;
 pub mod rotate;
 pub mod transe;
 pub mod transformer;
-pub mod gnn;
 
 #[cfg(feature = "tucker")]
 pub mod tucker;
@@ -28,10 +28,10 @@ pub mod common;
 // Re-export all models
 pub use complex::ComplEx;
 pub use distmult::DistMult;
+pub use gnn::{AggregationType, GNNConfig, GNNEmbedding, GNNType};
 pub use rotate::RotatE;
 pub use transe::TransE;
-pub use transformer::{TransformerEmbedding, TransformerType, TransformerConfig, PoolingStrategy};
-pub use gnn::{GNNEmbedding, GNNType, GNNConfig, AggregationType};
+pub use transformer::{PoolingStrategy, TransformerConfig, TransformerEmbedding, TransformerType};
 
 #[cfg(feature = "tucker")]
 pub use tucker::TuckER;

@@ -5,9 +5,9 @@
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_star::{
-    parser::{StarParser, StarFormat},
+    model::{StarGraph, StarQuad, StarTerm, StarTriple},
+    parser::{StarFormat, StarParser},
     serializer::StarSerializer,
-    model::{StarGraph, StarTriple, StarTerm, StarQuad},
     store::StarStore,
     StarConfig,
 };
@@ -16,35 +16,33 @@ use std::time::Duration;
 /// Benchmark parsing performance with different complexity levels
 fn benchmark_parsing_complexity(c: &mut Criterion) {
     let mut group = c.benchmark_group("parsing_complexity");
-    
+
     // Test different nesting depths
     let nesting_depths = [0, 1, 2, 3];
     let triple_count = 1000;
-    
+
     for depth in nesting_depths.iter() {
         let data = generate_nested_turtle_star(*depth, triple_count);
-        
+
         group.throughput(Throughput::Bytes(data.len() as u64));
-        
+
         group.bench_with_input(
             BenchmarkId::new("nesting_depth", depth),
             &data,
             |b, data| {
                 let parser = StarParser::new();
-                b.iter(|| {
-                    black_box(parser.parse_str(data, StarFormat::TurtleStar).unwrap())
-                })
+                b.iter(|| black_box(parser.parse_str(data, StarFormat::TurtleStar).unwrap()))
             },
         );
     }
-    
+
     group.finish();
 }
 
 /// Benchmark serialization with different graph structures
 fn benchmark_serialization_structures(c: &mut Criterion) {
     let mut group = c.benchmark_group("serialization_structures");
-    
+
     // Different graph structures
     let structures = [
         ("flat", generate_flat_graph(1000)),
@@ -52,32 +50,30 @@ fn benchmark_serialization_structures(c: &mut Criterion) {
         ("mixed", generate_mixed_graph(1000)),
         ("deep_nested", generate_deep_nested_graph(100)),
     ];
-    
+
     for (name, graph) in structures.iter() {
         let triple_count = graph.total_len();
         group.throughput(Throughput::Elements(triple_count as u64));
-        
+
         for format in [StarFormat::NTriplesStar, StarFormat::TurtleStar] {
             group.bench_with_input(
                 BenchmarkId::new(format!("{}/{:?}", name, format), triple_count),
                 graph,
                 |b, graph| {
                     let serializer = StarSerializer::new();
-                    b.iter(|| {
-                        black_box(serializer.serialize_to_string(graph, format).unwrap())
-                    })
+                    b.iter(|| black_box(serializer.serialize_to_string(graph, format).unwrap()))
                 },
             );
         }
     }
-    
+
     group.finish();
 }
 
 /// Benchmark store indexing performance
 fn benchmark_store_indexing(c: &mut Criterion) {
     let mut group = c.benchmark_group("store_indexing");
-    
+
     // Different query patterns
     let patterns = [
         ("subject_only", 1, 0, 0),
@@ -86,57 +82,57 @@ fn benchmark_store_indexing(c: &mut Criterion) {
         ("subject_predicate", 1, 1, 0),
         ("all_bound", 1, 1, 1),
     ];
-    
+
     let store_size = 10000;
     let store = setup_indexed_store(store_size);
-    
+
     for (name, s, p, o) in patterns.iter() {
         group.bench_with_input(
             BenchmarkId::new("query_pattern", name),
             &store,
             |b, store| {
-                let subject = if *s == 1 { 
+                let subject = if *s == 1 {
                     Some(StarTerm::iri("http://example.org/subject500").unwrap())
-                } else { 
-                    None 
+                } else {
+                    None
                 };
-                let predicate = if *p == 1 { 
+                let predicate = if *p == 1 {
                     Some(StarTerm::iri("http://example.org/predicate").unwrap())
-                } else { 
-                    None 
+                } else {
+                    None
                 };
-                let object = if *o == 1 { 
+                let object = if *o == 1 {
                     Some(StarTerm::literal("500").unwrap())
-                } else { 
-                    None 
+                } else {
+                    None
                 };
-                
+
                 b.iter(|| {
                     black_box(store.query_triples(
                         subject.as_ref(),
                         predicate.as_ref(),
-                        object.as_ref()
+                        object.as_ref(),
                     ))
                 })
             },
         );
     }
-    
+
     group.finish();
 }
 
 /// Benchmark quoted triple operations
 fn benchmark_quoted_operations(c: &mut Criterion) {
     let mut group = c.benchmark_group("quoted_operations");
-    
+
     let sizes = [100, 1000, 5000];
-    
+
     for size in sizes.iter() {
         group.throughput(Throughput::Elements(*size as u64));
-        
+
         // Benchmark finding triples containing specific quoted patterns
         let store = setup_quoted_store(*size);
-        
+
         group.bench_with_input(
             BenchmarkId::new("find_containing_quoted", size),
             &store,
@@ -146,25 +142,19 @@ fn benchmark_quoted_operations(c: &mut Criterion) {
                     StarTerm::iri("http://example.org/age").unwrap(),
                     StarTerm::literal("25").unwrap(),
                 );
-                
-                b.iter(|| {
-                    black_box(store.find_triples_containing_quoted(&quoted))
-                })
+
+                b.iter(|| black_box(store.find_triples_containing_quoted(&quoted)))
             },
         );
-        
+
         // Benchmark nesting depth queries
         group.bench_with_input(
             BenchmarkId::new("find_by_nesting_depth", size),
             &store,
-            |b, store| {
-                b.iter(|| {
-                    black_box(store.find_triples_by_nesting_depth(1, Some(2)))
-                })
-            },
+            |b, store| b.iter(|| black_box(store.find_triples_by_nesting_depth(1, Some(2)))),
         );
     }
-    
+
     group.finish();
 }
 
@@ -172,7 +162,7 @@ fn benchmark_quoted_operations(c: &mut Criterion) {
 fn benchmark_memory_efficiency(c: &mut Criterion) {
     let mut group = c.benchmark_group("memory_efficiency");
     group.measurement_time(Duration::from_secs(15));
-    
+
     // Benchmark graph-to-store conversion
     group.bench_function("graph_to_store_conversion", |b| {
         let graph = generate_large_mixed_graph(5000);
@@ -182,45 +172,51 @@ fn benchmark_memory_efficiency(c: &mut Criterion) {
             store
         })
     });
-    
+
     // Benchmark store optimization
     group.bench_function("store_optimization", |b| {
         let store = setup_fragmented_store(5000);
-        b.iter(|| {
-            black_box(store.optimize().unwrap())
-        })
+        b.iter(|| black_box(store.optimize().unwrap()))
     });
-    
+
     group.finish();
 }
 
 /// Benchmark concurrent operations
 fn benchmark_concurrent_operations(c: &mut Criterion) {
     let mut group = c.benchmark_group("concurrent_operations");
-    
+
     let thread_counts = [1, 2, 4];
     let operations_per_thread = 1000;
-    
+
     for threads in thread_counts.iter() {
         group.bench_with_input(
             BenchmarkId::new("concurrent_reads", threads),
             threads,
             |b, &thread_count| {
                 let store = std::sync::Arc::new(setup_indexed_store(10000));
-                
+
                 b.iter(|| {
                     let handles: Vec<_> = (0..thread_count)
                         .map(|_| {
                             let store_clone = std::sync::Arc::clone(&store);
                             std::thread::spawn(move || {
                                 for i in 0..operations_per_thread {
-                                    let subject = StarTerm::iri(&format!("http://example.org/subject{}", i % 1000)).unwrap();
-                                    black_box(store_clone.query_triples(Some(&subject), None, None));
+                                    let subject = StarTerm::iri(&format!(
+                                        "http://example.org/subject{}",
+                                        i % 1000
+                                    ))
+                                    .unwrap();
+                                    black_box(store_clone.query_triples(
+                                        Some(&subject),
+                                        None,
+                                        None,
+                                    ));
                                 }
                             })
                         })
                         .collect();
-                    
+
                     for handle in handles {
                         handle.join().unwrap();
                     }
@@ -228,7 +224,7 @@ fn benchmark_concurrent_operations(c: &mut Criterion) {
             },
         );
     }
-    
+
     group.finish();
 }
 
@@ -237,12 +233,12 @@ fn benchmark_concurrent_operations(c: &mut Criterion) {
 fn generate_nested_turtle_star(depth: usize, count: usize) -> String {
     let mut data = String::new();
     data.push_str("@prefix ex: <http://example.org/> .\n\n");
-    
+
     for i in 0..count {
         let triple = generate_nested_triple_string(depth, i);
         data.push_str(&format!("{} .\n", triple));
     }
-    
+
     data
 }
 
@@ -257,7 +253,7 @@ fn generate_nested_triple_string(depth: usize, id: usize) -> String {
 
 fn generate_flat_graph(size: usize) -> StarGraph {
     let mut graph = StarGraph::new();
-    
+
     for i in 0..size {
         let triple = StarTriple::new(
             StarTerm::iri(&format!("http://example.org/subject{}", i)).unwrap(),
@@ -266,35 +262,35 @@ fn generate_flat_graph(size: usize) -> StarGraph {
         );
         graph.insert(triple).unwrap();
     }
-    
+
     graph
 }
 
 fn generate_quoted_heavy_graph(size: usize) -> StarGraph {
     let mut graph = StarGraph::new();
-    
+
     for i in 0..size {
         let inner = StarTriple::new(
             StarTerm::iri(&format!("http://example.org/s{}", i)).unwrap(),
             StarTerm::iri("http://example.org/p").unwrap(),
             StarTerm::literal(&format!("{}", i)).unwrap(),
         );
-        
+
         let quoted = StarTriple::new(
             StarTerm::quoted_triple(inner),
             StarTerm::iri("http://example.org/confidence").unwrap(),
             StarTerm::literal(&format!("0.{}", i % 100)).unwrap(),
         );
-        
+
         graph.insert(quoted).unwrap();
     }
-    
+
     graph
 }
 
 fn generate_mixed_graph(size: usize) -> StarGraph {
     let mut graph = StarGraph::new();
-    
+
     for i in 0..size {
         if i % 3 == 0 {
             // Quoted triple
@@ -303,13 +299,13 @@ fn generate_mixed_graph(size: usize) -> StarGraph {
                 StarTerm::iri("http://example.org/p").unwrap(),
                 StarTerm::literal(&format!("{}", i)).unwrap(),
             );
-            
+
             let quoted = StarTriple::new(
                 StarTerm::quoted_triple(inner),
                 StarTerm::iri("http://example.org/meta").unwrap(),
                 StarTerm::literal("metadata").unwrap(),
             );
-            
+
             graph.insert(quoted).unwrap();
         } else {
             // Regular triple
@@ -318,24 +314,24 @@ fn generate_mixed_graph(size: usize) -> StarGraph {
                 StarTerm::iri("http://example.org/p").unwrap(),
                 StarTerm::literal(&format!("{}", i)).unwrap(),
             );
-            
+
             graph.insert(triple).unwrap();
         }
     }
-    
+
     graph
 }
 
 fn generate_deep_nested_graph(size: usize) -> StarGraph {
     let mut graph = StarGraph::new();
-    
+
     for i in 0..size {
         let mut current = StarTriple::new(
             StarTerm::iri(&format!("http://example.org/base{}", i)).unwrap(),
             StarTerm::iri("http://example.org/p").unwrap(),
             StarTerm::literal(&format!("{}", i)).unwrap(),
         );
-        
+
         // Create nested structure
         for depth in 0..3 {
             current = StarTriple::new(
@@ -344,16 +340,16 @@ fn generate_deep_nested_graph(size: usize) -> StarGraph {
                 StarTerm::literal(&format!("depth{}", depth)).unwrap(),
             );
         }
-        
+
         graph.insert(current).unwrap();
     }
-    
+
     graph
 }
 
 fn generate_large_mixed_graph(size: usize) -> StarGraph {
     let mut graph = StarGraph::new();
-    
+
     // Mix of different triple types
     for i in 0..size {
         match i % 5 {
@@ -373,13 +369,13 @@ fn generate_large_mixed_graph(size: usize) -> StarGraph {
                     StarTerm::iri("http://example.org/age").unwrap(),
                     StarTerm::literal("25").unwrap(),
                 );
-                
+
                 let quoted = StarTriple::new(
                     StarTerm::quoted_triple(inner),
                     StarTerm::iri("http://example.org/certainty").unwrap(),
                     StarTerm::literal("0.9").unwrap(),
                 );
-                
+
                 graph.insert(quoted).unwrap();
             }
             2 => {
@@ -412,13 +408,13 @@ fn generate_large_mixed_graph(size: usize) -> StarGraph {
             }
         }
     }
-    
+
     graph
 }
 
 fn setup_indexed_store(size: usize) -> StarStore {
     let store = StarStore::new();
-    
+
     for i in 0..size {
         let triple = StarTriple::new(
             StarTerm::iri(&format!("http://example.org/subject{}", i)).unwrap(),
@@ -427,13 +423,13 @@ fn setup_indexed_store(size: usize) -> StarStore {
         );
         store.insert(&triple).unwrap();
     }
-    
+
     store
 }
 
 fn setup_quoted_store(size: usize) -> StarStore {
     let store = StarStore::new();
-    
+
     for i in 0..size {
         let depth = (i % 3) + 1;
         let mut current = StarTriple::new(
@@ -441,7 +437,7 @@ fn setup_quoted_store(size: usize) -> StarStore {
             StarTerm::iri("http://example.org/age").unwrap(),
             StarTerm::literal("25").unwrap(),
         );
-        
+
         for d in 0..depth {
             current = StarTriple::new(
                 StarTerm::quoted_triple(current),
@@ -449,16 +445,16 @@ fn setup_quoted_store(size: usize) -> StarStore {
                 StarTerm::literal(&format!("level{}", d)).unwrap(),
             );
         }
-        
+
         store.insert(&current).unwrap();
     }
-    
+
     store
 }
 
 fn setup_fragmented_store(size: usize) -> StarStore {
     let store = StarStore::new();
-    
+
     // Insert and remove to create fragmentation
     for i in 0..size * 2 {
         let triple = StarTriple::new(
@@ -467,7 +463,7 @@ fn setup_fragmented_store(size: usize) -> StarStore {
             StarTerm::literal(&format!("{}", i)).unwrap(),
         );
         store.insert(&triple).unwrap();
-        
+
         // Remove every other triple
         if i % 2 == 0 && i > 0 {
             let to_remove = StarTriple::new(
@@ -478,7 +474,7 @@ fn setup_fragmented_store(size: usize) -> StarStore {
             store.remove(&to_remove).unwrap();
         }
     }
-    
+
     store
 }
 

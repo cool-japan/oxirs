@@ -228,7 +228,7 @@ impl ValidationReport {
                 message.replace('"', "\\\"")
             ));
         }
-        
+
         // Add nested results (sh:detail) if present
         if !violation.nested_results.is_empty() {
             turtle.push_str(";\n    sh:detail ");
@@ -243,7 +243,7 @@ impl ValidationReport {
         }
 
         turtle.push_str(" .\n");
-        
+
         // Generate turtle for nested violations
         for (i, nested) in violation.nested_results.iter().enumerate() {
             let nested_iri = format!("{}_detail_{}", violation_iri, i);
@@ -279,87 +279,154 @@ impl ValidationReport {
     /// Generate a JSON-LD representation
     fn to_json_ld(&self) -> Result<String> {
         let mut json_ld = serde_json::Map::new();
-        
+
         // Add JSON-LD context
         let mut context = serde_json::Map::new();
-        context.insert("sh".to_string(), serde_json::Value::String("http://www.w3.org/ns/shacl#".to_string()));
-        context.insert("conforms".to_string(), serde_json::Value::String("sh:conforms".to_string()));
-        context.insert("result".to_string(), serde_json::Value::String("sh:result".to_string()));
-        context.insert("focusNode".to_string(), serde_json::Value::String("sh:focusNode".to_string()));
-        context.insert("resultSeverity".to_string(), serde_json::Value::String("sh:resultSeverity".to_string()));
-        context.insert("sourceShape".to_string(), serde_json::Value::String("sh:sourceShape".to_string()));
-        context.insert("sourceConstraintComponent".to_string(), serde_json::Value::String("sh:sourceConstraintComponent".to_string()));
-        context.insert("resultMessage".to_string(), serde_json::Value::String("sh:resultMessage".to_string()));
-        context.insert("resultPath".to_string(), serde_json::Value::String("sh:resultPath".to_string()));
-        context.insert("value".to_string(), serde_json::Value::String("sh:value".to_string()));
-        context.insert("detail".to_string(), serde_json::Value::String("sh:detail".to_string()));
+        context.insert(
+            "sh".to_string(),
+            serde_json::Value::String("http://www.w3.org/ns/shacl#".to_string()),
+        );
+        context.insert(
+            "conforms".to_string(),
+            serde_json::Value::String("sh:conforms".to_string()),
+        );
+        context.insert(
+            "result".to_string(),
+            serde_json::Value::String("sh:result".to_string()),
+        );
+        context.insert(
+            "focusNode".to_string(),
+            serde_json::Value::String("sh:focusNode".to_string()),
+        );
+        context.insert(
+            "resultSeverity".to_string(),
+            serde_json::Value::String("sh:resultSeverity".to_string()),
+        );
+        context.insert(
+            "sourceShape".to_string(),
+            serde_json::Value::String("sh:sourceShape".to_string()),
+        );
+        context.insert(
+            "sourceConstraintComponent".to_string(),
+            serde_json::Value::String("sh:sourceConstraintComponent".to_string()),
+        );
+        context.insert(
+            "resultMessage".to_string(),
+            serde_json::Value::String("sh:resultMessage".to_string()),
+        );
+        context.insert(
+            "resultPath".to_string(),
+            serde_json::Value::String("sh:resultPath".to_string()),
+        );
+        context.insert(
+            "value".to_string(),
+            serde_json::Value::String("sh:value".to_string()),
+        );
+        context.insert(
+            "detail".to_string(),
+            serde_json::Value::String("sh:detail".to_string()),
+        );
         json_ld.insert("@context".to_string(), serde_json::Value::Object(context));
-        
+
         // Add type and ID
-        json_ld.insert("@type".to_string(), serde_json::Value::String("sh:ValidationReport".to_string()));
-        json_ld.insert("@id".to_string(), serde_json::Value::String(format!("_:report_{}", self.metadata.timestamp)));
-        
+        json_ld.insert(
+            "@type".to_string(),
+            serde_json::Value::String("sh:ValidationReport".to_string()),
+        );
+        json_ld.insert(
+            "@id".to_string(),
+            serde_json::Value::String(format!("_:report_{}", self.metadata.timestamp)),
+        );
+
         // Add conformance
-        json_ld.insert("conforms".to_string(), serde_json::Value::Bool(self.conforms));
-        
+        json_ld.insert(
+            "conforms".to_string(),
+            serde_json::Value::Bool(self.conforms),
+        );
+
         // Add results
         if !self.violations.is_empty() {
-            let results: Vec<serde_json::Value> = self.violations.iter()
+            let results: Vec<serde_json::Value> = self
+                .violations
+                .iter()
                 .map(|v| self.violation_to_json_ld(v))
                 .collect::<Result<Vec<_>>>()?;
             json_ld.insert("result".to_string(), serde_json::Value::Array(results));
         }
-        
-        serde_json::to_string_pretty(&json_ld)
-            .map_err(|e| ShaclError::ReportGeneration(format!("JSON-LD serialization error: {}", e)))
+
+        serde_json::to_string_pretty(&json_ld).map_err(|e| {
+            ShaclError::ReportGeneration(format!("JSON-LD serialization error: {}", e))
+        })
     }
 
     /// Convert a violation to JSON-LD format
     fn violation_to_json_ld(&self, violation: &ValidationViolation) -> Result<serde_json::Value> {
         let mut result = serde_json::Map::new();
-        
-        result.insert("@type".to_string(), serde_json::Value::String("sh:ValidationResult".to_string()));
-        result.insert("@id".to_string(), serde_json::Value::String(format!("_:result_{}", 
-            format!("{:p}", violation as *const _))));
-        
+
+        result.insert(
+            "@type".to_string(),
+            serde_json::Value::String("sh:ValidationResult".to_string()),
+        );
+        result.insert(
+            "@id".to_string(),
+            serde_json::Value::String(format!(
+                "_:result_{}",
+                format!("{:p}", violation as *const _)
+            )),
+        );
+
         // Focus node
-        result.insert("focusNode".to_string(), self.term_to_json_ld(&violation.focus_node)?);
-        
+        result.insert(
+            "focusNode".to_string(),
+            self.term_to_json_ld(&violation.focus_node)?,
+        );
+
         // Result severity
-        result.insert("resultSeverity".to_string(), 
-            serde_json::Value::String(format!("sh:{}", violation.result_severity)));
-        
+        result.insert(
+            "resultSeverity".to_string(),
+            serde_json::Value::String(format!("sh:{}", violation.result_severity)),
+        );
+
         // Source shape
-        result.insert("sourceShape".to_string(), 
-            serde_json::Value::String(violation.source_shape.as_str().to_string()));
-        
+        result.insert(
+            "sourceShape".to_string(),
+            serde_json::Value::String(violation.source_shape.as_str().to_string()),
+        );
+
         // Source constraint component
-        result.insert("sourceConstraintComponent".to_string(), 
-            serde_json::Value::String(violation.source_constraint_component.as_str().to_string()));
-        
+        result.insert(
+            "sourceConstraintComponent".to_string(),
+            serde_json::Value::String(violation.source_constraint_component.as_str().to_string()),
+        );
+
         // Result message
         if let Some(message) = &violation.result_message {
-            result.insert("resultMessage".to_string(), serde_json::Value::String(message.clone()));
+            result.insert(
+                "resultMessage".to_string(),
+                serde_json::Value::String(message.clone()),
+            );
         }
-        
+
         // Result path
         if let Some(path) = &violation.result_path {
             result.insert("resultPath".to_string(), self.path_to_json_ld(path)?);
         }
-        
+
         // Value
         if let Some(value) = &violation.value {
             result.insert("value".to_string(), self.term_to_json_ld(value)?);
         }
-        
+
         // Nested results
         if !violation.nested_results.is_empty() {
-            let details: Vec<serde_json::Value> = violation.nested_results.iter()
+            let details: Vec<serde_json::Value> = violation
+                .nested_results
+                .iter()
                 .map(|v| self.violation_to_json_ld(v))
                 .collect::<Result<Vec<_>>>()?;
             result.insert("detail".to_string(), serde_json::Value::Array(details));
         }
-        
+
         Ok(serde_json::Value::Object(result))
     }
 
@@ -370,15 +437,24 @@ impl ValidationReport {
             Term::BlankNode(node) => Ok(serde_json::Value::String(node.as_str().to_string())),
             Term::Literal(literal) => {
                 let mut lit_obj = serde_json::Map::new();
-                lit_obj.insert("@value".to_string(), serde_json::Value::String(literal.value().to_string()));
-                
+                lit_obj.insert(
+                    "@value".to_string(),
+                    serde_json::Value::String(literal.value().to_string()),
+                );
+
                 let datatype = literal.datatype();
-                lit_obj.insert("@type".to_string(), serde_json::Value::String(datatype.as_str().to_string()));
-                
+                lit_obj.insert(
+                    "@type".to_string(),
+                    serde_json::Value::String(datatype.as_str().to_string()),
+                );
+
                 if let Some(lang) = literal.language() {
-                    lit_obj.insert("@language".to_string(), serde_json::Value::String(lang.to_string()));
+                    lit_obj.insert(
+                        "@language".to_string(),
+                        serde_json::Value::String(lang.to_string()),
+                    );
                 }
-                
+
                 Ok(serde_json::Value::Object(lit_obj))
             }
             Term::Variable(var) => Ok(serde_json::Value::String(format!("?{}", var.name()))),
@@ -389,39 +465,58 @@ impl ValidationReport {
     /// Convert a property path to JSON-LD format
     fn path_to_json_ld(&self, path: &PropertyPath) -> Result<serde_json::Value> {
         match path {
-            PropertyPath::Predicate(pred) => Ok(serde_json::Value::String(pred.as_str().to_string())),
+            PropertyPath::Predicate(pred) => {
+                Ok(serde_json::Value::String(pred.as_str().to_string()))
+            }
             PropertyPath::Inverse(inner_path) => {
                 let mut inv_obj = serde_json::Map::new();
-                inv_obj.insert("sh:inversePath".to_string(), self.path_to_json_ld(inner_path)?);
+                inv_obj.insert(
+                    "sh:inversePath".to_string(),
+                    self.path_to_json_ld(inner_path)?,
+                );
                 Ok(serde_json::Value::Object(inv_obj))
             }
             PropertyPath::Sequence(paths) => {
-                let path_list: Vec<serde_json::Value> = paths.iter()
+                let path_list: Vec<serde_json::Value> = paths
+                    .iter()
                     .map(|p| self.path_to_json_ld(p))
                     .collect::<Result<Vec<_>>>()?;
                 Ok(serde_json::Value::Array(path_list))
             }
             PropertyPath::Alternative(paths) => {
                 let mut alt_obj = serde_json::Map::new();
-                let path_list: Vec<serde_json::Value> = paths.iter()
+                let path_list: Vec<serde_json::Value> = paths
+                    .iter()
                     .map(|p| self.path_to_json_ld(p))
                     .collect::<Result<Vec<_>>>()?;
-                alt_obj.insert("sh:alternativePath".to_string(), serde_json::Value::Array(path_list));
+                alt_obj.insert(
+                    "sh:alternativePath".to_string(),
+                    serde_json::Value::Array(path_list),
+                );
                 Ok(serde_json::Value::Object(alt_obj))
             }
             PropertyPath::ZeroOrMore(inner_path) => {
                 let mut zm_obj = serde_json::Map::new();
-                zm_obj.insert("sh:zeroOrMorePath".to_string(), self.path_to_json_ld(inner_path)?);
+                zm_obj.insert(
+                    "sh:zeroOrMorePath".to_string(),
+                    self.path_to_json_ld(inner_path)?,
+                );
                 Ok(serde_json::Value::Object(zm_obj))
             }
             PropertyPath::OneOrMore(inner_path) => {
                 let mut om_obj = serde_json::Map::new();
-                om_obj.insert("sh:oneOrMorePath".to_string(), self.path_to_json_ld(inner_path)?);
+                om_obj.insert(
+                    "sh:oneOrMorePath".to_string(),
+                    self.path_to_json_ld(inner_path)?,
+                );
                 Ok(serde_json::Value::Object(om_obj))
             }
             PropertyPath::ZeroOrOne(inner_path) => {
                 let mut zo_obj = serde_json::Map::new();
-                zo_obj.insert("sh:zeroOrOnePath".to_string(), self.path_to_json_ld(inner_path)?);
+                zo_obj.insert(
+                    "sh:zeroOrOnePath".to_string(),
+                    self.path_to_json_ld(inner_path)?,
+                );
                 Ok(serde_json::Value::Object(zo_obj))
             }
         }
@@ -430,103 +525,154 @@ impl ValidationReport {
     /// Generate an RDF/XML representation
     fn to_rdf_xml(&self) -> Result<String> {
         let mut xml = String::new();
-        
+
         // XML header and namespace declarations
         xml.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
         xml.push_str("<rdf:RDF\n");
         xml.push_str("    xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"\n");
         xml.push_str("    xmlns:sh=\"http://www.w3.org/ns/shacl#\">\n\n");
-        
+
         // Validation report resource
         let report_iri = format!("_:report_{}", self.metadata.timestamp);
-        xml.push_str(&format!("  <sh:ValidationReport rdf:about=\"{}\">\n", report_iri));
+        xml.push_str(&format!(
+            "  <sh:ValidationReport rdf:about=\"{}\">\n",
+            report_iri
+        ));
         xml.push_str(&format!("    <sh:conforms rdf:datatype=\"http://www.w3.org/2001/XMLSchema#boolean\">{}</sh:conforms>\n", self.conforms));
-        
+
         // Add results
         for (i, violation) in self.violations.iter().enumerate() {
             let result_iri = format!("_:result_{}_{}", self.metadata.timestamp, i);
-            xml.push_str(&format!("    <sh:result rdf:resource=\"{}\"/>\n", result_iri));
+            xml.push_str(&format!(
+                "    <sh:result rdf:resource=\"{}\"/>\n",
+                result_iri
+            ));
         }
-        
+
         xml.push_str("  </sh:ValidationReport>\n\n");
-        
+
         // Individual result resources
         for (i, violation) in self.violations.iter().enumerate() {
             xml.push_str(&self.violation_to_rdf_xml(violation, i)?);
             xml.push('\n');
         }
-        
+
         xml.push_str("</rdf:RDF>\n");
-        
+
         Ok(xml)
     }
 
     /// Convert a violation to RDF/XML format
-    fn violation_to_rdf_xml(&self, violation: &ValidationViolation, index: usize) -> Result<String> {
+    fn violation_to_rdf_xml(
+        &self,
+        violation: &ValidationViolation,
+        index: usize,
+    ) -> Result<String> {
         let mut xml = String::new();
         let result_iri = format!("_:result_{}_{}", self.metadata.timestamp, index);
-        
-        xml.push_str(&format!("  <sh:ValidationResult rdf:about=\"{}\">\n", result_iri));
-        
+
+        xml.push_str(&format!(
+            "  <sh:ValidationResult rdf:about=\"{}\">\n",
+            result_iri
+        ));
+
         // Focus node
-        xml.push_str(&format!("    <sh:focusNode {}>\n", self.term_to_rdf_xml_attr(&violation.focus_node)?));
-        
+        xml.push_str(&format!(
+            "    <sh:focusNode {}>\n",
+            self.term_to_rdf_xml_attr(&violation.focus_node)?
+        ));
+
         // Result severity
-        xml.push_str(&format!("    <sh:resultSeverity rdf:resource=\"http://www.w3.org/ns/shacl#{}\"/>\n", violation.result_severity));
-        
+        xml.push_str(&format!(
+            "    <sh:resultSeverity rdf:resource=\"http://www.w3.org/ns/shacl#{}\"/>\n",
+            violation.result_severity
+        ));
+
         // Source shape
-        xml.push_str(&format!("    <sh:sourceShape rdf:resource=\"{}\"/>\n", violation.source_shape.as_str()));
-        
+        xml.push_str(&format!(
+            "    <sh:sourceShape rdf:resource=\"{}\"/>\n",
+            violation.source_shape.as_str()
+        ));
+
         // Source constraint component
-        xml.push_str(&format!("    <sh:sourceConstraintComponent rdf:resource=\"{}\"/>\n", violation.source_constraint_component.as_str()));
-        
+        xml.push_str(&format!(
+            "    <sh:sourceConstraintComponent rdf:resource=\"{}\"/>\n",
+            violation.source_constraint_component.as_str()
+        ));
+
         // Result message
         if let Some(message) = &violation.result_message {
-            xml.push_str(&format!("    <sh:resultMessage>{}</sh:resultMessage>\n", 
-                self.escape_xml(&message)));
+            xml.push_str(&format!(
+                "    <sh:resultMessage>{}</sh:resultMessage>\n",
+                self.escape_xml(&message)
+            ));
         }
-        
+
         // Result path
         if let Some(path) = &violation.result_path {
-            xml.push_str(&format!("    <sh:resultPath {}>\n", self.path_to_rdf_xml_attr(path)?));
+            xml.push_str(&format!(
+                "    <sh:resultPath {}>\n",
+                self.path_to_rdf_xml_attr(path)?
+            ));
         }
-        
+
         // Value
         if let Some(value) = &violation.value {
-            xml.push_str(&format!("    <sh:value {}>\n", self.term_to_rdf_xml_attr(value)?));
+            xml.push_str(&format!(
+                "    <sh:value {}>\n",
+                self.term_to_rdf_xml_attr(value)?
+            ));
         }
-        
+
         // Nested results
         for (nested_index, nested) in violation.nested_results.iter().enumerate() {
-            let nested_iri = format!("_:result_{}_{}_{}", self.metadata.timestamp, index, nested_index);
-            xml.push_str(&format!("    <sh:detail rdf:resource=\"{}\"/>\n", nested_iri));
+            let nested_iri = format!(
+                "_:result_{}_{}_{}",
+                self.metadata.timestamp, index, nested_index
+            );
+            xml.push_str(&format!(
+                "    <sh:detail rdf:resource=\"{}\"/>\n",
+                nested_iri
+            ));
         }
-        
+
         xml.push_str("  </sh:ValidationResult>\n");
-        
+
         // Add nested results as separate resources
         for (nested_index, nested) in violation.nested_results.iter().enumerate() {
             xml.push_str(&self.violation_to_rdf_xml(nested, index * 1000 + nested_index)?);
         }
-        
+
         Ok(xml)
     }
 
     /// Convert a term to RDF/XML attribute format
     fn term_to_rdf_xml_attr(&self, term: &Term) -> Result<String> {
         match term {
-            Term::NamedNode(node) => Ok(format!("rdf:resource=\"{}\"", self.escape_xml(node.as_str()))),
-            Term::BlankNode(node) => Ok(format!("rdf:nodeID=\"{}\"", self.escape_xml(node.as_str()))),
+            Term::NamedNode(node) => Ok(format!(
+                "rdf:resource=\"{}\"",
+                self.escape_xml(node.as_str())
+            )),
+            Term::BlankNode(node) => {
+                Ok(format!("rdf:nodeID=\"{}\"", self.escape_xml(node.as_str())))
+            }
             Term::Literal(literal) => {
                 let escaped_value = self.escape_xml(literal.value());
                 let datatype = literal.datatype();
                 if let Some(lang) = literal.language() {
                     Ok(format!("xml:lang=\"{}\">{}</sh:value", lang, escaped_value))
                 } else {
-                    Ok(format!("rdf:datatype=\"{}\">{}</sh:value", datatype.as_str(), escaped_value))
+                    Ok(format!(
+                        "rdf:datatype=\"{}\">{}</sh:value",
+                        datatype.as_str(),
+                        escaped_value
+                    ))
                 }
             }
-            Term::Variable(var) => Ok(format!(">{}</sh:value", self.escape_xml(&format!("?{}", var.name())))),
+            Term::Variable(var) => Ok(format!(
+                ">{}</sh:value",
+                self.escape_xml(&format!("?{}", var.name()))
+            )),
             Term::QuotedTriple(_) => Ok("><<quoted_triple>></sh:value".to_string()),
         }
     }
@@ -534,7 +680,10 @@ impl ValidationReport {
     /// Convert a property path to RDF/XML attribute format
     fn path_to_rdf_xml_attr(&self, path: &PropertyPath) -> Result<String> {
         match path {
-            PropertyPath::Predicate(pred) => Ok(format!("rdf:resource=\"{}\"", self.escape_xml(pred.as_str()))),
+            PropertyPath::Predicate(pred) => Ok(format!(
+                "rdf:resource=\"{}\"",
+                self.escape_xml(pred.as_str())
+            )),
             // For complex paths, use a blank node (simplified representation)
             _ => Ok("rdf:nodeID=\"_:complexPath\"".to_string()),
         }
@@ -552,72 +701,105 @@ impl ValidationReport {
     /// Generate an N-Triples representation
     fn to_n_triples(&self) -> Result<String> {
         let mut nt = String::new();
-        
+
         // Validation report triples
         let report_iri = format!("_:report_{}", self.metadata.timestamp);
         nt.push_str(&format!("{} <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#ValidationReport> .\n", report_iri));
         nt.push_str(&format!("{} <http://www.w3.org/ns/shacl#conforms> \"{}\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n", 
             report_iri, self.conforms));
-        
+
         // Result triples
         for (i, violation) in self.violations.iter().enumerate() {
             let result_iri = format!("_:result_{}_{}", self.metadata.timestamp, i);
-            nt.push_str(&format!("{} <http://www.w3.org/ns/shacl#result> {} .\n", report_iri, result_iri));
+            nt.push_str(&format!(
+                "{} <http://www.w3.org/ns/shacl#result> {} .\n",
+                report_iri, result_iri
+            ));
             nt.push_str(&self.violation_to_n_triples(violation, i)?);
         }
-        
+
         Ok(nt)
     }
 
     /// Convert a violation to N-Triples format
-    fn violation_to_n_triples(&self, violation: &ValidationViolation, index: usize) -> Result<String> {
+    fn violation_to_n_triples(
+        &self,
+        violation: &ValidationViolation,
+        index: usize,
+    ) -> Result<String> {
         let mut nt = String::new();
         let result_iri = format!("_:result_{}_{}", self.metadata.timestamp, index);
-        
+
         // Type triple
         nt.push_str(&format!("{} <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#ValidationResult> .\n", result_iri));
-        
+
         // Focus node
-        nt.push_str(&format!("{} <http://www.w3.org/ns/shacl#focusNode> {} .\n", 
-            result_iri, self.term_to_n_triples(&violation.focus_node)?));
-        
+        nt.push_str(&format!(
+            "{} <http://www.w3.org/ns/shacl#focusNode> {} .\n",
+            result_iri,
+            self.term_to_n_triples(&violation.focus_node)?
+        ));
+
         // Result severity
-        nt.push_str(&format!("{} <http://www.w3.org/ns/shacl#resultSeverity> <http://www.w3.org/ns/shacl#{}> .\n", 
-            result_iri, violation.result_severity));
-        
+        nt.push_str(&format!(
+            "{} <http://www.w3.org/ns/shacl#resultSeverity> <http://www.w3.org/ns/shacl#{}> .\n",
+            result_iri, violation.result_severity
+        ));
+
         // Source shape
-        nt.push_str(&format!("{} <http://www.w3.org/ns/shacl#sourceShape> <{}> .\n", 
-            result_iri, violation.source_shape.as_str()));
-        
+        nt.push_str(&format!(
+            "{} <http://www.w3.org/ns/shacl#sourceShape> <{}> .\n",
+            result_iri,
+            violation.source_shape.as_str()
+        ));
+
         // Source constraint component
-        nt.push_str(&format!("{} <http://www.w3.org/ns/shacl#sourceConstraintComponent> <{}> .\n", 
-            result_iri, violation.source_constraint_component.as_str()));
-        
+        nt.push_str(&format!(
+            "{} <http://www.w3.org/ns/shacl#sourceConstraintComponent> <{}> .\n",
+            result_iri,
+            violation.source_constraint_component.as_str()
+        ));
+
         // Result message
         if let Some(message) = &violation.result_message {
-            nt.push_str(&format!("{} <http://www.w3.org/ns/shacl#resultMessage> {} .\n", 
-                result_iri, self.string_to_n_triples(message)));
+            nt.push_str(&format!(
+                "{} <http://www.w3.org/ns/shacl#resultMessage> {} .\n",
+                result_iri,
+                self.string_to_n_triples(message)
+            ));
         }
-        
+
         // Result path
         if let Some(path) = &violation.result_path {
-            nt.push_str(&format!("{} <http://www.w3.org/ns/shacl#resultPath> {} .\n", 
-                result_iri, self.path_to_n_triples(path)?));
+            nt.push_str(&format!(
+                "{} <http://www.w3.org/ns/shacl#resultPath> {} .\n",
+                result_iri,
+                self.path_to_n_triples(path)?
+            ));
         }
-        
+
         // Value
         if let Some(value) = &violation.value {
-            nt.push_str(&format!("{} <http://www.w3.org/ns/shacl#value> {} .\n", 
-                result_iri, self.term_to_n_triples(value)?));
+            nt.push_str(&format!(
+                "{} <http://www.w3.org/ns/shacl#value> {} .\n",
+                result_iri,
+                self.term_to_n_triples(value)?
+            ));
         }
-        
+
         // Nested results
         for (nested_index, nested) in violation.nested_results.iter().enumerate() {
-            let nested_iri = format!("_:result_{}_{}_{}", self.metadata.timestamp, index, nested_index);
-            nt.push_str(&format!("{} <http://www.w3.org/ns/shacl#detail> {} .\n", result_iri, nested_iri));
+            let nested_iri = format!(
+                "_:result_{}_{}_{}",
+                self.metadata.timestamp, index, nested_index
+            );
+            nt.push_str(&format!(
+                "{} <http://www.w3.org/ns/shacl#detail> {} .\n",
+                result_iri, nested_iri
+            ));
             nt.push_str(&self.violation_to_n_triples(nested, index * 1000 + nested_index)?);
         }
-        
+
         Ok(nt)
     }
 
@@ -760,7 +942,7 @@ impl ValidationReport {
                 if let Some(message) = &violation.result_message {
                     html.push_str(&format!("<p><strong>Message:</strong> {}</p>\n", message));
                 }
-                
+
                 // Add nested results if present
                 if !violation.nested_results.is_empty() {
                     html.push_str("<div class=\"nested-results\">\n");
@@ -771,7 +953,10 @@ impl ValidationReport {
                         if let Some(nested_msg) = &nested.result_message {
                             html.push_str(&format!("{} ", nested_msg));
                         }
-                        html.push_str(&format!("({})", nested.source_constraint_component.as_str()));
+                        html.push_str(&format!(
+                            "({})",
+                            nested.source_constraint_component.as_str()
+                        ));
                         if let Some(nested_value) = &nested.value {
                             html.push_str(&format!(" - Value: {}", nested_value.as_str()));
                         }

@@ -15,7 +15,6 @@ pub use async_streaming::{
 };
 
 pub use zero_copy::{
-    MmapReader, MmapWriter, ZeroCopyDeserialize, ZeroCopySerialize, ZeroCopyStr,
-    ZeroCopyTerm, ZeroCopyTriple, ZeroCopyQuad, ZeroCopyIri, ZeroCopyBlankNode,
-    ZeroCopyLiteral,
+    MmapReader, MmapWriter, ZeroCopyBlankNode, ZeroCopyDeserialize, ZeroCopyIri, ZeroCopyLiteral,
+    ZeroCopyQuad, ZeroCopySerialize, ZeroCopyStr, ZeroCopyTerm, ZeroCopyTriple,
 };

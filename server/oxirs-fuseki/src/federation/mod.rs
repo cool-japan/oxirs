@@ -146,7 +146,7 @@ impl FederationManager {
     /// Create a new federation manager
     pub fn new(config: FederationConfig) -> Self {
         let endpoints = Arc::new(RwLock::new(HashMap::new()));
-        
+
         Self {
             discovery: Arc::new(discovery::ServiceDiscovery::new(
                 config.clone(),
@@ -171,10 +171,10 @@ impl FederationManager {
         if self.config.enable_discovery {
             self.discovery.start().await?;
         }
-        
+
         // Start health monitoring
         self.health_monitor.start().await?;
-        
+
         Ok(())
     }
 

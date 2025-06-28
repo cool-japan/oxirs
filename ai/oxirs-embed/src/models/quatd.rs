@@ -6,9 +6,7 @@
 //! Reference: Zhang et al. "Quaternion Knowledge Graph Embeddings" (2019)
 
 use crate::models::{common::*, BaseModel};
-use crate::{
-    EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector,
-};
+use crate::{EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use ndarray::{Array1, Array2};
@@ -162,8 +160,11 @@ impl QuatD {
             _ => QuatDScoringFunction::Standard,
         };
 
-        let quaternion_regularization = config.model_params.get("quaternion_regularization")
-            .copied().unwrap_or(0.05);
+        let quaternion_regularization = config
+            .model_params
+            .get("quaternion_regularization")
+            .copied()
+            .unwrap_or(0.05);
 
         Self {
             base,
@@ -195,14 +196,12 @@ impl QuatD {
         };
 
         // Initialize entity embeddings as quaternions
-        self.entity_embeddings = Array2::from_shape_fn((num_entities, 4), |_| {
-            rng.gen_range(-0.1..0.1)
-        });
+        self.entity_embeddings =
+            Array2::from_shape_fn((num_entities, 4), |_| rng.gen_range(-0.1..0.1));
 
         // Initialize relation embeddings as quaternions
-        self.relation_embeddings = Array2::from_shape_fn((num_relations, 4), |_| {
-            rng.gen_range(-0.1..0.1)
-        });
+        self.relation_embeddings =
+            Array2::from_shape_fn((num_relations, 4), |_| rng.gen_range(-0.1..0.1));
 
         // Normalize quaternions to unit length
         self.normalize_all_quaternions();
@@ -309,25 +308,15 @@ impl QuatD {
         // Sigmoid derivatives
         let pos_sigmoid = 1.0 / (1.0 + (-pos_score).exp());
         let neg_sigmoid = 1.0 / (1.0 + (-neg_score).exp());
-        
+
         let pos_grad = pos_sigmoid - 1.0;
         let neg_grad = neg_sigmoid;
 
         // Compute gradients for positive triple
-        self.compute_triple_gradients(
-            pos_triple,
-            pos_grad,
-            &mut entity_grads,
-            &mut relation_grads,
-        );
+        self.compute_triple_gradients(pos_triple, pos_grad, &mut entity_grads, &mut relation_grads);
 
         // Compute gradients for negative triple
-        self.compute_triple_gradients(
-            neg_triple,
-            neg_grad,
-            &mut entity_grads,
-            &mut relation_grads,
-        );
+        self.compute_triple_gradients(neg_triple, neg_grad, &mut entity_grads, &mut relation_grads);
 
         Ok((entity_grads, relation_grads))
     }
@@ -341,7 +330,7 @@ impl QuatD {
         relation_grads: &mut Array2<f64>,
     ) {
         let (s, p, o) = triple;
-        
+
         let h = self.get_entity_quaternion(s);
         let r = self.get_relation_quaternion(p);
         let t = self.get_entity_quaternion(o);
@@ -350,23 +339,23 @@ impl QuatD {
             QuatDScoringFunction::Standard => {
                 // Gradients for h ∘ r · t scoring
                 let hr = h.multiply(&r);
-                
+
                 // ∂score/∂h = (r · t) where · is quaternion multiplication with t
                 let r_conj = r.conjugate();
                 let grad_h = r_conj.multiply(&t).scale(loss_grad);
-                
+
                 // ∂score/∂r = (h^* · t) where ^* is conjugate
                 let h_conj = h.conjugate();
                 let grad_r = h_conj.multiply(&t).scale(loss_grad);
-                
+
                 // ∂score/∂t = (h ∘ r)
                 let grad_t = hr.scale(loss_grad);
-                
+
                 // Add gradients
                 let grad_h_arr = grad_h.to_array();
                 let grad_r_arr = grad_r.to_array();
                 let grad_t_arr = grad_t.to_array();
-                
+
                 for i in 0..4 {
                     entity_grads[[s, i]] += grad_h_arr[i];
                     relation_grads[[p, i]] += grad_r_arr[i];
@@ -378,23 +367,23 @@ impl QuatD {
                 let hr = h.multiply(&r);
                 let diff = hr.subtract(&t);
                 let norm = diff.norm();
-                
+
                 if norm > 1e-12 {
                     let scale = -loss_grad / norm;
-                    
+
                     // Similar quaternion gradient computation but scaled by norm
                     let r_conj = r.conjugate();
                     let grad_h = r_conj.scale(scale);
-                    
+
                     let h_conj = h.conjugate();
                     let grad_r = h_conj.scale(scale);
-                    
+
                     let grad_t = diff.scale(-scale);
-                    
+
                     let grad_h_arr = grad_h.to_array();
                     let grad_r_arr = grad_r.to_array();
                     let grad_t_arr = grad_t.to_array();
-                    
+
                     for i in 0..4 {
                         entity_grads[[s, i]] += grad_h_arr[i];
                         relation_grads[[p, i]] += grad_r_arr[i];
@@ -409,27 +398,31 @@ impl QuatD {
                 let hr_norm = hr.norm();
                 let t_norm = t.norm();
                 let magnitude_product = hr_norm * t_norm;
-                
+
                 if magnitude_product > 1e-12 {
                     let cos_sim = dot_product / magnitude_product;
-                    
+
                     // Complex gradients for cosine similarity - simplified version
                     let scale = loss_grad / magnitude_product;
-                    
-                    let grad_hr = t.subtract(&hr.scale(cos_sim / (hr_norm * hr_norm))).scale(scale);
-                    let grad_t = hr.subtract(&t.scale(cos_sim / (t_norm * t_norm))).scale(scale);
-                    
+
+                    let grad_hr = t
+                        .subtract(&hr.scale(cos_sim / (hr_norm * hr_norm)))
+                        .scale(scale);
+                    let grad_t = hr
+                        .subtract(&t.scale(cos_sim / (t_norm * t_norm)))
+                        .scale(scale);
+
                     // Backpropagate through quaternion multiplication for grad_hr
                     let r_conj = r.conjugate();
                     let grad_h = r_conj.multiply(&grad_hr);
-                    
+
                     let h_conj = h.conjugate();
                     let grad_r = h_conj.multiply(&grad_hr);
-                    
+
                     let grad_h_arr = grad_h.to_array();
                     let grad_r_arr = grad_r.to_array();
                     let grad_t_arr = grad_t.to_array();
-                    
+
                     for i in 0..4 {
                         entity_grads[[s, i]] += grad_h_arr[i];
                         relation_grads[[p, i]] += grad_r_arr[i];
@@ -469,8 +462,10 @@ impl QuatD {
 
                 for neg_triple in neg_samples {
                     // Compute scores
-                    let pos_score = self.score_triple_ids(pos_triple.0, pos_triple.1, pos_triple.2)?;
-                    let neg_score = self.score_triple_ids(neg_triple.0, neg_triple.1, neg_triple.2)?;
+                    let pos_score =
+                        self.score_triple_ids(pos_triple.0, pos_triple.1, pos_triple.2)?;
+                    let neg_score =
+                        self.score_triple_ids(neg_triple.0, neg_triple.1, neg_triple.2)?;
 
                     // Logistic loss
                     let pos_loss = -(1.0 / (1.0 + (-pos_score).exp())).ln();
@@ -481,7 +476,7 @@ impl QuatD {
                     // Compute and accumulate gradients
                     let (entity_grads, relation_grads) =
                         self.compute_gradients(pos_triple, neg_triple)?;
-                    
+
                     batch_entity_grads += &entity_grads;
                     batch_relation_grads += &relation_grads;
                 }
@@ -490,13 +485,21 @@ impl QuatD {
             // Apply gradients with quaternion regularization
             if batch_loss > 0.0 {
                 // Update entity embeddings
-                for ((i, j), grad) in self.entity_embeddings.indexed_iter_mut().zip(batch_entity_grads.iter()) {
+                for ((i, j), grad) in self
+                    .entity_embeddings
+                    .indexed_iter_mut()
+                    .zip(batch_entity_grads.iter())
+                {
                     let reg_term = self.quaternion_regularization * *grad;
                     *grad -= learning_rate * (grad + reg_term);
                 }
 
-                // Update relation embeddings  
-                for ((i, j), grad) in self.relation_embeddings.indexed_iter_mut().zip(batch_relation_grads.iter()) {
+                // Update relation embeddings
+                for ((i, j), grad) in self
+                    .relation_embeddings
+                    .indexed_iter_mut()
+                    .zip(batch_relation_grads.iter())
+                {
                     let reg_term = self.quaternion_regularization * *grad;
                     *grad -= learning_rate * (grad + reg_term);
                 }
@@ -584,7 +587,9 @@ impl EmbeddingModel for QuatD {
             .ok_or_else(|| anyhow!("Entity not found: {}", entity))?;
 
         let embedding = self.entity_embeddings.row(entity_id).to_owned();
-        Ok(Vector::new(embedding.to_vec().into_iter().map(|x| x as f32).collect()))
+        Ok(Vector::new(
+            embedding.to_vec().into_iter().map(|x| x as f32).collect(),
+        ))
     }
 
     fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
@@ -598,7 +603,9 @@ impl EmbeddingModel for QuatD {
             .ok_or_else(|| anyhow!("Relation not found: {}", relation))?;
 
         let embedding = self.relation_embeddings.row(relation_id).to_owned();
-        Ok(Vector::new(embedding.to_vec().into_iter().map(|x| x as f32).collect()))
+        Ok(Vector::new(
+            embedding.to_vec().into_iter().map(|x| x as f32).collect(),
+        ))
     }
 
     fn score_triple(&self, subject: &str, predicate: &str, object: &str) -> Result<f64> {

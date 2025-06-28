@@ -14,8 +14,8 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 use crate::{
-    cache::{AdvancedCacheManager, CacheConfig, CacheStats},
     analytics::{ConversationAnalytics, ConversationTracker},
+    cache::{AdvancedCacheManager, CacheConfig, CacheStats},
     Message, MessageRole,
 };
 
@@ -289,14 +289,15 @@ impl PerformanceMonitor {
 
         // Clone metrics for alerts before moving into the collection
         let metrics_for_alerts = metrics.clone();
-        
+
         let mut request_metrics = self.request_metrics.write().await;
         request_metrics.push_back(metrics);
 
         // Maintain retention policy
-        let retention_duration = Duration::from_secs(self.config.metrics_retention_hours as u64 * 3600);
+        let retention_duration =
+            Duration::from_secs(self.config.metrics_retention_hours as u64 * 3600);
         let cutoff_time = SystemTime::now() - retention_duration;
-        
+
         while let Some(front) = request_metrics.front() {
             if front.timestamp < cutoff_time {
                 request_metrics.pop_front();
@@ -320,7 +321,7 @@ impl PerformanceMonitor {
     pub async fn get_aggregated_metrics(&self, time_window: Duration) -> Result<AggregatedMetrics> {
         let request_metrics = self.request_metrics.read().await;
         let cutoff_time = SystemTime::now() - time_window;
-        
+
         let relevant_metrics: Vec<&RequestMetrics> = request_metrics
             .iter()
             .filter(|m| m.timestamp >= cutoff_time)
@@ -343,16 +344,18 @@ impl PerformanceMonitor {
         }
 
         let total_requests = relevant_metrics.len();
-        
+
         // Calculate response time statistics
-        let mut response_times: Vec<Duration> = relevant_metrics
-            .iter()
-            .map(|m| m.response_time)
-            .collect();
+        let mut response_times: Vec<Duration> =
+            relevant_metrics.iter().map(|m| m.response_time).collect();
         response_times.sort();
 
         let avg_response_time = Duration::from_millis(
-            response_times.iter().map(|d| d.as_millis() as u64).sum::<u64>() / total_requests as u64
+            response_times
+                .iter()
+                .map(|d| d.as_millis() as u64)
+                .sum::<u64>()
+                / total_requests as u64,
         );
 
         let p50_response_time = response_times[total_requests / 2];
@@ -364,30 +367,39 @@ impl PerformanceMonitor {
         let cache_hit_rate = cache_hits as f64 / total_requests as f64;
 
         // Calculate error rate
-        let errors = relevant_metrics.iter().filter(|m| m.error.is_some()).count();
+        let errors = relevant_metrics
+            .iter()
+            .filter(|m| m.error.is_some())
+            .count();
         let error_rate = errors as f64 / total_requests as f64;
 
         // Calculate throughput
         let throughput = total_requests as f64 / time_window.as_secs_f64();
 
         // Calculate optimization effectiveness
-        let optimized_requests = relevant_metrics.iter().filter(|m| m.optimization_applied).count();
+        let optimized_requests = relevant_metrics
+            .iter()
+            .filter(|m| m.optimization_applied)
+            .count();
         let optimization_effectiveness = if optimized_requests > 0 {
             let optimized_avg_time: Duration = relevant_metrics
                 .iter()
                 .filter(|m| m.optimization_applied)
                 .map(|m| m.response_time)
-                .sum::<Duration>() / optimized_requests as u32;
-            
+                .sum::<Duration>()
+                / optimized_requests as u32;
+
             let non_optimized_avg_time: Duration = relevant_metrics
                 .iter()
                 .filter(|m| !m.optimization_applied)
                 .map(|m| m.response_time)
-                .sum::<Duration>() / (total_requests - optimized_requests) as u32;
+                .sum::<Duration>()
+                / (total_requests - optimized_requests) as u32;
 
             if non_optimized_avg_time > optimized_avg_time {
-                ((non_optimized_avg_time - optimized_avg_time).as_millis() as f64 
-                    / non_optimized_avg_time.as_millis() as f64) * 100.0
+                ((non_optimized_avg_time - optimized_avg_time).as_millis() as f64
+                    / non_optimized_avg_time.as_millis() as f64)
+                    * 100.0
             } else {
                 0.0
             }
@@ -416,7 +428,9 @@ impl PerformanceMonitor {
 
     /// Analyze performance bottlenecks
     pub async fn analyze_bottlenecks(&self) -> Result<BottleneckAnalysis> {
-        let metrics = self.get_aggregated_metrics(Duration::from_secs(3600)).await?; // Last hour
+        let metrics = self
+            .get_aggregated_metrics(Duration::from_secs(3600))
+            .await?; // Last hour
         let mut bottlenecks = Vec::new();
         let mut recommendations = Vec::new();
         let mut predicted_improvements = HashMap::new();
@@ -425,15 +439,20 @@ impl PerformanceMonitor {
         if metrics.cache_hit_rate < self.config.performance_targets.cache_hit_rate {
             bottlenecks.push(Bottleneck {
                 bottleneck_type: BottleneckType::CacheMiss,
-                description: format!("Cache hit rate {:.2}% is below target {:.2}%", 
-                    metrics.cache_hit_rate * 100.0, 
-                    self.config.performance_targets.cache_hit_rate * 100.0),
-                severity: if metrics.cache_hit_rate < 0.3 { 
-                    BottleneckSeverity::Critical 
-                } else { 
-                    BottleneckSeverity::Medium 
+                description: format!(
+                    "Cache hit rate {:.2}% is below target {:.2}%",
+                    metrics.cache_hit_rate * 100.0,
+                    self.config.performance_targets.cache_hit_rate * 100.0
+                ),
+                severity: if metrics.cache_hit_rate < 0.3 {
+                    BottleneckSeverity::Critical
+                } else {
+                    BottleneckSeverity::Medium
                 },
-                affected_operations: vec!["Response generation".to_string(), "Context assembly".to_string()],
+                affected_operations: vec![
+                    "Response generation".to_string(),
+                    "Context assembly".to_string(),
+                ],
                 estimated_impact: (1.0 - metrics.cache_hit_rate) * 40.0, // Up to 40% impact
             });
 
@@ -442,25 +461,38 @@ impl PerformanceMonitor {
                 description: "Increase cache size to improve hit rate".to_string(),
                 expected_improvement: 20.0,
                 implementation_effort: ImplementationEffort::Low,
-                parameters: [("new_size_multiplier".to_string(), serde_json::Value::Number(serde_json::Number::from(2)))].iter().cloned().collect(),
+                parameters: [(
+                    "new_size_multiplier".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from(2)),
+                )]
+                .iter()
+                .cloned()
+                .collect(),
             });
 
             predicted_improvements.insert("cache_optimization".to_string(), 25.0);
         }
 
         // Analyze response time
-        if metrics.avg_response_time > Duration::from_millis(self.config.performance_targets.avg_response_time_ms) {
+        if metrics.avg_response_time
+            > Duration::from_millis(self.config.performance_targets.avg_response_time_ms)
+        {
             bottlenecks.push(Bottleneck {
                 bottleneck_type: BottleneckType::SlowQuery,
-                description: format!("Average response time {}ms exceeds target {}ms", 
+                description: format!(
+                    "Average response time {}ms exceeds target {}ms",
                     metrics.avg_response_time.as_millis(),
-                    self.config.performance_targets.avg_response_time_ms),
-                severity: if metrics.avg_response_time > Duration::from_millis(5000) { 
-                    BottleneckSeverity::Critical 
-                } else { 
-                    BottleneckSeverity::High 
+                    self.config.performance_targets.avg_response_time_ms
+                ),
+                severity: if metrics.avg_response_time > Duration::from_millis(5000) {
+                    BottleneckSeverity::Critical
+                } else {
+                    BottleneckSeverity::High
                 },
-                affected_operations: vec!["Query processing".to_string(), "Response generation".to_string()],
+                affected_operations: vec![
+                    "Query processing".to_string(),
+                    "Response generation".to_string(),
+                ],
                 estimated_impact: 30.0,
             });
 
@@ -479,7 +511,8 @@ impl PerformanceMonitor {
         if metrics.memory_efficiency < 0.6 {
             bottlenecks.push(Bottleneck {
                 bottleneck_type: BottleneckType::MemoryPressure,
-                description: "Memory efficiency is low, indicating possible memory pressure".to_string(),
+                description: "Memory efficiency is low, indicating possible memory pressure"
+                    .to_string(),
                 severity: BottleneckSeverity::Medium,
                 affected_operations: vec!["Caching".to_string(), "Context management".to_string()],
                 estimated_impact: 15.0,
@@ -490,7 +523,13 @@ impl PerformanceMonitor {
                 description: "Enable data compression in caches".to_string(),
                 expected_improvement: 20.0,
                 implementation_effort: ImplementationEffort::Low,
-                parameters: [("compression_enabled".to_string(), serde_json::Value::Bool(true))].iter().cloned().collect(),
+                parameters: [(
+                    "compression_enabled".to_string(),
+                    serde_json::Value::Bool(true),
+                )]
+                .iter()
+                .cloned()
+                .collect(),
             });
         }
 
@@ -505,17 +544,28 @@ impl PerformanceMonitor {
     /// Apply automatic optimizations
     pub async fn apply_optimizations(&self, analysis: &BottleneckAnalysis) -> Result<usize> {
         let mut applied_count = 0;
-        let before_metrics = self.get_aggregated_metrics(Duration::from_secs(300)).await?;
+        let before_metrics = self
+            .get_aggregated_metrics(Duration::from_secs(300))
+            .await?;
 
         for recommendation in &analysis.optimization_recommendations {
-            if matches!(recommendation.implementation_effort, ImplementationEffort::Low) {
-                match self.apply_optimization(recommendation, &before_metrics).await {
+            if matches!(
+                recommendation.implementation_effort,
+                ImplementationEffort::Low
+            ) {
+                match self
+                    .apply_optimization(recommendation, &before_metrics)
+                    .await
+                {
                     Ok(_) => {
                         applied_count += 1;
                         info!("Applied optimization: {}", recommendation.description);
                     }
                     Err(e) => {
-                        warn!("Failed to apply optimization {}: {}", recommendation.description, e);
+                        warn!(
+                            "Failed to apply optimization {}: {}",
+                            recommendation.description, e
+                        );
                     }
                 }
             }
@@ -531,15 +581,16 @@ impl PerformanceMonitor {
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(60)); // Every minute
-            
+
             loop {
                 interval.tick().await;
-                
+
                 // Clean up old metrics
                 let mut metrics = request_metrics.write().await;
-                let retention_duration = Duration::from_secs(config.metrics_retention_hours as u64 * 3600);
+                let retention_duration =
+                    Duration::from_secs(config.metrics_retention_hours as u64 * 3600);
                 let cutoff_time = SystemTime::now() - retention_duration;
-                
+
                 while let Some(front) = metrics.front() {
                     if front.timestamp < cutoff_time {
                         metrics.pop_front();
@@ -547,7 +598,7 @@ impl PerformanceMonitor {
                         break;
                     }
                 }
-                
+
                 debug!("Performance monitoring: {} active metrics", metrics.len());
             }
         });
@@ -562,18 +613,28 @@ impl PerformanceMonitor {
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(config.optimization_interval);
-            
+
             loop {
                 interval.tick().await;
-                
+
                 // Create a temporary monitor for analysis
-                match Self::analyze_bottlenecks_static(&request_metrics, &cache_manager, &config).await {
+                match Self::analyze_bottlenecks_static(&request_metrics, &cache_manager, &config)
+                    .await
+                {
                     Ok(analysis) => {
                         if !analysis.identified_bottlenecks.is_empty() {
-                            info!("Performance analysis found {} bottlenecks", 
-                                analysis.identified_bottlenecks.len());
-                            
-                            match Self::apply_optimizations_static(&analysis, &optimization_history, &config).await {
+                            info!(
+                                "Performance analysis found {} bottlenecks",
+                                analysis.identified_bottlenecks.len()
+                            );
+
+                            match Self::apply_optimizations_static(
+                                &analysis,
+                                &optimization_history,
+                                &config,
+                            )
+                            .await
+                            {
                                 Ok(count) => {
                                     if count > 0 {
                                         info!("Applied {} automatic optimizations", count);
@@ -599,7 +660,8 @@ impl PerformanceMonitor {
         cache_manager: &Arc<AdvancedCacheManager>,
         config: &PerformanceConfig,
     ) -> Result<BottleneckAnalysis> {
-        let metrics = Self::get_aggregated_metrics_static(request_metrics, Duration::from_secs(3600)).await?;
+        let metrics =
+            Self::get_aggregated_metrics_static(request_metrics, Duration::from_secs(3600)).await?;
         let mut bottlenecks = Vec::new();
         let mut recommendations = Vec::new();
         let mut predicted_improvements = HashMap::new();
@@ -608,15 +670,20 @@ impl PerformanceMonitor {
         if metrics.cache_hit_rate < config.performance_targets.cache_hit_rate {
             bottlenecks.push(Bottleneck {
                 bottleneck_type: BottleneckType::CacheMiss,
-                description: format!("Cache hit rate {:.2}% is below target {:.2}%", 
-                    metrics.cache_hit_rate * 100.0, 
-                    config.performance_targets.cache_hit_rate * 100.0),
-                severity: if metrics.cache_hit_rate < 0.3 { 
-                    BottleneckSeverity::Critical 
-                } else { 
-                    BottleneckSeverity::Medium 
+                description: format!(
+                    "Cache hit rate {:.2}% is below target {:.2}%",
+                    metrics.cache_hit_rate * 100.0,
+                    config.performance_targets.cache_hit_rate * 100.0
+                ),
+                severity: if metrics.cache_hit_rate < 0.3 {
+                    BottleneckSeverity::Critical
+                } else {
+                    BottleneckSeverity::Medium
                 },
-                affected_operations: vec!["Response generation".to_string(), "Context assembly".to_string()],
+                affected_operations: vec![
+                    "Response generation".to_string(),
+                    "Context assembly".to_string(),
+                ],
                 estimated_impact: (1.0 - metrics.cache_hit_rate) * 40.0,
             });
 
@@ -625,7 +692,13 @@ impl PerformanceMonitor {
                 description: "Increase cache size to improve hit rate".to_string(),
                 expected_improvement: 20.0,
                 implementation_effort: ImplementationEffort::Low,
-                parameters: [("new_size_multiplier".to_string(), serde_json::Value::Number(serde_json::Number::from(2)))].iter().cloned().collect(),
+                parameters: [(
+                    "new_size_multiplier".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from(2)),
+                )]
+                .iter()
+                .cloned()
+                .collect(),
             });
 
             predicted_improvements.insert("cache_optimization".to_string(), 25.0);
@@ -648,7 +721,10 @@ impl PerformanceMonitor {
         let mut applied_count = 0;
 
         for recommendation in &analysis.optimization_recommendations {
-            if matches!(recommendation.implementation_effort, ImplementationEffort::Low) {
+            if matches!(
+                recommendation.implementation_effort,
+                ImplementationEffort::Low
+            ) {
                 // Create a simple optimization record
                 let optimization_record = AppliedOptimization {
                     timestamp: SystemTime::now(),
@@ -675,7 +751,7 @@ impl PerformanceMonitor {
                 let mut history = optimization_history.write().await;
                 history.push(optimization_record);
                 applied_count += 1;
-                
+
                 info!("Applied optimization: {}", recommendation.description);
             }
         }
@@ -690,7 +766,7 @@ impl PerformanceMonitor {
     ) -> Result<AggregatedMetrics> {
         let request_metrics = request_metrics.read().await;
         let cutoff_time = SystemTime::now() - time_window;
-        
+
         let relevant_metrics: Vec<&RequestMetrics> = request_metrics
             .iter()
             .filter(|m| m.timestamp >= cutoff_time)
@@ -713,16 +789,18 @@ impl PerformanceMonitor {
         }
 
         let total_requests = relevant_metrics.len();
-        
+
         // Calculate response time statistics
-        let mut response_times: Vec<Duration> = relevant_metrics
-            .iter()
-            .map(|m| m.response_time)
-            .collect();
+        let mut response_times: Vec<Duration> =
+            relevant_metrics.iter().map(|m| m.response_time).collect();
         response_times.sort();
 
         let avg_response_time = Duration::from_millis(
-            response_times.iter().map(|d| d.as_millis() as u64).sum::<u64>() / total_requests as u64
+            response_times
+                .iter()
+                .map(|d| d.as_millis() as u64)
+                .sum::<u64>()
+                / total_requests as u64,
         );
 
         let p50_response_time = response_times[total_requests / 2];
@@ -734,7 +812,10 @@ impl PerformanceMonitor {
         let cache_hit_rate = cache_hits as f64 / total_requests as f64;
 
         // Calculate error rate
-        let errors = relevant_metrics.iter().filter(|m| m.error.is_some()).count();
+        let errors = relevant_metrics
+            .iter()
+            .filter(|m| m.error.is_some())
+            .count();
         let error_rate = errors as f64 / total_requests as f64;
 
         // Calculate throughput
@@ -759,32 +840,34 @@ impl PerformanceMonitor {
     async fn check_performance_alerts(&self, metrics: &RequestMetrics) -> Result<()> {
         let last_alert = *self.last_alert_time.read().await;
         let now = SystemTime::now();
-        
-        if now.duration_since(last_alert).unwrap_or(Duration::ZERO) < self.config.alerting.notification_cooldown {
+
+        if now.duration_since(last_alert).unwrap_or(Duration::ZERO)
+            < self.config.alerting.notification_cooldown
+        {
             return Ok(()); // Still in cooldown
         }
 
         let thresholds = &self.config.alerting.alert_thresholds;
-        
+
         // Check response time
         if metrics.response_time.as_millis() > thresholds.response_time_critical_ms as u128 {
             self.send_alert(format!(
-                "Critical response time: {}ms for session {} message {}", 
+                "Critical response time: {}ms for session {} message {}",
                 metrics.response_time.as_millis(),
                 metrics.session_id,
                 metrics.message_id
-            )).await?;
+            ))
+            .await?;
             *self.last_alert_time.write().await = now;
         }
 
         // Check error rate (would need to aggregate recent errors)
         if let Some(ref error) = metrics.error {
             self.send_alert(format!(
-                "Error in session {} message {}: {}", 
-                metrics.session_id,
-                metrics.message_id,
-                error
-            )).await?;
+                "Error in session {} message {}: {}",
+                metrics.session_id, metrics.message_id, error
+            ))
+            .await?;
         }
 
         Ok(())
@@ -798,7 +881,11 @@ impl PerformanceMonitor {
     }
 
     /// Apply a specific optimization
-    async fn apply_optimization(&self, recommendation: &OptimizationRecommendation, before_metrics: &AggregatedMetrics) -> Result<()> {
+    async fn apply_optimization(
+        &self,
+        recommendation: &OptimizationRecommendation,
+        before_metrics: &AggregatedMetrics,
+    ) -> Result<()> {
         let optimization_record = AppliedOptimization {
             timestamp: SystemTime::now(),
             optimization_type: recommendation.recommendation_type.clone(),
@@ -822,7 +909,9 @@ impl PerformanceMonitor {
                 info!("Would enable data compression based on recommendation");
             }
             _ => {
-                return Err(anyhow!("Optimization type not implemented for automatic application"));
+                return Err(anyhow!(
+                    "Optimization type not implemented for automatic application"
+                ));
             }
         }
 
@@ -839,8 +928,12 @@ impl PerformanceMonitor {
 
     /// Get performance dashboard data
     pub async fn get_dashboard_data(&self) -> Result<PerformanceDashboard> {
-        let current_metrics = self.get_aggregated_metrics(Duration::from_secs(3600)).await?; // Last hour
-        let daily_metrics = self.get_aggregated_metrics(Duration::from_secs(86400)).await?; // Last day
+        let current_metrics = self
+            .get_aggregated_metrics(Duration::from_secs(3600))
+            .await?; // Last hour
+        let daily_metrics = self
+            .get_aggregated_metrics(Duration::from_secs(86400))
+            .await?; // Last day
         let bottleneck_analysis = self.analyze_bottlenecks().await?;
         let cache_stats = self.cache_manager.get_cache_stats().await;
 

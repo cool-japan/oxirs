@@ -5,8 +5,7 @@
 
 use crate::forward::Substitution;
 use crate::rete_enhanced::{
-    BetaJoinNode, ConflictResolution, EnhancedToken,
-    MemoryStrategy, ComparisonOp, JoinArg
+    BetaJoinNode, ComparisonOp, ConflictResolution, EnhancedToken, JoinArg, MemoryStrategy,
 };
 use crate::{Rule, RuleAtom, Term};
 use anyhow::Result;
@@ -185,7 +184,7 @@ impl ReteNetwork {
     pub fn new() -> Self {
         Self::with_strategies(MemoryStrategy::Adaptive, ConflictResolution::Combined)
     }
-    
+
     /// Create a new RETE network with specific strategies
     pub fn with_strategies(memory: MemoryStrategy, conflict: ConflictResolution) -> Self {
         let mut network = Self {
@@ -335,7 +334,9 @@ impl ReteNetwork {
         );
 
         // Extract join variables from the condition
-        enhanced_node.join_variables = join_condition.constraints.iter()
+        enhanced_node.join_variables = join_condition
+            .constraints
+            .iter()
             .map(|(var, _)| var.clone())
             .collect();
 
@@ -344,17 +345,21 @@ impl ReteNetwork {
             match filter.as_str() {
                 "type_constraint" => {
                     // Add type checking condition
-                    enhanced_node.conditions.push(crate::rete_enhanced::JoinCondition::Builtin {
-                        predicate: "type_check".to_string(),
-                        args: vec![],
-                    });
+                    enhanced_node
+                        .conditions
+                        .push(crate::rete_enhanced::JoinCondition::Builtin {
+                            predicate: "type_check".to_string(),
+                            args: vec![],
+                        });
                 }
                 "domain_range_constraint" => {
                     // Add domain/range checking
-                    enhanced_node.conditions.push(crate::rete_enhanced::JoinCondition::Builtin {
-                        predicate: "domain_range_check".to_string(),
-                        args: vec![],
-                    });
+                    enhanced_node
+                        .conditions
+                        .push(crate::rete_enhanced::JoinCondition::Builtin {
+                            predicate: "domain_range_check".to_string(),
+                            args: vec![],
+                        });
                 }
                 _ => {}
             }
@@ -477,11 +482,18 @@ impl ReteNetwork {
         }
 
         if self.debug_mode && !constraints.is_empty() {
-            debug!("Generated {} join constraints between nodes {} and {}", 
-                   constraints.len(), left_id, right_id);
+            debug!(
+                "Generated {} join constraints between nodes {} and {}",
+                constraints.len(),
+                left_id,
+                right_id
+            );
         }
 
-        Ok(JoinCondition { constraints, filters })
+        Ok(JoinCondition {
+            constraints,
+            filters,
+        })
     }
 
     /// Get the pattern associated with a node
@@ -499,7 +511,11 @@ impl ReteNetwork {
     /// Extract variables from a rule atom
     fn extract_variables(&self, atom: &RuleAtom) -> Vec<String> {
         match atom {
-            RuleAtom::Triple { subject, predicate, object } => {
+            RuleAtom::Triple {
+                subject,
+                predicate,
+                object,
+            } => {
                 let mut vars = Vec::new();
                 if let Term::Variable(var) = subject {
                     vars.push(var.clone());
@@ -528,11 +544,17 @@ impl ReteNetwork {
     fn should_add_type_constraint(&self, left: &RuleAtom, right: &RuleAtom) -> bool {
         match (left, right) {
             (
-                RuleAtom::Triple { predicate: Term::Constant(p1), .. },
-                RuleAtom::Triple { predicate: Term::Constant(p2), .. },
+                RuleAtom::Triple {
+                    predicate: Term::Constant(p1),
+                    ..
+                },
+                RuleAtom::Triple {
+                    predicate: Term::Constant(p2),
+                    ..
+                },
             ) => {
-                p1 == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" ||
-                p2 == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+                p1 == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+                    || p2 == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
             }
             _ => false,
         }
@@ -542,11 +564,19 @@ impl ReteNetwork {
     fn should_add_domain_range_constraint(&self, left: &RuleAtom, right: &RuleAtom) -> bool {
         match (left, right) {
             (
-                RuleAtom::Triple { predicate: Term::Constant(p1), .. },
-                RuleAtom::Triple { predicate: Term::Constant(p2), .. },
+                RuleAtom::Triple {
+                    predicate: Term::Constant(p1),
+                    ..
+                },
+                RuleAtom::Triple {
+                    predicate: Term::Constant(p2),
+                    ..
+                },
             ) => {
-                p1.contains("domain") || p1.contains("range") ||
-                p2.contains("domain") || p2.contains("range")
+                p1.contains("domain")
+                    || p1.contains("range")
+                    || p2.contains("domain")
+                    || p2.contains("range")
             }
             _ => false,
         }
@@ -642,19 +672,21 @@ impl ReteNetwork {
         if self.enhanced_beta_nodes.contains_key(&beta_id) {
             // Determine which side the token came from before borrowing mutably
             let from_left = self.is_left_token(&token, beta_id)?;
-            
+
             // Convert Token to EnhancedToken
             let mut enhanced_token = EnhancedToken::new();
             enhanced_token.bindings = token.bindings.clone();
             enhanced_token.facts = token.facts.clone();
             enhanced_token.priority = 0; // Default priority
             enhanced_token.specificity = token.facts.len();
-            
+
             // Use enhanced join
-            let enhanced_results = self.enhanced_beta_nodes.get_mut(&beta_id)
+            let enhanced_results = self
+                .enhanced_beta_nodes
+                .get_mut(&beta_id)
                 .unwrap()
                 .join(enhanced_token, from_left)?;
-            
+
             // Convert back to regular tokens
             let mut joined_tokens = Vec::new();
             for enhanced in enhanced_results {
@@ -664,37 +696,43 @@ impl ReteNetwork {
                 regular_token.tags = enhanced.justification;
                 joined_tokens.push(regular_token);
             }
-            
+
             if self.debug_mode && !joined_tokens.is_empty() {
-                debug!("Enhanced beta join {} produced {} joined tokens", beta_id, joined_tokens.len());
+                debug!(
+                    "Enhanced beta join {} produced {} joined tokens",
+                    beta_id,
+                    joined_tokens.len()
+                );
                 if let Some(stats) = self.enhanced_beta_nodes.get(&beta_id) {
                     debug!("Beta join stats: {:?}", stats.get_stats());
                 }
             }
-            
+
             Ok(joined_tokens)
         } else {
             // Fall back to old implementation for compatibility
             // Check which side the token is from before borrowing memory
             let is_left_token = self.is_left_token(&token, beta_id)?;
-            
+
             let mut joined_tokens = Vec::new();
 
             if is_left_token {
                 // Get copies to avoid borrowing conflicts
                 let right_tokens: Vec<_> = {
-                    let (_, right_memory) = self.beta_memory.get(&beta_id)
-                        .ok_or_else(|| anyhow::anyhow!("Beta memory not found for node {}", beta_id))?;
+                    let (_, right_memory) = self.beta_memory.get(&beta_id).ok_or_else(|| {
+                        anyhow::anyhow!("Beta memory not found for node {}", beta_id)
+                    })?;
                     right_memory.iter().cloned().collect()
                 };
-                
+
                 // Add token to left memory
                 {
-                    let (left_memory, _) = self.beta_memory.get_mut(&beta_id)
-                        .ok_or_else(|| anyhow::anyhow!("Beta memory not found for node {}", beta_id))?;
+                    let (left_memory, _) = self.beta_memory.get_mut(&beta_id).ok_or_else(|| {
+                        anyhow::anyhow!("Beta memory not found for node {}", beta_id)
+                    })?;
                     left_memory.push(token.clone());
                 }
-                
+
                 // Now perform joins
                 for right_token in right_tokens {
                     if self.satisfies_join_condition(&token, &right_token, join_condition)? {
@@ -703,20 +741,23 @@ impl ReteNetwork {
                     }
                 }
             } else {
-                // Get copies to avoid borrowing conflicts  
+                // Get copies to avoid borrowing conflicts
                 let left_tokens: Vec<_> = {
-                    let (left_memory, _) = self.beta_memory.get(&beta_id)
-                        .ok_or_else(|| anyhow::anyhow!("Beta memory not found for node {}", beta_id))?;
+                    let (left_memory, _) = self.beta_memory.get(&beta_id).ok_or_else(|| {
+                        anyhow::anyhow!("Beta memory not found for node {}", beta_id)
+                    })?;
                     left_memory.iter().cloned().collect()
                 };
-                
+
                 // Add token to right memory
                 {
-                    let (_, right_memory) = self.beta_memory.get_mut(&beta_id)
-                        .ok_or_else(|| anyhow::anyhow!("Beta memory not found for node {}", beta_id))?;
+                    let (_, right_memory) =
+                        self.beta_memory.get_mut(&beta_id).ok_or_else(|| {
+                            anyhow::anyhow!("Beta memory not found for node {}", beta_id)
+                        })?;
                     right_memory.push(token.clone());
                 }
-                
+
                 // Now perform joins
                 for left_token in left_tokens {
                     if self.satisfies_join_condition(&left_token, &token, join_condition)? {
@@ -729,7 +770,9 @@ impl ReteNetwork {
             // Simple memory management
             const MAX_MEMORY_SIZE: usize = 10000;
             {
-                let (left_memory, right_memory) = self.beta_memory.get_mut(&beta_id)
+                let (left_memory, right_memory) = self
+                    .beta_memory
+                    .get_mut(&beta_id)
                     .ok_or_else(|| anyhow::anyhow!("Beta memory not found for node {}", beta_id))?;
                 if left_memory.len() > MAX_MEMORY_SIZE {
                     left_memory.drain(0..left_memory.len() / 2);
@@ -769,7 +812,7 @@ impl ReteNetwork {
         for (left_var, right_var) in &join_condition.constraints {
             let left_value = left_token.bindings.get(left_var);
             let right_value = right_token.bindings.get(right_var);
-            
+
             match (left_value, right_value) {
                 (Some(left_val), Some(right_val)) => {
                     if !self.terms_equal(left_val, right_val) {
@@ -794,7 +837,7 @@ impl ReteNetwork {
     /// Join two tokens into a single token
     fn join_tokens(&self, left_token: &Token, right_token: &Token) -> Result<Token> {
         let mut joined_token = Token::new();
-        
+
         // Merge bindings
         joined_token.bindings.extend(left_token.bindings.clone());
         for (var, value) in &right_token.bindings {
@@ -807,15 +850,15 @@ impl ReteNetwork {
                 joined_token.bindings.insert(var.clone(), value.clone());
             }
         }
-        
+
         // Merge tags
         joined_token.tags.extend(left_token.tags.clone());
         joined_token.tags.extend(right_token.tags.clone());
-        
+
         // Merge facts
         joined_token.facts.extend(left_token.facts.clone());
         joined_token.facts.extend(right_token.facts.clone());
-        
+
         Ok(joined_token)
     }
 
@@ -830,7 +873,12 @@ impl ReteNetwork {
     }
 
     /// Apply a filter condition
-    fn apply_filter(&self, _filter: &str, _left_token: &Token, _right_token: &Token) -> Result<bool> {
+    fn apply_filter(
+        &self,
+        _filter: &str,
+        _left_token: &Token,
+        _right_token: &Token,
+    ) -> Result<bool> {
         // Simplified filter implementation
         // In a full implementation, this would parse and evaluate filter expressions
         Ok(true)
@@ -1054,12 +1102,12 @@ impl ReteNetwork {
     /// Get enhanced network statistics including beta join performance
     pub fn get_enhanced_stats(&self) -> EnhancedReteStats {
         let basic_stats = self.get_stats();
-        
+
         let mut total_joins = 0;
         let mut successful_joins = 0;
         let mut total_evictions = 0;
         let mut peak_memory = 0;
-        
+
         for enhanced_node in self.enhanced_beta_nodes.values() {
             let stats = enhanced_node.get_stats();
             total_joins += stats.total_joins;
@@ -1067,7 +1115,7 @@ impl ReteNetwork {
             total_evictions += stats.evictions;
             peak_memory = peak_memory.max(stats.peak_size);
         }
-        
+
         EnhancedReteStats {
             basic: basic_stats,
             total_beta_joins: total_joins,
@@ -1303,7 +1351,7 @@ mod tests {
     fn test_enhanced_beta_join() {
         let mut network = ReteNetwork::with_strategies(
             MemoryStrategy::LimitCount(100),
-            ConflictResolution::Specificity
+            ConflictResolution::Specificity,
         );
 
         // Create a rule with multiple conditions requiring joins
@@ -1366,7 +1414,7 @@ mod tests {
     fn test_memory_management() {
         let mut network = ReteNetwork::with_strategies(
             MemoryStrategy::LimitCount(10), // Very low limit to test eviction
-            ConflictResolution::Recency
+            ConflictResolution::Recency,
         );
 
         let rule = Rule {
@@ -1405,10 +1453,8 @@ mod tests {
 
     #[test]
     fn test_conflict_resolution() {
-        let mut network = ReteNetwork::with_strategies(
-            MemoryStrategy::Unlimited,
-            ConflictResolution::Priority
-        );
+        let mut network =
+            ReteNetwork::with_strategies(MemoryStrategy::Unlimited, ConflictResolution::Priority);
 
         // Test that conflict resolution selects the right match
         // This is a simplified test - full testing would require

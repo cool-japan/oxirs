@@ -7,13 +7,13 @@
 //! - RDF dataset federation
 
 pub mod config;
-pub mod schema_stitcher;
-pub mod query_planner;
 pub mod dataset_federation;
 pub mod manager;
+pub mod query_planner;
+pub mod schema_stitcher;
 
 pub use config::*;
-pub use schema_stitcher::*;
-pub use query_planner::*;
 pub use dataset_federation::*;
 pub use manager::*;
+pub use query_planner::*;
+pub use schema_stitcher::*;

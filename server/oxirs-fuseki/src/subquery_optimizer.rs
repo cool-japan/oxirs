@@ -4,10 +4,10 @@
 //! including query rewriting, materialization, and execution planning.
 
 use crate::error::{FusekiError, FusekiResult};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use serde::{Serialize, Deserialize};
 use tracing::{debug, info, warn};
 
 /// Advanced subquery optimizer with multiple optimization strategies
@@ -240,7 +240,7 @@ pub struct PatternMatcher {
 pub struct CompiledPattern {
     pub pattern_id: String,
     pub pattern_type: PatternType,
-    pub matcher: Box<dyn PatternMatcherTrait>,
+    pub matcher: Box<dyn PatternMatcherTrait + Send + Sync>,
 }
 
 #[derive(Debug, Clone)]
@@ -251,13 +251,13 @@ pub enum PatternType {
     Semantic,
 }
 
-trait PatternMatcherTrait: std::fmt::Debug {
+trait PatternMatcherTrait: std::fmt::Debug + Send + Sync {
     fn matches(&self, query: &str) -> bool;
     fn extract_bindings(&self, query: &str) -> HashMap<String, String>;
-    fn clone_box(&self) -> Box<dyn PatternMatcherTrait>;
+    fn clone_box(&self) -> Box<dyn PatternMatcherTrait + Send + Sync>;
 }
 
-impl Clone for Box<dyn PatternMatcherTrait> {
+impl Clone for Box<dyn PatternMatcherTrait + Send + Sync> {
     fn clone(&self) -> Self {
         self.clone_box()
     }
@@ -273,12 +273,12 @@ impl PatternMatcherTrait for LiteralMatcher {
     fn matches(&self, query: &str) -> bool {
         query.contains(&self.pattern)
     }
-    
+
     fn extract_bindings(&self, _query: &str) -> HashMap<String, String> {
         HashMap::new()
     }
-    
-    fn clone_box(&self) -> Box<dyn PatternMatcherTrait> {
+
+    fn clone_box(&self) -> Box<dyn PatternMatcherTrait + Send + Sync> {
         Box::new(self.clone())
     }
 }
@@ -362,33 +362,36 @@ impl AdvancedSubqueryOptimizer {
             statistics: Arc::new(RwLock::new(SubqueryStatistics::default())),
         }
     }
-    
+
     /// Optimize a query containing subqueries
     pub async fn optimize(&self, query: &str) -> FusekiResult<OptimizedQuery> {
         let start_time = std::time::Instant::now();
-        
+
         // Parse and analyze subqueries
         let subqueries = self.extract_subqueries(query)?;
         debug!("Found {} subqueries to optimize", subqueries.len());
-        
+
         // Apply rewrite rules
         let mut optimized_query = query.to_string();
         let mut rewrites_applied = Vec::new();
-        
+
         for subquery in &subqueries {
             if let Some(rewrite) = self.rewrite_engine.find_applicable_rewrite(&subquery)? {
                 optimized_query = self.apply_rewrite(&optimized_query, &subquery, &rewrite)?;
                 rewrites_applied.push(rewrite);
             }
         }
-        
+
         // Estimate costs for different execution strategies
-        let execution_plan = self.create_execution_plan(&optimized_query, &subqueries).await?;
-        
+        let execution_plan = self
+            .create_execution_plan(&optimized_query, &subqueries)
+            .await?;
+
         // Update statistics
         let optimization_time = start_time.elapsed().as_millis() as f64;
-        self.update_statistics(rewrites_applied.len(), optimization_time).await;
-        
+        self.update_statistics(rewrites_applied.len(), optimization_time)
+            .await;
+
         Ok(OptimizedQuery {
             original_query: query.to_string(),
             optimized_query,
@@ -398,54 +401,54 @@ impl AdvancedSubqueryOptimizer {
             optimization_time_ms: optimization_time,
         })
     }
-    
+
     /// Extract subqueries from a SPARQL query
     fn extract_subqueries(&self, query: &str) -> FusekiResult<Vec<SubqueryInfo>> {
         let mut subqueries = Vec::new();
-        
+
         // Extract EXISTS/NOT EXISTS subqueries
         if let Some(exists_subqueries) = self.extract_exists_subqueries(query) {
             subqueries.extend(exists_subqueries);
         }
-        
+
         // Extract scalar subqueries in SELECT
         if let Some(scalar_subqueries) = self.extract_scalar_subqueries(query) {
             subqueries.extend(scalar_subqueries);
         }
-        
+
         // Extract FROM subqueries
         if let Some(from_subqueries) = self.extract_from_subqueries(query) {
             subqueries.extend(from_subqueries);
         }
-        
+
         // Extract IN/NOT IN subqueries
         if let Some(in_subqueries) = self.extract_in_subqueries(query) {
             subqueries.extend(in_subqueries);
         }
-        
+
         Ok(subqueries)
     }
-    
+
     fn extract_exists_subqueries(&self, query: &str) -> Option<Vec<SubqueryInfo>> {
         // Implementation would parse EXISTS patterns
         None
     }
-    
+
     fn extract_scalar_subqueries(&self, query: &str) -> Option<Vec<SubqueryInfo>> {
         // Implementation would parse scalar subqueries in SELECT
         None
     }
-    
+
     fn extract_from_subqueries(&self, query: &str) -> Option<Vec<SubqueryInfo>> {
         // Implementation would parse subqueries in FROM clause
         None
     }
-    
+
     fn extract_in_subqueries(&self, query: &str) -> Option<Vec<SubqueryInfo>> {
         // Implementation would parse IN subqueries
         None
     }
-    
+
     fn apply_rewrite(
         &self,
         query: &str,
@@ -453,28 +456,20 @@ impl AdvancedSubqueryOptimizer {
         rewrite: &SubqueryRewriteRule,
     ) -> FusekiResult<String> {
         match &rewrite.rewrite {
-            RewriteAction::ExistsToSemiJoin => {
-                self.rewrite_exists_to_semi_join(query, subquery)
-            }
+            RewriteAction::ExistsToSemiJoin => self.rewrite_exists_to_semi_join(query, subquery),
             RewriteAction::NotExistsToAntiJoin => {
                 self.rewrite_not_exists_to_anti_join(query, subquery)
             }
-            RewriteAction::SubqueryPullUp => {
-                self.rewrite_subquery_pullup(query, subquery)
-            }
+            RewriteAction::SubqueryPullUp => self.rewrite_subquery_pullup(query, subquery),
             RewriteAction::FilterPushDown { filter } => {
                 self.rewrite_filter_pushdown(query, subquery, filter)
             }
-            RewriteAction::InToJoin => {
-                self.rewrite_in_to_join(query, subquery)
-            }
-            RewriteAction::Decorrelate => {
-                self.decorrelate_subquery(query, subquery)
-            }
+            RewriteAction::InToJoin => self.rewrite_in_to_join(query, subquery),
+            RewriteAction::Decorrelate => self.decorrelate_subquery(query, subquery),
             _ => Ok(query.to_string()),
         }
     }
-    
+
     fn rewrite_exists_to_semi_join(
         &self,
         query: &str,
@@ -486,7 +481,7 @@ impl AdvancedSubqueryOptimizer {
             &format!("SEMI_JOIN {{ {} }}", subquery.query_text),
         ))
     }
-    
+
     fn rewrite_not_exists_to_anti_join(
         &self,
         query: &str,
@@ -498,7 +493,7 @@ impl AdvancedSubqueryOptimizer {
             &format!("ANTI_JOIN {{ {} }}", subquery.query_text),
         ))
     }
-    
+
     fn rewrite_subquery_pullup(
         &self,
         query: &str,
@@ -514,7 +509,7 @@ impl AdvancedSubqueryOptimizer {
             Ok(query.to_string())
         }
     }
-    
+
     fn rewrite_filter_pushdown(
         &self,
         query: &str,
@@ -524,36 +519,31 @@ impl AdvancedSubqueryOptimizer {
         // Push filter into subquery
         Ok(query.to_string())
     }
-    
-    fn rewrite_in_to_join(
-        &self,
-        query: &str,
-        subquery: &SubqueryInfo,
-    ) -> FusekiResult<String> {
+
+    fn rewrite_in_to_join(&self, query: &str, subquery: &SubqueryInfo) -> FusekiResult<String> {
         // Convert IN to JOIN
         Ok(query.to_string())
     }
-    
-    fn decorrelate_subquery(
-        &self,
-        query: &str,
-        subquery: &SubqueryInfo,
-    ) -> FusekiResult<String> {
+
+    fn decorrelate_subquery(&self, query: &str, subquery: &SubqueryInfo) -> FusekiResult<String> {
         // Decorrelate correlated subquery
         Ok(query.to_string())
     }
-    
+
     async fn create_execution_plan(
         &self,
         query: &str,
         subqueries: &[SubqueryInfo],
     ) -> FusekiResult<ExecutionPlan> {
         let mut plan_steps = Vec::new();
-        
+
         for subquery in subqueries {
             let strategy = self.strategy_selector.select_strategy(subquery)?;
-            let estimated_cost = self.cost_estimator.estimate_cost(subquery, &strategy).await?;
-            
+            let estimated_cost = self
+                .cost_estimator
+                .estimate_cost(subquery, &strategy)
+                .await?;
+
             plan_steps.push(ExecutionStep {
                 subquery_id: subquery.id.clone(),
                 strategy,
@@ -562,7 +552,7 @@ impl AdvancedSubqueryOptimizer {
                 parallelizable: subquery.is_independent(),
             });
         }
-        
+
         Ok(ExecutionPlan {
             query: query.to_string(),
             steps: plan_steps,
@@ -570,25 +560,27 @@ impl AdvancedSubqueryOptimizer {
             parallelization_opportunities: self.identify_parallelization(&plan_steps),
         })
     }
-    
+
     fn identify_parallelization(&self, steps: &[ExecutionStep]) -> Vec<ParallelGroup> {
         // Group independent subqueries that can be executed in parallel
         Vec::new()
     }
-    
+
     fn estimate_cost_reduction(&self, subqueries: &[SubqueryInfo]) -> f64 {
         // Estimate overall cost reduction from optimizations
         0.3 // Placeholder
     }
-    
+
     async fn update_statistics(&self, rewrites_count: usize, optimization_time: f64) {
         if let Ok(mut stats) = self.statistics.write().await {
             stats.total_subqueries_optimized += 1;
             stats.successful_rewrites += rewrites_count as u64;
-            
+
             // Update average optimization time
-            let total_time = stats.average_optimization_time_ms * stats.total_subqueries_optimized as f64;
-            stats.average_optimization_time_ms = (total_time + optimization_time) / (stats.total_subqueries_optimized as f64);
+            let total_time =
+                stats.average_optimization_time_ms * stats.total_subqueries_optimized as f64;
+            stats.average_optimization_time_ms =
+                (total_time + optimization_time) / (stats.total_subqueries_optimized as f64);
         }
     }
 }
@@ -597,28 +589,29 @@ impl SubqueryRewriteEngine {
     pub fn new() -> Self {
         let rules = Self::create_default_rules();
         let rule_order = Self::sort_rules_by_priority(&rules);
-        
+
         Self {
             pattern_matcher: PatternMatcher::new(),
             rules,
             rule_order,
         }
     }
-    
+
     fn create_default_rules() -> Vec<SubqueryRewriteRule> {
         vec![
             SubqueryRewriteRule {
                 id: "exists_to_semi_join".to_string(),
                 name: "EXISTS to Semi-Join".to_string(),
-                description: "Convert EXISTS subqueries to semi-joins for better performance".to_string(),
-                pattern: QueryPattern::Exists { pattern: "*".to_string() },
+                description: "Convert EXISTS subqueries to semi-joins for better performance"
+                    .to_string(),
+                pattern: QueryPattern::Exists {
+                    pattern: "*".to_string(),
+                },
                 rewrite: RewriteAction::ExistsToSemiJoin,
-                conditions: vec![
-                    RuleCondition {
-                        condition_type: ConditionType::SubquerySize { max_triples: 100 },
-                        parameters: HashMap::new(),
-                    },
-                ],
+                conditions: vec![RuleCondition {
+                    condition_type: ConditionType::SubquerySize { max_triples: 100 },
+                    parameters: HashMap::new(),
+                }],
                 priority: 10,
                 estimated_benefit: 0.4,
             },
@@ -626,7 +619,9 @@ impl SubqueryRewriteEngine {
                 id: "not_exists_to_anti_join".to_string(),
                 name: "NOT EXISTS to Anti-Join".to_string(),
                 description: "Convert NOT EXISTS subqueries to anti-joins".to_string(),
-                pattern: QueryPattern::NotExists { pattern: "*".to_string() },
+                pattern: QueryPattern::NotExists {
+                    pattern: "*".to_string(),
+                },
                 rewrite: RewriteAction::NotExistsToAntiJoin,
                 conditions: vec![],
                 priority: 10,
@@ -635,15 +630,16 @@ impl SubqueryRewriteEngine {
             SubqueryRewriteRule {
                 id: "simple_subquery_pullup".to_string(),
                 name: "Simple Subquery Pull-Up".to_string(),
-                description: "Pull up simple subqueries without aggregation or distinct".to_string(),
-                pattern: QueryPattern::FromSubquery { alias: "*".to_string() },
+                description: "Pull up simple subqueries without aggregation or distinct"
+                    .to_string(),
+                pattern: QueryPattern::FromSubquery {
+                    alias: "*".to_string(),
+                },
                 rewrite: RewriteAction::SubqueryPullUp,
-                conditions: vec![
-                    RuleCondition {
-                        condition_type: ConditionType::IsCorrelated { expected: false },
-                        parameters: HashMap::new(),
-                    },
-                ],
+                conditions: vec![RuleCondition {
+                    condition_type: ConditionType::IsCorrelated { expected: false },
+                    parameters: HashMap::new(),
+                }],
                 priority: 8,
                 estimated_benefit: 0.3,
             },
@@ -651,14 +647,14 @@ impl SubqueryRewriteEngine {
                 id: "in_to_join".to_string(),
                 name: "IN to Join Conversion".to_string(),
                 description: "Convert IN subqueries to joins when beneficial".to_string(),
-                pattern: QueryPattern::InSubquery { variable: "*".to_string() },
+                pattern: QueryPattern::InSubquery {
+                    variable: "*".to_string(),
+                },
                 rewrite: RewriteAction::InToJoin,
-                conditions: vec![
-                    RuleCondition {
-                        condition_type: ConditionType::SelectivityRange { min: 0.0, max: 0.3 },
-                        parameters: HashMap::new(),
-                    },
-                ],
+                conditions: vec![RuleCondition {
+                    condition_type: ConditionType::SelectivityRange { min: 0.0, max: 0.3 },
+                    parameters: HashMap::new(),
+                }],
                 priority: 7,
                 estimated_benefit: 0.35,
             },
@@ -674,26 +670,30 @@ impl SubqueryRewriteEngine {
             },
         ]
     }
-    
+
     fn sort_rules_by_priority(rules: &[SubqueryRewriteRule]) -> Vec<usize> {
         let mut indices: Vec<usize> = (0..rules.len()).collect();
         indices.sort_by(|&a, &b| rules[b].priority.cmp(&rules[a].priority));
         indices
     }
-    
-    pub fn find_applicable_rewrite(&self, subquery: &SubqueryInfo) -> FusekiResult<Option<SubqueryRewriteRule>> {
+
+    pub fn find_applicable_rewrite(
+        &self,
+        subquery: &SubqueryInfo,
+    ) -> FusekiResult<Option<SubqueryRewriteRule>> {
         for &idx in &self.rule_order {
             let rule = &self.rules[idx];
-            
-            if self.pattern_matches(&rule.pattern, subquery) && 
-               self.conditions_satisfied(&rule.conditions, subquery)? {
+
+            if self.pattern_matches(&rule.pattern, subquery)
+                && self.conditions_satisfied(&rule.conditions, subquery)?
+            {
                 return Ok(Some(rule.clone()));
             }
         }
-        
+
         Ok(None)
     }
-    
+
     fn pattern_matches(&self, pattern: &QueryPattern, subquery: &SubqueryInfo) -> bool {
         match pattern {
             QueryPattern::Exists { .. } => subquery.subquery_type == SubqueryType::Exists,
@@ -706,8 +706,12 @@ impl SubqueryRewriteEngine {
             _ => false,
         }
     }
-    
-    fn conditions_satisfied(&self, conditions: &[RuleCondition], subquery: &SubqueryInfo) -> FusekiResult<bool> {
+
+    fn conditions_satisfied(
+        &self,
+        conditions: &[RuleCondition],
+        subquery: &SubqueryInfo,
+    ) -> FusekiResult<bool> {
         for condition in conditions {
             if !self.check_condition(condition, subquery)? {
                 return Ok(false);
@@ -715,18 +719,20 @@ impl SubqueryRewriteEngine {
         }
         Ok(true)
     }
-    
-    fn check_condition(&self, condition: &RuleCondition, subquery: &SubqueryInfo) -> FusekiResult<bool> {
+
+    fn check_condition(
+        &self,
+        condition: &RuleCondition,
+        subquery: &SubqueryInfo,
+    ) -> FusekiResult<bool> {
         match &condition.condition_type {
             ConditionType::SubquerySize { max_triples } => {
                 Ok(subquery.estimated_size <= *max_triples)
             }
-            ConditionType::IsCorrelated { expected } => {
-                Ok(subquery.is_correlated == *expected)
-            }
-            ConditionType::SelectivityRange { min, max } => {
-                Ok(subquery.estimated_selectivity >= *min && subquery.estimated_selectivity <= *max)
-            }
+            ConditionType::IsCorrelated { expected } => Ok(subquery.is_correlated == *expected),
+            ConditionType::SelectivityRange { min, max } => Ok(subquery.estimated_selectivity
+                >= *min
+                && subquery.estimated_selectivity <= *max),
             _ => Ok(true),
         }
     }
@@ -741,14 +747,14 @@ impl SubqueryCostEstimator {
             historical_stats: Arc::new(RwLock::new(HistoricalStats::new())),
         }
     }
-    
+
     pub async fn estimate_cost(
         &self,
         subquery: &SubqueryInfo,
         strategy: &ExecutionStrategy,
     ) -> FusekiResult<f64> {
         let base_cost = self.estimate_base_cost(subquery);
-        
+
         let strategy_multiplier = match strategy {
             ExecutionStrategy::MaterializeOnce => 1.0,
             ExecutionStrategy::CorrelatedExecution => subquery.outer_cardinality as f64,
@@ -756,18 +762,21 @@ impl SubqueryCostEstimator {
             ExecutionStrategy::SemiJoin => 0.5,
             ExecutionStrategy::AntiJoin => 0.6,
             ExecutionStrategy::RemoteExecution => 2.0,
-            ExecutionStrategy::ParallelExecution { max_threads } => 1.0 / (*max_threads as f64).sqrt(),
+            ExecutionStrategy::ParallelExecution { max_threads } => {
+                1.0 / (*max_threads as f64).sqrt()
+            }
             ExecutionStrategy::StreamingExecution => 0.8,
         };
-        
+
         Ok(base_cost * strategy_multiplier)
     }
-    
+
     fn estimate_base_cost(&self, subquery: &SubqueryInfo) -> f64 {
         let scan_cost = subquery.estimated_size as f64 * self.operation_costs.scan_cost_per_triple;
-        let filter_cost = subquery.filter_count as f64 * self.operation_costs.filter_cost_per_binding;
+        let filter_cost =
+            subquery.filter_count as f64 * self.operation_costs.filter_cost_per_binding;
         let join_cost = subquery.join_count as f64 * self.operation_costs.join_cost_per_pair;
-        
+
         scan_cost + filter_cost + join_cost
     }
 }
@@ -785,61 +794,66 @@ impl MaterializationManager {
             cache_stats: Arc::new(RwLock::new(CacheStatistics::default())),
         }
     }
-    
+
     pub async fn get_or_materialize(
         &self,
         subquery: &SubqueryInfo,
         executor: impl Fn() -> FusekiResult<Vec<HashMap<String, serde_json::Value>>>,
     ) -> FusekiResult<Vec<HashMap<String, serde_json::Value>>> {
         let cache_key = self.compute_cache_key(subquery);
-        
+
         // Check cache
         if let Some(view) = self.get_cached_view(&cache_key).await? {
             self.update_cache_stats(true).await;
             return Ok(view.result_data);
         }
-        
+
         self.update_cache_stats(false).await;
-        
+
         // Execute and potentially cache
         let results = executor()?;
-        
+
         if self.should_materialize(subquery, &results) {
-            self.materialize_view(cache_key, subquery, results.clone()).await?;
+            self.materialize_view(cache_key, subquery, results.clone())
+                .await?;
         }
-        
+
         Ok(results)
     }
-    
+
     fn compute_cache_key(&self, subquery: &SubqueryInfo) -> String {
         // Compute a hash of the subquery for cache key
         format!("{:x}", md5::compute(&subquery.query_text))
     }
-    
+
     async fn get_cached_view(&self, key: &str) -> FusekiResult<Option<MaterializedView>> {
         let views = self.materialized_views.read().await;
-        
+
         if let Some(view) = views.get(key) {
             if view.is_valid && self.is_within_ttl(view) {
                 return Ok(Some(view.clone()));
             }
         }
-        
+
         Ok(None)
     }
-    
+
     fn is_within_ttl(&self, view: &MaterializedView) -> bool {
         let age = chrono::Utc::now() - view.created_at;
         age.num_seconds() < self.policies.ttl_seconds as i64
     }
-    
-    fn should_materialize(&self, subquery: &SubqueryInfo, results: &[HashMap<String, serde_json::Value>]) -> bool {
+
+    fn should_materialize(
+        &self,
+        subquery: &SubqueryInfo,
+        results: &[HashMap<String, serde_json::Value>],
+    ) -> bool {
         let estimated_cost = subquery.estimated_cost;
         let result_size = results.len();
-        
+
         estimated_cost > self.policies.cost_threshold && result_size < 10000
     }
-    
+
     async fn materialize_view(
         &self,
         key: String,
@@ -847,7 +861,7 @@ impl MaterializationManager {
         results: Vec<HashMap<String, serde_json::Value>>,
     ) -> FusekiResult<()> {
         let size_bytes = serde_json::to_vec(&results)?.len();
-        
+
         let view = MaterializedView {
             query_hash: key.clone(),
             result_data: results,
@@ -857,16 +871,16 @@ impl MaterializationManager {
             size_bytes,
             is_valid: true,
         };
-        
+
         let mut views = self.materialized_views.write().await;
-        
+
         // Check cache size and evict if necessary
         self.evict_if_needed(&mut views, size_bytes).await?;
-        
+
         views.insert(key, view);
         Ok(())
     }
-    
+
     async fn evict_if_needed(
         &self,
         views: &mut HashMap<String, MaterializedView>,
@@ -874,27 +888,27 @@ impl MaterializationManager {
     ) -> FusekiResult<()> {
         let max_size = self.policies.max_cache_size_mb * 1024 * 1024;
         let current_size: usize = views.values().map(|v| v.size_bytes).sum();
-        
+
         if current_size + new_size > max_size {
             // Evict least recently used
             let mut entries: Vec<_> = views.iter().collect();
             entries.sort_by_key(|(_, v)| v.last_accessed);
-            
+
             let mut freed = 0;
             for (key, _) in entries {
                 if freed >= new_size {
                     break;
                 }
-                
+
                 if let Some(view) = views.remove(key) {
                     freed += view.size_bytes;
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     async fn update_cache_stats(&self, hit: bool) {
         if let Ok(mut stats) = self.cache_stats.write().await {
             if hit {
@@ -913,7 +927,7 @@ impl ExecutionStrategySelector {
             selection_algorithm: SelectionAlgorithm::CostBased,
         }
     }
-    
+
     fn create_available_strategies() -> Vec<ExecutionStrategy> {
         vec![
             ExecutionStrategy::MaterializeOnce,
@@ -925,7 +939,7 @@ impl ExecutionStrategySelector {
             ExecutionStrategy::StreamingExecution,
         ]
     }
-    
+
     pub fn select_strategy(&self, subquery: &SubqueryInfo) -> FusekiResult<ExecutionStrategy> {
         match &self.selection_algorithm {
             SelectionAlgorithm::CostBased => self.select_cost_based(subquery),
@@ -933,7 +947,7 @@ impl ExecutionStrategySelector {
             _ => self.select_cost_based(subquery),
         }
     }
-    
+
     fn select_cost_based(&self, subquery: &SubqueryInfo) -> FusekiResult<ExecutionStrategy> {
         // Simple heuristics for strategy selection
         match subquery.subquery_type {
@@ -947,7 +961,7 @@ impl ExecutionStrategySelector {
             _ => Ok(ExecutionStrategy::MaterializeOnce),
         }
     }
-    
+
     fn select_rule_based(&self, subquery: &SubqueryInfo) -> FusekiResult<ExecutionStrategy> {
         // Rule-based selection
         if subquery.is_correlated && subquery.outer_cardinality > 1000 {
@@ -1021,7 +1035,7 @@ impl SubqueryInfo {
     pub fn is_simple_projection(&self) -> bool {
         self.filter_count == 0 && self.join_count <= 1 && !self.is_correlated
     }
-    
+
     pub fn is_independent(&self) -> bool {
         !self.is_correlated && self.dependencies.is_empty()
     }
@@ -1078,13 +1092,13 @@ pub struct ParallelGroup {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_subquery_optimizer_creation() {
         let optimizer = AdvancedSubqueryOptimizer::new();
         assert!(!optimizer.rewrite_engine.rules.is_empty());
     }
-    
+
     #[test]
     fn test_pattern_matching() {
         let engine = SubqueryRewriteEngine::new();
@@ -1102,16 +1116,16 @@ mod tests {
             outer_cardinality: 1,
             dependencies: vec![],
         };
-        
+
         let rewrite = engine.find_applicable_rewrite(&subquery).unwrap();
         assert!(rewrite.is_some());
         assert_eq!(rewrite.unwrap().id, "exists_to_semi_join");
     }
-    
+
     #[tokio::test]
     async fn test_materialization_manager() {
         let manager = MaterializationManager::new();
-        
+
         let subquery = SubqueryInfo {
             id: "sq1".to_string(),
             query_text: "SELECT * WHERE { ?s ?p ?o }".to_string(),
@@ -1126,15 +1140,18 @@ mod tests {
             outer_cardinality: 1,
             dependencies: vec![],
         };
-        
-        let results = manager.get_or_materialize(&subquery, || {
-            Ok(vec![HashMap::from([
-                ("s".to_string(), serde_json::json!("subject")),
-                ("p".to_string(), serde_json::json!("predicate")),
-                ("o".to_string(), serde_json::json!("object")),
-            ])])
-        }).await.unwrap();
-        
+
+        let results = manager
+            .get_or_materialize(&subquery, || {
+                Ok(vec![HashMap::from([
+                    ("s".to_string(), serde_json::json!("subject")),
+                    ("p".to_string(), serde_json::json!("predicate")),
+                    ("o".to_string(), serde_json::json!("object")),
+                ])])
+            })
+            .await
+            .unwrap();
+
         assert_eq!(results.len(), 1);
     }
 }

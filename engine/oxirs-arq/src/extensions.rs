@@ -4,8 +4,8 @@
 //! SPARQL functions, operators, and other query processing capabilities.
 
 use crate::algebra::{Algebra, BinaryOperator, Binding, Expression, Term, UnaryOperator, Variable};
-use oxirs_core::model::NamedNode;
 use anyhow::{anyhow, bail, Result};
+use oxirs_core::model::NamedNode;
 use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -317,17 +317,13 @@ impl PartialOrd for Value {
                     language: l2,
                     datatype: d2,
                 },
-            ) => {
-                match v1.partial_cmp(v2) {
-                    Some(Ordering::Equal) => {
-                        match l1.partial_cmp(l2) {
-                            Some(Ordering::Equal) => d1.partial_cmp(d2),
-                            other => other,
-                        }
-                    }
+            ) => match v1.partial_cmp(v2) {
+                Some(Ordering::Equal) => match l1.partial_cmp(l2) {
+                    Some(Ordering::Equal) => d1.partial_cmp(d2),
                     other => other,
-                }
-            }
+                },
+                other => other,
+            },
             (Value::Integer(a), Value::Float(b)) => (*a as f64).partial_cmp(b),
             (Value::Float(a), Value::Integer(b)) => a.partial_cmp(&(*b as f64)),
             (Value::Null, Value::Null) => Some(Ordering::Equal),
@@ -674,7 +670,9 @@ impl Value {
             } => Ok(Term::Literal(crate::algebra::Literal {
                 value: value.clone(),
                 language: language.clone(),
-                datatype: datatype.as_ref().map(|dt| NamedNode::new_unchecked(dt.clone())),
+                datatype: datatype
+                    .as_ref()
+                    .map(|dt| NamedNode::new_unchecked(dt.clone())),
             })),
             _ => bail!("Cannot convert {} to Term", self.type_name()),
         }

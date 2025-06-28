@@ -1,7 +1,7 @@
 //! Example demonstrating arena-based memory management for RDF data
 
 use oxirs_core::model::*;
-use oxirs_core::store::{LocalArena, ConcurrentArena, GraphArena, ScopedArena};
+use oxirs_core::store::{ConcurrentArena, GraphArena, LocalArena, ScopedArena};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -48,7 +48,9 @@ fn example_local_arena() -> Result<(), Box<dyn std::error::Error>> {
         _ => {}
     }
     match arena_term2 {
-        oxirs_core::store::ArenaTerm::Literal { value, .. } => println!("  Literal: {}", value.as_str()),
+        oxirs_core::store::ArenaTerm::Literal { value, .. } => {
+            println!("  Literal: {}", value.as_str())
+        }
         _ => {}
     }
     match arena_term3 {
@@ -152,7 +154,7 @@ fn example_scoped_arena() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", "-".repeat(40));
 
     let parent_arena = LocalArena::new();
-    
+
     // Initial allocation in parent
     parent_arena.alloc_str("parent allocation");
     let initial_bytes = parent_arena.allocated_bytes();
@@ -161,16 +163,19 @@ fn example_scoped_arena() -> Result<(), Box<dyn std::error::Error>> {
     // Create a scope for temporary allocations
     {
         let scoped = ScopedArena::new(&parent_arena);
-        
+
         // Allocate in the scope
         for i in 0..5 {
             scoped.alloc_str(&format!("scoped allocation {}", i));
         }
-        
+
         println!("Scoped allocations: {} bytes", scoped.scope_allocated());
     }
 
-    println!("Parent arena after scope: {} bytes", parent_arena.allocated_bytes());
+    println!(
+        "Parent arena after scope: {} bytes",
+        parent_arena.allocated_bytes()
+    );
     println!();
 
     Ok(())
@@ -186,7 +191,10 @@ fn benchmark_arena_vs_heap() -> Result<(), Box<dyn std::error::Error>> {
     let start = Instant::now();
     let mut heap_allocated = Vec::with_capacity(NUM_ALLOCATIONS);
     for i in 0..NUM_ALLOCATIONS {
-        let term = Term::NamedNode(NamedNode::new(&format!("http://example.org/resource{}", i))?);
+        let term = Term::NamedNode(NamedNode::new(&format!(
+            "http://example.org/resource{}",
+            i
+        ))?);
         heap_allocated.push(term);
     }
     let heap_duration = start.elapsed();
@@ -195,7 +203,10 @@ fn benchmark_arena_vs_heap() -> Result<(), Box<dyn std::error::Error>> {
     let arena = LocalArena::with_capacity(1024 * 1024); // 1MB
     let start = Instant::now();
     for i in 0..NUM_ALLOCATIONS {
-        let term = Term::NamedNode(NamedNode::new(&format!("http://example.org/resource{}", i))?);
+        let term = Term::NamedNode(NamedNode::new(&format!(
+            "http://example.org/resource{}",
+            i
+        ))?);
         arena.alloc_term(&term);
     }
     let arena_duration = start.elapsed();
@@ -204,14 +215,17 @@ fn benchmark_arena_vs_heap() -> Result<(), Box<dyn std::error::Error>> {
     println!("Heap allocation time: {:?}", heap_duration);
     println!("Arena allocation time: {:?}", arena_duration);
     println!("Arena allocated bytes: {}", arena.allocated_bytes());
-    
+
     let speedup = heap_duration.as_secs_f64() / arena_duration.as_secs_f64();
     println!("Arena speedup: {:.2}x faster", speedup);
-    
+
     // Memory fragmentation comparison
     println!("\nMemory characteristics:");
-    println!("  Heap: {} individual allocations (fragmented)", NUM_ALLOCATIONS);
+    println!(
+        "  Heap: {} individual allocations (fragmented)",
+        NUM_ALLOCATIONS
+    );
     println!("  Arena: 1 contiguous allocation (cache-friendly)");
-    
+
     Ok(())
 }

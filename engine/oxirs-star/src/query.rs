@@ -564,9 +564,9 @@ impl QueryExecutor {
         };
 
         // Use store's query method for better performance
-        let matching_triples = self
-            .store
-            .query_triples(subject_term, predicate_term, object_term)?;
+        let matching_triples =
+            self.store
+                .query_triples(subject_term, predicate_term, object_term)?;
 
         for triple in matching_triples.iter() {
             if pattern.matches(triple, initial_binding) {
@@ -713,7 +713,11 @@ impl QueryExecutor {
     }
 
     /// Apply filter expressions to bindings
-    fn apply_filters(&self, bindings: Vec<Binding>, filters: &[Expression]) -> StarResult<Vec<Binding>> {
+    fn apply_filters(
+        &self,
+        bindings: Vec<Binding>,
+        filters: &[Expression],
+    ) -> StarResult<Vec<Binding>> {
         let mut filtered_bindings = Vec::new();
 
         for binding in bindings {
@@ -740,7 +744,10 @@ impl QueryExecutor {
                                 }
                             } else {
                                 // No datatype, check if it's a truthy value
-                                if literal.value.is_empty() || literal.value == "false" || literal.value == "0" {
+                                if literal.value.is_empty()
+                                    || literal.value == "false"
+                                    || literal.value == "0"
+                                {
                                     passes_all_filters = false;
                                     break;
                                 }
@@ -1464,10 +1471,14 @@ mod tests {
             let subject_result = crate::functions::FunctionEvaluator::evaluate(
                 crate::functions::StarFunction::Subject,
                 &[statement.clone()],
-            ).unwrap();
+            )
+            .unwrap();
 
             // The subject should be the alice IRI
-            assert_eq!(subject_result, StarTerm::iri("http://example.org/alice").unwrap());
+            assert_eq!(
+                subject_result,
+                StarTerm::iri("http://example.org/alice").unwrap()
+            );
         }
     }
 

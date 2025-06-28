@@ -1,8 +1,8 @@
 //! Benchmarks for concurrent graph operations
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId, Throughput};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_core::concurrent::ConcurrentGraph;
-use oxirs_core::model::{NamedNode, Subject, Object, Predicate, Triple};
+use oxirs_core::model::{NamedNode, Object, Predicate, Subject, Triple};
 use std::sync::Arc;
 use std::thread;
 
@@ -16,7 +16,7 @@ fn create_test_triple(id: usize) -> Triple {
 
 fn bench_single_thread_insert(c: &mut Criterion) {
     let mut group = c.benchmark_group("single_thread_insert");
-    
+
     for size in [100, 1000, 10000].iter() {
         group.throughput(Throughput::Elements(*size as u64));
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
@@ -35,7 +35,7 @@ fn bench_single_thread_insert(c: &mut Criterion) {
 
 fn bench_concurrent_insert(c: &mut Criterion) {
     let mut group = c.benchmark_group("concurrent_insert");
-    
+
     for num_threads in [2, 4, 8].iter() {
         group.throughput(Throughput::Elements(10000));
         group.bench_with_input(
@@ -45,7 +45,7 @@ fn bench_concurrent_insert(c: &mut Criterion) {
                 b.iter(|| {
                     let graph = Arc::new(ConcurrentGraph::new());
                     let triples_per_thread = 10000 / num_threads;
-                    
+
                     let handles: Vec<_> = (0..num_threads)
                         .map(|thread_id| {
                             let graph = graph.clone();
@@ -58,11 +58,11 @@ fn bench_concurrent_insert(c: &mut Criterion) {
                             })
                         })
                         .collect();
-                    
+
                     for handle in handles {
                         handle.join().unwrap();
                     }
-                    
+
                     black_box(graph.len())
                 });
             },
@@ -73,21 +73,21 @@ fn bench_concurrent_insert(c: &mut Criterion) {
 
 fn bench_pattern_matching(c: &mut Criterion) {
     let mut group = c.benchmark_group("pattern_matching");
-    
+
     // Setup graph with test data
     let graph = Arc::new(ConcurrentGraph::new());
     for i in 0..10000 {
         let triple = create_test_triple(i);
         graph.insert(triple).unwrap();
     }
-    
+
     group.bench_function("match_all", |b| {
         b.iter(|| {
             let results = graph.match_pattern(None, None, None);
             black_box(results.len())
         });
     });
-    
+
     group.bench_function("match_subject", |b| {
         let subject = Subject::NamedNode(NamedNode::new("http://subject/500").unwrap());
         b.iter(|| {
@@ -95,7 +95,7 @@ fn bench_pattern_matching(c: &mut Criterion) {
             black_box(results.len())
         });
     });
-    
+
     group.bench_function("match_subject_predicate", |b| {
         let subject = Subject::NamedNode(NamedNode::new("http://subject/500").unwrap());
         let predicate = Predicate::NamedNode(NamedNode::new("http://predicate/500").unwrap());
@@ -104,21 +104,21 @@ fn bench_pattern_matching(c: &mut Criterion) {
             black_box(results.len())
         });
     });
-    
+
     group.finish();
 }
 
 fn bench_mixed_operations(c: &mut Criterion) {
     let mut group = c.benchmark_group("mixed_operations");
-    
+
     group.bench_function("read_heavy_workload", |b| {
         let graph = Arc::new(ConcurrentGraph::new());
-        
+
         // Pre-populate
         for i in 0..1000 {
             graph.insert(create_test_triple(i)).unwrap();
         }
-        
+
         b.iter(|| {
             let handles: Vec<_> = (0..4)
                 .map(|thread_id| {
@@ -141,19 +141,19 @@ fn bench_mixed_operations(c: &mut Criterion) {
                     })
                 })
                 .collect();
-            
+
             for handle in handles {
                 handle.join().unwrap();
             }
         });
     });
-    
+
     group.finish();
 }
 
 fn bench_batch_operations(c: &mut Criterion) {
     let mut group = c.benchmark_group("batch_operations");
-    
+
     for batch_size in [10, 100, 1000].iter() {
         group.throughput(Throughput::Elements(*batch_size as u64));
         group.bench_with_input(
@@ -162,26 +162,24 @@ fn bench_batch_operations(c: &mut Criterion) {
             |b, &batch_size| {
                 b.iter(|| {
                     let graph = ConcurrentGraph::new();
-                    let triples: Vec<_> = (0..batch_size)
-                        .map(|i| create_test_triple(i))
-                        .collect();
-                    
+                    let triples: Vec<_> = (0..batch_size).map(|i| create_test_triple(i)).collect();
+
                     graph.insert_batch(triples).unwrap()
                 });
             },
         );
     }
-    
+
     group.finish();
 }
 
 fn bench_memory_reclamation(c: &mut Criterion) {
     let mut group = c.benchmark_group("memory_reclamation");
-    
+
     group.bench_function("collect_cycles", |b| {
         b.iter(|| {
             let graph = ConcurrentGraph::new();
-            
+
             // Insert and remove in cycles
             for cycle in 0..10 {
                 for i in 0..100 {
@@ -191,11 +189,11 @@ fn bench_memory_reclamation(c: &mut Criterion) {
                 }
                 graph.collect();
             }
-            
+
             black_box(graph.stats())
         });
     });
-    
+
     group.finish();
 }
 

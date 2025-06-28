@@ -1,10 +1,10 @@
 //! Dataset initialization command
 
-use super::CommandResult;
 use super::stubs::Store;
-use crate::cli::CliContext;
+use super::CommandResult;
 use crate::cli::logging::CommandLogger;
-use dialoguer::{Confirm, Input, Select, theme::ColorfulTheme};
+use crate::cli::CliContext;
+use dialoguer::{theme::ColorfulTheme, Confirm, Input, Select};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -12,16 +12,24 @@ use std::path::{Path, PathBuf};
 pub async fn run(name: String, format: String, location: Option<PathBuf>) -> CommandResult {
     let ctx = CliContext::new();
     let cmd_logger = CommandLogger::new("init", vec![name.clone(), format.clone()]);
-    
-    ctx.info(&format!("Initializing dataset '{}' with format '{}'", name, format));
+
+    ctx.info(&format!(
+        "Initializing dataset '{}' with format '{}'",
+        name, format
+    ));
 
     // If in interactive mode, prompt for additional configuration
     let (final_name, final_format, final_location, features) = if ctx.interactive {
         interactive_init(&name, &format, location, &ctx)?
     } else {
-        (name.clone(), format.clone(), location.unwrap_or_else(|| PathBuf::from(&name)), Features::default())
+        (
+            name.clone(),
+            format.clone(),
+            location.unwrap_or_else(|| PathBuf::from(&name)),
+            Features::default(),
+        )
     };
-    
+
     let dataset_path = final_location;
 
     // Validate format
@@ -40,15 +48,18 @@ pub async fn run(name: String, format: String, location: Option<PathBuf>) -> Com
     if dataset_path.exists() {
         if ctx.interactive {
             let overwrite = Confirm::with_theme(&ColorfulTheme::default())
-                .with_prompt(format!("Directory '{}' already exists. Overwrite?", dataset_path.display()))
+                .with_prompt(format!(
+                    "Directory '{}' already exists. Overwrite?",
+                    dataset_path.display()
+                ))
                 .default(false)
                 .interact()?;
-            
+
             if !overwrite {
                 ctx.info("Initialization cancelled.");
                 return Ok(());
             }
-            
+
             // Remove existing directory
             fs::remove_dir_all(&dataset_path)?;
         } else {
@@ -61,7 +72,10 @@ pub async fn run(name: String, format: String, location: Option<PathBuf>) -> Com
     }
 
     fs::create_dir_all(&dataset_path)?;
-    ctx.success(&format!("Created dataset directory: {}", dataset_path.display()));
+    ctx.success(&format!(
+        "Created dataset directory: {}",
+        dataset_path.display()
+    ));
 
     // Initialize storage backend
     let _store = match final_format.as_str() {
@@ -72,25 +86,39 @@ pub async fn run(name: String, format: String, location: Option<PathBuf>) -> Com
 
     // Create configuration file with features
     let config_path = dataset_path.join("oxirs.toml");
-    let config_content = create_config_with_features(&final_name, &final_format, &dataset_path, &features)?;
+    let config_content =
+        create_config_with_features(&final_name, &final_format, &dataset_path, &features)?;
     fs::write(&config_path, config_content)?;
-    ctx.success(&format!("Created configuration file: {}", config_path.display()));
+    ctx.success(&format!(
+        "Created configuration file: {}",
+        config_path.display()
+    ));
 
     ctx.info("Dataset Initialized Successfully");
     ctx.info(&format!("Name: {}", final_name));
     ctx.info(&format!("Storage format: {}", final_format));
     ctx.info(&format!("Location: {}", dataset_path.display()));
     ctx.info(&format!("Configuration: {}", config_path.display()));
-    
+
     if features.any_enabled() {
         ctx.info("Enabled Features");
-        if features.reasoning { ctx.verbose("• Reasoning (RDFS/OWL-RL)"); }
-        if features.validation { ctx.verbose("• SHACL Validation"); }
-        if features.text_search { ctx.verbose("• Full-text Search"); }
-        if features.vector_search { ctx.verbose("• Vector Search"); }
-        if features.graphql { ctx.verbose("• GraphQL Endpoint"); }
+        if features.reasoning {
+            ctx.verbose("• Reasoning (RDFS/OWL-RL)");
+        }
+        if features.validation {
+            ctx.verbose("• SHACL Validation");
+        }
+        if features.text_search {
+            ctx.verbose("• Full-text Search");
+        }
+        if features.vector_search {
+            ctx.verbose("• Vector Search");
+        }
+        if features.graphql {
+            ctx.verbose("• GraphQL Endpoint");
+        }
     }
-    
+
     cmd_logger.success();
     Ok(())
 }
@@ -169,25 +197,28 @@ fn interactive_init(
     ctx: &CliContext,
 ) -> Result<(String, String, PathBuf, Features), Box<dyn std::error::Error>> {
     let theme = ColorfulTheme::default();
-    
+
     ctx.info("Dataset Initialization Wizard");
-    
+
     // Dataset name
     let name: String = Input::with_theme(&theme)
         .with_prompt("Dataset name")
         .default(default_name.to_string())
         .interact_text()?;
-    
+
     // Storage format
     let formats = vec!["tdb2", "memory"];
-    let format_index = formats.iter().position(|&f| f == default_format).unwrap_or(0);
+    let format_index = formats
+        .iter()
+        .position(|&f| f == default_format)
+        .unwrap_or(0);
     let format_idx = Select::with_theme(&theme)
         .with_prompt("Storage format")
         .items(&formats)
         .default(format_index)
         .interact()?;
     let format = formats[format_idx].to_string();
-    
+
     // Location
     let default_loc = default_location.unwrap_or_else(|| PathBuf::from(&name));
     let location_str: String = Input::with_theme(&theme)
@@ -195,36 +226,36 @@ fn interactive_init(
         .default(default_loc.display().to_string())
         .interact_text()?;
     let location = PathBuf::from(location_str);
-    
+
     // Features
     ctx.info("Optional Features");
     ctx.verbose("Select features to enable for this dataset:");
-    
+
     let reasoning = Confirm::with_theme(&theme)
         .with_prompt("Enable RDFS/OWL reasoning?")
         .default(false)
         .interact()?;
-    
+
     let validation = Confirm::with_theme(&theme)
         .with_prompt("Enable SHACL validation?")
         .default(false)
         .interact()?;
-    
+
     let text_search = Confirm::with_theme(&theme)
         .with_prompt("Enable full-text search?")
         .default(false)
         .interact()?;
-    
+
     let vector_search = Confirm::with_theme(&theme)
         .with_prompt("Enable vector search (semantic similarity)?")
         .default(false)
         .interact()?;
-    
+
     let graphql = Confirm::with_theme(&theme)
         .with_prompt("Enable GraphQL endpoint?")
         .default(false)
         .interact()?;
-    
+
     let features = Features {
         reasoning,
         validation,
@@ -232,31 +263,41 @@ fn interactive_init(
         vector_search,
         graphql,
     };
-    
+
     // Summary
     ctx.info("Configuration Summary");
     ctx.info(&format!("Name: {}", name));
     ctx.info(&format!("Format: {}", format));
     ctx.info(&format!("Location: {}", location.display()));
-    
+
     if features.any_enabled() {
         ctx.verbose("Enabled features:");
-        if features.reasoning { ctx.verbose("• Reasoning"); }
-        if features.validation { ctx.verbose("• Validation"); }
-        if features.text_search { ctx.verbose("• Text search"); }
-        if features.vector_search { ctx.verbose("• Vector search"); }
-        if features.graphql { ctx.verbose("• GraphQL"); }
+        if features.reasoning {
+            ctx.verbose("• Reasoning");
+        }
+        if features.validation {
+            ctx.verbose("• Validation");
+        }
+        if features.text_search {
+            ctx.verbose("• Text search");
+        }
+        if features.vector_search {
+            ctx.verbose("• Vector search");
+        }
+        if features.graphql {
+            ctx.verbose("• GraphQL");
+        }
     }
-    
+
     let confirm = Confirm::with_theme(&theme)
         .with_prompt("Proceed with initialization?")
         .default(true)
         .interact()?;
-    
+
     if !confirm {
         return Err("Initialization cancelled by user".into());
     }
-    
+
     Ok((name, format, location, features))
 }
 

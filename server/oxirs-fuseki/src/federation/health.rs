@@ -1,20 +1,20 @@
 //! Health monitoring for federated SPARQL endpoints
 
+use reqwest::Client;
 use std::{
     collections::HashMap,
     sync::Arc,
     time::{Duration, Instant},
 };
 use tokio::{
-    sync::{RwLock, Notify, Mutex},
+    sync::{Mutex, Notify, RwLock},
     time::interval,
 };
-use reqwest::Client;
 use url::Url;
 
 use crate::{
-    error::{Error, Result},
-    federation::{FederationConfig, ServiceEndpoint, ServiceHealth, CircuitBreakerConfig},
+    error::{FusekiError, FusekiResult},
+    federation::{CircuitBreakerConfig, FederationConfig, ServiceEndpoint, ServiceHealth},
 };
 
 /// Health check result
@@ -99,7 +99,10 @@ impl CircuitBreaker {
                 if self.failure_count >= self.config.failure_threshold {
                     self.state = CircuitState::Open;
                     self.last_state_change = Instant::now();
-                    tracing::warn!("Circuit breaker opened after {} failures", self.failure_count);
+                    tracing::warn!(
+                        "Circuit breaker opened after {} failures",
+                        self.failure_count
+                    );
                 }
             }
             CircuitState::HalfOpen => {
@@ -180,7 +183,7 @@ impl HealthMonitor {
 
         tokio::spawn(async move {
             let mut interval = interval(Duration::from_secs(30));
-            
+
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
@@ -200,7 +203,8 @@ impl HealthMonitor {
             &self.circuit_breakers,
             &self.http_client,
             &self.config.circuit_breaker,
-        ).await;
+        )
+        .await;
 
         Ok(())
     }
@@ -219,30 +223,30 @@ impl HealthMonitor {
         circuit_config: &CircuitBreakerConfig,
     ) {
         let eps = endpoints.read().await.clone();
-        
+
         for (id, endpoint) in eps {
             let result = Self::check_endpoint(&endpoint.url, client).await;
-            
+
             // Update circuit breaker
             let mut breakers = circuit_breakers.lock().await;
             let breaker = breakers
                 .entry(id.clone())
                 .or_insert_with(|| CircuitBreaker::new(circuit_config.clone()));
-            
+
             if result.success {
                 breaker.record_success();
             } else {
                 breaker.record_failure();
             }
-            
+
             let health_status = breaker.get_health_status();
             drop(breakers);
-            
+
             // Update endpoint health
             let mut eps = endpoints.write().await;
             if let Some(ep) = eps.get_mut(&id) {
                 ep.health = health_status;
-                
+
                 // Update average response time if successful
                 if let Some(response_time) = result.response_time {
                     if let Some(avg) = &mut ep.capabilities.avg_response_time {
@@ -259,19 +263,19 @@ impl HealthMonitor {
     /// Check a single endpoint's health
     async fn check_endpoint(url: &Url, client: &Client) -> HealthCheckResult {
         let start = Instant::now();
-        
+
         // Simple ASK query for health check
         let query = "ASK { ?s ?p ?o } LIMIT 1";
-        
+
         let result = client
             .get(url.as_str())
             .query(&[("query", query)])
             .header("Accept", "application/sparql-results+json")
             .send()
             .await;
-        
+
         let response_time = start.elapsed();
-        
+
         match result {
             Ok(response) => {
                 let success = response.status().is_success();
@@ -280,7 +284,7 @@ impl HealthMonitor {
                 } else {
                     None
                 };
-                
+
                 HealthCheckResult {
                     url: url.clone(),
                     timestamp: Instant::now(),
@@ -289,22 +293,20 @@ impl HealthMonitor {
                     error,
                 }
             }
-            Err(e) => {
-                HealthCheckResult {
-                    url: url.clone(),
-                    timestamp: Instant::now(),
-                    response_time: None,
-                    success: false,
-                    error: Some(e.to_string()),
-                }
-            }
+            Err(e) => HealthCheckResult {
+                url: url.clone(),
+                timestamp: Instant::now(),
+                response_time: None,
+                success: false,
+                error: Some(e.to_string()),
+            },
         }
     }
 
     /// Check if a service should be used based on circuit breaker
     pub async fn should_use_service(&self, service_id: &str) -> bool {
         let mut breakers = self.circuit_breakers.lock().await;
-        
+
         if let Some(breaker) = breakers.get_mut(service_id) {
             breaker.should_allow_request()
         } else {
@@ -325,34 +327,34 @@ mod tests {
             success_threshold: 2,
             timeout: Duration::from_secs(1),
         };
-        
+
         let mut breaker = CircuitBreaker::new(config);
-        
+
         // Initially closed
         assert_eq!(breaker.state, CircuitState::Closed);
         assert!(breaker.should_allow_request());
-        
+
         // Record failures
         breaker.record_failure();
         breaker.record_failure();
         assert_eq!(breaker.state, CircuitState::Closed);
-        
+
         // Third failure opens circuit
         breaker.record_failure();
         assert_eq!(breaker.state, CircuitState::Open);
         assert!(!breaker.should_allow_request());
-        
+
         // Wait for timeout
         std::thread::sleep(Duration::from_secs(1));
-        
+
         // Should enter half-open state
         assert!(breaker.should_allow_request());
         assert_eq!(breaker.state, CircuitState::HalfOpen);
-        
+
         // Success in half-open
         breaker.record_success();
         assert_eq!(breaker.state, CircuitState::HalfOpen);
-        
+
         // Second success closes circuit
         breaker.record_success();
         assert_eq!(breaker.state, CircuitState::Closed);

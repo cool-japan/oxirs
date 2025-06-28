@@ -7,23 +7,25 @@ use indicatif::{ProgressBar, ProgressStyle};
 use std::io::{self, Write};
 use std::time::Duration;
 
-pub mod error;
-pub mod validation;
-pub mod interactive;
-pub mod progress;
-pub mod output;
 pub mod completion;
+pub mod error;
 pub mod help;
+pub mod interactive;
 pub mod logging;
+pub mod output;
+pub mod progress;
+pub mod validation;
 
+pub use completion::{CommandCompletionProvider, CompletionContext, CompletionProvider};
 pub use error::{CliError, CliResult};
-pub use validation::ArgumentValidator;
+pub use help::{HelpCategory, HelpProvider};
 pub use interactive::InteractiveMode;
+pub use logging::{
+    init_logging, CommandLogger, DataLogger, LogConfig, LogFormat, PerfLogger, QueryLogger,
+};
+pub use output::{ColorScheme, OutputFormatter};
 pub use progress::{ProgressTracker, ProgressType};
-pub use output::{OutputFormatter, ColorScheme};
-pub use completion::{CompletionContext, CompletionProvider, CommandCompletionProvider};
-pub use help::{HelpProvider, HelpCategory};
-pub use logging::{LogConfig, LogFormat, init_logging, CommandLogger, QueryLogger, DataLogger, PerfLogger};
+pub use validation::ArgumentValidator;
 
 /// CLI Context for managing global state
 pub struct CliContext {
@@ -39,7 +41,7 @@ pub struct CliContext {
 impl CliContext {
     pub fn new() -> Self {
         let no_color = std::env::var("NO_COLOR").is_ok() || !atty::is(atty::Stream::Stdout);
-        
+
         Self {
             verbose: false,
             quiet: false,
@@ -170,7 +172,6 @@ impl Default for CliContext {
     }
 }
 
-
 /// Command suggestions
 pub mod suggestions {
     use strsim::levenshtein;
@@ -191,10 +192,7 @@ pub mod suggestions {
     pub fn suggest_command(input: &str, commands: &[&str]) -> Option<String> {
         let similar = find_similar_commands(input, commands, 3);
         if !similar.is_empty() {
-            Some(format!(
-                "Did you mean: {}?",
-                similar.join(", ")
-            ))
+            Some(format!("Did you mean: {}?", similar.join(", ")))
         } else {
             None
         }
@@ -217,11 +215,11 @@ mod tests {
     fn test_output_control() {
         let mut ctx = CliContext::new();
         assert!(ctx.should_show_output());
-        
+
         ctx.quiet = true;
         assert!(!ctx.should_show_output());
         assert!(!ctx.should_show_verbose());
-        
+
         ctx.quiet = false;
         ctx.verbose = true;
         assert!(ctx.should_show_verbose());
@@ -230,11 +228,11 @@ mod tests {
     #[test]
     fn test_command_suggestions() {
         use suggestions::*;
-        
+
         let commands = vec!["query", "update", "import", "export"];
         let similar = find_similar_commands("qeury", &commands, 3);
         assert_eq!(similar, vec!["query"]);
-        
+
         let suggestion = suggest_command("improt", &commands);
         assert!(suggestion.is_some());
         assert!(suggestion.unwrap().contains("import"));

@@ -54,7 +54,10 @@ pub struct Statement;
 
 /// Placeholder for RDF operations
 pub mod rdf {
-    pub fn parse_file(_path: &super::Path, _format: &str) -> Result<Vec<super::Statement>, Box<dyn std::error::Error>> {
+    pub fn parse_file(
+        _path: &super::Path,
+        _format: &str,
+    ) -> Result<Vec<super::Statement>, Box<dyn std::error::Error>> {
         Ok(vec![])
     }
 
@@ -65,7 +68,10 @@ pub mod rdf {
 pub mod sparql {
     use super::Store;
 
-    pub fn execute_query(_store: &Store, _query: &str) -> Result<QueryResults, Box<dyn std::error::Error>> {
+    pub fn execute_query(
+        _store: &Store,
+        _query: &str,
+    ) -> Result<QueryResults, Box<dyn std::error::Error>> {
         Ok(QueryResults::new())
     }
 

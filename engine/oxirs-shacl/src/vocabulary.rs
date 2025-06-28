@@ -336,7 +336,7 @@ PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 pub struct IriResolver {
     /// Base IRI for resolving relative IRIs
     base_iri: Option<String>,
-    
+
     /// Namespace prefix mappings
     prefixes: std::collections::HashMap<String, String>,
 }
@@ -348,127 +348,146 @@ impl IriResolver {
             base_iri: None,
             prefixes: std::collections::HashMap::new(),
         };
-        
+
         // Add standard prefixes
         resolver.add_standard_prefixes();
         resolver
     }
-    
+
     /// Create a new IRI resolver with a base IRI
     pub fn with_base_iri(base_iri: String) -> Self {
         let mut resolver = Self::new();
         resolver.base_iri = Some(base_iri);
         resolver
     }
-    
+
     /// Add standard prefixes used in SHACL
     fn add_standard_prefixes(&mut self) {
-        self.prefixes.insert("sh".to_string(), "http://www.w3.org/ns/shacl#".to_string());
-        self.prefixes.insert("rdf".to_string(), "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string());
-        self.prefixes.insert("rdfs".to_string(), "http://www.w3.org/2000/01/rdf-schema#".to_string());
-        self.prefixes.insert("owl".to_string(), "http://www.w3.org/2002/07/owl#".to_string());
-        self.prefixes.insert("xsd".to_string(), "http://www.w3.org/2001/XMLSchema#".to_string());
+        self.prefixes
+            .insert("sh".to_string(), "http://www.w3.org/ns/shacl#".to_string());
+        self.prefixes.insert(
+            "rdf".to_string(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string(),
+        );
+        self.prefixes.insert(
+            "rdfs".to_string(),
+            "http://www.w3.org/2000/01/rdf-schema#".to_string(),
+        );
+        self.prefixes.insert(
+            "owl".to_string(),
+            "http://www.w3.org/2002/07/owl#".to_string(),
+        );
+        self.prefixes.insert(
+            "xsd".to_string(),
+            "http://www.w3.org/2001/XMLSchema#".to_string(),
+        );
     }
-    
+
     /// Add a prefix mapping
     pub fn add_prefix(&mut self, prefix: String, namespace: String) {
         self.prefixes.insert(prefix, namespace);
     }
-    
+
     /// Set the base IRI for resolving relative IRIs
     pub fn set_base_iri(&mut self, base_iri: String) {
         self.base_iri = Some(base_iri);
     }
-    
+
     /// Validate that an IRI is well-formed
     pub fn validate_iri(&self, iri: &str) -> Result<()> {
         // Check if it's a valid absolute IRI
         if self.is_absolute_iri(iri) {
             return self.validate_absolute_iri(iri);
         }
-        
+
         // Check if it's a prefixed name (CURIE)
         if iri.contains(':') && !iri.starts_with("http://") && !iri.starts_with("https://") {
             return self.validate_prefixed_name(iri);
         }
-        
+
         // Check if it's a relative IRI
         if self.base_iri.is_some() {
             return self.validate_relative_iri(iri);
         }
-        
+
         Err(ShaclError::ShapeParsing(format!(
             "Invalid IRI: '{}' - not absolute, not a valid prefixed name, and no base IRI set",
             iri
         )))
     }
-    
+
     /// Check if an IRI is absolute
     fn is_absolute_iri(&self, iri: &str) -> bool {
         iri.starts_with("http://") || iri.starts_with("https://") || iri.starts_with("urn:")
     }
-    
+
     /// Validate an absolute IRI
     fn validate_absolute_iri(&self, iri: &str) -> Result<()> {
         // Basic IRI validation - check for invalid characters
         if iri.contains(' ') || iri.contains('\t') || iri.contains('\n') || iri.contains('\r') {
             return Err(ShaclError::ShapeParsing(format!(
-                "Invalid IRI '{}': contains whitespace characters", iri
+                "Invalid IRI '{}': contains whitespace characters",
+                iri
             )));
         }
-        
+
         // Check for other invalid characters according to RFC 3987
         let invalid_chars = ['<', '>', '"', '{', '}', '|', '^', '`', '\\'];
         for invalid_char in &invalid_chars {
             if iri.contains(*invalid_char) {
                 return Err(ShaclError::ShapeParsing(format!(
-                    "Invalid IRI '{}': contains invalid character '{}'", iri, invalid_char
+                    "Invalid IRI '{}': contains invalid character '{}'",
+                    iri, invalid_char
                 )));
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Validate a prefixed name (CURIE)
     fn validate_prefixed_name(&self, curie: &str) -> Result<()> {
         if let Some(colon_pos) = curie.find(':') {
             let prefix = &curie[..colon_pos];
             let local_part = &curie[colon_pos + 1..];
-            
+
             // Check if prefix is known
             if !self.prefixes.contains_key(prefix) {
                 return Err(ShaclError::ShapeParsing(format!(
-                    "Unknown prefix '{}' in CURIE '{}'", prefix, curie
+                    "Unknown prefix '{}' in CURIE '{}'",
+                    prefix, curie
                 )));
             }
-            
+
             // Validate local part doesn't contain invalid characters
             if local_part.contains(' ') || local_part.contains('\t') || local_part.contains('\n') {
                 return Err(ShaclError::ShapeParsing(format!(
-                    "Invalid local part in CURIE '{}': contains whitespace", curie
+                    "Invalid local part in CURIE '{}': contains whitespace",
+                    curie
                 )));
             }
-            
+
             Ok(())
         } else {
             Err(ShaclError::ShapeParsing(format!(
-                "Invalid CURIE format: '{}'", curie
+                "Invalid CURIE format: '{}'",
+                curie
             )))
         }
     }
-    
+
     /// Validate a relative IRI
     fn validate_relative_iri(&self, iri: &str) -> Result<()> {
         // Basic validation for relative IRIs
         if iri.contains(' ') || iri.contains('\t') || iri.contains('\n') || iri.contains('\r') {
             return Err(ShaclError::ShapeParsing(format!(
-                "Invalid relative IRI '{}': contains whitespace characters", iri
+                "Invalid relative IRI '{}': contains whitespace characters",
+                iri
             )));
         }
         Ok(())
     }
-    
+
     /// Expand a prefixed IRI or validate and return absolute IRI
     pub fn expand_iri(&self, iri: &str) -> Result<String> {
         // If it's already absolute, validate and return
@@ -476,47 +495,48 @@ impl IriResolver {
             self.validate_absolute_iri(iri)?;
             return Ok(iri.to_string());
         }
-        
+
         // If it's a prefixed name (CURIE), expand it
         if iri.contains(':') && !iri.starts_with("http://") && !iri.starts_with("https://") {
             return self.expand_prefixed_name(iri);
         }
-        
+
         // If it's a relative IRI, resolve against base IRI
         if let Some(base) = &self.base_iri {
             return self.resolve_relative_iri(iri, base);
         }
-        
+
         Err(ShaclError::ShapeParsing(format!(
             "Cannot expand IRI '{}': not absolute, not a valid prefixed name, and no base IRI set",
             iri
         )))
     }
-    
+
     /// Expand a prefixed name (CURIE) to full IRI
     fn expand_prefixed_name(&self, curie: &str) -> Result<String> {
         self.validate_prefixed_name(curie)?;
-        
+
         if let Some(colon_pos) = curie.find(':') {
             let prefix = &curie[..colon_pos];
             let local_part = &curie[colon_pos + 1..];
-            
+
             if let Some(namespace) = self.prefixes.get(prefix) {
                 let expanded = format!("{}{}", namespace, local_part);
                 return Ok(expanded);
             }
         }
-        
+
         Err(ShaclError::ShapeParsing(format!(
-            "Cannot expand prefixed name '{}'", curie
+            "Cannot expand prefixed name '{}'",
+            curie
         )))
     }
-    
+
     /// Resolve a relative IRI against a base IRI
     fn resolve_relative_iri(&self, relative_iri: &str, base_iri: &str) -> Result<String> {
         self.validate_relative_iri(relative_iri)?;
         self.validate_absolute_iri(base_iri)?;
-        
+
         // Simple resolution - just concatenate for now
         // A full implementation would handle RFC 3986 resolution
         let resolved = if base_iri.ends_with('/') || base_iri.ends_with('#') {
@@ -524,26 +544,29 @@ impl IriResolver {
         } else {
             format!("{}/{}", base_iri, relative_iri)
         };
-        
+
         Ok(resolved)
     }
-    
+
     /// Get all known prefixes
     pub fn get_prefixes(&self) -> &std::collections::HashMap<String, String> {
         &self.prefixes
     }
-    
+
     /// Get the namespace for a prefix
     pub fn get_namespace(&self, prefix: &str) -> Option<&String> {
         self.prefixes.get(prefix)
     }
-    
+
     /// Create a NamedNode with IRI validation and expansion
     pub fn create_named_node(&self, iri: &str) -> Result<NamedNode> {
         let expanded_iri = self.expand_iri(iri)?;
-        NamedNode::new(expanded_iri).map_err(|e| ShaclError::ShapeParsing(format!(
-            "Failed to create NamedNode from IRI '{}': {}", iri, e
-        )))
+        NamedNode::new(expanded_iri).map_err(|e| {
+            ShaclError::ShapeParsing(format!(
+                "Failed to create NamedNode from IRI '{}': {}",
+                iri, e
+            ))
+        })
     }
 }
 
@@ -627,21 +650,25 @@ mod tests {
     #[test]
     fn test_iri_resolver_basic() {
         let resolver = IriResolver::new();
-        
+
         // Test absolute IRI validation
         assert!(resolver.validate_iri("http://example.org/test").is_ok());
         assert!(resolver.validate_iri("https://example.org/test").is_ok());
         assert!(resolver.validate_iri("urn:example:test").is_ok());
-        
+
         // Test invalid IRIs
-        assert!(resolver.validate_iri("http://example.org/test with spaces").is_err());
-        assert!(resolver.validate_iri("http://example.org/test<invalid>").is_err());
+        assert!(resolver
+            .validate_iri("http://example.org/test with spaces")
+            .is_err());
+        assert!(resolver
+            .validate_iri("http://example.org/test<invalid>")
+            .is_err());
     }
 
     #[test]
     fn test_iri_resolver_prefixes() {
         let resolver = IriResolver::new();
-        
+
         // Test CURIE expansion
         assert_eq!(
             resolver.expand_iri("sh:NodeShape").unwrap(),
@@ -651,7 +678,7 @@ mod tests {
             resolver.expand_iri("rdf:type").unwrap(),
             "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
         );
-        
+
         // Test unknown prefix
         assert!(resolver.expand_iri("unknown:test").is_err());
     }
@@ -659,7 +686,7 @@ mod tests {
     #[test]
     fn test_iri_resolver_base_iri() {
         let resolver = IriResolver::with_base_iri("http://example.org/base/".to_string());
-        
+
         // Test relative IRI resolution
         assert_eq!(
             resolver.expand_iri("test").unwrap(),
@@ -675,7 +702,7 @@ mod tests {
     fn test_iri_resolver_custom_prefix() {
         let mut resolver = IriResolver::new();
         resolver.add_prefix("ex".to_string(), "http://example.org/vocab#".to_string());
-        
+
         assert_eq!(
             resolver.expand_iri("ex:test").unwrap(),
             "http://example.org/vocab#test"
@@ -685,15 +712,17 @@ mod tests {
     #[test]
     fn test_iri_resolver_named_node_creation() {
         let resolver = IriResolver::new();
-        
+
         // Test creating NamedNode from CURIE
         let node = resolver.create_named_node("sh:NodeShape").unwrap();
         assert_eq!(node.as_str(), "http://www.w3.org/ns/shacl#NodeShape");
-        
+
         // Test creating NamedNode from absolute IRI
-        let node = resolver.create_named_node("http://example.org/test").unwrap();
+        let node = resolver
+            .create_named_node("http://example.org/test")
+            .unwrap();
         assert_eq!(node.as_str(), "http://example.org/test");
-        
+
         // Test invalid IRI
         assert!(resolver.create_named_node("invalid iri").is_err());
     }

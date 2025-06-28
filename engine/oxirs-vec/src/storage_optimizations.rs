@@ -10,7 +10,7 @@ use crate::Vector;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Read, Write, Seek, SeekFrom};
+use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
 /// Compression methods for vector storage
@@ -116,8 +116,10 @@ impl VectorFileHeader {
     pub fn calculate_checksum(&mut self) {
         // Simple CRC32-like checksum
         let mut checksum = 0u32;
-        checksum ^= u32::from_le_bytes([self.magic[0], self.magic[1], self.magic[2], self.magic[3]]);
-        checksum ^= u32::from_le_bytes([self.magic[4], self.magic[5], self.magic[6], self.magic[7]]);
+        checksum ^=
+            u32::from_le_bytes([self.magic[0], self.magic[1], self.magic[2], self.magic[3]]);
+        checksum ^=
+            u32::from_le_bytes([self.magic[4], self.magic[5], self.magic[6], self.magic[7]]);
         checksum ^= self.version;
         checksum ^= self.vector_count as u32;
         checksum ^= self.dimensions as u32;
@@ -165,7 +167,7 @@ impl VectorWriter {
     pub fn new<P: AsRef<Path>>(path: P, config: StorageConfig) -> Result<Self> {
         let file = File::create(path)?;
         let writer = BufWriter::new(file);
-        
+
         let header = VectorFileHeader {
             compression: config.compression,
             compression_level: config.compression_level,
@@ -189,8 +191,11 @@ impl VectorWriter {
         if self.header.dimensions == 0 {
             self.header.dimensions = vector.dimensions;
         } else if self.header.dimensions != vector.dimensions {
-            return Err(anyhow!("Vector dimension mismatch: expected {}, got {}", 
-                self.header.dimensions, vector.dimensions));
+            return Err(anyhow!(
+                "Vector dimension mismatch: expected {}, got {}",
+                self.header.dimensions,
+                vector.dimensions
+            ));
         }
 
         self.current_block.push(vector);
@@ -242,10 +247,10 @@ impl VectorWriter {
 
         // Write block to file
         self.write_block(&block)?;
-        
+
         self.current_block.clear();
         self.blocks_written += 1;
-        
+
         Ok(())
     }
 
@@ -294,11 +299,12 @@ impl VectorWriter {
         self.writer.write_all(&block.vector_count.to_le_bytes())?;
         self.writer.write_all(&block.original_size.to_le_bytes())?;
         self.writer.write_all(&block.checksum.to_le_bytes())?;
-        self.writer.write_all(&(block.data.len() as u32).to_le_bytes())?;
-        
+        self.writer
+            .write_all(&(block.data.len() as u32).to_le_bytes())?;
+
         // Write block data
         self.writer.write_all(&block.data)?;
-        
+
         Ok(())
     }
 
@@ -306,20 +312,20 @@ impl VectorWriter {
     pub fn finalize(mut self) -> Result<()> {
         // Flush any remaining vectors
         self.flush_block()?;
-        
+
         // Update header with final counts
         self.header.vector_count = self.total_vectors;
         self.header.data_offset = std::mem::size_of::<VectorFileHeader>() as u64;
         self.header.calculate_checksum();
-        
+
         // Seek to beginning and write header
         self.writer.get_mut().seek(SeekFrom::Start(0))?;
         let header_bytes = bincode::serialize(&self.header)?;
         self.writer.write_all(&header_bytes)?;
-        
+
         // Flush and close
         self.writer.flush()?;
-        
+
         Ok(())
     }
 }
@@ -337,10 +343,10 @@ impl VectorReader {
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
         let file = File::open(path)?;
         let mut reader = BufReader::new(file);
-        
+
         // Read and verify header
         let header = Self::read_header(&mut reader)?;
-        
+
         Ok(Self {
             reader,
             header,
@@ -353,19 +359,19 @@ impl VectorReader {
     fn read_header(reader: &mut BufReader<File>) -> Result<VectorFileHeader> {
         let mut header_data = vec![0u8; std::mem::size_of::<VectorFileHeader>()];
         reader.read_exact(&mut header_data)?;
-        
+
         let header: VectorFileHeader = bincode::deserialize(&header_data)?;
-        
+
         // Verify magic number
         if &header.magic != b"OXIRSVEC" {
             return Err(anyhow!("Invalid file format: magic number mismatch"));
         }
-        
+
         // Verify checksum
         if !header.verify_checksum() {
             return Err(anyhow!("Header checksum verification failed"));
         }
-        
+
         Ok(header)
     }
 
@@ -383,13 +389,13 @@ impl VectorReader {
         // For simplicity, reading one vector at a time
         // In production, implement block-wise reading for efficiency
         let mut vector_data = vec![0f32; self.header.dimensions];
-        
+
         for i in 0..self.header.dimensions {
             let mut bytes = [0u8; 4];
             self.reader.read_exact(&mut bytes)?;
             vector_data[i] = f32::from_le_bytes(bytes);
         }
-        
+
         self.vectors_read += 1;
         Ok(Some(Vector::new(vector_data)))
     }
@@ -397,7 +403,7 @@ impl VectorReader {
     /// Read multiple vectors
     pub fn read_vectors(&mut self, count: usize) -> Result<Vec<Vector>> {
         let mut vectors = Vec::with_capacity(count);
-        
+
         for _ in 0..count {
             if let Some(vector) = self.read_vector()? {
                 vectors.push(vector);
@@ -405,7 +411,7 @@ impl VectorReader {
                 break;
             }
         }
-        
+
         Ok(vectors)
     }
 
@@ -424,7 +430,7 @@ impl VectorReader {
         let byte_offset = self.header.data_offset + (index * self.header.dimensions as u64 * 4);
         self.reader.get_mut().seek(SeekFrom::Start(byte_offset))?;
         self.vectors_read = index;
-        
+
         Ok(())
     }
 }
@@ -441,16 +447,16 @@ impl MmapVectorFile {
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
         let file = File::open(path)?;
         let mmap = unsafe { memmap2::Mmap::map(&file)? };
-        
+
         // Read header from memory map
         let header_bytes = &mmap[0..std::mem::size_of::<VectorFileHeader>()];
         let header: VectorFileHeader = bincode::deserialize(header_bytes)?;
-        
+
         // Verify header
         if &header.magic != b"OXIRSVEC" {
             return Err(anyhow!("Invalid file format"));
         }
-        
+
         if !header.verify_checksum() {
             return Err(anyhow!("Header checksum verification failed"));
         }
@@ -468,27 +474,28 @@ impl MmapVectorFile {
             return Err(anyhow!("Vector index out of bounds"));
         }
 
-        let offset = self.header.data_offset as usize + (index as usize * self.header.dimensions * 4);
+        let offset =
+            self.header.data_offset as usize + (index as usize * self.header.dimensions * 4);
         let end_offset = offset + (self.header.dimensions * 4);
-        
+
         if end_offset > self.mmap.len() {
             return Err(anyhow!("Vector data extends beyond file"));
         }
 
         let vector_bytes = &self.mmap[offset..end_offset];
         let mut vector_data = vec![0f32; self.header.dimensions];
-        
+
         for (i, chunk) in vector_bytes.chunks_exact(4).enumerate() {
             vector_data[i] = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
         }
-        
+
         Ok(Vector::new(vector_data))
     }
 
     /// Get slice of vectors
     pub fn get_vectors(&self, start: u64, count: usize) -> Result<Vec<Vector>> {
         let mut vectors = Vec::with_capacity(count);
-        
+
         for i in 0..count {
             let index = start + i as u64;
             if index >= self.header.vector_count {
@@ -496,7 +503,7 @@ impl MmapVectorFile {
             }
             vectors.push(self.get_vector(index)?);
         }
-        
+
         Ok(vectors)
     }
 
@@ -518,14 +525,14 @@ impl StorageUtils {
     /// Convert vectors to binary format
     pub fn vectors_to_binary(vectors: &[Vector]) -> Result<Vec<u8>> {
         let mut data = Vec::new();
-        
+
         for vector in vectors {
             let vector_f32 = vector.as_f32();
             for value in vector_f32 {
                 data.extend_from_slice(&value.to_le_bytes());
             }
         }
-        
+
         Ok(data)
     }
 
@@ -537,28 +544,32 @@ impl StorageUtils {
 
         let vector_count = data.len() / (dimensions * 4);
         let mut vectors = Vec::with_capacity(vector_count);
-        
+
         for i in 0..vector_count {
             let start = i * dimensions * 4;
             let end = start + dimensions * 4;
             let vector_bytes = &data[start..end];
-            
+
             let mut vector_data = vec![0f32; dimensions];
             for (j, chunk) in vector_bytes.chunks_exact(4).enumerate() {
                 vector_data[j] = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
             }
-            
+
             vectors.push(Vector::new(vector_data));
         }
-        
+
         Ok(vectors)
     }
 
     /// Estimate storage size for vectors
-    pub fn estimate_storage_size(vector_count: usize, dimensions: usize, compression: CompressionType) -> usize {
+    pub fn estimate_storage_size(
+        vector_count: usize,
+        dimensions: usize,
+        compression: CompressionType,
+    ) -> usize {
         let raw_size = vector_count * dimensions * 4; // 4 bytes per f32
         let header_size = std::mem::size_of::<VectorFileHeader>();
-        
+
         let compressed_size = match compression {
             CompressionType::None => raw_size,
             CompressionType::Lz4 => (raw_size as f64 * 0.6) as usize, // ~40% compression
@@ -567,7 +578,7 @@ impl StorageUtils {
             CompressionType::Gzip => (raw_size as f64 * 0.5) as usize, // ~50% compression
             CompressionType::VectorQuantization => (raw_size as f64 * 0.25) as usize, // ~75% compression
         };
-        
+
         header_size + compressed_size
     }
 
@@ -575,7 +586,7 @@ impl StorageUtils {
     pub fn benchmark_compression(vectors: &[Vector]) -> Result<Vec<(CompressionType, f64, usize)>> {
         let binary_data = Self::vectors_to_binary(vectors)?;
         let original_size = binary_data.len();
-        
+
         let algorithms = [
             CompressionType::None,
             CompressionType::Lz4,
@@ -583,12 +594,12 @@ impl StorageUtils {
             CompressionType::Brotli,
             CompressionType::Gzip,
         ];
-        
+
         let mut results = Vec::new();
-        
+
         for &algorithm in &algorithms {
             let start_time = std::time::Instant::now();
-            
+
             // Simulate compression (in real implementation, use actual compression)
             let compressed_size = match algorithm {
                 CompressionType::None => original_size,
@@ -598,11 +609,11 @@ impl StorageUtils {
                 CompressionType::Gzip => (original_size as f64 * 0.5) as usize,
                 CompressionType::VectorQuantization => (original_size as f64 * 0.25) as usize,
             };
-            
+
             let duration = start_time.elapsed().as_secs_f64();
             results.push((algorithm, duration, compressed_size));
         }
-        
+
         Ok(results)
     }
 }
@@ -618,9 +629,9 @@ mod tests {
         header.vector_count = 1000;
         header.dimensions = 128;
         header.calculate_checksum();
-        
+
         assert!(header.verify_checksum());
-        
+
         // Modify header and verify checksum fails
         header.vector_count = 2000;
         assert!(!header.verify_checksum());
@@ -666,13 +677,13 @@ mod tests {
         {
             let mut reader = VectorReader::open(file_path)?;
             let metadata = reader.metadata();
-            
+
             assert_eq!(metadata.vector_count, 3);
             assert_eq!(metadata.dimensions, 4);
 
             let vectors = reader.read_all()?;
             assert_eq!(vectors.len(), 3);
-            
+
             assert_eq!(vectors[0].as_f32(), &[1.0, 2.0, 3.0, 4.0]);
             assert_eq!(vectors[1].as_f32(), &[5.0, 6.0, 7.0, 8.0]);
             assert_eq!(vectors[2].as_f32(), &[9.0, 10.0, 11.0, 12.0]);
@@ -691,11 +702,19 @@ mod tests {
 
         let results = StorageUtils::benchmark_compression(&vectors).unwrap();
         assert_eq!(results.len(), 5); // 5 compression algorithms
-        
+
         // Verify that some compression types reduce size
-        let none_size = results.iter().find(|(t, _, _)| *t == CompressionType::None).unwrap().2;
-        let zstd_size = results.iter().find(|(t, _, _)| *t == CompressionType::Zstd).unwrap().2;
-        
+        let none_size = results
+            .iter()
+            .find(|(t, _, _)| *t == CompressionType::None)
+            .unwrap()
+            .2;
+        let zstd_size = results
+            .iter()
+            .find(|(t, _, _)| *t == CompressionType::Zstd)
+            .unwrap()
+            .2;
+
         assert!(zstd_size < none_size);
     }
 }

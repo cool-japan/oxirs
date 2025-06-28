@@ -1,15 +1,15 @@
 //! Custom HNSW (Hierarchical Navigable Small World) implementation
-//! 
+//!
 //! This module provides a pure Rust implementation of the HNSW algorithm
 //! for approximate nearest neighbor search.
 
-use crate::{Vector, VectorIndex, similarity::SimilarityMetric};
+use crate::{similarity::SimilarityMetric, Vector, VectorIndex};
 use anyhow::Result;
+use parking_lot::RwLock;
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering as AtomicOrdering};
 use std::sync::Arc;
-use parking_lot::RwLock;
 
 /// Configuration for HNSW index
 #[derive(Debug, Clone)]
@@ -72,7 +72,7 @@ impl HnswConfig {
             ..Default::default()
         }
     }
-    
+
     /// Create a memory-optimized configuration
     pub fn memory_optimized() -> Self {
         Self {
@@ -114,7 +114,9 @@ impl PartialOrd for Candidate {
 impl Ord for Candidate {
     fn cmp(&self, other: &Self) -> Ordering {
         // Reverse ordering for min-heap behavior
-        other.distance.partial_cmp(&self.distance)
+        other
+            .distance
+            .partial_cmp(&self.distance)
             .unwrap_or(Ordering::Equal)
             .then_with(|| self.id.cmp(&other.id))
     }
@@ -187,15 +189,25 @@ impl Clone for HnswPerformanceStats {
         Self {
             total_searches: AtomicU64::new(self.total_searches.load(AtomicOrdering::Relaxed)),
             total_insertions: AtomicU64::new(self.total_insertions.load(AtomicOrdering::Relaxed)),
-            avg_search_time_us: AtomicU64::new(self.avg_search_time_us.load(AtomicOrdering::Relaxed)),
-            avg_distance_calculations: AtomicU64::new(self.avg_distance_calculations.load(AtomicOrdering::Relaxed)),
+            avg_search_time_us: AtomicU64::new(
+                self.avg_search_time_us.load(AtomicOrdering::Relaxed),
+            ),
+            avg_distance_calculations: AtomicU64::new(
+                self.avg_distance_calculations.load(AtomicOrdering::Relaxed),
+            ),
             cache_hits: AtomicU64::new(self.cache_hits.load(AtomicOrdering::Relaxed)),
             cache_misses: AtomicU64::new(self.cache_misses.load(AtomicOrdering::Relaxed)),
             simd_operations: AtomicU64::new(self.simd_operations.load(AtomicOrdering::Relaxed)),
             parallel_searches: AtomicU64::new(self.parallel_searches.load(AtomicOrdering::Relaxed)),
-            parallel_operations: AtomicU64::new(self.parallel_operations.load(AtomicOrdering::Relaxed)),
-            prefetch_operations: AtomicU64::new(self.prefetch_operations.load(AtomicOrdering::Relaxed)),
-            memory_allocations: AtomicU64::new(self.memory_allocations.load(AtomicOrdering::Relaxed)),
+            parallel_operations: AtomicU64::new(
+                self.parallel_operations.load(AtomicOrdering::Relaxed),
+            ),
+            prefetch_operations: AtomicU64::new(
+                self.prefetch_operations.load(AtomicOrdering::Relaxed),
+            ),
+            memory_allocations: AtomicU64::new(
+                self.memory_allocations.load(AtomicOrdering::Relaxed),
+            ),
             lock_contentions: AtomicU64::new(self.lock_contentions.load(AtomicOrdering::Relaxed)),
         }
     }
@@ -206,17 +218,17 @@ impl HnswPerformanceStats {
     pub fn get_total_searches(&self) -> u64 {
         self.total_searches.load(AtomicOrdering::Relaxed)
     }
-    
+
     /// Get average search time as f64 microseconds
     pub fn get_avg_search_time_us(&self) -> f64 {
         self.avg_search_time_us.load(AtomicOrdering::Relaxed) as f64
     }
-    
+
     /// Get average distance calculations as f64
     pub fn get_avg_distance_calculations(&self) -> f64 {
         self.avg_distance_calculations.load(AtomicOrdering::Relaxed) as f64
     }
-    
+
     /// Get cache hit ratio
     pub fn cache_hit_ratio(&self) -> f64 {
         let hits = self.cache_hits.load(AtomicOrdering::Relaxed);
@@ -227,12 +239,12 @@ impl HnswPerformanceStats {
             hits as f64 / (hits + misses) as f64
         }
     }
-    
+
     /// Get average search time in microseconds
     pub fn avg_search_time(&self) -> u64 {
         self.avg_search_time_us.load(AtomicOrdering::Relaxed)
     }
-    
+
     /// Get parallel operation efficiency ratio
     pub fn parallel_efficiency(&self) -> f64 {
         let total = self.total_searches.load(AtomicOrdering::Relaxed);
@@ -256,13 +268,12 @@ impl Node {
             access_count: 0,
         }
     }
-    
+
     /// Increment access count for cache optimization
     fn record_access(&mut self) {
         self.access_count = self.access_count.saturating_add(1);
     }
 }
-
 
 /// HNSW index implementation
 pub struct HnswIndex {
@@ -291,24 +302,27 @@ impl HnswIndex {
             distance_calculations: AtomicU64::new(0),
         }
     }
-    
+
     /// Get performance statistics
     pub fn get_stats(&self) -> &HnswPerformanceStats {
         &self.stats
     }
-    
+
     /// Reset performance statistics
     pub fn reset_stats(&mut self) {
         self.stats = HnswPerformanceStats::default();
         self.distance_calculations.store(0, AtomicOrdering::Relaxed);
     }
-    
+
     /// Optimized similarity calculation using SIMD when available
     fn similarity_optimized(&self, v1: &[f32], v2: &[f32]) -> f32 {
-        self.distance_calculations.fetch_add(1, AtomicOrdering::Relaxed);
-        
+        self.distance_calculations
+            .fetch_add(1, AtomicOrdering::Relaxed);
+
         if self.config.enable_simd {
-            self.stats.simd_operations.fetch_add(1, AtomicOrdering::Relaxed);
+            self.stats
+                .simd_operations
+                .fetch_add(1, AtomicOrdering::Relaxed);
             // Use oxirs-core SIMD operations through the similarity metric
             self.config.metric.similarity(v1, v2).unwrap_or(0.0)
         } else {
@@ -316,23 +330,26 @@ impl HnswIndex {
             self.config.metric.similarity(v1, v2).unwrap_or(0.0)
         }
     }
-    
+
     /// Batch similarity calculation with SIMD optimizations
     fn batch_similarity(&self, query: &[f32], candidates: &[usize]) -> Vec<f32> {
         let mut similarities = Vec::with_capacity(candidates.len());
-        
+
         if self.config.enable_simd && candidates.len() > 4 {
             // Use SIMD batch processing via oxirs-core
-            self.stats.simd_operations.fetch_add(1, AtomicOrdering::Relaxed);
-            
+            self.stats
+                .simd_operations
+                .fetch_add(1, AtomicOrdering::Relaxed);
+
             // Prefetch memory if enabled
             if self.config.enable_prefetch {
                 self.prefetch_candidates(candidates);
             }
-            
+
             for &candidate_id in candidates {
                 if candidate_id < self.nodes.len() {
-                    let similarity = self.similarity_optimized(query, &self.nodes[candidate_id].vector_data_f32);
+                    let similarity =
+                        self.similarity_optimized(query, &self.nodes[candidate_id].vector_data_f32);
                     similarities.push(similarity);
                 } else {
                     similarities.push(0.0);
@@ -342,25 +359,28 @@ impl HnswIndex {
             // Regular processing
             for &candidate_id in candidates {
                 if candidate_id < self.nodes.len() {
-                    let similarity = self.similarity_optimized(query, &self.nodes[candidate_id].vector_data_f32);
+                    let similarity =
+                        self.similarity_optimized(query, &self.nodes[candidate_id].vector_data_f32);
                     similarities.push(similarity);
                 } else {
                     similarities.push(0.0);
                 }
             }
         }
-        
+
         similarities
     }
-    
+
     /// Prefetch memory for better cache performance
     fn prefetch_candidates(&self, candidates: &[usize]) {
         if !self.config.enable_prefetch {
             return;
         }
-        
-        self.stats.prefetch_operations.fetch_add(1, AtomicOrdering::Relaxed);
-        
+
+        self.stats
+            .prefetch_operations
+            .fetch_add(1, AtomicOrdering::Relaxed);
+
         for &candidate_id in candidates.iter().take(self.config.prefetch_distance) {
             if candidate_id < self.nodes.len() {
                 // Prefetch the vector data for better cache performance
@@ -414,7 +434,8 @@ impl HnswIndex {
         // Initialize with entry points
         for ep in entry_points {
             if ep < self.nodes.len() {
-                let distance = 1.0 - self.similarity_optimized(&query_f32, &self.nodes[ep].vector_data_f32);
+                let distance =
+                    1.0 - self.similarity_optimized(&query_f32, &self.nodes[ep].vector_data_f32);
                 let candidate = Candidate { distance, id: ep };
                 candidates.push(candidate.clone());
                 w.push(std::cmp::Reverse(candidate));
@@ -424,7 +445,7 @@ impl HnswIndex {
 
         while let Some(candidate) = candidates.pop() {
             let lowerbound = w.peek().map(|c| c.0.distance).unwrap_or(f32::INFINITY);
-            
+
             if candidate.distance > lowerbound {
                 break;
             }
@@ -434,8 +455,15 @@ impl HnswIndex {
                 for &neighbor_id in &self.nodes[candidate.id].connections[layer] {
                     if !visited.contains(&neighbor_id) && neighbor_id < self.nodes.len() {
                         visited.insert(neighbor_id);
-                        let distance = 1.0 - self.similarity_optimized(&query_f32, &self.nodes[neighbor_id].vector_data_f32);
-                        let neighbor_candidate = Candidate { distance, id: neighbor_id };
+                        let distance = 1.0
+                            - self.similarity_optimized(
+                                &query_f32,
+                                &self.nodes[neighbor_id].vector_data_f32,
+                            );
+                        let neighbor_candidate = Candidate {
+                            distance,
+                            id: neighbor_id,
+                        };
 
                         if distance < lowerbound || w.len() < num_closest {
                             candidates.push(neighbor_candidate.clone());
@@ -453,11 +481,14 @@ impl HnswIndex {
         w.into_iter().map(|c| c.0).collect()
     }
 
-
     /// Select M neighbors using a simple heuristic
     fn select_neighbors_simple(&self, candidates: Vec<Candidate>, m: usize) -> Vec<usize> {
         let mut selected = candidates;
-        selected.sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap_or(Ordering::Equal));
+        selected.sort_by(|a, b| {
+            a.distance
+                .partial_cmp(&b.distance)
+                .unwrap_or(Ordering::Equal)
+        });
         selected.into_iter().take(m).map(|c| c.id).collect()
     }
 
@@ -480,8 +511,11 @@ impl HnswIndex {
         }
 
         // First, collect the current connections and calculate distances
-        let current_connections: Vec<usize> = self.nodes[node_id].connections[layer].iter().cloned().collect();
-        
+        let current_connections: Vec<usize> = self.nodes[node_id].connections[layer]
+            .iter()
+            .cloned()
+            .collect();
+
         if current_connections.len() <= max_conn {
             return;
         }
@@ -489,27 +523,40 @@ impl HnswIndex {
         // Calculate distances to all connected nodes
         let mut candidates = Vec::new();
         let node_vector = self.nodes[node_id].vector.clone();
-        
+
         for &connected_id in &current_connections {
             if connected_id < self.nodes.len() {
-                let distance = 1.0 - self.similarity(&node_vector, &self.nodes[connected_id].vector);
-                candidates.push(Candidate { distance, id: connected_id });
+                let distance =
+                    1.0 - self.similarity(&node_vector, &self.nodes[connected_id].vector);
+                candidates.push(Candidate {
+                    distance,
+                    id: connected_id,
+                });
             }
         }
 
         // Keep only the closest ones
-        candidates.sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap_or(Ordering::Equal));
-        let to_keep: HashSet<usize> = candidates.into_iter().take(max_conn).map(|c| c.id).collect();
-        
+        candidates.sort_by(|a, b| {
+            a.distance
+                .partial_cmp(&b.distance)
+                .unwrap_or(Ordering::Equal)
+        });
+        let to_keep: HashSet<usize> = candidates
+            .into_iter()
+            .take(max_conn)
+            .map(|c| c.id)
+            .collect();
+
         // Remove connections that are not in the keep set
-        let to_remove: Vec<usize> = current_connections.into_iter()
+        let to_remove: Vec<usize> = current_connections
+            .into_iter()
             .filter(|id| !to_keep.contains(id))
             .collect();
-            
+
         for remove_id in to_remove {
             // Remove from current node
             self.nodes[node_id].connections[layer].remove(&remove_id);
-            
+
             // Remove the reverse connection too
             if remove_id < self.nodes.len() && layer < self.nodes[remove_id].connections.len() {
                 self.nodes[remove_id].connections[layer].remove(&node_id);
@@ -522,7 +569,7 @@ impl VectorIndex for HnswIndex {
     fn insert(&mut self, uri: String, vector: Vector) -> Result<()> {
         let node_id = self.nodes.len();
         let level = self.get_random_level();
-        
+
         // Create new node
         let node = Node::new(uri.clone(), vector.clone(), level);
         self.nodes.push(node);
@@ -540,16 +587,27 @@ impl VectorIndex for HnswIndex {
         // Search from top layer down to level + 1
         let max_level = self.nodes[entry_point].connections.len().saturating_sub(1);
         for layer in (level + 1..=max_level).rev() {
-            current_closest = self.search_layer(&vector, current_closest, 1, layer)
-                .into_iter().map(|c| c.id).collect();
+            current_closest = self
+                .search_layer(&vector, current_closest, 1, layer)
+                .into_iter()
+                .map(|c| c.id)
+                .collect();
         }
 
         // Search and connect for layers from level down to 0
         for layer in (0..=level).rev() {
-            let ef = if layer == 0 { self.config.ef_construction } else { self.config.ef_construction };
+            let ef = if layer == 0 {
+                self.config.ef_construction
+            } else {
+                self.config.ef_construction
+            };
             let candidates = self.search_layer(&vector, current_closest.clone(), ef, layer);
-            
-            let m = if layer == 0 { self.config.m_l0 } else { self.config.m };
+
+            let m = if layer == 0 {
+                self.config.m_l0
+            } else {
+                self.config.m
+            };
             let selected = self.select_neighbors_simple(candidates.clone(), m);
 
             // Add connections
@@ -559,7 +617,11 @@ impl VectorIndex for HnswIndex {
 
             // Prune connections for neighbors if needed
             for &neighbor_id in &selected {
-                let max_conn = if layer == 0 { self.config.m_l0 } else { self.config.m };
+                let max_conn = if layer == 0 {
+                    self.config.m_l0
+                } else {
+                    self.config.m
+                };
                 self.prune_connections(neighbor_id, layer, max_conn);
             }
 
@@ -580,7 +642,9 @@ impl VectorIndex for HnswIndex {
         }
 
         // Update search statistics
-        self.stats.total_searches.fetch_add(1, AtomicOrdering::Relaxed);
+        self.stats
+            .total_searches
+            .fetch_add(1, AtomicOrdering::Relaxed);
         let start_time = std::time::Instant::now();
 
         let entry_point = self.entry_point.unwrap();
@@ -595,7 +659,9 @@ impl VectorIndex for HnswIndex {
             } else {
                 self.search_layer(query, current_closest, 1, layer)
             }
-            .into_iter().map(|c| c.id).collect();
+            .into_iter()
+            .map(|c| c.id)
+            .collect();
         }
 
         // Search layer 0 with ef
@@ -609,7 +675,8 @@ impl VectorIndex for HnswIndex {
         let mut results: Vec<(String, f32)> = candidates
             .into_iter()
             .map(|c| {
-                let similarity = self.similarity_optimized(&query_f32, &self.nodes[c.id].vector_data_f32);
+                let similarity =
+                    self.similarity_optimized(&query_f32, &self.nodes[c.id].vector_data_f32);
                 (self.nodes[c.id].uri.clone(), similarity)
             })
             .collect();
@@ -621,7 +688,7 @@ impl VectorIndex for HnswIndex {
         let search_time = start_time.elapsed().as_micros() as u64;
         self.stats.avg_search_time_us.store(
             (self.stats.avg_search_time_us.load(AtomicOrdering::Relaxed) + search_time) / 2,
-            AtomicOrdering::Relaxed
+            AtomicOrdering::Relaxed,
         );
 
         Ok(results)
@@ -629,13 +696,15 @@ impl VectorIndex for HnswIndex {
 
     fn search_threshold(&self, query: &Vector, threshold: f32) -> Result<Vec<(String, f32)>> {
         let all_results = self.search_knn(query, self.nodes.len())?;
-        Ok(all_results.into_iter()
+        Ok(all_results
+            .into_iter()
             .filter(|(_, similarity)| *similarity >= threshold)
             .collect())
     }
-    
+
     fn get_vector(&self, uri: &str) -> Option<&Vector> {
-        self.uri_to_id.get(uri)
+        self.uri_to_id
+            .get(uri)
             .and_then(|&id| self.nodes.get(id))
             .filter(|node| !node.uri.is_empty()) // Skip deleted nodes
             .map(|node| &node.vector)
@@ -657,7 +726,10 @@ impl HnswIndex {
         // Handle entry point update if we're deleting the entry point
         if self.entry_point == Some(node_id) {
             // Find a new entry point from remaining nodes
-            self.entry_point = self.nodes.iter().enumerate()
+            self.entry_point = self
+                .nodes
+                .iter()
+                .enumerate()
                 .filter(|(id, node)| *id != node_id && !node.connections.is_empty())
                 .map(|(id, _)| id)
                 .next();
@@ -667,7 +739,9 @@ impl HnswIndex {
         for layer in 0..self.nodes[node_id].connections.len() {
             let connections = self.nodes[node_id].connections[layer].clone();
             for &connected_id in &connections {
-                if connected_id < self.nodes.len() && layer < self.nodes[connected_id].connections.len() {
+                if connected_id < self.nodes.len()
+                    && layer < self.nodes[connected_id].connections.len()
+                {
                     self.nodes[connected_id].connections[layer].remove(&node_id);
                 }
             }
@@ -720,7 +794,9 @@ impl HnswIndex {
         }
 
         // Update entry point
-        self.entry_point = self.entry_point.and_then(|old_ep| old_to_new.get(&old_ep).copied());
+        self.entry_point = self
+            .entry_point
+            .and_then(|old_ep| old_to_new.get(&old_ep).copied());
 
         // Replace with optimized structures
         self.nodes = new_nodes;
@@ -739,31 +815,34 @@ impl HnswIndex {
     ) -> Vec<Candidate> {
         use parking_lot::RwLock;
         use std::sync::atomic::{AtomicBool, AtomicUsize};
-        
+
         if !self.config.enable_parallel || entry_points.len() <= 1 {
             return self.search_layer(query, entry_points, num_closest, layer);
         }
 
-        self.stats.parallel_operations.fetch_add(1, AtomicOrdering::Relaxed);
-        
+        self.stats
+            .parallel_operations
+            .fetch_add(1, AtomicOrdering::Relaxed);
+
         let query_f32 = query.as_f32();
         let visited = Arc::new(RwLock::new(HashSet::new()));
         let candidates = Arc::new(RwLock::new(BinaryHeap::new()));
         let w = Arc::new(RwLock::new(BinaryHeap::new()));
         let active_workers = Arc::new(AtomicUsize::new(0));
         let should_stop = Arc::new(AtomicBool::new(false));
-        
+
         // Initialize with entry points
         for ep in entry_points {
             if ep < self.nodes.len() {
-                let distance = 1.0 - self.similarity_optimized(&query_f32, &self.nodes[ep].vector_data_f32);
+                let distance =
+                    1.0 - self.similarity_optimized(&query_f32, &self.nodes[ep].vector_data_f32);
                 let candidate = Candidate { distance, id: ep };
-                
+
                 {
                     let mut c = candidates.write();
                     let mut w_guard = w.write();
                     let mut v = visited.write();
-                    
+
                     c.push(candidate.clone());
                     w_guard.push(std::cmp::Reverse(candidate));
                     v.insert(ep);
@@ -774,40 +853,48 @@ impl HnswIndex {
         // Enhanced parallel processing with work stealing
         let max_iterations = 1000;
         let chunk_size = 8;
-        
+
         for iteration in 0..max_iterations {
             if should_stop.load(AtomicOrdering::Acquire) {
                 break;
             }
-            
+
             let next_candidate = {
                 let mut c = candidates.write();
                 c.pop()
             };
-            
+
             let candidate = match next_candidate {
                 Some(c) => c,
                 None => break,
             };
-            
+
             let lowerbound = {
                 let w_guard = w.read();
-                w_guard.peek().map(|c| c.0.distance).unwrap_or(f32::INFINITY)
+                w_guard
+                    .peek()
+                    .map(|c| c.0.distance)
+                    .unwrap_or(f32::INFINITY)
             };
-            
+
             if candidate.distance > lowerbound {
                 break;
             }
-            
+
             // Process neighbors with enhanced parallel execution
             if layer < self.nodes[candidate.id].connections.len() {
                 let neighbors: Vec<usize> = self.nodes[candidate.id].connections[layer]
-                    .iter().cloned().collect();
-                
+                    .iter()
+                    .cloned()
+                    .collect();
+
                 if neighbors.len() > chunk_size * 2 {
                     // Parallel processing for large neighbor sets using oxirs-core
-                    active_workers.store(neighbors.len().div_ceil(chunk_size), AtomicOrdering::Release);
-                    
+                    active_workers.store(
+                        neighbors.len().div_ceil(chunk_size),
+                        AtomicOrdering::Release,
+                    );
+
                     // Process neighbors in parallel chunks
                     self.process_neighbors_parallel(
                         &neighbors,
@@ -818,7 +905,7 @@ impl HnswIndex {
                         &candidates,
                         &w,
                         &active_workers,
-                        &should_stop
+                        &should_stop,
                     );
                 } else {
                     // Sequential processing for small neighbor sets
@@ -828,17 +915,20 @@ impl HnswIndex {
                         num_closest,
                         &visited,
                         &candidates,
-                        &w
+                        &w,
                     );
                 }
             }
         }
-        
+
         // Convert result to Vec<Candidate>
         let w_final = w.read();
-        w_final.iter().map(|rev_candidate| rev_candidate.0.clone()).collect()
+        w_final
+            .iter()
+            .map(|rev_candidate| rev_candidate.0.clone())
+            .collect()
     }
-    
+
     /// Process neighbors in parallel chunks using work-stealing
     fn process_neighbors_parallel(
         &self,
@@ -850,20 +940,20 @@ impl HnswIndex {
         candidates: &Arc<RwLock<BinaryHeap<Candidate>>>,
         w: &Arc<RwLock<BinaryHeap<std::cmp::Reverse<Candidate>>>>,
         _active_workers: &Arc<AtomicUsize>,
-        _should_stop: &Arc<AtomicBool>
+        _should_stop: &Arc<AtomicBool>,
     ) {
         // Create chunks of neighbors for processing
         let chunks: Vec<&[usize]> = neighbors.chunks(chunk_size).collect();
-        
+
         // Process chunks sequentially (parallel processing removed)
         let results: Vec<Vec<Candidate>> = chunks.iter().map(|chunk| {
             let mut local_candidates = Vec::new();
-            
+
             for neighbor_id in chunk.iter() {
                 if *neighbor_id >= self.nodes.len() {
                     continue;
                 }
-                
+
                 // Check if already visited (lock-free check first)
                 let should_process = {
                     let mut v = visited.write();
@@ -874,32 +964,42 @@ impl HnswIndex {
                         false
                     }
                 };
-                
+
                 if should_process {
-                    let distance = 1.0 - self.similarity_optimized(query_f32, &self.nodes[*neighbor_id].vector_data_f32);
-                    local_candidates.push(Candidate { distance, id: *neighbor_id });
+                    let distance = 1.0
+                        - self.similarity_optimized(
+                            query_f32,
+                            &self.nodes[*neighbor_id].vector_data_f32,
+                        );
+                    local_candidates.push(Candidate {
+                        distance,
+                        id: *neighbor_id,
+                    });
                 }
             }
-            
+
             local_candidates
         });
-        
+
         // Merge results back into main data structures
         for local_candidates in results {
             for neighbor_candidate in local_candidates {
                 let should_add = {
                     let w_guard = w.read();
-                    let lowerbound = w_guard.peek().map(|c| c.0.distance).unwrap_or(f32::INFINITY);
+                    let lowerbound = w_guard
+                        .peek()
+                        .map(|c| c.0.distance)
+                        .unwrap_or(f32::INFINITY);
                     neighbor_candidate.distance < lowerbound || w_guard.len() < num_closest
                 };
-                
+
                 if should_add {
                     let mut c = candidates.write();
                     let mut w_guard = w.write();
-                    
+
                     c.push(neighbor_candidate.clone());
                     w_guard.push(std::cmp::Reverse(neighbor_candidate));
-                    
+
                     if w_guard.len() > num_closest {
                         w_guard.pop();
                     }
@@ -907,7 +1007,7 @@ impl HnswIndex {
             }
         }
     }
-    
+
     /// Process neighbors sequentially for small sets
     fn process_neighbors_sequential(
         &self,
@@ -916,13 +1016,13 @@ impl HnswIndex {
         num_closest: usize,
         visited: &Arc<RwLock<HashSet<usize>>>,
         candidates: &Arc<RwLock<BinaryHeap<Candidate>>>,
-        w: &Arc<RwLock<BinaryHeap<std::cmp::Reverse<Candidate>>>>
+        w: &Arc<RwLock<BinaryHeap<std::cmp::Reverse<Candidate>>>>,
     ) {
         for &neighbor_id in neighbors {
             if neighbor_id >= self.nodes.len() {
                 continue;
             }
-            
+
             let should_process = {
                 let mut v = visited.write();
                 if !v.contains(&neighbor_id) {
@@ -932,24 +1032,32 @@ impl HnswIndex {
                     false
                 }
             };
-            
+
             if should_process {
-                let distance = 1.0 - self.similarity_optimized(query_f32, &self.nodes[neighbor_id].vector_data_f32);
-                let neighbor_candidate = Candidate { distance, id: neighbor_id };
-                
+                let distance = 1.0
+                    - self
+                        .similarity_optimized(query_f32, &self.nodes[neighbor_id].vector_data_f32);
+                let neighbor_candidate = Candidate {
+                    distance,
+                    id: neighbor_id,
+                };
+
                 let should_add = {
                     let w_guard = w.read();
-                    let lowerbound = w_guard.peek().map(|c| c.0.distance).unwrap_or(f32::INFINITY);
+                    let lowerbound = w_guard
+                        .peek()
+                        .map(|c| c.0.distance)
+                        .unwrap_or(f32::INFINITY);
                     distance < lowerbound || w_guard.len() < num_closest
                 };
-                
+
                 if should_add {
                     let mut c = candidates.write();
                     let mut w_guard = w.write();
-                    
+
                     c.push(neighbor_candidate.clone());
                     w_guard.push(std::cmp::Reverse(neighbor_candidate));
-                    
+
                     if w_guard.len() > num_closest {
                         w_guard.pop();
                     }
@@ -964,22 +1072,27 @@ impl HnswIndex {
             return self.batch_similarity(query, candidates);
         }
 
-        self.stats.parallel_operations.fetch_add(1, AtomicOrdering::Relaxed);
-        
+        self.stats
+            .parallel_operations
+            .fetch_add(1, AtomicOrdering::Relaxed);
+
         // Process in chunks for optimal cache usage
         let chunk_size = 32; // Process in chunks of 32 for optimal cache usage
         let chunks: Vec<&[usize]> = candidates.chunks(chunk_size).collect();
-        
+
         // Sequential calculation of similarities
         let results: Vec<Vec<f32>> = chunks.iter().map(|chunk| {
             let mut local_results = Vec::with_capacity(chunk.len());
-            
+
             // Process chunk with SIMD optimizations when possible
             if self.config.enable_simd && chunk.len() >= 8 {
                 // Batch SIMD processing
                 for candidate_id in chunk.iter() {
                     if *candidate_id < self.nodes.len() {
-                        let similarity = self.similarity_optimized(query, &self.nodes[*candidate_id].vector_data_f32);
+                        let similarity = self.similarity_optimized(
+                            query,
+                            &self.nodes[*candidate_id].vector_data_f32,
+                        );
                         local_results.push(similarity);
                     } else {
                         local_results.push(0.0);
@@ -989,39 +1102,55 @@ impl HnswIndex {
                 // Regular processing for smaller chunks
                 for candidate_id in chunk.iter() {
                     if *candidate_id < self.nodes.len() {
-                        let similarity = self.similarity_optimized(query, &self.nodes[*candidate_id].vector_data_f32);
+                        let similarity = self.similarity_optimized(
+                            query,
+                            &self.nodes[*candidate_id].vector_data_f32,
+                        );
                         local_results.push(similarity);
                     } else {
                         local_results.push(0.0);
                     }
                 }
             }
-            
+
             local_results
         });
-        
+
         // Flatten results
         results.into_iter().flatten().collect()
     }
 
     /// Multi-threaded k-NN search with load balancing
-    pub fn search_knn_parallel(&self, query: &Vector, k: usize, num_threads: Option<usize>) -> Result<Vec<(String, f32)>> {
+    pub fn search_knn_parallel(
+        &self,
+        query: &Vector,
+        k: usize,
+        num_threads: Option<usize>,
+    ) -> Result<Vec<(String, f32)>> {
         if self.nodes.is_empty() || self.entry_point.is_none() || !self.config.enable_parallel {
             return self.search_knn(query, k);
         }
 
-        self.stats.parallel_searches.fetch_add(1, AtomicOrdering::Relaxed);
+        self.stats
+            .parallel_searches
+            .fetch_add(1, AtomicOrdering::Relaxed);
         let start_time = std::time::Instant::now();
 
         let entry_point = self.entry_point.unwrap();
         let query_f32 = query.as_f32();
-        
+
         // Determine optimal number of entry points for parallel search
-        let num_entry_points = num_threads.unwrap_or(std::thread::available_parallelism().map(|p| p.get()).unwrap_or(4)).min(8);
-        
+        let num_entry_points = num_threads
+            .unwrap_or(
+                std::thread::available_parallelism()
+                    .map(|p| p.get())
+                    .unwrap_or(4),
+            )
+            .min(8);
+
         // Find multiple entry points at different layers for better parallelism
         let mut entry_points = vec![entry_point];
-        
+
         // Add more entry points from the top layer connections
         let max_level = self.nodes[entry_point].connections.len().saturating_sub(1);
         if max_level > 0 && !self.nodes[entry_point].connections[max_level].is_empty() {
@@ -1032,13 +1161,16 @@ impl HnswIndex {
                 .collect();
             entry_points.extend(additional_entries);
         }
-        
+
         let mut current_closest = entry_points;
 
         // Search from top layer down to 1 with parallel processing
         for layer in (1..=max_level).rev() {
-            current_closest = self.search_layer_parallel(query, current_closest, num_entry_points, layer)
-                .into_iter().map(|c| c.id).collect();
+            current_closest = self
+                .search_layer_parallel(query, current_closest, num_entry_points, layer)
+                .into_iter()
+                .map(|c| c.id)
+                .collect();
         }
 
         // Final search in layer 0 with enhanced parallelism
@@ -1046,10 +1178,10 @@ impl HnswIndex {
         let candidates = self.search_layer_parallel(query, current_closest, ef, 0);
 
         // Final similarity calculation and ranking
-        
+
         let candidate_ids: Vec<usize> = candidates.iter().map(|c| c.id).collect();
         let similarities = self.batch_distance_parallel(&query_f32, &candidate_ids);
-        
+
         let mut results: Vec<(String, f32)> = candidate_ids
             .into_iter()
             .zip(similarities)
@@ -1062,141 +1194,176 @@ impl HnswIndex {
         // Update performance metrics
         let search_time = start_time.elapsed().as_micros() as u64;
         let current_avg = self.stats.avg_search_time_us.load(AtomicOrdering::Relaxed);
-        let new_avg = if current_avg == 0 { search_time } else { (current_avg + search_time) / 2 };
-        self.stats.avg_search_time_us.store(new_avg, AtomicOrdering::Relaxed);
+        let new_avg = if current_avg == 0 {
+            search_time
+        } else {
+            (current_avg + search_time) / 2
+        };
+        self.stats
+            .avg_search_time_us
+            .store(new_avg, AtomicOrdering::Relaxed);
 
         Ok(results)
     }
-    
+
     /// Asynchronous batch search for multiple queries
-    pub fn batch_search_parallel(&self, queries: &[Vector], k: usize) -> Result<Vec<Vec<(String, f32)>>> {
+    pub fn batch_search_parallel(
+        &self,
+        queries: &[Vector],
+        k: usize,
+    ) -> Result<Vec<Vec<(String, f32)>>> {
         if !self.config.enable_parallel || queries.is_empty() {
             // Fallback to sequential processing
-            return Ok(queries.iter().map(|q| self.search_knn(q, k).unwrap_or_default()).collect());
+            return Ok(queries
+                .iter()
+                .map(|q| self.search_knn(q, k).unwrap_or_default())
+                .collect());
         }
 
-        self.stats.parallel_operations.fetch_add(queries.len() as u64, AtomicOrdering::Relaxed);
-        
+        self.stats
+            .parallel_operations
+            .fetch_add(queries.len() as u64, AtomicOrdering::Relaxed);
+
         // Process queries sequentially (parallel processing removed)
-        let results = queries.iter().map(|query| {
-            self.search_knn_parallel(query, k, None).unwrap_or_default()
-        }).collect();
-        
+        let results = queries
+            .iter()
+            .map(|query| self.search_knn_parallel(query, k, None).unwrap_or_default())
+            .collect();
+
         Ok(results)
     }
-    
+
     /// Parallel graph traversal for connectivity analysis
     pub fn analyze_connectivity_parallel(&self) -> Result<ConnectivityStats> {
         if !self.config.enable_parallel || self.nodes.is_empty() {
             return self.analyze_connectivity_sequential();
         }
-        
+
         use std::sync::atomic::AtomicU64;
-        
+
         let total_nodes = AtomicU64::new(0);
         let total_connections = AtomicU64::new(0);
         let max_connections = AtomicU64::new(0);
         let isolated_nodes = AtomicU64::new(0);
-        
+
         // Analyze nodes in parallel
         let chunk_size = 1000;
         let chunks: Vec<&[Node]> = self.nodes.chunks(chunk_size).collect();
-        
-        let _: Vec<()> = chunks.iter().map(|chunk| {
-            let mut local_total = 0;
-            let mut local_connections = 0;
-            let mut local_max = 0;
-            let mut local_isolated = 0;
-            
-            for node in chunk {
-                if !node.uri.is_empty() { // Skip deleted nodes
-                    local_total += 1;
-                    
-                    let node_connections: usize = node.connections.iter().map(|c| c.len()).sum();
-                    local_connections += node_connections;
-                    local_max = local_max.max(node_connections);
-                    
-                    if node_connections == 0 {
-                        local_isolated += 1;
+
+        let _: Vec<()> = chunks
+            .iter()
+            .map(|chunk| {
+                let mut local_total = 0;
+                let mut local_connections = 0;
+                let mut local_max = 0;
+                let mut local_isolated = 0;
+
+                for node in chunk {
+                    if !node.uri.is_empty() {
+                        // Skip deleted nodes
+                        local_total += 1;
+
+                        let node_connections: usize =
+                            node.connections.iter().map(|c| c.len()).sum();
+                        local_connections += node_connections;
+                        local_max = local_max.max(node_connections);
+
+                        if node_connections == 0 {
+                            local_isolated += 1;
+                        }
                     }
                 }
-            }
-            
-            total_nodes.fetch_add(local_total, AtomicOrdering::Relaxed);
-            total_connections.fetch_add(local_connections as u64, AtomicOrdering::Relaxed);
-            
-            // Update max connections atomically
-            let mut current_max = max_connections.load(AtomicOrdering::Relaxed);
-            while current_max < local_max as u64 {
-                match max_connections.compare_exchange_weak(
-                    current_max,
-                    local_max as u64,
-                    AtomicOrdering::Relaxed,
-                    AtomicOrdering::Relaxed
-                ) {
-                    Ok(_) => break,
-                    Err(new_current) => current_max = new_current,
+
+                total_nodes.fetch_add(local_total, AtomicOrdering::Relaxed);
+                total_connections.fetch_add(local_connections as u64, AtomicOrdering::Relaxed);
+
+                // Update max connections atomically
+                let mut current_max = max_connections.load(AtomicOrdering::Relaxed);
+                while current_max < local_max as u64 {
+                    match max_connections.compare_exchange_weak(
+                        current_max,
+                        local_max as u64,
+                        AtomicOrdering::Relaxed,
+                        AtomicOrdering::Relaxed,
+                    ) {
+                        Ok(_) => break,
+                        Err(new_current) => current_max = new_current,
+                    }
                 }
-            }
-            
-            isolated_nodes.fetch_add(local_isolated, AtomicOrdering::Relaxed);
-            () // Return unit type for map function
-        }).collect();
-        
+
+                isolated_nodes.fetch_add(local_isolated, AtomicOrdering::Relaxed);
+                () // Return unit type for map function
+            })
+            .collect();
+
         let total = total_nodes.load(AtomicOrdering::Relaxed) as usize;
         let connections = total_connections.load(AtomicOrdering::Relaxed) as usize;
-        
+
         Ok(ConnectivityStats {
             total_nodes: total,
             total_connections: connections,
-            avg_connections: if total > 0 { connections as f64 / total as f64 } else { 0.0 },
+            avg_connections: if total > 0 {
+                connections as f64 / total as f64
+            } else {
+                0.0
+            },
             max_connections: max_connections.load(AtomicOrdering::Relaxed) as usize,
             isolated_nodes: isolated_nodes.load(AtomicOrdering::Relaxed) as usize,
-            connectivity_ratio: if total > 0 { 
-                (total - isolated_nodes.load(AtomicOrdering::Relaxed) as usize) as f64 / total as f64 
-            } else { 0.0 },
+            connectivity_ratio: if total > 0 {
+                (total - isolated_nodes.load(AtomicOrdering::Relaxed) as usize) as f64
+                    / total as f64
+            } else {
+                0.0
+            },
         })
     }
-    
+
     /// Sequential connectivity analysis fallback
     fn analyze_connectivity_sequential(&self) -> Result<ConnectivityStats> {
         let mut total_nodes = 0;
         let mut total_connections = 0;
         let mut max_connections = 0;
         let mut isolated_nodes = 0;
-        
+
         for node in &self.nodes {
-            if !node.uri.is_empty() { // Skip deleted nodes
+            if !node.uri.is_empty() {
+                // Skip deleted nodes
                 total_nodes += 1;
-                
+
                 let node_connections: usize = node.connections.iter().map(|c| c.len()).sum();
                 total_connections += node_connections;
                 max_connections = max_connections.max(node_connections);
-                
+
                 if node_connections == 0 {
                     isolated_nodes += 1;
                 }
             }
         }
-        
+
         Ok(ConnectivityStats {
             total_nodes,
             total_connections,
-            avg_connections: if total_nodes > 0 { total_connections as f64 / total_nodes as f64 } else { 0.0 },
+            avg_connections: if total_nodes > 0 {
+                total_connections as f64 / total_nodes as f64
+            } else {
+                0.0
+            },
             max_connections,
             isolated_nodes,
-            connectivity_ratio: if total_nodes > 0 { 
-                (total_nodes - isolated_nodes) as f64 / total_nodes as f64 
-            } else { 0.0 },
+            connectivity_ratio: if total_nodes > 0 {
+                (total_nodes - isolated_nodes) as f64 / total_nodes as f64
+            } else {
+                0.0
+            },
         })
     }
-    
+
     /// Memory-optimized node access with prefetching
     fn get_node_optimized(&self, id: usize) -> Option<&Node> {
         if id >= self.nodes.len() {
             return None;
         }
-        
+
         // Prefetch next few nodes if enabled
         if self.config.enable_prefetch && id + self.config.prefetch_distance < self.nodes.len() {
             for i in 1..=self.config.prefetch_distance {
@@ -1207,7 +1374,7 @@ impl HnswIndex {
                 }
             }
         }
-        
+
         Some(&self.nodes[id])
     }
 
@@ -1216,10 +1383,10 @@ impl HnswIndex {
         let total_nodes = self.nodes.len();
         let active_nodes = self.active_nodes();
         let deleted_nodes = total_nodes - active_nodes;
-        
+
         let mut total_connections = 0;
         let mut max_level = 0;
-        
+
         for node in &self.nodes {
             if !node.uri.is_empty() {
                 for (level, connections) in node.connections.iter().enumerate() {
@@ -1230,13 +1397,13 @@ impl HnswIndex {
                 }
             }
         }
-        
+
         let avg_connections = if active_nodes > 0 {
             total_connections as f64 / active_nodes as f64
         } else {
             0.0
         };
-        
+
         HnswStats {
             total_nodes,
             active_nodes,

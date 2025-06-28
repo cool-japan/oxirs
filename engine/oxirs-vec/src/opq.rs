@@ -4,7 +4,10 @@
 //! by aligning the data before applying product quantization. This typically
 //! provides better compression quality than standard PQ.
 
-use crate::{Vector, pq::{PQConfig, PQIndex}};
+use crate::{
+    pq::{PQConfig, PQIndex},
+    Vector,
+};
 use anyhow::{anyhow, Result};
 use nalgebra::{DMatrix, DVector, SVD};
 use oxirs_core::parallel::*;
@@ -90,12 +93,16 @@ impl OPQIndex {
 
         // Alternating optimization
         for iteration in 0..self.config.n_iterations {
-            println!("OPQ iteration {}/{}", iteration + 1, self.config.n_iterations);
+            println!(
+                "OPQ iteration {}/{}",
+                iteration + 1,
+                self.config.n_iterations
+            );
 
             // Step 1: Fix R, optimize C (codebooks)
             let rotated_data = self.apply_rotation(&data_matrix, &rotation);
             let rotated_vectors = self.matrix_to_vectors(&rotated_data);
-            
+
             // Train PQ on rotated data
             self.pq_index.train(&rotated_vectors)?;
 
@@ -117,11 +124,11 @@ impl OPQIndex {
     fn compute_mean(&self, data: &DMatrix<f32>) -> DVector<f32> {
         let n_samples = data.nrows() as f32;
         let mut mean = DVector::zeros(data.ncols());
-        
+
         for i in 0..data.ncols() {
             mean[i] = data.column(i).sum() / n_samples;
         }
-        
+
         mean
     }
 
@@ -142,20 +149,24 @@ impl OPQIndex {
     /// Convert matrix back to vectors
     fn matrix_to_vectors(&self, matrix: &DMatrix<f32>) -> Vec<Vector> {
         let mut vectors = Vec::with_capacity(matrix.nrows());
-        
+
         for i in 0..matrix.nrows() {
             let row: Vec<f32> = matrix.row(i).iter().cloned().collect();
             vectors.push(Vector::new(row));
         }
-        
+
         vectors
     }
 
     /// Optimize rotation matrix using SVD
-    fn optimize_rotation(&self, data: &DMatrix<f32>, rotated_vectors: &[Vector]) -> Result<DMatrix<f32>> {
+    fn optimize_rotation(
+        &self,
+        data: &DMatrix<f32>,
+        rotated_vectors: &[Vector],
+    ) -> Result<DMatrix<f32>> {
         // Reconstruct data using current codebooks
         let mut reconstructed = DMatrix::zeros(data.nrows(), data.ncols());
-        
+
         for (i, vector) in rotated_vectors.iter().enumerate() {
             // Encode and decode to get reconstruction
             if let Ok(reconstructed_vec) = self.pq_index.reconstruct(vector) {
@@ -169,7 +180,7 @@ impl OPQIndex {
         // Solve orthogonal Procrustes problem: min ||X - Y*R||_F
         // Solution: R = U*V^T where X^T*Y = U*S*V^T
         let correlation = data.transpose() * &reconstructed;
-        
+
         // Add regularization if needed
         let mut reg_correlation = correlation.clone();
         if self.config.regularization > 0.0 {
@@ -181,17 +192,23 @@ impl OPQIndex {
         // Compute SVD
         let svd = SVD::new(reg_correlation, true, true);
         let u = svd.u.ok_or_else(|| anyhow!("SVD failed to compute U"))?;
-        let v_t = svd.v_t.ok_or_else(|| anyhow!("SVD failed to compute V^T"))?;
+        let v_t = svd
+            .v_t
+            .ok_or_else(|| anyhow!("SVD failed to compute V^T"))?;
 
         // Optimal rotation is U * V^T
         Ok(u * v_t)
     }
 
     /// Compute reconstruction error
-    fn compute_reconstruction_error(&self, data: &DMatrix<f32>, rotation: &DMatrix<f32>) -> Result<f32> {
+    fn compute_reconstruction_error(
+        &self,
+        data: &DMatrix<f32>,
+        rotation: &DMatrix<f32>,
+    ) -> Result<f32> {
         let rotated = self.apply_rotation(data, rotation);
         let rotated_vecs = self.matrix_to_vectors(&rotated);
-        
+
         let mut total_error = 0.0;
         for (i, vec) in rotated_vecs.iter().enumerate() {
             if let Ok(reconstructed) = self.pq_index.reconstruct(vec) {
@@ -202,7 +219,7 @@ impl OPQIndex {
                 }
             }
         }
-        
+
         Ok((total_error / (data.nrows() * data.ncols()) as f32).sqrt())
     }
 
@@ -214,7 +231,7 @@ impl OPQIndex {
 
         // Apply centering and rotation
         let transformed = self.transform_vector(vector)?;
-        
+
         // Use PQ to encode
         self.pq_index.encode(&transformed)
     }
@@ -227,47 +244,51 @@ impl OPQIndex {
 
         // Decode using PQ
         let rotated = self.pq_index.decode(codes)?;
-        
+
         // Apply inverse transformation
         self.inverse_transform_vector(&rotated)
     }
 
     /// Transform vector: center and rotate
     fn transform_vector(&self, vector: &Vector) -> Result<Vector> {
-        let rotation = self.rotation_matrix.as_ref()
+        let rotation = self
+            .rotation_matrix
+            .as_ref()
             .ok_or_else(|| anyhow!("Rotation matrix not initialized"))?;
-        
+
         let vec_f32 = vector.as_f32();
         let mut vec_dv = DVector::from_vec(vec_f32.to_vec());
-        
+
         // Center if needed
         if let Some(ref mean) = self.data_mean {
             vec_dv -= mean;
         }
-        
+
         // Apply rotation
         let rotated = rotation.transpose() * vec_dv;
-        
+
         Ok(Vector::new(rotated.iter().cloned().collect()))
     }
 
     /// Inverse transform: rotate back and uncenter
     fn inverse_transform_vector(&self, vector: &Vector) -> Result<Vector> {
-        let rotation = self.rotation_matrix.as_ref()
+        let rotation = self
+            .rotation_matrix
+            .as_ref()
             .ok_or_else(|| anyhow!("Rotation matrix not initialized"))?;
-        
+
         let vec_f32 = vector.as_f32();
         let vec_dv = DVector::from_vec(vec_f32.to_vec());
-        
+
         // Apply inverse rotation
         let unrotated = rotation * vec_dv;
-        
+
         // Uncenter if needed
         let mut result = unrotated;
         if let Some(ref mean) = self.data_mean {
             result += mean;
         }
-        
+
         Ok(Vector::new(result.iter().cloned().collect()))
     }
 
@@ -279,7 +300,7 @@ impl OPQIndex {
 
         // Transform query
         let transformed_query = self.transform_vector(query)?;
-        
+
         // Use PQ search
         self.pq_index.search(&transformed_query, k)
     }
@@ -287,12 +308,14 @@ impl OPQIndex {
     /// Get compression statistics
     pub fn stats(&self) -> OPQStats {
         let pq_stats = self.pq_index.stats();
-        
+
         OPQStats {
             pq_stats,
             is_trained: self.is_trained,
             has_rotation: self.rotation_matrix.is_some(),
-            rotation_rank: self.rotation_matrix.as_ref()
+            rotation_rank: self
+                .rotation_matrix
+                .as_ref()
                 .map(|r| r.rank(1e-6))
                 .unwrap_or(0),
         }
@@ -358,9 +381,7 @@ mod tests {
         // Create and train on random vectors
         let vectors: Vec<Vector> = (0..50)
             .map(|i| {
-                let values: Vec<f32> = (0..8)
-                    .map(|j| ((i * j) as f32).sin())
-                    .collect();
+                let values: Vec<f32> = (0..8).map(|j| ((i * j) as f32).sin()).collect();
                 Vector::new(values)
             })
             .collect();

@@ -86,13 +86,13 @@ mod tests {
     }
 
     fn create_person_shape() -> Shape {
-        use oxirs_shacl::{ShapeId, ShapeType, Target};
         use oxirs_core::model::NamedNode;
+        use oxirs_shacl::{ShapeId, ShapeType, Target};
 
         // Create a basic shape using oxirs_shacl types
         Shape::new(
             ShapeId::new("http://example.org/PersonShape"),
-            ShapeType::NodeShape
+            ShapeType::NodeShape,
         )
     }
 }
@@ -108,7 +108,10 @@ pub fn optimize_query(query: &str) -> String {
     query.to_string()
 }
 
-pub fn get_performance_optimization_hints(store: &Store, shapes: &[oxirs_shacl::Shape]) -> Vec<String> {
+pub fn get_performance_optimization_hints(
+    store: &Store,
+    shapes: &[oxirs_shacl::Shape],
+) -> Vec<String> {
     // Placeholder implementation
     vec![
         "Consider adding indexes for frequently queried properties".to_string(),

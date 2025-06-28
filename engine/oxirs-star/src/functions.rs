@@ -84,7 +84,11 @@ impl FunctionEvaluator {
     }
 
     /// TRIPLE(s, p, o) - constructs a quoted triple from subject, predicate, object
-    fn evaluate_triple(subject: &StarTerm, predicate: &StarTerm, object: &StarTerm) -> StarResult<StarTerm> {
+    fn evaluate_triple(
+        subject: &StarTerm,
+        predicate: &StarTerm,
+        object: &StarTerm,
+    ) -> StarResult<StarTerm> {
         // Validate that the arguments can form a valid triple
         if !subject.can_be_subject() {
             return Err(StarError::QueryError(format!(
@@ -148,7 +152,7 @@ impl FunctionEvaluator {
     /// isTRIPLE(t) - tests if a term is a quoted triple
     fn evaluate_is_triple(term: &StarTerm) -> StarResult<StarTerm> {
         let result = term.is_quoted_triple();
-        
+
         // Return a boolean literal (xsd:boolean)
         let value = if result { "true" } else { "false" };
         StarTerm::literal_with_datatype(value, "http://www.w3.org/2001/XMLSchema#boolean")
@@ -221,18 +225,17 @@ impl ExpressionEvaluator {
     ) -> StarResult<StarTerm> {
         match expr {
             Expression::Term(term) => Ok(term.clone()),
-            Expression::Variable(var) => {
-                bindings.get(var).cloned().ok_or_else(|| {
-                    StarError::QueryError(format!("Unbound variable: {}", var))
-                })
-            }
+            Expression::Variable(var) => bindings
+                .get(var)
+                .cloned()
+                .ok_or_else(|| StarError::QueryError(format!("Unbound variable: {}", var))),
             Expression::FunctionCall { function, args } => {
                 // Evaluate arguments first
                 let evaluated_args: Result<Vec<_>, _> = args
                     .iter()
                     .map(|arg| Self::evaluate(arg, bindings))
                     .collect();
-                
+
                 let evaluated_args = evaluated_args?;
                 FunctionEvaluator::evaluate(*function, &evaluated_args)
             }
@@ -289,9 +292,11 @@ impl ExpressionEvaluator {
                             let negated = match value {
                                 "true" => "false",
                                 "false" => "true",
-                                _ => return Err(StarError::QueryError(
-                                    "Invalid boolean value".to_string()
-                                )),
+                                _ => {
+                                    return Err(StarError::QueryError(
+                                        "Invalid boolean value".to_string(),
+                                    ))
+                                }
                             };
                             return StarTerm::literal_with_datatype(
                                 negated,
@@ -301,11 +306,11 @@ impl ExpressionEvaluator {
                     }
                 }
                 Err(StarError::QueryError(
-                    "NOT operator expects a boolean literal".to_string()
+                    "NOT operator expects a boolean literal".to_string(),
                 ))
             }
             UnaryOperator::Minus => Err(StarError::QueryError(
-                "Arithmetic operations not yet implemented".to_string()
+                "Arithmetic operations not yet implemented".to_string(),
             )),
         }
     }
@@ -387,7 +392,8 @@ mod tests {
         let result = FunctionEvaluator::evaluate(
             StarFunction::Triple,
             &[subject.clone(), predicate.clone(), object.clone()],
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(result.is_quoted_triple());
         if let StarTerm::QuotedTriple(triple) = result {
@@ -406,10 +412,7 @@ mod tests {
         );
         let quoted = StarTerm::quoted_triple(triple);
 
-        let result = FunctionEvaluator::evaluate(
-            StarFunction::Subject,
-            &[quoted],
-        ).unwrap();
+        let result = FunctionEvaluator::evaluate(StarFunction::Subject, &[quoted]).unwrap();
 
         assert_eq!(result, StarTerm::iri("http://example.org/alice").unwrap());
     }
@@ -423,10 +426,7 @@ mod tests {
         );
         let quoted = StarTerm::quoted_triple(triple);
 
-        let result = FunctionEvaluator::evaluate(
-            StarFunction::Predicate,
-            &[quoted],
-        ).unwrap();
+        let result = FunctionEvaluator::evaluate(StarFunction::Predicate, &[quoted]).unwrap();
 
         assert_eq!(result, StarTerm::iri("http://example.org/age").unwrap());
     }
@@ -440,10 +440,7 @@ mod tests {
         );
         let quoted = StarTerm::quoted_triple(triple);
 
-        let result = FunctionEvaluator::evaluate(
-            StarFunction::Object,
-            &[quoted],
-        ).unwrap();
+        let result = FunctionEvaluator::evaluate(StarFunction::Object, &[quoted]).unwrap();
 
         assert_eq!(result, StarTerm::literal("25").unwrap());
     }
@@ -458,26 +455,22 @@ mod tests {
         );
         let quoted = StarTerm::quoted_triple(triple);
 
-        let result = FunctionEvaluator::evaluate(
-            StarFunction::IsTriple,
-            &[quoted],
-        ).unwrap();
+        let result = FunctionEvaluator::evaluate(StarFunction::IsTriple, &[quoted]).unwrap();
 
         assert_eq!(
             result,
-            StarTerm::literal_with_datatype("true", "http://www.w3.org/2001/XMLSchema#boolean").unwrap()
+            StarTerm::literal_with_datatype("true", "http://www.w3.org/2001/XMLSchema#boolean")
+                .unwrap()
         );
 
         // Test with a non-quoted term
         let iri = StarTerm::iri("http://example.org/alice").unwrap();
-        let result = FunctionEvaluator::evaluate(
-            StarFunction::IsTriple,
-            &[iri],
-        ).unwrap();
+        let result = FunctionEvaluator::evaluate(StarFunction::IsTriple, &[iri]).unwrap();
 
         assert_eq!(
             result,
-            StarTerm::literal_with_datatype("false", "http://www.w3.org/2001/XMLSchema#boolean").unwrap()
+            StarTerm::literal_with_datatype("false", "http://www.w3.org/2001/XMLSchema#boolean")
+                .unwrap()
         );
     }
 
@@ -492,10 +485,7 @@ mod tests {
             "p".to_string(),
             StarTerm::iri("http://example.org/age").unwrap(),
         );
-        bindings.insert(
-            "o".to_string(),
-            StarTerm::literal("25").unwrap(),
-        );
+        bindings.insert("o".to_string(), StarTerm::literal("25").unwrap());
 
         // Test TRIPLE(?x, ?p, ?o)
         let expr = Expression::triple(
@@ -535,17 +525,16 @@ mod tests {
         let quoted2 = StarTerm::quoted_triple(triple2);
 
         // Test SUBJECT(SUBJECT(<<...>>))
-        let inner_subject = FunctionEvaluator::evaluate(
-            StarFunction::Subject,
-            &[quoted2.clone()],
-        ).unwrap();
+        let inner_subject =
+            FunctionEvaluator::evaluate(StarFunction::Subject, &[quoted2.clone()]).unwrap();
 
-        let outer_subject = FunctionEvaluator::evaluate(
-            StarFunction::Subject,
-            &[inner_subject],
-        ).unwrap();
+        let outer_subject =
+            FunctionEvaluator::evaluate(StarFunction::Subject, &[inner_subject]).unwrap();
 
-        assert_eq!(outer_subject, StarTerm::iri("http://example.org/alice").unwrap());
+        assert_eq!(
+            outer_subject,
+            StarTerm::iri("http://example.org/alice").unwrap()
+        );
     }
 
     #[test]

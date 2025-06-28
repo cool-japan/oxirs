@@ -9,14 +9,14 @@ use std::sync::Arc;
 use std::convert::Infallible;
 use std::net::SocketAddr;
 use anyhow::{Result, anyhow};
+use hyper::{Method, Request, Response, StatusCode, body::Incoming};
+use hyper::body::Bytes;
+use hyper_util::rt::TokioIo;
+use hyper_util::server::conn::auto::Builder;
 use tokio::net::TcpListener;
-use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Method, Request, Response, Server, StatusCode};
-use juniper_hyper::{graphql, graphiql, playground};
-use tower::ServiceBuilder;
-use tower_http::cors::{CorsLayer, Any};
 use tracing::{info, warn, error, debug};
 use serde_json;
+use juniper::{execute, EmptyMutation, EmptySubscription};
 
 /// Configuration for the GraphQL server
 #[derive(Debug, Clone)]
@@ -225,8 +225,8 @@ impl JuniperGraphQLServer {
                     "timestamp": chrono::Utc::now().to_rfc3339(),
                     "endpoints": {
                         "graphql": "/graphql",
-                        "graphiql": if config.enable_graphiql { "/graphiql" } else { null },
-                        "playground": if config.enable_playground { "/playground" } else { null }
+                        "graphiql": if config.enable_graphiql { "/graphiql" } else { serde_json::Value::Null },
+                        "playground": if config.enable_playground { "/playground" } else { serde_json::Value::Null }
                     }
                 });
 

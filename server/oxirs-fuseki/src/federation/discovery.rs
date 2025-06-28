@@ -1,18 +1,20 @@
 //! Service discovery for federated SPARQL endpoints
 
-use std::{collections::HashMap, sync::Arc, time::Duration};
-use tokio::{
-    sync::{RwLock, Notify},
-    time::interval,
-};
-use url::Url;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use trust_dns_resolver::{Resolver, config::*};
+use std::{collections::HashMap, sync::Arc, time::Duration};
+use tokio::{
+    sync::{Notify, RwLock},
+    time::interval,
+};
+use trust_dns_resolver::{config::*, Resolver};
+use url::Url;
 
 use crate::{
-    error::{Error, Result},
-    federation::{FederationConfig, ServiceEndpoint, ServiceMetadata, ServiceHealth, ServiceCapabilities},
+    error::{FusekiError, FusekiResult},
+    federation::{
+        FederationConfig, ServiceCapabilities, ServiceEndpoint, ServiceHealth, ServiceMetadata,
+    },
 };
 
 /// Service discovery mechanisms
@@ -80,7 +82,7 @@ impl ServiceDiscovery {
 
         tokio::spawn(async move {
             let mut interval = interval(config.discovery_interval);
-            
+
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
@@ -97,8 +99,9 @@ impl ServiceDiscovery {
         });
 
         // Run initial discovery
-        Self::discover_services(&self.discovery_methods, &self.endpoints, &self.http_client).await?;
-        
+        Self::discover_services(&self.discovery_methods, &self.endpoints, &self.http_client)
+            .await?;
+
         Ok(())
     }
 
@@ -142,7 +145,7 @@ impl ServiceDiscovery {
         endpoints: &Arc<RwLock<HashMap<String, ServiceEndpoint>>>,
     ) -> Result<()> {
         let mut eps = endpoints.write().await;
-        
+
         for reg in registrations {
             let endpoint = ServiceEndpoint {
                 url: reg.url.clone(),
@@ -150,10 +153,10 @@ impl ServiceDiscovery {
                 health: ServiceHealth::Unknown,
                 capabilities: ServiceCapabilities::default(),
             };
-            
+
             eps.insert(reg.id.clone(), endpoint);
         }
-        
+
         Ok(())
     }
 
@@ -213,7 +216,7 @@ impl ServiceDiscovery {
 
         // Parse SPARQL results and build capabilities
         let mut capabilities = ServiceCapabilities::default();
-        
+
         // For now, return basic capabilities
         // TODO: Parse actual SPARQL JSON results
         capabilities.sparql_features = vec![
@@ -234,73 +237,101 @@ impl ServiceDiscovery {
         endpoints: &Arc<RwLock<HashMap<String, ServiceEndpoint>>>,
         client: &Client,
     ) -> Result<()> {
-        tracing::info!("Starting DNS-based service discovery for domain: {}", domain);
-        
+        tracing::info!(
+            "Starting DNS-based service discovery for domain: {}",
+            domain
+        );
+
         // Create DNS resolver
         let resolver = Resolver::new(ResolverConfig::default(), ResolverOpts::default())
             .map_err(|e| Error::Custom(format!("Failed to create DNS resolver: {}", e)))?;
-        
+
         // Look up SRV records for SPARQL services
         // Convention: _sparql._tcp.domain.com
         let srv_query = format!("_sparql._tcp.{}", domain);
-        
+
         match resolver.srv_lookup(&srv_query).await {
             Ok(lookup) => {
                 let mut eps = endpoints.write().await;
                 let mut discovered_count = 0;
-                
+
                 for record in lookup.iter() {
                     let target = record.target().to_string();
                     let port = record.port();
-                    
+
                     // Construct service URL
-                    let service_url = match Url::parse(&format!("http://{}:{}/sparql", target.trim_end_matches('.'), port)) {
+                    let service_url = match Url::parse(&format!(
+                        "http://{}:{}/sparql",
+                        target.trim_end_matches('.'),
+                        port
+                    )) {
                         Ok(url) => url,
                         Err(e) => {
                             tracing::warn!("Invalid URL for SRV record {}:{}: {}", target, port, e);
                             continue;
                         }
                     };
-                    
+
                     // Create unique service ID
                     let service_id = format!("dns-{}:{}", target.trim_end_matches('.'), port);
-                    
+
                     // Check if service is reachable
                     match Self::check_service_health(&service_url, client).await {
                         Ok(health) => {
                             let endpoint = ServiceEndpoint {
                                 url: service_url,
                                 metadata: ServiceMetadata {
-                                    name: format!("SPARQL Service at {}:{}", target.trim_end_matches('.'), port),
-                                    description: Some(format!("Discovered via DNS SRV record for {}", domain)),
+                                    name: format!(
+                                        "SPARQL Service at {}:{}",
+                                        target.trim_end_matches('.'),
+                                        port
+                                    ),
+                                    description: Some(format!(
+                                        "Discovered via DNS SRV record for {}",
+                                        domain
+                                    )),
                                     version: None,
                                     contact: None,
                                 },
                                 health,
                                 capabilities: ServiceCapabilities::default(),
                             };
-                            
+
                             eps.insert(service_id.clone(), endpoint);
                             discovered_count += 1;
-                            
-                            tracing::info!("Discovered SPARQL service: {} at {}:{}", service_id, target, port);
+
+                            tracing::info!(
+                                "Discovered SPARQL service: {} at {}:{}",
+                                service_id,
+                                target,
+                                port
+                            );
                         }
                         Err(e) => {
-                            tracing::warn!("Service at {}:{} is not reachable: {}", target, port, e);
+                            tracing::warn!(
+                                "Service at {}:{} is not reachable: {}",
+                                target,
+                                port,
+                                e
+                            );
                         }
                     }
                 }
-                
-                tracing::info!("DNS discovery completed: {} services discovered for domain {}", discovered_count, domain);
+
+                tracing::info!(
+                    "DNS discovery completed: {} services discovered for domain {}",
+                    discovered_count,
+                    domain
+                );
             }
             Err(e) => {
                 tracing::warn!("No SRV records found for {}: {}", srv_query, e);
-                
+
                 // Fallback: try common SPARQL service ports on the domain itself
                 Self::discover_via_fallback_ports(domain, endpoints, client).await?;
             }
         }
-        
+
         Ok(())
     }
 
@@ -310,11 +341,14 @@ impl ServiceDiscovery {
         endpoints: &Arc<RwLock<HashMap<String, ServiceEndpoint>>>,
         client: &Client,
     ) -> Result<()> {
-        tracing::info!("Starting Consul-based service discovery from: {}", consul_endpoint);
-        
+        tracing::info!(
+            "Starting Consul-based service discovery from: {}",
+            consul_endpoint
+        );
+
         // Query Consul for services with "sparql" tag
         let consul_url = format!("{}/v1/health/service/sparql?passing=true", consul_endpoint);
-        
+
         let response = client
             .get(&consul_url)
             .header("Accept", "application/json")
@@ -322,27 +356,27 @@ impl ServiceDiscovery {
             .send()
             .await
             .map_err(|e| Error::Custom(format!("Failed to query Consul: {}", e)))?;
-            
+
         if !response.status().is_success() {
             return Err(Error::Custom(format!(
-                "Consul query failed with status: {}", 
+                "Consul query failed with status: {}",
                 response.status()
             )));
         }
-        
+
         let consul_services: serde_json::Value = response
             .json()
             .await
             .map_err(|e| Error::Custom(format!("Failed to parse Consul response: {}", e)))?;
-            
+
         let mut eps = endpoints.write().await;
         let mut discovered_count = 0;
-        
+
         if let Some(services) = consul_services.as_array() {
             for service in services {
                 if let (Some(service_obj), Some(checks)) = (
                     service.get("Service").and_then(|s| s.as_object()),
-                    service.get("Checks").and_then(|c| c.as_array())
+                    service.get("Checks").and_then(|c| c.as_array()),
                 ) {
                     // Extract service information
                     let service_name = service_obj
@@ -361,74 +395,104 @@ impl ServiceDiscovery {
                         .get("Port")
                         .and_then(|p| p.as_u64())
                         .unwrap_or(8080) as u16;
-                        
+
                     // Check if all health checks are passing
                     let all_passing = checks.iter().all(|check| {
-                        check.get("Status")
+                        check
+                            .get("Status")
                             .and_then(|s| s.as_str())
                             .map(|status| status == "passing")
                             .unwrap_or(false)
                     });
-                    
+
                     if !all_passing {
                         tracing::debug!("Skipping unhealthy Consul service: {}", service_id);
                         continue;
                     }
-                    
+
                     // Extract metadata from service tags
                     let tags = service_obj
                         .get("Tags")
                         .and_then(|t| t.as_array())
                         .map(|tags| tags.iter().filter_map(|t| t.as_str()).collect::<Vec<_>>())
                         .unwrap_or_default();
-                        
-                    let sparql_path = tags.iter()
+
+                    let sparql_path = tags
+                        .iter()
                         .find(|tag| tag.starts_with("sparql-path="))
                         .map(|tag| tag.strip_prefix("sparql-path=").unwrap_or("/sparql"))
                         .unwrap_or("/sparql");
-                        
+
                     // Construct service URL
-                    let service_url = match Url::parse(&format!("http://{}:{}{}", address, port, sparql_path)) {
-                        Ok(url) => url,
-                        Err(e) => {
-                            tracing::warn!("Invalid URL for Consul service {}:{}:{}: {}", service_id, address, port, e);
-                            continue;
-                        }
-                    };
-                    
+                    let service_url =
+                        match Url::parse(&format!("http://{}:{}{}", address, port, sparql_path)) {
+                            Ok(url) => url,
+                            Err(e) => {
+                                tracing::warn!(
+                                    "Invalid URL for Consul service {}:{}:{}: {}",
+                                    service_id,
+                                    address,
+                                    port,
+                                    e
+                                );
+                                continue;
+                            }
+                        };
+
                     // Double-check service health
                     match Self::check_service_health(&service_url, client).await {
                         Ok(health) => {
                             let consul_service_id = format!("consul-{}", service_id);
-                            
+
                             let endpoint = ServiceEndpoint {
                                 url: service_url.clone(),
                                 metadata: ServiceMetadata {
                                     name: format!("Consul Service: {}", service_name),
-                                    description: Some(format!("Discovered via Consul from {}", consul_endpoint)),
-                                    version: tags.iter()
+                                    description: Some(format!(
+                                        "Discovered via Consul from {}",
+                                        consul_endpoint
+                                    )),
+                                    version: tags
+                                        .iter()
                                         .find(|tag| tag.starts_with("version="))
-                                        .map(|tag| tag.strip_prefix("version=").unwrap_or("unknown").to_string()),
+                                        .map(|tag| {
+                                            tag.strip_prefix("version=")
+                                                .unwrap_or("unknown")
+                                                .to_string()
+                                        }),
                                     contact: None,
                                 },
                                 health,
                                 capabilities: ServiceCapabilities::default(),
                             };
-                            
+
                             eps.insert(consul_service_id.clone(), endpoint);
                             discovered_count += 1;
-                            
-                            tracing::info!("Discovered SPARQL service via Consul: {} at {}", consul_service_id, service_url);
+
+                            tracing::info!(
+                                "Discovered SPARQL service via Consul: {} at {}",
+                                consul_service_id,
+                                service_url
+                            );
                         }
                         Err(e) => {
-                            tracing::warn!("Consul service {} at {} failed health check: {}", service_id, service_url, e);
+                            tracing::warn!(
+                                "Consul service {} at {} failed health check: {}",
+                                service_id,
+                                service_url,
+                                e
+                            );
                         }
                     }
                 }
             }
         }
-        
-        tracing::info!("Consul discovery completed: {} services discovered from {}", discovered_count, consul_endpoint);
+
+        tracing::info!(
+            "Consul discovery completed: {} services discovered from {}",
+            discovered_count,
+            consul_endpoint
+        );
         Ok(())
     }
 
@@ -439,14 +503,17 @@ impl ServiceDiscovery {
         client: &Client,
     ) -> Result<()> {
         // TODO: Implement Kubernetes-based discovery
-        tracing::debug!("Kubernetes discovery not yet implemented for namespace: {}", namespace);
+        tracing::debug!(
+            "Kubernetes discovery not yet implemented for namespace: {}",
+            namespace
+        );
         Ok(())
     }
 
     /// Check if a SPARQL service is healthy and reachable
     async fn check_service_health(url: &Url, client: &Client) -> Result<ServiceHealth> {
         let health_check_query = "ASK { ?s ?p ?o }";
-        
+
         let response = client
             .get(url.as_str())
             .query(&[("query", health_check_query)])
@@ -454,7 +521,7 @@ impl ServiceDiscovery {
             .timeout(Duration::from_secs(5))
             .send()
             .await;
-            
+
         match response {
             Ok(resp) if resp.status().is_success() => {
                 tracing::debug!("Service at {} is healthy", url);
@@ -479,42 +546,55 @@ impl ServiceDiscovery {
     ) -> Result<()> {
         let common_ports = [8080, 3030, 8000, 80, 443];
         let common_paths = ["/sparql", "/query", "/sparql/query"];
-        
+
         let mut eps = endpoints.write().await;
         let mut discovered_count = 0;
-        
+
         for port in &common_ports {
             for path in &common_paths {
                 let scheme = if *port == 443 { "https" } else { "http" };
-                let service_url = match Url::parse(&format!("{}://{}:{}{}", scheme, domain, port, path)) {
-                    Ok(url) => url,
-                    Err(e) => {
-                        tracing::debug!("Invalid fallback URL for {}:{}{}: {}", domain, port, path, e);
-                        continue;
-                    }
-                };
-                
+                let service_url =
+                    match Url::parse(&format!("{}://{}:{}{}", scheme, domain, port, path)) {
+                        Ok(url) => url,
+                        Err(e) => {
+                            tracing::debug!(
+                                "Invalid fallback URL for {}:{}{}: {}",
+                                domain,
+                                port,
+                                path,
+                                e
+                            );
+                            continue;
+                        }
+                    };
+
                 match Self::check_service_health(&service_url, client).await {
                     Ok(health) => {
                         let service_id = format!("fallback-{}:{}{}", domain, port, path);
-                        
+
                         let endpoint = ServiceEndpoint {
                             url: service_url.clone(),
                             metadata: ServiceMetadata {
                                 name: format!("SPARQL Service at {}:{}{}", domain, port, path),
-                                description: Some("Discovered via fallback port scanning".to_string()),
+                                description: Some(
+                                    "Discovered via fallback port scanning".to_string(),
+                                ),
                                 version: None,
                                 contact: None,
                             },
                             health,
                             capabilities: ServiceCapabilities::default(),
                         };
-                        
+
                         eps.insert(service_id.clone(), endpoint);
                         discovered_count += 1;
-                        
-                        tracing::info!("Discovered SPARQL service via fallback: {} at {}", service_id, service_url);
-                        
+
+                        tracing::info!(
+                            "Discovered SPARQL service via fallback: {} at {}",
+                            service_id,
+                            service_url
+                        );
+
                         // Only discover one service per port to avoid duplicates
                         break;
                     }
@@ -525,8 +605,12 @@ impl ServiceDiscovery {
                 }
             }
         }
-        
-        tracing::info!("Fallback discovery completed: {} services discovered for domain {}", discovered_count, domain);
+
+        tracing::info!(
+            "Fallback discovery completed: {} services discovered for domain {}",
+            discovered_count,
+            domain
+        );
         Ok(())
     }
 }
@@ -541,16 +625,14 @@ mod tests {
         let config = FederationConfig::default();
         let mut discovery = ServiceDiscovery::new(config, endpoints.clone());
 
-        let registrations = vec![
-            ServiceRegistration {
-                id: "test-service".to_string(),
-                url: Url::parse("http://example.com/sparql").unwrap(),
-                metadata: ServiceMetadata {
-                    name: "Test Service".to_string(),
-                    ..Default::default()
-                },
+        let registrations = vec![ServiceRegistration {
+            id: "test-service".to_string(),
+            url: Url::parse("http://example.com/sparql").unwrap(),
+            metadata: ServiceMetadata {
+                name: "Test Service".to_string(),
+                ..Default::default()
             },
-        ];
+        }];
 
         discovery.add_method(DiscoveryMethod::Static(registrations));
         discovery.start().await.unwrap();

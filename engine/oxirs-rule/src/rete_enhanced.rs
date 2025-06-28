@@ -10,7 +10,7 @@
 use crate::forward::Substitution;
 use crate::{Rule, RuleAtom, Term};
 use anyhow::{anyhow, Result};
-use std::collections::{HashMap, HashSet, VecDeque, BTreeMap};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tracing::{debug, info, trace, warn};
@@ -53,35 +53,39 @@ impl EnhancedToken {
     /// Merge two tokens with proper conflict resolution
     pub fn merge(left: &Self, right: &Self) -> Result<Self> {
         let mut merged = Self::new();
-        
+
         // Merge bindings with conflict detection
         merged.bindings.extend(left.bindings.clone());
         for (var, value) in &right.bindings {
             if let Some(existing) = merged.bindings.get(var) {
                 if !terms_compatible(existing, value) {
-                    return Err(anyhow!("Binding conflict for variable {}: {:?} vs {:?}", 
-                                       var, existing, value));
+                    return Err(anyhow!(
+                        "Binding conflict for variable {}: {:?} vs {:?}",
+                        var,
+                        existing,
+                        value
+                    ));
                 }
             } else {
                 merged.bindings.insert(var.clone(), value.clone());
             }
         }
-        
+
         // Combine facts
         merged.facts.extend(left.facts.clone());
         merged.facts.extend(right.facts.clone());
-        
+
         // Use earliest timestamp
         merged.timestamp = left.timestamp.min(right.timestamp);
-        
+
         // Combine priorities and specificity
         merged.priority = left.priority.max(right.priority);
         merged.specificity = left.specificity + right.specificity;
-        
+
         // Merge justifications
         merged.justification.extend(left.justification.clone());
         merged.justification.extend(right.justification.clone());
-        
+
         Ok(merged)
     }
 }
@@ -159,7 +163,7 @@ impl BetaMemory {
     pub fn add_left(&mut self, token: EnhancedToken, join_vars: &[String]) -> usize {
         let idx = self.left_tokens.len();
         self.left_tokens.push_back(token.clone());
-        
+
         // Update indices for join variables
         for var in join_vars {
             if let Some(value) = token.bindings.get(var) {
@@ -171,11 +175,11 @@ impl BetaMemory {
                     .push(idx);
             }
         }
-        
+
         self.access_times.insert(idx, Instant::now());
         self.apply_memory_management();
         self.stats.peak_size = self.stats.peak_size.max(self.left_tokens.len());
-        
+
         idx
     }
 
@@ -183,7 +187,7 @@ impl BetaMemory {
     pub fn add_right(&mut self, token: EnhancedToken, join_vars: &[String]) -> usize {
         let idx = self.right_tokens.len();
         self.right_tokens.push_back(token.clone());
-        
+
         // Update indices for join variables
         for var in join_vars {
             if let Some(value) = token.bindings.get(var) {
@@ -195,11 +199,11 @@ impl BetaMemory {
                     .push(idx);
             }
         }
-        
+
         self.access_times.insert(idx + 1000000, Instant::now()); // Offset for right side
         self.apply_memory_management();
         self.stats.peak_size = self.stats.peak_size.max(self.right_tokens.len());
-        
+
         idx
     }
 
@@ -212,16 +216,24 @@ impl BetaMemory {
     ) -> Vec<EnhancedToken> {
         self.stats.total_joins += 1;
         let mut matches = Vec::new();
-        
+
         if join_vars.is_empty() {
             // Cartesian product if no join variables
-            let tokens = if is_left { &self.right_tokens } else { &self.left_tokens };
+            let tokens = if is_left {
+                &self.right_tokens
+            } else {
+                &self.left_tokens
+            };
             matches.extend(tokens.iter().cloned());
         } else {
             // Use indices for efficient lookup
-            let indices = if is_left { &self.right_index } else { &self.left_index };
+            let indices = if is_left {
+                &self.right_index
+            } else {
+                &self.left_index
+            };
             let mut candidate_indices = HashSet::new();
-            
+
             for var in join_vars {
                 if let Some(value) = token.bindings.get(var) {
                     if let Some(var_index) = indices.get(var) {
@@ -236,24 +248,28 @@ impl BetaMemory {
                     }
                 }
             }
-            
+
             // Retrieve matching tokens
-            let tokens = if is_left { &self.right_tokens } else { &self.left_tokens };
+            let tokens = if is_left {
+                &self.right_tokens
+            } else {
+                &self.left_tokens
+            };
             for &idx in &candidate_indices {
                 if let Some(match_token) = tokens.get(idx) {
                     matches.push(match_token.clone());
-                    
+
                     // Update access time for LRU
                     let access_key = if is_left { idx + 1000000 } else { idx };
                     self.access_times.insert(access_key, Instant::now());
                 }
             }
         }
-        
+
         if !matches.is_empty() {
             self.stats.successful_joins += 1;
         }
-        
+
         matches
     }
 
@@ -277,8 +293,10 @@ impl BetaMemory {
             }
             MemoryStrategy::LimitAge(max_age) => {
                 let now = Instant::now();
-                self.left_tokens.retain(|token| now.duration_since(token.timestamp) < max_age);
-                self.right_tokens.retain(|token| now.duration_since(token.timestamp) < max_age);
+                self.left_tokens
+                    .retain(|token| now.duration_since(token.timestamp) < max_age);
+                self.right_tokens
+                    .retain(|token| now.duration_since(token.timestamp) < max_age);
                 self.rebuild_indices();
             }
             MemoryStrategy::LRU(max_count) => {
@@ -293,7 +311,7 @@ impl BetaMemory {
                 } else {
                     1.0
                 };
-                
+
                 // If success rate is low, be more aggressive with eviction
                 if success_rate < 0.1 && self.left_tokens.len() + self.right_tokens.len() > 1000 {
                     self.evict_oldest();
@@ -316,9 +334,7 @@ impl BetaMemory {
 
     /// Evict least recently used token
     fn evict_lru(&mut self) {
-        if let Some((&oldest_key, _)) = self.access_times.iter()
-            .min_by_key(|(_, &time)| time) {
-            
+        if let Some((&oldest_key, _)) = self.access_times.iter().min_by_key(|(_, &time)| time) {
             if oldest_key < 1000000 {
                 // Left side
                 if oldest_key < self.left_tokens.len() {
@@ -331,7 +347,7 @@ impl BetaMemory {
                     self.right_tokens.remove(idx);
                 }
             }
-            
+
             self.stats.evictions += 1;
             self.rebuild_indices();
         }
@@ -342,7 +358,7 @@ impl BetaMemory {
         self.left_index.clear();
         self.right_index.clear();
         self.access_times.clear();
-        
+
         // Rebuild left index
         for (idx, token) in self.left_tokens.iter().enumerate() {
             for (var, value) in &token.bindings {
@@ -355,7 +371,7 @@ impl BetaMemory {
             }
             self.access_times.insert(idx, Instant::now());
         }
-        
+
         // Rebuild right index
         for (idx, token) in self.right_tokens.iter().enumerate() {
             for (var, value) in &token.bindings {
@@ -454,20 +470,18 @@ impl BetaJoinNode {
     }
 
     /// Perform the join operation
-    pub fn join(
-        &mut self,
-        token: EnhancedToken,
-        from_left: bool,
-    ) -> Result<Vec<EnhancedToken>> {
+    pub fn join(&mut self, token: EnhancedToken, from_left: bool) -> Result<Vec<EnhancedToken>> {
         let mut results = Vec::new();
-        
+
         if from_left {
             // Add to left memory
             self.memory.add_left(token.clone(), &self.join_variables);
-            
+
             // Find matches in right memory
-            let matches = self.memory.find_matches_indexed(&token, true, &self.join_variables);
-            
+            let matches = self
+                .memory
+                .find_matches_indexed(&token, true, &self.join_variables);
+
             for right_token in matches {
                 if let Ok(joined) = self.try_join(&token, &right_token) {
                     results.push(joined);
@@ -476,47 +490,47 @@ impl BetaJoinNode {
         } else {
             // Add to right memory
             self.memory.add_right(token.clone(), &self.join_variables);
-            
+
             // Find matches in left memory
-            let matches = self.memory.find_matches_indexed(&token, false, &self.join_variables);
-            
+            let matches = self
+                .memory
+                .find_matches_indexed(&token, false, &self.join_variables);
+
             for left_token in matches {
                 if let Ok(joined) = self.try_join(&left_token, &token) {
                     results.push(joined);
                 }
             }
         }
-        
+
         // Apply conflict resolution if multiple results
         if results.len() > 1 {
             results = self.apply_conflict_resolution(results);
         }
-        
+
         Ok(results)
     }
 
     /// Try to join two tokens
-    fn try_join(
-        &self,
-        left: &EnhancedToken,
-        right: &EnhancedToken,
-    ) -> Result<EnhancedToken> {
+    fn try_join(&self, left: &EnhancedToken, right: &EnhancedToken) -> Result<EnhancedToken> {
         // First check join variables match
         for var in &self.join_variables {
-            if let (Some(left_val), Some(right_val)) = (left.bindings.get(var), right.bindings.get(var)) {
+            if let (Some(left_val), Some(right_val)) =
+                (left.bindings.get(var), right.bindings.get(var))
+            {
                 if !terms_compatible(left_val, right_val) {
                     return Err(anyhow!("Join variable {} doesn't match", var));
                 }
             }
         }
-        
+
         // Then check additional conditions
         for condition in &self.conditions {
             if !self.evaluate_condition(condition, left, right)? {
                 return Err(anyhow!("Join condition failed"));
             }
         }
-        
+
         // Merge tokens
         EnhancedToken::merge(left, right)
     }
@@ -529,7 +543,10 @@ impl BetaJoinNode {
         right: &EnhancedToken,
     ) -> Result<bool> {
         match condition {
-            JoinCondition::VarEquality { left_var, right_var } => {
+            JoinCondition::VarEquality {
+                left_var,
+                right_var,
+            } => {
                 let left_val = left.bindings.get(left_var);
                 let right_val = right.bindings.get(right_var);
                 Ok(match (left_val, right_val) {
@@ -537,7 +554,11 @@ impl BetaJoinNode {
                     _ => false,
                 })
             }
-            JoinCondition::VarComparison { left_var, right_var, op } => {
+            JoinCondition::VarComparison {
+                left_var,
+                right_var,
+                op,
+            } => {
                 let left_val = left.bindings.get(left_var);
                 let right_val = right.bindings.get(right_var);
                 Ok(match (left_val, right_val) {
@@ -548,9 +569,7 @@ impl BetaJoinNode {
             JoinCondition::Builtin { predicate, args } => {
                 evaluate_builtin(predicate, args, left, right)
             }
-            JoinCondition::Not(cond) => {
-                Ok(!self.evaluate_condition(cond, left, right)?)
-            }
+            JoinCondition::Not(cond) => Ok(!self.evaluate_condition(cond, left, right)?),
             JoinCondition::And(conds) => {
                 for cond in conds {
                     if !self.evaluate_condition(cond, left, right)? {
@@ -625,7 +644,7 @@ fn evaluate_comparison(left: &Term, right: &Term, op: ComparisonOp) -> Result<bo
     // Try to parse as numbers for numeric comparison
     let left_num = parse_numeric(left);
     let right_num = parse_numeric(right);
-    
+
     match (left_num, right_num) {
         (Some(l), Some(r)) => Ok(match op {
             ComparisonOp::Equal => (l - r).abs() < f64::EPSILON,
@@ -676,28 +695,29 @@ fn evaluate_builtin(
     right: &EnhancedToken,
 ) -> Result<bool> {
     // Get argument values
-    let arg_values: Vec<Option<Term>> = args.iter().map(|arg| {
-        match arg {
+    let arg_values: Vec<Option<Term>> = args
+        .iter()
+        .map(|arg| match arg {
             JoinArg::LeftVar(var) => left.bindings.get(var).cloned(),
             JoinArg::RightVar(var) => right.bindings.get(var).cloned(),
             JoinArg::Constant(term) => Some(term.clone()),
-        }
-    }).collect();
-    
+        })
+        .collect();
+
     // Check all arguments are bound
     if arg_values.iter().any(|v| v.is_none()) {
         return Ok(false);
     }
-    
+
     let values: Vec<Term> = arg_values.into_iter().map(|v| v.unwrap()).collect();
-    
+
     // Evaluate builtin
     match predicate {
         "regex" => {
             if values.len() >= 2 {
                 if let (Term::Literal(text), Term::Literal(pattern)) = (&values[0], &values[1]) {
-                    let re = regex::Regex::new(pattern)
-                        .map_err(|e| anyhow!("Invalid regex: {}", e))?;
+                    let re =
+                        regex::Regex::new(pattern).map_err(|e| anyhow!("Invalid regex: {}", e))?;
                     Ok(re.is_match(text))
                 } else {
                     Ok(false)
@@ -726,8 +746,11 @@ fn evaluate_builtin(
         }
         "numeric_add" => {
             if values.len() >= 3 {
-                if let (Some(n1), Some(n2), Some(result)) = 
-                    (parse_numeric(&values[0]), parse_numeric(&values[1]), parse_numeric(&values[2])) {
+                if let (Some(n1), Some(n2), Some(result)) = (
+                    parse_numeric(&values[0]),
+                    parse_numeric(&values[1]),
+                    parse_numeric(&values[2]),
+                ) {
                     Ok((n1 + n2 - result).abs() < f64::EPSILON)
                 } else {
                     Ok(false)
@@ -750,53 +773,81 @@ mod tests {
     #[test]
     fn test_enhanced_token_merge() {
         let mut token1 = EnhancedToken::new();
-        token1.bindings.insert("X".to_string(), Term::Constant("a".to_string()));
-        token1.bindings.insert("Y".to_string(), Term::Constant("b".to_string()));
-        
+        token1
+            .bindings
+            .insert("X".to_string(), Term::Constant("a".to_string()));
+        token1
+            .bindings
+            .insert("Y".to_string(), Term::Constant("b".to_string()));
+
         let mut token2 = EnhancedToken::new();
-        token2.bindings.insert("Y".to_string(), Term::Constant("b".to_string()));
-        token2.bindings.insert("Z".to_string(), Term::Constant("c".to_string()));
-        
+        token2
+            .bindings
+            .insert("Y".to_string(), Term::Constant("b".to_string()));
+        token2
+            .bindings
+            .insert("Z".to_string(), Term::Constant("c".to_string()));
+
         let merged = EnhancedToken::merge(&token1, &token2).unwrap();
         assert_eq!(merged.bindings.len(), 3);
-        assert_eq!(merged.bindings.get("X"), Some(&Term::Constant("a".to_string())));
-        assert_eq!(merged.bindings.get("Y"), Some(&Term::Constant("b".to_string())));
-        assert_eq!(merged.bindings.get("Z"), Some(&Term::Constant("c".to_string())));
+        assert_eq!(
+            merged.bindings.get("X"),
+            Some(&Term::Constant("a".to_string()))
+        );
+        assert_eq!(
+            merged.bindings.get("Y"),
+            Some(&Term::Constant("b".to_string()))
+        );
+        assert_eq!(
+            merged.bindings.get("Z"),
+            Some(&Term::Constant("c".to_string()))
+        );
     }
 
     #[test]
     fn test_beta_memory_indexed_lookup() {
         let mut memory = BetaMemory::new(MemoryStrategy::Unlimited);
-        
+
         // Add some tokens
         let mut token1 = EnhancedToken::new();
-        token1.bindings.insert("X".to_string(), Term::Constant("a".to_string()));
+        token1
+            .bindings
+            .insert("X".to_string(), Term::Constant("a".to_string()));
         memory.add_left(token1, &["X".to_string()]);
-        
+
         let mut token2 = EnhancedToken::new();
-        token2.bindings.insert("X".to_string(), Term::Constant("b".to_string()));
+        token2
+            .bindings
+            .insert("X".to_string(), Term::Constant("b".to_string()));
         memory.add_left(token2, &["X".to_string()]);
-        
+
         // Search for matching tokens
         let mut search_token = EnhancedToken::new();
-        search_token.bindings.insert("X".to_string(), Term::Constant("a".to_string()));
-        
+        search_token
+            .bindings
+            .insert("X".to_string(), Term::Constant("a".to_string()));
+
         let matches = memory.find_matches_indexed(&search_token, false, &["X".to_string()]);
         assert_eq!(matches.len(), 1);
-        assert_eq!(matches[0].bindings.get("X"), Some(&Term::Constant("a".to_string())));
+        assert_eq!(
+            matches[0].bindings.get("X"),
+            Some(&Term::Constant("a".to_string()))
+        );
     }
 
     #[test]
     fn test_memory_eviction_strategies() {
         // Test count limit
         let mut memory = BetaMemory::new(MemoryStrategy::LimitCount(2));
-        
+
         for i in 0..5 {
             let mut token = EnhancedToken::new();
-            token.bindings.insert("X".to_string(), Term::Constant(i.to_string()));
+            token
+                .bindings
+                .insert("X".to_string(), Term::Constant(i.to_string()));
             memory.add_left(token, &["X".to_string()]);
         }
-        
+
         assert!(memory.left_tokens.len() <= 2);
         assert!(memory.stats.evictions > 0);
     }
@@ -804,62 +855,74 @@ mod tests {
     #[test]
     fn test_join_conditions() {
         let node = BetaJoinNode::new(
-            1, 0, 0, 
+            1,
+            0,
+            0,
             MemoryStrategy::Unlimited,
-            ConflictResolution::First
+            ConflictResolution::First,
         );
-        
+
         let mut left = EnhancedToken::new();
-        left.bindings.insert("X".to_string(), Term::Literal("5".to_string()));
-        
+        left.bindings
+            .insert("X".to_string(), Term::Literal("5".to_string()));
+
         let mut right = EnhancedToken::new();
-        right.bindings.insert("Y".to_string(), Term::Literal("10".to_string()));
-        
+        right
+            .bindings
+            .insert("Y".to_string(), Term::Literal("10".to_string()));
+
         // Test numeric comparison
         let cond = JoinCondition::VarComparison {
             left_var: "X".to_string(),
             right_var: "Y".to_string(),
             op: ComparisonOp::Less,
         };
-        
+
         assert!(node.evaluate_condition(&cond, &left, &right).unwrap());
     }
 
     #[test]
     fn test_builtin_evaluation() {
         let mut left = EnhancedToken::new();
-        left.bindings.insert("text".to_string(), Term::Literal("hello world".to_string()));
-        
+        left.bindings
+            .insert("text".to_string(), Term::Literal("hello world".to_string()));
+
         let right = EnhancedToken::new();
-        
+
         // Test regex builtin
         let args = vec![
             JoinArg::LeftVar("text".to_string()),
             JoinArg::Constant(Term::Literal("hello.*".to_string())),
         ];
-        
+
         assert!(evaluate_builtin("regex", &args, &left, &right).unwrap());
-        
+
         // Test contains builtin
         let args = vec![
             JoinArg::LeftVar("text".to_string()),
             JoinArg::Constant(Term::Literal("world".to_string())),
         ];
-        
+
         assert!(evaluate_builtin("contains", &args, &left, &right).unwrap());
     }
 
     #[test]
     fn test_memory_strategy_getter_setter() {
         let mut memory = BetaMemory::new(MemoryStrategy::Unlimited);
-        
+
         // Test getter
-        assert!(matches!(memory.memory_strategy(), &MemoryStrategy::Unlimited));
-        
+        assert!(matches!(
+            memory.memory_strategy(),
+            &MemoryStrategy::Unlimited
+        ));
+
         // Test setter
         memory.set_memory_strategy(MemoryStrategy::LimitCount(100));
-        assert!(matches!(memory.memory_strategy(), &MemoryStrategy::LimitCount(100)));
-        
+        assert!(matches!(
+            memory.memory_strategy(),
+            &MemoryStrategy::LimitCount(100)
+        ));
+
         // Test with other strategies
         memory.set_memory_strategy(MemoryStrategy::LRU(50));
         assert!(matches!(memory.memory_strategy(), &MemoryStrategy::LRU(50)));

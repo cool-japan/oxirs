@@ -574,7 +574,8 @@ impl TemporalStorage {
             property: match temporal.triple.predicate() {
                 crate::model::Predicate::NamedNode(nn) => nn.as_str(),
                 crate::model::Predicate::Variable(v) => v.as_str(),
-            }.to_string(),
+            }
+            .to_string(),
             old_value: None,
             new_value: Some(Term::from_object(temporal.triple.object())),
         };

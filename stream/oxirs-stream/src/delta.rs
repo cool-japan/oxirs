@@ -80,7 +80,7 @@ impl DeltaComputer {
 
         // Track if we're in a transaction
         let mut in_transaction = false;
-        
+
         for event in events {
             let operation = match event {
                 StreamEvent::TripleAdded {
@@ -182,7 +182,9 @@ impl DeltaComputer {
                         key: "sparql-source".to_string(),
                         value: query.clone(),
                     });
-                    patch.headers.insert("sparql-source".to_string(), query.clone());
+                    patch
+                        .headers
+                        .insert("sparql-source".to_string(), query.clone());
                     continue;
                 }
                 StreamEvent::SchemaChanged { .. } | StreamEvent::Heartbeat { .. } => {
@@ -573,14 +575,14 @@ impl DeltaComputer {
                 }
             }
             UpdateOperation::ClearAll => {
-                events.push(StreamEvent::GraphCleared { 
-                    graph: None, 
+                events.push(StreamEvent::GraphCleared {
+                    graph: None,
                     metadata: Default::default(),
                 });
             }
             UpdateOperation::ClearDefault => {
-                events.push(StreamEvent::GraphCleared { 
-                    graph: None, 
+                events.push(StreamEvent::GraphCleared {
+                    graph: None,
                     metadata: Default::default(),
                 });
             }
@@ -872,7 +874,7 @@ mod tests {
     #[test]
     fn test_sparql_parsing() {
         let mut computer = DeltaComputer::new();
-        
+
         let update = r#"
             INSERT DATA {
                 <http://example.org/person1> <http://example.org/name> "John Doe" .
@@ -884,7 +886,12 @@ mod tests {
         assert_eq!(events.len(), 2);
 
         match &events[0] {
-            StreamEvent::TripleAdded { subject, predicate, object, .. } => {
+            StreamEvent::TripleAdded {
+                subject,
+                predicate,
+                object,
+                ..
+            } => {
                 assert_eq!(subject, "http://example.org/person1");
                 assert_eq!(predicate, "http://example.org/name");
                 assert_eq!(object, "\"John Doe\"");
@@ -896,7 +903,7 @@ mod tests {
     #[test]
     fn test_delete_data_parsing() {
         let mut computer = DeltaComputer::new();
-        
+
         let update = r#"
             DELETE DATA {
                 <http://example.org/person1> <http://example.org/name> "John Doe" .
@@ -907,7 +914,12 @@ mod tests {
         assert_eq!(events.len(), 1);
 
         match &events[0] {
-            StreamEvent::TripleRemoved { subject, predicate, object, .. } => {
+            StreamEvent::TripleRemoved {
+                subject,
+                predicate,
+                object,
+                ..
+            } => {
                 assert_eq!(subject, "http://example.org/person1");
                 assert_eq!(predicate, "http://example.org/name");
                 assert_eq!(object, "\"John Doe\"");
@@ -919,7 +931,7 @@ mod tests {
     #[test]
     fn test_clear_graph() {
         let mut computer = DeltaComputer::new();
-        
+
         let update = "CLEAR GRAPH <http://example.org/graph>";
         let events = computer.compute_delta(update).unwrap();
         assert_eq!(events.len(), 1);
@@ -935,7 +947,7 @@ mod tests {
     #[test]
     fn test_delete_insert() {
         let mut computer = DeltaComputer::new();
-        
+
         let update = r#"
             DELETE {
                 <http://example.org/person1> <http://example.org/age> "30" .
@@ -953,7 +965,12 @@ mod tests {
 
         // First event should be a delete
         match &events[0] {
-            StreamEvent::TripleRemoved { subject, predicate, object, .. } => {
+            StreamEvent::TripleRemoved {
+                subject,
+                predicate,
+                object,
+                ..
+            } => {
                 assert_eq!(subject, "http://example.org/person1");
                 assert_eq!(predicate, "http://example.org/age");
                 assert_eq!(object, "\"30\"");
@@ -963,7 +980,12 @@ mod tests {
 
         // Second event should be an insert
         match &events[1] {
-            StreamEvent::TripleAdded { subject, predicate, object, .. } => {
+            StreamEvent::TripleAdded {
+                subject,
+                predicate,
+                object,
+                ..
+            } => {
                 assert_eq!(subject, "http://example.org/person1");
                 assert_eq!(predicate, "http://example.org/age");
                 assert_eq!(object, "\"31\"");
@@ -975,7 +997,7 @@ mod tests {
     #[test]
     fn test_delta_to_patch() {
         let computer = DeltaComputer::new();
-        
+
         let events = vec![
             StreamEvent::TripleAdded {
                 subject: "http://example.org/s".to_string(),
@@ -1017,7 +1039,11 @@ mod tests {
         assert_eq!(patch.operations.len(), 2);
 
         match &patch.operations[0] {
-            PatchOperation::Add { subject, predicate, object } => {
+            PatchOperation::Add {
+                subject,
+                predicate,
+                object,
+            } => {
                 assert_eq!(subject, "http://example.org/s");
                 assert_eq!(predicate, "http://example.org/p");
                 assert_eq!(object, "http://example.org/o");
@@ -1026,7 +1052,11 @@ mod tests {
         }
 
         match &patch.operations[1] {
-            PatchOperation::Delete { subject, predicate, object } => {
+            PatchOperation::Delete {
+                subject,
+                predicate,
+                object,
+            } => {
                 assert_eq!(subject, "http://example.org/s2");
                 assert_eq!(predicate, "http://example.org/p2");
                 assert_eq!(object, "http://example.org/o2");
@@ -1038,7 +1068,7 @@ mod tests {
     #[tokio::test]
     async fn test_delta_processor() {
         let mut processor = DeltaProcessor::new().with_batch_size(2);
-        
+
         let update1 = r#"
             INSERT DATA {
                 <http://example.org/person1> <http://example.org/name> "John" .
@@ -1068,20 +1098,29 @@ mod tests {
     #[tokio::test]
     async fn test_batch_processor() {
         let mut batch_processor = BatchDeltaProcessor::new(2);
-        
+
         let updates = vec![
-            r#"INSERT DATA { <http://example.org/p1> <http://example.org/name> "Person1" . }"#.to_string(),
-            r#"INSERT DATA { <http://example.org/p2> <http://example.org/name> "Person2" . }"#.to_string(),
-            r#"DELETE DATA { <http://example.org/p1> <http://example.org/old> "value" . }"#.to_string(),
+            r#"INSERT DATA { <http://example.org/p1> <http://example.org/name> "Person1" . }"#
+                .to_string(),
+            r#"INSERT DATA { <http://example.org/p2> <http://example.org/name> "Person2" . }"#
+                .to_string(),
+            r#"DELETE DATA { <http://example.org/p1> <http://example.org/old> "value" . }"#
+                .to_string(),
         ];
 
         let events = batch_processor.process_updates(&updates).await.unwrap();
         assert_eq!(events.len(), 3);
 
         // Check that we got the right types of events
-        let add_count = events.iter().filter(|e| matches!(e, StreamEvent::TripleAdded { .. })).count();
-        let remove_count = events.iter().filter(|e| matches!(e, StreamEvent::TripleRemoved { .. })).count();
-        
+        let add_count = events
+            .iter()
+            .filter(|e| matches!(e, StreamEvent::TripleAdded { .. }))
+            .count();
+        let remove_count = events
+            .iter()
+            .filter(|e| matches!(e, StreamEvent::TripleRemoved { .. }))
+            .count();
+
         assert_eq!(add_count, 2);
         assert_eq!(remove_count, 1);
     }
@@ -1089,11 +1128,14 @@ mod tests {
     #[tokio::test]
     async fn test_updates_to_patch() {
         let mut processor = DeltaProcessor::new();
-        
+
         let updates = vec![
-            r#"INSERT DATA { <http://example.org/s> <http://example.org/p> "value1" . }"#.to_string(),
-            r#"DELETE DATA { <http://example.org/s> <http://example.org/p> "value1" . }"#.to_string(),
-            r#"INSERT DATA { <http://example.org/s> <http://example.org/p> "value2" . }"#.to_string(),
+            r#"INSERT DATA { <http://example.org/s> <http://example.org/p> "value1" . }"#
+                .to_string(),
+            r#"DELETE DATA { <http://example.org/s> <http://example.org/p> "value1" . }"#
+                .to_string(),
+            r#"INSERT DATA { <http://example.org/s> <http://example.org/p> "value2" . }"#
+                .to_string(),
         ];
 
         let patch = processor.updates_to_patch(&updates).await.unwrap();
@@ -1108,7 +1150,7 @@ mod tests {
     #[test]
     fn test_statement_splitting() {
         let computer = DeltaComputer::new();
-        
+
         let input = r#"
             INSERT DATA { <s1> <p1> "o1" . };
             DELETE DATA { <s2> <p2> "o2" . };
@@ -1125,7 +1167,7 @@ mod tests {
     #[test]
     fn test_triple_parsing() {
         let computer = DeltaComputer::new();
-        
+
         let data = r#"
             <http://example.org/subject> <http://example.org/predicate> "Object literal" .
             <http://example.org/s2> <http://example.org/p2> <http://example.org/o2> .
@@ -1133,11 +1175,11 @@ mod tests {
 
         let triples = computer.parse_triples(data).unwrap();
         assert_eq!(triples.len(), 2);
-        
+
         assert_eq!(triples[0].subject, "http://example.org/subject");
         assert_eq!(triples[0].predicate, "http://example.org/predicate");
         assert_eq!(triples[0].object, "\"Object literal\"");
-        
+
         assert_eq!(triples[1].subject, "http://example.org/s2");
         assert_eq!(triples[1].predicate, "http://example.org/p2");
         assert_eq!(triples[1].object, "http://example.org/o2");
@@ -1146,7 +1188,7 @@ mod tests {
     #[test]
     fn test_optimization() {
         let computer = DeltaComputer::new().with_optimization(true);
-        
+
         let events = vec![
             StreamEvent::TripleAdded {
                 subject: "s".to_string(),

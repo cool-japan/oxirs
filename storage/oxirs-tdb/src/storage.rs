@@ -13,27 +13,38 @@ use thiserror::Error;
 pub enum StorageError {
     #[error("Invalid IRI format: {iri}")]
     InvalidIri { iri: String },
-    
+
     #[error("Invalid literal format: {literal}")]
     InvalidLiteral { literal: String },
-    
+
     #[error("Storage capacity exceeded: {current_size} >= {max_size}")]
-    CapacityExceeded { current_size: usize, max_size: usize },
-    
+    CapacityExceeded {
+        current_size: usize,
+        max_size: usize,
+    },
+
     #[error("Operation timeout after {duration:?}")]
     OperationTimeout { duration: Duration },
-    
+
     #[error("Duplicate quad: {subject} {predicate} {object}")]
-    DuplicateQuad { subject: String, predicate: String, object: String },
-    
+    DuplicateQuad {
+        subject: String,
+        predicate: String,
+        object: String,
+    },
+
     #[error("Invalid quad pattern: {reason}")]
     InvalidPattern { reason: String },
-    
+
     #[error("Storage corrupted: {details}")]
     StorageCorrupted { details: String },
-    
+
     #[error("Resource limit exceeded: {resource} = {current} >= {limit}")]
-    ResourceLimitExceeded { resource: String, current: u64, limit: u64 },
+    ResourceLimitExceeded {
+        resource: String,
+        current: u64,
+        limit: u64,
+    },
 }
 
 /// Storage operation metrics
@@ -75,7 +86,7 @@ pub struct StorageConfig {
 impl Default for StorageConfig {
     fn default() -> Self {
         Self {
-            max_quads: Some(10_000_000), // 10M quads default limit
+            max_quads: Some(10_000_000),                // 10M quads default limit
             max_memory_bytes: Some(1024 * 1024 * 1024), // 1GB default limit
             operation_timeout: Some(Duration::from_secs(30)), // 30s timeout
             strict_iri_validation: true,
@@ -92,54 +103,55 @@ impl Validator {
     /// Validate IRI format according to RFC 3987
     pub fn validate_iri(iri: &str) -> Result<(), StorageError> {
         if iri.is_empty() {
-            return Err(StorageError::InvalidIri { 
-                iri: iri.to_string() 
+            return Err(StorageError::InvalidIri {
+                iri: iri.to_string(),
             });
         }
-        
+
         // Basic IRI validation - check for scheme
         if !iri.contains(':') {
-            return Err(StorageError::InvalidIri { 
-                iri: iri.to_string() 
+            return Err(StorageError::InvalidIri {
+                iri: iri.to_string(),
             });
         }
-        
+
         // Check for invalid characters
         if iri.contains(' ') || iri.contains('\t') || iri.contains('\n') {
-            return Err(StorageError::InvalidIri { 
-                iri: iri.to_string() 
+            return Err(StorageError::InvalidIri {
+                iri: iri.to_string(),
             });
         }
-        
+
         // Additional checks for common schemes
         if iri.starts_with("http://") || iri.starts_with("https://") {
-            if iri.len() < 8 { // Minimum valid HTTP(S) URL
-                return Err(StorageError::InvalidIri { 
-                    iri: iri.to_string() 
+            if iri.len() < 8 {
+                // Minimum valid HTTP(S) URL
+                return Err(StorageError::InvalidIri {
+                    iri: iri.to_string(),
                 });
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Validate literal format
     pub fn validate_literal(literal: &str) -> Result<(), StorageError> {
         // Literals can be any string, but check for reasonable length
-        if literal.len() > 1_000_000 { // 1MB max literal size
-            return Err(StorageError::InvalidLiteral { 
-                literal: format!("{}...(truncated, {} bytes)", 
-                    &literal[..100], literal.len()) 
+        if literal.len() > 1_000_000 {
+            // 1MB max literal size
+            return Err(StorageError::InvalidLiteral {
+                literal: format!("{}...(truncated, {} bytes)", &literal[..100], literal.len()),
             });
         }
-        
+
         Ok(())
     }
-    
+
     /// Validate complete quad
     pub fn validate_quad(
         subject: &str,
-        predicate: &str, 
+        predicate: &str,
         object: &str,
         graph: Option<&str>,
         config: &StorageConfig,
@@ -147,17 +159,17 @@ impl Validator {
         if config.strict_iri_validation {
             Self::validate_iri(subject)?;
             Self::validate_iri(predicate)?;
-            
+
             // Object can be IRI or literal - try IRI first, then literal
             if Self::validate_iri(object).is_err() {
                 Self::validate_literal(object)?;
             }
-            
+
             if let Some(g) = graph {
                 Self::validate_iri(g)?;
             }
         }
-        
+
         Ok(())
     }
 }
@@ -218,7 +230,7 @@ impl MemoryStorage {
     pub fn new() -> Self {
         Self::with_config(StorageConfig::default())
     }
-    
+
     /// Create new memory storage with custom configuration
     pub fn with_config(config: StorageConfig) -> Self {
         Self {
@@ -229,17 +241,17 @@ impl MemoryStorage {
             created_at: Instant::now(),
         }
     }
-    
+
     /// Get current metrics
     pub fn get_metrics(&self) -> &StorageMetrics {
         &self.metrics
     }
-    
+
     /// Get storage configuration
     pub fn get_config(&self) -> &StorageConfig {
         &self.config
     }
-    
+
     /// Validate storage integrity
     pub fn validate_integrity(&self) -> Result<(), StorageError> {
         // Check for quad count consistency
@@ -252,7 +264,7 @@ impl MemoryStorage {
                 ),
             });
         }
-        
+
         // Validate all stored quads
         for (i, quad) in self.quads.iter().enumerate() {
             if let Err(e) = Validator::validate_quad(
@@ -267,10 +279,10 @@ impl MemoryStorage {
                 });
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Check resource limits before operation
     fn check_limits(&self, operation: &str) -> Result<(), StorageError> {
         // Check quad count limit
@@ -282,7 +294,7 @@ impl MemoryStorage {
                 });
             }
         }
-        
+
         // Check memory usage (rough estimation)
         if let Some(max_memory) = self.config.max_memory_bytes {
             let estimated_memory = self.estimate_memory_usage();
@@ -294,30 +306,36 @@ impl MemoryStorage {
                 });
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Estimate current memory usage
     fn estimate_memory_usage(&self) -> usize {
         let quad_size = std::mem::size_of::<Quad>();
         let base_memory = self.quads.len() * quad_size;
-        
+
         // Estimate string data
-        let string_memory: usize = self.quads.iter()
-            .map(|q| q.subject.len() + q.predicate.len() + q.object.len() 
-                + q.graph.as_ref().map_or(0, |g| g.len()))
+        let string_memory: usize = self
+            .quads
+            .iter()
+            .map(|q| {
+                q.subject.len()
+                    + q.predicate.len()
+                    + q.object.len()
+                    + q.graph.as_ref().map_or(0, |g| g.len())
+            })
             .sum();
-            
+
         base_memory + string_memory
     }
-    
+
     /// Update metrics after operation
     fn update_metrics(&mut self, operation: &str, duration: Duration, success: bool) {
         if !self.config.enable_metrics {
             return;
         }
-        
+
         match operation {
             "insert" => self.metrics.insert_count += 1,
             "query" => {
@@ -327,32 +345,38 @@ impl MemoryStorage {
                 if self.metrics.query_count == 1 {
                     self.metrics.avg_query_time_us = duration_us;
                 } else {
-                    self.metrics.avg_query_time_us = 
+                    self.metrics.avg_query_time_us =
                         (self.metrics.avg_query_time_us + duration_us) / 2;
                 }
-            },
+            }
             "remove" => self.metrics.remove_count += 1,
             _ => {}
         }
-        
+
         if !success {
             self.metrics.error_count += 1;
         }
-        
+
         self.metrics.quad_count = self.quads.len() as u64;
-        
+
         let current_memory = self.estimate_memory_usage() as u64;
         if current_memory > self.metrics.peak_memory_bytes {
             self.metrics.peak_memory_bytes = current_memory;
         }
     }
-    
+
     /// Check for duplicate quad
-    fn is_duplicate(&self, subject: &str, predicate: &str, object: &str, graph: Option<&str>) -> bool {
+    fn is_duplicate(
+        &self,
+        subject: &str,
+        predicate: &str,
+        object: &str,
+        graph: Option<&str>,
+    ) -> bool {
         if !self.config.enable_duplicate_detection {
             return false;
         }
-        
+
         self.quads.iter().any(|quad| {
             quad.subject == subject
                 && quad.predicate == predicate
@@ -360,10 +384,11 @@ impl MemoryStorage {
                 && quad.graph.as_deref() == graph
         })
     }
-    
+
     /// Rebuild index for a specific subject after removals
     fn rebuild_index_for_subject(&mut self, subject: &str) {
-        let indices: Vec<usize> = self.quads
+        let indices: Vec<usize> = self
+            .quads
             .iter()
             .enumerate()
             .filter_map(|(i, quad)| {
@@ -374,7 +399,7 @@ impl MemoryStorage {
                 }
             })
             .collect();
-            
+
         if indices.is_empty() {
             self.quad_index.remove(subject);
         } else {
@@ -393,16 +418,16 @@ impl StorageBackend for MemoryStorage {
     ) -> Result<()> {
         let start_time = Instant::now();
         let mut success = false;
-        
+
         // Perform operation with comprehensive error handling
         let result = (|| {
             // Check resource limits first
             self.check_limits("insert")?;
-            
+
             // Validate input
             Validator::validate_quad(subject, predicate, object, graph, &self.config)
                 .map_err(|e| anyhow::Error::new(e))?;
-            
+
             // Check for duplicates
             if self.is_duplicate(subject, predicate, object, graph) {
                 return Err(anyhow::Error::new(StorageError::DuplicateQuad {
@@ -411,7 +436,7 @@ impl StorageBackend for MemoryStorage {
                     object: object.to_string(),
                 }));
             }
-            
+
             // Check operation timeout
             if let Some(timeout) = self.config.operation_timeout {
                 if start_time.elapsed() > timeout {
@@ -420,7 +445,7 @@ impl StorageBackend for MemoryStorage {
                     }));
                 }
             }
-            
+
             // Create and insert quad
             let quad = Quad {
                 subject: subject.to_string(),
@@ -428,30 +453,30 @@ impl StorageBackend for MemoryStorage {
                 object: object.to_string(),
                 graph: graph.map(|g| g.to_string()),
             };
-            
+
             let index = self.quads.len();
             self.quads.push(quad);
-            
+
             // Update index for faster queries
             self.quad_index
                 .entry(subject.to_string())
                 .or_insert_with(Vec::new)
                 .push(index);
-            
+
             success = true;
             Ok(())
         })();
-        
+
         // Update metrics
         self.update_metrics("insert", start_time.elapsed(), success);
-        
+
         result
     }
 
     fn query_quads(&self, pattern: QuadPattern) -> Result<Vec<Quad>> {
         let start_time = Instant::now();
         let mut success = false;
-        
+
         let result = (|| {
             // Check operation timeout
             if let Some(timeout) = self.config.operation_timeout {
@@ -461,30 +486,30 @@ impl StorageBackend for MemoryStorage {
                     }));
                 }
             }
-            
+
             // Optimize query using index when possible
             let candidate_indices = if let Some(ref subject) = pattern.subject {
                 self.quad_index.get(subject).cloned().unwrap_or_default()
             } else {
                 (0..self.quads.len()).collect()
             };
-            
+
             let results: Vec<Quad> = candidate_indices
                 .iter()
                 .filter_map(|&i| {
                     if i >= self.quads.len() {
                         return None; // Index corruption check
                     }
-                    
+
                     let quad = &self.quads[i];
-                    
+
                     // Check timeout periodically during iteration
                     if let Some(timeout) = self.config.operation_timeout {
                         if start_time.elapsed() > timeout {
                             return None;
                         }
                     }
-                    
+
                     // Apply filters
                     if let Some(ref subject) = pattern.subject {
                         if &quad.subject != subject {
@@ -506,20 +531,20 @@ impl StorageBackend for MemoryStorage {
                             return None;
                         }
                     }
-                    
+
                     Some(quad.clone())
                 })
                 .collect();
-            
+
             success = true;
             Ok(results)
         })();
-        
+
         // Update metrics (cast to mutable for this call)
         let duration = start_time.elapsed();
         // Note: We need to work around the immutable self here
         // In a real implementation, we'd use interior mutability (e.g., RefCell, Mutex)
-        
+
         result
     }
 
@@ -532,7 +557,7 @@ impl StorageBackend for MemoryStorage {
     ) -> Result<()> {
         let start_time = Instant::now();
         let mut success = false;
-        
+
         let result = (|| {
             // Check operation timeout
             if let Some(timeout) = self.config.operation_timeout {
@@ -542,15 +567,15 @@ impl StorageBackend for MemoryStorage {
                     }));
                 }
             }
-            
+
             // Validate input if strict validation is enabled
             if self.config.strict_iri_validation {
                 Validator::validate_quad(subject, predicate, object, graph, &self.config)
                     .map_err(|e| anyhow::Error::new(e))?;
             }
-            
+
             let initial_len = self.quads.len();
-            
+
             // Remove matching quads and track removed indices
             let mut removed_indices = Vec::new();
             let mut index = 0;
@@ -559,32 +584,32 @@ impl StorageBackend for MemoryStorage {
                     && quad.predicate == predicate
                     && quad.object == object
                     && quad.graph.as_deref() == graph;
-                    
+
                 if should_remove {
                     removed_indices.push(index);
                 }
                 index += 1;
                 !should_remove
             });
-            
+
             // Update index - rebuild for affected subjects
             if !removed_indices.is_empty() {
                 self.rebuild_index_for_subject(subject);
             }
-            
+
             let removed_count = initial_len - self.quads.len();
             if removed_count == 0 {
                 // No quad was found to remove - this could be considered an error
                 // but RDF stores typically handle this silently
             }
-            
+
             success = true;
             Ok(())
         })();
-        
+
         // Update metrics
         self.update_metrics("remove", start_time.elapsed(), success);
-        
+
         result
     }
 }
@@ -600,16 +625,16 @@ mod tests {
         assert!(Validator::validate_iri("http://example.org/test").is_ok());
         assert!(Validator::validate_iri("https://example.org/test").is_ok());
         assert!(Validator::validate_iri("urn:example:test").is_ok());
-        
+
         // Invalid IRIs
         assert!(Validator::validate_iri("").is_err());
         assert!(Validator::validate_iri("no-scheme").is_err());
         assert!(Validator::validate_iri("http://example with spaces").is_err());
-        
+
         // Test literal validation
         assert!(Validator::validate_literal("valid literal").is_ok());
         assert!(Validator::validate_literal("").is_ok()); // Empty literal is valid
-        
+
         // Very large literal should fail
         let large_literal = "x".repeat(2_000_000);
         assert!(Validator::validate_literal(&large_literal).is_err());
@@ -629,15 +654,17 @@ mod tests {
     #[test]
     fn test_memory_storage_basic_operations() {
         let mut storage = MemoryStorage::new();
-        
+
         // Test insert
-        assert!(storage.insert_quad(
-            "http://example.org/alice",
-            "http://example.org/name",
-            "Alice",
-            None
-        ).is_ok());
-        
+        assert!(storage
+            .insert_quad(
+                "http://example.org/alice",
+                "http://example.org/name",
+                "Alice",
+                None
+            )
+            .is_ok());
+
         // Test query
         let pattern = QuadPattern {
             subject: Some("http://example.org/alice".to_string()),
@@ -649,7 +676,7 @@ mod tests {
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].subject, "http://example.org/alice");
         assert_eq!(results[0].object, "Alice");
-        
+
         // Check metrics
         let metrics = storage.get_metrics();
         assert_eq!(metrics.quad_count, 1);
@@ -659,24 +686,26 @@ mod tests {
     #[test]
     fn test_duplicate_detection() {
         let mut storage = MemoryStorage::new();
-        
+
         // Insert a quad
-        assert!(storage.insert_quad(
-            "http://example.org/alice",
-            "http://example.org/name",
-            "Alice",
-            None
-        ).is_ok());
-        
+        assert!(storage
+            .insert_quad(
+                "http://example.org/alice",
+                "http://example.org/name",
+                "Alice",
+                None
+            )
+            .is_ok());
+
         // Try to insert the same quad again - should fail
         let result = storage.insert_quad(
             "http://example.org/alice",
             "http://example.org/name",
             "Alice",
-            None
+            None,
         );
         assert!(result.is_err());
-        
+
         // Verify only one quad exists
         assert_eq!(storage.get_metrics().quad_count, 1);
     }
@@ -688,11 +717,15 @@ mod tests {
             ..StorageConfig::default()
         };
         let mut storage = MemoryStorage::with_config(config);
-        
+
         // Insert up to limit
-        assert!(storage.insert_quad("http://ex.org/s1", "http://ex.org/p", "o1", None).is_ok());
-        assert!(storage.insert_quad("http://ex.org/s2", "http://ex.org/p", "o2", None).is_ok());
-        
+        assert!(storage
+            .insert_quad("http://ex.org/s1", "http://ex.org/p", "o1", None)
+            .is_ok());
+        assert!(storage
+            .insert_quad("http://ex.org/s2", "http://ex.org/p", "o2", None)
+            .is_ok());
+
         // Next insert should fail due to capacity
         let result = storage.insert_quad("http://ex.org/s3", "http://ex.org/p", "o3", None);
         assert!(result.is_err());
@@ -701,16 +734,16 @@ mod tests {
     #[test]
     fn test_input_validation() {
         let mut storage = MemoryStorage::new();
-        
+
         // Try to insert quad with invalid IRI
         let result = storage.insert_quad(
             "invalid iri with spaces",
             "http://example.org/predicate",
             "object",
-            None
+            None,
         );
         assert!(result.is_err());
-        
+
         // Verify no quad was inserted
         assert_eq!(storage.get_metrics().quad_count, 0);
     }
@@ -718,10 +751,12 @@ mod tests {
     #[test]
     fn test_storage_integrity() {
         let mut storage = MemoryStorage::new();
-        
+
         // Insert some valid data
-        storage.insert_quad("http://ex.org/s", "http://ex.org/p", "o", None).unwrap();
-        
+        storage
+            .insert_quad("http://ex.org/s", "http://ex.org/p", "o", None)
+            .unwrap();
+
         // Integrity check should pass
         assert!(storage.validate_integrity().is_ok());
     }
@@ -729,18 +764,26 @@ mod tests {
     #[test]
     fn test_remove_operations() {
         let mut storage = MemoryStorage::new();
-        
+
         // Insert some quads
-        storage.insert_quad("http://ex.org/alice", "http://ex.org/name", "Alice", None).unwrap();
-        storage.insert_quad("http://ex.org/alice", "http://ex.org/age", "30", None).unwrap();
-        storage.insert_quad("http://ex.org/bob", "http://ex.org/name", "Bob", None).unwrap();
-        
+        storage
+            .insert_quad("http://ex.org/alice", "http://ex.org/name", "Alice", None)
+            .unwrap();
+        storage
+            .insert_quad("http://ex.org/alice", "http://ex.org/age", "30", None)
+            .unwrap();
+        storage
+            .insert_quad("http://ex.org/bob", "http://ex.org/name", "Bob", None)
+            .unwrap();
+
         assert_eq!(storage.get_metrics().quad_count, 3);
-        
+
         // Remove one quad
-        storage.remove_quad("http://ex.org/alice", "http://ex.org/name", "Alice", None).unwrap();
+        storage
+            .remove_quad("http://ex.org/alice", "http://ex.org/name", "Alice", None)
+            .unwrap();
         assert_eq!(storage.get_metrics().quad_count, 2);
-        
+
         // Verify the correct quad was removed
         let pattern = QuadPattern {
             subject: Some("http://ex.org/alice".to_string()),
@@ -756,11 +799,15 @@ mod tests {
     #[test]
     fn test_metrics_collection() {
         let mut storage = MemoryStorage::new();
-        
+
         // Perform various operations
-        storage.insert_quad("http://ex.org/s1", "http://ex.org/p", "o1", None).unwrap();
-        storage.insert_quad("http://ex.org/s2", "http://ex.org/p", "o2", None).unwrap();
-        
+        storage
+            .insert_quad("http://ex.org/s1", "http://ex.org/p", "o1", None)
+            .unwrap();
+        storage
+            .insert_quad("http://ex.org/s2", "http://ex.org/p", "o2", None)
+            .unwrap();
+
         let pattern = QuadPattern {
             subject: None,
             predicate: Some("http://ex.org/p".to_string()),
@@ -768,9 +815,11 @@ mod tests {
             graph: None,
         };
         storage.query_quads(pattern).unwrap();
-        
-        storage.remove_quad("http://ex.org/s1", "http://ex.org/p", "o1", None).unwrap();
-        
+
+        storage
+            .remove_quad("http://ex.org/s1", "http://ex.org/p", "o1", None)
+            .unwrap();
+
         let metrics = storage.get_metrics();
         assert_eq!(metrics.quad_count, 1);
         assert_eq!(metrics.insert_count, 2);

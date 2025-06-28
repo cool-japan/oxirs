@@ -2,17 +2,17 @@
 //!
 //! Extracted and adapted from OxiGraph error handling with OxiRS enhancements.
 
-use std::fmt;
-use std::error::Error;
-use std::io;
 use serde::{Deserialize, Serialize};
+use std::error::Error;
+use std::fmt;
+use std::io;
 
 /// Position in a text document
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TextPosition {
     /// Line number (1-based)
     pub line: usize,
-    /// Column number (1-based) 
+    /// Column number (1-based)
     pub column: usize,
     /// Byte offset from start of document
     pub offset: usize,
@@ -21,9 +21,13 @@ pub struct TextPosition {
 impl TextPosition {
     /// Create a new text position
     pub fn new(line: usize, column: usize, offset: usize) -> Self {
-        Self { line, column, offset }
+        Self {
+            line,
+            column,
+            offset,
+        }
     }
-    
+
     /// Position at start of document
     pub fn start() -> Self {
         Self::new(1, 1, 0)
@@ -56,7 +60,7 @@ impl RdfSyntaxError {
             context: None,
         }
     }
-    
+
     /// Create a syntax error with position
     pub fn with_position(message: impl Into<String>, position: TextPosition) -> Self {
         Self {
@@ -65,12 +69,12 @@ impl RdfSyntaxError {
             context: None,
         }
     }
-    
+
     /// Create a syntax error with position and context
     pub fn with_context(
-        message: impl Into<String>, 
-        position: TextPosition, 
-        context: impl Into<String>
+        message: impl Into<String>,
+        position: TextPosition,
+        context: impl Into<String>,
     ) -> Self {
         Self {
             message: message.into(),
@@ -78,13 +82,13 @@ impl RdfSyntaxError {
             context: Some(context.into()),
         }
     }
-    
+
     /// Add position information to the error
     pub fn at_position(mut self, position: TextPosition) -> Self {
         self.position = Some(position);
         self
     }
-    
+
     /// Add context information to the error
     pub fn with_context_str(mut self, context: impl Into<String>) -> Self {
         self.context = Some(context.into());
@@ -95,15 +99,15 @@ impl RdfSyntaxError {
 impl fmt::Display for RdfSyntaxError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Syntax error: {}", self.message)?;
-        
+
         if let Some(position) = &self.position {
             write!(f, " at {}", position)?;
         }
-        
+
         if let Some(context) = &self.context {
             write!(f, "\nContext: {}", context)?;
         }
-        
+
         Ok(())
     }
 }
@@ -138,27 +142,27 @@ impl RdfParseError {
     pub fn syntax(message: impl Into<String>) -> Self {
         Self::Syntax(RdfSyntaxError::new(message))
     }
-    
+
     /// Create a syntax error with position
     pub fn syntax_at(message: impl Into<String>, position: TextPosition) -> Self {
         Self::Syntax(RdfSyntaxError::with_position(message, position))
     }
-    
+
     /// Create an invalid IRI error
     pub fn invalid_iri(iri: impl Into<String>) -> Self {
         Self::InvalidIri(iri.into())
     }
-    
+
     /// Create an invalid literal error
     pub fn invalid_literal(literal: impl Into<String>) -> Self {
         Self::InvalidLiteral(literal.into())
     }
-    
+
     /// Create an unsupported feature error
     pub fn unsupported(feature: impl Into<String>) -> Self {
         Self::UnsupportedFeature(feature.into())
     }
-    
+
     /// Create an internal error
     pub fn internal(message: impl Into<String>) -> Self {
         Self::Internal(message.into())
@@ -225,17 +229,17 @@ impl FormatError {
     pub fn unsupported_format(format: impl Into<String>) -> Self {
         Self::UnsupportedFormat(format.into())
     }
-    
+
     /// Create an invalid data error
     pub fn invalid_data(message: impl Into<String>) -> Self {
         Self::InvalidData(message.into())
     }
-    
+
     /// Create a missing component error
     pub fn missing_component(component: impl Into<String>) -> Self {
         Self::MissingComponent(component.into())
     }
-    
+
     /// Create a configuration error
     pub fn configuration(message: impl Into<String>) -> Self {
         Self::Configuration(message.into())
@@ -302,7 +306,7 @@ mod tests {
         assert_eq!(pos.line, 10);
         assert_eq!(pos.column, 5);
         assert_eq!(pos.offset, 100);
-        
+
         let start = TextPosition::start();
         assert_eq!(start.line, 1);
         assert_eq!(start.column, 1);
@@ -314,7 +318,7 @@ mod tests {
         let err = RdfSyntaxError::new("Invalid syntax");
         assert_eq!(err.message, "Invalid syntax");
         assert!(err.position.is_none());
-        
+
         let pos = TextPosition::new(5, 10, 50);
         let err_with_pos = RdfSyntaxError::with_position("Bad token", pos);
         assert_eq!(err_with_pos.position, Some(pos));
@@ -324,19 +328,22 @@ mod tests {
     fn test_parse_error() {
         let syntax_err = RdfParseError::syntax("Bad syntax");
         assert!(matches!(syntax_err, RdfParseError::Syntax(_)));
-        
+
         let iri_err = RdfParseError::invalid_iri("not-an-iri");
         assert!(matches!(iri_err, RdfParseError::InvalidIri(_)));
-        
+
         let unsupported_err = RdfParseError::unsupported("Some feature");
-        assert!(matches!(unsupported_err, RdfParseError::UnsupportedFeature(_)));
+        assert!(matches!(
+            unsupported_err,
+            RdfParseError::UnsupportedFeature(_)
+        ));
     }
 
-    #[test] 
+    #[test]
     fn test_format_error() {
         let format_err = FormatError::unsupported_format("unknown/format");
         assert!(matches!(format_err, FormatError::UnsupportedFormat(_)));
-        
+
         let data_err = FormatError::invalid_data("Bad data");
         assert!(matches!(data_err, FormatError::InvalidData(_)));
     }
@@ -346,7 +353,7 @@ mod tests {
         let syntax_err = RdfSyntaxError::new("Bad syntax");
         let parse_err: RdfParseError = syntax_err.into();
         let format_err: FormatError = parse_err.into();
-        
+
         assert!(matches!(format_err, FormatError::Parse(_)));
     }
 }

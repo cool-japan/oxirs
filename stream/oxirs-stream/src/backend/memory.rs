@@ -110,7 +110,11 @@ impl StreamBackend for MemoryBackend {
         Ok(offset)
     }
 
-    async fn send_batch(&self, topic: &TopicName, events: Vec<StreamEvent>) -> StreamResult<Vec<Offset>> {
+    async fn send_batch(
+        &self,
+        topic: &TopicName,
+        events: Vec<StreamEvent>,
+    ) -> StreamResult<Vec<Offset>> {
         let mut offsets = Vec::new();
         for event in events {
             let offset = self.send_event(topic, event).await?;
@@ -133,8 +137,12 @@ impl StreamBackend for MemoryBackend {
 
         let start_offset = if let Some(group) = consumer_group {
             let group_name = group.name();
-            let current_offset = topic_data.consumer_offsets.get(group_name).copied().unwrap_or(0);
-            
+            let current_offset = topic_data
+                .consumer_offsets
+                .get(group_name)
+                .copied()
+                .unwrap_or(0);
+
             match position {
                 StreamPosition::Beginning => 0,
                 StreamPosition::End => topic_data.next_offset,
@@ -158,10 +166,9 @@ impl StreamBackend for MemoryBackend {
         // Update consumer offset if using consumer group
         if let Some(group) = consumer_group {
             if let Some((_, last_offset)) = events.last() {
-                topic_data.consumer_offsets.insert(
-                    group.name().to_string(),
-                    last_offset.value() + 1,
-                );
+                topic_data
+                    .consumer_offsets
+                    .insert(group.name().to_string(), last_offset.value() + 1);
             }
         }
 
@@ -180,10 +187,9 @@ impl StreamBackend for MemoryBackend {
             .get_mut(topic)
             .ok_or_else(|| StreamError::TopicNotFound(topic.to_string()))?;
 
-        topic_data.consumer_offsets.insert(
-            consumer_group.name().to_string(),
-            offset.value() + 1,
-        );
+        topic_data
+            .consumer_offsets
+            .insert(consumer_group.name().to_string(), offset.value() + 1);
         Ok(())
     }
 
@@ -205,10 +211,9 @@ impl StreamBackend for MemoryBackend {
             StreamPosition::Offset(offset) => offset,
         };
 
-        topic_data.consumer_offsets.insert(
-            consumer_group.name().to_string(),
-            offset,
-        );
+        topic_data
+            .consumer_offsets
+            .insert(consumer_group.name().to_string(), offset);
         Ok(())
     }
 
@@ -222,7 +227,8 @@ impl StreamBackend for MemoryBackend {
             .get(topic)
             .ok_or_else(|| StreamError::TopicNotFound(topic.to_string()))?;
 
-        let current_offset = topic_data.consumer_offsets
+        let current_offset = topic_data
+            .consumer_offsets
             .get(consumer_group.name())
             .copied()
             .unwrap_or(0);
@@ -241,10 +247,19 @@ impl StreamBackend for MemoryBackend {
 
         let mut metadata = HashMap::new();
         metadata.insert("backend".to_string(), "memory".to_string());
-        metadata.insert("event_count".to_string(), topic_data.events.len().to_string());
-        metadata.insert("next_offset".to_string(), topic_data.next_offset.to_string());
-        metadata.insert("consumer_groups".to_string(), topic_data.consumer_offsets.len().to_string());
-        
+        metadata.insert(
+            "event_count".to_string(),
+            topic_data.events.len().to_string(),
+        );
+        metadata.insert(
+            "next_offset".to_string(),
+            topic_data.next_offset.to_string(),
+        );
+        metadata.insert(
+            "consumer_groups".to_string(),
+            topic_data.consumer_offsets.len().to_string(),
+        );
+
         Ok(metadata)
     }
 }

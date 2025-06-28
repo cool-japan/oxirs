@@ -1,22 +1,22 @@
 //! Advanced memory mapping features for large datasets
-//! 
+//!
 //! This module provides advanced memory mapping capabilities including:
 //! - Lazy loading with page-level access
 //! - Smart caching and eviction policies
 //! - NUMA-aware memory allocation
 //! - Swapping policies for memory pressure
 
-use anyhow::{Result, Context, bail};
-use memmap2::{MmapMut, MmapOptions, Mmap};
-use parking_lot::{RwLock, Mutex};
-use std::collections::{HashMap, BTreeMap, VecDeque};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, AtomicU64, Ordering};
-use std::time::{Instant, Duration};
-use std::num::NonZeroUsize;
-use lru::LruCache;
+use anyhow::{bail, Context, Result};
 use crossbeam_utils::CachePadded;
+use lru::LruCache;
+use memmap2::{Mmap, MmapMut, MmapOptions};
 use oxirs_core::parallel::*;
+use parking_lot::{Mutex, RwLock};
+use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::num::NonZeroUsize;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 /// Page size for lazy loading (16KB for better vector alignment)
 const VECTOR_PAGE_SIZE: usize = 16384;
@@ -27,29 +27,35 @@ const DEFAULT_MAX_PAGES: usize = 10000;
 /// NUMA node information
 #[cfg(target_os = "linux")]
 mod numa {
-    use libc::{c_void, c_ulong};
-    
+    use libc::{c_ulong, c_void};
+
     extern "C" {
         fn numa_available() -> i32;
         fn numa_max_node() -> i32;
         fn numa_node_of_cpu(cpu: i32) -> i32;
         fn numa_alloc_onnode(size: usize, node: i32) -> *mut c_void;
         fn numa_free(ptr: *mut c_void, size: usize);
-        fn mbind(addr: *mut c_void, len: c_ulong, mode: i32, 
-                 nodemask: *const c_ulong, maxnode: c_ulong, flags: u32) -> i32;
+        fn mbind(
+            addr: *mut c_void,
+            len: c_ulong,
+            mode: i32,
+            nodemask: *const c_ulong,
+            maxnode: c_ulong,
+            flags: u32,
+        ) -> i32;
     }
-    
+
     pub const MPOL_BIND: i32 = 2;
     pub const MPOL_INTERLEAVE: i32 = 3;
-    
+
     pub fn is_available() -> bool {
         unsafe { numa_available() >= 0 }
     }
-    
+
     pub fn max_node() -> i32 {
         unsafe { numa_max_node() }
     }
-    
+
     pub fn node_of_cpu(cpu: i32) -> i32 {
         unsafe { numa_node_of_cpu(cpu) }
     }
@@ -57,9 +63,15 @@ mod numa {
 
 #[cfg(not(target_os = "linux"))]
 mod numa {
-    pub fn is_available() -> bool { false }
-    pub fn max_node() -> i32 { 0 }
-    pub fn node_of_cpu(_cpu: i32) -> i32 { 0 }
+    pub fn is_available() -> bool {
+        false
+    }
+    pub fn max_node() -> i32 {
+        0
+    }
+    pub fn node_of_cpu(_cpu: i32) -> i32 {
+        0
+    }
 }
 
 /// Page access pattern for predictive prefetching
@@ -84,11 +96,11 @@ struct PageCacheEntry {
 /// Eviction policy for page cache
 #[derive(Debug, Clone, Copy)]
 pub enum EvictionPolicy {
-    LRU,      // Least Recently Used
-    LFU,      // Least Frequently Used
-    FIFO,     // First In First Out
-    Clock,    // Clock algorithm
-    ARC,      // Adaptive Replacement Cache
+    LRU,   // Least Recently Used
+    LFU,   // Least Frequently Used
+    FIFO,  // First In First Out
+    Clock, // Clock algorithm
+    ARC,   // Adaptive Replacement Cache
 }
 
 /// Memory pressure levels
@@ -104,31 +116,31 @@ pub enum MemoryPressure {
 pub struct AdvancedMemoryMap {
     /// Base file mapping
     mmap: Option<Mmap>,
-    
+
     /// Page cache
     page_cache: Arc<RwLock<LruCache<usize, Arc<PageCacheEntry>>>>,
-    
+
     /// Access pattern tracking
     access_patterns: Arc<RwLock<VecDeque<AccessPattern>>>,
-    
+
     /// Page access frequency
     page_frequency: Arc<RwLock<HashMap<usize, usize>>>,
-    
+
     /// Eviction policy
     eviction_policy: EvictionPolicy,
-    
+
     /// Memory statistics
     total_memory: AtomicUsize,
     cache_hits: AtomicU64,
     cache_misses: AtomicU64,
-    
+
     /// NUMA configuration
     numa_enabled: bool,
     numa_nodes: Vec<i32>,
-    
+
     /// Memory pressure monitor
     memory_pressure: Arc<RwLock<MemoryPressure>>,
-    
+
     /// Configuration
     max_pages: usize,
     page_size: usize,
@@ -144,9 +156,9 @@ impl AdvancedMemoryMap {
         } else {
             vec![0]
         };
-        
+
         let cache_size = NonZeroUsize::new(max_pages).unwrap_or(NonZeroUsize::new(1).unwrap());
-        
+
         Self {
             mmap,
             page_cache: Arc::new(RwLock::new(LruCache::new(cache_size))),
@@ -164,7 +176,7 @@ impl AdvancedMemoryMap {
             prefetch_distance: 3,
         }
     }
-    
+
     /// Get a page with lazy loading
     pub fn get_page(&self, page_id: usize) -> Result<Arc<PageCacheEntry>> {
         // Check cache first
@@ -177,27 +189,29 @@ impl AdvancedMemoryMap {
                 return Ok(Arc::clone(entry));
             }
         }
-        
+
         // Cache miss - load from mmap
         self.cache_misses.fetch_add(1, Ordering::Relaxed);
         self.load_page(page_id)
     }
-    
+
     /// Load a page from memory-mapped file
     fn load_page(&self, page_id: usize) -> Result<Arc<PageCacheEntry>> {
-        let mmap = self.mmap.as_ref()
+        let mmap = self
+            .mmap
+            .as_ref()
             .ok_or_else(|| anyhow::anyhow!("No memory mapping available"))?;
-        
+
         let start = page_id * self.page_size;
         let end = (start + self.page_size).min(mmap.len());
-        
+
         if start >= mmap.len() {
             bail!("Page {} out of bounds", page_id);
         }
-        
+
         // Copy page data
         let page_data = mmap[start..end].to_vec();
-        
+
         // Determine NUMA node for allocation
         let numa_node = if self.numa_enabled {
             let cpu = sched_getcpu();
@@ -205,7 +219,7 @@ impl AdvancedMemoryMap {
         } else {
             0
         };
-        
+
         let entry = Arc::new(PageCacheEntry {
             data: page_data,
             page_id,
@@ -214,28 +228,29 @@ impl AdvancedMemoryMap {
             dirty: false,
             numa_node,
         });
-        
+
         // Check memory pressure and evict if needed
         self.check_memory_pressure();
         if *self.memory_pressure.read() >= MemoryPressure::High {
             self.evict_pages(1)?;
         }
-        
+
         // Insert into cache
         {
             let mut cache = self.page_cache.write();
             cache.put(page_id, Arc::clone(&entry));
         }
-        
-        self.total_memory.fetch_add(entry.data.len(), Ordering::Relaxed);
+
+        self.total_memory
+            .fetch_add(entry.data.len(), Ordering::Relaxed);
         self.record_access(page_id);
-        
+
         // Predictive prefetching
         self.prefetch_pages(page_id);
-        
+
         Ok(entry)
     }
-    
+
     /// Record page access for pattern analysis
     fn record_access(&self, page_id: usize) {
         let mut patterns = self.access_patterns.write();
@@ -244,40 +259,40 @@ impl AdvancedMemoryMap {
             access_time: Instant::now(),
             access_count: 1,
         });
-        
+
         // Keep only recent patterns
         while patterns.len() > 1000 {
             patterns.pop_front();
         }
-        
+
         // Update frequency map
         let mut freq = self.page_frequency.write();
         *freq.entry(page_id).or_insert(0) += 1;
     }
-    
+
     /// Predictive prefetching based on access patterns
     fn prefetch_pages(&self, current_page: usize) {
         let patterns = self.access_patterns.read();
-        
+
         // Simple sequential prefetching for now
         for i in 1..=self.prefetch_distance {
             let prefetch_page = current_page + i;
-            
+
             // Spawn async prefetch
             let self_clone = self.clone_ref();
             spawn(move || {
                 let _ = self_clone.get_page(prefetch_page);
             });
         }
-        
+
         // TODO: Implement more sophisticated pattern-based prefetching
     }
-    
+
     /// Check system memory pressure
     fn check_memory_pressure(&self) {
         let total_memory = self.total_memory.load(Ordering::Relaxed);
         let max_memory = self.max_pages * self.page_size;
-        
+
         let pressure = if total_memory < max_memory / 2 {
             MemoryPressure::Low
         } else if total_memory < max_memory * 3 / 4 {
@@ -287,10 +302,10 @@ impl AdvancedMemoryMap {
         } else {
             MemoryPressure::Critical
         };
-        
+
         *self.memory_pressure.write() = pressure;
     }
-    
+
     /// Evict pages based on eviction policy
     fn evict_pages(&self, num_pages: usize) -> Result<()> {
         match self.eviction_policy {
@@ -301,97 +316,103 @@ impl AdvancedMemoryMap {
             EvictionPolicy::ARC => self.evict_arc(num_pages),
         }
     }
-    
+
     /// LRU eviction
     fn evict_lru(&self, num_pages: usize) -> Result<()> {
         let mut cache = self.page_cache.write();
-        
+
         // LruCache automatically evicts least recently used
         for _ in 0..num_pages {
             if let Some((_, entry)) = cache.pop_lru() {
-                self.total_memory.fetch_sub(entry.data.len(), Ordering::Relaxed);
-                
+                self.total_memory
+                    .fetch_sub(entry.data.len(), Ordering::Relaxed);
+
                 // Write back if dirty
                 if entry.dirty {
                     // TODO: Implement write-back
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// LFU eviction
     fn evict_lfu(&self, num_pages: usize) -> Result<()> {
         let cache = self.page_cache.read();
         let freq = self.page_frequency.read();
-        
+
         // Sort pages by frequency
-        let mut pages_by_freq: Vec<(usize, usize)> = cache.iter()
+        let mut pages_by_freq: Vec<(usize, usize)> = cache
+            .iter()
             .map(|(page_id, _)| (*page_id, *freq.get(page_id).unwrap_or(&0)))
             .collect();
         pages_by_freq.sort_by_key(|(_, freq)| *freq);
-        
+
         // Evict least frequently used
         drop(cache);
         drop(freq);
-        
+
         let mut cache = self.page_cache.write();
         for (page_id, _) in pages_by_freq.iter().take(num_pages) {
             if let Some(entry) = cache.pop(page_id) {
-                self.total_memory.fetch_sub(entry.data.len(), Ordering::Relaxed);
+                self.total_memory
+                    .fetch_sub(entry.data.len(), Ordering::Relaxed);
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// FIFO eviction (not implemented - uses LRU as fallback)
     fn evict_fifo(&self, num_pages: usize) -> Result<()> {
         self.evict_lru(num_pages)
     }
-    
+
     /// Clock algorithm eviction (not implemented - uses LRU as fallback)
     fn evict_clock(&self, num_pages: usize) -> Result<()> {
         self.evict_lru(num_pages)
     }
-    
+
     /// ARC (Adaptive Replacement Cache) eviction
     fn evict_arc(&self, num_pages: usize) -> Result<()> {
         // Simplified ARC - combines recency and frequency
         let cache = self.page_cache.read();
         let freq = self.page_frequency.read();
-        
+
         // Score = recency * 0.5 + frequency * 0.5
         let now = Instant::now();
-        let mut scored_pages: Vec<(usize, f64)> = cache.iter()
+        let mut scored_pages: Vec<(usize, f64)> = cache
+            .iter()
             .map(|(page_id, entry)| {
-                let recency_score = 1.0 / (now.duration_since(entry.last_access).as_secs_f64() + 1.0);
+                let recency_score =
+                    1.0 / (now.duration_since(entry.last_access).as_secs_f64() + 1.0);
                 let frequency_score = *freq.get(page_id).unwrap_or(&0) as f64;
                 let combined_score = recency_score * 0.5 + frequency_score * 0.5;
                 (*page_id, combined_score)
             })
             .collect();
-        
+
         scored_pages.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-        
+
         drop(cache);
         drop(freq);
-        
+
         let mut cache = self.page_cache.write();
         for (page_id, _) in scored_pages.iter().take(num_pages) {
             if let Some(entry) = cache.pop(page_id) {
-                self.total_memory.fetch_sub(entry.data.len(), Ordering::Relaxed);
+                self.total_memory
+                    .fetch_sub(entry.data.len(), Ordering::Relaxed);
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Get cache statistics
     pub fn stats(&self) -> MemoryMapStats {
         let cache = self.page_cache.read();
-        
+
         MemoryMapStats {
             total_pages: cache.len(),
             total_memory: self.total_memory.load(Ordering::Relaxed),
@@ -402,7 +423,7 @@ impl AdvancedMemoryMap {
             numa_enabled: self.numa_enabled,
         }
     }
-    
+
     fn calculate_hit_rate(&self) -> f64 {
         let hits = self.cache_hits.load(Ordering::Relaxed) as f64;
         let misses = self.cache_misses.load(Ordering::Relaxed) as f64;
@@ -413,7 +434,7 @@ impl AdvancedMemoryMap {
             0.0
         }
     }
-    
+
     fn clone_ref(&self) -> Self {
         Self {
             mmap: None, // Don't clone the mmap
@@ -449,9 +470,7 @@ pub struct MemoryMapStats {
 /// Get current CPU for NUMA operations
 #[cfg(target_os = "linux")]
 fn sched_getcpu() -> i32 {
-    unsafe {
-        libc::sched_getcpu()
-    }
+    unsafe { libc::sched_getcpu() }
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -472,30 +491,30 @@ impl NumaVectorAllocator {
         } else {
             vec![0]
         };
-        
+
         Self {
             numa_nodes,
             current_node: AtomicUsize::new(0),
         }
     }
-    
+
     /// Allocate vector memory on specific NUMA node
     pub fn allocate_on_node(&self, size: usize, node: Option<i32>) -> Vec<u8> {
         if !numa::is_available() {
             return vec![0u8; size];
         }
-        
+
         let target_node = node.unwrap_or_else(|| {
             // Round-robin allocation across NUMA nodes
             let idx = self.current_node.fetch_add(1, Ordering::Relaxed) % self.numa_nodes.len();
             self.numa_nodes[idx]
         });
-        
+
         // For now, just use standard allocation
         // TODO: Implement actual NUMA allocation when libc bindings are available
         vec![0u8; size]
     }
-    
+
     /// Get preferred NUMA node for current thread
     pub fn preferred_node(&self) -> i32 {
         if numa::is_available() {
@@ -509,30 +528,32 @@ impl NumaVectorAllocator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_memory_pressure() {
         let mmap = AdvancedMemoryMap::new(None, 100);
-        
+
         assert_eq!(*mmap.memory_pressure.read(), MemoryPressure::Low);
-        
+
         // Simulate memory usage
-        mmap.total_memory.store(50 * VECTOR_PAGE_SIZE, Ordering::Relaxed);
+        mmap.total_memory
+            .store(50 * VECTOR_PAGE_SIZE, Ordering::Relaxed);
         mmap.check_memory_pressure();
         assert_eq!(*mmap.memory_pressure.read(), MemoryPressure::Medium);
-        
-        mmap.total_memory.store(90 * VECTOR_PAGE_SIZE, Ordering::Relaxed);
+
+        mmap.total_memory
+            .store(90 * VECTOR_PAGE_SIZE, Ordering::Relaxed);
         mmap.check_memory_pressure();
         assert_eq!(*mmap.memory_pressure.read(), MemoryPressure::Critical);
     }
-    
+
     #[test]
     fn test_cache_stats() {
         let mmap = AdvancedMemoryMap::new(None, 100);
-        
+
         mmap.cache_hits.store(75, Ordering::Relaxed);
         mmap.cache_misses.store(25, Ordering::Relaxed);
-        
+
         let stats = mmap.stats();
         assert_eq!(stats.cache_hits, 75);
         assert_eq!(stats.cache_misses, 25);

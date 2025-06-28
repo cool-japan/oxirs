@@ -85,7 +85,11 @@ pub enum PathPattern {
     /// Optional path
     Optional(Box<PathPattern>),
     /// Fixed repetitions
-    Repetition { pattern: Box<PathPattern>, min: usize, max: Option<usize> },
+    Repetition {
+        pattern: Box<PathPattern>,
+        min: usize,
+        max: Option<usize>,
+    },
     /// Negated property set
     NegatedPropertySet(Vec<String>),
     /// Any pattern (wildcard)
@@ -111,7 +115,10 @@ pub enum PathRewrite {
 #[derive(Debug, Clone)]
 pub enum RewriteCondition {
     /// Path length constraint
-    PathLength { min: Option<usize>, max: Option<usize> },
+    PathLength {
+        min: Option<usize>,
+        max: Option<usize>,
+    },
     /// Cardinality estimate
     EstimatedCardinality { min: Option<u64>, max: Option<u64> },
     /// Index availability
@@ -174,11 +181,16 @@ pub enum PathExecutionStrategy {
     /// Breadth-first search for shortest paths
     BreadthFirst { max_depth: Option<usize> },
     /// Depth-first search with pruning
-    DepthFirst { max_depth: Option<usize>, prune_threshold: f64 },
+    DepthFirst {
+        max_depth: Option<usize>,
+        prune_threshold: f64,
+    },
     /// Dynamic programming approach
     DynamicProgramming,
     /// Hybrid strategy combining multiple approaches
-    Hybrid { strategies: Vec<PathExecutionStrategy> },
+    Hybrid {
+        strategies: Vec<PathExecutionStrategy>,
+    },
 }
 
 /// Enhanced path execution step
@@ -288,7 +300,9 @@ impl AdvancedPropertyPathOptimizer {
             // Optimize inverse of inverse
             PathRewriteRule {
                 name: "double_inverse_elimination".to_string(),
-                pattern: PathPattern::Inverse(Box::new(PathPattern::Inverse(Box::new(PathPattern::Any)))),
+                pattern: PathPattern::Inverse(Box::new(PathPattern::Inverse(Box::new(
+                    PathPattern::Any,
+                )))),
                 rewrite: PathRewrite::Replace(PathPattern::Any),
                 conditions: vec![],
                 priority: 100,
@@ -298,7 +312,9 @@ impl AdvancedPropertyPathOptimizer {
                 name: "indexed_property_repetition".to_string(),
                 pattern: PathPattern::ZeroOrMore(Box::new(PathPattern::Property("_".to_string()))),
                 rewrite: PathRewrite::UseIndex("transitive_closure_index".to_string()),
-                conditions: vec![RewriteCondition::IndexAvailable("transitive_closure_index".to_string())],
+                conditions: vec![RewriteCondition::IndexAvailable(
+                    "transitive_closure_index".to_string(),
+                )],
                 priority: 90,
             },
             // Optimize alternatives with common prefix
@@ -315,34 +331,38 @@ impl AdvancedPropertyPathOptimizer {
     /// Optimize a property path with advanced strategies
     pub async fn optimize_path(&self, path: &str) -> FusekiResult<OptimizedPath> {
         let start_time = std::time::Instant::now();
-        
+
         // Check cache first
         if let Some(cached) = self.get_cached_path(path).await? {
             self.record_cache_hit().await;
             return Ok(cached);
         }
-        
+
         self.record_cache_miss().await;
 
         // Parse the property path
         let parsed_path = self.parse_property_path(path)?;
-        
+
         // Apply rewrite rules
         let rewritten_path = self.apply_rewrite_rules(&parsed_path).await?;
-        
+
         // Analyze path characteristics
         let characteristics = self.analyze_path_characteristics(&rewritten_path).await?;
-        
+
         // Choose optimal execution strategy
-        let strategy = self.choose_optimal_strategy(&rewritten_path, &characteristics).await?;
-        
+        let strategy = self
+            .choose_optimal_strategy(&rewritten_path, &characteristics)
+            .await?;
+
         // Create execution plan
-        let execution_plan = self.create_enhanced_execution_plan(&rewritten_path, strategy).await?;
-        
+        let execution_plan = self
+            .create_enhanced_execution_plan(&rewritten_path, strategy)
+            .await?;
+
         // Estimate cost and cardinality
         let cost_estimate = self.estimate_total_cost(&execution_plan).await?;
         let cardinality_estimate = self.estimate_result_cardinality(&rewritten_path).await?;
-        
+
         let optimized = OptimizedPath {
             original_path: path.to_string(),
             optimized_form: self.path_to_string(&rewritten_path),
@@ -356,13 +376,14 @@ impl AdvancedPropertyPathOptimizer {
 
         // Cache the result
         self.cache_optimized_path(path, &optimized).await?;
-        
+
         // Record statistics
         let elapsed = start_time.elapsed();
-        self.record_optimization_stats(path, elapsed.as_millis() as f64, true).await;
-        
+        self.record_optimization_stats(path, elapsed.as_millis() as f64, true)
+            .await;
+
         info!("Optimized property path '{}' in {:?}", path, elapsed);
-        
+
         Ok(optimized)
     }
 
@@ -370,52 +391,64 @@ impl AdvancedPropertyPathOptimizer {
     fn parse_property_path(&self, path: &str) -> FusekiResult<PathPattern> {
         // This is a simplified parser - in production would use a proper parser
         let path = path.trim();
-        
+
         // Handle simple cases
-        if !path.contains(|c: char| c == '/' || c == '|' || c == '*' || c == '+' || c == '?' || c == '^' || c == '!' || c == '(' || c == ')') {
+        if !path.contains(|c: char| {
+            c == '/'
+                || c == '|'
+                || c == '*'
+                || c == '+'
+                || c == '?'
+                || c == '^'
+                || c == '!'
+                || c == '('
+                || c == ')'
+        }) {
             return Ok(PathPattern::Property(path.to_string()));
         }
-        
+
         // Handle inverse
         if path.starts_with('^') {
             let inner = self.parse_property_path(&path[1..])?;
             return Ok(PathPattern::Inverse(Box::new(inner)));
         }
-        
+
         // Handle zero or more
         if path.ends_with('*') {
-            let inner = self.parse_property_path(&path[..path.len()-1])?;
+            let inner = self.parse_property_path(&path[..path.len() - 1])?;
             return Ok(PathPattern::ZeroOrMore(Box::new(inner)));
         }
-        
+
         // Handle one or more
         if path.ends_with('+') {
-            let inner = self.parse_property_path(&path[..path.len()-1])?;
+            let inner = self.parse_property_path(&path[..path.len() - 1])?;
             return Ok(PathPattern::OneOrMore(Box::new(inner)));
         }
-        
+
         // Handle optional
         if path.ends_with('?') {
-            let inner = self.parse_property_path(&path[..path.len()-1])?;
+            let inner = self.parse_property_path(&path[..path.len() - 1])?;
             return Ok(PathPattern::Optional(Box::new(inner)));
         }
-        
+
         // Handle alternatives
         if path.contains('|') {
-            let parts: Vec<_> = path.split('|')
+            let parts: Vec<_> = path
+                .split('|')
                 .map(|p| self.parse_property_path(p.trim()))
                 .collect::<Result<Vec<_>, _>>()?;
             return Ok(PathPattern::Alternative(parts));
         }
-        
+
         // Handle sequences
         if path.contains('/') {
-            let parts: Vec<_> = path.split('/')
+            let parts: Vec<_> = path
+                .split('/')
                 .map(|p| self.parse_property_path(p.trim()))
                 .collect::<Result<Vec<_>, _>>()?;
             return Ok(PathPattern::Sequence(parts));
         }
-        
+
         // Default to property
         Ok(PathPattern::Property(path.to_string()))
     }
@@ -424,19 +457,19 @@ impl AdvancedPropertyPathOptimizer {
     async fn apply_rewrite_rules(&self, path: &PathPattern) -> FusekiResult<PathPattern> {
         let mut current_path = path.clone();
         let mut applied_rules = Vec::new();
-        
+
         // Sort rules by priority
         let mut rules = self.rewrite_rules.clone();
         rules.sort_by_key(|r| -r.priority);
-        
+
         for rule in &rules {
-            if self.pattern_matches(&current_path, &rule.pattern) && 
-               self.conditions_met(&current_path, &rule.conditions).await? {
-                
+            if self.pattern_matches(&current_path, &rule.pattern)
+                && self.conditions_met(&current_path, &rule.conditions).await?
+            {
                 debug!("Applying rewrite rule: {}", rule.name);
                 current_path = self.apply_rewrite(&current_path, &rule.rewrite)?;
                 applied_rules.push(rule.name.clone());
-                
+
                 // Limit number of rewrites to prevent infinite loops
                 if applied_rules.len() > 10 {
                     warn!("Rewrite limit reached, stopping optimization");
@@ -444,11 +477,11 @@ impl AdvancedPropertyPathOptimizer {
                 }
             }
         }
-        
+
         if !applied_rules.is_empty() {
             debug!("Applied rewrite rules: {:?}", applied_rules);
         }
-        
+
         Ok(current_path)
     }
 
@@ -458,48 +491,71 @@ impl AdvancedPropertyPathOptimizer {
             (_, PathPattern::Any) => true,
             (PathPattern::Property(p1), PathPattern::Property(p2)) => p1 == p2 || p2 == "_",
             (PathPattern::Sequence(s1), PathPattern::Sequence(s2)) => {
-                s1.len() == s2.len() && 
-                s1.iter().zip(s2.iter()).all(|(p1, p2)| self.pattern_matches(p1, p2))
+                s1.len() == s2.len()
+                    && s1
+                        .iter()
+                        .zip(s2.iter())
+                        .all(|(p1, p2)| self.pattern_matches(p1, p2))
             }
             (PathPattern::Alternative(a1), PathPattern::Alternative(a2)) => {
-                a1.len() == a2.len() &&
-                a1.iter().zip(a2.iter()).all(|(p1, p2)| self.pattern_matches(p1, p2))
+                a1.len() == a2.len()
+                    && a1
+                        .iter()
+                        .zip(a2.iter())
+                        .all(|(p1, p2)| self.pattern_matches(p1, p2))
             }
             (PathPattern::Inverse(i1), PathPattern::Inverse(i2)) => self.pattern_matches(i1, i2),
-            (PathPattern::ZeroOrMore(z1), PathPattern::ZeroOrMore(z2)) => self.pattern_matches(z1, z2),
-            (PathPattern::OneOrMore(o1), PathPattern::OneOrMore(o2)) => self.pattern_matches(o1, o2),
+            (PathPattern::ZeroOrMore(z1), PathPattern::ZeroOrMore(z2)) => {
+                self.pattern_matches(z1, z2)
+            }
+            (PathPattern::OneOrMore(o1), PathPattern::OneOrMore(o2)) => {
+                self.pattern_matches(o1, o2)
+            }
             (PathPattern::Optional(o1), PathPattern::Optional(o2)) => self.pattern_matches(o1, o2),
             _ => false,
         }
     }
 
     /// Check if rewrite conditions are met
-    async fn conditions_met(&self, path: &PathPattern, conditions: &[RewriteCondition]) -> FusekiResult<bool> {
+    async fn conditions_met(
+        &self,
+        path: &PathPattern,
+        conditions: &[RewriteCondition],
+    ) -> FusekiResult<bool> {
         for condition in conditions {
             match condition {
                 RewriteCondition::PathLength { min, max } => {
                     let length = self.estimate_path_length(path);
                     if let Some(min) = min {
-                        if length < *min { return Ok(false); }
+                        if length < *min {
+                            return Ok(false);
+                        }
                     }
                     if let Some(max) = max {
-                        if length > *max { return Ok(false); }
+                        if length > *max {
+                            return Ok(false);
+                        }
                     }
                 }
                 RewriteCondition::IndexAvailable(index) => {
                     let index_info = self.index_info.read().await;
-                    if !index_info.property_indexes.contains(index) &&
-                       !index_info.path_indexes.contains_key(index) {
+                    if !index_info.property_indexes.contains(index)
+                        && !index_info.path_indexes.contains_key(index)
+                    {
                         return Ok(false);
                     }
                 }
                 RewriteCondition::EstimatedCardinality { min, max } => {
                     let cardinality = self.estimate_result_cardinality(path).await?;
                     if let Some(min) = min {
-                        if cardinality < *min { return Ok(false); }
+                        if cardinality < *min {
+                            return Ok(false);
+                        }
                     }
                     if let Some(max) = max {
-                        if cardinality > *max { return Ok(false); }
+                        if cardinality > *max {
+                            return Ok(false);
+                        }
                     }
                 }
                 _ => {} // Other conditions not implemented yet
@@ -509,7 +565,11 @@ impl AdvancedPropertyPathOptimizer {
     }
 
     /// Apply a rewrite transformation
-    fn apply_rewrite(&self, path: &PathPattern, rewrite: &PathRewrite) -> FusekiResult<PathPattern> {
+    fn apply_rewrite(
+        &self,
+        path: &PathPattern,
+        rewrite: &PathRewrite,
+    ) -> FusekiResult<PathPattern> {
         match rewrite {
             PathRewrite::Replace(new_pattern) => Ok(new_pattern.clone()),
             PathRewrite::UseIndex(index_name) => {
@@ -518,7 +578,10 @@ impl AdvancedPropertyPathOptimizer {
             }
             PathRewrite::Materialize => {
                 // Wrap the pattern to indicate materialization
-                Ok(PathPattern::Property(format!("MATERIALIZE:{}", self.path_to_string(path))))
+                Ok(PathPattern::Property(format!(
+                    "MATERIALIZE:{}",
+                    self.path_to_string(path)
+                )))
             }
             PathRewrite::Custom(transform) => {
                 // Apply custom transformation
@@ -542,7 +605,10 @@ impl AdvancedPropertyPathOptimizer {
     }
 
     /// Analyze path characteristics for optimization
-    async fn analyze_path_characteristics(&self, path: &PathPattern) -> FusekiResult<PathCharacteristics> {
+    async fn analyze_path_characteristics(
+        &self,
+        path: &PathPattern,
+    ) -> FusekiResult<PathCharacteristics> {
         Ok(PathCharacteristics {
             estimated_length: self.estimate_path_length(path),
             has_cycles: self.detect_cycles(path),
@@ -557,9 +623,9 @@ impl AdvancedPropertyPathOptimizer {
 
     /// Choose optimal execution strategy based on path characteristics
     async fn choose_optimal_strategy(
-        &self, 
-        path: &PathPattern, 
-        characteristics: &PathCharacteristics
+        &self,
+        path: &PathPattern,
+        characteristics: &PathCharacteristics,
     ) -> FusekiResult<PathExecutionStrategy> {
         // If we can use an index, prefer that
         if characteristics.can_use_index {
@@ -567,39 +633,39 @@ impl AdvancedPropertyPathOptimizer {
                 return Ok(PathExecutionStrategy::IndexLookup { index_name });
             }
         }
-        
+
         // For short paths without repetition, use simple traversal
         if characteristics.estimated_length <= 2 && !characteristics.has_repetition {
             return Ok(PathExecutionStrategy::ForwardTraversal);
         }
-        
+
         // For paths with inverse and reasonable length, use bidirectional search
         if characteristics.has_inverse && characteristics.estimated_length > 3 {
             let meet_point = Some(characteristics.estimated_length / 2);
             return Ok(PathExecutionStrategy::BidirectionalMeet { meet_point });
         }
-        
+
         // For paths with alternatives, consider parallel execution
         if characteristics.has_alternatives && !characteristics.has_repetition {
             return Ok(PathExecutionStrategy::ParallelAlternatives);
         }
-        
+
         // For paths with repetition, use appropriate search strategy
         if characteristics.has_repetition {
             if characteristics.estimated_branching_factor > 10.0 {
                 // High branching factor - use breadth-first with depth limit
-                return Ok(PathExecutionStrategy::BreadthFirst { 
-                    max_depth: Some(10) 
+                return Ok(PathExecutionStrategy::BreadthFirst {
+                    max_depth: Some(10),
                 });
             } else {
                 // Low branching factor - depth-first might be more efficient
-                return Ok(PathExecutionStrategy::DepthFirst { 
+                return Ok(PathExecutionStrategy::DepthFirst {
                     max_depth: Some(20),
-                    prune_threshold: 0.1 
+                    prune_threshold: 0.1,
                 });
             }
         }
-        
+
         // Default to forward traversal
         Ok(PathExecutionStrategy::ForwardTraversal)
     }
@@ -616,7 +682,7 @@ impl AdvancedPropertyPathOptimizer {
         let memory_requirements = self.estimate_memory_requirements(&steps, estimated_cardinality);
         let parallelizable = self.is_parallelizable(&strategy, &steps);
         let optimization_hints = self.generate_optimization_hints(path, &strategy);
-        
+
         Ok(EnhancedPathExecutionPlan {
             strategy,
             steps,
@@ -635,10 +701,13 @@ impl AdvancedPropertyPathOptimizer {
         strategy: &PathExecutionStrategy,
     ) -> FusekiResult<Vec<EnhancedPathStep>> {
         let mut steps = Vec::new();
-        
+
         match path {
             PathPattern::Property(prop) => {
-                steps.push(self.create_traverse_step(prop, TraversalDirection::Forward).await?);
+                steps.push(
+                    self.create_traverse_step(prop, TraversalDirection::Forward)
+                        .await?,
+                );
             }
             PathPattern::Sequence(seq) => {
                 for (i, p) in seq.iter().enumerate() {
@@ -663,7 +732,8 @@ impl AdvancedPropertyPathOptimizer {
                 if !alt_operations.is_empty() {
                     steps.push(EnhancedPathStep {
                         operation: PathOperation::Union(alt_operations),
-                        estimated_cost: self.cost_model.alternative_multiplier * self.cost_model.traversal_cost,
+                        estimated_cost: self.cost_model.alternative_multiplier
+                            * self.cost_model.traversal_cost,
                         estimated_selectivity: 0.8,
                         can_use_index: false,
                         memory_usage: 1024 * 1024, // 1MB estimate
@@ -686,14 +756,19 @@ impl AdvancedPropertyPathOptimizer {
             }
             PathPattern::ZeroOrMore(inner) | PathPattern::OneOrMore(inner) => {
                 if let PathPattern::Property(prop) = inner.as_ref() {
-                    let min_length = if matches!(path, PathPattern::OneOrMore(_)) { 1 } else { 0 };
+                    let min_length = if matches!(path, PathPattern::OneOrMore(_)) {
+                        1
+                    } else {
+                        0
+                    };
                     steps.push(EnhancedPathStep {
                         operation: PathOperation::TransitiveClosure {
                             predicate: prop.clone(),
                             min_length,
                             max_length: None,
                         },
-                        estimated_cost: self.cost_model.repetition_multiplier * self.cost_model.traversal_cost,
+                        estimated_cost: self.cost_model.repetition_multiplier
+                            * self.cost_model.traversal_cost,
                         estimated_selectivity: 0.3,
                         can_use_index: self.can_use_transitive_index(prop).await?,
                         memory_usage: 10 * 1024 * 1024, // 10MB estimate for transitive closure
@@ -703,10 +778,13 @@ impl AdvancedPropertyPathOptimizer {
             }
             _ => {
                 // Default to simple traversal
-                steps.push(self.create_traverse_step("?", TraversalDirection::Forward).await?);
+                steps.push(
+                    self.create_traverse_step("?", TraversalDirection::Forward)
+                        .await?,
+                );
             }
         }
-        
+
         Ok(steps)
     }
 
@@ -720,13 +798,14 @@ impl AdvancedPropertyPathOptimizer {
         let cost = if can_use_index {
             self.cost_model.traversal_cost * self.cost_model.index_reduction_factor
         } else {
-            self.cost_model.traversal_cost * if direction == TraversalDirection::Backward {
-                self.cost_model.inverse_multiplier
-            } else {
-                1.0
-            }
+            self.cost_model.traversal_cost
+                * if direction == TraversalDirection::Backward {
+                    self.cost_model.inverse_multiplier
+                } else {
+                    1.0
+                }
         };
-        
+
         Ok(EnhancedPathStep {
             operation: PathOperation::Traverse {
                 predicate: predicate.to_string(),
@@ -741,14 +820,18 @@ impl AdvancedPropertyPathOptimizer {
     }
 
     /// Check if property index is available
-    async fn can_use_property_index(&self, predicate: &str, direction: &TraversalDirection) -> FusekiResult<bool> {
+    async fn can_use_property_index(
+        &self,
+        predicate: &str,
+        direction: &TraversalDirection,
+    ) -> FusekiResult<bool> {
         let index_info = self.index_info.read().await;
         Ok(match direction {
             TraversalDirection::Forward => index_info.property_indexes.contains(predicate),
             TraversalDirection::Backward => index_info.inverse_property_indexes.contains(predicate),
             TraversalDirection::Both => {
-                index_info.property_indexes.contains(predicate) && 
-                index_info.inverse_property_indexes.contains(predicate)
+                index_info.property_indexes.contains(predicate)
+                    && index_info.inverse_property_indexes.contains(predicate)
             }
         })
     }
@@ -756,26 +839,28 @@ impl AdvancedPropertyPathOptimizer {
     /// Check if transitive index is available
     async fn can_use_transitive_index(&self, predicate: &str) -> FusekiResult<bool> {
         let index_info = self.index_info.read().await;
-        Ok(index_info.path_indexes.contains_key(&format!("{}+", predicate)))
+        Ok(index_info
+            .path_indexes
+            .contains_key(&format!("{}+", predicate)))
     }
 
     /// Find best available index for path
     async fn find_best_index(&self, path: &PathPattern) -> FusekiResult<String> {
         let index_info = self.index_info.read().await;
         let path_str = self.path_to_string(path);
-        
+
         // Check for exact path index match
         if let Some(path_index) = index_info.path_indexes.get(&path_str) {
             return Ok(path_str);
         }
-        
+
         // Check for property index
         if let PathPattern::Property(prop) = path {
             if index_info.property_indexes.contains(prop) {
                 return Ok(prop.clone());
             }
         }
-        
+
         Err(FusekiError::internal("No suitable index found"))
     }
 
@@ -784,9 +869,11 @@ impl AdvancedPropertyPathOptimizer {
         match path {
             PathPattern::Property(_) => 1,
             PathPattern::Sequence(seq) => seq.iter().map(|p| self.estimate_path_length(p)).sum(),
-            PathPattern::Alternative(alts) => {
-                alts.iter().map(|p| self.estimate_path_length(p)).max().unwrap_or(0)
-            }
+            PathPattern::Alternative(alts) => alts
+                .iter()
+                .map(|p| self.estimate_path_length(p))
+                .max()
+                .unwrap_or(0),
             PathPattern::Inverse(inner) => self.estimate_path_length(inner),
             PathPattern::ZeroOrMore(_) | PathPattern::OneOrMore(_) => 5, // Estimate
             PathPattern::Optional(inner) => self.estimate_path_length(inner),
@@ -807,20 +894,24 @@ impl AdvancedPropertyPathOptimizer {
         match path {
             PathPattern::Alternative(_) => true,
             PathPattern::Sequence(seq) => seq.iter().any(|p| self.has_alternatives(p)),
-            PathPattern::Inverse(inner) | PathPattern::ZeroOrMore(inner) | 
-            PathPattern::OneOrMore(inner) | PathPattern::Optional(inner) => {
-                self.has_alternatives(inner)
-            }
+            PathPattern::Inverse(inner)
+            | PathPattern::ZeroOrMore(inner)
+            | PathPattern::OneOrMore(inner)
+            | PathPattern::Optional(inner) => self.has_alternatives(inner),
             _ => false,
         }
     }
 
     fn has_repetition(&self, path: &PathPattern) -> bool {
         match path {
-            PathPattern::ZeroOrMore(_) | PathPattern::OneOrMore(_) | PathPattern::Repetition { .. } => true,
+            PathPattern::ZeroOrMore(_)
+            | PathPattern::OneOrMore(_)
+            | PathPattern::Repetition { .. } => true,
             PathPattern::Sequence(seq) => seq.iter().any(|p| self.has_repetition(p)),
             PathPattern::Alternative(alts) => alts.iter().any(|p| self.has_repetition(p)),
-            PathPattern::Inverse(inner) | PathPattern::Optional(inner) => self.has_repetition(inner),
+            PathPattern::Inverse(inner) | PathPattern::Optional(inner) => {
+                self.has_repetition(inner)
+            }
             _ => false,
         }
     }
@@ -830,8 +921,9 @@ impl AdvancedPropertyPathOptimizer {
             PathPattern::Inverse(_) => true,
             PathPattern::Sequence(seq) => seq.iter().any(|p| self.has_inverse(p)),
             PathPattern::Alternative(alts) => alts.iter().any(|p| self.has_inverse(p)),
-            PathPattern::ZeroOrMore(inner) | PathPattern::OneOrMore(inner) | 
-            PathPattern::Optional(inner) => self.has_inverse(inner),
+            PathPattern::ZeroOrMore(inner)
+            | PathPattern::OneOrMore(inner)
+            | PathPattern::Optional(inner) => self.has_inverse(inner),
             _ => false,
         }
     }
@@ -872,7 +964,10 @@ impl AdvancedPropertyPathOptimizer {
 
     async fn can_use_index(&self, path: &PathPattern) -> FusekiResult<bool> {
         match path {
-            PathPattern::Property(prop) => self.can_use_property_index(prop, &TraversalDirection::Forward).await,
+            PathPattern::Property(prop) => {
+                self.can_use_property_index(prop, &TraversalDirection::Forward)
+                    .await
+            }
             PathPattern::ZeroOrMore(inner) | PathPattern::OneOrMore(inner) => {
                 if let PathPattern::Property(prop) = inner.as_ref() {
                     self.can_use_transitive_index(prop).await
@@ -915,11 +1010,11 @@ impl AdvancedPropertyPathOptimizer {
         strategy: &PathExecutionStrategy,
     ) -> FusekiResult<f64> {
         let mut total_cost = 0.0;
-        
+
         for step in steps {
             total_cost += step.estimated_cost;
         }
-        
+
         // Apply strategy-specific cost adjustments
         match strategy {
             PathExecutionStrategy::IndexLookup { .. } => {
@@ -935,7 +1030,7 @@ impl AdvancedPropertyPathOptimizer {
             }
             _ => {}
         }
-        
+
         Ok(total_cost)
     }
 
@@ -945,18 +1040,22 @@ impl AdvancedPropertyPathOptimizer {
         estimated_cardinality: u64,
     ) -> u64 {
         let mut total_memory = 0u64;
-        
+
         for step in steps {
             total_memory += step.memory_usage;
         }
-        
+
         // Add memory for result set
         total_memory += estimated_cardinality * 100; // 100 bytes per result estimate
-        
+
         total_memory
     }
 
-    fn is_parallelizable(&self, strategy: &PathExecutionStrategy, steps: &[EnhancedPathStep]) -> bool {
+    fn is_parallelizable(
+        &self,
+        strategy: &PathExecutionStrategy,
+        steps: &[EnhancedPathStep],
+    ) -> bool {
         match strategy {
             PathExecutionStrategy::ParallelAlternatives => true,
             _ => {
@@ -966,9 +1065,13 @@ impl AdvancedPropertyPathOptimizer {
         }
     }
 
-    fn generate_optimization_hints(&self, path: &PathPattern, strategy: &PathExecutionStrategy) -> Vec<String> {
+    fn generate_optimization_hints(
+        &self,
+        path: &PathPattern,
+        strategy: &PathExecutionStrategy,
+    ) -> Vec<String> {
         let mut hints = Vec::new();
-        
+
         match strategy {
             PathExecutionStrategy::IndexLookup { index_name } => {
                 hints.push(format!("Using index: {}", index_name));
@@ -983,29 +1086,29 @@ impl AdvancedPropertyPathOptimizer {
             }
             _ => {}
         }
-        
+
         if self.has_repetition(path) {
             hints.push("Consider limiting depth for repetition operators".to_string());
         }
-        
+
         if self.has_inverse(path) {
             hints.push("Inverse traversal may be slower without index".to_string());
         }
-        
+
         hints
     }
 
     fn path_to_string(&self, path: &PathPattern) -> String {
         match path {
             PathPattern::Property(prop) => prop.clone(),
-            PathPattern::Sequence(seq) => {
-                seq.iter()
-                    .map(|p| self.path_to_string(p))
-                    .collect::<Vec<_>>()
-                    .join("/")
-            }
+            PathPattern::Sequence(seq) => seq
+                .iter()
+                .map(|p| self.path_to_string(p))
+                .collect::<Vec<_>>()
+                .join("/"),
             PathPattern::Alternative(alts) => {
-                format!("({})", 
+                format!(
+                    "({})",
                     alts.iter()
                         .map(|p| self.path_to_string(p))
                         .collect::<Vec<_>>()
@@ -1042,27 +1145,33 @@ impl AdvancedPropertyPathOptimizer {
     }
 
     fn convert_to_legacy_steps(&self, steps: &[EnhancedPathStep]) -> Vec<PathStep> {
-        steps.iter().map(|step| {
-            let (operation, predicate, direction) = match &step.operation {
-                PathOperation::Traverse { predicate, direction } => {
-                    ("traverse".to_string(), Some(predicate.clone()), *direction)
+        steps
+            .iter()
+            .map(|step| {
+                let (operation, predicate, direction) = match &step.operation {
+                    PathOperation::Traverse {
+                        predicate,
+                        direction,
+                    } => ("traverse".to_string(), Some(predicate.clone()), *direction),
+                    PathOperation::TransitiveClosure { predicate, .. } => (
+                        "transitive_closure".to_string(),
+                        Some(predicate.clone()),
+                        TraversalDirection::Forward,
+                    ),
+                    PathOperation::Union(_) => {
+                        ("union".to_string(), None, TraversalDirection::Forward)
+                    }
+                    _ => ("unknown".to_string(), None, TraversalDirection::Forward),
+                };
+
+                PathStep {
+                    operation,
+                    predicate,
+                    direction,
+                    estimated_selectivity: step.estimated_selectivity,
                 }
-                PathOperation::TransitiveClosure { predicate, .. } => {
-                    ("transitive_closure".to_string(), Some(predicate.clone()), TraversalDirection::Forward)
-                }
-                PathOperation::Union(_) => {
-                    ("union".to_string(), None, TraversalDirection::Forward)
-                }
-                _ => ("unknown".to_string(), None, TraversalDirection::Forward),
-            };
-            
-            PathStep {
-                operation,
-                predicate,
-                direction,
-                estimated_selectivity: step.estimated_selectivity,
-            }
-        }).collect()
+            })
+            .collect()
     }
 
     // Cache management
@@ -1071,9 +1180,13 @@ impl AdvancedPropertyPathOptimizer {
         Ok(cache.get(path).cloned())
     }
 
-    async fn cache_optimized_path(&self, path: &str, optimized: &OptimizedPath) -> FusekiResult<()> {
+    async fn cache_optimized_path(
+        &self,
+        path: &str,
+        optimized: &OptimizedPath,
+    ) -> FusekiResult<()> {
         let mut cache = self.path_cache.write().await;
-        
+
         // Implement LRU eviction if cache is too large
         if cache.len() > 1000 {
             // Simple eviction - remove oldest entries
@@ -1082,7 +1195,7 @@ impl AdvancedPropertyPathOptimizer {
                 cache.remove(&key);
             }
         }
-        
+
         cache.insert(path.to_string(), optimized.clone());
         Ok(())
     }
@@ -1103,18 +1216,18 @@ impl AdvancedPropertyPathOptimizer {
     async fn record_optimization_stats(&self, path: &str, time_ms: f64, success: bool) {
         if let Ok(mut stats) = self.statistics.write().await {
             stats.total_executions += 1;
-            
+
             // Update running average
             let n = stats.total_executions as f64;
-            stats.average_execution_time_ms = 
+            stats.average_execution_time_ms =
                 (stats.average_execution_time_ms * (n - 1.0) + time_ms) / n;
-            
+
             if success {
                 stats.optimization_successes += 1;
             } else {
                 stats.optimization_failures += 1;
             }
-            
+
             // Track path frequency
             *stats.path_frequency.entry(path.to_string()).or_insert(0) += 1;
         }
@@ -1135,7 +1248,7 @@ struct PathCharacteristics {
 }
 
 // Import legacy types for compatibility
-use crate::handlers::sparql::{OptimizedPath, PathExecutionPlan, PathStrategy, PathStep};
+use crate::handlers::sparql::{OptimizedPath, PathExecutionPlan, PathStep, PathStrategy};
 
 #[cfg(test)]
 mod tests {
@@ -1144,27 +1257,31 @@ mod tests {
     #[tokio::test]
     async fn test_property_path_parsing() {
         let optimizer = AdvancedPropertyPathOptimizer::new();
-        
+
         // Test simple property
         let path = optimizer.parse_property_path("foaf:knows").unwrap();
         matches!(path, PathPattern::Property(p) if p == "foaf:knows");
-        
+
         // Test sequence
-        let path = optimizer.parse_property_path("foaf:knows/foaf:name").unwrap();
+        let path = optimizer
+            .parse_property_path("foaf:knows/foaf:name")
+            .unwrap();
         matches!(path, PathPattern::Sequence(seq) if seq.len() == 2);
-        
+
         // Test alternative
-        let path = optimizer.parse_property_path("foaf:knows|foaf:member").unwrap();
+        let path = optimizer
+            .parse_property_path("foaf:knows|foaf:member")
+            .unwrap();
         matches!(path, PathPattern::Alternative(alts) if alts.len() == 2);
-        
+
         // Test inverse
         let path = optimizer.parse_property_path("^foaf:knows").unwrap();
         matches!(path, PathPattern::Inverse(_));
-        
+
         // Test zero or more
         let path = optimizer.parse_property_path("foaf:knows*").unwrap();
         matches!(path, PathPattern::ZeroOrMore(_));
-        
+
         // Test one or more
         let path = optimizer.parse_property_path("foaf:knows+").unwrap();
         matches!(path, PathPattern::OneOrMore(_));
@@ -1173,22 +1290,24 @@ mod tests {
     #[tokio::test]
     async fn test_path_optimization() {
         let optimizer = AdvancedPropertyPathOptimizer::new();
-        
+
         // Add some indexes
         {
             let mut index_info = optimizer.index_info.write().await;
             index_info.property_indexes.insert("foaf:knows".to_string());
-            index_info.property_indexes.insert("rdfs:subClassOf".to_string());
+            index_info
+                .property_indexes
+                .insert("rdfs:subClassOf".to_string());
         }
-        
+
         // Test optimization with index
         let result = optimizer.optimize_path("foaf:knows").await.unwrap();
         assert!(result.execution_plan.estimated_cost < 10.0); // Should be low due to index
-        
+
         // Test optimization without index
         let result = optimizer.optimize_path("ex:unknownProperty").await.unwrap();
         assert!(result.execution_plan.estimated_cost >= 10.0); // Should be higher without index
-        
+
         // Test transitive path optimization
         let result = optimizer.optimize_path("rdfs:subClassOf+").await.unwrap();
         assert!(result.optimized_form.contains("subClassOf")); // Should maintain the property
@@ -1197,10 +1316,10 @@ mod tests {
     #[tokio::test]
     async fn test_rewrite_rules() {
         let optimizer = AdvancedPropertyPathOptimizer::new();
-        
+
         // Test double inverse elimination
         let path = PathPattern::Inverse(Box::new(PathPattern::Inverse(Box::new(
-            PathPattern::Property("test".to_string())
+            PathPattern::Property("test".to_string()),
         ))));
         let rewritten = optimizer.apply_rewrite_rules(&path).await.unwrap();
         matches!(rewritten, PathPattern::Property(p) if p == "test");
@@ -1209,17 +1328,26 @@ mod tests {
     #[tokio::test]
     async fn test_strategy_selection() {
         let optimizer = AdvancedPropertyPathOptimizer::new();
-        
+
         // Simple property should use forward traversal
         let path = PathPattern::Property("test".to_string());
         let chars = optimizer.analyze_path_characteristics(&path).await.unwrap();
-        let strategy = optimizer.choose_optimal_strategy(&path, &chars).await.unwrap();
+        let strategy = optimizer
+            .choose_optimal_strategy(&path, &chars)
+            .await
+            .unwrap();
         matches!(strategy, PathExecutionStrategy::ForwardTraversal);
-        
+
         // Path with repetition should use breadth-first or depth-first
         let path = PathPattern::OneOrMore(Box::new(PathPattern::Property("test".to_string())));
         let chars = optimizer.analyze_path_characteristics(&path).await.unwrap();
-        let strategy = optimizer.choose_optimal_strategy(&path, &chars).await.unwrap();
-        matches!(strategy, PathExecutionStrategy::BreadthFirst { .. } | PathExecutionStrategy::DepthFirst { .. });
+        let strategy = optimizer
+            .choose_optimal_strategy(&path, &chars)
+            .await
+            .unwrap();
+        matches!(
+            strategy,
+            PathExecutionStrategy::BreadthFirst { .. } | PathExecutionStrategy::DepthFirst { .. }
+        );
     }
 }

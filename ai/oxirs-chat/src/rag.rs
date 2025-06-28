@@ -5,7 +5,7 @@
 
 use anyhow::{anyhow, Result};
 use oxirs_core::{
-    model::{quad::Quad, term::Term, triple::Triple, NamedNode, Subject, Object},
+    model::{quad::Quad, term::Term, triple::Triple, NamedNode, Object, Subject},
     Store,
 };
 // Vector search integration (temporarily disabled)
@@ -29,7 +29,9 @@ pub trait EmbeddingModel: Send + Sync {
     fn encode<'a>(
         &'a self,
         texts: &'a [String],
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<Vec<f32>>, anyhow::Error>> + Send + 'a>>;
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Vec<Vec<f32>>, anyhow::Error>> + Send + 'a>,
+    >;
 }
 
 /// Simple in-memory vector index for semantic search
@@ -55,9 +57,19 @@ impl VectorIndex {
     }
 
     /// Add a vector to the index
-    pub fn add(&mut self, id: String, vector: Vec<f32>, triple: Triple, metadata: HashMap<String, String>) -> Result<()> {
+    pub fn add(
+        &mut self,
+        id: String,
+        vector: Vec<f32>,
+        triple: Triple,
+        metadata: HashMap<String, String>,
+    ) -> Result<()> {
         if vector.len() != self.dimension {
-            return Err(anyhow!("Vector dimension mismatch: expected {}, got {}", self.dimension, vector.len()));
+            return Err(anyhow!(
+                "Vector dimension mismatch: expected {}, got {}",
+                self.dimension,
+                vector.len()
+            ));
         }
 
         let indexed_vector = IndexedVector {
@@ -78,7 +90,11 @@ impl VectorIndex {
         limit: usize,
     ) -> Result<Vec<SearchDocument>, anyhow::Error> {
         if query.len() != self.dimension {
-            return Err(anyhow!("Query vector dimension mismatch: expected {}, got {}", self.dimension, query.len()));
+            return Err(anyhow!(
+                "Query vector dimension mismatch: expected {}, got {}",
+                self.dimension,
+                query.len()
+            ));
         }
 
         let mut results: Vec<(f32, &IndexedVector)> = self
@@ -215,18 +231,18 @@ impl EnhancedEmbeddingModel {
 
     async fn create_provider(config: &EmbeddingConfig) -> Result<EmbeddingProvider> {
         match config.provider_type {
-            EmbeddingProviderType::OpenAI => {
-                Ok(EmbeddingProvider::OpenAI(OpenAIEmbeddingProvider::new(config.clone())?))
-            }
-            EmbeddingProviderType::HuggingFace => {
-                Ok(EmbeddingProvider::HuggingFace(HuggingFaceEmbeddingProvider::new(config.clone())?))
-            }
-            EmbeddingProviderType::Sentence => {
-                Ok(EmbeddingProvider::Sentence(SentenceEmbeddingProvider::new(config.clone())?))
-            }
-            EmbeddingProviderType::Local => {
-                Ok(EmbeddingProvider::Local(LocalEmbeddingProvider::new(config.clone())?))
-            }
+            EmbeddingProviderType::OpenAI => Ok(EmbeddingProvider::OpenAI(
+                OpenAIEmbeddingProvider::new(config.clone())?,
+            )),
+            EmbeddingProviderType::HuggingFace => Ok(EmbeddingProvider::HuggingFace(
+                HuggingFaceEmbeddingProvider::new(config.clone())?,
+            )),
+            EmbeddingProviderType::Sentence => Ok(EmbeddingProvider::Sentence(
+                SentenceEmbeddingProvider::new(config.clone())?,
+            )),
+            EmbeddingProviderType::Local => Ok(EmbeddingProvider::Local(
+                LocalEmbeddingProvider::new(config.clone())?,
+            )),
         }
     }
 
@@ -237,20 +253,21 @@ impl EnhancedEmbeddingModel {
 
     async fn cache_embedding(&self, text: String, embedding: Vec<f32>) {
         let mut cache = self.cache.write().await;
-        
+
         // Simple LRU-like cache management
         if cache.len() >= self.config.cache_size {
             // Remove 10% of entries randomly when cache is full
-            let keys_to_remove: Vec<String> = cache.keys()
+            let keys_to_remove: Vec<String> = cache
+                .keys()
                 .take(self.config.cache_size / 10)
                 .cloned()
                 .collect();
-            
+
             for key in keys_to_remove {
                 cache.remove(&key);
             }
         }
-        
+
         cache.insert(text, embedding);
     }
 }
@@ -259,7 +276,9 @@ impl EmbeddingModel for EnhancedEmbeddingModel {
     fn encode<'a>(
         &'a self,
         texts: &'a [String],
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<Vec<f32>>, anyhow::Error>> + Send + 'a>> {
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Vec<Vec<f32>>, anyhow::Error>> + Send + 'a>,
+    > {
         Box::pin(async move {
             let mut results = Vec::with_capacity(texts.len());
             let mut cache_misses = Vec::new();
@@ -279,17 +298,25 @@ impl EmbeddingModel for EnhancedEmbeddingModel {
             // Generate embeddings for cache misses
             if !cache_misses.is_empty() {
                 let new_embeddings = match &self.provider {
-                    EmbeddingProvider::OpenAI(provider) => provider.encode_batch(&cache_misses).await?,
-                    EmbeddingProvider::HuggingFace(provider) => provider.encode_batch(&cache_misses).await?,
-                    EmbeddingProvider::Sentence(provider) => provider.encode_batch(&cache_misses).await?,
-                    EmbeddingProvider::Local(provider) => provider.encode_batch(&cache_misses).await?,
+                    EmbeddingProvider::OpenAI(provider) => {
+                        provider.encode_batch(&cache_misses).await?
+                    }
+                    EmbeddingProvider::HuggingFace(provider) => {
+                        provider.encode_batch(&cache_misses).await?
+                    }
+                    EmbeddingProvider::Sentence(provider) => {
+                        provider.encode_batch(&cache_misses).await?
+                    }
+                    EmbeddingProvider::Local(provider) => {
+                        provider.encode_batch(&cache_misses).await?
+                    }
                 };
 
                 // Fill in results and cache new embeddings
                 for (i, embedding) in new_embeddings.into_iter().enumerate() {
                     let result_index = cache_miss_indices[i];
                     let text = &cache_misses[i];
-                    
+
                     results[result_index] = Some(embedding.clone());
                     self.cache_embedding(text.clone(), embedding).await;
                 }
@@ -316,9 +343,10 @@ struct OpenAIEmbeddingProvider {
 
 impl OpenAIEmbeddingProvider {
     fn new(config: EmbeddingConfig) -> Result<Self> {
-        let api_key = config.api_key
+        let api_key = config
+            .api_key
             .ok_or_else(|| anyhow!("OpenAI API key is required"))?;
-        
+
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(config.timeout_seconds))
             .build()?;
@@ -327,7 +355,9 @@ impl OpenAIEmbeddingProvider {
             client,
             api_key,
             model_name: config.model_name,
-            base_url: config.base_url.unwrap_or_else(|| "https://api.openai.com".to_string()),
+            base_url: config
+                .base_url
+                .unwrap_or_else(|| "https://api.openai.com".to_string()),
         })
     }
 
@@ -338,7 +368,8 @@ impl OpenAIEmbeddingProvider {
             "encoding_format": "float"
         });
 
-        let response = self.client
+        let response = self
+            .client
             .post(&format!("{}/v1/embeddings", self.base_url))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
@@ -348,13 +379,13 @@ impl OpenAIEmbeddingProvider {
 
         let status = response.status();
         let response_text = response.text().await?;
-        
+
         if !status.is_success() {
             return Err(anyhow!("OpenAI API error: {} - {}", status, response_text));
         }
 
         let response_json: serde_json::Value = serde_json::from_str(&response_text)?;
-        
+
         let embeddings = response_json
             .get("data")
             .and_then(|d| d.as_array())
@@ -366,12 +397,12 @@ impl OpenAIEmbeddingProvider {
                 .get("embedding")
                 .and_then(|e| e.as_array())
                 .ok_or_else(|| anyhow!("Invalid embedding format"))?;
-            
+
             let embedding: Vec<f32> = embedding_vec
                 .iter()
                 .filter_map(|v| v.as_f64().map(|f| f as f32))
                 .collect();
-            
+
             results.push(embedding);
         }
 
@@ -397,21 +428,27 @@ impl HuggingFaceEmbeddingProvider {
             client,
             api_key: config.api_key,
             model_name: config.model_name,
-            base_url: config.base_url.unwrap_or_else(|| "https://api-inference.huggingface.co".to_string()),
+            base_url: config
+                .base_url
+                .unwrap_or_else(|| "https://api-inference.huggingface.co".to_string()),
         })
     }
 
     async fn encode_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         let mut embeddings = Vec::new();
-        
+
         // HuggingFace Inference API typically processes one text at a time
         for text in texts {
             let request_body = serde_json::json!({
                 "inputs": text
             });
 
-            let mut request = self.client
-                .post(&format!("{}/pipeline/feature-extraction/{}", self.base_url, self.model_name))
+            let mut request = self
+                .client
+                .post(&format!(
+                    "{}/pipeline/feature-extraction/{}",
+                    self.base_url, self.model_name
+                ))
                 .header("Content-Type", "application/json")
                 .json(&request_body);
 
@@ -421,10 +458,14 @@ impl HuggingFaceEmbeddingProvider {
 
             let response = request.send().await?;
             let status = response.status();
-            
+
             if !status.is_success() {
                 let error_text = response.text().await?;
-                return Err(anyhow!("HuggingFace API error: {} - {}", status, error_text));
+                return Err(anyhow!(
+                    "HuggingFace API error: {} - {}",
+                    status,
+                    error_text
+                ));
             }
 
             let embedding: Vec<f32> = response.json().await?;
@@ -449,16 +490,19 @@ impl SentenceEmbeddingProvider {
 
     async fn encode_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         // For now, fall back to simple embedding until we have proper sentence-transformers integration
-        info!("SentenceEmbeddingProvider: Using fallback implementation for model {}", self.model_name);
-        
+        info!(
+            "SentenceEmbeddingProvider: Using fallback implementation for model {}",
+            self.model_name
+        );
+
         let simple_model = SimpleEmbeddingModel::new(384); // MiniLM dimension
         let mut embeddings = Vec::new();
-        
+
         for text in texts {
             let embedding = simple_model.text_to_embedding(text);
             embeddings.push(embedding);
         }
-        
+
         Ok(embeddings)
     }
 }
@@ -500,38 +544,38 @@ impl SimpleEmbeddingModel {
         use std::hash::{Hash, Hasher};
 
         let mut embedding = vec![0.0; self.dimension];
-        
+
         // Improved hash-based embedding with TF-IDF-like weighting
         let text_lower = text.to_lowercase();
         let words: Vec<&str> = text_lower
             .split_whitespace()
             .filter(|w| w.len() > 2) // Filter out very short words
             .collect();
-        
+
         let word_count = words.len() as f32;
         let mut word_freqs: HashMap<&str, f32> = HashMap::new();
-        
+
         // Calculate word frequencies
         for word in &words {
             *word_freqs.entry(word).or_insert(0.0) += 1.0;
         }
-        
+
         // Generate embedding with frequency weighting
         for (word, freq) in word_freqs {
             let mut hasher = DefaultHasher::new();
             word.hash(&mut hasher);
             let hash = hasher.finish();
-            
+
             // Use multiple hash functions for better distribution
             for i in 0..3 {
                 let mut shifted_hasher = DefaultHasher::new();
                 (hash.wrapping_add(i * 1299827)).hash(&mut shifted_hasher);
                 let shifted_hash = shifted_hasher.finish();
-                
+
                 let idx = (shifted_hash as usize) % self.dimension;
                 let tf_weight = freq / word_count; // Term frequency
                 let idf_weight = (1.0 + word.len() as f32).ln(); // Simple IDF approximation
-                
+
                 embedding[idx] += tf_weight * idf_weight * ((hash % 1000) as f32 / 1000.0);
             }
         }
@@ -539,8 +583,9 @@ impl SimpleEmbeddingModel {
         // Add semantic features
         let sentence_length_feature = (text.len() as f32 / 1000.0).min(1.0);
         let word_count_feature = (word_count / 50.0).min(1.0);
-        let avg_word_length = words.iter().map(|w| w.len()).sum::<usize>() as f32 / word_count.max(1.0) / 10.0;
-        
+        let avg_word_length =
+            words.iter().map(|w| w.len()).sum::<usize>() as f32 / word_count.max(1.0) / 10.0;
+
         if self.dimension > 3 {
             embedding[0] += sentence_length_feature;
             embedding[1] += word_count_feature;
@@ -563,7 +608,9 @@ impl EmbeddingModel for SimpleEmbeddingModel {
     fn encode<'a>(
         &'a self,
         texts: &'a [String],
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<Vec<f32>>, anyhow::Error>> + Send + 'a>> {
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Vec<Vec<f32>>, anyhow::Error>> + Send + 'a>,
+    > {
         let embeddings: Vec<Vec<f32>> = texts
             .iter()
             .map(|text| self.text_to_embedding(text))
@@ -926,7 +973,9 @@ impl RAGSystem {
         info!("Starting to populate vector index from RDF store");
 
         // Get all triples from the store
-        let triples = store.triples().map_err(|e| anyhow!("Failed to get triples: {}", e))?;
+        let triples = store
+            .triples()
+            .map_err(|e| anyhow!("Failed to get triples: {}", e))?;
         let mut indexed_count = 0;
 
         info!("Found {} triples to index", triples.len());
@@ -961,13 +1010,20 @@ impl RAGSystem {
                     }
                 }
                 Err(e) => {
-                    warn!("Failed to generate embeddings for batch {}: {}", batch_idx, e);
+                    warn!(
+                        "Failed to generate embeddings for batch {}: {}",
+                        batch_idx, e
+                    );
                 }
             }
 
             // Log progress
             if (batch_idx + 1) % 10 == 0 {
-                info!("Processed {} batches, indexed {} triples", batch_idx + 1, indexed_count);
+                info!(
+                    "Processed {} batches, indexed {} triples",
+                    batch_idx + 1,
+                    indexed_count
+                );
             }
         }
 
@@ -988,11 +1044,11 @@ impl RAGSystem {
     /// Convert a term to a readable text representation
     fn term_to_text<T: std::fmt::Display>(term: &T) -> String {
         let term_str = term.to_string();
-        
+
         // Extract meaningful parts from IRIs
         if term_str.starts_with('<') && term_str.ends_with('>') {
-            let iri = &term_str[1..term_str.len()-1]; // Remove < >
-            
+            let iri = &term_str[1..term_str.len() - 1]; // Remove < >
+
             // Extract local name from IRI
             if let Some(fragment_pos) = iri.rfind('#') {
                 return iri[fragment_pos + 1..].to_string();
@@ -1000,7 +1056,7 @@ impl RAGSystem {
                 return iri[slash_pos + 1..].to_string();
             }
         }
-        
+
         // For literals, remove quotes and type information
         if term_str.starts_with('"') {
             if let Some(quote_end) = term_str[1..].find('"') {
@@ -1014,16 +1070,16 @@ impl RAGSystem {
     /// Create metadata for a triple
     fn create_triple_metadata(triple: &Triple) -> HashMap<String, String> {
         let mut metadata = HashMap::new();
-        
+
         metadata.insert("subject".to_string(), triple.subject().to_string());
         metadata.insert("predicate".to_string(), triple.predicate().to_string());
         metadata.insert("object".to_string(), triple.object().to_string());
-        
+
         // Add type information
         if triple.predicate().to_string().contains("type") {
             metadata.insert("is_type_statement".to_string(), "true".to_string());
         }
-        
+
         metadata
     }
 
@@ -1101,7 +1157,6 @@ impl RAGSystem {
             .await
     }
 
-
     /// Enhanced semantic search with hybrid approach
     async fn semantic_search(
         &self,
@@ -1134,16 +1189,13 @@ impl RAGSystem {
     ) -> Result<Vec<SearchResult>> {
         // Semantic search
         let semantic_results = self.semantic_search(query, vector_index).await?;
-        
+
         // BM25-like keyword search
         let keyword_results = self.keyword_search(query).await?;
-        
+
         // Combine and rerank results
-        let hybrid_results = self.combine_search_results(
-            semantic_results,
-            keyword_results,
-            &self.config.retrieval,
-        )?;
+        let hybrid_results =
+            self.combine_search_results(semantic_results, keyword_results, &self.config.retrieval)?;
 
         Ok(hybrid_results)
     }
@@ -1162,15 +1214,19 @@ impl RAGSystem {
         }
 
         // Get all triples from store
-        let all_triples = self.store.triples()
+        let all_triples = self
+            .store
+            .triples()
             .map_err(|e| anyhow!("Failed to get triples for keyword search: {}", e))?;
 
         for triple in all_triples {
-            let triple_text = format!("{} {} {}", 
-                triple.subject(), 
-                triple.predicate(), 
+            let triple_text = format!(
+                "{} {} {}",
+                triple.subject(),
+                triple.predicate(),
                 triple.object()
-            ).to_lowercase();
+            )
+            .to_lowercase();
 
             let mut score = 0.0f32;
             let mut matched_terms = 0;
@@ -1191,7 +1247,7 @@ impl RAGSystem {
                 // Boost score for multiple term matches
                 let coverage_boost = matched_terms as f32 / query_terms.len() as f32;
                 score *= 1.0 + coverage_boost;
-                
+
                 results.push(SearchResult {
                     triple,
                     score,
@@ -1201,7 +1257,11 @@ impl RAGSystem {
         }
 
         // Sort by score and limit results
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         results.truncate(self.config.retrieval.max_results);
 
         Ok(results)
@@ -1220,34 +1280,42 @@ impl RAGSystem {
         for result in semantic_results {
             let key = format!("{:?}", result.triple);
             let weighted_score = result.score * config.semantic_weight;
-            combined_map.insert(key, SearchResult {
-                score: weighted_score,
-                search_type: SearchType::Hybrid,
-                ..result
-            });
+            combined_map.insert(
+                key,
+                SearchResult {
+                    score: weighted_score,
+                    search_type: SearchType::Hybrid,
+                    ..result
+                },
+            );
         }
 
         // Add keyword results, combining scores if triple already exists
         for result in keyword_results {
             let key = format!("{:?}", result.triple);
             let weighted_score = result.score * config.bm25_weight;
-            
+
             if let Some(existing) = combined_map.get_mut(&key) {
                 existing.score += weighted_score;
                 existing.search_type = SearchType::Hybrid;
             } else {
-                combined_map.insert(key, SearchResult {
-                    score: weighted_score,
-                    search_type: SearchType::Hybrid,
-                    ..result
-                });
+                combined_map.insert(
+                    key,
+                    SearchResult {
+                        score: weighted_score,
+                        search_type: SearchType::Hybrid,
+                        ..result
+                    },
+                );
             }
         }
 
         // Convert to vec and sort
         let mut final_results: Vec<SearchResult> = combined_map.into_values().collect();
         final_results.sort_by(|a, b| {
-            b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal)
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         // Apply similarity threshold
@@ -1273,7 +1341,7 @@ impl RAGSystem {
                 let entity_triples = self
                     .find_entity_triples(iri, self.config.retrieval.graph_traversal_depth)
                     .await?;
-                
+
                 for triple in entity_triples {
                     results.push(SearchResult {
                         triple,
@@ -1284,7 +1352,8 @@ impl RAGSystem {
 
                 // Enhanced entity expansion
                 if self.config.retrieval.enable_entity_expansion {
-                    let expanded_results = self.expand_entity_context(iri, entity.confidence).await?;
+                    let expanded_results =
+                        self.expand_entity_context(iri, entity.confidence).await?;
                     results.extend(expanded_results);
                 }
             }
@@ -1295,7 +1364,11 @@ impl RAGSystem {
     }
 
     /// Expand entity context with related entities and properties
-    async fn expand_entity_context(&self, entity_iri: &str, base_confidence: f32) -> Result<Vec<SearchResult>> {
+    async fn expand_entity_context(
+        &self,
+        entity_iri: &str,
+        base_confidence: f32,
+    ) -> Result<Vec<SearchResult>> {
         let mut expanded_results = Vec::new();
 
         // Find type information
@@ -1353,15 +1426,16 @@ impl RAGSystem {
 
         // First, get the types of the input entity
         let entity_types = self.find_entity_types(entity_iri).await?;
-        
+
         if entity_types.is_empty() {
             return Ok(same_type_triples);
         }
 
         // For each type, find other entities of the same type
-        for type_triple in entity_types.iter().take(2) { // Limit to first 2 types
+        for type_triple in entity_types.iter().take(2) {
+            // Limit to first 2 types
             let entity_type = type_triple.object().to_string();
-            
+
             // Find other entities with this type
             if let Ok(type_instances) = self.find_triples_with_object(&entity_type).await {
                 for instance_triple in type_instances.iter().take(limit) {
@@ -1383,9 +1457,10 @@ impl RAGSystem {
 
         // Find properties where this entity is used
         if let Ok(subject_triples) = self.find_triples_with_subject(entity_iri).await {
-            for triple in subject_triples.iter().take(10) { // Limit for performance
+            for triple in subject_triples.iter().take(10) {
+                // Limit for performance
                 let property_iri = triple.predicate().to_string();
-                
+
                 // Find domain and range information for this property
                 let domain_range_triples = self.find_property_domain_range(&property_iri).await?;
                 context_triples.extend(domain_range_triples);
@@ -1407,7 +1482,9 @@ impl RAGSystem {
         if let Ok(property_triples) = self.find_triples_with_subject(property_iri).await {
             for triple in property_triples {
                 let predicate_str = triple.predicate().to_string();
-                if predicate_str.contains(domain_predicate) || predicate_str.contains(range_predicate) {
+                if predicate_str.contains(domain_predicate)
+                    || predicate_str.contains(range_predicate)
+                {
                     domain_range_triples.push(triple);
                 }
             }
@@ -1417,7 +1494,10 @@ impl RAGSystem {
     }
 
     /// Remove duplicates and apply graph-specific ranking
-    fn deduplicate_and_rank_graph_results(&self, results: Vec<SearchResult>) -> Result<Vec<SearchResult>> {
+    fn deduplicate_and_rank_graph_results(
+        &self,
+        results: Vec<SearchResult>,
+    ) -> Result<Vec<SearchResult>> {
         let mut unique_results: HashMap<String, SearchResult> = HashMap::new();
 
         for result in results {
@@ -1437,22 +1517,24 @@ impl RAGSystem {
         // Apply graph-specific ranking factors
         for result in &mut final_results {
             // Boost scores based on triple patterns
-            let triple_text = format!("{} {} {}", 
-                result.triple.subject(), 
-                result.triple.predicate(), 
+            let triple_text = format!(
+                "{} {} {}",
+                result.triple.subject(),
+                result.triple.predicate(),
                 result.triple.object()
-            ).to_lowercase();
+            )
+            .to_lowercase();
 
             // Boost type statements
             if triple_text.contains("type") {
                 result.score *= 1.2;
             }
-            
+
             // Boost label and name properties
             if triple_text.contains("label") || triple_text.contains("name") {
                 result.score *= 1.3;
             }
-            
+
             // Boost description properties
             if triple_text.contains("description") || triple_text.contains("comment") {
                 result.score *= 1.1;
@@ -1461,7 +1543,9 @@ impl RAGSystem {
 
         // Sort by score
         final_results.sort_by(|a, b| {
-            b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal)
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         // Apply graph traversal limits
@@ -1515,8 +1599,12 @@ impl RAGSystem {
 
         // Remove duplicates
         result_triples.sort_by(|a, b| {
-            format!("{} {} {}", a.subject(), a.predicate(), a.object())
-                .cmp(&format!("{} {} {}", b.subject(), b.predicate(), b.object()))
+            format!("{} {} {}", a.subject(), a.predicate(), a.object()).cmp(&format!(
+                "{} {} {}",
+                b.subject(),
+                b.predicate(),
+                b.object()
+            ))
         });
         result_triples.dedup_by(|a, b| {
             format!("{} {} {}", a.subject(), a.predicate(), a.object())
@@ -1528,51 +1616,54 @@ impl RAGSystem {
 
     async fn find_triples_with_subject(&self, subject: &str) -> Result<Vec<Triple>> {
         use oxirs_core::model::{iri::NamedNode, term::Term};
-        
+
         let mut results = Vec::new();
-        
+
         // Try to parse subject as IRI
         if let Ok(subject_node) = NamedNode::new(subject) {
             let subject_term = Subject::NamedNode(subject_node);
-            
+
             // Query the store for triples with this subject
-            if let Ok(quads) = self.store.query_quads(Some(&subject_term), None, None, None) {
+            if let Ok(quads) = self
+                .store
+                .query_quads(Some(&subject_term), None, None, None)
+            {
                 for quad in quads {
                     let triple = Triple::new(
                         quad.subject().clone(),
                         quad.predicate().clone(),
-                        quad.object().clone()
+                        quad.object().clone(),
                     );
                     results.push(triple);
                 }
             }
         }
-        
+
         Ok(results)
     }
 
     async fn find_triples_with_object(&self, object: &str) -> Result<Vec<Triple>> {
         use oxirs_core::model::{iri::NamedNode, term::Term};
-        
+
         let mut results = Vec::new();
-        
+
         // Try to parse object as IRI
         if let Ok(object_node) = NamedNode::new(object) {
             let object_term = Object::NamedNode(object_node);
-            
+
             // Query the store for triples with this object
             if let Ok(quads) = self.store.query_quads(None, None, Some(&object_term), None) {
                 for quad in quads {
                     let triple = Triple::new(
                         quad.subject().clone(),
                         quad.predicate().clone(),
-                        quad.object().clone()
+                        quad.object().clone(),
                     );
                     results.push(triple);
                 }
             }
         }
-        
+
         Ok(results)
     }
 
@@ -1994,18 +2085,20 @@ impl ContextAssembler {
 
     fn calculate_quality_score(&self, structured_context: &StructuredContext) -> f32 {
         let mut quality_factors = Vec::new();
-        
+
         // Factor 1: Entity completeness (0.0-1.0)
         let entity_completeness = if structured_context.entities.is_empty() {
             0.0
         } else {
-            let entities_with_labels = structured_context.entities.iter()
+            let entities_with_labels = structured_context
+                .entities
+                .iter()
                 .filter(|e| e.label.is_some())
                 .count() as f32;
             entities_with_labels / structured_context.entities.len() as f32
         };
         quality_factors.push(("entity_completeness", entity_completeness, 0.3));
-        
+
         // Factor 2: Fact density (0.0-1.0)
         let fact_density = if structured_context.facts.is_empty() {
             0.0
@@ -2014,18 +2107,18 @@ impl ContextAssembler {
             (structured_context.facts.len() as f32 / 10.0).min(1.0)
         };
         quality_factors.push(("fact_density", fact_density, 0.3));
-        
+
         // Factor 3: Relationship richness (0.0-1.0)
         let relationship_richness = if structured_context.relationships.is_empty() {
             0.0
         } else {
             // Normalize by fact count ratio
-            let rel_to_fact_ratio = structured_context.relationships.len() as f32 / 
-                (structured_context.facts.len() as f32).max(1.0);
+            let rel_to_fact_ratio = structured_context.relationships.len() as f32
+                / (structured_context.facts.len() as f32).max(1.0);
             rel_to_fact_ratio.min(1.0)
         };
         quality_factors.push(("relationship_richness", relationship_richness, 0.2));
-        
+
         // Factor 4: Schema presence (0.0-1.0)
         let schema_presence = if structured_context.schema.is_empty() {
             0.5 // Neutral - schema not always required
@@ -2033,7 +2126,7 @@ impl ContextAssembler {
             0.8 // Bonus for having schema information
         };
         quality_factors.push(("schema_presence", schema_presence, 0.1));
-        
+
         // Factor 5: Content diversity (0.0-1.0)
         let content_diversity = {
             let mut unique_predicates = std::collections::HashSet::new();
@@ -2045,18 +2138,19 @@ impl ContextAssembler {
             (unique_predicates.len() as f32 / 5.0).min(1.0) // Normalize by 5 unique predicates
         };
         quality_factors.push(("content_diversity", content_diversity, 0.1));
-        
+
         // Calculate weighted average
-        let total_score: f32 = quality_factors.iter()
+        let total_score: f32 = quality_factors
+            .iter()
             .map(|(name, score, weight)| {
                 debug!("Quality factor {}: {} (weight: {})", name, score, weight);
                 score * weight
             })
             .sum();
-        
+
         let final_score = total_score.max(0.0).min(1.0);
         debug!("Calculated quality score: {}", final_score);
-        
+
         final_score
     }
 
@@ -2066,31 +2160,33 @@ impl ContextAssembler {
         query_context: &QueryContext,
     ) -> f32 {
         let mut coverage_factors = Vec::new();
-        
+
         // Factor 1: Entity coverage (0.0-1.0)
         let entity_coverage = if query_context.entities.is_empty() {
             1.0 // No entities to cover
         } else {
-            let query_entity_iris: std::collections::HashSet<_> = query_context.entities.iter()
+            let query_entity_iris: std::collections::HashSet<_> = query_context
+                .entities
+                .iter()
                 .filter_map(|e| e.iri.as_ref())
                 .collect();
-            
+
             if query_entity_iris.is_empty() {
                 0.5 // Can't determine entity coverage
             } else {
-                let context_entity_iris: std::collections::HashSet<_> = structured_context.entities.iter()
-                    .map(|e| &e.iri)
-                    .collect();
-                
-                let covered_entities = query_entity_iris.iter()
+                let context_entity_iris: std::collections::HashSet<_> =
+                    structured_context.entities.iter().map(|e| &e.iri).collect();
+
+                let covered_entities = query_entity_iris
+                    .iter()
                     .filter(|iri| context_entity_iris.contains(*iri))
                     .count();
-                
+
                 covered_entities as f32 / query_entity_iris.len() as f32
             }
         };
         coverage_factors.push(("entity_coverage", entity_coverage, 0.4));
-        
+
         // Factor 2: Keyword coverage (0.0-1.0)
         let keyword_coverage = {
             let query_lowercase = query_context.query.to_lowercase();
@@ -2098,48 +2194,65 @@ impl ContextAssembler {
                 .split_whitespace()
                 .filter(|w| w.len() > 3) // Only consider significant words
                 .collect();
-            
+
             if query_words.is_empty() {
                 0.5
             } else {
                 let context_text = structured_context.facts.join(" ").to_lowercase();
-                let covered_words = query_words.iter()
+                let covered_words = query_words
+                    .iter()
                     .filter(|word| context_text.contains(*word))
                     .count();
-                
+
                 covered_words as f32 / query_words.len() as f32
             }
         };
         coverage_factors.push(("keyword_coverage", keyword_coverage, 0.3));
-        
+
         // Factor 3: Intent-specific coverage (0.0-1.0)
         let intent_coverage = match query_context.intent {
             QueryIntent::FactualLookup => {
                 // Check if we have direct facts about the queried entity
-                if structured_context.facts.len() > 2 { 0.8 } else { 0.4 }
-            },
+                if structured_context.facts.len() > 2 {
+                    0.8
+                } else {
+                    0.4
+                }
+            }
             QueryIntent::Relationship => {
                 // Check if we have relationship information
-                if structured_context.relationships.len() > 1 { 0.9 } else { 0.3 }
-            },
+                if structured_context.relationships.len() > 1 {
+                    0.9
+                } else {
+                    0.3
+                }
+            }
             QueryIntent::ListQuery => {
                 // Check if we have multiple entities/facts
-                if structured_context.entities.len() > 3 { 0.8 } else { 0.4 }
-            },
+                if structured_context.entities.len() > 3 {
+                    0.8
+                } else {
+                    0.4
+                }
+            }
             QueryIntent::Aggregation => {
                 // Check if we have sufficient data for aggregation
-                if structured_context.facts.len() > 5 { 0.7 } else { 0.3 }
-            },
+                if structured_context.facts.len() > 5 {
+                    0.7
+                } else {
+                    0.3
+                }
+            }
             _ => 0.6, // Default coverage for other intents
         };
         coverage_factors.push(("intent_coverage", intent_coverage, 0.2));
-        
+
         // Factor 4: Completeness (0.0-1.0)
         let completeness = {
             let has_entities = !structured_context.entities.is_empty();
             let has_facts = !structured_context.facts.is_empty();
             let has_relationships = !structured_context.relationships.is_empty();
-            
+
             match (has_entities, has_facts, has_relationships) {
                 (true, true, true) => 1.0,
                 (true, true, false) => 0.8,
@@ -2152,18 +2265,19 @@ impl ContextAssembler {
             }
         };
         coverage_factors.push(("completeness", completeness, 0.1));
-        
+
         // Calculate weighted average
-        let total_score: f32 = coverage_factors.iter()
+        let total_score: f32 = coverage_factors
+            .iter()
             .map(|(name, score, weight)| {
                 debug!("Coverage factor {}: {} (weight: {})", name, score, weight);
                 score * weight
             })
             .sum();
-        
+
         let final_score = total_score.max(0.0).min(1.0);
         debug!("Calculated coverage score: {}", final_score);
-        
+
         final_score
     }
 }
@@ -2171,29 +2285,42 @@ impl ContextAssembler {
 impl RAGSystem {
     /// Extract entities and relationships from query using LLM and knowledge graph linking
     async fn extract_query_components(&self, query_context: &QueryContext) -> Result<QueryContext> {
-        info!("Extracting entities and relationships from query: {}", query_context.query);
-        
+        info!(
+            "Extracting entities and relationships from query: {}",
+            query_context.query
+        );
+
         // Try LLM-powered extraction first, fallback to rule-based
-        let (entities, relationships) = match self.llm_extract_entities(&query_context.query).await {
+        let (entities, relationships) = match self.llm_extract_entities(&query_context.query).await
+        {
             Ok((llm_entities, llm_relationships)) => {
-                info!("LLM extraction successful: {} entities, {} relationships", 
-                     llm_entities.len(), llm_relationships.len());
+                info!(
+                    "LLM extraction successful: {} entities, {} relationships",
+                    llm_entities.len(),
+                    llm_relationships.len()
+                );
                 (llm_entities, llm_relationships)
             }
             Err(e) => {
                 warn!("LLM extraction failed ({}), using fallback extraction", e);
-                let entities = self.rule_based_entity_extraction(&query_context.query).await?;
-                let relationships = self.rule_based_relationship_extraction(&query_context.query, &entities).await?;
+                let entities = self
+                    .rule_based_entity_extraction(&query_context.query)
+                    .await?;
+                let relationships = self
+                    .rule_based_relationship_extraction(&query_context.query, &entities)
+                    .await?;
                 (entities, relationships)
             }
         };
-        
+
         // Enhance entities with knowledge graph linking
         let enhanced_entities = self.link_entities_to_knowledge_graph(entities).await?;
-        
+
         // Extract constraints from query
-        let constraints = self.extract_constraints(&query_context.query, &enhanced_entities).await?;
-        
+        let constraints = self
+            .extract_constraints(&query_context.query, &enhanced_entities)
+            .await?;
+
         Ok(QueryContext {
             query: query_context.query.clone(),
             intent: query_context.intent.clone(),
@@ -2203,11 +2330,16 @@ impl RAGSystem {
             conversation_history: query_context.conversation_history.clone(),
         })
     }
-    
+
     /// LLM-powered entity and relationship extraction
-    async fn llm_extract_entities(&self, query: &str) -> Result<(Vec<ExtractedEntity>, Vec<ExtractedRelationship>)> {
-        use crate::llm::{ChatMessage, ChatRole, LLMConfig, LLMManager, LLMRequest, Priority, UseCase};
-        
+    async fn llm_extract_entities(
+        &self,
+        query: &str,
+    ) -> Result<(Vec<ExtractedEntity>, Vec<ExtractedRelationship>)> {
+        use crate::llm::{
+            ChatMessage, ChatRole, LLMConfig, LLMManager, LLMRequest, Priority, UseCase,
+        };
+
         // Create extraction prompt
         let prompt = format!(
             r#"Extract entities and relationships from the following query. Return a JSON response with the following structure:
@@ -2241,11 +2373,11 @@ Focus on:
 JSON Response:"#,
             query
         );
-        
+
         // Initialize LLM manager
         let llm_config = LLMConfig::default();
         let llm_manager = LLMManager::new(llm_config)?;
-        
+
         let chat_messages = vec![
             ChatMessage {
                 role: ChatRole::System,
@@ -2258,7 +2390,7 @@ JSON Response:"#,
                 metadata: None,
             },
         ];
-        
+
         let request = LLMRequest {
             messages: chat_messages,
             system_prompt: Some("Extract entities and relationships as JSON.".to_string()),
@@ -2268,15 +2400,18 @@ JSON Response:"#,
             temperature: 0.1f32, // Low temperature for consistent extraction
             timeout: Some(std::time::Duration::from_secs(15)),
         };
-        
+
         let response = llm_manager.generate_response(request).await?;
-        
+
         // Parse JSON response
         self.parse_extraction_response(&response.content)
     }
-    
+
     /// Parse LLM extraction response
-    fn parse_extraction_response(&self, response: &str) -> Result<(Vec<ExtractedEntity>, Vec<ExtractedRelationship>)> {
+    fn parse_extraction_response(
+        &self,
+        response: &str,
+    ) -> Result<(Vec<ExtractedEntity>, Vec<ExtractedRelationship>)> {
         // Clean response (remove markdown formatting if present)
         let cleaned_response = response
             .trim()
@@ -2285,12 +2420,12 @@ JSON Response:"#,
             .strip_suffix("```")
             .unwrap_or(response)
             .trim();
-        
+
         let parsed: serde_json::Value = serde_json::from_str(cleaned_response)?;
-        
+
         let mut entities = Vec::new();
         let mut relationships = Vec::new();
-        
+
         // Parse entities
         if let Some(entity_array) = parsed.get("entities").and_then(|e| e.as_array()) {
             for entity_obj in entity_array {
@@ -2309,7 +2444,7 @@ JSON Response:"#,
                 }
             }
         }
-        
+
         // Parse relationships
         if let Some(rel_array) = parsed.get("relationships").and_then(|r| r.as_array()) {
             for rel_obj in rel_array {
@@ -2328,15 +2463,15 @@ JSON Response:"#,
                 }
             }
         }
-        
+
         Ok((entities, relationships))
     }
-    
+
     /// Rule-based entity extraction fallback
     async fn rule_based_entity_extraction(&self, query: &str) -> Result<Vec<ExtractedEntity>> {
         let mut entities = Vec::new();
         let query_lower = query.to_lowercase();
-        
+
         // Pattern 1: Proper nouns (capitalized words)
         let proper_noun_regex = regex::Regex::new(r"\b[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*\b")?;
         for cap in proper_noun_regex.captures_iter(query) {
@@ -2353,16 +2488,31 @@ JSON Response:"#,
                 }
             }
         }
-        
+
         // Pattern 2: Technical terms and domain concepts
         let technical_patterns = [
-            (r"\b(?:class|property|relationship|entity|triple|graph|ontology|schema)\b", "Concept"),
-            (r"\b(?:person|people|individual|user|author|creator)\b", "Person"),
-            (r"\b(?:organization|company|institution|university|group)\b", "Organization"),
-            (r"\b(?:location|place|city|country|address|region)\b", "Location"),
-            (r"\b(?:time|date|year|month|day|period|duration)\b", "Temporal"),
+            (
+                r"\b(?:class|property|relationship|entity|triple|graph|ontology|schema)\b",
+                "Concept",
+            ),
+            (
+                r"\b(?:person|people|individual|user|author|creator)\b",
+                "Person",
+            ),
+            (
+                r"\b(?:organization|company|institution|university|group)\b",
+                "Organization",
+            ),
+            (
+                r"\b(?:location|place|city|country|address|region)\b",
+                "Location",
+            ),
+            (
+                r"\b(?:time|date|year|month|day|period|duration)\b",
+                "Temporal",
+            ),
         ];
-        
+
         for (pattern, entity_type) in technical_patterns {
             let regex = regex::Regex::new(pattern)?;
             for cap in regex.captures_iter(&query_lower) {
@@ -2377,7 +2527,7 @@ JSON Response:"#,
                 }
             }
         }
-        
+
         // Pattern 3: Quoted strings (explicit mentions)
         let quoted_regex = regex::Regex::new(r#""([^"]+)""#)?;
         for cap in quoted_regex.captures_iter(query) {
@@ -2391,35 +2541,45 @@ JSON Response:"#,
                 });
             }
         }
-        
+
         // Remove duplicates and low-confidence entities
-        entities.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+        entities.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         entities.dedup_by(|a, b| a.text.to_lowercase() == b.text.to_lowercase());
         entities.retain(|e| e.confidence > 0.5);
-        
+
         debug!("Rule-based extraction found {} entities", entities.len());
         Ok(entities)
     }
-    
+
     /// Rule-based relationship extraction
     async fn rule_based_relationship_extraction(
-        &self, 
-        query: &str, 
-        entities: &[ExtractedEntity]
+        &self,
+        query: &str,
+        entities: &[ExtractedEntity],
     ) -> Result<Vec<ExtractedRelationship>> {
         let mut relationships = Vec::new();
         let query_lower = query.to_lowercase();
-        
+
         // Pattern 1: Direct relationship indicators
         let relationship_patterns = [
             (r"(\w+)\s+(?:is|are)\s+(?:a|an|the)?\s*(\w+)", "type"),
             (r"(\w+)\s+(?:has|have|owns|contains)\s+(\w+)", "has"),
-            (r"(\w+)\s+(?:works for|employed by|part of)\s+(\w+)", "worksFor"),
-            (r"(\w+)\s+(?:knows|related to|connected to)\s+(\w+)", "relatedTo"),
+            (
+                r"(\w+)\s+(?:works for|employed by|part of)\s+(\w+)",
+                "worksFor",
+            ),
+            (
+                r"(\w+)\s+(?:knows|related to|connected to)\s+(\w+)",
+                "relatedTo",
+            ),
             (r"(\w+)\s+(?:created|authored|made)\s+(\w+)", "created"),
             (r"(\w+)\s+(?:located in|from|based in)\s+(\w+)", "locatedIn"),
         ];
-        
+
         for (pattern, relation_type) in relationship_patterns {
             let regex = regex::Regex::new(pattern)?;
             for cap in regex.captures_iter(&query_lower) {
@@ -2433,20 +2593,21 @@ JSON Response:"#,
                 }
             }
         }
-        
+
         // Pattern 2: Inferred relationships from entity proximity
         for i in 0..entities.len() {
             for j in (i + 1)..entities.len() {
                 let entity1 = &entities[i];
                 let entity2 = &entities[j];
-                
+
                 // Check if entities appear close together in query
                 let text1_pos = query_lower.find(&entity1.text.to_lowercase());
                 let text2_pos = query_lower.find(&entity2.text.to_lowercase());
-                
+
                 if let (Some(pos1), Some(pos2)) = (text1_pos, text2_pos) {
                     let distance = (pos1 as i32 - pos2 as i32).abs();
-                    if distance < 50 { // Within 50 characters
+                    if distance < 50 {
+                        // Within 50 characters
                         relationships.push(ExtractedRelationship {
                             subject: entity1.text.clone(),
                             predicate: "relatedTo".to_string(),
@@ -2457,47 +2618,61 @@ JSON Response:"#,
                 }
             }
         }
-        
+
         // Remove duplicates
-        relationships.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+        relationships.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         relationships.dedup_by(|a, b| {
             a.subject == b.subject && a.predicate == b.predicate && a.object == b.object
         });
-        
-        debug!("Rule-based extraction found {} relationships", relationships.len());
+
+        debug!(
+            "Rule-based extraction found {} relationships",
+            relationships.len()
+        );
         Ok(relationships)
     }
-    
+
     /// Link extracted entities to knowledge graph IRIs
-    async fn link_entities_to_knowledge_graph(&self, entities: Vec<ExtractedEntity>) -> Result<Vec<ExtractedEntity>> {
+    async fn link_entities_to_knowledge_graph(
+        &self,
+        entities: Vec<ExtractedEntity>,
+    ) -> Result<Vec<ExtractedEntity>> {
         let mut enhanced_entities = Vec::new();
-        
+
         for mut entity in entities {
             // Search for matching entities in the knowledge graph
             let matching_iris = self.find_matching_iris(&entity.text).await?;
-            
+
             if !matching_iris.is_empty() {
                 // Select best matching IRI based on confidence
                 entity.iri = Some(matching_iris[0].clone());
                 entity.confidence = (entity.confidence * 1.2).min(1.0); // Boost confidence for linked entities
-                
+
                 // Add aliases from knowledge graph
-                entity.aliases = self.get_entity_aliases(&entity.iri.as_ref().unwrap()).await?;
+                entity.aliases = self
+                    .get_entity_aliases(&entity.iri.as_ref().unwrap())
+                    .await?;
             }
-            
+
             enhanced_entities.push(entity);
         }
-        
-        debug!("Linked {} entities to knowledge graph IRIs", 
-               enhanced_entities.iter().filter(|e| e.iri.is_some()).count());
-        
+
+        debug!(
+            "Linked {} entities to knowledge graph IRIs",
+            enhanced_entities.iter().filter(|e| e.iri.is_some()).count()
+        );
+
         Ok(enhanced_entities)
     }
-    
+
     /// Find matching IRIs in knowledge graph for entity text
     async fn find_matching_iris(&self, entity_text: &str) -> Result<Vec<String>> {
         let mut matching_iris = Vec::new();
-        
+
         // Search through available triples for label matches
         // This is a simplified implementation - in production you'd want more sophisticated matching
         let search_patterns = [
@@ -2505,32 +2680,37 @@ JSON Response:"#,
             &entity_text.to_lowercase(),
             &format!("\"{}\"", entity_text),
         ];
-        
+
         for pattern in search_patterns {
             // Search in literals (labels, names, etc.)
             if let Ok(quads) = self.store.query_quads(None, None, None, None) {
-                for quad in quads.into_iter().take(1000) { // Limit search for performance
+                for quad in quads.into_iter().take(1000) {
+                    // Limit search for performance
                     if let oxirs_core::model::term::Object::Literal(literal) = quad.object() {
-                        if literal.value().to_lowercase().contains(&pattern.to_lowercase()) {
+                        if literal
+                            .value()
+                            .to_lowercase()
+                            .contains(&pattern.to_lowercase())
+                        {
                             matching_iris.push(quad.subject().to_string());
                             break; // Found a match, stop searching
                         }
                     }
                 }
             }
-            
+
             if !matching_iris.is_empty() {
                 break; // Found matches with this pattern
             }
         }
-        
+
         Ok(matching_iris)
     }
-    
+
     /// Get aliases for an entity IRI
     async fn get_entity_aliases(&self, iri: &str) -> Result<Vec<String>> {
         let mut aliases = Vec::new();
-        
+
         // Look for rdfs:label, foaf:name, skos:prefLabel, etc.
         let label_properties = [
             "http://www.w3.org/2000/01/rdf-schema#label",
@@ -2538,16 +2718,21 @@ JSON Response:"#,
             "http://www.w3.org/2004/02/skos/core#prefLabel",
             "http://purl.org/dc/terms/title",
         ];
-        
+
         for prop in label_properties {
             if let Ok(property_node) = oxirs_core::model::iri::NamedNode::new(prop) {
                 if let Ok(iri_node) = oxirs_core::model::iri::NamedNode::new(iri) {
                     let subject = oxirs_core::model::term::Subject::NamedNode(iri_node);
                     let predicate = oxirs_core::model::term::Predicate::NamedNode(property_node);
-                    
-                    if let Ok(quads) = self.store.query_quads(Some(&subject), Some(&predicate), None, None) {
-                        for quad in quads.into_iter().take(5) { // Limit aliases
-                            if let oxirs_core::model::term::Object::Literal(literal) = quad.object() {
+
+                    if let Ok(quads) =
+                        self.store
+                            .query_quads(Some(&subject), Some(&predicate), None, None)
+                    {
+                        for quad in quads.into_iter().take(5) {
+                            // Limit aliases
+                            if let oxirs_core::model::term::Object::Literal(literal) = quad.object()
+                            {
                                 aliases.push(literal.value().to_string());
                             }
                         }
@@ -2555,21 +2740,33 @@ JSON Response:"#,
                 }
             }
         }
-        
+
         Ok(aliases)
     }
-    
+
     /// Extract query constraints
-    async fn extract_constraints(&self, query: &str, entities: &[ExtractedEntity]) -> Result<Vec<QueryConstraint>> {
+    async fn extract_constraints(
+        &self,
+        query: &str,
+        entities: &[ExtractedEntity],
+    ) -> Result<Vec<QueryConstraint>> {
         let mut constraints = Vec::new();
         let query_lower = query.to_lowercase();
-        
+
         // Temporal constraints
         let temporal_patterns = [
-            (r"(?:in|during|from|since|before|after)\s+(\d{4})", ConstraintType::Temporal, "year"),
-            (r"(?:today|yesterday|tomorrow|now|recent)", ConstraintType::Temporal, "relative_time"),
+            (
+                r"(?:in|during|from|since|before|after)\s+(\d{4})",
+                ConstraintType::Temporal,
+                "year",
+            ),
+            (
+                r"(?:today|yesterday|tomorrow|now|recent)",
+                ConstraintType::Temporal,
+                "relative_time",
+            ),
         ];
-        
+
         for (pattern, constraint_type, operator) in temporal_patterns {
             let regex = regex::Regex::new(pattern)?;
             for cap in regex.captures_iter(&query_lower) {
@@ -2588,23 +2785,26 @@ JSON Response:"#,
                 }
             }
         }
-        
+
         // Type constraints
-        if query_lower.contains("type") || query_lower.contains("kind") || query_lower.contains("class") {
+        if query_lower.contains("type")
+            || query_lower.contains("kind")
+            || query_lower.contains("class")
+        {
             constraints.push(QueryConstraint {
                 constraint_type: ConstraintType::Type,
                 value: "type_constraint".to_string(),
                 operator: "equals".to_string(),
             });
         }
-        
+
         // Value constraints (numeric, comparison)
         let value_patterns = [
             (r"(?:greater than|more than|>\s*)(\d+)", "greater_than"),
             (r"(?:less than|fewer than|<\s*)(\d+)", "less_than"),
             (r"(?:equals?|is|=\s*)(\d+)", "equals"),
         ];
-        
+
         for (pattern, operator) in value_patterns {
             let regex = regex::Regex::new(pattern)?;
             for cap in regex.captures_iter(&query_lower) {
@@ -2617,21 +2817,90 @@ JSON Response:"#,
                 }
             }
         }
-        
+
         debug!("Extracted {} constraints from query", constraints.len());
         Ok(constraints)
     }
-    
+
     /// Check if a word is a stop word (for entity extraction)
     fn is_stop_word(&self, word: &str) -> bool {
-        matches!(word, "the" | "and" | "or" | "but" | "in" | "on" | "at" | "to" | "for" | 
-                       "of" | "with" | "by" | "from" | "up" | "about" | "into" | "through" | 
-                       "during" | "before" | "after" | "above" | "below" | "between" | "among" |
-                       "this" | "that" | "these" | "those" | "i" | "you" | "he" | "she" | "it" |
-                       "we" | "they" | "me" | "him" | "her" | "us" | "them" | "my" | "your" |
-                       "his" | "its" | "our" | "their" | "am" | "is" | "are" | "was" | "were" |
-                       "be" | "been" | "being" | "have" | "has" | "had" | "do" | "does" | "did" |
-                       "will" | "would" | "could" | "should" | "may" | "might" | "must" | "can" |
-                       "what" | "when" | "where" | "who" | "why" | "how" | "which")
+        matches!(
+            word,
+            "the"
+                | "and"
+                | "or"
+                | "but"
+                | "in"
+                | "on"
+                | "at"
+                | "to"
+                | "for"
+                | "of"
+                | "with"
+                | "by"
+                | "from"
+                | "up"
+                | "about"
+                | "into"
+                | "through"
+                | "during"
+                | "before"
+                | "after"
+                | "above"
+                | "below"
+                | "between"
+                | "among"
+                | "this"
+                | "that"
+                | "these"
+                | "those"
+                | "i"
+                | "you"
+                | "he"
+                | "she"
+                | "it"
+                | "we"
+                | "they"
+                | "me"
+                | "him"
+                | "her"
+                | "us"
+                | "them"
+                | "my"
+                | "your"
+                | "his"
+                | "its"
+                | "our"
+                | "their"
+                | "am"
+                | "is"
+                | "are"
+                | "was"
+                | "were"
+                | "be"
+                | "been"
+                | "being"
+                | "have"
+                | "has"
+                | "had"
+                | "do"
+                | "does"
+                | "did"
+                | "will"
+                | "would"
+                | "could"
+                | "should"
+                | "may"
+                | "might"
+                | "must"
+                | "can"
+                | "what"
+                | "when"
+                | "where"
+                | "who"
+                | "why"
+                | "how"
+                | "which"
+        )
     }
 }

@@ -9,11 +9,17 @@
 
 use anyhow::{anyhow, Result};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
+use chrono::{DateTime, Utc};
+use crc32fast;
+use futures::stream::{BoxStream, StreamExt as _};
+use lz4_flex;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::io::{Cursor, Read as _};
 use std::sync::Arc;
-use tokio::sync::RwLock;
-use tracing::{debug, warn};
+use tokio::sync::{Mutex, RwLock};
+use tokio_stream::Stream;
+use tracing::{debug, info, warn};
 
 use crate::{CompressionType, EventMetadata, StreamEvent};
 
@@ -74,6 +80,7 @@ impl SerializationFormat {
 }
 
 /// Event serializer with format support
+#[derive(Clone)]
 pub struct EventSerializer {
     format: SerializationFormat,
     compression: Option<CompressionType>,
@@ -299,7 +306,8 @@ impl EventSerializer {
     /// Serialize to JSON
     fn serialize_json(&self, event: &StreamEvent) -> Result<Vec<u8>> {
         if self.options.pretty_json {
-            serde_json::to_vec_pretty(event).map_err(|e| anyhow!("JSON serialization failed: {}", e))
+            serde_json::to_vec_pretty(event)
+                .map_err(|e| anyhow!("JSON serialization failed: {}", e))
         } else {
             serde_json::to_vec(event).map_err(|e| anyhow!("JSON serialization failed: {}", e))
         }
@@ -379,7 +387,9 @@ impl EventSerializer {
             }
             // ... implement other event types similarly
             _ => {
-                return Err(anyhow!("Binary serialization not implemented for this event type"))
+                return Err(anyhow!(
+                    "Binary serialization not implemented for this event type"
+                ))
             }
         }
 
@@ -454,7 +464,7 @@ impl EventSerializer {
     /// Helper to read string from cursor
     fn read_string(&self, cursor: &mut std::io::Cursor<&[u8]>) -> Result<String> {
         use std::io::Read;
-        
+
         let mut len_bytes = [0u8; 4];
         cursor.read_exact(&mut len_bytes)?;
         let len = u32::from_le_bytes(len_bytes) as usize;
@@ -468,7 +478,7 @@ impl EventSerializer {
     /// Helper to read optional string
     fn read_optional_string(&self, cursor: &mut std::io::Cursor<&[u8]>) -> Result<Option<String>> {
         use std::io::Read;
-        
+
         let mut present = [0u8; 1];
         cursor.read_exact(&mut present)?;
 
@@ -482,7 +492,7 @@ impl EventSerializer {
     /// Helper to read metadata
     fn read_metadata(&self, cursor: &mut std::io::Cursor<&[u8]>) -> Result<EventMetadata> {
         use std::io::Read;
-        
+
         let mut len_bytes = [0u8; 4];
         cursor.read_exact(&mut len_bytes)?;
         let len = u32::from_le_bytes(len_bytes) as usize;
@@ -500,7 +510,8 @@ impl EventSerializer {
 
     /// Deserialize from MessagePack
     fn deserialize_messagepack(&self, data: &[u8]) -> Result<StreamEvent> {
-        rmp_serde::from_slice(data).map_err(|e| anyhow!("MessagePack deserialization failed: {}", e))
+        rmp_serde::from_slice(data)
+            .map_err(|e| anyhow!("MessagePack deserialization failed: {}", e))
     }
 
     /// Serialize to CBOR
@@ -519,7 +530,7 @@ impl EventSerializer {
         // For now, we'll use a JSON-based approach until proper proto definitions are created
         let json_data = serde_json::to_value(event)?;
         let proto_event = ProtobufStreamEvent::from_json(&json_data)?;
-        
+
         let mut buf = Vec::new();
         prost::Message::encode(&proto_event, &mut buf)?;
         Ok(buf)
@@ -545,13 +556,13 @@ impl EventSerializer {
 
         // Convert event to Avro value
         let avro_value = to_avro_value(event, &schema)?;
-        
+
         // Serialize with schema
         let mut writer = Vec::new();
         let mut encoder = apache_avro::Writer::new(&schema, &mut writer);
         encoder.append(avro_value)?;
         encoder.flush()?;
-        
+
         Ok(writer)
     }
 
@@ -560,7 +571,7 @@ impl EventSerializer {
         // Extract schema from data header
         let reader = apache_avro::Reader::new(data)?;
         let schema = reader.writer_schema();
-        
+
         // Read the first (and only) record
         if let Some(record) = reader.into_iter().next() {
             let avro_value = record?;
@@ -581,12 +592,17 @@ impl EventSerializer {
             CompressionType::Gzip => {
                 let mut encoder = GzEncoder::new(Vec::new(), flate2::Compression::default());
                 encoder.write_all(data)?;
-                encoder.finish().map_err(|e| anyhow!("Gzip compression failed: {}", e))
+                encoder
+                    .finish()
+                    .map_err(|e| anyhow!("Gzip compression failed: {}", e))
             }
             CompressionType::Zstd => {
                 zstd::encode_all(data, 3).map_err(|e| anyhow!("Zstd compression failed: {}", e))
             }
-            _ => Err(anyhow!("Compression type {:?} not implemented", compression)),
+            _ => Err(anyhow!(
+                "Compression type {:?} not implemented",
+                compression
+            )),
         }
     }
 
@@ -606,7 +622,10 @@ impl EventSerializer {
             CompressionType::Zstd => {
                 zstd::decode_all(data).map_err(|e| anyhow!("Zstd decompression failed: {}", e))
             }
-            _ => Err(anyhow!("Decompression type {:?} not implemented", compression)),
+            _ => Err(anyhow!(
+                "Decompression type {:?} not implemented",
+                compression
+            )),
         }
     }
 }
@@ -644,11 +663,7 @@ impl SchemaRegistry {
     }
 
     /// Validate schema evolution
-    pub async fn validate_evolution(
-        &self,
-        old_schema: &Schema,
-        new_schema: &Schema,
-    ) -> Result<()> {
+    pub async fn validate_evolution(&self, old_schema: &Schema, new_schema: &Schema) -> Result<()> {
         match old_schema.compatibility {
             CompatibilityMode::None => Ok(()),
             CompatibilityMode::Backward => {
@@ -763,8 +778,8 @@ mod tests {
             source: "test".to_string(),
         };
 
-        let serializer = EventSerializer::new(SerializationFormat::Json)
-            .with_compression(CompressionType::Gzip);
+        let serializer =
+            EventSerializer::new(SerializationFormat::Json).with_compression(CompressionType::Gzip);
 
         let serialized = serializer.serialize(&event).await.unwrap();
         let deserialized = serializer.deserialize(&serialized).await.unwrap();
@@ -819,7 +834,8 @@ mod tests {
         let json_data = json_serializer.serialize(&event).await.unwrap();
 
         // Convert to MessagePack
-        let converter = FormatConverter::new(SerializationFormat::Json, SerializationFormat::MessagePack);
+        let converter =
+            FormatConverter::new(SerializationFormat::Json, SerializationFormat::MessagePack);
         let msgpack_data = converter.convert(&json_data).await.unwrap();
 
         // Verify by deserializing
@@ -851,32 +867,32 @@ impl ProtobufStreamEvent {
     pub fn from_json(json: &serde_json::Value) -> Result<Self> {
         // Extract event type
         let event_type = "StreamEvent".to_string(); // Simplified
-        
+
         // Serialize the entire JSON as data
         let data = serde_json::to_vec(json)?;
-        
+
         // Empty metadata for now
         let metadata = Vec::new();
-        
+
         Ok(Self {
             event_type,
             data,
             metadata,
         })
     }
-    
+
     /// Convert to JSON value
     pub fn to_json(&self) -> Result<serde_json::Value> {
         serde_json::from_slice(&self.data).map_err(|e| anyhow!("Failed to parse JSON: {}", e))
     }
-    
+
     /// Encode using prost
     pub fn encode(&self, buf: &mut Vec<u8>) -> Result<()> {
         // Simplified encoding - in practice use proper prost::Message
         buf.extend_from_slice(&self.data);
         Ok(())
     }
-    
+
     /// Decode using prost
     pub fn decode(data: &[u8]) -> Result<Self> {
         // Simplified decoding - in practice use proper prost::Message
@@ -889,20 +905,31 @@ impl ProtobufStreamEvent {
 }
 
 impl prost::Message for ProtobufStreamEvent {
-    fn encode_raw<B>(&self, buf: &mut B) where B: prost::bytes::BufMut {
+    fn encode_raw<B>(&self, buf: &mut B)
+    where
+        B: prost::bytes::BufMut,
+    {
         // Simplified implementation
         buf.put_slice(&self.data);
     }
-    
-    fn merge_field<B>(&mut self, _tag: u32, _wire_type: prost::encoding::WireType, _buf: &mut B, _ctx: prost::encoding::DecodeContext) -> Result<(), prost::DecodeError> 
-    where B: prost::bytes::Buf {
+
+    fn merge_field<B>(
+        &mut self,
+        _tag: u32,
+        _wire_type: prost::encoding::WireType,
+        _buf: &mut B,
+        _ctx: prost::encoding::DecodeContext,
+    ) -> Result<(), prost::DecodeError>
+    where
+        B: prost::bytes::Buf,
+    {
         Ok(())
     }
-    
+
     fn encoded_len(&self) -> usize {
         self.data.len()
     }
-    
+
     fn clear(&mut self) {
         self.data.clear();
         self.metadata.clear();
@@ -922,26 +949,40 @@ pub fn get_default_avro_schema() -> apache_avro::Schema {
         ]
     }
     "#;
-    
-    apache_avro::Schema::parse_str(schema_str)
-        .expect("Failed to parse default Avro schema")
+
+    apache_avro::Schema::parse_str(schema_str).expect("Failed to parse default Avro schema")
 }
 
 /// Convert StreamEvent to Avro value
-pub fn to_avro_value(event: &StreamEvent, _schema: &apache_avro::Schema) -> Result<apache_avro::types::Value> {
+pub fn to_avro_value(
+    event: &StreamEvent,
+    _schema: &apache_avro::Schema,
+) -> Result<apache_avro::types::Value> {
     // Simplified conversion - serialize to JSON then to bytes
     let json_data = serde_json::to_vec(event)?;
-    
+
     let mut fields = Vec::new();
-    fields.push(("event_type".to_string(), apache_avro::types::Value::String("StreamEvent".to_string())));
-    fields.push(("data".to_string(), apache_avro::types::Value::Bytes(json_data)));
-    fields.push(("metadata".to_string(), apache_avro::types::Value::Union(0, Box::new(apache_avro::types::Value::Null))));
-    
+    fields.push((
+        "event_type".to_string(),
+        apache_avro::types::Value::String("StreamEvent".to_string()),
+    ));
+    fields.push((
+        "data".to_string(),
+        apache_avro::types::Value::Bytes(json_data),
+    ));
+    fields.push((
+        "metadata".to_string(),
+        apache_avro::types::Value::Union(0, Box::new(apache_avro::types::Value::Null)),
+    ));
+
     Ok(apache_avro::types::Value::Record(fields))
 }
 
 /// Convert Avro value to StreamEvent
-pub fn from_avro_value(value: &apache_avro::types::Value, _schema: &apache_avro::Schema) -> Result<StreamEvent> {
+pub fn from_avro_value(
+    value: &apache_avro::types::Value,
+    _schema: &apache_avro::Schema,
+) -> Result<StreamEvent> {
     match value {
         apache_avro::types::Value::Record(fields) => {
             // Extract data field
@@ -961,8 +1002,738 @@ pub fn from_avro_value(value: &apache_avro::types::Value, _schema: &apache_avro:
 
 impl SchemaRegistry {
     /// Get Avro schema for event
-    pub async fn get_avro_schema_for_event(&self, _event: &StreamEvent) -> Result<apache_avro::Schema> {
+    pub async fn get_avro_schema_for_event(
+        &self,
+        _event: &StreamEvent,
+    ) -> Result<apache_avro::Schema> {
         // In practice, this would look up the appropriate schema
         Ok(get_default_avro_schema())
     }
 }
+
+/// Delta compression support for event streams
+pub struct DeltaCompressor {
+    /// Previous event states for delta calculation
+    previous_states: Arc<RwLock<HashMap<String, StreamEvent>>>,
+    /// Compression algorithm to use
+    compression_type: DeltaCompressionType,
+    /// Maximum states to keep in memory
+    max_states: usize,
+}
+
+/// Delta compression algorithms
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum DeltaCompressionType {
+    /// XOR-based delta compression
+    Xor,
+    /// Prefix compression for strings
+    Prefix,
+    /// Dictionary-based compression
+    Dictionary,
+    /// LZ4-based delta compression
+    Lz4Delta,
+}
+
+impl DeltaCompressor {
+    /// Create a new delta compressor
+    pub fn new(compression_type: DeltaCompressionType, max_states: usize) -> Self {
+        Self {
+            previous_states: Arc::new(RwLock::new(HashMap::new())),
+            compression_type,
+            max_states,
+        }
+    }
+
+    /// Compress event using delta compression
+    pub async fn compress_delta(
+        &self,
+        event: &StreamEvent,
+        event_id: &str,
+    ) -> Result<DeltaCompressedEvent> {
+        let mut states = self.previous_states.write().await;
+
+        // Clean up old states if we exceed the limit
+        if states.len() >= self.max_states {
+            let keys_to_remove: Vec<String> = states
+                .keys()
+                .take(states.len() - self.max_states + 1)
+                .cloned()
+                .collect();
+            for key in keys_to_remove {
+                states.remove(&key);
+            }
+        }
+
+        let delta = if let Some(previous) = states.get(event_id) {
+            self.calculate_delta(previous, event)?
+        } else {
+            // First event, store as full event
+            EventDelta::Full(event.clone())
+        };
+
+        // Update state
+        states.insert(event_id.to_string(), event.clone());
+
+        Ok(DeltaCompressedEvent {
+            event_id: event_id.to_string(),
+            delta,
+            compression_type: self.compression_type,
+            timestamp: chrono::Utc::now(),
+        })
+    }
+
+    /// Calculate delta between two events
+    fn calculate_delta(&self, previous: &StreamEvent, current: &StreamEvent) -> Result<EventDelta> {
+        match self.compression_type {
+            DeltaCompressionType::Xor => self.calculate_xor_delta(previous, current),
+            DeltaCompressionType::Prefix => self.calculate_prefix_delta(previous, current),
+            DeltaCompressionType::Dictionary => self.calculate_dictionary_delta(previous, current),
+            DeltaCompressionType::Lz4Delta => self.calculate_lz4_delta(previous, current),
+        }
+    }
+
+    /// XOR-based delta compression
+    fn calculate_xor_delta(
+        &self,
+        previous: &StreamEvent,
+        current: &StreamEvent,
+    ) -> Result<EventDelta> {
+        let prev_bytes = serde_json::to_vec(previous)?;
+        let curr_bytes = serde_json::to_vec(current)?;
+
+        if prev_bytes.len() != curr_bytes.len() {
+            // If sizes differ, store as full event
+            return Ok(EventDelta::Full(current.clone()));
+        }
+
+        let xor_bytes: Vec<u8> = prev_bytes
+            .iter()
+            .zip(curr_bytes.iter())
+            .map(|(a, b)| a ^ b)
+            .collect();
+
+        Ok(EventDelta::Xor(xor_bytes))
+    }
+
+    /// Prefix compression for string fields
+    fn calculate_prefix_delta(
+        &self,
+        previous: &StreamEvent,
+        current: &StreamEvent,
+    ) -> Result<EventDelta> {
+        let prev_json = serde_json::to_value(previous)?;
+        let curr_json = serde_json::to_value(current)?;
+
+        let diff = self.calculate_json_prefix_diff(&prev_json, &curr_json)?;
+        Ok(EventDelta::Prefix(diff))
+    }
+
+    /// Dictionary-based compression
+    fn calculate_dictionary_delta(
+        &self,
+        previous: &StreamEvent,
+        current: &StreamEvent,
+    ) -> Result<EventDelta> {
+        let prev_strings = self.extract_strings_from_event(previous);
+        let curr_strings = self.extract_strings_from_event(current);
+
+        let mut dictionary = HashMap::new();
+        let mut dict_id = 0u16;
+
+        // Build dictionary from common strings
+        for string in &prev_strings {
+            if curr_strings.contains(string) && !dictionary.contains_key(string) {
+                dictionary.insert(string.clone(), dict_id);
+                dict_id += 1;
+            }
+        }
+
+        // Replace strings with dictionary IDs
+        let compressed_event = self.replace_strings_with_ids(current, &dictionary)?;
+
+        Ok(EventDelta::Dictionary {
+            dictionary,
+            compressed_event,
+        })
+    }
+
+    /// LZ4-based delta compression
+    fn calculate_lz4_delta(
+        &self,
+        previous: &StreamEvent,
+        current: &StreamEvent,
+    ) -> Result<EventDelta> {
+        let prev_bytes = serde_json::to_vec(previous)?;
+        let curr_bytes = serde_json::to_vec(current)?;
+
+        // Simple delta: store additions and removals
+        let diff_bytes = self.calculate_byte_diff(&prev_bytes, &curr_bytes);
+        let compressed = lz4_flex::compress_prepend_size(&diff_bytes);
+
+        Ok(EventDelta::Lz4(compressed))
+    }
+
+    /// Calculate JSON prefix differences
+    fn calculate_json_prefix_diff(
+        &self,
+        prev: &serde_json::Value,
+        curr: &serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        match (prev, curr) {
+            (serde_json::Value::Object(prev_obj), serde_json::Value::Object(curr_obj)) => {
+                let mut diff = serde_json::Map::new();
+                for (key, curr_val) in curr_obj {
+                    if let Some(prev_val) = prev_obj.get(key) {
+                        if prev_val != curr_val {
+                            diff.insert(key.clone(), curr_val.clone());
+                        }
+                    } else {
+                        diff.insert(key.clone(), curr_val.clone());
+                    }
+                }
+                Ok(serde_json::Value::Object(diff))
+            }
+            _ => Ok(curr.clone()),
+        }
+    }
+
+    /// Extract all strings from an event
+    fn extract_strings_from_event(&self, event: &StreamEvent) -> Vec<String> {
+        let mut strings = Vec::new();
+        if let Ok(json) = serde_json::to_value(event) {
+            self.extract_strings_from_json(&json, &mut strings);
+        }
+        strings
+    }
+
+    /// Recursively extract strings from JSON value
+    fn extract_strings_from_json(&self, value: &serde_json::Value, strings: &mut Vec<String>) {
+        match value {
+            serde_json::Value::String(s) => strings.push(s.clone()),
+            serde_json::Value::Array(arr) => {
+                for item in arr {
+                    self.extract_strings_from_json(item, strings);
+                }
+            }
+            serde_json::Value::Object(obj) => {
+                for (_, val) in obj {
+                    self.extract_strings_from_json(val, strings);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Replace strings with dictionary IDs
+    fn replace_strings_with_ids(
+        &self,
+        event: &StreamEvent,
+        dictionary: &HashMap<String, u16>,
+    ) -> Result<serde_json::Value> {
+        let mut json = serde_json::to_value(event)?;
+        self.replace_strings_in_json(&mut json, dictionary);
+        Ok(json)
+    }
+
+    /// Recursively replace strings in JSON
+    fn replace_strings_in_json(
+        &self,
+        value: &mut serde_json::Value,
+        dictionary: &HashMap<String, u16>,
+    ) {
+        match value {
+            serde_json::Value::String(s) => {
+                if let Some(&id) = dictionary.get(s) {
+                    *value = serde_json::Value::Number(serde_json::Number::from(id));
+                }
+            }
+            serde_json::Value::Array(arr) => {
+                for item in arr {
+                    self.replace_strings_in_json(item, dictionary);
+                }
+            }
+            serde_json::Value::Object(obj) => {
+                for (_, val) in obj.values_mut() {
+                    self.replace_strings_in_json(val, dictionary);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Calculate byte-level differences
+    fn calculate_byte_diff(&self, prev: &[u8], curr: &[u8]) -> Vec<u8> {
+        // Simple implementation - could be enhanced with more sophisticated diff algorithms
+        let mut diff = Vec::new();
+
+        // Store length difference
+        diff.extend_from_slice(&(curr.len() as u32).to_le_bytes());
+        diff.extend_from_slice(&(prev.len() as u32).to_le_bytes());
+
+        // Store the current bytes (simplified)
+        diff.extend_from_slice(curr);
+
+        diff
+    }
+
+    /// Decompress delta-compressed event
+    pub async fn decompress_delta(
+        &self,
+        compressed: &DeltaCompressedEvent,
+        previous_event: Option<&StreamEvent>,
+    ) -> Result<StreamEvent> {
+        match &compressed.delta {
+            EventDelta::Full(event) => Ok(event.clone()),
+            EventDelta::Xor(xor_bytes) => {
+                if let Some(prev) = previous_event {
+                    let prev_bytes = serde_json::to_vec(prev)?;
+                    if prev_bytes.len() == xor_bytes.len() {
+                        let restored_bytes: Vec<u8> = prev_bytes
+                            .iter()
+                            .zip(xor_bytes.iter())
+                            .map(|(a, b)| a ^ b)
+                            .collect();
+                        let event = serde_json::from_slice(&restored_bytes)?;
+                        Ok(event)
+                    } else {
+                        Err(anyhow!("XOR delta length mismatch"))
+                    }
+                } else {
+                    Err(anyhow!("Previous event required for XOR decompression"))
+                }
+            }
+            EventDelta::Prefix(diff) => {
+                if let Some(prev) = previous_event {
+                    let mut prev_json = serde_json::to_value(prev)?;
+                    self.apply_json_diff(&mut prev_json, diff)?;
+                    let event = serde_json::from_value(prev_json)?;
+                    Ok(event)
+                } else {
+                    Err(anyhow!("Previous event required for prefix decompression"))
+                }
+            }
+            EventDelta::Dictionary {
+                dictionary,
+                compressed_event,
+            } => {
+                let mut restored_json = compressed_event.clone();
+                let reverse_dict: HashMap<u16, String> =
+                    dictionary.iter().map(|(k, &v)| (v, k.clone())).collect();
+                self.restore_strings_from_ids(&mut restored_json, &reverse_dict);
+                let event = serde_json::from_value(restored_json)?;
+                Ok(event)
+            }
+            EventDelta::Lz4(compressed_bytes) => {
+                let decompressed = lz4_flex::decompress_size_prepended(compressed_bytes)?;
+                // Restore from diff (simplified - would need more sophisticated restoration)
+                let event = serde_json::from_slice(&decompressed)?;
+                Ok(event)
+            }
+        }
+    }
+
+    /// Apply JSON diff to base JSON
+    fn apply_json_diff(
+        &self,
+        base: &mut serde_json::Value,
+        diff: &serde_json::Value,
+    ) -> Result<()> {
+        if let (Some(base_obj), Some(diff_obj)) = (base.as_object_mut(), diff.as_object()) {
+            for (key, diff_val) in diff_obj {
+                base_obj.insert(key.clone(), diff_val.clone());
+            }
+        } else {
+            *base = diff.clone();
+        }
+        Ok(())
+    }
+
+    /// Restore strings from dictionary IDs
+    fn restore_strings_from_ids(
+        &self,
+        value: &mut serde_json::Value,
+        reverse_dict: &HashMap<u16, String>,
+    ) {
+        match value {
+            serde_json::Value::Number(n) => {
+                if let Some(id) = n.as_u64() {
+                    if let Some(string) = reverse_dict.get(&(id as u16)) {
+                        *value = serde_json::Value::String(string.clone());
+                    }
+                }
+            }
+            serde_json::Value::Array(arr) => {
+                for item in arr {
+                    self.restore_strings_from_ids(item, reverse_dict);
+                }
+            }
+            serde_json::Value::Object(obj) => {
+                for (_, val) in obj.values_mut() {
+                    self.restore_strings_from_ids(val, reverse_dict);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Delta-compressed event representation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeltaCompressedEvent {
+    pub event_id: String,
+    pub delta: EventDelta,
+    pub compression_type: DeltaCompressionType,
+    pub timestamp: DateTime<Utc>,
+}
+
+/// Event delta representations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum EventDelta {
+    /// Full event (no compression possible)
+    Full(StreamEvent),
+    /// XOR-based delta
+    Xor(Vec<u8>),
+    /// Prefix-based delta
+    Prefix(serde_json::Value),
+    /// Dictionary-based compression
+    Dictionary {
+        dictionary: HashMap<String, u16>,
+        compressed_event: serde_json::Value,
+    },
+    /// LZ4 compressed delta
+    Lz4(Vec<u8>),
+}
+
+/// Streaming serializer for batch processing
+pub struct StreamingSerializer {
+    serializer: EventSerializer,
+    delta_compressor: Option<DeltaCompressor>,
+    batch_size: usize,
+    current_batch: Vec<StreamEvent>,
+}
+
+impl StreamingSerializer {
+    /// Create a new streaming serializer
+    pub fn new(serializer: EventSerializer, batch_size: usize) -> Self {
+        Self {
+            serializer,
+            delta_compressor: None,
+            batch_size,
+            current_batch: Vec::new(),
+        }
+    }
+
+    /// Enable delta compression
+    pub fn with_delta_compression(
+        mut self,
+        compression_type: DeltaCompressionType,
+        max_states: usize,
+    ) -> Self {
+        self.delta_compressor = Some(DeltaCompressor::new(compression_type, max_states));
+        self
+    }
+
+    /// Add event to batch
+    pub async fn add_event(&mut self, event: StreamEvent) -> Result<Option<Bytes>> {
+        self.current_batch.push(event);
+
+        if self.current_batch.len() >= self.batch_size {
+            self.flush_batch().await
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Flush current batch
+    pub async fn flush_batch(&mut self) -> Result<Option<Bytes>> {
+        if self.current_batch.is_empty() {
+            return Ok(None);
+        }
+
+        let batch = std::mem::take(&mut self.current_batch);
+        let serialized = self.serialize_batch(&batch).await?;
+        Ok(Some(serialized))
+    }
+
+    /// Serialize a batch of events
+    async fn serialize_batch(&self, batch: &[StreamEvent]) -> Result<Bytes> {
+        let mut buffer = BytesMut::new();
+
+        // Write batch header
+        buffer.put_u32(batch.len() as u32);
+        buffer.put_u64(chrono::Utc::now().timestamp_millis() as u64);
+
+        // Serialize each event
+        for event in batch {
+            let event_data = self.serializer.serialize(event).await?;
+            buffer.put_u32(event_data.len() as u32);
+            buffer.put(event_data);
+        }
+
+        Ok(buffer.freeze())
+    }
+
+    /// Deserialize a batch of events
+    pub async fn deserialize_batch(&self, data: &[u8]) -> Result<Vec<StreamEvent>> {
+        let mut cursor = std::io::Cursor::new(data);
+        let mut events = Vec::new();
+
+        // Read batch header
+        let batch_size = cursor.get_u32();
+        let _timestamp = cursor.get_u64();
+
+        // Read each event
+        for _ in 0..batch_size {
+            let event_size = cursor.get_u32() as usize;
+            let event_data =
+                &data[cursor.position() as usize..(cursor.position() as usize + event_size)];
+            cursor.advance(event_size);
+
+            let event = self.serializer.deserialize(event_data).await?;
+            events.push(event);
+        }
+
+        Ok(events)
+    }
+
+    /// Create a stream of serialized batches
+    pub fn create_batch_stream(
+        &self,
+        events: impl Stream<Item = StreamEvent> + Send + 'static,
+    ) -> BoxStream<'static, Result<Bytes>> {
+        let serializer = self.serializer.clone();
+        let batch_size = self.batch_size;
+
+        Box::pin(events.chunks(batch_size).then(move |chunk| {
+            let serializer = serializer.clone();
+            async move {
+                let streaming_serializer = StreamingSerializer::new(serializer, batch_size);
+                streaming_serializer.serialize_batch(&chunk).await
+            }
+        }))
+    }
+}
+
+/// Enhanced binary format with streaming support
+pub struct EnhancedBinaryFormat {
+    version: u8,
+    enable_compression: bool,
+    enable_checksums: bool,
+    chunk_size: usize,
+}
+
+impl EnhancedBinaryFormat {
+    /// Create a new enhanced binary format
+    pub fn new() -> Self {
+        Self {
+            version: 2, // Enhanced version
+            enable_compression: true,
+            enable_checksums: true,
+            chunk_size: 8192, // 8KB chunks
+        }
+    }
+
+    /// Configure compression
+    pub fn with_compression(mut self, enable: bool) -> Self {
+        self.enable_compression = enable;
+        self
+    }
+
+    /// Configure checksums
+    pub fn with_checksums(mut self, enable: bool) -> Self {
+        self.enable_checksums = enable;
+        self
+    }
+
+    /// Set chunk size for streaming
+    pub fn with_chunk_size(mut self, size: usize) -> Self {
+        self.chunk_size = size;
+        self
+    }
+
+    /// Serialize event in enhanced binary format
+    pub async fn serialize(&self, event: &StreamEvent) -> Result<Bytes> {
+        let mut buffer = BytesMut::new();
+
+        // Header
+        buffer.put(&b"BIN2"[..]); // Magic bytes for v2
+        buffer.put_u8(self.version);
+        buffer.put_u8(self.get_flags());
+
+        // Serialize event data
+        let event_json = serde_json::to_vec(event)?;
+
+        // Apply compression if enabled
+        let data = if self.enable_compression {
+            lz4_flex::compress_prepend_size(&event_json)
+        } else {
+            event_json
+        };
+
+        // Add checksum if enabled
+        if self.enable_checksums {
+            let checksum = crc32fast::hash(&data);
+            buffer.put_u32(checksum);
+        }
+
+        // Add data length and data
+        buffer.put_u32(data.len() as u32);
+        buffer.put(&data[..]);
+
+        Ok(buffer.freeze())
+    }
+
+    /// Deserialize event from enhanced binary format
+    pub async fn deserialize(&self, data: &[u8]) -> Result<StreamEvent> {
+        let mut cursor = std::io::Cursor::new(data);
+
+        // Check magic bytes
+        let mut magic = [0u8; 4];
+        cursor.read_exact(&mut magic)?;
+        if &magic != b"BIN2" {
+            return Err(anyhow!("Invalid magic bytes for enhanced binary format"));
+        }
+
+        // Read version and flags
+        let version = cursor.get_u8();
+        if version != self.version {
+            return Err(anyhow!(
+                "Unsupported enhanced binary format version: {}",
+                version
+            ));
+        }
+
+        let flags = cursor.get_u8();
+        let has_compression = (flags & 0x01) != 0;
+        let has_checksum = (flags & 0x02) != 0;
+
+        // Read checksum if present
+        let expected_checksum = if has_checksum {
+            Some(cursor.get_u32())
+        } else {
+            None
+        };
+
+        // Read data
+        let data_len = cursor.get_u32() as usize;
+        let mut event_data = vec![0u8; data_len];
+        cursor.read_exact(&mut event_data)?;
+
+        // Verify checksum
+        if let Some(expected) = expected_checksum {
+            let actual = crc32fast::hash(&event_data);
+            if actual != expected {
+                return Err(anyhow!(
+                    "Checksum mismatch: expected {}, got {}",
+                    expected,
+                    actual
+                ));
+            }
+        }
+
+        // Decompress if needed
+        let decompressed = if has_compression {
+            lz4_flex::decompress_size_prepended(&event_data)?
+        } else {
+            event_data
+        };
+
+        // Deserialize event
+        let event = serde_json::from_slice(&decompressed)?;
+        Ok(event)
+    }
+
+    /// Create streaming chunks for large events
+    pub async fn serialize_streaming(&self, event: &StreamEvent) -> Result<Vec<Bytes>> {
+        let serialized = self.serialize(event).await?;
+        let mut chunks = Vec::new();
+
+        if serialized.len() <= self.chunk_size {
+            chunks.push(serialized);
+        } else {
+            // Split into chunks
+            let chunk_count = (serialized.len() + self.chunk_size - 1) / self.chunk_size;
+
+            for i in 0..chunk_count {
+                let start = i * self.chunk_size;
+                let end = std::cmp::min(start + self.chunk_size, serialized.len());
+
+                let mut chunk_buffer = BytesMut::new();
+                chunk_buffer.put(&b"CHNK"[..]); // Chunk magic
+                chunk_buffer.put_u32(i as u32); // Chunk index
+                chunk_buffer.put_u32(chunk_count as u32); // Total chunks
+                chunk_buffer.put_u32((end - start) as u32); // Chunk size
+                chunk_buffer.put(&serialized[start..end]);
+
+                chunks.push(chunk_buffer.freeze());
+            }
+        }
+
+        Ok(chunks)
+    }
+
+    /// Reassemble streaming chunks
+    pub async fn deserialize_streaming(&self, chunks: Vec<Bytes>) -> Result<StreamEvent> {
+        if chunks.len() == 1 && !chunks[0].starts_with(b"CHNK") {
+            // Single chunk, deserialize directly
+            return self.deserialize(&chunks[0]).await;
+        }
+
+        // Reassemble chunks
+        let mut chunk_data: BTreeMap<u32, Vec<u8>> = BTreeMap::new();
+        let mut total_chunks = 0;
+
+        for chunk in chunks {
+            if !chunk.starts_with(b"CHNK") {
+                return Err(anyhow!("Invalid chunk format"));
+            }
+
+            let mut cursor = std::io::Cursor::new(&chunk[4..]);
+            let chunk_index = cursor.get_u32();
+            let chunk_count = cursor.get_u32();
+            let chunk_size = cursor.get_u32() as usize;
+
+            total_chunks = chunk_count;
+
+            let data = chunk[16..16 + chunk_size].to_vec();
+            chunk_data.insert(chunk_index, data);
+        }
+
+        if chunk_data.len() != total_chunks as usize {
+            return Err(anyhow!(
+                "Missing chunks: got {}, expected {}",
+                chunk_data.len(),
+                total_chunks
+            ));
+        }
+
+        // Reassemble data
+        let mut reassembled = Vec::new();
+        for (_index, data) in chunk_data {
+            reassembled.extend(data);
+        }
+
+        // Deserialize reassembled data
+        self.deserialize(&reassembled).await
+    }
+
+    /// Get format flags
+    fn get_flags(&self) -> u8 {
+        let mut flags = 0u8;
+        if self.enable_compression {
+            flags |= 0x01;
+        }
+        if self.enable_checksums {
+            flags |= 0x02;
+        }
+        flags
+    }
+}
+
+impl Default for EnhancedBinaryFormat {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// Required imports are now at the top of the file

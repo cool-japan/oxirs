@@ -3,11 +3,11 @@
 //! Provides a consistent API for parsing all supported RDF formats.
 //! Extracted and adapted from OxiGraph with OxiRS enhancements.
 
-use crate::model::{Quad, QuadRef, Triple, TripleRef};
+use super::error::{ParseResult, RdfParseError, TextPosition};
 use super::format::RdfFormat;
-use super::error::{RdfParseError, ParseResult, TextPosition};
-use std::io::Read;
+use crate::model::{Quad, QuadRef, Triple, TripleRef};
 use std::collections::HashMap;
+use std::io::Read;
 
 /// Result type for quad parsing operations
 pub type QuadParseResult = ParseResult<Quad>;
@@ -33,7 +33,7 @@ impl<R: Read> ReaderQuadParser<R> {
 
 impl<R: Read> Iterator for ReaderQuadParser<R> {
     type Item = QuadParseResult;
-    
+
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
     }
@@ -53,7 +53,7 @@ impl<'a> SliceQuadParser<'a> {
 
 impl<'a> Iterator for SliceQuadParser<'a> {
     type Item = QuadParseResult;
-    
+
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
     }
@@ -78,25 +78,25 @@ impl RdfParser {
             lenient: false,
         }
     }
-    
+
     /// Set the base IRI for resolving relative IRIs
     pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Self {
         self.base_iri = Some(base_iri.into());
         self
     }
-    
+
     /// Add a namespace prefix
     pub fn with_prefix(mut self, prefix: impl Into<String>, iri: impl Into<String>) -> Self {
         self.prefixes.insert(prefix.into(), iri.into());
         self
     }
-    
+
     /// Enable lenient parsing (skip some validations for performance)
     pub fn lenient(mut self) -> Self {
         self.lenient = true;
         self
     }
-    
+
     /// Parse from a reader
     pub fn for_reader<R: Read + Send>(self, reader: R) -> ReaderQuadParser<R> {
         match self.format {
@@ -109,7 +109,7 @@ impl RdfParser {
             RdfFormat::N3 => self.parse_n3_reader(reader),
         }
     }
-    
+
     /// Parse from a byte slice
     pub fn for_slice<'a>(self, slice: &'a [u8]) -> SliceQuadParser<'a> {
         match self.format {
@@ -122,95 +122,95 @@ impl RdfParser {
             RdfFormat::N3 => self.parse_n3_slice(slice),
         }
     }
-    
+
     /// Get the format being parsed
     pub fn format(&self) -> RdfFormat {
         self.format.clone()
     }
-    
+
     /// Get the base IRI
     pub fn base_iri(&self) -> Option<&str> {
         self.base_iri.as_deref()
     }
-    
+
     /// Get the prefixes
     pub fn prefixes(&self) -> &HashMap<String, String> {
         &self.prefixes
     }
-    
+
     /// Check if lenient parsing is enabled
     pub fn is_lenient(&self) -> bool {
         self.lenient
     }
 
     // Format-specific parser implementations
-    
+
     fn parse_turtle_reader<R: Read + Send>(self, reader: R) -> ReaderQuadParser<R> {
         // TODO: Implement actual Turtle parsing using extracted oxttl components
         // For now, return empty iterator
         ReaderQuadParser::new(Box::new(std::iter::empty()))
     }
-    
+
     fn parse_turtle_slice<'a>(self, _slice: &'a [u8]) -> SliceQuadParser<'a> {
         // TODO: Implement actual Turtle parsing using extracted oxttl components
         SliceQuadParser::new(Box::new(std::iter::empty()))
     }
-    
+
     fn parse_ntriples_reader<R: Read + Send>(self, reader: R) -> ReaderQuadParser<R> {
         // TODO: Implement N-Triples parsing
         ReaderQuadParser::new(Box::new(std::iter::empty()))
     }
-    
+
     fn parse_ntriples_slice<'a>(self, _slice: &'a [u8]) -> SliceQuadParser<'a> {
         // TODO: Implement N-Triples parsing
         SliceQuadParser::new(Box::new(std::iter::empty()))
     }
-    
+
     fn parse_nquads_reader<R: Read + Send>(self, reader: R) -> ReaderQuadParser<R> {
         // TODO: Implement N-Quads parsing
         ReaderQuadParser::new(Box::new(std::iter::empty()))
     }
-    
+
     fn parse_nquads_slice<'a>(self, _slice: &'a [u8]) -> SliceQuadParser<'a> {
         // TODO: Implement N-Quads parsing
         SliceQuadParser::new(Box::new(std::iter::empty()))
     }
-    
+
     fn parse_trig_reader<R: Read + Send>(self, reader: R) -> ReaderQuadParser<R> {
         // TODO: Implement TriG parsing
         ReaderQuadParser::new(Box::new(std::iter::empty()))
     }
-    
+
     fn parse_trig_slice<'a>(self, _slice: &'a [u8]) -> SliceQuadParser<'a> {
         // TODO: Implement TriG parsing
         SliceQuadParser::new(Box::new(std::iter::empty()))
     }
-    
+
     fn parse_rdfxml_reader<R: Read + Send>(self, reader: R) -> ReaderQuadParser<R> {
         // TODO: Implement RDF/XML parsing using extracted oxrdfxml components
         ReaderQuadParser::new(Box::new(std::iter::empty()))
     }
-    
+
     fn parse_rdfxml_slice<'a>(self, _slice: &'a [u8]) -> SliceQuadParser<'a> {
         // TODO: Implement RDF/XML parsing
         SliceQuadParser::new(Box::new(std::iter::empty()))
     }
-    
+
     fn parse_jsonld_reader<R: Read + Send>(self, reader: R) -> ReaderQuadParser<R> {
         // TODO: Implement JSON-LD parsing using extracted oxjsonld components
         ReaderQuadParser::new(Box::new(std::iter::empty()))
     }
-    
+
     fn parse_jsonld_slice<'a>(self, _slice: &'a [u8]) -> SliceQuadParser<'a> {
         // TODO: Implement JSON-LD parsing
         SliceQuadParser::new(Box::new(std::iter::empty()))
     }
-    
+
     fn parse_n3_reader<R: Read + Send>(self, reader: R) -> ReaderQuadParser<R> {
         // TODO: Implement N3 parsing
         ReaderQuadParser::new(Box::new(std::iter::empty()))
     }
-    
+
     fn parse_n3_slice<'a>(self, _slice: &'a [u8]) -> SliceQuadParser<'a> {
         // TODO: Implement N3 parsing
         SliceQuadParser::new(Box::new(std::iter::empty()))
@@ -270,37 +270,37 @@ impl ConfigurableParser {
             config,
         }
     }
-    
+
     /// Set base IRI
     pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Self {
         self.parser = self.parser.with_base_iri(base_iri);
         self
     }
-    
+
     /// Add prefix
     pub fn with_prefix(mut self, prefix: impl Into<String>, iri: impl Into<String>) -> Self {
         self.parser = self.parser.with_prefix(prefix, iri);
         self
     }
-    
+
     /// Parse with configuration
     pub fn parse_slice<'a>(&self, slice: &'a [u8]) -> SliceQuadParser<'a> {
         // Apply configuration settings and parse
         let mut parser = self.parser.clone();
-        
+
         if !self.config.strict_iri_validation || !self.config.strict_literal_validation {
             parser = parser.lenient();
         }
-        
+
         // TODO: Apply other configuration options
         parser.for_slice(slice)
     }
-    
+
     /// Get the configuration
     pub fn config(&self) -> &ParseConfig {
         &self.config
     }
-    
+
     /// Get the parser
     pub fn parser(&self) -> &RdfParser {
         &self.parser
@@ -310,49 +310,49 @@ impl ConfigurableParser {
 /// Simple parsing functions for common use cases
 pub mod simple {
     use super::*;
-    
+
     /// Parse triples from a string in the specified format
     pub fn parse_triples_from_str(input: &str, format: RdfFormat) -> ParseResult<Vec<Triple>> {
         let parser = RdfParser::new(format);
         let mut triples = Vec::new();
-        
+
         for quad_result in parser.for_slice(input.as_bytes()) {
             let quad = quad_result?;
             if let Some(triple) = quad.triple_in_default_graph() {
                 triples.push(triple);
             }
         }
-        
+
         Ok(triples)
     }
-    
+
     /// Parse quads from a string in the specified format
     pub fn parse_quads_from_str(input: &str, format: RdfFormat) -> ParseResult<Vec<Quad>> {
         let parser = RdfParser::new(format);
         let mut quads = Vec::new();
-        
+
         for quad_result in parser.for_slice(input.as_bytes()) {
             quads.push(quad_result?);
         }
-        
+
         Ok(quads)
     }
-    
+
     /// Parse triples from Turtle string
     pub fn parse_turtle(input: &str) -> ParseResult<Vec<Triple>> {
         parse_triples_from_str(input, RdfFormat::Turtle)
     }
-    
+
     /// Parse triples from N-Triples string
     pub fn parse_ntriples(input: &str) -> ParseResult<Vec<Triple>> {
         parse_triples_from_str(input, RdfFormat::NTriples)
     }
-    
+
     /// Parse quads from N-Quads string
     pub fn parse_nquads(input: &str) -> ParseResult<Vec<Quad>> {
         parse_quads_from_str(input, RdfFormat::NQuads)
     }
-    
+
     /// Parse quads from TriG string
     pub fn parse_trig(input: &str) -> ParseResult<Vec<Quad>> {
         parse_quads_from_str(input, RdfFormat::TriG)
@@ -378,9 +378,12 @@ mod tests {
             .with_base_iri("http://example.org/")
             .with_prefix("ex", "http://example.org/ns#")
             .lenient();
-            
+
         assert_eq!(parser.base_iri(), Some("http://example.org/"));
-        assert_eq!(parser.prefixes().get("ex"), Some(&"http://example.org/ns#".to_string()));
+        assert_eq!(
+            parser.prefixes().get("ex"),
+            Some(&"http://example.org/ns#".to_string())
+        );
         assert!(parser.is_lenient());
     }
 
@@ -391,7 +394,7 @@ mod tests {
             parallel: true,
             ..Default::default()
         };
-        
+
         let parser = ConfigurableParser::new(RdfFormat::NQuads, config);
         assert_eq!(parser.config().max_items, Some(1000));
         assert!(parser.config().parallel);

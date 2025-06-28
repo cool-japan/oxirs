@@ -523,7 +523,7 @@ mod sparql_star_tests {
     async fn test_quoted_triple_parsing() {
         // Simple quoted triple
         let result = oxirs_fuseki::handlers::sparql::parse_quoted_triple_value(
-            "<< <http://example.org/alice> <http://example.org/knows> <http://example.org/bob> >>"
+            "<< <http://example.org/alice> <http://example.org/knows> <http://example.org/bob> >>",
         );
         assert!(result.is_ok());
         let parsed = result.unwrap();
@@ -533,7 +533,7 @@ mod sparql_star_tests {
 
         // Quoted triple with prefixed names
         let result = oxirs_fuseki::handlers::sparql::parse_quoted_triple_value(
-            "<< ex:alice foaf:knows ex:bob >>"
+            "<< ex:alice foaf:knows ex:bob >>",
         );
         assert!(result.is_ok());
         let parsed = result.unwrap();
@@ -543,7 +543,7 @@ mod sparql_star_tests {
 
         // Quoted triple with literal
         let result = oxirs_fuseki::handlers::sparql::parse_quoted_triple_value(
-            "<< ex:alice foaf:age \"30\"^^xsd:integer >>"
+            "<< ex:alice foaf:age \"30\"^^xsd:integer >>",
         );
         assert!(result.is_ok());
         let parsed = result.unwrap();
@@ -553,7 +553,7 @@ mod sparql_star_tests {
 
         // Quoted triple with language-tagged literal
         let result = oxirs_fuseki::handlers::sparql::parse_quoted_triple_value(
-            "<< ex:alice foaf:name \"Alice\"@en >>"
+            "<< ex:alice foaf:name \"Alice\"@en >>",
         );
         assert!(result.is_ok());
         let parsed = result.unwrap();
@@ -564,20 +564,24 @@ mod sparql_star_tests {
     async fn test_quoted_triple_pattern_extraction() {
         // Single quoted triple pattern
         let query = "SELECT ?s WHERE { << ?s ?p ?o >> :confidence ?value }";
-        let patterns = oxirs_fuseki::handlers::sparql::extract_quoted_triple_patterns(query).unwrap();
+        let patterns =
+            oxirs_fuseki::handlers::sparql::extract_quoted_triple_patterns(query).unwrap();
         assert_eq!(patterns.len(), 1);
         assert_eq!(patterns[0], "<< ?s ?p ?o >>");
 
         // Multiple quoted triple patterns
-        let query = "SELECT ?s WHERE { << ?s ?p ?o >> :confidence ?c . << ?x ?y ?z >> :source ?src }";
-        let patterns = oxirs_fuseki::handlers::sparql::extract_quoted_triple_patterns(query).unwrap();
+        let query =
+            "SELECT ?s WHERE { << ?s ?p ?o >> :confidence ?c . << ?x ?y ?z >> :source ?src }";
+        let patterns =
+            oxirs_fuseki::handlers::sparql::extract_quoted_triple_patterns(query).unwrap();
         assert_eq!(patterns.len(), 2);
         assert!(patterns.contains(&"<< ?s ?p ?o >>".to_string()));
         assert!(patterns.contains(&"<< ?x ?y ?z >>".to_string()));
 
         // Nested quoted triples
         let query = "SELECT ?s WHERE { << << ?a ?b ?c >> ?p ?o >> :confidence ?value }";
-        let patterns = oxirs_fuseki::handlers::sparql::extract_quoted_triple_patterns(query).unwrap();
+        let patterns =
+            oxirs_fuseki::handlers::sparql::extract_quoted_triple_patterns(query).unwrap();
         assert_eq!(patterns.len(), 2);
         assert!(patterns.contains(&"<< ?a ?b ?c >>".to_string()));
         assert!(patterns.contains(&"<< << ?a ?b ?c >> ?p ?o >>".to_string()));
@@ -586,20 +590,20 @@ mod sparql_star_tests {
     #[tokio::test]
     async fn test_sparql_star_processing() {
         // Test processing of bindings with quoted triples
-        let mut bindings = vec![
-            {
-                let mut binding = HashMap::new();
-                binding.insert(
-                    "stmt".to_string(),
-                    serde_json::json!("<< ex:alice ex:knows ex:bob >>"),
-                );
-                binding
-            },
-        ];
+        let mut bindings = vec![{
+            let mut binding = HashMap::new();
+            binding.insert(
+                "stmt".to_string(),
+                serde_json::json!("<< ex:alice ex:knows ex:bob >>"),
+            );
+            binding
+        }];
 
         // Query that uses SUBJECT function
         let query = "SELECT ?stmt ?s WHERE { ?stmt :confidence ?c . BIND(SUBJECT(?stmt) AS ?s) }";
-        let result = oxirs_fuseki::handlers::sparql::process_sparql_star_features(query, &mut bindings).await;
+        let result =
+            oxirs_fuseki::handlers::sparql::process_sparql_star_features(query, &mut bindings)
+                .await;
         assert!(result.is_ok());
 
         // Check that subject was extracted
@@ -613,9 +617,10 @@ mod sparql_star_tests {
         let query = "SELECT ?s WHERE { ?s :name ?name {| :confidence 0.9 ; :source :manual |} }";
         let binding = HashMap::new();
 
-        let annotations = oxirs_fuseki::handlers::sparql::extract_annotations(query, &binding).unwrap();
+        let annotations =
+            oxirs_fuseki::handlers::sparql::extract_annotations(query, &binding).unwrap();
         assert!(!annotations.is_empty());
-        
+
         // Should extract confidence and source annotations
         let annotation_props: Vec<String> = annotations.iter().map(|(k, _)| k.clone()).collect();
         assert!(annotation_props.iter().any(|p| p.contains("confidence")));
@@ -647,7 +652,8 @@ mod sparql_star_tests {
         assert!(oxirs_fuseki::handlers::sparql::contains_sparql_star_features(query));
 
         // Extract quoted triple patterns
-        let patterns = oxirs_fuseki::handlers::sparql::extract_quoted_triple_patterns(query).unwrap();
+        let patterns =
+            oxirs_fuseki::handlers::sparql::extract_quoted_triple_patterns(query).unwrap();
         assert_eq!(patterns.len(), 2);
         assert!(patterns.contains(&"<< ?person foaf:knows ?friend >>".to_string()));
         assert!(patterns.contains(&"<< ?friend foaf:age ?age >>".to_string()));

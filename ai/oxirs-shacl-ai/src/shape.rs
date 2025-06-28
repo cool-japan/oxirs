@@ -196,19 +196,18 @@ impl PropertyConstraint {
     /// Validate constraint completeness
     pub fn is_valid(&self) -> bool {
         // Basic validation - has path and at least one constraint
-        !self.path.is_empty() && (
-            self.min_count.is_some() ||
-            self.max_count.is_some() ||
-            self.datatype.is_some() ||
-            self.node_kind.is_some() ||
-            self.class.is_some()
-        )
+        !self.path.is_empty()
+            && (self.min_count.is_some()
+                || self.max_count.is_some()
+                || self.datatype.is_some()
+                || self.node_kind.is_some()
+                || self.class.is_some())
     }
 
     /// Get constraint summary
     pub fn constraint_summary(&self) -> String {
         let mut parts = Vec::new();
-        
+
         if let Some(min_count) = self.min_count {
             parts.push(format!("minCount:{}", min_count));
         }
@@ -221,7 +220,7 @@ impl PropertyConstraint {
         if let Some(ref class) = self.class {
             parts.push(format!("class:{}", class));
         }
-        
+
         if parts.is_empty() {
             "no constraints".to_string()
         } else {
@@ -235,28 +234,28 @@ impl PropertyConstraint {
 pub struct ShapeMetrics {
     /// Number of validation runs
     pub validation_runs: usize,
-    
+
     /// Success rate (0.0 to 1.0)
     pub success_rate: f64,
-    
+
     /// Average validation time in milliseconds
     pub avg_validation_time_ms: f64,
-    
+
     /// Number of violations detected
     pub violations_detected: usize,
-    
+
     /// False positive rate
     pub false_positive_rate: f64,
-    
+
     /// Coverage percentage
     pub coverage_percentage: f64,
-    
+
     /// Precision score
     pub precision: f64,
-    
+
     /// Recall score
     pub recall: f64,
-    
+
     /// F1 score
     pub f1_score: f64,
 }
@@ -266,25 +265,26 @@ impl ShapeMetrics {
     pub fn new() -> Self {
         Self::default()
     }
-    
+
     /// Update success rate
     pub fn update_success_rate(&mut self, rate: f64) {
         self.success_rate = rate;
     }
-    
+
     /// Add validation run result
     pub fn add_validation_result(&mut self, success: bool, time_ms: f64) {
         self.validation_runs += 1;
-        
+
         // Update average time
         let total_time = self.avg_validation_time_ms * (self.validation_runs - 1) as f64 + time_ms;
         self.avg_validation_time_ms = total_time / self.validation_runs as f64;
-        
+
         // Update success rate
-        let total_successes = (self.success_rate * (self.validation_runs - 1) as f64) + if success { 1.0 } else { 0.0 };
+        let total_successes = (self.success_rate * (self.validation_runs - 1) as f64)
+            + if success { 1.0 } else { 0.0 };
         self.success_rate = total_successes / self.validation_runs as f64;
     }
-    
+
     /// Calculate F1 score from precision and recall
     pub fn calculate_f1_score(&mut self) {
         if self.precision + self.recall > 0.0 {
@@ -308,31 +308,31 @@ impl ShapeBuilder {
             shape: Shape::new(iri),
         }
     }
-    
+
     /// Set target class
     pub fn target_class(mut self, class_iri: String) -> Self {
         self.shape.set_target_class(class_iri);
         self
     }
-    
+
     /// Add property constraint
     pub fn property(mut self, constraint: PropertyConstraint) -> Self {
         self.shape.add_property_constraint(constraint);
         self
     }
-    
+
     /// Set confidence
     pub fn confidence(mut self, confidence: f64) -> Self {
         self.shape.set_confidence(confidence);
         self
     }
-    
+
     /// Mark as AI-generated
     pub fn ai_generated(mut self) -> Self {
         self.shape.mark_ai_generated();
         self
     }
-    
+
     /// Build the shape
     pub fn build(self) -> Shape {
         self.shape
@@ -342,24 +342,36 @@ impl ShapeBuilder {
 /// Utility functions for shape operations
 pub mod utils {
     use super::*;
-    
+
     /// Create a simple property constraint with cardinality
-    pub fn simple_property(path: String, min_count: Option<u32>, max_count: Option<u32>) -> PropertyConstraint {
+    pub fn simple_property(
+        path: String,
+        min_count: Option<u32>,
+        max_count: Option<u32>,
+    ) -> PropertyConstraint {
         let mut constraint = PropertyConstraint::new(path);
         constraint.min_count = min_count;
         constraint.max_count = max_count;
         constraint
     }
-    
+
     /// Create a datatype property constraint
-    pub fn datatype_property(path: String, datatype: String, min_count: Option<u32>) -> PropertyConstraint {
+    pub fn datatype_property(
+        path: String,
+        datatype: String,
+        min_count: Option<u32>,
+    ) -> PropertyConstraint {
         PropertyConstraint::new(path)
             .with_datatype(datatype)
             .with_min_count(min_count.unwrap_or(0))
     }
-    
+
     /// Create a class property constraint
-    pub fn class_property(path: String, class: String, min_count: Option<u32>) -> PropertyConstraint {
+    pub fn class_property(
+        path: String,
+        class: String,
+        min_count: Option<u32>,
+    ) -> PropertyConstraint {
         PropertyConstraint::new(path)
             .with_class(class)
             .with_min_count(min_count.unwrap_or(0))
@@ -374,7 +386,7 @@ mod tests {
     fn test_shape_creation() {
         let mut shape = Shape::new("http://example.org/TestShape".to_string());
         shape.set_target_class("http://example.org/TestClass".to_string());
-        
+
         assert!(!shape.is_ai_generated());
         assert_eq!(shape.confidence(), 1.0);
     }
@@ -385,23 +397,28 @@ mod tests {
             .with_min_count(1)
             .with_max_count(1)
             .with_datatype("http://www.w3.org/2001/XMLSchema#string".to_string());
-        
+
         assert_eq!(constraint.min_count, Some(1));
         assert_eq!(constraint.max_count, Some(1));
-        assert_eq!(constraint.datatype, Some("http://www.w3.org/2001/XMLSchema#string".to_string()));
+        assert_eq!(
+            constraint.datatype,
+            Some("http://www.w3.org/2001/XMLSchema#string".to_string())
+        );
     }
 
     #[test]
     fn test_shape_builder() {
         let shape = ShapeBuilder::new("http://example.org/PersonShape".to_string())
             .target_class("http://example.org/Person".to_string())
-            .property(PropertyConstraint::new("http://example.org/name".to_string())
-                .with_min_count(1)
-                .with_datatype("http://www.w3.org/2001/XMLSchema#string".to_string()))
+            .property(
+                PropertyConstraint::new("http://example.org/name".to_string())
+                    .with_min_count(1)
+                    .with_datatype("http://www.w3.org/2001/XMLSchema#string".to_string()),
+            )
             .confidence(0.95)
             .ai_generated()
             .build();
-        
+
         assert!(shape.is_ai_generated());
         assert_eq!(shape.confidence(), 0.95);
     }
@@ -409,10 +426,10 @@ mod tests {
     #[test]
     fn test_shape_metrics() {
         let mut metrics = ShapeMetrics::new();
-        
+
         metrics.add_validation_result(true, 100.0);
         metrics.add_validation_result(false, 150.0);
-        
+
         assert_eq!(metrics.validation_runs, 2);
         assert_eq!(metrics.success_rate, 0.5);
         assert_eq!(metrics.avg_validation_time_ms, 125.0);

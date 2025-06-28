@@ -19,5 +19,5 @@ pub use bft::{BftConfig, BftNode};
 pub use crdt::{CrdtConfig, RdfCrdt};
 pub use raft::{RaftConfig, RaftNode};
 pub use replication::{ReplicationConfig, ReplicationManager};
-pub use sharding::{ShardingConfig, ShardManager, ShardingStrategy, ShardRouter};
+pub use sharding::{ShardManager, ShardRouter, ShardingConfig, ShardingStrategy};
 pub use transaction::{TransactionConfig, TransactionCoordinator, TransactionId};

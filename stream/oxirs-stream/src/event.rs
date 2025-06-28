@@ -2,10 +2,10 @@
 //!
 //! Event types for RDF streaming with comprehensive metadata and provenance tracking.
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
-use chrono::{DateTime, Utc};
 use uuid;
 
 // Event metadata is defined as a struct below
@@ -96,7 +96,7 @@ pub enum StreamEvent {
         execution_time: Duration,
         metadata: EventMetadata,
     },
-    
+
     // Named Graph Events
     GraphMetadataUpdated {
         graph: String,
@@ -135,7 +135,7 @@ pub enum StreamEvent {
         split_criteria: String,
         metadata: EventMetadata,
     },
-    
+
     // Schema Change Events
     SchemaDefinitionAdded {
         schema_type: String, // "class", "property", "datatype"
@@ -203,7 +203,7 @@ pub enum StreamEvent {
         duration_ms: u64,
         metadata: EventMetadata,
     },
-    
+
     // SHACL Shape Events
     ShapeAdded {
         shape_uri: String,
@@ -421,7 +421,12 @@ impl StreamEvent {
     // Helper methods for creating specific event types
 
     /// Create a named graph metadata update event
-    pub fn graph_metadata_updated(graph: String, metadata_type: String, old_value: Option<String>, new_value: String) -> Self {
+    pub fn graph_metadata_updated(
+        graph: String,
+        metadata_type: String,
+        old_value: Option<String>,
+        new_value: String,
+    ) -> Self {
         StreamEvent::GraphMetadataUpdated {
             graph,
             metadata_type,
@@ -432,7 +437,12 @@ impl StreamEvent {
     }
 
     /// Create a graph permissions change event
-    pub fn graph_permissions_changed(graph: String, permission_type: String, principal: String, granted: bool) -> Self {
+    pub fn graph_permissions_changed(
+        graph: String,
+        permission_type: String,
+        principal: String,
+        granted: bool,
+    ) -> Self {
         StreamEvent::GraphPermissionsChanged {
             graph,
             permission_type,
@@ -457,7 +467,11 @@ impl StreamEvent {
     }
 
     /// Create a schema definition added event
-    pub fn schema_definition_added(schema_type: String, schema_uri: String, definition: String) -> Self {
+    pub fn schema_definition_added(
+        schema_type: String,
+        schema_uri: String,
+        definition: String,
+    ) -> Self {
         StreamEvent::SchemaDefinitionAdded {
             schema_type,
             schema_uri,
@@ -467,7 +481,12 @@ impl StreamEvent {
     }
 
     /// Create a schema definition modified event
-    pub fn schema_definition_modified(schema_type: String, schema_uri: String, old_definition: String, new_definition: String) -> Self {
+    pub fn schema_definition_modified(
+        schema_type: String,
+        schema_uri: String,
+        old_definition: String,
+        new_definition: String,
+    ) -> Self {
         StreamEvent::SchemaDefinitionModified {
             schema_type,
             schema_uri,
@@ -478,7 +497,11 @@ impl StreamEvent {
     }
 
     /// Create an ontology import event
-    pub fn ontology_imported(ontology_uri: String, version: Option<String>, import_method: String) -> Self {
+    pub fn ontology_imported(
+        ontology_uri: String,
+        version: Option<String>,
+        import_method: String,
+    ) -> Self {
         StreamEvent::OntologyImported {
             ontology_uri,
             version,
@@ -488,7 +511,12 @@ impl StreamEvent {
     }
 
     /// Create a constraint violation event
-    pub fn constraint_violated(constraint_type: String, target: String, violating_data: String, severity: String) -> Self {
+    pub fn constraint_violated(
+        constraint_type: String,
+        target: String,
+        violating_data: String,
+        severity: String,
+    ) -> Self {
         StreamEvent::ConstraintViolated {
             constraint_type,
             target,
@@ -499,7 +527,12 @@ impl StreamEvent {
     }
 
     /// Create an index creation event
-    pub fn index_created(index_name: String, index_type: String, target_properties: Vec<String>, graph: Option<String>) -> Self {
+    pub fn index_created(
+        index_name: String,
+        index_type: String,
+        target_properties: Vec<String>,
+        graph: Option<String>,
+    ) -> Self {
         StreamEvent::IndexCreated {
             index_name,
             index_type,
@@ -510,7 +543,11 @@ impl StreamEvent {
     }
 
     /// Create a SHACL shape added event
-    pub fn shape_added(shape_uri: String, shape_definition: String, target_class: Option<String>) -> Self {
+    pub fn shape_added(
+        shape_uri: String,
+        shape_definition: String,
+        target_class: Option<String>,
+    ) -> Self {
         StreamEvent::ShapeAdded {
             shape_uri,
             shape_definition,
@@ -520,7 +557,13 @@ impl StreamEvent {
     }
 
     /// Create a SHACL shape validation completed event
-    pub fn shape_validation_completed(shape_uri: String, validation_id: String, success: bool, violation_count: u32, duration_ms: u64) -> Self {
+    pub fn shape_validation_completed(
+        shape_uri: String,
+        validation_id: String,
+        success: bool,
+        violation_count: u32,
+        duration_ms: u64,
+    ) -> Self {
         StreamEvent::ShapeValidationCompleted {
             shape_uri,
             validation_id,
@@ -532,7 +575,13 @@ impl StreamEvent {
     }
 
     /// Create a SHACL shape violation detected event
-    pub fn shape_violation_detected(shape_uri: String, violation_path: String, violating_node: String, severity: String, message: String) -> Self {
+    pub fn shape_violation_detected(
+        shape_uri: String,
+        violation_path: String,
+        violating_node: String,
+        severity: String,
+        message: String,
+    ) -> Self {
         StreamEvent::ShapeViolationDetected {
             shape_uri,
             violation_path,
@@ -546,36 +595,52 @@ impl StreamEvent {
     /// Get the event category for classification
     pub fn category(&self) -> EventCategory {
         match self {
-            StreamEvent::TripleAdded { .. } | StreamEvent::TripleRemoved { .. } |
-            StreamEvent::QuadAdded { .. } | StreamEvent::QuadRemoved { .. } => EventCategory::Data,
-            
-            StreamEvent::GraphCreated { .. } | StreamEvent::GraphCleared { .. } |
-            StreamEvent::GraphDeleted { .. } | StreamEvent::GraphMetadataUpdated { .. } |
-            StreamEvent::GraphPermissionsChanged { .. } | StreamEvent::GraphStatisticsUpdated { .. } |
-            StreamEvent::GraphRenamed { .. } | StreamEvent::GraphMerged { .. } |
-            StreamEvent::GraphSplit { .. } => EventCategory::Graph,
-            
-            StreamEvent::TransactionBegin { .. } | StreamEvent::TransactionCommit { .. } |
-            StreamEvent::TransactionAbort { .. } => EventCategory::Transaction,
-            
-            StreamEvent::SchemaChanged { .. } | StreamEvent::SchemaDefinitionAdded { .. } | 
-            StreamEvent::SchemaDefinitionRemoved { .. } | StreamEvent::SchemaDefinitionModified { .. } | 
-            StreamEvent::OntologyImported { .. } | StreamEvent::OntologyRemoved { .. } | 
-            StreamEvent::ConstraintAdded { .. } | StreamEvent::ConstraintRemoved { .. } | 
-            StreamEvent::ConstraintViolated { .. } => EventCategory::Schema,
-            
-            StreamEvent::IndexCreated { .. } | StreamEvent::IndexDropped { .. } |
-            StreamEvent::IndexRebuilt { .. } => EventCategory::Index,
-            
-            StreamEvent::ShapeAdded { .. } | StreamEvent::ShapeRemoved { .. } |
-            StreamEvent::ShapeModified { .. } | StreamEvent::ShapeValidationStarted { .. } |
-            StreamEvent::ShapeValidationCompleted { .. } | StreamEvent::ShapeViolationDetected { .. } => EventCategory::Shape,
-            
+            StreamEvent::TripleAdded { .. }
+            | StreamEvent::TripleRemoved { .. }
+            | StreamEvent::QuadAdded { .. }
+            | StreamEvent::QuadRemoved { .. } => EventCategory::Data,
+
+            StreamEvent::GraphCreated { .. }
+            | StreamEvent::GraphCleared { .. }
+            | StreamEvent::GraphDeleted { .. }
+            | StreamEvent::GraphMetadataUpdated { .. }
+            | StreamEvent::GraphPermissionsChanged { .. }
+            | StreamEvent::GraphStatisticsUpdated { .. }
+            | StreamEvent::GraphRenamed { .. }
+            | StreamEvent::GraphMerged { .. }
+            | StreamEvent::GraphSplit { .. } => EventCategory::Graph,
+
+            StreamEvent::TransactionBegin { .. }
+            | StreamEvent::TransactionCommit { .. }
+            | StreamEvent::TransactionAbort { .. } => EventCategory::Transaction,
+
+            StreamEvent::SchemaChanged { .. }
+            | StreamEvent::SchemaDefinitionAdded { .. }
+            | StreamEvent::SchemaDefinitionRemoved { .. }
+            | StreamEvent::SchemaDefinitionModified { .. }
+            | StreamEvent::OntologyImported { .. }
+            | StreamEvent::OntologyRemoved { .. }
+            | StreamEvent::ConstraintAdded { .. }
+            | StreamEvent::ConstraintRemoved { .. }
+            | StreamEvent::ConstraintViolated { .. } => EventCategory::Schema,
+
+            StreamEvent::IndexCreated { .. }
+            | StreamEvent::IndexDropped { .. }
+            | StreamEvent::IndexRebuilt { .. } => EventCategory::Index,
+
+            StreamEvent::ShapeAdded { .. }
+            | StreamEvent::ShapeRemoved { .. }
+            | StreamEvent::ShapeModified { .. }
+            | StreamEvent::ShapeValidationStarted { .. }
+            | StreamEvent::ShapeValidationCompleted { .. }
+            | StreamEvent::ShapeViolationDetected { .. } => EventCategory::Shape,
+
             StreamEvent::SparqlUpdate { .. } => EventCategory::Query,
-            
-            StreamEvent::QueryResultAdded { .. } | StreamEvent::QueryResultRemoved { .. } |
-            StreamEvent::QueryCompleted { .. } => EventCategory::Query,
-            
+
+            StreamEvent::QueryResultAdded { .. }
+            | StreamEvent::QueryResultRemoved { .. }
+            | StreamEvent::QueryCompleted { .. } => EventCategory::Query,
+
             StreamEvent::Heartbeat { .. } => EventCategory::Data,
         }
     }
@@ -603,7 +668,9 @@ impl StreamEvent {
             StreamEvent::SchemaChanged { .. } => StreamEventType::SchemaChanged,
             StreamEvent::SchemaDefinitionAdded { .. } => StreamEventType::SchemaDefinitionAdded,
             StreamEvent::SchemaDefinitionRemoved { .. } => StreamEventType::SchemaDefinitionRemoved,
-            StreamEvent::SchemaDefinitionModified { .. } => StreamEventType::SchemaDefinitionModified,
+            StreamEvent::SchemaDefinitionModified { .. } => {
+                StreamEventType::SchemaDefinitionModified
+            }
             StreamEvent::OntologyImported { .. } => StreamEventType::OntologyImported,
             StreamEvent::OntologyRemoved { .. } => StreamEventType::OntologyRemoved,
             StreamEvent::ConstraintAdded { .. } => StreamEventType::ConstraintAdded,
@@ -616,7 +683,9 @@ impl StreamEvent {
             StreamEvent::ShapeRemoved { .. } => StreamEventType::ShapeRemoved,
             StreamEvent::ShapeModified { .. } => StreamEventType::ShapeModified,
             StreamEvent::ShapeValidationStarted { .. } => StreamEventType::ShapeValidationStarted,
-            StreamEvent::ShapeValidationCompleted { .. } => StreamEventType::ShapeValidationCompleted,
+            StreamEvent::ShapeValidationCompleted { .. } => {
+                StreamEventType::ShapeValidationCompleted
+            }
             StreamEvent::ShapeViolationDetected { .. } => StreamEventType::ShapeViolationDetected,
             StreamEvent::QueryResultAdded { .. } => StreamEventType::QueryResultAdded,
             StreamEvent::QueryResultRemoved { .. } => StreamEventType::QueryResultRemoved,
@@ -634,29 +703,34 @@ impl StreamEvent {
             StreamEvent::QuadAdded { graph, .. } | StreamEvent::QuadRemoved { graph, .. } => {
                 graph == target_graph
             }
-            StreamEvent::GraphCreated { graph, .. } | StreamEvent::GraphDeleted { graph, .. } |
-            StreamEvent::GraphMetadataUpdated { graph, .. } | StreamEvent::GraphPermissionsChanged { graph, .. } |
-            StreamEvent::GraphStatisticsUpdated { graph, .. } => {
-                graph == target_graph
-            }
+            StreamEvent::GraphCreated { graph, .. }
+            | StreamEvent::GraphDeleted { graph, .. }
+            | StreamEvent::GraphMetadataUpdated { graph, .. }
+            | StreamEvent::GraphPermissionsChanged { graph, .. }
+            | StreamEvent::GraphStatisticsUpdated { graph, .. } => graph == target_graph,
             StreamEvent::GraphCleared { graph, .. } => {
                 graph.as_ref().map_or(true, |g| g == target_graph)
             }
             StreamEvent::GraphRenamed { old_name, new_name } => {
                 old_name == target_graph || new_name == target_graph
             }
-            StreamEvent::GraphMerged { source_graphs, target_graph: target, .. } => {
-                source_graphs.contains(&target_graph.to_string()) || target == target_graph
-            }
-            StreamEvent::GraphSplit { source_graph, target_graphs, .. } => {
-                source_graph == target_graph || target_graphs.contains(&target_graph.to_string())
-            }
+            StreamEvent::GraphMerged {
+                source_graphs,
+                target_graph: target,
+                ..
+            } => source_graphs.contains(&target_graph.to_string()) || target == target_graph,
+            StreamEvent::GraphSplit {
+                source_graph,
+                target_graphs,
+                ..
+            } => source_graph == target_graph || target_graphs.contains(&target_graph.to_string()),
             StreamEvent::IndexCreated { graph, .. } => {
                 graph.as_ref().map_or(false, |g| g == target_graph)
             }
-            StreamEvent::ShapeValidationStarted { target_graph: shape_target, .. } => {
-                shape_target.as_ref().map_or(false, |g| g == target_graph)
-            }
+            StreamEvent::ShapeValidationStarted {
+                target_graph: shape_target,
+                ..
+            } => shape_target.as_ref().map_or(false, |g| g == target_graph),
             _ => false,
         }
     }
@@ -664,23 +738,22 @@ impl StreamEvent {
     /// Get the priority level of this event
     pub fn priority(&self) -> EventPriority {
         match self {
-            StreamEvent::ConstraintViolated { severity, .. } => {
-                match severity.as_str() {
-                    "error" => EventPriority::High,
-                    "warning" => EventPriority::Medium,
-                    _ => EventPriority::Low,
-                }
+            StreamEvent::ConstraintViolated { severity, .. } => match severity.as_str() {
+                "error" => EventPriority::High,
+                "warning" => EventPriority::Medium,
+                _ => EventPriority::Low,
+            },
+            StreamEvent::ShapeViolationDetected { severity, .. } => match severity.as_str() {
+                "error" => EventPriority::High,
+                "warning" => EventPriority::Medium,
+                _ => EventPriority::Low,
+            },
+            StreamEvent::TransactionAbort { .. } | StreamEvent::GraphDeleted { .. } => {
+                EventPriority::High
             }
-            StreamEvent::ShapeViolationDetected { severity, .. } => {
-                match severity.as_str() {
-                    "error" => EventPriority::High,
-                    "warning" => EventPriority::Medium,
-                    _ => EventPriority::Low,
-                }
-            }
-            StreamEvent::TransactionAbort { .. } | StreamEvent::GraphDeleted { .. } => EventPriority::High,
-            StreamEvent::IndexDropped { .. } | StreamEvent::OntologyRemoved { .. } |
-            StreamEvent::SchemaDefinitionRemoved { .. } => EventPriority::Medium,
+            StreamEvent::IndexDropped { .. }
+            | StreamEvent::OntologyRemoved { .. }
+            | StreamEvent::SchemaDefinitionRemoved { .. } => EventPriority::Medium,
             _ => EventPriority::Low,
         }
     }

@@ -35,7 +35,9 @@ fn test_basic_shape_inheritance() {
 
     // Verify inheritance resolution works
     let engine = validation::ValidationEngine::new(validator.shapes(), ValidationConfig::default());
-    let resolved_constraints = engine.resolve_inherited_constraints(&ShapeId::new("http://example.org/ChildShape")).unwrap();
+    let resolved_constraints = engine
+        .resolve_inherited_constraints(&ShapeId::new("http://example.org/ChildShape"))
+        .unwrap();
 
     // Child should have all parent constraints plus its own
     assert_eq!(resolved_constraints.len(), 3);
@@ -68,11 +70,15 @@ fn test_constraint_override_in_inheritance() {
     validator.add_shape(child_shape).unwrap();
 
     let engine = validation::ValidationEngine::new(validator.shapes(), ValidationConfig::default());
-    let resolved_constraints = engine.resolve_inherited_constraints(&ShapeId::new("http://example.org/ChildShape")).unwrap();
+    let resolved_constraints = engine
+        .resolve_inherited_constraints(&ShapeId::new("http://example.org/ChildShape"))
+        .unwrap();
 
     // Should have only one minCount constraint with the child's value
     assert_eq!(resolved_constraints.len(), 1);
-    if let Some(Constraint::MinCount(min_count)) = resolved_constraints.get(&ConstraintComponentId::new("minCount")) {
+    if let Some(Constraint::MinCount(min_count)) =
+        resolved_constraints.get(&ConstraintComponentId::new("minCount"))
+    {
         assert_eq!(min_count.min_count, 2); // Child's value should override parent's
     } else {
         panic!("Expected MinCount constraint");
@@ -85,7 +91,8 @@ fn test_priority_based_inheritance() {
     let mut validator = Validator::new();
 
     // High priority parent
-    let mut high_priority_parent = Shape::node_shape(ShapeId::new("http://example.org/HighPriorityParent"));
+    let mut high_priority_parent =
+        Shape::node_shape(ShapeId::new("http://example.org/HighPriorityParent"));
     high_priority_parent.with_priority(10);
     high_priority_parent.add_constraint(
         ConstraintComponentId::new("datatype"),
@@ -94,8 +101,9 @@ fn test_priority_based_inheritance() {
         }),
     );
 
-    // Low priority parent  
-    let mut low_priority_parent = Shape::node_shape(ShapeId::new("http://example.org/LowPriorityParent"));
+    // Low priority parent
+    let mut low_priority_parent =
+        Shape::node_shape(ShapeId::new("http://example.org/LowPriorityParent"));
     low_priority_parent.with_priority(1);
     low_priority_parent.add_constraint(
         ConstraintComponentId::new("datatype"),
@@ -114,12 +122,19 @@ fn test_priority_based_inheritance() {
     validator.add_shape(child_shape).unwrap();
 
     let engine = validation::ValidationEngine::new(validator.shapes(), ValidationConfig::default());
-    let resolved_constraints = engine.resolve_inherited_constraints(&ShapeId::new("http://example.org/ChildShape")).unwrap();
+    let resolved_constraints = engine
+        .resolve_inherited_constraints(&ShapeId::new("http://example.org/ChildShape"))
+        .unwrap();
 
     // Should have the high priority parent's constraint
     assert_eq!(resolved_constraints.len(), 1);
-    if let Some(Constraint::Datatype(datatype)) = resolved_constraints.get(&ConstraintComponentId::new("datatype")) {
-        assert_eq!(datatype.datatype_iri.as_str(), "http://www.w3.org/2001/XMLSchema#string");
+    if let Some(Constraint::Datatype(datatype)) =
+        resolved_constraints.get(&ConstraintComponentId::new("datatype"))
+    {
+        assert_eq!(
+            datatype.datatype_iri.as_str(),
+            "http://www.w3.org/2001/XMLSchema#string"
+        );
     } else {
         panic!("Expected Datatype constraint");
     }
@@ -133,20 +148,22 @@ fn test_circular_inheritance_prevention() {
     // Create shapes that would form a circle: A -> B -> A
     let mut shape_a = Shape::node_shape(ShapeId::new("http://example.org/ShapeA"));
     shape_a.extends(ShapeId::new("http://example.org/ShapeB"));
-    
+
     let mut shape_b = Shape::node_shape(ShapeId::new("http://example.org/ShapeB"));
     shape_b.extends(ShapeId::new("http://example.org/ShapeA"));
 
     // Adding these shapes should either detect the circular dependency or handle it gracefully
     assert!(validator.add_shape(shape_a).is_ok());
     let result = validator.add_shape(shape_b);
-    
+
     // Should either succeed (with circular prevention) or fail with an appropriate error
     match result {
         Ok(_) => {
             // If it succeeds, inheritance resolution should handle circular references
-            let engine = validation::ValidationEngine::new(validator.shapes(), ValidationConfig::default());
-            let resolved = engine.resolve_inherited_constraints(&ShapeId::new("http://example.org/ShapeA"));
+            let engine =
+                validation::ValidationEngine::new(validator.shapes(), ValidationConfig::default());
+            let resolved =
+                engine.resolve_inherited_constraints(&ShapeId::new("http://example.org/ShapeA"));
             assert!(resolved.is_ok());
         }
         Err(e) => {
@@ -181,10 +198,10 @@ fn test_deep_inheritance_chain() {
     child.extends(ShapeId::new("http://example.org/Parent"));
     child.add_constraint(
         ConstraintComponentId::new("pattern"),
-        Constraint::Pattern(constraints::PatternConstraint { 
-            pattern: "[a-zA-Z]+".to_string(), 
-            flags: None, 
-            message: None 
+        Constraint::Pattern(constraints::PatternConstraint {
+            pattern: "[a-zA-Z]+".to_string(),
+            flags: None,
+            message: None,
         }),
     );
 
@@ -193,7 +210,9 @@ fn test_deep_inheritance_chain() {
     validator.add_shape(child).unwrap();
 
     let engine = validation::ValidationEngine::new(validator.shapes(), ValidationConfig::default());
-    let resolved_constraints = engine.resolve_inherited_constraints(&ShapeId::new("http://example.org/Child")).unwrap();
+    let resolved_constraints = engine
+        .resolve_inherited_constraints(&ShapeId::new("http://example.org/Child"))
+        .unwrap();
 
     // Child should have all constraints from the inheritance chain
     assert_eq!(resolved_constraints.len(), 3);
@@ -212,12 +231,19 @@ fn test_inheritance_with_validation() {
     let subject = NamedNode::new("http://example.org/testNode").unwrap();
     let predicate = NamedNode::new("http://example.org/name").unwrap();
     let object = Literal::new_simple_literal("test");
-    store.insert_quad(Quad::new(subject.clone(), predicate.clone(), object, GraphName::DefaultGraph)).unwrap();
+    store
+        .insert_quad(Quad::new(
+            subject.clone(),
+            predicate.clone(),
+            object,
+            GraphName::DefaultGraph,
+        ))
+        .unwrap();
 
     // Parent shape with minLength constraint
     let mut parent_shape = Shape::property_shape(
         ShapeId::new("http://example.org/ParentShape"),
-        PropertyPath::predicate(predicate.clone())
+        PropertyPath::predicate(predicate.clone()),
     );
     parent_shape.add_target(Target::node(Term::NamedNode(subject.clone())));
     parent_shape.add_constraint(
@@ -228,7 +254,7 @@ fn test_inheritance_with_validation() {
     // Child shape inheriting from parent, adds maxLength
     let mut child_shape = Shape::property_shape(
         ShapeId::new("http://example.org/ChildShape"),
-        PropertyPath::predicate(predicate.clone())
+        PropertyPath::predicate(predicate.clone()),
     );
     child_shape.extends(ShapeId::new("http://example.org/ParentShape"));
     child_shape.add_target(Target::node(Term::NamedNode(subject.clone())));

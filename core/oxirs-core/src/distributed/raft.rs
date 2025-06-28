@@ -574,7 +574,8 @@ impl RaftNode {
 
             loop {
                 // Random election timeout
-                let timeout = rand::thread_rng().gen_range(config.election_timeout.0..config.election_timeout.1);
+                let timeout = rand::thread_rng()
+                    .gen_range(config.election_timeout.0..config.election_timeout.1);
                 tokio::time::sleep(Duration::from_millis(timeout)).await;
 
                 if *shutdown.read().await {

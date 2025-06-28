@@ -211,7 +211,10 @@ impl SecretManager {
         {
             let cache = self.cache.read().await;
             if let Some(cached) = cache.get(name) {
-                if cached.expires_at.map_or(true, |exp| exp > std::time::Instant::now()) {
+                if cached
+                    .expires_at
+                    .map_or(true, |exp| exp > std::time::Instant::now())
+                {
                     return Ok(cached.value.clone());
                 }
             }
@@ -330,10 +333,7 @@ impl TlsManager {
             .map_err(|e| anyhow!("Failed to read key {}: {}", key_path.display(), e))?;
 
         let ca_pem = if let Some(ca) = ca_path {
-            Some(
-                fs::read(ca)
-                    .map_err(|e| anyhow!("Failed to read CA {}: {}", ca.display(), e))?,
-            )
+            Some(fs::read(ca).map_err(|e| anyhow!("Failed to read CA {}: {}", ca.display(), e))?)
         } else {
             None
         };
@@ -652,7 +652,11 @@ impl ConfigManager {
     }
 
     /// Apply key-value overrides
-    fn apply_overrides(&self, mut config: StreamConfig, overrides: HashMap<String, String>) -> StreamConfig {
+    fn apply_overrides(
+        &self,
+        mut config: StreamConfig,
+        overrides: HashMap<String, String>,
+    ) -> StreamConfig {
         for (key, value) in overrides {
             match key.as_str() {
                 "topic" => config.topic = value,

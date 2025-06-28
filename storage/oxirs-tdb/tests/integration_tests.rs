@@ -284,8 +284,10 @@ fn test_concurrent_operations() -> Result<()> {
         let store_clone = Arc::clone(&store);
         let handle = thread::spawn(move || {
             for i in 0..20 {
-                let subject =
-                    Term::iri(&format!("http://example.org/thread{}/subject{}", thread_id, i));
+                let subject = Term::iri(&format!(
+                    "http://example.org/thread{}/subject{}",
+                    thread_id, i
+                ));
                 let predicate = Term::iri("http://example.org/value");
                 let object = Term::literal(&format!("thread{}_value{}", thread_id, i));
 

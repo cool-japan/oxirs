@@ -101,7 +101,7 @@ impl UnifiedTriplePattern {
     /// Extract all variables from this pattern
     pub fn extract_variables(&self) -> HashSet<Variable> {
         let mut vars = HashSet::new();
-        
+
         if let UnifiedTermPattern::Variable(v) = &self.subject {
             vars.insert(v.clone());
         }
@@ -111,15 +111,15 @@ impl UnifiedTriplePattern {
         if let UnifiedTermPattern::Variable(v) = &self.object {
             vars.insert(v.clone());
         }
-        
+
         vars
     }
 
     /// Check if this pattern matches a concrete triple
     pub fn matches(&self, triple: &Triple) -> bool {
-        self.subject.matches_subject(triple.subject()) &&
-        self.predicate.matches_predicate(triple.predicate()) &&
-        self.object.matches_object(triple.object())
+        self.subject.matches_subject(triple.subject())
+            && self.predicate.matches_predicate(triple.predicate())
+            && self.object.matches_object(triple.object())
     }
 
     /// Get pattern selectivity estimate (0.0 = most selective, 1.0 = least selective)
@@ -127,7 +127,7 @@ impl UnifiedTriplePattern {
         let subject_selectivity = self.subject.selectivity_factor();
         let predicate_selectivity = self.predicate.selectivity_factor();
         let object_selectivity = self.object.selectivity_factor();
-        
+
         // Combined selectivity using independence assumption
         subject_selectivity * predicate_selectivity * object_selectivity
     }
@@ -162,7 +162,9 @@ impl UnifiedTermPattern {
         match self {
             UnifiedTermPattern::NamedNode(nn) => Some(PredicatePattern::NamedNode(nn.clone())),
             UnifiedTermPattern::Variable(var) => Some(PredicatePattern::Variable(var.clone())),
-            UnifiedTermPattern::BlankNode(_) | UnifiedTermPattern::Literal(_) | UnifiedTermPattern::Wildcard => None,
+            UnifiedTermPattern::BlankNode(_)
+            | UnifiedTermPattern::Literal(_)
+            | UnifiedTermPattern::Wildcard => None,
         }
     }
 
@@ -247,10 +249,10 @@ impl UnifiedTermPattern {
     /// Get selectivity factor for cost estimation
     pub fn selectivity_factor(&self) -> f64 {
         match self {
-            UnifiedTermPattern::NamedNode(_) => 0.001,  // Very selective
-            UnifiedTermPattern::BlankNode(_) => 0.01,   // Selective
-            UnifiedTermPattern::Literal(_) => 0.001,    // Very selective
-            UnifiedTermPattern::Variable(_) => 1.0,     // Not selective
+            UnifiedTermPattern::NamedNode(_) => 0.001, // Very selective
+            UnifiedTermPattern::BlankNode(_) => 0.01,  // Selective
+            UnifiedTermPattern::Literal(_) => 0.001,   // Very selective
+            UnifiedTermPattern::Variable(_) => 1.0,    // Not selective
             UnifiedTermPattern::Wildcard => 1.0,       // Not selective
         }
     }
@@ -261,9 +263,7 @@ pub struct PatternConverter;
 
 impl PatternConverter {
     /// Convert a vector of algebra patterns to model patterns
-    pub fn algebra_to_model_patterns(
-        patterns: &[algebra::TriplePattern],
-    ) -> Vec<TriplePattern> {
+    pub fn algebra_to_model_patterns(patterns: &[algebra::TriplePattern]) -> Vec<TriplePattern> {
         patterns
             .iter()
             .map(|p| UnifiedTriplePattern::from_algebra_pattern(p).to_model_pattern())
@@ -291,9 +291,7 @@ impl PatternConverter {
     }
 
     /// Extract all variables from a set of model patterns
-    pub fn extract_variables_from_model(
-        patterns: &[TriplePattern],
-    ) -> HashSet<Variable> {
+    pub fn extract_variables_from_model(patterns: &[TriplePattern]) -> HashSet<Variable> {
         patterns
             .iter()
             .flat_map(|p| UnifiedTriplePattern::from_model_pattern(p).extract_variables())
@@ -305,7 +303,7 @@ impl PatternConverter {
         if patterns.is_empty() {
             return 1.0;
         }
-        
+
         patterns
             .iter()
             .map(|p| p.selectivity_estimate())
@@ -318,25 +316,21 @@ pub struct PatternOptimizer;
 
 impl PatternOptimizer {
     /// Reorder patterns for optimal execution based on selectivity
-    pub fn optimize_pattern_order(
-        patterns: &[UnifiedTriplePattern],
-    ) -> Vec<UnifiedTriplePattern> {
+    pub fn optimize_pattern_order(patterns: &[UnifiedTriplePattern]) -> Vec<UnifiedTriplePattern> {
         let mut sorted_patterns = patterns.to_vec();
-        
+
         // Sort by selectivity (most selective first)
         sorted_patterns.sort_by(|a, b| {
             a.selectivity_estimate()
                 .partial_cmp(&b.selectivity_estimate())
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
-        
+
         sorted_patterns
     }
 
     /// Find optimal join order for patterns
-    pub fn optimize_join_order(
-        patterns: &[UnifiedTriplePattern],
-    ) -> Vec<usize> {
+    pub fn optimize_join_order(patterns: &[UnifiedTriplePattern]) -> Vec<usize> {
         if patterns.is_empty() {
             return Vec::new();
         }
@@ -346,12 +340,16 @@ impl PatternOptimizer {
         let mut order = Vec::new();
 
         // Find most selective pattern as starting point
-        if let Some(min_idx) = remaining.iter().min_by(|&&a, &&b| {
-            patterns[a]
-                .selectivity_estimate()
-                .partial_cmp(&patterns[b].selectivity_estimate())
-                .unwrap_or(std::cmp::Ordering::Equal)
-        }).copied() {
+        if let Some(min_idx) = remaining
+            .iter()
+            .min_by(|&&a, &&b| {
+                patterns[a]
+                    .selectivity_estimate()
+                    .partial_cmp(&patterns[b].selectivity_estimate())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .copied()
+        {
             order.push(min_idx);
             remaining.retain(|&x| x != min_idx);
         }
@@ -363,10 +361,14 @@ impl PatternOptimizer {
                 .flat_map(|&i| patterns[i].extract_variables())
                 .collect();
 
-            if let Some(best_idx) = remaining.iter().max_by_key(|&&i| {
-                let pattern_vars = patterns[i].extract_variables();
-                pattern_vars.intersection(&selected_vars).count()
-            }).copied() {
+            if let Some(best_idx) = remaining
+                .iter()
+                .max_by_key(|&&i| {
+                    let pattern_vars = patterns[i].extract_variables();
+                    pattern_vars.intersection(&selected_vars).count()
+                })
+                .copied()
+            {
                 order.push(best_idx);
                 remaining.retain(|&x| x != best_idx);
             } else {
@@ -439,7 +441,7 @@ mod tests {
         ];
 
         let optimized = PatternOptimizer::optimize_pattern_order(&patterns);
-        
+
         // More selective pattern should come first
         assert_eq!(optimized[0], patterns[1]);
         assert_eq!(optimized[1], patterns[0]);

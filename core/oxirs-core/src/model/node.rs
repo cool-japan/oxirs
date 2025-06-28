@@ -3,7 +3,7 @@
 //! This module provides node types that are shared between different
 //! RDF serialization formats.
 
-use crate::model::{NamedNode, BlankNode};
+use crate::model::{BlankNode, NamedNode};
 
 /// A node that can be either a named node (IRI) or a blank node
 #[derive(Clone, Debug, PartialEq, Eq)]

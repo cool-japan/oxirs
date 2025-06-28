@@ -54,21 +54,21 @@ impl SimpleRdfProcessor {
     /// Process N-Triples data
     pub fn process_ntriples(&mut self, data: &str) -> Result<Vec<RuleAtom>> {
         let mut atoms = Vec::new();
-        
+
         for line in data.lines() {
             let line = line.trim();
             if line.is_empty() || line.starts_with('#') {
                 continue;
             }
-            
+
             if let Ok(triple) = self.parse_ntriples_line(line) {
                 let atom = self.triple_to_rule_atom(&triple)?;
                 atoms.push(atom);
-                
+
                 // Note: Store insertion handled separately to avoid Arc mutability issues
             }
         }
-        
+
         Ok(atoms)
     }
 
@@ -79,12 +79,12 @@ impl SimpleRdfProcessor {
         if parts.len() < 4 || !line.ends_with('.') {
             return Err(anyhow!("Invalid N-Triples line"));
         }
-        
+
         let subject = parts[0].trim_start_matches('<').trim_end_matches('>');
         let predicate = parts[1].trim_start_matches('<').trim_end_matches('>');
-        
+
         // Parse object
-        let object_str = parts[2..parts.len()-1].join(" ");
+        let object_str = parts[2..parts.len() - 1].join(" ");
         let (object, object_type) = if object_str.starts_with('<') && object_str.ends_with('>') {
             // IRI
             let iri = object_str.trim_start_matches('<').trim_end_matches('>');
@@ -98,7 +98,7 @@ impl SimpleRdfProcessor {
         } else {
             return Err(anyhow!("Invalid object format"));
         };
-        
+
         Ok(SimpleTriple {
             subject: subject.to_string(),
             predicate: predicate.to_string(),
@@ -110,22 +110,36 @@ impl SimpleRdfProcessor {
     /// Parse a literal from N-Triples format
     fn parse_literal(&self, literal_str: &str) -> Result<(String, ObjectType)> {
         // Find the closing quote
-        let end_quote = literal_str.rfind('"').ok_or_else(|| anyhow!("No closing quote"))?;
+        let end_quote = literal_str
+            .rfind('"')
+            .ok_or_else(|| anyhow!("No closing quote"))?;
         let value = &literal_str[1..end_quote];
-        
+
         // Check for language tag or datatype
         let remainder = &literal_str[end_quote + 1..];
         if remainder.starts_with("@") {
             // Language tag
             let lang = remainder[1..].to_string();
-            Ok((value.to_string(), ObjectType::Literal(Some(value.to_string()), Some(lang))))
+            Ok((
+                value.to_string(),
+                ObjectType::Literal(Some(value.to_string()), Some(lang)),
+            ))
         } else if remainder.starts_with("^^") {
             // Datatype
-            let datatype = remainder[2..].trim_start_matches('<').trim_end_matches('>').to_string();
-            Ok((value.to_string(), ObjectType::Literal(Some(value.to_string()), Some(datatype))))
+            let datatype = remainder[2..]
+                .trim_start_matches('<')
+                .trim_end_matches('>')
+                .to_string();
+            Ok((
+                value.to_string(),
+                ObjectType::Literal(Some(value.to_string()), Some(datatype)),
+            ))
         } else {
             // Plain literal
-            Ok((value.to_string(), ObjectType::Literal(Some(value.to_string()), None)))
+            Ok((
+                value.to_string(),
+                ObjectType::Literal(Some(value.to_string()), None),
+            ))
         }
     }
 
@@ -136,16 +150,20 @@ impl SimpleRdfProcessor {
         } else {
             RuleTerm::Constant(self.namespaces.compact(&triple.subject))
         };
-        
+
         let predicate = RuleTerm::Constant(self.namespaces.compact(&triple.predicate));
-        
+
         let object = match &triple.object_type {
             ObjectType::Iri => RuleTerm::Constant(self.namespaces.compact(&triple.object)),
             ObjectType::Literal(Some(value), lang_or_dt) => {
                 if let Some(lang_or_dt) = lang_or_dt {
                     if lang_or_dt.starts_with("http://") || lang_or_dt.starts_with("https://") {
                         // Datatype
-                        RuleTerm::Literal(format!("{}^^{}", value, self.namespaces.compact(lang_or_dt)))
+                        RuleTerm::Literal(format!(
+                            "{}^^{}",
+                            value,
+                            self.namespaces.compact(lang_or_dt)
+                        ))
                     } else {
                         // Language
                         RuleTerm::Literal(format!("{}@{}", value, lang_or_dt))
@@ -157,8 +175,12 @@ impl SimpleRdfProcessor {
             ObjectType::BlankNode => RuleTerm::Constant(format!("_:{}", triple.object)),
             _ => RuleTerm::Literal(triple.object.clone()),
         };
-        
-        Ok(RuleAtom::Triple { subject, predicate, object })
+
+        Ok(RuleAtom::Triple {
+            subject,
+            predicate,
+            object,
+        })
     }
 
     /// Add triple to store
@@ -169,9 +191,9 @@ impl SimpleRdfProcessor {
         } else {
             NamedNode::new(&triple.subject)?.into()
         };
-        
+
         let predicate = NamedNode::new(&triple.predicate)?;
-        
+
         let object: oxirs_core::Object = match &triple.object_type {
             ObjectType::Iri => NamedNode::new(&triple.object)?.into(),
             ObjectType::Literal(Some(value), lang_or_dt) => {
@@ -191,10 +213,15 @@ impl SimpleRdfProcessor {
             ObjectType::BlankNode => BlankNode::new(&triple.object)?.into(),
             _ => Literal::new_simple_literal(triple.object.clone()).into(),
         };
-        
+
         // Note: Store insertion removed to avoid Arc<Store> mutability issues
         // The caller can handle storing the processed data if needed
-        let _quad = Quad::new(subject, predicate, object, oxirs_core::model::GraphName::DefaultGraph);
+        let _quad = Quad::new(
+            subject,
+            predicate,
+            object,
+            oxirs_core::model::GraphName::DefaultGraph,
+        );
         // self.store.insert(&quad)?; // Would require mutable store
         Ok(())
     }
@@ -202,7 +229,7 @@ impl SimpleRdfProcessor {
     /// Process Turtle data (simplified - only handles basic prefixes)
     pub fn process_turtle(&mut self, data: &str) -> Result<Vec<RuleAtom>> {
         let mut atoms = Vec::new();
-        
+
         // First pass: extract prefixes
         for line in data.lines() {
             let line = line.trim();
@@ -212,11 +239,11 @@ impl SimpleRdfProcessor {
                 self.parse_base_declaration(line)?;
             }
         }
-        
+
         // Second pass: parse triples (very basic)
         // This is a placeholder - real Turtle parsing is complex
         // For now, we'll just handle simple subject predicate object . patterns
-        
+
         Ok(atoms)
     }
 
@@ -226,8 +253,12 @@ impl SimpleRdfProcessor {
         let parts: Vec<&str> = line.split_whitespace().collect();
         if parts.len() >= 3 {
             let prefix = parts[1].trim_end_matches(':');
-            let namespace = parts[2].trim_start_matches('<').trim_end_matches('>').trim_end_matches('.');
-            self.namespaces.add_prefix(prefix.to_string(), namespace.to_string());
+            let namespace = parts[2]
+                .trim_start_matches('<')
+                .trim_end_matches('>')
+                .trim_end_matches('.');
+            self.namespaces
+                .add_prefix(prefix.to_string(), namespace.to_string());
         }
         Ok(())
     }
@@ -236,7 +267,10 @@ impl SimpleRdfProcessor {
     fn parse_base_declaration(&mut self, line: &str) -> Result<()> {
         let parts: Vec<&str> = line.split_whitespace().collect();
         if parts.len() >= 2 {
-            let base = parts[1].trim_start_matches('<').trim_end_matches('>').trim_end_matches('.');
+            let base = parts[1]
+                .trim_start_matches('<')
+                .trim_end_matches('>')
+                .trim_end_matches('.');
             self.namespaces.set_base(base.to_string());
         }
         Ok(())
@@ -250,19 +284,23 @@ impl SimpleRdfProcessor {
     /// Get all facts from store as rule atoms
     pub fn get_facts_as_atoms(&self) -> Result<Vec<RuleAtom>> {
         let mut atoms = Vec::new();
-        
+
         // Iterate through store quads using query_quads
         let quads = self.store.query_quads(None, None, None, None)?;
-        
+
         for quad in quads {
             // Convert to RuleAtom
             let subject = self.term_to_rule_term(&Term::from_subject(quad.subject()))?;
             let predicate = self.term_to_rule_term(&Term::from_predicate(quad.predicate()))?;
             let object = self.term_to_rule_term(&Term::from_object(quad.object()))?;
-            
-            atoms.push(RuleAtom::Triple { subject, predicate, object });
+
+            atoms.push(RuleAtom::Triple {
+                subject,
+                predicate,
+                object,
+            });
         }
-        
+
         Ok(atoms)
     }
 
@@ -275,7 +313,11 @@ impl SimpleRdfProcessor {
                 if let Some(lang) = l.language() {
                     Ok(RuleTerm::Literal(format!("{}@{}", l.value(), lang)))
                 } else if l.datatype().as_str() != "http://www.w3.org/2001/XMLSchema#string" {
-                    Ok(RuleTerm::Literal(format!("{}^^{}", l.value(), self.namespaces.compact(l.datatype().as_str()))))
+                    Ok(RuleTerm::Literal(format!(
+                        "{}^^{}",
+                        l.value(),
+                        self.namespaces.compact(l.datatype().as_str())
+                    )))
                 } else {
                     Ok(RuleTerm::Literal(l.value().to_string()))
                 }
@@ -294,7 +336,7 @@ mod tests {
     fn test_parse_ntriples() {
         let store = Arc::new(Store::new().unwrap());
         let mut processor = SimpleRdfProcessor::new(store);
-        
+
         let ntriples = r#"
 <http://example.org/subject> <http://example.org/predicate> <http://example.org/object> .
 <http://example.org/s2> <http://example.org/p2> "literal value" .
@@ -302,20 +344,24 @@ mod tests {
 <http://example.org/s4> <http://example.org/p4> "42"^^<http://www.w3.org/2001/XMLSchema#integer> .
 _:blank1 <http://example.org/p5> _:blank2 .
 "#;
-        
+
         let atoms = processor.process_ntriples(ntriples).unwrap();
         assert_eq!(atoms.len(), 5);
-        
+
         // Check first atom
         match &atoms[0] {
-            RuleAtom::Triple { subject, predicate, object } => {
+            RuleAtom::Triple {
+                subject,
+                predicate,
+                object,
+            } => {
                 assert!(matches!(subject, RuleTerm::Constant(s) if s.contains("subject")));
                 assert!(matches!(predicate, RuleTerm::Constant(p) if p.contains("predicate")));
                 assert!(matches!(object, RuleTerm::Constant(o) if o.contains("object")));
             }
             _ => panic!("Expected triple"),
         }
-        
+
         // Check literal
         match &atoms[1] {
             RuleAtom::Triple { object, .. } => {
@@ -323,7 +369,7 @@ _:blank1 <http://example.org/p5> _:blank2 .
             }
             _ => panic!("Expected triple"),
         }
-        
+
         // Check language-tagged literal
         match &atoms[2] {
             RuleAtom::Triple { object, .. } => {
@@ -337,16 +383,22 @@ _:blank1 <http://example.org/p5> _:blank2 .
     fn test_parse_prefixes() {
         let store = Arc::new(Store::new().unwrap());
         let mut processor = SimpleRdfProcessor::new(store);
-        
+
         let turtle = r#"
 @prefix ex: <http://example.org/> .
 @prefix foaf: <http://xmlns.com/foaf/0.1/> .
 @base <http://example.org/base/> .
 "#;
-        
+
         processor.process_turtle(turtle).unwrap();
-        
-        assert_eq!(processor.namespaces.expand("ex:Person").unwrap(), "http://example.org/Person");
-        assert_eq!(processor.namespaces.expand("foaf:name").unwrap(), "http://xmlns.com/foaf/0.1/name");
+
+        assert_eq!(
+            processor.namespaces.expand("ex:Person").unwrap(),
+            "http://example.org/Person"
+        );
+        assert_eq!(
+            processor.namespaces.expand("foaf:name").unwrap(),
+            "http://xmlns.com/foaf/0.1/name"
+        );
     }
 }

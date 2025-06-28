@@ -48,7 +48,7 @@ pub mod vocabulary {
 
     // SWRL-X Temporal Extensions
     pub const SWRLX_TEMPORAL_NS: &str = "http://www.w3.org/2003/11/swrlx/temporal#";
-    
+
     // Temporal predicates
     pub const SWRLX_BEFORE: &str = "http://www.w3.org/2003/11/swrlx/temporal#before";
     pub const SWRLX_AFTER: &str = "http://www.w3.org/2003/11/swrlx/temporal#after";
@@ -58,9 +58,10 @@ pub mod vocabulary {
     pub const SWRLX_STARTS: &str = "http://www.w3.org/2003/11/swrlx/temporal#starts";
     pub const SWRLX_FINISHES: &str = "http://www.w3.org/2003/11/swrlx/temporal#finishes";
     pub const SWRLX_EQUALS: &str = "http://www.w3.org/2003/11/swrlx/temporal#equals";
-    
+
     // Interval operations
-    pub const SWRLX_INTERVAL_DURATION: &str = "http://www.w3.org/2003/11/swrlx/temporal#intervalDuration";
+    pub const SWRLX_INTERVAL_DURATION: &str =
+        "http://www.w3.org/2003/11/swrlx/temporal#intervalDuration";
     pub const SWRLX_INTERVAL_START: &str = "http://www.w3.org/2003/11/swrlx/temporal#intervalStart";
     pub const SWRLX_INTERVAL_END: &str = "http://www.w3.org/2003/11/swrlx/temporal#intervalEnd";
 }
@@ -465,7 +466,7 @@ impl SwrlEngine {
             implementation: builtin_exp,
         });
 
-        // Temporal operations  
+        // Temporal operations
         self.register_builtin(BuiltinFunction {
             name: "dateAdd".to_string(),
             namespace: vocabulary::SWRLX_NS.to_string(),
@@ -663,7 +664,10 @@ impl SwrlEngine {
     ) -> Result<(), String> {
         // Validate namespace
         if !namespace.starts_with("http://") && !namespace.starts_with("https://") {
-            return Err(format!("Invalid namespace '{}': must be a valid IRI", namespace));
+            return Err(format!(
+                "Invalid namespace '{}': must be a valid IRI",
+                namespace
+            ));
         }
 
         // Validate argument constraints
@@ -685,7 +689,7 @@ impl SwrlEngine {
         };
 
         self.register_builtin(builtin);
-        
+
         info!("Registered custom SWRL built-in: {}{}", namespace, name);
         Ok(())
     }
@@ -1596,7 +1600,9 @@ fn builtin_exp(args: &[SwrlArgument]) -> Result<bool> {
 // Geographic operations
 fn builtin_distance(args: &[SwrlArgument]) -> Result<bool> {
     if args.len() != 5 {
-        return Err(anyhow::anyhow!("distance requires exactly 5 arguments: lat1, lon1, lat2, lon2, result"));
+        return Err(anyhow::anyhow!(
+            "distance requires exactly 5 arguments: lat1, lon1, lat2, lon2, result"
+        ));
     }
 
     let lat1 = extract_numeric_value(&args[0])?.to_radians();
@@ -1609,7 +1615,7 @@ fn builtin_distance(args: &[SwrlArgument]) -> Result<bool> {
     let earth_radius = 6371.0; // Earth radius in kilometers
     let dlat = lat2 - lat1;
     let dlon = lon2 - lon1;
-    
+
     let a = (dlat / 2.0).sin().powi(2) + lat1.cos() * lat2.cos() * (dlon / 2.0).sin().powi(2);
     let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
     let distance = earth_radius * c;
@@ -1619,7 +1625,9 @@ fn builtin_distance(args: &[SwrlArgument]) -> Result<bool> {
 
 fn builtin_within(args: &[SwrlArgument]) -> Result<bool> {
     if args.len() != 5 {
-        return Err(anyhow::anyhow!("within requires exactly 5 arguments: lat1, lon1, lat2, lon2, max_distance"));
+        return Err(anyhow::anyhow!(
+            "within requires exactly 5 arguments: lat1, lon1, lat2, lon2, max_distance"
+        ));
     }
 
     let lat1 = extract_numeric_value(&args[0])?.to_radians();
@@ -1632,7 +1640,7 @@ fn builtin_within(args: &[SwrlArgument]) -> Result<bool> {
     let earth_radius = 6371.0; // Earth radius in kilometers
     let dlat = lat2 - lat1;
     let dlon = lon2 - lon1;
-    
+
     let a = (dlat / 2.0).sin().powi(2) + lat1.cos() * lat2.cos() * (dlon / 2.0).sin().powi(2);
     let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
     let distance = earth_radius * c;
@@ -1643,7 +1651,9 @@ fn builtin_within(args: &[SwrlArgument]) -> Result<bool> {
 // Temporal operations
 fn builtin_date_add(args: &[SwrlArgument]) -> Result<bool> {
     if args.len() != 4 {
-        return Err(anyhow::anyhow!("dateAdd requires exactly 4 arguments: date, duration, unit, result"));
+        return Err(anyhow::anyhow!(
+            "dateAdd requires exactly 4 arguments: date, duration, unit, result"
+        ));
     }
 
     let date_str = extract_string_value(&args[0])?;
@@ -1661,7 +1671,7 @@ fn builtin_date_add(args: &[SwrlArgument]) -> Result<bool> {
             "weeks" => duration * 604800,
             _ => return Err(anyhow::anyhow!("Unsupported time unit: {}", unit)),
         };
-        
+
         let result_timestamp = timestamp + seconds_to_add;
         Ok(result_timestamp.to_string() == expected_result)
     } else {
@@ -1672,7 +1682,9 @@ fn builtin_date_add(args: &[SwrlArgument]) -> Result<bool> {
 
 fn builtin_date_diff(args: &[SwrlArgument]) -> Result<bool> {
     if args.len() != 3 {
-        return Err(anyhow::anyhow!("dateDiff requires exactly 3 arguments: date1, date2, result"));
+        return Err(anyhow::anyhow!(
+            "dateDiff requires exactly 3 arguments: date1, date2, result"
+        ));
     }
 
     let date1_str = extract_string_value(&args[0])?;
@@ -1694,13 +1706,13 @@ fn builtin_now(args: &[SwrlArgument]) -> Result<bool> {
     }
 
     let expected_result = extract_string_value(&args[0])?;
-    
+
     // Get current timestamp (simplified - in production would use proper time crate)
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|e| anyhow::anyhow!("Time error: {}", e))?
         .as_secs();
-    
+
     // Check if the expected result is close to current time (within 1 second)
     if let Ok(expected_timestamp) = expected_result.parse::<u64>() {
         Ok((now as i64 - expected_timestamp as i64).abs() <= 1)
@@ -1712,7 +1724,9 @@ fn builtin_now(args: &[SwrlArgument]) -> Result<bool> {
 // SWRL-X Temporal Extensions
 fn builtin_temporal_before(args: &[SwrlArgument]) -> Result<bool> {
     if args.len() != 2 {
-        return Err(anyhow::anyhow!("temporal:before requires exactly 2 arguments: time1, time2"));
+        return Err(anyhow::anyhow!(
+            "temporal:before requires exactly 2 arguments: time1, time2"
+        ));
     }
 
     let time1 = extract_numeric_value(&args[0])?;
@@ -1723,7 +1737,9 @@ fn builtin_temporal_before(args: &[SwrlArgument]) -> Result<bool> {
 
 fn builtin_temporal_after(args: &[SwrlArgument]) -> Result<bool> {
     if args.len() != 2 {
-        return Err(anyhow::anyhow!("temporal:after requires exactly 2 arguments: time1, time2"));
+        return Err(anyhow::anyhow!(
+            "temporal:after requires exactly 2 arguments: time1, time2"
+        ));
     }
 
     let time1 = extract_numeric_value(&args[0])?;
@@ -1734,7 +1750,9 @@ fn builtin_temporal_after(args: &[SwrlArgument]) -> Result<bool> {
 
 fn builtin_temporal_during(args: &[SwrlArgument]) -> Result<bool> {
     if args.len() != 3 {
-        return Err(anyhow::anyhow!("temporal:during requires exactly 3 arguments: time, interval_start, interval_end"));
+        return Err(anyhow::anyhow!(
+            "temporal:during requires exactly 3 arguments: time, interval_start, interval_end"
+        ));
     }
 
     let time = extract_numeric_value(&args[0])?;
@@ -1746,7 +1764,9 @@ fn builtin_temporal_during(args: &[SwrlArgument]) -> Result<bool> {
 
 fn builtin_temporal_overlaps(args: &[SwrlArgument]) -> Result<bool> {
     if args.len() != 4 {
-        return Err(anyhow::anyhow!("temporal:overlaps requires exactly 4 arguments: start1, end1, start2, end2"));
+        return Err(anyhow::anyhow!(
+            "temporal:overlaps requires exactly 4 arguments: start1, end1, start2, end2"
+        ));
     }
 
     let start1 = extract_numeric_value(&args[0])?;
@@ -1760,7 +1780,9 @@ fn builtin_temporal_overlaps(args: &[SwrlArgument]) -> Result<bool> {
 
 fn builtin_temporal_meets(args: &[SwrlArgument]) -> Result<bool> {
     if args.len() != 4 {
-        return Err(anyhow::anyhow!("temporal:meets requires exactly 4 arguments: start1, end1, start2, end2"));
+        return Err(anyhow::anyhow!(
+            "temporal:meets requires exactly 4 arguments: start1, end1, start2, end2"
+        ));
     }
 
     let start1 = extract_numeric_value(&args[0])?;
@@ -1774,7 +1796,9 @@ fn builtin_temporal_meets(args: &[SwrlArgument]) -> Result<bool> {
 
 fn builtin_interval_duration(args: &[SwrlArgument]) -> Result<bool> {
     if args.len() != 3 {
-        return Err(anyhow::anyhow!("temporal:intervalDuration requires exactly 3 arguments: start, end, duration"));
+        return Err(anyhow::anyhow!(
+            "temporal:intervalDuration requires exactly 3 arguments: start, end, duration"
+        ));
     }
 
     let start = extract_numeric_value(&args[0])?;
@@ -1880,7 +1904,11 @@ fn builtin_list_nth(args: &[SwrlArgument]) -> Result<bool> {
     // Simple implementation: get nth item from comma-separated list (0-indexed)
     let items: Vec<&str> = list_str.split(',').collect();
     if index >= items.len() {
-        return Err(anyhow::anyhow!("Index {} out of bounds for list of length {}", index, items.len()));
+        return Err(anyhow::anyhow!(
+            "Index {} out of bounds for list of length {}",
+            index,
+            items.len()
+        ));
     }
     Ok(items[index] == expected)
 }
@@ -1907,7 +1935,9 @@ fn builtin_list_append(args: &[SwrlArgument]) -> Result<bool> {
 
 fn builtin_string_matches_regex(args: &[SwrlArgument]) -> Result<bool> {
     if args.len() < 2 || args.len() > 3 {
-        return Err(anyhow::anyhow!("stringMatchesRegex requires 2 or 3 arguments"));
+        return Err(anyhow::anyhow!(
+            "stringMatchesRegex requires 2 or 3 arguments"
+        ));
     }
 
     let input = extract_string_value(&args[0])?;
@@ -1917,13 +1947,21 @@ fn builtin_string_matches_regex(args: &[SwrlArgument]) -> Result<bool> {
     let regex_builder = if args.len() == 3 {
         let flags = extract_string_value(&args[2])?;
         let mut builder = RegexBuilder::new(&pattern);
-        
+
         for flag in flags.chars() {
             match flag {
-                'i' => { builder.case_insensitive(true); }
-                'm' => { builder.multi_line(true); }
-                's' => { builder.dot_matches_new_line(true); }
-                'x' => { builder.ignore_whitespace(true); }
+                'i' => {
+                    builder.case_insensitive(true);
+                }
+                'm' => {
+                    builder.multi_line(true);
+                }
+                's' => {
+                    builder.dot_matches_new_line(true);
+                }
+                'x' => {
+                    builder.ignore_whitespace(true);
+                }
                 _ => return Err(anyhow::anyhow!("Unknown regex flag: {}", flag)),
             }
         }
@@ -1954,8 +1992,10 @@ fn builtin_geo_contains(args: &[SwrlArgument]) -> Result<bool> {
     let point_lon = extract_numeric_value(&args[5])?;
     let expected_result = extract_string_value(&args[6])? == "true";
 
-    let contains = point_lat >= min_lat && point_lat <= max_lat &&
-                  point_lon >= min_lon && point_lon <= max_lon;
+    let contains = point_lat >= min_lat
+        && point_lat <= max_lat
+        && point_lon >= min_lon
+        && point_lon <= max_lon;
 
     Ok(contains == expected_result)
 }
@@ -1976,15 +2016,19 @@ fn builtin_geo_intersects(args: &[SwrlArgument]) -> Result<bool> {
     let box2_max_lon = extract_numeric_value(&args[7])?;
 
     // Two boxes intersect if they overlap in both dimensions
-    let intersects = !(box1_max_lat < box2_min_lat || box2_max_lat < box1_min_lat ||
-                      box1_max_lon < box2_min_lon || box2_max_lon < box1_min_lon);
+    let intersects = !(box1_max_lat < box2_min_lat
+        || box2_max_lat < box1_min_lat
+        || box1_max_lon < box2_min_lon
+        || box2_max_lon < box1_min_lon);
 
     Ok(intersects)
 }
 
 fn builtin_geo_area(args: &[SwrlArgument]) -> Result<bool> {
     if args.len() != 5 {
-        return Err(anyhow::anyhow!("area requires exactly 5 arguments: min_lat, min_lon, max_lat, max_lon, result"));
+        return Err(anyhow::anyhow!(
+            "area requires exactly 5 arguments: min_lat, min_lon, max_lat, max_lon, result"
+        ));
     }
 
     // Calculate approximate area of a bounding box in square kilometers
@@ -1996,15 +2040,15 @@ fn builtin_geo_area(args: &[SwrlArgument]) -> Result<bool> {
 
     // Simple approximation: treat Earth as sphere
     const EARTH_RADIUS_KM: f64 = 6371.0;
-    
+
     // Convert to radians
     let lat1_rad = min_lat.to_radians();
     let lat2_rad = max_lat.to_radians();
     let lon_diff_rad = (max_lon - min_lon).to_radians();
-    
+
     // Approximate area calculation
     let area = EARTH_RADIUS_KM * EARTH_RADIUS_KM * lon_diff_rad * (lat2_rad.sin() - lat1_rad.sin());
-    
+
     // Allow some tolerance for floating point comparison
     Ok((area.abs() - expected_area).abs() < 0.1)
 }
@@ -2019,7 +2063,11 @@ pub struct TemporalInterval {
 impl TemporalInterval {
     pub fn new(start: f64, end: f64) -> Result<Self> {
         if start > end {
-            return Err(anyhow::anyhow!("Invalid interval: start ({}) > end ({})", start, end));
+            return Err(anyhow::anyhow!(
+                "Invalid interval: start ({}) > end ({})",
+                start,
+                end
+            ));
         }
         Ok(Self { start, end })
     }
@@ -2089,9 +2137,12 @@ impl CustomBuiltinRegistry {
         F: Fn(&[SwrlArgument]) -> Result<bool> + Send + Sync + 'static,
     {
         let full_name = format!("{}{}", metadata.namespace, metadata.name);
-        
+
         if self.functions.contains_key(&full_name) {
-            return Err(anyhow::anyhow!("Built-in function '{}' already registered", full_name));
+            return Err(anyhow::anyhow!(
+                "Built-in function '{}' already registered",
+                full_name
+            ));
         }
 
         self.functions.insert(full_name.clone(), Box::new(function));
@@ -2109,14 +2160,18 @@ impl CustomBuiltinRegistry {
                 if args.len() < meta.min_args {
                     return Err(anyhow::anyhow!(
                         "Too few arguments for '{}': expected at least {}, got {}",
-                        name, meta.min_args, args.len()
+                        name,
+                        meta.min_args,
+                        args.len()
                     ));
                 }
                 if let Some(max_args) = meta.max_args {
                     if args.len() > max_args {
                         return Err(anyhow::anyhow!(
                             "Too many arguments for '{}': expected at most {}, got {}",
-                            name, max_args, args.len()
+                            name,
+                            max_args,
+                            args.len()
                         ));
                     }
                 }

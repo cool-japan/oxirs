@@ -4,10 +4,9 @@
 //! model management, and batch processing capabilities.
 
 #[cfg(feature = "api-server")]
-
 use crate::{
-    CacheManager, CachedEmbeddingModel, EmbeddingModel, ModelConfig, ModelStats,
-    TrainingStats, Vector, ModelRegistry, ModelVersion
+    CacheManager, CachedEmbeddingModel, EmbeddingModel, ModelConfig, ModelRegistry, ModelStats,
+    ModelVersion, TrainingStats, Vector,
 };
 use anyhow::{anyhow, Result};
 #[cfg(feature = "api-server")]
@@ -21,18 +20,14 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
 #[cfg(feature = "api-server")]
 use tower::ServiceBuilder;
 #[cfg(feature = "api-server")]
-use tower_http::{
-    cors::CorsLayer,
-    trace::TraceLayer,
-    timeout::TimeoutLayer,
-};
-use tracing::{info, warn, error};
+use tower_http::{cors::CorsLayer, timeout::TimeoutLayer, trace::TraceLayer};
+use tracing::{error, info, warn};
 use uuid::Uuid;
-use std::time::Duration;
 
 /// API server state
 #[derive(Clone)]
@@ -338,26 +333,21 @@ pub fn create_router(state: ApiState) -> Router {
         // Embedding endpoints
         .route("/api/v1/embed", post(embed_single))
         .route("/api/v1/embed/batch", post(embed_batch))
-        
         // Scoring endpoints
         .route("/api/v1/score", post(score_triple))
-        
         // Prediction endpoints
         .route("/api/v1/predict", post(predict))
-        
         // Model management endpoints
         .route("/api/v1/models", get(list_models))
         .route("/api/v1/models/:model_id", get(get_model_info))
         .route("/api/v1/models/:model_id/health", get(get_model_health))
         .route("/api/v1/models/:model_id/load", post(load_model))
         .route("/api/v1/models/:model_id/unload", post(unload_model))
-        
         // System endpoints
         .route("/api/v1/health", get(system_health))
         .route("/api/v1/stats", get(system_stats))
         .route("/api/v1/cache/stats", get(cache_stats))
         .route("/api/v1/cache/clear", post(clear_cache))
-        
         .with_state(state);
 
     // Add middleware layers
@@ -384,7 +374,7 @@ async fn embed_single(
     Json(request): Json<EmbeddingRequest>,
 ) -> Result<Json<EmbeddingResponse>, StatusCode> {
     let start_time = std::time::Instant::now();
-    
+
     // Get model version
     let model_version = if let Some(version) = request.model_version {
         version
@@ -413,7 +403,10 @@ async fn embed_single(
     let use_cache = request.use_cache.unwrap_or(true);
     let (embedding, from_cache) = if use_cache {
         match cached_model.get_entity_embedding_cached(&request.entity) {
-            Ok(emb) => (emb, state.cache_manager.get_embedding(&request.entity).is_some()),
+            Ok(emb) => (
+                emb,
+                state.cache_manager.get_embedding(&request.entity).is_some(),
+            ),
             Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
         }
     } else {
@@ -443,7 +436,7 @@ async fn embed_batch(
     Json(request): Json<BatchEmbeddingRequest>,
 ) -> Result<Json<BatchEmbeddingResponse>, StatusCode> {
     let start_time = std::time::Instant::now();
-    
+
     // Validate batch size
     if request.entities.len() > state.config.max_batch_size {
         return Err(StatusCode::BAD_REQUEST);
@@ -466,10 +459,8 @@ async fn embed_batch(
         None => return Err(StatusCode::NOT_FOUND),
     };
 
-    let cached_model = CachedEmbeddingModel::new(
-        Box::new(model.as_ref()),
-        Arc::clone(&state.cache_manager),
-    );
+    let cached_model =
+        CachedEmbeddingModel::new(Box::new(model.as_ref()), Arc::clone(&state.cache_manager));
 
     let use_cache = request.use_cache.unwrap_or(true);
     let mut embeddings = Vec::new();
@@ -479,7 +470,7 @@ async fn embed_batch(
     // Process entities
     for entity in &request.entities {
         let entity_start = std::time::Instant::now();
-        
+
         let (embedding, from_cache) = if use_cache {
             let had_cache = state.cache_manager.get_embedding(&entity).is_some();
             match cached_model.get_entity_embedding_cached(&entity) {
@@ -537,7 +528,7 @@ async fn score_triple(
     Json(request): Json<TripleScoreRequest>,
 ) -> Result<Json<TripleScoreResponse>, StatusCode> {
     let start_time = std::time::Instant::now();
-    
+
     // Get model version
     let model_version = if let Some(version) = request.model_version {
         version
@@ -555,15 +546,17 @@ async fn score_triple(
         None => return Err(StatusCode::NOT_FOUND),
     };
 
-    let cached_model = CachedEmbeddingModel::new(
-        Box::new(model.as_ref()),
-        Arc::clone(&state.cache_manager),
-    );
+    let cached_model =
+        CachedEmbeddingModel::new(Box::new(model.as_ref()), Arc::clone(&state.cache_manager));
 
     // Score triple
     let use_cache = request.use_cache.unwrap_or(true);
     let (score, from_cache) = if use_cache {
-        match cached_model.score_triple_cached(&request.subject, &request.predicate, &request.object) {
+        match cached_model.score_triple_cached(
+            &request.subject,
+            &request.predicate,
+            &request.object,
+        ) {
             Ok(score) => (score, true), // Simplified - would need to check if actually from cache
             Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
         }
@@ -597,7 +590,7 @@ async fn predict(
     Json(request): Json<PredictionRequest>,
 ) -> Result<Json<PredictionResponse>, StatusCode> {
     let start_time = std::time::Instant::now();
-    
+
     // Validate input
     if request.entities.is_empty() || request.k == 0 {
         return Err(StatusCode::BAD_REQUEST);
@@ -620,10 +613,8 @@ async fn predict(
         None => return Err(StatusCode::NOT_FOUND),
     };
 
-    let cached_model = CachedEmbeddingModel::new(
-        Box::new(model.as_ref()),
-        Arc::clone(&state.cache_manager),
-    );
+    let cached_model =
+        CachedEmbeddingModel::new(Box::new(model.as_ref()), Arc::clone(&state.cache_manager));
 
     // Make predictions based on type
     let use_cache = request.use_cache.unwrap_or(true);
@@ -633,7 +624,11 @@ async fn predict(
                 return Err(StatusCode::BAD_REQUEST);
             }
             let preds = if use_cache {
-                cached_model.predict_objects_cached(&request.entities[0], &request.entities[1], request.k)
+                cached_model.predict_objects_cached(
+                    &request.entities[0],
+                    &request.entities[1],
+                    request.k,
+                )
             } else {
                 model.predict_objects(&request.entities[0], &request.entities[1], request.k)
             };
@@ -643,14 +638,16 @@ async fn predict(
             if request.entities.len() != 2 {
                 return Err(StatusCode::BAD_REQUEST);
             }
-            let preds = model.predict_subjects(&request.entities[0], &request.entities[1], request.k);
+            let preds =
+                model.predict_subjects(&request.entities[0], &request.entities[1], request.k);
             (preds, "subjects")
         }
         PredictionType::Relations => {
             if request.entities.len() != 2 {
                 return Err(StatusCode::BAD_REQUEST);
             }
-            let preds = model.predict_relations(&request.entities[0], &request.entities[1], request.k);
+            let preds =
+                model.predict_relations(&request.entities[0], &request.entities[1], request.k);
             (preds, "relations")
         }
     };
@@ -684,7 +681,7 @@ async fn list_models(
     Query(params): Query<QueryParams>,
 ) -> Result<Json<Vec<ModelInfoResponse>>, StatusCode> {
     let models_metadata = state.registry.list_models().await;
-    
+
     let mut responses = Vec::new();
     for metadata in models_metadata {
         if let Some(production_version) = metadata.production_version {
@@ -695,7 +692,11 @@ async fn list_models(
                 };
 
                 let health = ModelHealth {
-                    status: if is_loaded { HealthStatus::Healthy } else { HealthStatus::Degraded },
+                    status: if is_loaded {
+                        HealthStatus::Healthy
+                    } else {
+                        HealthStatus::Degraded
+                    },
                     last_check: chrono::Utc::now(),
                     metrics: HealthMetrics {
                         avg_response_time_ms: 50.0, // Placeholder
@@ -809,11 +810,9 @@ async fn cache_stats(
 }
 
 /// Clear all caches
-async fn clear_cache(
-    State(state): State<ApiState>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
+async fn clear_cache(State(state): State<ApiState>) -> Result<Json<serde_json::Value>, StatusCode> {
     state.cache_manager.clear_all();
-    
+
     let response = serde_json::json!({
         "message": "Cache cleared successfully",
         "timestamp": chrono::Utc::now(),
@@ -841,12 +840,16 @@ async fn get_production_model_version(state: &ApiState) -> Result<Uuid> {
 #[cfg(feature = "api-server")]
 pub async fn start_server(state: ApiState) -> Result<()> {
     let router = create_router(state.clone());
-    
-    let listener = tokio::net::TcpListener::bind(format!("{}:{}", state.config.host, state.config.port))
-        .await
-        .map_err(|e| anyhow!("Failed to bind to address: {}", e))?;
 
-    info!("API server starting on {}:{}", state.config.host, state.config.port);
+    let listener =
+        tokio::net::TcpListener::bind(format!("{}:{}", state.config.host, state.config.port))
+            .await
+            .map_err(|e| anyhow!("Failed to bind to address: {}", e))?;
+
+    info!(
+        "API server starting on {}:{}",
+        state.config.host, state.config.port
+    );
 
     axum::serve(listener, router)
         .await
@@ -880,7 +883,7 @@ mod tests {
     async fn test_api_router_creation() {
         let state = create_test_state();
         let router = create_router(state);
-        
+
         // Router should be created successfully
         assert!(!router.into_make_service().to_string().is_empty());
     }

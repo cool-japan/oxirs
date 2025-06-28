@@ -189,11 +189,7 @@ impl ConcurrentGraph {
         match (subject, predicate, object) {
             // All components specified
             (Some(s), Some(p), Some(o)) => {
-                let triple = Triple::new(
-                    s.clone(),
-                    p.clone(),
-                    o.clone(),
-                );
+                let triple = Triple::new(s.clone(), p.clone(), o.clone());
                 if self.contains(&triple) {
                     vec![triple]
                 } else {
@@ -206,11 +202,7 @@ impl ConcurrentGraph {
                     if let Some(obj_set) = pred_map.get(p) {
                         obj_set
                             .iter()
-                            .map(|o| Triple::new(
-                                s.clone(),
-                                p.clone(),
-                                o.clone(),
-                            ))
+                            .map(|o| Triple::new(s.clone(), p.clone(), o.clone()))
                             .collect()
                     } else {
                         Vec::new()
@@ -227,11 +219,11 @@ impl ConcurrentGraph {
                         .flat_map(|pred_entry| {
                             let p = pred_entry.key().clone();
                             let s = s.clone();
-                            pred_entry.value().iter().map(move |o| Triple::new(
-                                s.clone(),
-                                p.clone(),
-                                o.clone(),
-                            )).collect::<Vec<_>>()
+                            pred_entry
+                                .value()
+                                .iter()
+                                .map(move |o| Triple::new(s.clone(), p.clone(), o.clone()))
+                                .collect::<Vec<_>>()
                         })
                         .collect()
                 } else {
@@ -246,11 +238,11 @@ impl ConcurrentGraph {
                         .flat_map(|subj_entry| {
                             let s = subj_entry.key().clone();
                             let o = o.clone();
-                            subj_entry.value().iter().map(move |p| Triple::new(
-                                s.clone(),
-                                p.clone(),
-                                o.clone(),
-                            )).collect::<Vec<_>>()
+                            subj_entry
+                                .value()
+                                .iter()
+                                .map(move |p| Triple::new(s.clone(), p.clone(), o.clone()))
+                                .collect::<Vec<_>>()
                         })
                         .collect()
                 } else {

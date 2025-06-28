@@ -2,7 +2,6 @@
 
 use clap::Parser;
 use oxirs_gql::{GraphQLConfig, GraphQLServer, RdfStore};
-// use oxirs_gql::juniper_server::{JuniperGraphQLServer, GraphQLServerBuilder, GraphQLServerConfig};
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -90,8 +89,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("🚀 Starting OxiRS GraphQL server on http://{}", addr);
 
-    // Use the core GraphQL implementation
-    println!("🔧 Using core GraphQL implementation with optimization features");
+    // Use the enhanced core GraphQL implementation with real SPARQL integration
+    println!("🔧 Using enhanced GraphQL implementation with real SPARQL query execution");
 
     let config = GraphQLConfig {
         enable_playground: args.playground,
@@ -104,7 +103,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if args.playground {
         println!("📊 GraphQL Playground available at http://{}/", addr);
     }
+    if args.graphiql {
+        println!("📊 GraphiQL interface: planned for future release");
+    }
     println!("🔍 GraphQL endpoint: http://{}/graphql", addr);
+    println!("✨ Enhancement: Real SPARQL query execution now implemented");
 
     server.start(&addr.to_string()).await?;
 

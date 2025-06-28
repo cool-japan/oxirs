@@ -165,9 +165,7 @@ pub enum HealthEvent {
         reason: String,
     },
     /// Connection recovered
-    ConnectionRecovered {
-        connection_id: String,
-    },
+    ConnectionRecovered { connection_id: String },
     /// Health check failed
     HealthCheckFailed {
         connection_id: String,
@@ -179,7 +177,7 @@ impl<T: PooledConnection> HealthMonitor<T> {
     /// Create a new health monitor
     pub fn new(config: HealthCheckConfig) -> Self {
         let (event_sender, _) = broadcast::channel(1000);
-        
+
         Self {
             config,
             health_records: Arc::new(RwLock::new(HashMap::new())),
@@ -190,9 +188,13 @@ impl<T: PooledConnection> HealthMonitor<T> {
     }
 
     /// Register a connection for health monitoring
-    pub async fn register_connection(&self, connection_id: String, metadata: HashMap<String, String>) {
+    pub async fn register_connection(
+        &self,
+        connection_id: String,
+        metadata: HashMap<String, String>,
+    ) {
         let mut records = self.health_records.write().await;
-        
+
         let record = ConnectionHealthRecord {
             connection_id: connection_id.clone(),
             status: HealthStatus::Unknown,
@@ -200,16 +202,22 @@ impl<T: PooledConnection> HealthMonitor<T> {
             metadata,
             history: Vec::with_capacity(100),
         };
-        
+
         records.insert(connection_id.clone(), record);
-        info!("Registered connection {} for health monitoring", connection_id);
+        info!(
+            "Registered connection {} for health monitoring",
+            connection_id
+        );
     }
 
     /// Unregister a connection from health monitoring
     pub async fn unregister_connection(&self, connection_id: &str) {
         let mut records = self.health_records.write().await;
         if records.remove(connection_id).is_some() {
-            info!("Unregistered connection {} from health monitoring", connection_id);
+            info!(
+                "Unregistered connection {} from health monitoring",
+                connection_id
+            );
         }
     }
 
@@ -230,13 +238,9 @@ impl<T: PooledConnection> HealthMonitor<T> {
             match tokio::time::timeout(self.config.check_timeout, connection.is_healthy()).await {
                 Ok(true) => {
                     let response_time = start_time.elapsed();
-                    self.record_health_check_result(
-                        connection_id,
-                        true,
-                        response_time,
-                        None,
-                    ).await?;
-                    
+                    self.record_health_check_result(connection_id, true, response_time, None)
+                        .await?;
+
                     return Ok(self.determine_health_status(connection_id).await);
                 }
                 Ok(false) => {
@@ -254,15 +258,11 @@ impl<T: PooledConnection> HealthMonitor<T> {
 
         // All attempts failed
         let response_time = start_time.elapsed();
-        self.record_health_check_result(
-            connection_id,
-            false,
-            response_time,
-            last_error.clone(),
-        ).await?;
+        self.record_health_check_result(connection_id, false, response_time, last_error.clone())
+            .await?;
 
         let status = self.determine_health_status(connection_id).await;
-        
+
         if let Some(error) = last_error {
             let _ = self.event_sender.send(HealthEvent::HealthCheckFailed {
                 connection_id: connection_id.to_string(),
@@ -282,15 +282,15 @@ impl<T: PooledConnection> HealthMonitor<T> {
         error: Option<String>,
     ) -> Result<()> {
         let mut records = self.health_records.write().await;
-        
+
         if let Some(record) = records.get_mut(connection_id) {
             let response_time_ms = response_time.as_millis() as f64;
             let stats = &mut record.statistics;
-            
+
             // Update basic counters
             stats.total_checks += 1;
             stats.last_check = Some(Instant::now());
-            
+
             if success {
                 stats.successful_checks += 1;
                 stats.consecutive_successes += 1;
@@ -301,25 +301,25 @@ impl<T: PooledConnection> HealthMonitor<T> {
                 stats.consecutive_failures += 1;
                 stats.consecutive_successes = 0;
                 stats.last_failure = Some(Instant::now());
-                
+
                 if let Some(ref err) = error {
                     *stats.error_counts.entry(err.clone()).or_insert(0) += 1;
                 }
             }
-            
+
             // Update response time statistics
             stats.min_response_time_ms = stats.min_response_time_ms.min(response_time_ms);
             stats.max_response_time_ms = stats.max_response_time_ms.max(response_time_ms);
-            
+
             // Update average with exponential moving average
             let alpha = 0.1;
             if stats.total_checks == 1 {
                 stats.avg_response_time_ms = response_time_ms;
             } else {
-                stats.avg_response_time_ms = 
+                stats.avg_response_time_ms =
                     alpha * response_time_ms + (1.0 - alpha) * stats.avg_response_time_ms;
             }
-            
+
             // Add to history
             let result = HealthCheckResult {
                 timestamp: Instant::now(),
@@ -327,24 +327,24 @@ impl<T: PooledConnection> HealthMonitor<T> {
                 response_time_ms,
                 error,
             };
-            
+
             record.history.push(result);
             if record.history.len() > 100 {
                 record.history.remove(0);
             }
         }
-        
+
         Ok(())
     }
 
     /// Determine health status based on statistics
     async fn determine_health_status(&self, connection_id: &str) -> HealthStatus {
         let records = self.health_records.read().await;
-        
+
         if let Some(record) = records.get(connection_id) {
             let stats = &record.statistics;
             let old_status = record.status.clone();
-            
+
             let new_status = if stats.consecutive_failures >= self.config.failure_threshold * 2 {
                 HealthStatus::Dead
             } else if stats.consecutive_failures >= self.config.failure_threshold {
@@ -356,17 +356,17 @@ impl<T: PooledConnection> HealthMonitor<T> {
             } else {
                 HealthStatus::Unknown
             };
-            
+
             // Send event if status changed
             if old_status != new_status {
                 drop(records); // Release read lock before sending event
-                
+
                 let _ = self.event_sender.send(HealthEvent::StatusChanged {
                     connection_id: connection_id.to_string(),
                     old_status,
                     new_status: new_status.clone(),
                 });
-                
+
                 match new_status {
                     HealthStatus::Dead => {
                         let _ = self.event_sender.send(HealthEvent::ConnectionDead {
@@ -381,14 +381,14 @@ impl<T: PooledConnection> HealthMonitor<T> {
                     }
                     _ => {}
                 }
-                
+
                 // Update the status
                 let mut records = self.health_records.write().await;
                 if let Some(record) = records.get_mut(connection_id) {
                     record.status = new_status.clone();
                 }
             }
-            
+
             new_status
         } else {
             HealthStatus::Unknown
@@ -396,51 +396,49 @@ impl<T: PooledConnection> HealthMonitor<T> {
     }
 
     /// Start periodic health monitoring
-    pub async fn start_monitoring(
-        &self,
-        connections: Arc<RwLock<HashMap<String, T>>>,
-    ) {
+    pub async fn start_monitoring(&self, connections: Arc<RwLock<HashMap<String, T>>>) {
         let health_records = self.health_records.clone();
         let config = self.config.clone();
         let shutdown_signal = self.shutdown_signal.clone();
         let event_sender = self.event_sender.clone();
-        
+
         tokio::spawn(async move {
             let mut check_interval = interval(config.check_interval);
-            
+
             loop {
                 check_interval.tick().await;
-                
+
                 // Check shutdown signal
                 if *shutdown_signal.read().await {
                     info!("Health monitor shutting down");
                     break;
                 }
-                
+
                 // Get all connections to check
                 let connections_snapshot = connections.read().await.clone();
-                
+
                 for (conn_id, connection) in connections_snapshot {
                     let start_time = Instant::now();
-                    
-                    match tokio::time::timeout(config.check_timeout, connection.is_healthy()).await {
+
+                    match tokio::time::timeout(config.check_timeout, connection.is_healthy()).await
+                    {
                         Ok(healthy) => {
                             let response_time = start_time.elapsed();
                             let response_time_ms = response_time.as_millis() as f64;
-                            
+
                             // Update health record
                             let mut records = health_records.write().await;
                             if let Some(record) = records.get_mut(&conn_id) {
                                 let stats = &mut record.statistics;
                                 stats.total_checks += 1;
                                 stats.last_check = Some(Instant::now());
-                                
+
                                 if healthy {
                                     stats.successful_checks += 1;
                                     stats.consecutive_successes += 1;
                                     stats.consecutive_failures = 0;
                                     stats.last_success = Some(Instant::now());
-                                    
+
                                     debug!(
                                         "Connection {} health check passed in {:.2}ms",
                                         conn_id, response_time_ms
@@ -450,13 +448,15 @@ impl<T: PooledConnection> HealthMonitor<T> {
                                     stats.consecutive_failures += 1;
                                     stats.consecutive_successes = 0;
                                     stats.last_failure = Some(Instant::now());
-                                    
+
                                     warn!("Connection {} health check failed", conn_id);
                                 }
-                                
+
                                 // Check if status needs to change
                                 let old_status = record.status.clone();
-                                let new_status = if stats.consecutive_failures >= config.failure_threshold * 2 {
+                                let new_status = if stats.consecutive_failures
+                                    >= config.failure_threshold * 2
+                                {
                                     HealthStatus::Dead
                                 } else if stats.consecutive_failures >= config.failure_threshold {
                                     HealthStatus::Unhealthy
@@ -465,7 +465,7 @@ impl<T: PooledConnection> HealthMonitor<T> {
                                 } else {
                                     old_status.clone()
                                 };
-                                
+
                                 if old_status != new_status {
                                     record.status = new_status.clone();
                                     let _ = event_sender.send(HealthEvent::StatusChanged {
@@ -478,13 +478,17 @@ impl<T: PooledConnection> HealthMonitor<T> {
                         }
                         Err(_) => {
                             error!("Health check timeout for connection {}", conn_id);
-                            
+
                             let mut records = health_records.write().await;
                             if let Some(record) = records.get_mut(&conn_id) {
                                 record.statistics.failed_checks += 1;
                                 record.statistics.consecutive_failures += 1;
                                 record.statistics.consecutive_successes = 0;
-                                *record.statistics.error_counts.entry("timeout".to_string()).or_insert(0) += 1;
+                                *record
+                                    .statistics
+                                    .error_counts
+                                    .entry("timeout".to_string())
+                                    .or_insert(0) += 1;
                             }
                         }
                     }
@@ -499,7 +503,10 @@ impl<T: PooledConnection> HealthMonitor<T> {
     }
 
     /// Get health status for a specific connection
-    pub async fn get_connection_health(&self, connection_id: &str) -> Option<ConnectionHealthRecord> {
+    pub async fn get_connection_health(
+        &self,
+        connection_id: &str,
+    ) -> Option<ConnectionHealthRecord> {
         self.health_records.read().await.get(connection_id).cloned()
     }
 
@@ -533,7 +540,7 @@ impl<T: PooledConnection> HealthMonitor<T> {
     /// Get overall health statistics
     pub async fn get_overall_statistics(&self) -> OverallHealthStatistics {
         let records = self.health_records.read().await;
-        
+
         let total_connections = records.len();
         let healthy_connections = records
             .values()
@@ -551,18 +558,24 @@ impl<T: PooledConnection> HealthMonitor<T> {
             .values()
             .filter(|r| r.status == HealthStatus::Dead)
             .count();
-        
+
         let total_checks: u64 = records.values().map(|r| r.statistics.total_checks).sum();
-        let successful_checks: u64 = records.values().map(|r| r.statistics.successful_checks).sum();
+        let successful_checks: u64 = records
+            .values()
+            .map(|r| r.statistics.successful_checks)
+            .sum();
         let failed_checks: u64 = records.values().map(|r| r.statistics.failed_checks).sum();
-        
+
         let avg_response_time_ms = if total_connections > 0 {
-            records.values().map(|r| r.statistics.avg_response_time_ms).sum::<f64>() 
+            records
+                .values()
+                .map(|r| r.statistics.avg_response_time_ms)
+                .sum::<f64>()
                 / total_connections as f64
         } else {
             0.0
         };
-        
+
         OverallHealthStatistics {
             total_connections,
             healthy_connections,
@@ -636,42 +649,53 @@ mod tests {
     async fn test_health_monitoring() {
         let config = HealthCheckConfig::default();
         let monitor = HealthMonitor::<TestConnection>::new(config);
-        
+
         // Register a connection
         let metadata = HashMap::new();
-        monitor.register_connection("test-conn-1".to_string(), metadata).await;
-        
+        monitor
+            .register_connection("test-conn-1".to_string(), metadata)
+            .await;
+
         // Create test connection
         let healthy_flag = Arc::new(AtomicBool::new(true));
         let connection = TestConnection {
             healthy: healthy_flag.clone(),
         };
-        
+
         // Check healthy connection
-        let status = monitor.check_connection_health("test-conn-1", &connection).await.unwrap();
+        let status = monitor
+            .check_connection_health("test-conn-1", &connection)
+            .await
+            .unwrap();
         assert_eq!(status, HealthStatus::Unknown); // First check, no history
-        
+
         // Multiple successful checks should mark as healthy
         for _ in 0..3 {
-            monitor.check_connection_health("test-conn-1", &connection).await.unwrap();
+            monitor
+                .check_connection_health("test-conn-1", &connection)
+                .await
+                .unwrap();
         }
-        
+
         let health = monitor.get_connection_health("test-conn-1").await.unwrap();
         assert_eq!(health.status, HealthStatus::Healthy);
         assert_eq!(health.statistics.consecutive_successes, 4);
-        
+
         // Make connection unhealthy
         healthy_flag.store(false, Ordering::Relaxed);
-        
+
         // Multiple failed checks should mark as unhealthy
         for _ in 0..3 {
-            monitor.check_connection_health("test-conn-1", &connection).await.unwrap();
+            monitor
+                .check_connection_health("test-conn-1", &connection)
+                .await
+                .unwrap();
         }
-        
+
         let health = monitor.get_connection_health("test-conn-1").await.unwrap();
         assert_eq!(health.status, HealthStatus::Unhealthy);
         assert_eq!(health.statistics.consecutive_failures, 3);
-        
+
         // Check unhealthy connections list
         let unhealthy = monitor.get_unhealthy_connections().await;
         assert!(unhealthy.contains(&"test-conn-1".to_string()));
@@ -681,22 +705,27 @@ mod tests {
     async fn test_dead_connection_detection() {
         let mut config = HealthCheckConfig::default();
         config.failure_threshold = 2;
-        
+
         let monitor = HealthMonitor::<TestConnection>::new(config);
-        monitor.register_connection("test-conn-1".to_string(), HashMap::new()).await;
-        
+        monitor
+            .register_connection("test-conn-1".to_string(), HashMap::new())
+            .await;
+
         let connection = TestConnection {
             healthy: Arc::new(AtomicBool::new(false)),
         };
-        
+
         // Enough failures to mark as dead
         for _ in 0..5 {
-            monitor.check_connection_health("test-conn-1", &connection).await.unwrap();
+            monitor
+                .check_connection_health("test-conn-1", &connection)
+                .await
+                .unwrap();
         }
-        
+
         let health = monitor.get_connection_health("test-conn-1").await.unwrap();
         assert_eq!(health.status, HealthStatus::Dead);
-        
+
         let dead = monitor.get_dead_connections().await;
         assert!(dead.contains(&"test-conn-1".to_string()));
     }
@@ -705,27 +734,35 @@ mod tests {
     async fn test_health_events() {
         let config = HealthCheckConfig::default();
         let monitor = HealthMonitor::<TestConnection>::new(config);
-        
+
         let mut event_receiver = monitor.subscribe();
-        
-        monitor.register_connection("test-conn-1".to_string(), HashMap::new()).await;
-        
+
+        monitor
+            .register_connection("test-conn-1".to_string(), HashMap::new())
+            .await;
+
         let healthy_flag = Arc::new(AtomicBool::new(true));
         let connection = TestConnection {
             healthy: healthy_flag.clone(),
         };
-        
+
         // Generate health status change
         for _ in 0..3 {
-            monitor.check_connection_health("test-conn-1", &connection).await.unwrap();
+            monitor
+                .check_connection_health("test-conn-1", &connection)
+                .await
+                .unwrap();
         }
-        
+
         healthy_flag.store(false, Ordering::Relaxed);
-        
+
         for _ in 0..3 {
-            monitor.check_connection_health("test-conn-1", &connection).await.unwrap();
+            monitor
+                .check_connection_health("test-conn-1", &connection)
+                .await
+                .unwrap();
         }
-        
+
         // Should receive status change event
         tokio::time::timeout(Duration::from_secs(1), async {
             while let Ok(event) = event_receiver.recv().await {

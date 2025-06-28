@@ -212,7 +212,10 @@ impl ImmutableStorage {
             config: config.clone(),
             blocks: Arc::new(RwLock::new(BlockStore {
                 path: config.path.join("blocks"),
-                cache: lru::LruCache::new(std::num::NonZeroUsize::new(cache_size).unwrap_or(std::num::NonZeroUsize::new(1000).unwrap())),
+                cache: lru::LruCache::new(
+                    std::num::NonZeroUsize::new(cache_size)
+                        .unwrap_or(std::num::NonZeroUsize::new(1000).unwrap()),
+                ),
                 metadata: HashMap::new(),
             })),
             merkle_tree: Arc::new(RwLock::new(MerkleTree {

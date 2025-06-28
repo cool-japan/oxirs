@@ -52,7 +52,7 @@ impl PlatformCapabilities {
                 arch: std::env::consts::ARCH.to_string(),
                 os: std::env::consts::OS.to_string(),
             };
-            
+
             // Detect SIMD capabilities
             #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
             {
@@ -60,45 +60,45 @@ impl PlatformCapabilities {
                 caps.avx2_available = is_x86_feature_detected!("avx2");
                 caps.avx512_available = is_x86_feature_detected!("avx512f");
             }
-            
+
             #[cfg(target_arch = "aarch64")]
             {
                 caps.simd_available = true; // NEON is mandatory on aarch64
                 caps.neon_available = true;
             }
-            
+
             // Detect GPU capabilities
             caps.gpu_available = Self::detect_gpu();
-            
+
             // Detect CUDA
             #[cfg(feature = "cuda")]
             {
                 caps.cuda_available = Self::detect_cuda();
             }
-            
+
             // Detect OpenCL
             #[cfg(feature = "opencl")]
             {
                 caps.opencl_available = Self::detect_opencl();
             }
-            
+
             // Detect Metal (macOS only)
             #[cfg(all(target_os = "macos", feature = "metal"))]
             {
                 caps.metal_available = Self::detect_metal();
             }
-            
+
             caps
         })
     }
-    
+
     /// Get a human-readable summary of capabilities
     pub fn summary(&self) -> String {
         let mut features = Vec::new();
-        
+
         if self.simd_available {
             features.push("SIMD");
-            
+
             if self.avx2_available {
                 features.push("AVX2");
             }
@@ -109,10 +109,10 @@ impl PlatformCapabilities {
                 features.push("NEON");
             }
         }
-        
+
         if self.gpu_available {
             features.push("GPU");
-            
+
             if self.cuda_available {
                 features.push("CUDA");
             }
@@ -123,7 +123,7 @@ impl PlatformCapabilities {
                 features.push("Metal");
             }
         }
-        
+
         format!(
             "{} ({} cores, {})",
             features.join(", "),
@@ -131,7 +131,7 @@ impl PlatformCapabilities {
             self.arch
         )
     }
-    
+
     /// Check if any GPU is available
     fn detect_gpu() -> bool {
         // Simple heuristic - check for common GPU environment variables
@@ -139,21 +139,22 @@ impl PlatformCapabilities {
             || std::env::var("GPU_DEVICE_ORDINAL").is_ok()
             || std::env::var("ROCR_VISIBLE_DEVICES").is_ok()
     }
-    
+
     /// Check if CUDA is available
     #[cfg(feature = "cuda")]
     fn detect_cuda() -> bool {
         // Check for CUDA runtime
         std::env::var("CUDA_PATH").is_ok()
             || std::path::Path::new("/usr/local/cuda").exists()
-            || std::path::Path::new("C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA").exists()
+            || std::path::Path::new("C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA")
+                .exists()
     }
-    
+
     #[cfg(not(feature = "cuda"))]
     fn detect_cuda() -> bool {
         false
     }
-    
+
     /// Check if OpenCL is available
     #[cfg(feature = "opencl")]
     fn detect_opencl() -> bool {
@@ -176,19 +177,19 @@ impl PlatformCapabilities {
             false
         }
     }
-    
+
     #[cfg(not(feature = "opencl"))]
     fn detect_opencl() -> bool {
         false
     }
-    
+
     /// Check if Metal is available
     #[cfg(all(target_os = "macos", feature = "metal"))]
     fn detect_metal() -> bool {
         // Metal is available on all modern macOS systems
         true
     }
-    
+
     #[cfg(not(all(target_os = "macos", feature = "metal")))]
     fn detect_metal() -> bool {
         false
@@ -207,31 +208,31 @@ impl AutoOptimizer {
             capabilities: PlatformCapabilities::detect(),
         }
     }
-    
+
     /// Determine if GPU should be used based on problem size
     pub fn should_use_gpu(&self, problem_size: usize) -> bool {
         // Use GPU for large problems when available
         self.capabilities.gpu_available && problem_size > 100_000
     }
-    
+
     /// Determine if SIMD should be used based on problem size
     pub fn should_use_simd(&self, problem_size: usize) -> bool {
         // Use SIMD for medium to large problems
         self.capabilities.simd_available && problem_size > 1000
     }
-    
+
     /// Determine if parallel processing should be used
     pub fn should_use_parallel(&self, problem_size: usize) -> bool {
         // Use parallel processing for large problems on multi-core systems
         self.capabilities.cpu_cores > 1 && problem_size > 10_000
     }
-    
+
     /// Get recommended chunk size for parallel processing
     pub fn recommended_chunk_size(&self, total_size: usize) -> usize {
         // Balance between parallelism overhead and work distribution
         let ideal_chunks = self.capabilities.cpu_cores * 4;
         let chunk_size = total_size / ideal_chunks;
-        
+
         // Ensure reasonable chunk size
         chunk_size.clamp(1000, 100_000)
     }
@@ -246,33 +247,33 @@ impl Default for AutoOptimizer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_platform_detection() {
         let caps = PlatformCapabilities::detect();
-        
+
         // Should have at least 1 CPU core
         assert!(caps.cpu_cores >= 1);
-        
+
         // Should have valid architecture
         assert!(!caps.arch.is_empty());
-        
+
         // Should have valid OS
         assert!(!caps.os.is_empty());
-        
+
         println!("Platform capabilities: {}", caps.summary());
     }
-    
+
     #[test]
     fn test_auto_optimizer() {
         let optimizer = AutoOptimizer::new();
-        
+
         // Small problem sizes should not use GPU
         assert!(!optimizer.should_use_gpu(100));
-        
+
         // Medium problem sizes might use SIMD
         let _ = optimizer.should_use_simd(5000);
-        
+
         // Get chunk size recommendation
         let chunk_size = optimizer.recommended_chunk_size(1_000_000);
         assert!(chunk_size > 0);

@@ -11,47 +11,47 @@ pub enum ClusterError {
     /// Configuration error
     #[error("Configuration error: {0}")]
     Config(String),
-    
+
     /// Network communication error
     #[error("Network error: {0}")]
     Network(String),
-    
+
     /// Storage backend error
     #[error("Storage error: {0}")]
     Storage(String),
-    
+
     /// Consensus error
     #[error("Consensus error: {0}")]
     Consensus(String),
-    
+
     /// Not the leader node
     #[error("Not the leader node")]
     NotLeader,
-    
+
     /// Lock acquisition error
     #[error("Lock error: {0}")]
     Lock(String),
-    
+
     /// Serialization error
     #[error("Serialization error: {0}")]
     Serialize(String),
-    
+
     /// Parse error
     #[error("Parse error: {0}")]
     Parse(String),
-    
+
     /// Runtime error
     #[error("Runtime error: {0}")]
     Runtime(String),
-    
+
     /// Byzantine fault detected
     #[error("Byzantine fault detected: {0}")]
     Byzantine(String),
-    
+
     /// Shard not found
     #[error("Shard not found: {0}")]
     ShardNotFound(crate::shard::ShardId),
-    
+
     /// Generic error
     #[error("{0}")]
     Other(String),

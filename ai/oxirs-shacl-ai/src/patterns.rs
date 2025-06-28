@@ -373,7 +373,6 @@ impl PatternAnalyzer {
         })
     }
 
-
     /// Clear pattern cache
     pub fn clear_cache(&mut self) {
         self.pattern_cache.clear();

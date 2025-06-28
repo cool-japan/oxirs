@@ -124,7 +124,11 @@ impl AutoDiscovery {
     ) {
         match event {
             ServiceEvent::ServiceResolved(info) => {
-                debug!("Discovered {:?} service: {}", service_type, info.get_fullname());
+                debug!(
+                    "Discovered {:?} service: {}",
+                    service_type,
+                    info.get_fullname()
+                );
 
                 let endpoint = Self::extract_endpoint_from_mdns(&info);
                 if let Some(endpoint) = endpoint {
@@ -291,16 +295,13 @@ impl AutoDiscovery {
     }
 
     /// Start Kubernetes service discovery
-    async fn start_kubernetes_discovery(
-        &self,
-        tx: mpsc::Sender<DiscoveredEndpoint>,
-    ) -> Result<()> {
+    async fn start_kubernetes_discovery(&self, tx: mpsc::Sender<DiscoveredEndpoint>) -> Result<()> {
         #[cfg(feature = "kubernetes")]
         {
             info!("Starting Kubernetes service discovery");
-            
+
             use crate::k8s_discovery::{K8sDiscoveryConfig, K8sServiceDiscovery};
-            
+
             let k8s_config = K8sDiscoveryConfig {
                 namespace: self.config.k8s_namespace.clone(),
                 label_selectors: self.config.k8s_label_selectors.clone(),
@@ -308,10 +309,10 @@ impl AutoDiscovery {
                 external_domain: self.config.k8s_external_domain.clone(),
                 ..Default::default()
             };
-            
+
             let mut k8s_discovery = K8sServiceDiscovery::new(k8s_config).await?;
             let mut k8s_rx = k8s_discovery.start().await?;
-            
+
             // Spawn task to forward Kubernetes discoveries
             tokio::spawn(async move {
                 while let Some(discovered) = k8s_rx.recv().await {
@@ -416,7 +417,7 @@ impl Default for AutoDiscoveryConfig {
     fn default() -> Self {
         let mut k8s_label_selectors = HashMap::new();
         k8s_label_selectors.insert("federation".to_string(), "enabled".to_string());
-        
+
         Self {
             enable_mdns: true,
             enable_dns_discovery: true,

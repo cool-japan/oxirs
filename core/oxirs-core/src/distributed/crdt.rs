@@ -753,7 +753,7 @@ pub struct CrdtStatsReport {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{Object, NamedNode, Literal};
+    use crate::model::{Literal, NamedNode, Object};
 
     #[tokio::test]
     async fn test_grow_set() {

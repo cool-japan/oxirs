@@ -4,13 +4,15 @@
 //! including multi-version indices, efficient version lookup, and compaction strategies.
 
 use crate::mvcc::{HLCTimestamp, MVCCManager, TransactionSnapshot, Version};
-use crate::storage::StorageBackend;
 use crate::shard::ShardId;
-use crate::transaction::{TransactionId, IsolationLevel};
+use crate::storage::StorageBackend;
+use crate::transaction::{IsolationLevel, TransactionId};
 use anyhow::Result;
 use async_trait::async_trait;
 use dashmap::DashMap;
-use oxirs_core::model::{Triple, Subject, Predicate, Object, NamedNode, BlankNode, Literal, Variable, QuotedTriple};
+use oxirs_core::model::{
+    BlankNode, Literal, NamedNode, Object, Predicate, QuotedTriple, Subject, Triple, Variable,
+};
 use oxirs_core::vocab::xsd;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -45,7 +47,9 @@ impl IndexKey {
         object: Option<&str>,
     ) -> Self {
         match (subject, predicate, object) {
-            (Some(s), Some(p), Some(o)) => IndexKey::Triple(s.to_string(), p.to_string(), o.to_string()),
+            (Some(s), Some(p), Some(o)) => {
+                IndexKey::Triple(s.to_string(), p.to_string(), o.to_string())
+            }
             (Some(s), Some(p), None) => IndexKey::SubjectPredicate(s.to_string(), p.to_string()),
             (Some(s), None, Some(o)) => IndexKey::SubjectObject(s.to_string(), o.to_string()),
             (None, Some(p), Some(o)) => IndexKey::PredicateObject(p.to_string(), o.to_string()),
@@ -92,7 +96,7 @@ impl MVCCIndex {
         let subject = subject_to_string(triple.subject());
         let predicate = predicate_to_string(triple.predicate());
         let object = object_to_string(triple.object());
-        
+
         // Generate all index keys for this triple
         let index_keys = vec![
             IndexKey::Subject(subject.clone()),
@@ -103,7 +107,7 @@ impl MVCCIndex {
             IndexKey::SubjectObject(subject.clone(), object.clone()),
             IndexKey::Triple(subject, predicate, object),
         ];
-        
+
         // Update primary index
         for key in &index_keys {
             self.primary_index
@@ -113,7 +117,7 @@ impl MVCCIndex {
                 .or_insert_with(HashSet::new)
                 .insert(triple_key.to_string());
         }
-        
+
         // Update reverse index
         self.reverse_index
             .entry(triple_key.to_string())
@@ -145,7 +149,7 @@ impl MVCCIndex {
         include_uncommitted: bool,
     ) -> HashSet<String> {
         let mut results = HashSet::new();
-        
+
         if let Some(versions) = self.primary_index.get(index_key) {
             // Get all versions up to the given timestamp
             for (ts, keys) in versions.range(..=timestamp) {
@@ -154,7 +158,7 @@ impl MVCCIndex {
                 }
             }
         }
-        
+
         results
     }
 
@@ -162,12 +166,12 @@ impl MVCCIndex {
     pub fn get_statistics(&self) -> IndexStatistics {
         let total_index_entries = self.primary_index.len();
         let total_triple_keys = self.reverse_index.len();
-        
+
         let mut max_versions_per_index = 0;
         for entry in self.primary_index.iter() {
             max_versions_per_index = max_versions_per_index.max(entry.value().len());
         }
-        
+
         IndexStatistics {
             total_index_entries,
             total_triple_keys,
@@ -225,16 +229,12 @@ pub struct MVCCStorage {
 
 impl MVCCStorage {
     /// Create a new MVCC storage backend
-    pub fn new(
-        node_id: u64,
-        base_path: String,
-        compaction_strategy: CompactionStrategy,
-    ) -> Self {
+    pub fn new(node_id: u64, base_path: String, compaction_strategy: CompactionStrategy) -> Self {
         let mvcc = Arc::new(MVCCManager::new(
             node_id,
             crate::mvcc::MVCCConfig::default(),
         ));
-        
+
         Self {
             mvcc,
             index: Arc::new(MVCCIndex::new()),
@@ -248,10 +248,10 @@ impl MVCCStorage {
     pub async fn start(&self) -> Result<()> {
         // Start MVCC manager
         self.mvcc.start().await?;
-        
+
         // Create base directory if needed
         tokio::fs::create_dir_all(&self.base_path).await?;
-        
+
         info!("MVCC storage started at {}", self.base_path);
         Ok(())
     }
@@ -269,7 +269,9 @@ impl MVCCStorage {
         transaction_id: TransactionId,
         isolation_level: IsolationLevel,
     ) -> Result<TransactionSnapshot> {
-        self.mvcc.begin_transaction(transaction_id, isolation_level).await
+        self.mvcc
+            .begin_transaction(transaction_id, isolation_level)
+            .await
     }
 
     /// Insert a triple within a transaction
@@ -279,17 +281,19 @@ impl MVCCStorage {
         triple: Triple,
     ) -> Result<()> {
         let key = self.triple_to_key(&triple);
-        
+
         // Write to MVCC
-        self.mvcc.write(transaction_id, &key, Some(triple.clone())).await?;
-        
+        self.mvcc
+            .write(transaction_id, &key, Some(triple.clone()))
+            .await?;
+
         // Update index (this would be done at commit time in production)
         let timestamp = self.mvcc.current_timestamp();
         self.index.index_triple(&triple, timestamp, &key);
-        
+
         // Update statistics
         self.stats.write().await.total_inserts += 1;
-        
+
         Ok(())
     }
 
@@ -300,13 +304,13 @@ impl MVCCStorage {
         triple: Triple,
     ) -> Result<()> {
         let key = self.triple_to_key(&triple);
-        
+
         // Write deletion marker to MVCC
         self.mvcc.write(transaction_id, &key, None).await?;
-        
+
         // Update statistics
         self.stats.write().await.total_deletes += 1;
-        
+
         Ok(())
     }
 
@@ -319,20 +323,20 @@ impl MVCCStorage {
         object: Option<&str>,
     ) -> Result<Vec<Triple>> {
         let index_key = IndexKey::from_triple_pattern(subject, predicate, object);
-        
+
         // Get transaction snapshot
-        let snapshot = self.mvcc.begin_transaction(
-            transaction_id.clone(),
-            IsolationLevel::ReadCommitted,
-        ).await?;
-        
+        let snapshot = self
+            .mvcc
+            .begin_transaction(transaction_id.clone(), IsolationLevel::ReadCommitted)
+            .await?;
+
         // Query index
         let triple_keys = self.index.query(
             &index_key,
             &snapshot.timestamp,
             snapshot.isolation_level == IsolationLevel::ReadUncommitted,
         );
-        
+
         // Read each triple with MVCC
         let mut results = Vec::new();
         for key in triple_keys {
@@ -343,10 +347,10 @@ impl MVCCStorage {
                 }
             }
         }
-        
+
         // Update statistics
         self.stats.write().await.total_queries += 1;
-        
+
         Ok(results)
     }
 
@@ -369,7 +373,7 @@ impl MVCCStorage {
         let start_time = std::time::Instant::now();
         let mut versions_removed = 0;
         let mut keys_processed = 0;
-        
+
         match self.compaction_strategy {
             CompactionStrategy::None => {
                 // No compaction
@@ -388,12 +392,15 @@ impl MVCCStorage {
                 // Remove versions older than retention period
                 warn!("TimeBasedRetention compaction not yet implemented");
             }
-            CompactionStrategy::Hybrid { max_versions, retention_period } => {
+            CompactionStrategy::Hybrid {
+                max_versions,
+                retention_period,
+            } => {
                 // Hybrid compaction
                 warn!("Hybrid compaction not yet implemented");
             }
         }
-        
+
         Ok(CompactionResult {
             duration: start_time.elapsed(),
             versions_removed,
@@ -444,37 +451,39 @@ impl StorageBackend for MVCCStorage {
         // No physical creation needed
         Ok(())
     }
-    
+
     async fn delete_shard(&self, shard_id: ShardId) -> Result<()> {
         // Mark all triples in the shard as deleted
         // This would be implemented via a shard-wide deletion marker
         Ok(())
     }
-    
+
     async fn insert_triple_to_shard(&self, shard_id: ShardId, triple: Triple) -> Result<()> {
         // Create a temporary transaction for non-transactional inserts
         let tx_id = format!("shard_{}_insert_{}", shard_id, uuid::Uuid::new_v4());
-        self.begin_transaction(tx_id.clone(), IsolationLevel::ReadCommitted).await?;
-        
+        self.begin_transaction(tx_id.clone(), IsolationLevel::ReadCommitted)
+            .await?;
+
         // Use shard-prefixed key
         let key = format!("shard:{}:{}", shard_id, self.triple_to_key(&triple));
         self.mvcc.write(&tx_id, &key, Some(triple)).await?;
-        
+
         self.commit_transaction(&tx_id).await
     }
-    
+
     async fn delete_triple_from_shard(&self, shard_id: ShardId, triple: &Triple) -> Result<()> {
         // Create a temporary transaction for non-transactional deletes
         let tx_id = format!("shard_{}_delete_{}", shard_id, uuid::Uuid::new_v4());
-        self.begin_transaction(tx_id.clone(), IsolationLevel::ReadCommitted).await?;
-        
+        self.begin_transaction(tx_id.clone(), IsolationLevel::ReadCommitted)
+            .await?;
+
         // Use shard-prefixed key
         let key = format!("shard:{}:{}", shard_id, self.triple_to_key(triple));
         self.mvcc.write(&tx_id, &key, None).await?;
-        
+
         self.commit_transaction(&tx_id).await
     }
-    
+
     async fn query_shard(
         &self,
         shard_id: ShardId,
@@ -484,40 +493,41 @@ impl StorageBackend for MVCCStorage {
     ) -> Result<Vec<Triple>> {
         // Create a temporary transaction for queries
         let tx_id = format!("shard_{}_query_{}", shard_id, uuid::Uuid::new_v4());
-        
+
         // For shard queries, we need to filter by shard prefix
         // This is a simplified implementation
         self.query_triples(&tx_id, subject, predicate, object).await
     }
-    
+
     async fn get_shard_size(&self, shard_id: ShardId) -> Result<u64> {
         // Estimate based on triple count and average size
         let count = self.get_shard_triple_count(shard_id).await?;
         Ok((count * 100) as u64) // Estimate 100 bytes per triple
     }
-    
+
     async fn get_shard_triple_count(&self, shard_id: ShardId) -> Result<usize> {
         // Count triples in the shard
         // This would need proper implementation with shard filtering
         let stats = self.mvcc.get_statistics().await;
         Ok(stats.total_keys / 10) // Simplified: assume even distribution
     }
-    
+
     async fn export_shard(&self, shard_id: ShardId) -> Result<Vec<Triple>> {
         // Export all triples from a shard
         self.query_shard(shard_id, None, None, None).await
     }
-    
+
     async fn import_shard(&self, shard_id: ShardId, triples: Vec<Triple>) -> Result<()> {
         // Import triples into a shard
         let tx_id = format!("shard_{}_import_{}", shard_id, uuid::Uuid::new_v4());
-        self.begin_transaction(tx_id.clone(), IsolationLevel::ReadCommitted).await?;
-        
+        self.begin_transaction(tx_id.clone(), IsolationLevel::ReadCommitted)
+            .await?;
+
         for triple in triples {
             let key = format!("shard:{}:{}", shard_id, self.triple_to_key(&triple));
             self.mvcc.write(&tx_id, &key, Some(triple)).await?;
         }
-        
+
         self.commit_transaction(&tx_id).await
     }
 }
@@ -529,10 +539,12 @@ fn subject_to_string(subject: &Subject) -> String {
         Subject::NamedNode(n) => n.as_str().to_string(),
         Subject::BlankNode(b) => format!("_:{}", b.as_str()),
         Subject::Variable(v) => format!("?{}", v.as_str()),
-        Subject::QuotedTriple(t) => format!("<<{} {} {}>>", 
+        Subject::QuotedTriple(t) => format!(
+            "<<{} {} {}>>",
             subject_to_string(t.subject()),
             predicate_to_string(t.predicate()),
-            object_to_string(t.object())),
+            object_to_string(t.object())
+        ),
     }
 }
 
@@ -556,10 +568,12 @@ fn object_to_string(object: &Object) -> String {
             }
         }
         Object::Variable(v) => format!("?{}", v.as_str()),
-        Object::QuotedTriple(t) => format!("<<{} {} {}>>",
+        Object::QuotedTriple(t) => format!(
+            "<<{} {} {}>>",
             subject_to_string(t.subject()),
             predicate_to_string(t.predicate()),
-            object_to_string(t.object())),
+            object_to_string(t.object())
+        ),
     }
 }
 
@@ -595,10 +609,10 @@ mod tests {
     fn test_index_key_creation() {
         let key1 = IndexKey::from_triple_pattern(Some("s"), Some("p"), Some("o"));
         assert!(matches!(key1, IndexKey::Triple(_, _, _)));
-        
+
         let key2 = IndexKey::from_triple_pattern(Some("s"), Some("p"), None);
         assert!(matches!(key2, IndexKey::SubjectPredicate(_, _)));
-        
+
         let key3 = IndexKey::from_triple_pattern(Some("s"), None, None);
         assert!(matches!(key3, IndexKey::Subject(_)));
     }
@@ -607,7 +621,7 @@ mod tests {
     fn test_index_key_to_storage_key() {
         let key = IndexKey::Triple("s".to_string(), "p".to_string(), "o".to_string());
         assert_eq!(key.to_storage_key(), "spo:s:p:o");
-        
+
         let key = IndexKey::Subject("s".to_string());
         assert_eq!(key.to_storage_key(), "s:s");
     }
@@ -616,52 +630,65 @@ mod tests {
     async fn test_mvcc_storage_basic() {
         let storage = MVCCStorage::new(1, "/tmp/mvcc_test".to_string(), CompactionStrategy::None);
         storage.start().await.unwrap();
-        
+
         let triple = Triple::new(
             NamedNode::new("http://example.org/s").unwrap(),
             NamedNode::new("http://example.org/p").unwrap(),
             Literal::new_typed_literal("value", xsd::STRING.clone()),
         );
-        
+
         // Insert triple using StorageBackend trait
-        storage.insert_triple_to_shard(0, triple.clone()).await.unwrap();
-        
+        storage
+            .insert_triple_to_shard(0, triple.clone())
+            .await
+            .unwrap();
+
         // Query triple using StorageBackend trait
-        let results = storage.query_shard(0, Some("http://example.org/s"), None, None).await.unwrap();
+        let results = storage
+            .query_shard(0, Some("http://example.org/s"), None, None)
+            .await
+            .unwrap();
         assert_eq!(results.len(), 1);
-        
+
         // Check statistics
         let stats = storage.get_statistics().await;
         assert_eq!(stats.total_inserts, 1);
         assert_eq!(stats.total_commits, 1);
-        
+
         storage.stop().await.unwrap();
     }
 
     #[tokio::test]
     async fn test_mvcc_storage_transaction() {
-        let storage = MVCCStorage::new(1, "/tmp/mvcc_test_tx".to_string(), CompactionStrategy::None);
+        let storage =
+            MVCCStorage::new(1, "/tmp/mvcc_test_tx".to_string(), CompactionStrategy::None);
         storage.start().await.unwrap();
-        
+
         let tx_id = "test_tx".to_string();
-        storage.begin_transaction(tx_id.clone(), IsolationLevel::ReadCommitted).await.unwrap();
-        
+        storage
+            .begin_transaction(tx_id.clone(), IsolationLevel::ReadCommitted)
+            .await
+            .unwrap();
+
         let triple = Triple::new(
             NamedNode::new("http://example.org/s").unwrap(),
             NamedNode::new("http://example.org/p").unwrap(),
             Literal::new_typed_literal("value", xsd::STRING.clone()),
         );
-        
+
         // Insert within transaction
         storage.insert_triple(&tx_id, triple.clone()).await.unwrap();
-        
+
         // Commit transaction
         storage.commit_transaction(&tx_id).await.unwrap();
-        
+
         // Verify triple is persisted
-        let results = storage.query_shard(0, Some("http://example.org/s"), None, None).await.unwrap();
+        let results = storage
+            .query_shard(0, Some("http://example.org/s"), None, None)
+            .await
+            .unwrap();
         assert_eq!(results.len(), 1);
-        
+
         storage.stop().await.unwrap();
     }
 
@@ -669,7 +696,10 @@ mod tests {
     fn test_compaction_strategy() {
         let strategy = CompactionStrategy::default();
         match strategy {
-            CompactionStrategy::Hybrid { max_versions, retention_period } => {
+            CompactionStrategy::Hybrid {
+                max_versions,
+                retention_period,
+            } => {
                 assert_eq!(max_versions, 100);
                 assert_eq!(retention_period.as_secs(), 86400);
             }

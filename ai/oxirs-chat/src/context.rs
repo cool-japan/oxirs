@@ -14,9 +14,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 use crate::{
-    Message, MessageRole, MessageMetadata,
-    rag::QueryIntent,
-    analytics::ConversationAnalytics,
+    analytics::ConversationAnalytics, rag::QueryIntent, Message, MessageMetadata, MessageRole,
 };
 
 /// Configuration for context management
@@ -82,10 +80,16 @@ impl AdvancedContextManager {
         let start_time = SystemTime::now();
 
         // Calculate importance score
-        let importance_score = self.importance_scorer.score_message(message, conversation_analytics).await?;
+        let importance_score = self
+            .importance_scorer
+            .score_message(message, conversation_analytics)
+            .await?;
 
         // Update context window
-        let window_update = self.context_window.add_message(message.clone(), importance_score).await?;
+        let window_update = self
+            .context_window
+            .add_message(message.clone(), importance_score)
+            .await?;
 
         // Track topic changes
         let topic_update = if self.config.enable_topic_tracking {
@@ -95,16 +99,20 @@ impl AdvancedContextManager {
         };
 
         // Check if summarization is needed
-        let summarization_update = if self.config.enable_summarization 
-            && self.context_window.should_summarize().await {
-            Some(self.perform_summarization().await?)
-        } else {
-            None
-        };
+        let summarization_update =
+            if self.config.enable_summarization && self.context_window.should_summarize().await {
+                Some(self.perform_summarization().await?)
+            } else {
+                None
+            };
 
         // Optimize memory if needed
         let optimization_update = if self.config.memory_optimization_enabled {
-            Some(self.memory_optimizer.optimize_context(&mut self.context_window).await?)
+            Some(
+                self.memory_optimizer
+                    .optimize_context(&mut self.context_window)
+                    .await?,
+            )
         } else {
             None
         };
@@ -142,7 +150,10 @@ impl AdvancedContextManager {
         if !current_topics.is_empty() {
             context_text.push_str("## Current Topics\n");
             for topic in &current_topics {
-                context_text.push_str(&format!("- {} (confidence: {:.2})\n", topic.name, topic.confidence));
+                context_text.push_str(&format!(
+                    "- {} (confidence: {:.2})\n",
+                    topic.name, topic.confidence
+                ));
             }
             context_text.push_str("\n");
         }
@@ -159,13 +170,15 @@ impl AdvancedContextManager {
         }
 
         // Calculate quality metrics
-        let quality_score = self.calculate_context_quality(&effective_messages, &current_topics).await;
+        let quality_score = self
+            .calculate_context_quality(&effective_messages, &current_topics)
+            .await;
         let coverage_score = self.calculate_coverage_score(&effective_messages).await;
 
         // Calculate values before moving into the struct
         let token_count = self.estimate_token_count(&context_text).await;
         let structured_context = self.extract_structured_context(&effective_messages).await?;
-        
+
         Ok(AssembledContext {
             context_text,
             effective_messages,
@@ -179,20 +192,32 @@ impl AdvancedContextManager {
     }
 
     /// Handle context switching
-    pub async fn switch_context(&mut self, new_topic: &str, context_hint: Option<&str>) -> Result<ContextSwitch> {
+    pub async fn switch_context(
+        &mut self,
+        new_topic: &str,
+        context_hint: Option<&str>,
+    ) -> Result<ContextSwitch> {
         info!("Switching context to topic: {}", new_topic);
 
         // Save current context state
         let previous_state = self.context_window.get_state_snapshot().await;
 
         // Perform topic transition
-        let topic_transition = self.topic_tracker.transition_to_topic(new_topic, context_hint).await?;
+        let topic_transition = self
+            .topic_tracker
+            .transition_to_topic(new_topic, context_hint)
+            .await?;
 
         // Adjust context window for new topic
-        let window_adjustment = self.context_window.adjust_for_topic(&topic_transition).await?;
+        let window_adjustment = self
+            .context_window
+            .adjust_for_topic(&topic_transition)
+            .await?;
 
         // Update importance scoring for new context
-        self.importance_scorer.update_for_context_switch(&topic_transition).await?;
+        self.importance_scorer
+            .update_for_context_switch(&topic_transition)
+            .await?;
 
         Ok(ContextSwitch {
             previous_state,
@@ -231,49 +256,64 @@ impl AdvancedContextManager {
 
     async fn perform_summarization(&mut self) -> Result<SummarizationUpdate> {
         let messages_to_summarize = self.context_window.get_messages_for_summarization().await?;
-        let summary = self.summarization_engine.summarize_messages(&messages_to_summarize).await?;
-        
+        let summary = self
+            .summarization_engine
+            .summarize_messages(&messages_to_summarize)
+            .await?;
+
         let summary_text = summary.text.clone();
         let summary_clone = summary.clone();
         self.context_window.apply_summarization(summary).await?;
-        
+
         Ok(SummarizationUpdate {
             summary: summary_clone,
             messages_summarized: messages_to_summarize.len(),
-            compression_ratio: self.calculate_compression_ratio(&messages_to_summarize, &summary_text).await,
+            compression_ratio: self
+                .calculate_compression_ratio(&messages_to_summarize, &summary_text)
+                .await,
         })
     }
 
     async fn calculate_context_quality(&self, messages: &[Message], topics: &[Topic]) -> f32 {
         let mut quality = 0.0;
-        
+
         // Message relevance
         if !messages.is_empty() {
-            let relevance_sum: f32 = messages.iter()
+            let relevance_sum: f32 = messages
+                .iter()
                 .filter_map(|m| m.metadata.as_ref().and_then(|meta| meta.confidence_score))
                 .sum();
             quality += relevance_sum / messages.len() as f32 * 0.4;
         }
-        
+
         // Topic coherence
         if !topics.is_empty() {
             let topic_confidence: f32 = topics.iter().map(|t| t.confidence).sum();
             quality += (topic_confidence / topics.len() as f32) * 0.3;
         }
-        
+
         // Context completeness
-        let completeness = if messages.len() >= self.config.sliding_window_size / 2 { 1.0 } else { 0.5 };
+        let completeness = if messages.len() >= self.config.sliding_window_size / 2 {
+            1.0
+        } else {
+            0.5
+        };
         quality += completeness * 0.3;
-        
+
         quality.min(1.0)
     }
 
     async fn calculate_coverage_score(&self, messages: &[Message]) -> f32 {
         // Simple coverage calculation based on message diversity
-        let unique_intents: std::collections::HashSet<String> = messages.iter()
-            .filter_map(|m| m.metadata.as_ref().and_then(|meta| meta.intent_classification.clone()))
+        let unique_intents: std::collections::HashSet<String> = messages
+            .iter()
+            .filter_map(|m| {
+                m.metadata
+                    .as_ref()
+                    .and_then(|meta| meta.intent_classification.clone())
+            })
             .collect();
-        
+
         if messages.is_empty() {
             0.0
         } else {
@@ -318,7 +358,11 @@ impl AdvancedContextManager {
         })
     }
 
-    async fn calculate_compression_ratio(&self, original_messages: &[Message], summary: &str) -> f32 {
+    async fn calculate_compression_ratio(
+        &self,
+        original_messages: &[Message],
+        summary: &str,
+    ) -> f32 {
         let original_length: usize = original_messages.iter().map(|m| m.content.len()).sum();
         if original_length == 0 {
             0.0
@@ -329,10 +373,10 @@ impl AdvancedContextManager {
 
     async fn calculate_context_efficiency(&self) -> f32 {
         // Calculate how efficiently the context is being used
-        let active_ratio = self.context_window.active_messages().await as f32 / 
-                          self.context_window.total_messages().await as f32;
+        let active_ratio = self.context_window.active_messages().await as f32
+            / self.context_window.total_messages().await as f32;
         let importance_efficiency = self.importance_scorer.average_score().await;
-        
+
         (active_ratio + importance_efficiency) / 2.0
     }
 }
@@ -383,7 +427,11 @@ impl ContextWindow {
         }
     }
 
-    async fn add_message(&mut self, message: Message, importance_score: f32) -> Result<WindowUpdate> {
+    async fn add_message(
+        &mut self,
+        message: Message,
+        importance_score: f32,
+    ) -> Result<WindowUpdate> {
         let context_message = ContextMessage {
             message,
             importance_score,
@@ -421,15 +469,25 @@ impl ContextWindow {
 
         // Add pinned messages first
         for pinned in self.pinned_messages.values() {
-            if let Some(context_msg) = self.messages.iter().find(|m| m.message.id == pinned.message_id) {
+            if let Some(context_msg) = self
+                .messages
+                .iter()
+                .find(|m| m.message.id == pinned.message_id)
+            {
                 effective_messages.push(context_msg.message.clone());
             }
         }
 
         // Add recent messages up to window size
-        let recent_count = self.config.sliding_window_size.saturating_sub(effective_messages.len());
+        let recent_count = self
+            .config
+            .sliding_window_size
+            .saturating_sub(effective_messages.len());
         for context_msg in self.messages.iter().rev().take(recent_count) {
-            if !effective_messages.iter().any(|m| m.id == context_msg.message.id) {
+            if !effective_messages
+                .iter()
+                .any(|m| m.id == context_msg.message.id)
+            {
                 effective_messages.push(context_msg.message.clone());
             }
         }
@@ -451,7 +509,10 @@ impl ContextWindow {
             self.pinned_messages.insert(message_id.to_string(), pinned);
             debug!("Pinned message: {}", message_id);
         } else {
-            return Err(anyhow!("Message not found in context window: {}", message_id));
+            return Err(anyhow!(
+                "Message not found in context window: {}",
+                message_id
+            ));
         }
         Ok(())
     }
@@ -466,8 +527,8 @@ impl ContextWindow {
     }
 
     fn should_trim_window(&self) -> bool {
-        self.messages.len() > self.config.sliding_window_size ||
-        self.total_token_count > self.config.max_context_length
+        self.messages.len() > self.config.sliding_window_size
+            || self.total_token_count > self.config.max_context_length
     }
 
     async fn evict_least_important(&mut self) -> Result<Option<Message>> {
@@ -476,8 +537,9 @@ impl ContextWindow {
         let mut min_score = f32::MAX;
 
         for (idx, context_msg) in self.messages.iter().enumerate() {
-            if !self.pinned_messages.contains_key(&context_msg.message.id) &&
-               context_msg.importance_score < min_score {
+            if !self.pinned_messages.contains_key(&context_msg.message.id)
+                && context_msg.importance_score < min_score
+            {
                 min_score = context_msg.importance_score;
                 least_important_idx = Some(idx);
             }
@@ -495,15 +557,20 @@ impl ContextWindow {
     }
 
     async fn should_summarize(&self) -> bool {
-        self.config.enable_summarization &&
-        self.messages.len() >= self.config.summarization_threshold
+        self.config.enable_summarization
+            && self.messages.len() >= self.config.summarization_threshold
     }
 
     async fn get_messages_for_summarization(&self) -> Result<Vec<Message>> {
         // Get older messages that aren't pinned
-        let cutoff_idx = self.messages.len().saturating_sub(self.config.sliding_window_size);
-        
-        Ok(self.messages.iter()
+        let cutoff_idx = self
+            .messages
+            .len()
+            .saturating_sub(self.config.sliding_window_size);
+
+        Ok(self
+            .messages
+            .iter()
             .take(cutoff_idx)
             .filter(|m| !self.pinned_messages.contains_key(&m.message.id))
             .map(|m| m.message.clone())
@@ -512,7 +579,10 @@ impl ContextWindow {
 
     async fn apply_summarization(&mut self, summary: ContextSummary) -> Result<()> {
         // Remove summarized messages
-        let cutoff_idx = self.messages.len().saturating_sub(self.config.sliding_window_size);
+        let cutoff_idx = self
+            .messages
+            .len()
+            .saturating_sub(self.config.sliding_window_size);
         for _ in 0..cutoff_idx {
             if let Some(removed) = self.messages.pop_front() {
                 if !self.pinned_messages.contains_key(&removed.message.id) {
@@ -552,7 +622,10 @@ impl ContextWindow {
         }
     }
 
-    async fn adjust_for_topic(&mut self, _transition: &TopicTransition) -> Result<WindowAdjustment> {
+    async fn adjust_for_topic(
+        &mut self,
+        _transition: &TopicTransition,
+    ) -> Result<WindowAdjustment> {
         // TODO: Implement topic-specific adjustments
         Ok(WindowAdjustment {
             messages_reordered: false,
@@ -719,7 +792,9 @@ struct TopicTracker {
 
 impl TopicTracker {
     fn new(_config: &ContextConfig) -> Self {
-        Self { _config: _config.clone() }
+        Self {
+            _config: _config.clone(),
+        }
     }
 
     async fn process_message(&mut self, _message: &Message) -> Result<TopicUpdate> {
@@ -734,7 +809,11 @@ impl TopicTracker {
         Vec::new()
     }
 
-    async fn transition_to_topic(&mut self, topic: &str, _hint: Option<&str>) -> Result<TopicTransition> {
+    async fn transition_to_topic(
+        &mut self,
+        topic: &str,
+        _hint: Option<&str>,
+    ) -> Result<TopicTransition> {
         Ok(TopicTransition {
             from_topic: None,
             to_topic: topic.to_string(),
@@ -755,10 +834,16 @@ struct ImportanceScorer {
 
 impl ImportanceScorer {
     fn new(_config: &ContextConfig) -> Self {
-        Self { _config: _config.clone() }
+        Self {
+            _config: _config.clone(),
+        }
     }
 
-    async fn score_message(&self, message: &Message, _analytics: Option<&ConversationAnalytics>) -> Result<f32> {
+    async fn score_message(
+        &self,
+        message: &Message,
+        _analytics: Option<&ConversationAnalytics>,
+    ) -> Result<f32> {
         // Simple importance scoring based on message characteristics
         let mut score: f32 = 0.5; // Base score
 
@@ -795,7 +880,9 @@ struct SummarizationEngine {
 
 impl SummarizationEngine {
     fn new(_config: &ContextConfig) -> Self {
-        Self { _config: _config.clone() }
+        Self {
+            _config: _config.clone(),
+        }
     }
 
     async fn summarize_messages(&self, messages: &[Message]) -> Result<ContextSummary> {
@@ -803,7 +890,10 @@ impl SummarizationEngine {
         let summary_text = if messages.is_empty() {
             "No messages to summarize".to_string()
         } else {
-            format!("Summary of {} messages discussing various topics", messages.len())
+            format!(
+                "Summary of {} messages discussing various topics",
+                messages.len()
+            )
         };
 
         Ok(ContextSummary {
@@ -826,7 +916,9 @@ struct MemoryOptimizer {
 
 impl MemoryOptimizer {
     fn new(_config: &ContextConfig) -> Self {
-        Self { _config: _config.clone() }
+        Self {
+            _config: _config.clone(),
+        }
     }
 
     async fn optimize_context(&self, _window: &mut ContextWindow) -> Result<OptimizationUpdate> {

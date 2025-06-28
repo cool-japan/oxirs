@@ -18,8 +18,8 @@ use anyhow::{anyhow, Result};
 use fastrand;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
-use std::hash::{Hash, Hasher};
 use std::future::Future;
+use std::hash::{Hash, Hasher};
 use std::pin::Pin;
 use std::sync::{
     atomic::{AtomicU64, AtomicUsize, Ordering},
@@ -759,7 +759,7 @@ impl<T: PooledConnection> ConnectionPool<T> {
 
                 for (index, wrapper) in connections_guard.iter().enumerate() {
                     let conn_id = wrapper.connection_id.clone();
-                    
+
                     // Check if connection is expired
                     if wrapper.is_expired(config.max_lifetime, config.idle_timeout) {
                         to_remove.push(index);
@@ -770,7 +770,7 @@ impl<T: PooledConnection> ConnectionPool<T> {
                             .check_connection_health(&conn_id, &wrapper.connection)
                             .await
                             .unwrap_or(HealthStatus::Unknown);
-                        
+
                         match health_status {
                             HealthStatus::Dead => {
                                 to_remove.push(index);
@@ -804,12 +804,12 @@ impl<T: PooledConnection> ConnectionPool<T> {
                             Ok(new_conn) => {
                                 let mut new_wrapper = PooledConnectionWrapper::new(new_conn);
                                 new_wrapper.connection_id = conn_id.clone();
-                                
+
                                 // Register new connection with health monitor
                                 let mut metadata = HashMap::new();
                                 metadata.insert("pool_id".to_string(), "main".to_string());
                                 health_monitor.register_connection(conn_id, metadata).await;
-                                
+
                                 connections_guard[index] = new_wrapper;
                                 info!("Successfully reconnected connection {}", conn_id);
                             }
@@ -826,7 +826,10 @@ impl<T: PooledConnection> ConnectionPool<T> {
                 // Get dead connections from health monitor
                 let dead_connections = health_monitor.get_dead_connections().await;
                 if !dead_connections.is_empty() {
-                    warn!("Health monitor detected {} dead connections", dead_connections.len());
+                    warn!(
+                        "Health monitor detected {} dead connections",
+                        dead_connections.len()
+                    );
                 }
 
                 debug!(
@@ -845,30 +848,42 @@ impl<T: PooledConnection> ConnectionPool<T> {
         for wrapper in connections.iter() {
             let mut metadata = HashMap::new();
             metadata.insert("pool_id".to_string(), "main".to_string());
-            metadata.insert("created_at".to_string(), wrapper.created_at.elapsed().as_secs().to_string());
-            
+            metadata.insert(
+                "created_at".to_string(),
+                wrapper.created_at.elapsed().as_secs().to_string(),
+            );
+
             self.health_monitor
                 .register_connection(wrapper.connection_id.clone(), metadata)
                 .await;
         }
-        
+
         // Subscribe to health events
         let mut health_events = self.health_monitor.subscribe();
         let stats = self.stats.clone();
-        
+
         tokio::spawn(async move {
             while let Ok(event) = health_events.recv().await {
                 match event {
-                    crate::health_monitor::HealthEvent::ConnectionDead { connection_id, reason } => {
+                    crate::health_monitor::HealthEvent::ConnectionDead {
+                        connection_id,
+                        reason,
+                    } => {
                         error!("Connection {} marked as dead: {}", connection_id, reason);
                         stats.write().await.health_check_failures += 1;
                     }
                     crate::health_monitor::HealthEvent::ConnectionRecovered { connection_id } => {
                         info!("Connection {} recovered", connection_id);
                     }
-                    crate::health_monitor::HealthEvent::StatusChanged { connection_id, old_status, new_status } => {
-                        debug!("Connection {} status changed from {:?} to {:?}", 
-                            connection_id, old_status, new_status);
+                    crate::health_monitor::HealthEvent::StatusChanged {
+                        connection_id,
+                        old_status,
+                        new_status,
+                    } => {
+                        debug!(
+                            "Connection {} status changed from {:?} to {:?}",
+                            connection_id, old_status, new_status
+                        );
                     }
                     _ => {}
                 }
@@ -1022,7 +1037,6 @@ impl<T: PooledConnection> ConnectionPool<T> {
             }
         });
     }
-
 }
 
 /// Enhanced connection handle with usage tracking and metrics
@@ -1168,7 +1182,10 @@ impl<T: PooledConnection> Drop for PooledConnectionHandle<T> {
 /// Helper for creating connection pools from stream config
 impl<T: PooledConnection> ConnectionPool<T> {
     /// Create a connection pool from stream configuration
-    pub async fn new_from_config(config: &StreamConfig, factory: Arc<dyn ConnectionFactory<T>>) -> Result<Self> {
+    pub async fn new_from_config(
+        config: &StreamConfig,
+        factory: Arc<dyn ConnectionFactory<T>>,
+    ) -> Result<Self> {
         let pool_config = PoolConfig {
             min_connections: 1,
             max_connections: config.max_connections,
@@ -1250,41 +1267,42 @@ impl<T: PooledConnection> ConnectionPool<T> {
             priority: 1,
             metadata: HashMap::new(),
         };
-        
+
         let secondary_endpoint = ConnectionEndpoint {
             name: "secondary".to_string(),
             factory: secondary_factory,
             priority: 2,
             metadata: HashMap::new(),
         };
-        
+
         // Create failover manager
         let failover_manager = Arc::new(
-            FailoverManager::new(
-                failover_config,
-                primary_endpoint,
-                secondary_endpoint,
-            )
-            .await?,
+            FailoverManager::new(failover_config, primary_endpoint, secondary_endpoint).await?,
         );
-        
+
         // Create pool with primary factory
         let mut pool = Self::new(config, primary_factory).await?;
         pool.failover_manager = Some(failover_manager.clone());
-        
+
         // Subscribe to failover events
         let mut failover_events = failover_manager.subscribe();
         let stats = pool.stats.clone();
-        
+
         tokio::spawn(async move {
             while let Ok(event) = failover_events.recv().await {
                 match event {
                     crate::failover::FailoverEvent::FailoverCompleted { from, to, duration } => {
-                        info!("Failover completed from {} to {} in {:?}", from, to, duration);
+                        info!(
+                            "Failover completed from {} to {} in {:?}",
+                            from, to, duration
+                        );
                         stats.write().await.failover_count += 1;
                     }
                     crate::failover::FailoverEvent::FailbackCompleted { from, to, duration } => {
-                        info!("Failback completed from {} to {} in {:?}", from, to, duration);
+                        info!(
+                            "Failback completed from {} to {} in {:?}",
+                            from, to, duration
+                        );
                     }
                     crate::failover::FailoverEvent::AllConnectionsUnavailable => {
                         error!("All connections unavailable!");
@@ -1293,7 +1311,7 @@ impl<T: PooledConnection> ConnectionPool<T> {
                 }
             }
         });
-        
+
         Ok(pool)
     }
 
@@ -1319,9 +1337,14 @@ impl<T: PooledConnection> ConnectionPool<T> {
     /// Register a connection failure callback for automatic reconnection
     pub async fn register_failure_callback<F>(&self, callback: F)
     where
-        F: Fn(String, String, u32) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync + 'static,
+        F: Fn(String, String, u32) -> Pin<Box<dyn Future<Output = ()> + Send>>
+            + Send
+            + Sync
+            + 'static,
     {
-        self.reconnect_manager.register_failure_callback(callback).await;
+        self.reconnect_manager
+            .register_failure_callback(callback)
+            .await;
     }
 
     /// Manually trigger failover (if configured)
@@ -1344,16 +1367,19 @@ impl<T: PooledConnection> ConnectionPool<T> {
     }
 
     /// Subscribe to health monitoring events
-    pub fn subscribe_health_events(&self) -> broadcast::Receiver<crate::health_monitor::HealthEvent> {
+    pub fn subscribe_health_events(
+        &self,
+    ) -> broadcast::Receiver<crate::health_monitor::HealthEvent> {
         self.health_monitor.subscribe()
     }
 
     /// Subscribe to reconnection events
-    pub fn subscribe_reconnect_events(&self) -> broadcast::Receiver<crate::reconnect::ReconnectEvent> {
+    pub fn subscribe_reconnect_events(
+        &self,
+    ) -> broadcast::Receiver<crate::reconnect::ReconnectEvent> {
         self.reconnect_manager.subscribe()
     }
 }
-
 
 /// Detailed pool metrics for comprehensive monitoring
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -3,14 +3,13 @@
 //! Extracted and adapted from OxiGraph oxjsonld with OxiRS enhancements.
 //! Based on W3C JSON-LD specifications: https://www.w3.org/TR/json-ld/
 
-use crate::model::{Quad, QuadRef, Triple, TripleRef};
-use super::format::{JsonLdProfile, JsonLdProfileSet};
-use super::error::{RdfParseError, ParseResult, RdfSyntaxError, TextPosition};
-use super::serializer::QuadSerializer;
 use super::error::SerializeResult;
-use std::io::{Read, Write};
+use super::error::{ParseResult, RdfParseError, RdfSyntaxError, TextPosition};
+use super::format::{JsonLdProfile, JsonLdProfileSet};
+use super::serializer::QuadSerializer;
+use crate::model::{Quad, QuadRef, Triple, TripleRef};
 use std::collections::HashMap;
-
+use std::io::{Read, Write};
 
 /// JSON-LD parser implementation
 #[derive(Debug, Clone)]
@@ -31,31 +30,31 @@ impl JsonLdParser {
             expand_context: false,
         }
     }
-    
+
     /// Set the JSON-LD processing profile
     pub fn with_profile(mut self, profile: JsonLdProfileSet) -> Self {
         self.profile = profile;
         self
     }
-    
+
     /// Set a custom context
     pub fn with_context(mut self, context: serde_json::Value) -> Self {
         self.context = Some(context);
         self
     }
-    
+
     /// Set base IRI for resolving relative IRIs
     pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Self {
         self.base_iri = Some(base_iri.into());
         self
     }
-    
+
     /// Enable context expansion
     pub fn expand_context(mut self) -> Self {
         self.expand_context = true;
         self
     }
-    
+
     /// Parse JSON-LD from a reader
     pub fn parse_reader<R: Read>(&self, reader: R) -> ParseResult<Vec<Quad>> {
         // TODO: Implement actual JSON-LD parsing
@@ -64,50 +63,50 @@ impl JsonLdParser {
         // 2. Context processing
         // 3. Expansion algorithm
         // 4. Conversion to RDF
-        
+
         Ok(Vec::new())
     }
-    
+
     /// Parse JSON-LD from a byte slice
     pub fn parse_slice(&self, slice: &[u8]) -> ParseResult<Vec<Quad>> {
         let content = std::str::from_utf8(slice)
             .map_err(|e| RdfParseError::syntax(format!("Invalid UTF-8: {}", e)))?;
         self.parse_str(content)
     }
-    
+
     /// Parse JSON-LD from a string
     pub fn parse_str(&self, input: &str) -> ParseResult<Vec<Quad>> {
         // TODO: Implement string-based JSON-LD parsing
-        
+
         // Basic JSON validation
         let _json_value: serde_json::Value = serde_json::from_str(input)
             .map_err(|e| RdfParseError::syntax(format!("Invalid JSON: {}", e)))?;
-        
+
         // TODO: Process JSON-LD algorithm:
         // 1. Context processing
         // 2. Expansion
         // 3. Compaction (if needed)
         // 4. Flattening (if needed)
         // 5. RDF conversion
-        
+
         Ok(Vec::new())
     }
-    
+
     /// Get the processing profile
     pub fn profile(&self) -> &JsonLdProfileSet {
         &self.profile
     }
-    
+
     /// Get the custom context
     pub fn context(&self) -> Option<&serde_json::Value> {
         self.context.as_ref()
     }
-    
+
     /// Get the base IRI
     pub fn base_iri(&self) -> Option<&str> {
         self.base_iri.as_deref()
     }
-    
+
     /// Check if context expansion is enabled
     pub fn is_expand_context(&self) -> bool {
         self.expand_context
@@ -141,42 +140,42 @@ impl JsonLdSerializer {
             pretty: false,
         }
     }
-    
+
     /// Set the JSON-LD processing profile
     pub fn with_profile(mut self, profile: JsonLdProfileSet) -> Self {
         self.profile = profile;
         self
     }
-    
+
     /// Set a custom context for compaction
     pub fn with_context(mut self, context: serde_json::Value) -> Self {
         self.context = Some(context);
         self
     }
-    
+
     /// Set base IRI for generating relative IRIs
     pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Self {
         self.base_iri = Some(base_iri.into());
         self
     }
-    
+
     /// Enable compact output (apply compaction algorithm)
     pub fn compact(mut self) -> Self {
         self.compact = true;
         self
     }
-    
+
     /// Enable pretty formatting
     pub fn pretty(mut self) -> Self {
         self.pretty = true;
         self
     }
-    
+
     /// Create a writer-based serializer
     pub fn for_writer<W: Write>(self, writer: W) -> WriterJsonLdSerializer<W> {
         WriterJsonLdSerializer::new(writer, self)
     }
-    
+
     /// Serialize quads to a JSON-LD string
     pub fn serialize_to_string(&self, quads: &[Quad]) -> SerializeResult<String> {
         let mut buffer = Vec::new();
@@ -187,32 +186,30 @@ impl JsonLdSerializer {
             }
             serializer.finish()?;
         }
-        String::from_utf8(buffer).map_err(|e| std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            e,
-        ))
+        String::from_utf8(buffer)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
     }
-    
+
     /// Get the processing profile
     pub fn profile(&self) -> &JsonLdProfileSet {
         &self.profile
     }
-    
+
     /// Get the custom context
     pub fn context(&self) -> Option<&serde_json::Value> {
         self.context.as_ref()
     }
-    
+
     /// Get the base IRI
     pub fn base_iri(&self) -> Option<&str> {
         self.base_iri.as_deref()
     }
-    
+
     /// Check if compact output is enabled
     pub fn is_compact(&self) -> bool {
         self.compact
     }
-    
+
     /// Check if pretty formatting is enabled
     pub fn is_pretty(&self) -> bool {
         self.pretty
@@ -243,7 +240,7 @@ impl<W: Write> WriterJsonLdSerializer<W> {
             finished: false,
         }
     }
-    
+
     /// Serialize a quad
     pub fn serialize_quad(&mut self, quad: QuadRef<'_>) -> SerializeResult<()> {
         if self.finished {
@@ -252,24 +249,24 @@ impl<W: Write> WriterJsonLdSerializer<W> {
                 "Serializer already finished",
             ));
         }
-        
+
         // Collect quads for batch processing
         self.quads.push(quad.into_owned());
         Ok(())
     }
-    
+
     /// Finish serialization and return the writer
     pub fn finish(mut self) -> SerializeResult<W> {
         if self.finished {
             return Ok(self.writer);
         }
-        
+
         // TODO: Implement actual JSON-LD serialization
         // This would involve:
         // 1. Convert quads to JSON-LD internal representation
         // 2. Apply processing algorithms (expansion, compaction, etc.)
         // 3. Serialize to JSON
-        
+
         // Create a basic JSON structure for now
         let json_output = if self.config.pretty {
             serde_json::to_string_pretty(&serde_json::json!({
@@ -282,10 +279,10 @@ impl<W: Write> WriterJsonLdSerializer<W> {
                 "@graph": self.quads.iter().map(|q| format!("TODO: quad {}", q)).collect::<Vec<_>>()
             }))?
         };
-        
+
         write!(self.writer, "{}", json_output)?;
         self.finished = true;
-        
+
         Ok(self.writer)
     }
 }
@@ -294,7 +291,7 @@ impl<W: Write> QuadSerializer<W> for WriterJsonLdSerializer<W> {
     fn serialize_quad(&mut self, quad: QuadRef<'_>) -> SerializeResult<()> {
         self.serialize_quad(quad)
     }
-    
+
     fn finish(self: Box<Self>) -> SerializeResult<W> {
         (*self).finish()
     }
@@ -303,7 +300,7 @@ impl<W: Write> QuadSerializer<W> for WriterJsonLdSerializer<W> {
 /// JSON-LD context management utilities
 pub mod context {
     use super::*;
-    
+
     /// Load context from URL or embedded definition
     pub fn load_context(context_ref: &str) -> ParseResult<serde_json::Value> {
         // TODO: Implement context loading
@@ -312,22 +309,22 @@ pub mod context {
         // 2. Context caching
         // 3. Recursive context loading
         // 4. Security considerations
-        
+
         Ok(serde_json::json!({}))
     }
-    
+
     /// Merge multiple contexts
     pub fn merge_contexts(contexts: &[serde_json::Value]) -> ParseResult<serde_json::Value> {
         // TODO: Implement context merging algorithm
         Ok(serde_json::json!({}))
     }
-    
+
     /// Expand a term using context
     pub fn expand_term(term: &str, context: &serde_json::Value) -> ParseResult<String> {
         // TODO: Implement term expansion
         Ok(term.to_string())
     }
-    
+
     /// Compact an IRI using context
     pub fn compact_iri(iri: &str, context: &serde_json::Value) -> ParseResult<String> {
         // TODO: Implement IRI compaction
@@ -352,13 +349,13 @@ mod tests {
     fn test_jsonld_parser_configuration() {
         let context = serde_json::json!({"@vocab": "http://example.org/"});
         let profile = JsonLdProfileSet::from_profile(JsonLdProfile::Expanded);
-        
+
         let parser = JsonLdParser::new()
             .with_profile(profile.clone())
             .with_context(context.clone())
             .with_base_iri("http://example.org/")
             .expand_context();
-            
+
         assert_eq!(parser.profile(), &profile);
         assert_eq!(parser.context(), Some(&context));
         assert_eq!(parser.base_iri(), Some("http://example.org/"));
@@ -379,14 +376,14 @@ mod tests {
     fn test_jsonld_serializer_configuration() {
         let context = serde_json::json!({"@vocab": "http://example.org/"});
         let profile = JsonLdProfileSet::from_profile(JsonLdProfile::Compacted);
-        
+
         let serializer = JsonLdSerializer::new()
             .with_profile(profile.clone())
             .with_context(context.clone())
             .with_base_iri("http://example.org/")
             .compact()
             .pretty();
-            
+
         assert_eq!(serializer.profile(), &profile);
         assert_eq!(serializer.context(), Some(&context));
         assert_eq!(serializer.base_iri(), Some("http://example.org/"));

@@ -35,20 +35,22 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 pub mod benchmark;
+pub mod cli;
 pub mod commands;
 pub mod config;
 pub mod export;
 pub mod import;
 pub mod server;
 pub mod tools;
-pub mod cli;
 
 /// Oxide CLI application
 #[derive(Parser)]
 #[command(name = "oxide")]
 #[command(about = "OxiRS command-line interface")]
 #[command(version)]
-#[command(long_about = "OxiRS command-line interface for RDF processing, SPARQL operations, and semantic data management.\n\nComplete documentation at https://oxirs.io/docs/cli")]
+#[command(
+    long_about = "OxiRS command-line interface for RDF processing, SPARQL operations, and semantic data management.\n\nComplete documentation at https://oxirs.io/docs/cli"
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
@@ -647,7 +649,7 @@ pub enum ConfigAction {
 
 /// Run the CLI application
 pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
-    use cli::{CliContext, completion};
+    use cli::{completion, CliContext};
 
     // Handle shell completion generation
     if let Some(shell) = cli.completion {
@@ -668,7 +670,7 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     } else {
         cli::LogFormat::Text
     };
-    
+
     let log_config = cli::LogConfig {
         level: if ctx.verbose {
             "debug".to_string()
@@ -686,9 +688,8 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             .and_then(|s| s.parse().ok()),
         file: std::env::var("OXIDE_LOG_FILE").ok(),
     };
-    
-    cli::init_logging(&log_config)
-        .expect("Failed to initialize logging");
+
+    cli::init_logging(&log_config).expect("Failed to initialize logging");
 
     // Show startup message if not quiet
     if ctx.should_show_output() {
@@ -919,9 +920,12 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             output_format,
             output,
         } => tools::rset::run(input, input_format, output_format, output).await,
-        Commands::Interactive { dataset: _, history: _ } => {
+        Commands::Interactive {
+            dataset: _,
+            history: _,
+        } => {
             use cli::InteractiveMode;
-            
+
             ctx.info("Starting interactive mode...");
             let mut interactive = InteractiveMode::new()?;
             interactive.run().await

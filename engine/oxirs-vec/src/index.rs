@@ -2,11 +2,11 @@
 
 use crate::{Vector, VectorIndex};
 use anyhow::{anyhow, Result};
+use oxirs_core::parallel::*;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
 use std::sync::Arc;
-use oxirs_core::parallel::*;
 
 #[cfg(feature = "hnsw")]
 use hnsw_rs::prelude::*;
@@ -71,7 +71,7 @@ impl DistanceMetric {
     /// Calculate distance between two vectors
     pub fn distance(&self, a: &[f32], b: &[f32]) -> f32 {
         use oxirs_core::simd::SimdOps;
-        
+
         match self {
             DistanceMetric::Cosine => f32::cosine_distance(a, b),
             DistanceMetric::Euclidean => f32::euclidean_distance(a, b),
@@ -273,10 +273,7 @@ impl AdvancedVectorIndex {
                 }
             }
 
-            let distance = self
-                .config
-                .distance_metric
-                .distance_vectors(query, vector);
+            let distance = self.config.distance_metric.distance_vectors(query, vector);
 
             if heap.len() < k {
                 heap.push(std::cmp::Reverse(SearchResult {
@@ -310,29 +307,27 @@ impl AdvancedVectorIndex {
     ) -> Result<Vec<SearchResult>> {
         // Split vectors into chunks for parallel processing
         let chunk_size = (self.vectors.len() / num_threads()).max(100);
-        
+
         // Use Arc for thread-safe sharing of the filter
         let filter_arc = filter.map(Arc::new);
-        
+
         // Process chunks in parallel and collect top-k from each
-        let partial_results: Vec<Vec<SearchResult>> = self.vectors
+        let partial_results: Vec<Vec<SearchResult>> = self
+            .vectors
             .par_chunks(chunk_size)
             .map(|chunk| {
                 let mut local_heap = BinaryHeap::new();
                 let filter_ref = filter_arc.as_ref();
-                
+
                 for (uri, vector) in chunk {
                     if let Some(filter_fn) = filter_ref {
                         if !filter_fn(uri) {
                             continue;
                         }
                     }
-                    
-                    let distance = self
-                        .config
-                        .distance_metric
-                        .distance_vectors(query, vector);
-                    
+
+                    let distance = self.config.distance_metric.distance_vectors(query, vector);
+
                     if local_heap.len() < k {
                         local_heap.push(std::cmp::Reverse(SearchResult {
                             uri: uri.clone(),
@@ -350,11 +345,15 @@ impl AdvancedVectorIndex {
                         }
                     }
                 }
-                
-                local_heap.into_sorted_vec().into_iter().map(|r| r.0).collect()
+
+                local_heap
+                    .into_sorted_vec()
+                    .into_iter()
+                    .map(|r| r.0)
+                    .collect()
             })
             .collect();
-        
+
         // Merge results from all chunks
         let mut final_heap = BinaryHeap::new();
         for partial in partial_results {
@@ -369,10 +368,10 @@ impl AdvancedVectorIndex {
                 }
             }
         }
-        
+
         let mut results: Vec<SearchResult> = final_heap.into_iter().map(|r| r.0).collect();
         results.sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap());
-        
+
         Ok(results)
     }
 
@@ -428,10 +427,7 @@ impl VectorIndex for AdvancedVectorIndex {
         let mut results = Vec::new();
 
         for (uri, vector) in &self.vectors {
-            let distance = self
-                .config
-                .distance_metric
-                .distance_vectors(query, vector);
+            let distance = self.config.distance_metric.distance_vectors(query, vector);
             if distance <= threshold {
                 results.push((uri.clone(), distance));
             }
@@ -440,13 +436,11 @@ impl VectorIndex for AdvancedVectorIndex {
         results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
         Ok(results)
     }
-    
+
     fn get_vector(&self, uri: &str) -> Option<&Vector> {
         // For AdvancedVectorIndex, vectors are stored in the vectors field
         // regardless of the index type being used
-        self.vectors.iter()
-            .find(|(u, _)| u == uri)
-            .map(|(_, v)| v)
+        self.vectors.iter().find(|(u, _)| u == uri).map(|(_, v)| v)
     }
 }
 
@@ -569,7 +563,7 @@ impl VectorIndex for QuantizedVectorIndex {
         results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
         Ok(results)
     }
-    
+
     fn get_vector(&self, uri: &str) -> Option<&Vector> {
         // Quantized index doesn't store original vectors
         // Return None as we only have quantized representations
@@ -719,7 +713,7 @@ impl VectorIndex for MultiIndex {
             Err(anyhow!("No default index set"))
         }
     }
-    
+
     fn get_vector(&self, uri: &str) -> Option<&Vector> {
         if let Some(index) = self.indices.get(&self.default_index) {
             index.get_vector(uri)

@@ -1,7 +1,7 @@
 //! Example demonstrating Locality Sensitive Hashing (LSH) for approximate nearest neighbor search
 
 use anyhow::Result;
-use oxirs_vec::{Vector, VectorIndex, LshConfig, LshIndex, LshFamily};
+use oxirs_vec::{LshConfig, LshFamily, LshIndex, Vector, VectorIndex};
 use std::time::Instant;
 
 fn main() -> Result<()> {
@@ -68,8 +68,10 @@ fn random_projection_example() -> Result<()> {
 
     // Get index statistics
     let stats = index.stats();
-    println!("  Index stats: {} vectors, {} tables, avg bucket size: {:.2}", 
-             stats.num_vectors, stats.num_tables, stats.avg_bucket_size);
+    println!(
+        "  Index stats: {} vectors, {} tables, avg bucket size: {:.2}",
+        stats.num_vectors, stats.num_tables, stats.avg_bucket_size
+    );
 
     Ok(())
 }
@@ -88,13 +90,22 @@ fn minhash_example() -> Result<()> {
 
     // Create sparse binary vectors (e.g., document term sets)
     let mut doc1 = vec![0.0; 100];
-    doc1[5] = 1.0; doc1[10] = 1.0; doc1[15] = 1.0; doc1[20] = 1.0;
+    doc1[5] = 1.0;
+    doc1[10] = 1.0;
+    doc1[15] = 1.0;
+    doc1[20] = 1.0;
 
     let mut doc2 = vec![0.0; 100];
-    doc2[5] = 1.0; doc2[10] = 1.0; doc2[25] = 1.0; doc2[30] = 1.0; // 50% overlap
+    doc2[5] = 1.0;
+    doc2[10] = 1.0;
+    doc2[25] = 1.0;
+    doc2[30] = 1.0; // 50% overlap
 
     let mut doc3 = vec![0.0; 100];
-    doc3[50] = 1.0; doc3[55] = 1.0; doc3[60] = 1.0; doc3[65] = 1.0; // No overlap
+    doc3[50] = 1.0;
+    doc3[55] = 1.0;
+    doc3[60] = 1.0;
+    doc3[65] = 1.0; // No overlap
 
     index.insert("doc1".to_string(), Vector::new(doc1.clone()))?;
     index.insert("doc2".to_string(), Vector::new(doc2))?;
@@ -143,20 +154,23 @@ fn multiprobe_example() -> Result<()> {
         let angle = i as f32 * 2.0 * std::f32::consts::PI / num_vectors as f32;
         let vector = Vector::new(vec![angle.cos(), angle.sin()]);
         let uri = format!("point_{}", i);
-        
+
         index_standard.insert(uri.clone(), vector.clone())?;
         index_multiprobe.insert(uri, vector)?;
     }
 
     // Query with a specific point
     let query = Vector::new(vec![1.0, 0.0]);
-    
+
     let results_standard = index_standard.search_knn(&query, 5)?;
     let results_multiprobe = index_multiprobe.search_knn(&query, 5)?;
 
     println!("  Query point: [1.0, 0.0]");
     println!("  Standard LSH found {} neighbors", results_standard.len());
-    println!("  Multi-probe LSH found {} neighbors", results_multiprobe.len());
+    println!(
+        "  Multi-probe LSH found {} neighbors",
+        results_multiprobe.len()
+    );
 
     Ok(())
 }
@@ -182,9 +196,12 @@ fn performance_comparison() -> Result<()> {
     let mut brute_force = MemoryVectorIndex::new();
 
     // Generate and index random vectors
-    println!("  Indexing {} {}-dimensional vectors...", num_vectors, dimensions);
+    println!(
+        "  Indexing {} {}-dimensional vectors...",
+        num_vectors, dimensions
+    );
     let start = Instant::now();
-    
+
     for i in 0..num_vectors {
         let mut values = Vec::with_capacity(dimensions);
         for j in 0..dimensions {
@@ -194,11 +211,11 @@ fn performance_comparison() -> Result<()> {
         }
         let vector = Vector::new(values);
         let uri = format!("vec_{}", i);
-        
+
         lsh_index.insert(uri.clone(), vector.clone())?;
         brute_force.insert(uri, vector)?;
     }
-    
+
     let indexing_time = start.elapsed();
     println!("  Indexing completed in {:?}", indexing_time);
 
@@ -228,12 +245,10 @@ fn performance_comparison() -> Result<()> {
         brute_times.push(brute_start.elapsed());
 
         // Calculate recall
-        let lsh_set: std::collections::HashSet<_> = lsh_results.iter()
-            .map(|(uri, _)| uri)
-            .collect();
-        let brute_set: std::collections::HashSet<_> = brute_results.iter()
-            .map(|(uri, _)| uri)
-            .collect();
+        let lsh_set: std::collections::HashSet<_> =
+            lsh_results.iter().map(|(uri, _)| uri).collect();
+        let brute_set: std::collections::HashSet<_> =
+            brute_results.iter().map(|(uri, _)| uri).collect();
         let intersection = lsh_set.intersection(&brute_set).count();
         let recall = intersection as f32 / brute_set.len() as f32;
         recall_scores.push(recall);

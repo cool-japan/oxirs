@@ -1,6 +1,8 @@
 //! Core RDF term types and implementations
 
-use crate::model::{Literal, LiteralRef, NamedNode, NamedNodeRef, ObjectTerm, PredicateTerm, RdfTerm, SubjectTerm};
+use crate::model::{
+    Literal, LiteralRef, NamedNode, NamedNodeRef, ObjectTerm, PredicateTerm, RdfTerm, SubjectTerm,
+};
 use crate::OxirsError;
 use lazy_static::lazy_static;
 use rand::random;

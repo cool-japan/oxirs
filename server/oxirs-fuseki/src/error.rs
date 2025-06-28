@@ -63,7 +63,7 @@ pub enum FusekiError {
 
     #[error("Request timeout")]
     Timeout,
-    
+
     #[error("Timeout: {0}")]
     TimeoutWithMessage(String),
 
@@ -147,7 +147,9 @@ impl FusekiError {
 
             FusekiError::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
 
-            FusekiError::Timeout | FusekiError::TimeoutWithMessage(..) => StatusCode::REQUEST_TIMEOUT,
+            FusekiError::Timeout | FusekiError::TimeoutWithMessage(..) => {
+                StatusCode::REQUEST_TIMEOUT
+            }
 
             FusekiError::UnsupportedMediaType { .. } => StatusCode::UNSUPPORTED_MEDIA_TYPE,
 
@@ -276,7 +278,6 @@ impl IntoResponse for FusekiError {
         (status, Json(error_response)).into_response()
     }
 }
-
 
 /// Convenience functions for creating common errors
 impl FusekiError {

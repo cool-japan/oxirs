@@ -2,12 +2,12 @@
 //!
 //! Provides REPL-like interactive command execution with history and completion.
 
-use rustyline::error::ReadlineError;
-use rustyline::{CompletionType, Config, EditMode, Editor};
 use rustyline::completion::{Completer, FilenameCompleter, Pair};
+use rustyline::error::ReadlineError;
 use rustyline::highlight::{Highlighter, MatchingBracketHighlighter};
 use rustyline::hint::HistoryHinter;
 use rustyline::validate::{self, MatchingBracketValidator, Validator};
+use rustyline::{CompletionType, Config, EditMode, Editor};
 use rustyline_derive::{Helper, Hinter};
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -72,20 +72,21 @@ impl InteractiveMode {
         loop {
             let prompt = self.get_prompt();
             let readline = self.editor.readline(&prompt);
-            
+
             match readline {
                 Ok(line) => {
                     // Handle multi-line mode
                     if self.multi_line_mode {
                         if line.trim().ends_with('\\') {
-                            self.multi_line_buffer.push(line.trim_end_matches('\\').to_string());
+                            self.multi_line_buffer
+                                .push(line.trim_end_matches('\\').to_string());
                             continue;
                         } else {
                             self.multi_line_buffer.push(line);
                             let full_command = self.multi_line_buffer.join(" ");
                             self.multi_line_buffer.clear();
                             self.multi_line_mode = false;
-                            
+
                             let _ = self.editor.add_history_entry(&full_command);
                             if let Err(e) = self.process_command(&full_command).await {
                                 eprintln!("Error: {}", e);
@@ -93,14 +94,15 @@ impl InteractiveMode {
                             continue;
                         }
                     }
-                    
+
                     // Check for multi-line start
                     if line.trim().ends_with('\\') {
                         self.multi_line_mode = true;
-                        self.multi_line_buffer.push(line.trim_end_matches('\\').to_string());
+                        self.multi_line_buffer
+                            .push(line.trim_end_matches('\\').to_string());
                         continue;
                     }
-                    
+
                     if line.trim().is_empty() {
                         continue;
                     }
@@ -138,7 +140,7 @@ impl InteractiveMode {
 
         Ok(())
     }
-    
+
     /// Get the appropriate prompt
     fn get_prompt(&self) -> String {
         if self.multi_line_mode {
@@ -149,11 +151,11 @@ impl InteractiveMode {
             "oxide> ".to_string()
         }
     }
-    
+
     /// Process a command
     async fn process_command(&mut self, command: &str) -> Result<(), Box<dyn std::error::Error>> {
         let trimmed = command.trim();
-        
+
         // Built-in commands
         match trimmed {
             "exit" | "quit" => std::process::exit(0),
@@ -167,16 +169,20 @@ impl InteractiveMode {
             }
             _ => {}
         }
-        
+
         // Check for special commands
         if trimmed.starts_with("use ") {
             let dataset = trimmed.strip_prefix("use ").unwrap().trim();
             self.use_dataset(dataset);
             return Ok(());
         }
-        
+
         if trimmed.starts_with("set ") {
-            let parts: Vec<&str> = trimmed.strip_prefix("set ").unwrap().splitn(2, '=').collect();
+            let parts: Vec<&str> = trimmed
+                .strip_prefix("set ")
+                .unwrap()
+                .splitn(2, '=')
+                .collect();
             if parts.len() == 2 {
                 self.set_variable(parts[0].trim(), parts[1].trim());
             } else {
@@ -184,12 +190,12 @@ impl InteractiveMode {
             }
             return Ok(());
         }
-        
+
         if trimmed == "env" {
             self.show_environment();
             return Ok(());
         }
-        
+
         // Execute regular commands
         self.execute_command(trimmed).await
     }
@@ -199,7 +205,7 @@ impl InteractiveMode {
         // Expand environment variables
         let expanded = self.expand_variables(command);
         let parts: Vec<&str> = expanded.split_whitespace().collect();
-        
+
         if parts.is_empty() {
             return Ok(());
         }
@@ -223,17 +229,26 @@ impl InteractiveMode {
             "tdbdump" => self.handle_tdbdump(&adjusted_args_refs).await,
             _ => {
                 // Try to suggest similar commands
-                let suggestions = crate::cli::suggestions::suggest_command(cmd, &get_command_list().iter().map(|s| s.as_str()).collect::<Vec<_>>());
+                let suggestions = crate::cli::suggestions::suggest_command(
+                    cmd,
+                    &get_command_list()
+                        .iter()
+                        .map(|s| s.as_str())
+                        .collect::<Vec<_>>(),
+                );
                 if let Some(suggestion) = suggestions {
                     println!("Unknown command: {}. {}", cmd, suggestion);
                 } else {
-                    println!("Unknown command: {}. Type 'help' for available commands.", cmd);
+                    println!(
+                        "Unknown command: {}. Type 'help' for available commands.",
+                        cmd
+                    );
                 }
                 Ok(())
             }
         }
     }
-    
+
     /// Expand environment variables in command
     fn expand_variables(&self, command: &str) -> String {
         let mut result = command.to_string();
@@ -243,12 +258,12 @@ impl InteractiveMode {
         }
         result
     }
-    
+
     /// Adjust arguments to include current dataset if needed
     fn adjust_args_with_dataset(&self, cmd: &str, args: &[&str]) -> Vec<String> {
         // Commands that can use current dataset as first argument
         let dataset_commands = ["query", "import", "export", "stats", "tdbloader", "tdbdump"];
-        
+
         if dataset_commands.contains(&cmd) && !args.is_empty() {
             // Check if first arg looks like a dataset name or if we should inject current dataset
             if let Some(ref dataset) = self.current_dataset {
@@ -257,8 +272,11 @@ impl InteractiveMode {
                     // For query, check if it starts with SELECT/CONSTRUCT/etc
                     if cmd == "query" && !args.is_empty() {
                         let first_upper = args[0].to_uppercase();
-                        if first_upper.starts_with("SELECT") || first_upper.starts_with("CONSTRUCT") 
-                            || first_upper.starts_with("DESCRIBE") || first_upper.starts_with("ASK") {
+                        if first_upper.starts_with("SELECT")
+                            || first_upper.starts_with("CONSTRUCT")
+                            || first_upper.starts_with("DESCRIBE")
+                            || first_upper.starts_with("ASK")
+                        {
                             // This is a query, inject dataset
                             let mut new_args = vec![dataset.clone()];
                             new_args.extend(args.iter().map(|s| s.to_string()));
@@ -268,7 +286,7 @@ impl InteractiveMode {
                 }
             }
         }
-        
+
         args.iter().map(|s| s.to_string()).collect()
     }
 
@@ -281,28 +299,28 @@ impl InteractiveMode {
         println!("    import <dataset> <file>   - Import RDF data");
         println!("    export <dataset> <file>   - Export RDF data");
         println!("    stats <dataset>           - Show dataset statistics");
-        
+
         println!("\n  Data Processing:");
         println!("    validate <file>           - Validate RDF syntax");
         println!("    riot <files...>           - Parse and serialize RDF");
         println!("    shacl <data> <shapes>     - Run SHACL validation");
-        
+
         println!("\n  Environment:");
         println!("    set VAR=value             - Set an environment variable");
         println!("    env                       - Show environment variables");
         println!("    clear                     - Clear the screen");
-        
+
         println!("\n  System:");
         println!("    help, ?                   - Show this help message");
         println!("    exit, quit                - Exit interactive mode");
-        
+
         println!("\nInteractive Features:");
         println!("  - Use Tab for command and file completion");
         println!("  - Use Up/Down arrows for command history");
         println!("  - Use Ctrl+R for reverse history search");
         println!("  - Use '\\' at line end for multi-line input");
         println!("  - Variables: $VAR expands to environment value");
-        
+
         if let Some(ref dataset) = self.current_dataset {
             println!("\nCurrent dataset: {}", dataset);
         }
@@ -401,19 +419,19 @@ impl InteractiveMode {
 
         Ok(())
     }
-    
+
     /// Use a dataset
     fn use_dataset(&mut self, dataset: &str) {
         self.current_dataset = Some(dataset.to_string());
         println!("Now using dataset: {}", dataset);
     }
-    
+
     /// Set an environment variable
     fn set_variable(&mut self, key: &str, value: &str) {
         self.environment.insert(key.to_string(), value.to_string());
         println!("Set {} = {}", key, value);
     }
-    
+
     /// Show environment variables
     fn show_environment(&self) {
         if self.environment.is_empty() {
@@ -424,58 +442,58 @@ impl InteractiveMode {
                 println!("  {} = {}", key, value);
             }
         }
-        
+
         if let Some(ref dataset) = self.current_dataset {
             println!("\nCurrent dataset: {}", dataset);
         }
     }
-    
+
     /// Handle riot command
     async fn handle_riot(&self, args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
         if args.is_empty() {
             println!("Usage: riot <input_files...> [--output <format>]");
             return Ok(());
         }
-        
+
         println!("Running riot with args: {}", args.join(" "));
         // TODO: Integrate with actual riot command
         println!("Riot command not yet fully integrated in interactive mode");
         Ok(())
     }
-    
+
     /// Handle shacl command  
     async fn handle_shacl(&self, args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
         if args.len() < 2 {
             println!("Usage: shacl <data_file> <shapes_file>");
             return Ok(());
         }
-        
+
         println!("Running SHACL validation...");
         // TODO: Integrate with actual shacl command
         println!("SHACL command not yet fully integrated in interactive mode");
         Ok(())
     }
-    
+
     /// Handle tdbloader command
     async fn handle_tdbloader(&self, args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
         if args.len() < 2 {
             println!("Usage: tdbloader <dataset> <files...>");
             return Ok(());
         }
-        
+
         println!("Loading data into TDB...");
         // TODO: Integrate with actual tdbloader command
         println!("TDB loader not yet fully integrated in interactive mode");
         Ok(())
     }
-    
+
     /// Handle tdbdump command
     async fn handle_tdbdump(&self, args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
         if args.is_empty() {
             println!("Usage: tdbdump <dataset> [--output <file>]");
             return Ok(());
         }
-        
+
         println!("Dumping TDB dataset...");
         // TODO: Integrate with actual tdbdump command
         println!("TDB dump not yet fully integrated in interactive mode");
@@ -511,10 +529,10 @@ impl Completer for OxideHelper {
     ) -> Result<(usize, Vec<Pair>), ReadlineError> {
         // First try command completion
         let mut candidates = Vec::new();
-        
+
         // Split the line to get the current word
         let words: Vec<&str> = line[..pos].split_whitespace().collect();
-        
+
         if words.len() <= 1 {
             // Complete commands
             let prefix = words.first().unwrap_or(&"");
@@ -527,12 +545,12 @@ impl Completer for OxideHelper {
                 }
             }
         }
-        
+
         // If no command matches, try file completion
         if candidates.is_empty() {
             return self.completer.complete(line, pos, ctx);
         }
-        
+
         Ok((0, candidates))
     }
 }
@@ -569,19 +587,16 @@ fn get_command_list() -> Vec<String> {
         "export".to_string(),
         "validate".to_string(),
         "stats".to_string(),
-        
         // Data processing
         "riot".to_string(),
         "rdfcat".to_string(),
         "rdfcopy".to_string(),
         "rdfdiff".to_string(),
         "rdfparse".to_string(),
-        
         // Validation
         "shacl".to_string(),
         "shex".to_string(),
         "infer".to_string(),
-        
         // TDB commands
         "tdbloader".to_string(),
         "tdbdump".to_string(),
@@ -590,12 +605,10 @@ fn get_command_list() -> Vec<String> {
         "tdbstats".to_string(),
         "tdbbackup".to_string(),
         "tdbcompact".to_string(),
-        
         // Environment
         "use".to_string(),
         "set".to_string(),
         "env".to_string(),
-        
         // System
         "clear".to_string(),
         "cls".to_string(),

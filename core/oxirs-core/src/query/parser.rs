@@ -3,8 +3,8 @@
 //! This is a placeholder implementation that will be enhanced with full
 //! SPARQL 1.1 parsing capabilities in future iterations.
 
-use crate::model::{Variable, NamedNode, BlankNode, Literal};
-use crate::query::sparql_algebra::{GraphPattern, TriplePattern, TermPattern};
+use crate::model::{BlankNode, Literal, NamedNode, Variable};
+use crate::query::sparql_algebra::{GraphPattern, TermPattern, TriplePattern};
 use crate::query::sparql_query::{Query, QueryDataset};
 use crate::OxirsError;
 use std::collections::HashMap;
@@ -89,10 +89,9 @@ impl SparqlParser {
     fn parse_construct_query(&self, query: &str) -> Result<Query, OxirsError> {
         // Find CONSTRUCT template and WHERE clause
         let construct_start = query.to_uppercase().find("CONSTRUCT").unwrap() + 9;
-        let where_start = query
-            .to_uppercase()
-            .find("WHERE")
-            .ok_or_else(|| OxirsError::Parse("CONSTRUCT query must have WHERE clause".to_string()))?;
+        let where_start = query.to_uppercase().find("WHERE").ok_or_else(|| {
+            OxirsError::Parse("CONSTRUCT query must have WHERE clause".to_string())
+        })?;
 
         // Parse template (simplified - just get the content between braces)
         let construct_clause = query[construct_start..where_start].trim();
@@ -125,10 +124,9 @@ impl SparqlParser {
     }
 
     fn parse_describe_query(&self, query: &str) -> Result<Query, OxirsError> {
-        let where_start = query
-            .to_uppercase()
-            .find("WHERE")
-            .ok_or_else(|| OxirsError::Parse("DESCRIBE query must have WHERE clause".to_string()))?;
+        let where_start = query.to_uppercase().find("WHERE").ok_or_else(|| {
+            OxirsError::Parse("DESCRIBE query must have WHERE clause".to_string())
+        })?;
 
         let pattern = self.parse_where_clause(&query[where_start + 5..])?;
 
@@ -139,7 +137,10 @@ impl SparqlParser {
         })
     }
 
-    fn parse_construct_template(&self, template_text: &str) -> Result<Vec<TriplePattern>, OxirsError> {
+    fn parse_construct_template(
+        &self,
+        template_text: &str,
+    ) -> Result<Vec<TriplePattern>, OxirsError> {
         let content = template_text.trim();
         if !content.starts_with('{') || !content.ends_with('}') {
             return Err(OxirsError::Parse(
@@ -211,7 +212,9 @@ impl SparqlParser {
             triple_patterns.push(TriplePattern::new(subject, predicate, object));
         }
 
-        Ok(GraphPattern::Bgp { patterns: triple_patterns })
+        Ok(GraphPattern::Bgp {
+            patterns: triple_patterns,
+        })
     }
 
     fn parse_term_pattern(&self, term: &str) -> Result<TermPattern, OxirsError> {
@@ -240,7 +243,6 @@ impl SparqlParser {
             Err(OxirsError::Parse(format!("Invalid term pattern: {}", term)))
         }
     }
-
 }
 
 #[cfg(test)]
@@ -297,7 +299,10 @@ mod tests {
         let result = parser.parse_query(query);
         assert!(result.is_ok());
 
-        if let Ok(Query::Construct { template, pattern, .. }) = result {
+        if let Ok(Query::Construct {
+            template, pattern, ..
+        }) = result
+        {
             assert_eq!(template.len(), 1);
             match pattern {
                 GraphPattern::Bgp { patterns } => {

@@ -120,7 +120,6 @@ mod tests {
     }
 
     fn create_person_shape() -> Shape {
-
         let mut shape = Shape::new("http://example.org/PersonShape".to_string());
         shape.set_target_class("http://example.org/Person".to_string());
 

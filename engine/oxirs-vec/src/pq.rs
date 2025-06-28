@@ -70,9 +70,13 @@ impl PQConfig {
             enable_symmetric_distance: false,
         }
     }
-    
+
     /// Create a configuration with residual quantization enabled
-    pub fn with_residual_quantization(n_subquantizers: usize, n_bits: usize, residual_levels: usize) -> Self {
+    pub fn with_residual_quantization(
+        n_subquantizers: usize,
+        n_bits: usize,
+        residual_levels: usize,
+    ) -> Self {
         Self {
             n_subquantizers,
             n_centroids: 1 << n_bits,
@@ -82,9 +86,13 @@ impl PQConfig {
             ..Default::default()
         }
     }
-    
+
     /// Create a configuration with multi-codebook quantization enabled
-    pub fn with_multi_codebook(n_subquantizers: usize, n_bits: usize, num_codebooks: usize) -> Self {
+    pub fn with_multi_codebook(
+        n_subquantizers: usize,
+        n_bits: usize,
+        num_codebooks: usize,
+    ) -> Self {
         Self {
             n_subquantizers,
             n_centroids: 1 << n_bits,
@@ -94,7 +102,7 @@ impl PQConfig {
             ..Default::default()
         }
     }
-    
+
     /// Create a configuration with all enhancements enabled
     pub fn enhanced(n_subquantizers: usize, n_bits: usize) -> Self {
         Self {
@@ -109,13 +117,13 @@ impl PQConfig {
             ..Default::default()
         }
     }
-    
+
     /// Validate the configuration
     pub fn validate(&self) -> Result<()> {
         if self.n_centroids != (1 << self.n_bits) {
             return Err(anyhow!(
-                "n_centroids {} doesn't match 2^n_bits ({})", 
-                self.n_centroids, 
+                "n_centroids {} doesn't match 2^n_bits ({})",
+                self.n_centroids,
                 1 << self.n_bits
             ));
         }
@@ -126,10 +134,14 @@ impl PQConfig {
             return Err(anyhow!("n_bits must be between 1 and 16"));
         }
         if self.enable_residual_quantization && self.residual_levels == 0 {
-            return Err(anyhow!("residual_levels must be greater than 0 when residual quantization is enabled"));
+            return Err(anyhow!(
+                "residual_levels must be greater than 0 when residual quantization is enabled"
+            ));
         }
         if self.enable_multi_codebook && self.num_codebooks < 2 {
-            return Err(anyhow!("num_codebooks must be at least 2 when multi-codebook quantization is enabled"));
+            return Err(anyhow!(
+                "num_codebooks must be at least 2 when multi-codebook quantization is enabled"
+            ));
         }
         Ok(())
     }
@@ -167,7 +179,7 @@ impl SubQuantizer {
         }
 
         let dims = subvectors[0].len();
-        
+
         // Initialize centroids using k-means++
         self.centroids = self.initialize_centroids_kmeans_plus_plus(subvectors, config)?;
 
@@ -178,7 +190,7 @@ impl SubQuantizer {
         while iteration < config.max_iterations {
             // Assign points to nearest centroids
             let mut clusters: Vec<Vec<&Vec<f32>>> = vec![Vec::new(); config.n_centroids];
-            
+
             for subvector in subvectors {
                 let nearest_idx = self.find_nearest_centroid(subvector)?;
                 clusters[nearest_idx].push(subvector);
@@ -236,7 +248,7 @@ impl SubQuantizer {
                     .iter()
                     .map(|c| self.euclidean_distance(subvector, c))
                     .fold(f32::INFINITY, |a, b| a.min(b));
-                
+
                 distances.push(min_dist * min_dist);
                 sum_distances += min_dist * min_dist;
             }
@@ -313,7 +325,7 @@ impl SubQuantizer {
         if self.centroids.len() > 256 {
             return Err(anyhow!("Too many centroids for u8 encoding"));
         }
-        
+
         let idx = self.find_nearest_centroid(subvector)?;
         Ok(idx as u8)
     }
@@ -392,7 +404,9 @@ impl PQIndex {
         // Validate dimensions
         let dims = training_vectors[0].dimensions;
         if !training_vectors.iter().all(|v| v.dimensions == dims) {
-            return Err(anyhow!("All training vectors must have the same dimensions"));
+            return Err(anyhow!(
+                "All training vectors must have the same dimensions"
+            ));
         }
 
         if dims % self.config.n_subquantizers != 0 {
@@ -411,14 +425,12 @@ impl PQIndex {
         for i in 0..self.config.n_subquantizers {
             let start = i * subdim;
             let end = start + subdim;
-            self.subquantizers.push(SubQuantizer::new(start, end, self.config.n_centroids));
+            self.subquantizers
+                .push(SubQuantizer::new(start, end, self.config.n_centroids));
         }
 
         // Extract training data as f32
-        let training_data: Vec<Vec<f32>> = training_vectors
-            .iter()
-            .map(|v| v.as_f32())
-            .collect();
+        let training_data: Vec<Vec<f32>> = training_vectors.iter().map(|v| v.as_f32()).collect();
 
         // Train each subquantizer
         for sq in self.subquantizers.iter_mut() {
@@ -453,10 +465,10 @@ impl PQIndex {
     /// Train residual quantizers for improved accuracy
     fn train_residual_quantizers(&mut self, training_data: &[Vec<f32>]) -> Result<()> {
         let subdim = self.dimensions.unwrap() / self.config.n_subquantizers;
-        
+
         // Start with residuals from the primary quantizers
         let mut current_residuals = training_data.to_vec();
-        
+
         for level in 0..self.config.residual_levels {
             // Compute residuals from previous level
             if level == 0 {
@@ -464,9 +476,10 @@ impl PQIndex {
                 for (i, vector) in training_data.iter().enumerate() {
                     let primary_codes = self.encode_primary_vector(vector)?;
                     let reconstructed = self.decode_primary_codes(&primary_codes)?;
-                    
+
                     // Compute residual
-                    let residual: Vec<f32> = vector.iter()
+                    let residual: Vec<f32> = vector
+                        .iter()
                         .zip(reconstructed.iter())
                         .map(|(a, b)| a - b)
                         .collect();
@@ -476,79 +489,87 @@ impl PQIndex {
                 // Compute residuals from previous residual level
                 for (i, residual) in current_residuals.clone().iter().enumerate() {
                     let residual_codes = self.encode_residual_vector(residual, level - 1)?;
-                    let reconstructed_residual = self.decode_residual_codes(&residual_codes, level - 1)?;
-                    
-                    let new_residual: Vec<f32> = residual.iter()
+                    let reconstructed_residual =
+                        self.decode_residual_codes(&residual_codes, level - 1)?;
+
+                    let new_residual: Vec<f32> = residual
+                        .iter()
                         .zip(reconstructed_residual.iter())
                         .map(|(a, b)| a - b)
                         .collect();
                     current_residuals[i] = new_residual;
                 }
             }
-            
+
             // Initialize residual subquantizers for this level
             self.residual_quantizers[level].clear();
             for i in 0..self.config.n_subquantizers {
                 let start = i * subdim;
                 let end = start + subdim;
-                self.residual_quantizers[level].push(SubQuantizer::new(start, end, self.config.n_centroids));
+                self.residual_quantizers[level].push(SubQuantizer::new(
+                    start,
+                    end,
+                    self.config.n_centroids,
+                ));
             }
-            
+
             // Train each residual subquantizer
             for sq in self.residual_quantizers[level].iter_mut() {
                 let subvectors: Vec<Vec<f32>> = current_residuals
                     .iter()
                     .map(|v| sq.extract_subvector(v))
                     .collect();
-                
+
                 sq.train(&subvectors, &self.config)?;
             }
         }
-        
+
         Ok(())
     }
 
     /// Train multi-codebook quantizers for better coverage
     fn train_multi_codebook_quantizers(&mut self, training_data: &[Vec<f32>]) -> Result<()> {
         let subdim = self.dimensions.unwrap() / self.config.n_subquantizers;
-        
+
         for codebook_idx in 0..self.config.num_codebooks {
             // Initialize subquantizers for this codebook
             self.multi_codebook_quantizers[codebook_idx].clear();
             for i in 0..self.config.n_subquantizers {
                 let start = i * subdim;
                 let end = start + subdim;
-                self.multi_codebook_quantizers[codebook_idx].push(
-                    SubQuantizer::new(start, end, self.config.n_centroids)
-                );
+                self.multi_codebook_quantizers[codebook_idx].push(SubQuantizer::new(
+                    start,
+                    end,
+                    self.config.n_centroids,
+                ));
             }
-            
+
             // Use different initialization for each codebook
             let mut modified_config = self.config.clone();
             modified_config.seed = self.config.seed.map(|s| s + codebook_idx as u64);
-            
+
             // Train each subquantizer in this codebook
             for sq in self.multi_codebook_quantizers[codebook_idx].iter_mut() {
                 let subvectors: Vec<Vec<f32>> = training_data
                     .iter()
                     .map(|v| sq.extract_subvector(v))
                     .collect();
-                
+
                 sq.train(&subvectors, &modified_config)?;
             }
         }
-        
+
         Ok(())
     }
 
     /// Build distance lookup tables for symmetric distance computation
     fn build_distance_tables(&mut self) -> Result<()> {
         let mut tables = Vec::new();
-        
+
         for sq_idx in 0..self.config.n_subquantizers {
             let sq = &self.subquantizers[sq_idx];
             let mut sq_table = Vec::new();
-            
+
             // Build distance table between all pairs of centroids
             for i in 0..sq.centroids.len() {
                 let mut centroid_distances = Vec::new();
@@ -560,7 +581,7 @@ impl PQIndex {
             }
             tables.push(sq_table);
         }
-        
+
         self.distance_tables = Some(tables);
         Ok(())
     }
@@ -568,25 +589,25 @@ impl PQIndex {
     /// Helper method to encode with primary quantizers only
     fn encode_primary_vector(&self, vector: &[f32]) -> Result<Vec<u8>> {
         let mut codes = Vec::with_capacity(self.subquantizers.len());
-        
+
         for sq in &self.subquantizers {
             let subvec = sq.extract_subvector(vector);
             let code = sq.encode(&subvec)?;
             codes.push(code);
         }
-        
+
         Ok(codes)
     }
 
     /// Helper method to decode primary codes
     fn decode_primary_codes(&self, codes: &[u8]) -> Result<Vec<f32>> {
         let mut reconstructed = Vec::new();
-        
+
         for (sq, &code) in self.subquantizers.iter().zip(codes.iter()) {
             let subvec = sq.decode(code)?;
             reconstructed.extend(subvec);
         }
-        
+
         Ok(reconstructed)
     }
 
@@ -595,15 +616,15 @@ impl PQIndex {
         if level >= self.residual_quantizers.len() {
             return Err(anyhow!("Invalid residual level: {}", level));
         }
-        
+
         let mut codes = Vec::with_capacity(self.residual_quantizers[level].len());
-        
+
         for sq in &self.residual_quantizers[level] {
             let subvec = sq.extract_subvector(vector);
             let code = sq.encode(&subvec)?;
             codes.push(code);
         }
-        
+
         Ok(codes)
     }
 
@@ -612,14 +633,14 @@ impl PQIndex {
         if level >= self.residual_quantizers.len() {
             return Err(anyhow!("Invalid residual level: {}", level));
         }
-        
+
         let mut reconstructed = Vec::new();
-        
+
         for (sq, &code) in self.residual_quantizers[level].iter().zip(codes.iter()) {
             let subvec = sq.decode(code)?;
             reconstructed.extend(subvec);
         }
-        
+
         Ok(reconstructed)
     }
 
@@ -648,7 +669,7 @@ impl PQIndex {
         }
 
         let mut reconstructed = Vec::new();
-        
+
         for (sq, &code) in self.subquantizers.iter().zip(codes.iter()) {
             let subvec = sq.decode(code)?;
             reconstructed.extend(subvec);
@@ -656,17 +677,17 @@ impl PQIndex {
 
         Ok(Vector::new(reconstructed))
     }
-    
+
     /// Public method to encode a vector (for OPQ)
     pub fn encode(&self, vector: &Vector) -> Result<Vec<u8>> {
         self.encode_vector(vector)
     }
-    
+
     /// Public method to decode codes (for OPQ)
     pub fn decode(&self, codes: &[u8]) -> Result<Vector> {
         self.decode_codes(codes)
     }
-    
+
     /// Reconstruct a vector by encoding and then decoding (for OPQ)
     pub fn reconstruct(&self, vector: &Vector) -> Result<Vector> {
         let codes = self.encode_vector(vector)?;
@@ -681,14 +702,14 @@ impl PQIndex {
         for (sq, &code) in self.subquantizers.iter().zip(codes.iter()) {
             let query_subvec = sq.extract_subvector(&query_f32);
             let centroid = &sq.centroids[code as usize];
-            
+
             // Compute squared distance to avoid sqrt
             let dist: f32 = query_subvec
                 .iter()
                 .zip(centroid.iter())
                 .map(|(a, b)| (a - b).powi(2))
                 .sum();
-            
+
             total_distance += dist;
         }
 
@@ -702,44 +723,47 @@ impl PQIndex {
         }
 
         let vector_f32 = vector.as_f32();
-        
+
         // Primary encoding
         let primary_codes = self.encode_primary_vector(&vector_f32)?;
-        
+
         // Residual encoding if enabled
         let mut residual_codes = Vec::new();
         if self.config.enable_residual_quantization {
             let mut current_residual = vector_f32.clone();
-            
+
             // Compute residual from primary quantization
             let primary_reconstructed = self.decode_primary_codes(&primary_codes)?;
-            current_residual = current_residual.iter()
+            current_residual = current_residual
+                .iter()
                 .zip(primary_reconstructed.iter())
                 .map(|(a, b)| a - b)
                 .collect();
-            
+
             // Encode residuals at each level
             for level in 0..self.config.residual_levels {
                 let level_codes = self.encode_residual_vector(&current_residual, level)?;
                 residual_codes.push(level_codes.clone());
-                
+
                 // Update residual for next level
                 if level < self.config.residual_levels - 1 {
                     let level_reconstructed = self.decode_residual_codes(&level_codes, level)?;
-                    current_residual = current_residual.iter()
+                    current_residual = current_residual
+                        .iter()
                         .zip(level_reconstructed.iter())
                         .map(|(a, b)| a - b)
                         .collect();
                 }
             }
         }
-        
+
         // Multi-codebook encoding if enabled
         let mut multi_codebook_codes = Vec::new();
         if self.config.enable_multi_codebook {
             for codebook_idx in 0..self.config.num_codebooks {
-                let mut codes = Vec::with_capacity(self.multi_codebook_quantizers[codebook_idx].len());
-                
+                let mut codes =
+                    Vec::with_capacity(self.multi_codebook_quantizers[codebook_idx].len());
+
                 for sq in &self.multi_codebook_quantizers[codebook_idx] {
                     let subvec = sq.extract_subvector(&vector_f32);
                     let code = sq.encode(&subvec)?;
@@ -748,7 +772,7 @@ impl PQIndex {
                 multi_codebook_codes.push(codes);
             }
         }
-        
+
         Ok(EnhancedCodes {
             primary: primary_codes,
             residual: residual_codes,
@@ -761,21 +785,23 @@ impl PQIndex {
         if !self.config.enable_symmetric_distance {
             return Err(anyhow!("Symmetric distance computation not enabled"));
         }
-        
-        let distance_tables = self.distance_tables.as_ref()
+
+        let distance_tables = self
+            .distance_tables
+            .as_ref()
             .ok_or_else(|| anyhow!("Distance tables not built"))?;
-        
+
         if codes1.len() != codes2.len() || codes1.len() != self.config.n_subquantizers {
             return Err(anyhow!("Invalid code lengths for symmetric distance"));
         }
-        
+
         let mut total_distance = 0.0;
-        
+
         for (sq_idx, (&code1, &code2)) in codes1.iter().zip(codes2.iter()).enumerate() {
             let distance = distance_tables[sq_idx][code1 as usize][code2 as usize];
             total_distance += distance * distance; // Squared distance
         }
-        
+
         Ok(total_distance.sqrt())
     }
 
@@ -783,62 +809,67 @@ impl PQIndex {
     fn enhanced_distance(&self, query: &Vector, enhanced_codes: &EnhancedCodes) -> Result<f32> {
         // Start with primary distance
         let mut total_distance = self.asymmetric_distance(query, &enhanced_codes.primary)?;
-        
+
         // Add residual distances if enabled
         if self.config.enable_residual_quantization && !enhanced_codes.residual.is_empty() {
             let query_f32 = query.as_f32();
             let mut current_residual = query_f32.clone();
-            
+
             // Compute residual from primary quantization
             let primary_reconstructed = self.decode_primary_codes(&enhanced_codes.primary)?;
-            current_residual = current_residual.iter()
+            current_residual = current_residual
+                .iter()
                 .zip(primary_reconstructed.iter())
                 .map(|(a, b)| a - b)
                 .collect();
-            
+
             // Add distance from each residual level
             for (level, residual_codes) in enhanced_codes.residual.iter().enumerate() {
                 let mut residual_distance = 0.0;
-                
-                for (sq, &code) in self.residual_quantizers[level].iter().zip(residual_codes.iter()) {
+
+                for (sq, &code) in self.residual_quantizers[level]
+                    .iter()
+                    .zip(residual_codes.iter())
+                {
                     let query_subvec = sq.extract_subvector(&current_residual);
                     let centroid = &sq.centroids[code as usize];
-                    
+
                     let dist: f32 = query_subvec
                         .iter()
                         .zip(centroid.iter())
                         .map(|(a, b)| (a - b).powi(2))
                         .sum();
-                    
+
                     residual_distance += dist;
                 }
-                
+
                 total_distance += residual_distance.sqrt() * 0.5; // Weight residual distances
-                
+
                 // Update residual for next level
                 if level < enhanced_codes.residual.len() - 1 {
                     let level_reconstructed = self.decode_residual_codes(residual_codes, level)?;
-                    current_residual = current_residual.iter()
+                    current_residual = current_residual
+                        .iter()
                         .zip(level_reconstructed.iter())
                         .map(|(a, b)| a - b)
                         .collect();
                 }
             }
         }
-        
+
         // For multi-codebook, use the minimum distance across codebooks
         if self.config.enable_multi_codebook && !enhanced_codes.multi_codebook.is_empty() {
             let mut min_codebook_distance = f32::INFINITY;
-            
+
             for codes in &enhanced_codes.multi_codebook {
                 let codebook_distance = self.asymmetric_distance(query, codes)?;
                 min_codebook_distance = min_codebook_distance.min(codebook_distance);
             }
-            
+
             // Use the minimum as a refinement
             total_distance = total_distance.min(min_codebook_distance);
         }
-        
+
         Ok(total_distance)
     }
 
@@ -868,25 +899,27 @@ impl PQIndex {
 
     /// Estimate memory usage in bytes
     fn estimate_memory_usage(&self) -> usize {
-        let codebook_size = self.subquantizers.iter()
+        let codebook_size = self
+            .subquantizers
+            .iter()
             .map(|sq| sq.centroids.len() * (sq.end_dim - sq.start_dim) * 4)
             .sum::<usize>();
-        
+
         let codes_size = self.codes.len() * self.config.n_subquantizers;
-        
+
         codebook_size + codes_size
     }
-    
+
     /// Check if the index is trained
     pub fn is_trained(&self) -> bool {
         self.is_trained
     }
-    
+
     /// Compute distance between query and encoded vector (for IVF compatibility)
     pub fn compute_distance(&self, query: &Vector, codes: &[u8]) -> Result<f32> {
         self.asymmetric_distance(query, codes)
     }
-    
+
     /// Decode codes to vector (for IVF compatibility)
     pub fn decode_vector(&self, codes: &[u8]) -> Result<Vector> {
         self.decode_codes(codes)
@@ -912,7 +945,7 @@ impl VectorIndex for PQIndex {
 
         // Encode the vector
         let codes = self.encode_vector(&vector)?;
-        
+
         // Store the codes
         let id = self.codes.len();
         self.uri_to_id.insert(uri.clone(), id);
@@ -927,10 +960,13 @@ impl VectorIndex for PQIndex {
         }
 
         // Compute distances to all vectors
-        let mut distances: Vec<(String, f32)> = self.codes
+        let mut distances: Vec<(String, f32)> = self
+            .codes
             .iter()
             .map(|(uri, codes)| {
-                let dist = self.asymmetric_distance(query, codes).unwrap_or(f32::INFINITY);
+                let dist = self
+                    .asymmetric_distance(query, codes)
+                    .unwrap_or(f32::INFINITY);
                 (uri.clone(), dist)
             })
             .collect();
@@ -956,7 +992,7 @@ impl VectorIndex for PQIndex {
         for (uri, codes) in &self.codes {
             let dist = self.asymmetric_distance(query, codes)?;
             let similarity = 1.0 / (1.0 + dist);
-            
+
             if similarity >= threshold {
                 results.push((uri.clone(), similarity));
             }
@@ -967,7 +1003,7 @@ impl VectorIndex for PQIndex {
 
         Ok(results)
     }
-    
+
     fn get_vector(&self, uri: &str) -> Option<&Vector> {
         // PQ doesn't store original vectors, only codes
         // Would need to decode, but that returns an approximation
@@ -1005,7 +1041,7 @@ mod tests {
             n_centroids: 4,
             ..Default::default()
         };
-        
+
         let mut index = PQIndex::new(config);
 
         // Create training vectors
@@ -1030,7 +1066,7 @@ mod tests {
         // Search for nearest neighbors
         let query = Vector::new(vec![0.9, 0.1, 0.1, 0.9]);
         let results = index.search_knn(&query, 3).unwrap();
-        
+
         assert!(!results.is_empty());
         assert!(results.len() <= 3);
     }
@@ -1042,26 +1078,24 @@ mod tests {
             n_centroids: 16,
             ..Default::default()
         };
-        
+
         let mut index = PQIndex::new(config);
 
         // Create 128-dimensional vectors
         let dims = 128;
         let training_vectors: Vec<Vector> = (0..100)
             .map(|i| {
-                let values: Vec<f32> = (0..dims)
-                    .map(|j| ((i + j) as f32).sin())
-                    .collect();
+                let values: Vec<f32> = (0..dims).map(|j| ((i + j) as f32).sin()).collect();
                 Vector::new(values)
             })
             .collect();
 
         // Train and check compression ratio
         index.train(&training_vectors).unwrap();
-        
+
         let compression_ratio = index.compression_ratio();
         assert_eq!(compression_ratio, 128.0); // 128*4 bytes -> 4 bytes
-        
+
         let stats = index.stats();
         assert_eq!(stats.n_subquantizers, 4);
         assert_eq!(stats.n_centroids, 16);
@@ -1075,7 +1109,7 @@ mod tests {
             n_centroids: 8,
             ..Default::default()
         };
-        
+
         let mut index = PQIndex::new(config);
 
         // Simple training set
@@ -1121,7 +1155,7 @@ mod tests {
         // Test enhanced encoding
         let test_vector = Vector::new(vec![0.7, 0.3, 0.3, 0.7]);
         let enhanced_codes = index.encode_vector_enhanced(&test_vector).unwrap();
-        
+
         assert!(!enhanced_codes.primary.is_empty());
         assert_eq!(enhanced_codes.residual.len(), 2);
         assert!(enhanced_codes.multi_codebook.is_empty()); // Multi-codebook not enabled
@@ -1150,7 +1184,7 @@ mod tests {
         // Test enhanced encoding
         let test_vector = Vector::new(vec![0.7, 0.3, 0.3, 0.7]);
         let enhanced_codes = index.encode_vector_enhanced(&test_vector).unwrap();
-        
+
         assert!(!enhanced_codes.primary.is_empty());
         assert!(enhanced_codes.residual.is_empty()); // Residual not enabled
         assert_eq!(enhanced_codes.multi_codebook.len(), 3);
@@ -1162,7 +1196,7 @@ mod tests {
         config.enable_symmetric_distance = true;
         config.n_subquantizers = 2;
         config.n_centroids = 4;
-        
+
         let mut index = PQIndex::new(config);
 
         // Create training vectors
@@ -1181,7 +1215,7 @@ mod tests {
         let codes1 = vec![0, 1];
         let codes2 = vec![1, 0];
         let distance = index.symmetric_distance(&codes1, &codes2).unwrap();
-        
+
         assert!(distance >= 0.0);
         assert!(distance.is_finite());
     }
@@ -1204,7 +1238,7 @@ mod tests {
         // Train with all enhanced features
         index.train(&training_vectors).unwrap();
         assert!(index.is_trained());
-        
+
         // Verify all features are initialized
         assert!(!index.residual_quantizers.is_empty());
         assert!(!index.multi_codebook_quantizers.is_empty());
@@ -1213,13 +1247,17 @@ mod tests {
         // Test enhanced encoding and distance computation
         let test_vector = Vector::new(vec![0.7, 0.3, 0.3, 0.7]);
         let enhanced_codes = index.encode_vector_enhanced(&test_vector).unwrap();
-        let enhanced_distance = index.enhanced_distance(&test_vector, &enhanced_codes).unwrap();
-        
+        let enhanced_distance = index
+            .enhanced_distance(&test_vector, &enhanced_codes)
+            .unwrap();
+
         assert!(enhanced_distance >= 0.0);
         assert!(enhanced_distance.is_finite());
-        
+
         // Enhanced distance should be more accurate (smaller) than basic asymmetric distance
-        let basic_distance = index.asymmetric_distance(&test_vector, &enhanced_codes.primary).unwrap();
+        let basic_distance = index
+            .asymmetric_distance(&test_vector, &enhanced_codes.primary)
+            .unwrap();
         assert!(enhanced_distance <= basic_distance * 1.1); // Allow some tolerance
     }
 
@@ -1228,13 +1266,13 @@ mod tests {
         // Test valid enhanced config
         let config = PQConfig::enhanced(4, 8);
         assert!(config.validate().is_ok());
-        
+
         // Test invalid residual config
         let mut invalid_config = PQConfig::default();
         invalid_config.enable_residual_quantization = true;
         invalid_config.residual_levels = 0;
         assert!(invalid_config.validate().is_err());
-        
+
         // Test invalid multi-codebook config
         let mut invalid_config = PQConfig::default();
         invalid_config.enable_multi_codebook = true;

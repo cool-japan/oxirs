@@ -1,17 +1,17 @@
 //! Cross-shard transaction support with Two-Phase Commit (2PC) optimization
 
+use crate::network::{NetworkService, RpcMessage};
+use crate::raft::OxirsNodeId;
 use crate::shard::{ShardId, ShardRouter};
 use crate::shard_manager::ShardManager;
 use crate::storage::StorageBackend;
-use crate::network::{NetworkService, RpcMessage};
-use crate::raft::OxirsNodeId;
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use oxirs_core::model::Triple;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use chrono::{DateTime, Utc};
 use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 
@@ -156,9 +156,12 @@ impl TransactionCoordinator {
     }
 
     /// Begin a new transaction
-    pub async fn begin_transaction(&self, isolation_level: IsolationLevel) -> Result<TransactionId> {
+    pub async fn begin_transaction(
+        &self,
+        isolation_level: IsolationLevel,
+    ) -> Result<TransactionId> {
         let tx_id = Uuid::new_v4().to_string();
-        
+
         let transaction = Transaction {
             id: tx_id.clone(),
             state: TransactionState::Active,
@@ -181,19 +184,19 @@ impl TransactionCoordinator {
         self.transaction_log.lock().await.log_begin(&tx_id).await?;
 
         // Store transaction
-        self.transactions.write().await.insert(tx_id.clone(), transaction);
+        self.transactions
+            .write()
+            .await
+            .insert(tx_id.clone(), transaction);
 
         Ok(tx_id)
     }
 
     /// Add an operation to a transaction
-    pub async fn add_operation(
-        &self,
-        tx_id: &str,
-        operation: TransactionOp,
-    ) -> Result<()> {
+    pub async fn add_operation(&self, tx_id: &str, operation: TransactionOp) -> Result<()> {
         let mut transactions = self.transactions.write().await;
-        let transaction = transactions.get_mut(tx_id)
+        let transaction = transactions
+            .get_mut(tx_id)
             .ok_or_else(|| anyhow::anyhow!("Transaction not found"))?;
 
         if transaction.state != TransactionState::Active {
@@ -215,12 +218,15 @@ impl TransactionCoordinator {
         // Add participant if not already present
         if !transaction.participants.contains_key(&shard_id) {
             let node_id = self.shard_manager.get_primary_node(shard_id).await?;
-            transaction.participants.insert(shard_id, TransactionParticipant {
-                node_id,
+            transaction.participants.insert(
                 shard_id,
-                vote: None,
-                last_contact: Instant::now(),
-            });
+                TransactionParticipant {
+                    node_id,
+                    shard_id,
+                    vote: None,
+                    last_contact: Instant::now(),
+                },
+            );
         }
 
         transaction.operations.push((shard_id, operation));
@@ -235,7 +241,7 @@ impl TransactionCoordinator {
 
         // Phase 2: Commit or Abort
         let should_commit = self.check_votes(tx_id).await?;
-        
+
         if should_commit {
             self.commit_phase(tx_id).await?;
         } else {
@@ -250,7 +256,8 @@ impl TransactionCoordinator {
         // Update transaction state
         {
             let mut transactions = self.transactions.write().await;
-            let transaction = transactions.get_mut(tx_id)
+            let transaction = transactions
+                .get_mut(tx_id)
                 .ok_or_else(|| anyhow::anyhow!("Transaction not found"))?;
             transaction.state = TransactionState::Preparing;
         }
@@ -261,7 +268,8 @@ impl TransactionCoordinator {
         // Send prepare messages to all participants
         let participants = {
             let transactions = self.transactions.read().await;
-            let transaction = transactions.get(tx_id)
+            let transaction = transactions
+                .get(tx_id)
                 .ok_or_else(|| anyhow::anyhow!("Transaction not found"))?;
             transaction.participants.clone()
         };
@@ -269,7 +277,8 @@ impl TransactionCoordinator {
         // Acquire locks for all operations
         let operations = {
             let transactions = self.transactions.read().await;
-            let transaction = transactions.get(tx_id)
+            let transaction = transactions
+                .get(tx_id)
                 .ok_or_else(|| anyhow::anyhow!("Transaction not found"))?;
             transaction.operations.clone()
         };
@@ -278,19 +287,15 @@ impl TransactionCoordinator {
         for (shard_id, op) in &operations {
             match op {
                 TransactionOp::Insert { triple } | TransactionOp::Delete { triple } => {
-                    self.lock_manager.acquire_write_lock(
-                        tx_id,
-                        *shard_id,
-                        &triple.subject().to_string(),
-                    ).await?;
+                    self.lock_manager
+                        .acquire_write_lock(tx_id, *shard_id, &triple.subject().to_string())
+                        .await?;
                 }
                 TransactionOp::Query { subject, .. } => {
                     if let Some(subj) = subject {
-                        self.lock_manager.acquire_read_lock(
-                            tx_id,
-                            *shard_id,
-                            subj,
-                        ).await?;
+                        self.lock_manager
+                            .acquire_read_lock(tx_id, *shard_id, subj)
+                            .await?;
                     }
                 }
             }
@@ -298,18 +303,21 @@ impl TransactionCoordinator {
 
         // Send prepare requests to participants
         for (shard_id, participant) in participants {
-            let ops: Vec<_> = operations.iter()
+            let ops: Vec<_> = operations
+                .iter()
                 .filter(|(s, _)| *s == shard_id)
                 .map(|(_, op)| op.clone())
                 .collect();
 
-            self.send_prepare_request(tx_id, participant.node_id, shard_id, ops).await?;
+            self.send_prepare_request(tx_id, participant.node_id, shard_id, ops)
+                .await?;
         }
 
         // Update state to prepared if we get here
         {
             let mut transactions = self.transactions.write().await;
-            let transaction = transactions.get_mut(tx_id)
+            let transaction = transactions
+                .get_mut(tx_id)
                 .ok_or_else(|| anyhow::anyhow!("Transaction not found"))?;
             transaction.state = TransactionState::Prepared;
         }
@@ -320,7 +328,8 @@ impl TransactionCoordinator {
     /// Check if all participants voted to commit
     async fn check_votes(&self, tx_id: &str) -> Result<bool> {
         let transactions = self.transactions.read().await;
-        let transaction = transactions.get(tx_id)
+        let transaction = transactions
+            .get(tx_id)
             .ok_or_else(|| anyhow::anyhow!("Transaction not found"))?;
 
         // Check if all participants have voted
@@ -347,7 +356,8 @@ impl TransactionCoordinator {
         // Update transaction state
         {
             let mut transactions = self.transactions.write().await;
-            let transaction = transactions.get_mut(tx_id)
+            let transaction = transactions
+                .get_mut(tx_id)
                 .ok_or_else(|| anyhow::anyhow!("Transaction not found"))?;
             transaction.state = TransactionState::Committing;
         }
@@ -358,13 +368,15 @@ impl TransactionCoordinator {
         // Send commit messages to all participants
         let participants = {
             let transactions = self.transactions.read().await;
-            let transaction = transactions.get(tx_id)
+            let transaction = transactions
+                .get(tx_id)
                 .ok_or_else(|| anyhow::anyhow!("Transaction not found"))?;
             transaction.participants.clone()
         };
 
         for (shard_id, participant) in participants {
-            self.send_commit_request(tx_id, participant.node_id, shard_id).await?;
+            self.send_commit_request(tx_id, participant.node_id, shard_id)
+                .await?;
         }
 
         // Release locks
@@ -373,13 +385,18 @@ impl TransactionCoordinator {
         // Update final state
         {
             let mut transactions = self.transactions.write().await;
-            let transaction = transactions.get_mut(tx_id)
+            let transaction = transactions
+                .get_mut(tx_id)
                 .ok_or_else(|| anyhow::anyhow!("Transaction not found"))?;
             transaction.state = TransactionState::Committed;
         }
 
         // Log completion
-        self.transaction_log.lock().await.log_complete(tx_id, true).await?;
+        self.transaction_log
+            .lock()
+            .await
+            .log_complete(tx_id, true)
+            .await?;
 
         Ok(())
     }
@@ -389,7 +406,8 @@ impl TransactionCoordinator {
         // Update transaction state
         {
             let mut transactions = self.transactions.write().await;
-            let transaction = transactions.get_mut(tx_id)
+            let transaction = transactions
+                .get_mut(tx_id)
                 .ok_or_else(|| anyhow::anyhow!("Transaction not found"))?;
             transaction.state = TransactionState::Aborting;
         }
@@ -400,13 +418,15 @@ impl TransactionCoordinator {
         // Send abort messages to all participants
         let participants = {
             let transactions = self.transactions.read().await;
-            let transaction = transactions.get(tx_id)
+            let transaction = transactions
+                .get(tx_id)
                 .ok_or_else(|| anyhow::anyhow!("Transaction not found"))?;
             transaction.participants.clone()
         };
 
         for (shard_id, participant) in participants {
-            self.send_abort_request(tx_id, participant.node_id, shard_id).await?;
+            self.send_abort_request(tx_id, participant.node_id, shard_id)
+                .await?;
         }
 
         // Release locks
@@ -415,13 +435,18 @@ impl TransactionCoordinator {
         // Update final state
         {
             let mut transactions = self.transactions.write().await;
-            let transaction = transactions.get_mut(tx_id)
+            let transaction = transactions
+                .get_mut(tx_id)
                 .ok_or_else(|| anyhow::anyhow!("Transaction not found"))?;
             transaction.state = TransactionState::Aborted;
         }
 
         // Log completion
-        self.transaction_log.lock().await.log_complete(tx_id, false).await?;
+        self.transaction_log
+            .lock()
+            .await
+            .log_complete(tx_id, false)
+            .await?;
 
         Ok(())
     }
@@ -484,7 +509,8 @@ impl TransactionCoordinator {
         vote: bool,
     ) -> Result<()> {
         let mut transactions = self.transactions.write().await;
-        let transaction = transactions.get_mut(tx_id)
+        let transaction = transactions
+            .get_mut(tx_id)
             .ok_or_else(|| anyhow::anyhow!("Transaction not found"))?;
 
         if let Some(participant) = transaction.participants.get_mut(&shard_id) {
@@ -517,14 +543,12 @@ impl TransactionCoordinator {
     pub async fn cleanup_transactions(&self, retention: Duration) {
         let mut transactions = self.transactions.write().await;
         let now = Instant::now();
-        
-        transactions.retain(|_, tx| {
-            match tx.state {
-                TransactionState::Committed | TransactionState::Aborted => {
-                    now.duration_since(tx.created_at) < retention
-                }
-                _ => true
+
+        transactions.retain(|_, tx| match tx.state {
+            TransactionState::Committed | TransactionState::Aborted => {
+                now.duration_since(tx.created_at) < retention
             }
+            _ => true,
         });
     }
 }
@@ -644,20 +668,26 @@ impl LockManager {
         // Check for conflicting write locks
         if let Some(existing) = locks.get(&key) {
             if existing.lock_type == LockType::Write && existing.tx_id != tx_id {
-                return Err(anyhow::anyhow!("Resource is write-locked by another transaction"));
+                return Err(anyhow::anyhow!(
+                    "Resource is write-locked by another transaction"
+                ));
             }
         }
 
         // Acquire read lock
-        locks.insert(key.clone(), Lock {
-            lock_type: LockType::Read,
-            tx_id: tx_id.to_string(),
-            acquired_at: Instant::now(),
-        });
+        locks.insert(
+            key.clone(),
+            Lock {
+                lock_type: LockType::Read,
+                tx_id: tx_id.to_string(),
+                acquired_at: Instant::now(),
+            },
+        );
 
         // Track lock for transaction
         let mut tx_locks = self.tx_locks.write().await;
-        tx_locks.entry(tx_id.to_string())
+        tx_locks
+            .entry(tx_id.to_string())
             .or_insert_with(HashSet::new)
             .insert(key);
 
@@ -681,15 +711,19 @@ impl LockManager {
         }
 
         // Acquire write lock
-        locks.insert(key.clone(), Lock {
-            lock_type: LockType::Write,
-            tx_id: tx_id.to_string(),
-            acquired_at: Instant::now(),
-        });
+        locks.insert(
+            key.clone(),
+            Lock {
+                lock_type: LockType::Write,
+                tx_id: tx_id.to_string(),
+                acquired_at: Instant::now(),
+            },
+        );
 
         // Track lock for transaction
         let mut tx_locks = self.tx_locks.write().await;
-        tx_locks.entry(tx_id.to_string())
+        tx_locks
+            .entry(tx_id.to_string())
             .or_insert_with(HashSet::new)
             .insert(key);
 

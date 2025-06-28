@@ -3,7 +3,9 @@
 //! This implementation is extracted and adapted from Oxigraph's numeric_encoder.rs
 //! to provide zero-dependency term encoding with hash-based optimization.
 
-use crate::model::{NamedNode, BlankNode, Literal, Term, NamedNodeRef, BlankNodeRef, LiteralRef, TermRef};
+use crate::model::{
+    BlankNode, BlankNodeRef, Literal, LiteralRef, NamedNode, NamedNodeRef, Term, TermRef,
+};
 use crate::OxirsError;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
@@ -22,18 +24,18 @@ impl StrHash {
         let mut hasher = DefaultHasher::new();
         hasher.write(value.as_bytes());
         let hash_value = hasher.finish();
-        
+
         // Create a 16-byte hash by using the 8-byte hash twice with different salts
         let mut full_hash = [0u8; 16];
         full_hash[0..8].copy_from_slice(&hash_value.to_be_bytes());
-        
+
         // Create second hash with salt for better distribution
         let mut hasher2 = DefaultHasher::new();
         hasher2.write(&[0xDE, 0xAD, 0xBE, 0xEF]); // Salt
         hasher2.write(value.as_bytes());
         let hash_value2 = hasher2.finish();
         full_hash[8..16].copy_from_slice(&hash_value2.to_be_bytes());
-        
+
         Self { hash: full_hash }
     }
 
@@ -55,8 +57,14 @@ impl Hash for StrHash {
     fn hash<H: Hasher>(&self, state: &mut H) {
         // Use the first 8 bytes as the hash value
         let hash_val = u64::from_be_bytes([
-            self.hash[0], self.hash[1], self.hash[2], self.hash[3],
-            self.hash[4], self.hash[5], self.hash[6], self.hash[7],
+            self.hash[0],
+            self.hash[1],
+            self.hash[2],
+            self.hash[3],
+            self.hash[4],
+            self.hash[5],
+            self.hash[6],
+            self.hash[7],
         ]);
         state.write_u64(hash_val);
     }
@@ -87,7 +95,7 @@ impl SmallString {
 
         let mut data = [0u8; 16];
         data[..s.len()].copy_from_slice(s.as_bytes());
-        
+
         Some(SmallString {
             data,
             len: s.len() as u8,
@@ -96,9 +104,7 @@ impl SmallString {
 
     /// Returns the string slice
     pub fn as_str(&self) -> &str {
-        unsafe {
-            std::str::from_utf8_unchecked(&self.data[..self.len as usize])
-        }
+        unsafe { std::str::from_utf8_unchecked(&self.data[..self.len as usize]) }
     }
 
     /// Returns the length of the string
@@ -129,75 +135,67 @@ impl From<&str> for SmallString {
 pub enum EncodedTerm {
     /// Default graph (for quad-based stores)
     DefaultGraph,
-    
+
     /// Named node with hashed IRI
-    NamedNode {
-        iri_id: StrHash,
-    },
-    
+    NamedNode { iri_id: StrHash },
+
     /// Blank node with numerical ID (16 bytes for uniqueness)
-    NumericalBlankNode {
-        id: [u8; 16],
-    },
-    
+    NumericalBlankNode { id: [u8; 16] },
+
     /// Small blank node with inline string
     SmallBlankNode(SmallString),
-    
+
     /// Large blank node with hashed ID
-    BigBlankNode {
-        id_id: StrHash,
-    },
-    
+    BigBlankNode { id_id: StrHash },
+
     /// Small string literal (inline)
     SmallStringLiteral(SmallString),
-    
+
     /// Large string literal (hashed)
-    BigStringLiteral {
-        value_id: StrHash,
-    },
-    
+    BigStringLiteral { value_id: StrHash },
+
     /// Small value, small language tag
     SmallSmallLangStringLiteral {
         value: SmallString,
         language: SmallString,
     },
-    
+
     /// Small value, large language tag
     SmallBigLangStringLiteral {
         value: SmallString,
         language_id: StrHash,
     },
-    
+
     /// Large value, small language tag
     BigSmallLangStringLiteral {
         value_id: StrHash,
         language: SmallString,
     },
-    
+
     /// Large value, large language tag
     BigBigLangStringLiteral {
         value_id: StrHash,
         language_id: StrHash,
     },
-    
+
     /// Typed literal with small value and small datatype
     SmallSmallTypedLiteral {
         value: SmallString,
         datatype: SmallString,
     },
-    
+
     /// Typed literal with small value and hashed datatype
     SmallBigTypedLiteral {
         value: SmallString,
         datatype_id: StrHash,
     },
-    
+
     /// Typed literal with hashed value and small datatype
     BigSmallTypedLiteral {
         value_id: StrHash,
         datatype: SmallString,
     },
-    
+
     /// Typed literal with hashed value and hashed datatype
     BigBigTypedLiteral {
         value_id: StrHash,
@@ -223,7 +221,7 @@ impl EncodedTerm {
     /// Encodes a blank node
     pub fn encode_blank_node(node: &BlankNode) -> Self {
         let id_str = node.as_str();
-        
+
         // Try to use numerical representation if it's a hex ID
         if let Ok(bytes) = hex::decode(id_str) {
             if bytes.len() == 16 {
@@ -232,7 +230,7 @@ impl EncodedTerm {
                 return EncodedTerm::NumericalBlankNode { id };
             }
         }
-        
+
         // Use string representation
         if let Some(small_string) = SmallString::new(id_str) {
             EncodedTerm::SmallBlankNode(small_string)
@@ -246,7 +244,7 @@ impl EncodedTerm {
     /// Encodes a blank node reference
     pub fn encode_blank_node_ref(node: BlankNodeRef<'_>) -> Self {
         let id_str = node.as_str();
-        
+
         // Try to use numerical representation if it's a hex ID
         if let Ok(bytes) = hex::decode(id_str) {
             if bytes.len() == 16 {
@@ -255,7 +253,7 @@ impl EncodedTerm {
                 return EncodedTerm::NumericalBlankNode { id };
             }
         }
-        
+
         // Use string representation
         if let Some(small_string) = SmallString::new(id_str) {
             EncodedTerm::SmallBlankNode(small_string)
@@ -269,39 +267,31 @@ impl EncodedTerm {
     /// Encodes a literal
     pub fn encode_literal(literal: &Literal) -> Self {
         let value = literal.value();
-        
+
         if let Some(language) = literal.language() {
             // Language-tagged string literal
             match (SmallString::new(value), SmallString::new(language)) {
-                (Some(small_value), Some(small_lang)) => {
-                    EncodedTerm::SmallSmallLangStringLiteral {
-                        value: small_value,
-                        language: small_lang,
-                    }
-                }
-                (Some(small_value), None) => {
-                    EncodedTerm::SmallBigLangStringLiteral {
-                        value: small_value,
-                        language_id: StrHash::new(language),
-                    }
-                }
-                (None, Some(small_lang)) => {
-                    EncodedTerm::BigSmallLangStringLiteral {
-                        value_id: StrHash::new(value),
-                        language: small_lang,
-                    }
-                }
-                (None, None) => {
-                    EncodedTerm::BigBigLangStringLiteral {
-                        value_id: StrHash::new(value),
-                        language_id: StrHash::new(language),
-                    }
-                }
+                (Some(small_value), Some(small_lang)) => EncodedTerm::SmallSmallLangStringLiteral {
+                    value: small_value,
+                    language: small_lang,
+                },
+                (Some(small_value), None) => EncodedTerm::SmallBigLangStringLiteral {
+                    value: small_value,
+                    language_id: StrHash::new(language),
+                },
+                (None, Some(small_lang)) => EncodedTerm::BigSmallLangStringLiteral {
+                    value_id: StrHash::new(value),
+                    language: small_lang,
+                },
+                (None, None) => EncodedTerm::BigBigLangStringLiteral {
+                    value_id: StrHash::new(value),
+                    language_id: StrHash::new(language),
+                },
             }
         } else {
             let datatype = literal.datatype();
             let datatype_str = datatype.as_str();
-            
+
             // Check if it's a simple string literal (xsd:string)
             if datatype_str == "http://www.w3.org/2001/XMLSchema#string" {
                 if let Some(small_value) = SmallString::new(value) {
@@ -320,24 +310,18 @@ impl EncodedTerm {
                             datatype: small_datatype,
                         }
                     }
-                    (Some(small_value), None) => {
-                        EncodedTerm::SmallBigTypedLiteral {
-                            value: small_value,
-                            datatype_id: StrHash::new(datatype_str),
-                        }
-                    }
-                    (None, Some(small_datatype)) => {
-                        EncodedTerm::BigSmallTypedLiteral {
-                            value_id: StrHash::new(value),
-                            datatype: small_datatype,
-                        }
-                    }
-                    (None, None) => {
-                        EncodedTerm::BigBigTypedLiteral {
-                            value_id: StrHash::new(value),
-                            datatype_id: StrHash::new(datatype_str),
-                        }
-                    }
+                    (Some(small_value), None) => EncodedTerm::SmallBigTypedLiteral {
+                        value: small_value,
+                        datatype_id: StrHash::new(datatype_str),
+                    },
+                    (None, Some(small_datatype)) => EncodedTerm::BigSmallTypedLiteral {
+                        value_id: StrHash::new(value),
+                        datatype: small_datatype,
+                    },
+                    (None, None) => EncodedTerm::BigBigTypedLiteral {
+                        value_id: StrHash::new(value),
+                        datatype_id: StrHash::new(datatype_str),
+                    },
                 }
             }
         }
@@ -346,39 +330,31 @@ impl EncodedTerm {
     /// Encodes a literal reference
     pub fn encode_literal_ref(literal: LiteralRef<'_>) -> Self {
         let value = literal.value();
-        
+
         if let Some(language) = literal.language() {
             // Language-tagged string literal
             match (SmallString::new(value), SmallString::new(language)) {
-                (Some(small_value), Some(small_lang)) => {
-                    EncodedTerm::SmallSmallLangStringLiteral {
-                        value: small_value,
-                        language: small_lang,
-                    }
-                }
-                (Some(small_value), None) => {
-                    EncodedTerm::SmallBigLangStringLiteral {
-                        value: small_value,
-                        language_id: StrHash::new(language),
-                    }
-                }
-                (None, Some(small_lang)) => {
-                    EncodedTerm::BigSmallLangStringLiteral {
-                        value_id: StrHash::new(value),
-                        language: small_lang,
-                    }
-                }
-                (None, None) => {
-                    EncodedTerm::BigBigLangStringLiteral {
-                        value_id: StrHash::new(value),
-                        language_id: StrHash::new(language),
-                    }
-                }
+                (Some(small_value), Some(small_lang)) => EncodedTerm::SmallSmallLangStringLiteral {
+                    value: small_value,
+                    language: small_lang,
+                },
+                (Some(small_value), None) => EncodedTerm::SmallBigLangStringLiteral {
+                    value: small_value,
+                    language_id: StrHash::new(language),
+                },
+                (None, Some(small_lang)) => EncodedTerm::BigSmallLangStringLiteral {
+                    value_id: StrHash::new(value),
+                    language: small_lang,
+                },
+                (None, None) => EncodedTerm::BigBigLangStringLiteral {
+                    value_id: StrHash::new(value),
+                    language_id: StrHash::new(language),
+                },
             }
         } else {
             let datatype = literal.datatype();
             let datatype_str = datatype.as_str();
-            
+
             // Check if it's a simple string literal (xsd:string)
             if datatype_str == "http://www.w3.org/2001/XMLSchema#string" {
                 if let Some(small_value) = SmallString::new(value) {
@@ -397,24 +373,18 @@ impl EncodedTerm {
                             datatype: small_datatype,
                         }
                     }
-                    (Some(small_value), None) => {
-                        EncodedTerm::SmallBigTypedLiteral {
-                            value: small_value,
-                            datatype_id: StrHash::new(datatype_str),
-                        }
-                    }
-                    (None, Some(small_datatype)) => {
-                        EncodedTerm::BigSmallTypedLiteral {
-                            value_id: StrHash::new(value),
-                            datatype: small_datatype,
-                        }
-                    }
-                    (None, None) => {
-                        EncodedTerm::BigBigTypedLiteral {
-                            value_id: StrHash::new(value),
-                            datatype_id: StrHash::new(datatype_str),
-                        }
-                    }
+                    (Some(small_value), None) => EncodedTerm::SmallBigTypedLiteral {
+                        value: small_value,
+                        datatype_id: StrHash::new(datatype_str),
+                    },
+                    (None, Some(small_datatype)) => EncodedTerm::BigSmallTypedLiteral {
+                        value_id: StrHash::new(value),
+                        datatype: small_datatype,
+                    },
+                    (None, None) => EncodedTerm::BigBigTypedLiteral {
+                        value_id: StrHash::new(value),
+                        datatype_id: StrHash::new(datatype_str),
+                    },
                 }
             }
         }
@@ -616,7 +586,7 @@ mod tests {
     fn test_encode_named_node() {
         let node = NamedNode::new("http://example.org/test").unwrap();
         let encoded = EncodedTerm::encode_named_node(&node);
-        
+
         assert!(encoded.is_named_node());
         assert!(!encoded.is_blank_node());
         assert!(!encoded.is_literal());
@@ -626,7 +596,7 @@ mod tests {
     fn test_encode_blank_node() {
         let node = BlankNode::new("test").unwrap();
         let encoded = EncodedTerm::encode_blank_node(&node);
-        
+
         assert!(!encoded.is_named_node());
         assert!(encoded.is_blank_node());
         assert!(!encoded.is_literal());
@@ -644,7 +614,10 @@ mod tests {
         let literal = Literal::new_lang("test", "en").unwrap();
         let encoded = EncodedTerm::encode_literal(&literal);
         assert!(encoded.is_literal());
-        assert!(matches!(encoded, EncodedTerm::SmallSmallLangStringLiteral { .. }));
+        assert!(matches!(
+            encoded,
+            EncodedTerm::SmallSmallLangStringLiteral { .. }
+        ));
 
         // Typed literal
         let literal = Literal::new_typed("42", xsd::INTEGER.clone());
@@ -655,8 +628,10 @@ mod tests {
 
     #[test]
     fn test_encoded_triple() {
-        let subject = EncodedTerm::encode_named_node(&NamedNode::new("http://example.org/s").unwrap());
-        let predicate = EncodedTerm::encode_named_node(&NamedNode::new("http://example.org/p").unwrap());
+        let subject =
+            EncodedTerm::encode_named_node(&NamedNode::new("http://example.org/s").unwrap());
+        let predicate =
+            EncodedTerm::encode_named_node(&NamedNode::new("http://example.org/p").unwrap());
         let object = EncodedTerm::encode_literal(&Literal::new("test"));
 
         let triple = EncodedTriple::new(subject, predicate, object);

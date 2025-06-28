@@ -3,7 +3,7 @@
 //! This module provides a parallel batch processor with work-stealing queues,
 //! configurable thread pools, and progress tracking for efficient RDF data processing.
 
-use crate::model::{Triple, Subject, Predicate, Object};
+use crate::model::{Object, Predicate, Subject, Triple};
 use crate::OxirsError;
 use crossbeam_deque::Injector;
 use parking_lot::{Mutex, RwLock};
@@ -36,7 +36,11 @@ impl std::fmt::Debug for BatchOperation {
         match self {
             BatchOperation::Insert(triples) => write!(f, "Insert({} triples)", triples.len()),
             BatchOperation::Remove(triples) => write!(f, "Remove({} triples)", triples.len()),
-            BatchOperation::Query { subject, predicate, object } => {
+            BatchOperation::Query {
+                subject,
+                predicate,
+                object,
+            } => {
                 write!(f, "Query({:?}, {:?}, {:?})", subject, predicate, object)
             }
             BatchOperation::Transform(_) => write!(f, "Transform(function)"),
@@ -150,7 +154,7 @@ impl ParallelBatchProcessor {
     /// Create a new parallel batch processor
     pub fn new(config: BatchConfig) -> Self {
         let injector = Arc::new(Injector::new());
-        
+
         ParallelBatchProcessor {
             config,
             injector,
@@ -200,7 +204,7 @@ impl ParallelBatchProcessor {
         if self.injector.len() > self.config.max_queue_size {
             return Err(OxirsError::Store("Queue is full".to_string()));
         }
-        
+
         self.injector.push(operation);
         Ok(())
     }
@@ -211,7 +215,7 @@ impl ParallelBatchProcessor {
         if self.injector.len() + operations.len() > self.config.max_queue_size {
             return Err(OxirsError::Store("Queue would overflow".to_string()));
         }
-        
+
         for op in operations {
             self.injector.push(op);
         }
@@ -229,10 +233,10 @@ impl ParallelBatchProcessor {
         let barrier = Arc::new(Barrier::new(num_threads + 1));
         let executor = Arc::new(executor);
         let results = Arc::new(Mutex::new(Vec::new()));
-        
+
         // Reset cancellation flag
         self.cancelled.store(false, Ordering::SeqCst);
-        
+
         // Spawn worker threads
         let handles: Vec<_> = (0..num_threads)
             .map(|_worker_id| {
@@ -245,17 +249,17 @@ impl ParallelBatchProcessor {
                 let barrier = barrier.clone();
                 let progress_callback = self.progress_callback.clone();
                 let enable_progress = self.config.enable_progress;
-                
+
                 thread::spawn(move || {
                     // Wait for all threads to be ready
                     barrier.wait();
-                    
+
                     loop {
                         // Check for cancellation
                         if cancelled.load(Ordering::SeqCst) {
                             break;
                         }
-                        
+
                         // Try to get work from global queue
                         let task = loop {
                             match injector.steal() {
@@ -264,12 +268,13 @@ impl ParallelBatchProcessor {
                                 crossbeam_deque::Steal::Retry => continue,
                             }
                         };
-                        
+
                         match task {
                             Some(operation) => {
                                 // Process the operation
-                                let processed = stats.total_processed.fetch_add(1, Ordering::Relaxed) + 1;
-                                
+                                let processed =
+                                    stats.total_processed.fetch_add(1, Ordering::Relaxed) + 1;
+
                                 // Report progress
                                 if enable_progress && processed % 100 == 0 {
                                     if let Some(callback) = &*progress_callback.lock() {
@@ -277,7 +282,7 @@ impl ParallelBatchProcessor {
                                         callback(processed, total);
                                     }
                                 }
-                                
+
                                 match executor(operation) {
                                     Ok(result) => {
                                         stats.total_succeeded.fetch_add(1, Ordering::Relaxed);
@@ -302,10 +307,10 @@ impl ParallelBatchProcessor {
                 })
             })
             .collect();
-        
+
         // Signal all threads to start
         barrier.wait();
-        
+
         // Wait for completion or timeout
         if let Some(timeout) = self.config.timeout {
             let deadline = Instant::now() + timeout;
@@ -316,29 +321,38 @@ impl ParallelBatchProcessor {
                     return Err(OxirsError::Store("Operation timed out".to_string()));
                 }
                 // Note: We can't actually join with timeout in std, would need a different approach
-                handle.join().map_err(|_| OxirsError::Store("Worker thread panicked".to_string()))?;
+                handle
+                    .join()
+                    .map_err(|_| OxirsError::Store("Worker thread panicked".to_string()))?;
             }
         } else {
             for handle in handles {
-                handle.join().map_err(|_| OxirsError::Store("Worker thread panicked".to_string()))?;
+                handle
+                    .join()
+                    .map_err(|_| OxirsError::Store("Worker thread panicked".to_string()))?;
             }
         }
-        
+
         // Record processing time
         let elapsed = start_time.elapsed();
-        self.stats.processing_time_ms.store(elapsed.as_millis() as usize, Ordering::Relaxed);
-        
+        self.stats
+            .processing_time_ms
+            .store(elapsed.as_millis() as usize, Ordering::Relaxed);
+
         // Check for errors
         let errors = self.errors.read();
         if !errors.is_empty() {
-            return Err(OxirsError::Store(format!("Batch processing failed with {} errors", errors.len())));
+            return Err(OxirsError::Store(format!(
+                "Batch processing failed with {} errors",
+                errors.len()
+            )));
         }
-        
+
         // Extract results
         let final_results = Arc::try_unwrap(results)
             .map_err(|_| OxirsError::Store("Failed to extract results from Arc".to_string()))?
             .into_inner();
-        
+
         Ok(final_results)
     }
 
@@ -350,7 +364,7 @@ impl ParallelBatchProcessor {
         R: Send,
     {
         let start_time = Instant::now();
-        
+
         // Collect all operations from the queue
         let mut operations = Vec::new();
         loop {
@@ -365,20 +379,20 @@ impl ParallelBatchProcessor {
                 crossbeam_deque::Steal::Retry => continue,
             }
         }
-        
+
         // Configure rayon thread pool
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(self.config.num_threads.unwrap_or_else(num_cpus::get))
             .build()
             .map_err(|e| OxirsError::Store(format!("Failed to build thread pool: {}", e)))?;
-        
+
         // Clone needed references
         let cancelled = self.cancelled.clone();
         let stats = self.stats.clone();
         let errors = self.errors.clone();
         let batch_size = self.config.batch_size;
         let executor = Arc::new(executor);
-        
+
         // Process in parallel
         let results = pool.install(move || {
             operations
@@ -390,9 +404,9 @@ impl ParallelBatchProcessor {
                         if cancelled.load(Ordering::SeqCst) {
                             return Err(OxirsError::Store("Operation cancelled".to_string()));
                         }
-                        
+
                         stats.total_processed.fetch_add(1, Ordering::Relaxed);
-                        
+
                         match executor(op) {
                             Ok(result) => {
                                 stats.total_succeeded.fetch_add(1, Ordering::Relaxed);
@@ -409,14 +423,16 @@ impl ParallelBatchProcessor {
                 })
                 .collect::<Result<Vec<_>, _>>()
         })?;
-        
+
         // Flatten results
         let results: Vec<R> = results.into_iter().flatten().collect();
-        
+
         // Record processing time
         let elapsed = start_time.elapsed();
-        self.stats.processing_time_ms.store(elapsed.as_millis() as usize, Ordering::Relaxed);
-        
+        self.stats
+            .processing_time_ms
+            .store(elapsed.as_millis() as usize, Ordering::Relaxed);
+
         Ok(results)
     }
 }
@@ -427,19 +443,27 @@ impl BatchOperation {
     pub fn insert(triples: Vec<Triple>) -> Self {
         BatchOperation::Insert(triples)
     }
-    
+
     /// Create a remove operation
     pub fn remove(triples: Vec<Triple>) -> Self {
         BatchOperation::Remove(triples)
     }
-    
+
     /// Create a query operation
-    pub fn query(subject: Option<Subject>, predicate: Option<Predicate>, object: Option<Object>) -> Self {
-        BatchOperation::Query { subject, predicate, object }
+    pub fn query(
+        subject: Option<Subject>,
+        predicate: Option<Predicate>,
+        object: Option<Object>,
+    ) -> Self {
+        BatchOperation::Query {
+            subject,
+            predicate,
+            object,
+        }
     }
-    
+
     /// Create a transform operation
-    pub fn transform<F>(f: F) -> Self 
+    pub fn transform<F>(f: F) -> Self
     where
         F: Fn(&Triple) -> Option<Triple> + Send + Sync + 'static,
     {
@@ -464,25 +488,27 @@ mod tests {
     fn test_parallel_batch_processor() {
         let config = BatchConfig::default();
         let processor = ParallelBatchProcessor::new(config);
-        
+
         // Submit some operations
         let operations: Vec<_> = (0..1000)
             .map(|i| BatchOperation::insert(vec![create_test_triple(i)]))
             .collect();
-        
+
         processor.submit_batch(operations).unwrap();
-        
+
         // Process with a simple executor
-        let results = processor.process(|op| -> Result<usize, OxirsError> {
-            match op {
-                BatchOperation::Insert(triples) => Ok(triples.len()),
-                _ => Ok(0),
-            }
-        }).unwrap();
-        
+        let results = processor
+            .process(|op| -> Result<usize, OxirsError> {
+                match op {
+                    BatchOperation::Insert(triples) => Ok(triples.len()),
+                    _ => Ok(0),
+                }
+            })
+            .unwrap();
+
         assert_eq!(results.len(), 1000);
         assert_eq!(results.iter().sum::<usize>(), 1000);
-        
+
         let stats = processor.stats();
         assert_eq!(stats.total_processed, 1000);
         assert_eq!(stats.total_succeeded, 1000);
@@ -497,24 +523,28 @@ mod tests {
             batch_size: 10,
             ..Default::default()
         };
-        
+
         let processor = ParallelBatchProcessor::new(config);
-        
+
         // Submit operations
         for i in 0..100 {
-            processor.submit(BatchOperation::insert(vec![create_test_triple(i)])).unwrap();
+            processor
+                .submit(BatchOperation::insert(vec![create_test_triple(i)]))
+                .unwrap();
         }
-        
+
         // Process and verify work is distributed
-        let results = processor.process_rayon(|op| -> Result<usize, OxirsError> {
-            // Simulate some work
-            thread::sleep(Duration::from_micros(100));
-            match op {
-                BatchOperation::Insert(triples) => Ok(triples.len()),
-                _ => Ok(0),
-            }
-        }).unwrap();
-        
+        let results = processor
+            .process_rayon(|op| -> Result<usize, OxirsError> {
+                // Simulate some work
+                thread::sleep(Duration::from_micros(100));
+                match op {
+                    BatchOperation::Insert(triples) => Ok(triples.len()),
+                    _ => Ok(0),
+                }
+            })
+            .unwrap();
+
         assert_eq!(results.len(), 100);
         let stats = processor.stats();
         assert_eq!(stats.total_processed, 100);
@@ -524,17 +554,19 @@ mod tests {
     fn test_error_handling() {
         let config = BatchConfig::default();
         let processor = ParallelBatchProcessor::new(config);
-        
+
         // Submit operations that will fail
         for i in 0..10 {
-            processor.submit(BatchOperation::insert(vec![create_test_triple(i)])).unwrap();
+            processor
+                .submit(BatchOperation::insert(vec![create_test_triple(i)]))
+                .unwrap();
         }
-        
+
         // Process with failing executor
         let result = processor.process(|_op| -> Result<(), OxirsError> {
             Err(OxirsError::Store("Test error".to_string()))
         });
-        
+
         assert!(result.is_err());
         let stats = processor.stats();
         assert_eq!(stats.total_failed, 10);
@@ -545,15 +577,17 @@ mod tests {
     fn test_cancellation() {
         let config = BatchConfig::default();
         let processor = Arc::new(ParallelBatchProcessor::new(config));
-        
+
         // Submit many operations
         for i in 0..1000 {
-            processor.submit(BatchOperation::insert(vec![create_test_triple(i)])).unwrap();
+            processor
+                .submit(BatchOperation::insert(vec![create_test_triple(i)]))
+                .unwrap();
         }
-        
+
         // Start processing in a thread
         let processor_thread = processor.clone();
-        
+
         let handle = thread::spawn(move || {
             processor_thread.process(|op| -> Result<(), OxirsError> {
                 // Simulate slow processing
@@ -564,14 +598,14 @@ mod tests {
                 }
             })
         });
-        
+
         // Cancel after a short delay
         thread::sleep(Duration::from_millis(50));
         processor.cancel();
-        
+
         // Wait for completion
         let result = handle.join().unwrap();
-        
+
         // Should have processed some but not all
         let stats = processor.stats();
         assert!(stats.total_processed < 1000);
@@ -582,28 +616,32 @@ mod tests {
     fn test_progress_tracking() {
         let config = BatchConfig::default();
         let processor = ParallelBatchProcessor::new(config);
-        
+
         let progress_count = Arc::new(AtomicUsize::new(0));
         let progress_count_clone = progress_count.clone();
-        
+
         processor.set_progress_callback(move |current, _total| {
             progress_count_clone.fetch_add(1, Ordering::Relaxed);
             println!("Progress: {}/{}", current, _total);
         });
-        
+
         // Submit operations
         for i in 0..500 {
-            processor.submit(BatchOperation::insert(vec![create_test_triple(i)])).unwrap();
+            processor
+                .submit(BatchOperation::insert(vec![create_test_triple(i)]))
+                .unwrap();
         }
-        
+
         // Process
-        processor.process(|op| -> Result<(), OxirsError> {
-            match op {
-                BatchOperation::Insert(_) => Ok(()),
-                _ => Ok(()),
-            }
-        }).unwrap();
-        
+        processor
+            .process(|op| -> Result<(), OxirsError> {
+                match op {
+                    BatchOperation::Insert(_) => Ok(()),
+                    _ => Ok(()),
+                }
+            })
+            .unwrap();
+
         // Should have received progress updates
         assert!(progress_count.load(Ordering::Relaxed) > 0);
     }

@@ -5,14 +5,16 @@
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::hash::{Hash, Hasher};
 use std::time::Duration;
 use tracing::{debug, info, warn};
 
 use crate::{
-    FederatedService, ServiceCapability, ServiceRegistry,
-    query_decomposition::{QueryDecomposer, DecompositionResult, DecomposerConfig},
+    query_decomposition::{DecomposerConfig, DecompositionResult, QueryDecomposer},
     service_optimizer::{ServiceOptimizer, ServiceOptimizerConfig},
+    FederatedService, ServiceCapability, ServiceRegistry,
 };
 
 /// Query planner for federated queries
@@ -39,21 +41,29 @@ impl QueryPlanner {
             min_patterns_for_distribution: 3,
             max_services_per_query: config.max_services_per_query,
             optimization_strategy: match config.optimization_level {
-                OptimizationLevel::None => crate::query_decomposition::OptimizationStrategy::MinimizeTime,
-                OptimizationLevel::Basic => crate::query_decomposition::OptimizationStrategy::MinimizeCost,
-                OptimizationLevel::Balanced => crate::query_decomposition::OptimizationStrategy::Balanced,
-                OptimizationLevel::Aggressive => crate::query_decomposition::OptimizationStrategy::MinimizeTransfer,
+                OptimizationLevel::None => {
+                    crate::query_decomposition::OptimizationStrategy::MinimizeTime
+                }
+                OptimizationLevel::Basic => {
+                    crate::query_decomposition::OptimizationStrategy::MinimizeCost
+                }
+                OptimizationLevel::Balanced => {
+                    crate::query_decomposition::OptimizationStrategy::Balanced
+                }
+                OptimizationLevel::Aggressive => {
+                    crate::query_decomposition::OptimizationStrategy::MinimizeTransfer
+                }
             },
             enable_advanced_algorithms: config.optimization_level != OptimizationLevel::None,
         };
-        
+
         let optimizer_config = ServiceOptimizerConfig {
             enable_pattern_grouping: config.optimization_level != OptimizationLevel::None,
             enable_service_merging: config.optimization_level == OptimizationLevel::Aggressive,
             enable_statistics: config.optimization_level != OptimizationLevel::None,
             ..Default::default()
         };
-        
+
         Self {
             config,
             decomposer: QueryDecomposer::with_config(decomposer_config),
@@ -135,11 +145,17 @@ impl QueryPlanner {
 
         // Handle explicit SERVICE clauses with optimization
         if !query_info.service_clauses.is_empty() {
-            debug!("Optimizing {} SERVICE clauses", query_info.service_clauses.len());
-            
+            debug!(
+                "Optimizing {} SERVICE clauses",
+                query_info.service_clauses.len()
+            );
+
             // Optimize SERVICE clauses
-            let optimized = self.service_optimizer.optimize_query(query_info, registry).await?;
-            
+            let optimized = self
+                .service_optimizer
+                .optimize_query(query_info, registry)
+                .await?;
+
             // Create steps from optimized services
             for opt_service in optimized.services {
                 let step = ExecutionStep {
@@ -150,11 +166,15 @@ impl QueryPlanner {
                     expected_variables: self.extract_service_variables(&opt_service),
                     estimated_duration: Duration::from_millis(opt_service.estimated_cost as u64),
                     dependencies: Vec::new(),
-                    parallel_group: if opt_service.strategy.stream_results { None } else { Some(0) },
+                    parallel_group: if opt_service.strategy.stream_results {
+                        None
+                    } else {
+                        Some(0)
+                    },
                 };
                 plan.steps.push(step);
             }
-            
+
             // Handle remaining global filters after optimization
             for filter in optimized.global_filters {
                 let filter_step = ExecutionStep {
@@ -223,29 +243,33 @@ impl QueryPlanner {
         self.optimize_plan(&mut plan);
         Ok(plan)
     }
-    
+
     /// Create an execution plan using advanced decomposition for complex queries
     pub async fn plan_sparql_advanced(
         &self,
         query_info: &QueryInfo,
         registry: &ServiceRegistry,
     ) -> Result<ExecutionPlan> {
-        info!("Using advanced query decomposition for {} patterns", query_info.patterns.len());
-        
+        info!(
+            "Using advanced query decomposition for {} patterns",
+            query_info.patterns.len()
+        );
+
         // Use advanced decomposition for complex queries
-        if query_info.complexity as u8 >= QueryComplexity::High as u8 || 
-           query_info.patterns.len() >= self.config.advanced_decomposition_threshold {
+        if query_info.complexity as u8 >= QueryComplexity::High as u8
+            || query_info.patterns.len() >= self.config.advanced_decomposition_threshold
+        {
             let decomposition_result = self.decomposer.decompose(query_info, registry).await?;
-            
+
             info!(
                 "Advanced decomposition found {} components, generated {} total plans",
                 decomposition_result.statistics.components_found,
                 decomposition_result.statistics.total_plans_generated
             );
-            
+
             return Ok(decomposition_result.plan);
         }
-        
+
         // Fall back to regular planning for simple queries
         self.plan_sparql(query_info, registry).await
     }
@@ -363,7 +387,7 @@ impl QueryPlanner {
                 let mut in_string = false;
                 let mut escaped = false;
                 let mut result = String::new();
-                
+
                 for ch in line.chars() {
                     match ch {
                         '"' if !escaped => in_string = !in_string,
@@ -446,12 +470,16 @@ impl QueryPlanner {
     /// Parse a single triple pattern from a SPARQL statement
     fn parse_triple_pattern(&self, statement: &str) -> Result<Option<TriplePattern>> {
         let statement = statement.trim();
-        
+
         // Skip FILTER, OPTIONAL, UNION, etc. - these aren't triple patterns
         let upper = statement.to_uppercase();
-        if upper.starts_with("FILTER") || upper.starts_with("OPTIONAL") || 
-           upper.starts_with("UNION") || upper.starts_with("SERVICE") ||
-           upper.starts_with("GRAPH") || upper.starts_with("BIND") {
+        if upper.starts_with("FILTER")
+            || upper.starts_with("OPTIONAL")
+            || upper.starts_with("UNION")
+            || upper.starts_with("SERVICE")
+            || upper.starts_with("GRAPH")
+            || upper.starts_with("BIND")
+        {
             return Ok(None);
         }
 
@@ -474,7 +502,7 @@ impl QueryPlanner {
     /// Parse basic triple pattern: subject predicate object
     fn parse_basic_triple(&self, statement: &str) -> Result<Option<TriplePattern>> {
         let tokens = self.tokenize_sparql(statement);
-        
+
         if tokens.len() >= 3 {
             // Handle abbreviated syntax like "?s rdf:type ?type"
             let subject = tokens[0].clone();
@@ -500,9 +528,12 @@ impl QueryPlanner {
     /// Parse property path expressions
     fn parse_property_path(&self, statement: &str) -> Result<Option<TriplePattern>> {
         // Handle property paths like "?s foaf:knows+ ?friend"
-        if statement.contains('/') || statement.contains('+') || 
-           statement.contains('*') || statement.contains('?') ||
-           statement.contains('|') {
+        if statement.contains('/')
+            || statement.contains('+')
+            || statement.contains('*')
+            || statement.contains('?')
+            || statement.contains('|')
+        {
             let tokens = self.tokenize_sparql(statement);
             if tokens.len() >= 3 {
                 return Ok(Some(TriplePattern {
@@ -699,32 +730,32 @@ impl QueryPlanner {
     fn extract_graphql_selections(&self, query: &str) -> Result<Vec<GraphQLSelection>> {
         // Basic GraphQL parsing - could be enhanced with a proper parser
         let mut selections = Vec::new();
-        
+
         // Remove query/mutation wrapper
         let content = if let Some(start) = query.find('{') {
             &query[start + 1..]
         } else {
             query
         };
-        
+
         // Find the last closing brace
         let content = if let Some(end) = content.rfind('}') {
             &content[..end]
         } else {
             content
         };
-        
+
         // Parse field selections
         for line in content.lines() {
             let line = line.trim();
             if line.is_empty() || line.starts_with('#') {
                 continue;
             }
-            
+
             // Basic field parsing
             if let Some(field_name) = line.split_whitespace().next() {
                 let mut arguments = HashMap::new();
-                
+
                 // Parse arguments if present
                 if let Some(args_start) = line.find('(') {
                     if let Some(args_end) = line.find(')') {
@@ -739,7 +770,7 @@ impl QueryPlanner {
                         }
                     }
                 }
-                
+
                 selections.push(GraphQLSelection {
                     name: field_name.to_string(),
                     arguments,
@@ -747,7 +778,7 @@ impl QueryPlanner {
                 });
             }
         }
-        
+
         if selections.is_empty() {
             // Fallback for complex queries
             selections.push(GraphQLSelection {
@@ -756,7 +787,7 @@ impl QueryPlanner {
                 selections: Vec::new(),
             });
         }
-        
+
         Ok(selections)
     }
 
@@ -771,10 +802,10 @@ impl QueryPlanner {
         services: &[ServiceClause],
     ) -> QueryComplexity {
         let mut complexity_score = 0;
-        
+
         // Base pattern complexity
         complexity_score += patterns.len();
-        
+
         // Pattern complexity based on variables and literals
         for pattern in patterns {
             if pattern.subject.starts_with('?') {
@@ -786,23 +817,27 @@ impl QueryPlanner {
             if pattern.object.starts_with('?') {
                 complexity_score += 1;
             }
-            if pattern.pattern_string.contains('[') || pattern.pattern_string.contains('+') ||
-               pattern.pattern_string.contains('*') || pattern.pattern_string.contains('/') {
+            if pattern.pattern_string.contains('[')
+                || pattern.pattern_string.contains('+')
+                || pattern.pattern_string.contains('*')
+                || pattern.pattern_string.contains('/')
+            {
                 complexity_score += 3; // Property paths are complex
             }
         }
-        
+
         // Filter complexity
         for filter in filters {
             complexity_score += 2;
             // More complex filters
-            if filter.expression.to_uppercase().contains("REGEX") ||
-               filter.expression.to_uppercase().contains("EXISTS") ||
-               filter.expression.to_uppercase().contains("NOT EXISTS") {
+            if filter.expression.to_uppercase().contains("REGEX")
+                || filter.expression.to_uppercase().contains("EXISTS")
+                || filter.expression.to_uppercase().contains("NOT EXISTS")
+            {
                 complexity_score += 3;
             }
         }
-        
+
         // Service complexity
         for service in services {
             complexity_score += 3;
@@ -814,7 +849,7 @@ impl QueryPlanner {
                 complexity_score += 5;
             }
         }
-        
+
         let base_complexity = complexity_score;
 
         if base_complexity < 5 {
@@ -876,22 +911,48 @@ impl QueryPlanner {
             return Err(anyhow!("No SPARQL services available"));
         }
 
+        // Apply triple pattern coverage analysis first
+        let coverage_analysis =
+            self.analyze_pattern_coverage(patterns, &sparql_services, registry)?;
+
         // Use different assignment strategies based on configuration
         match self.config.service_selection_strategy {
             ServiceSelectionStrategy::RoundRobin => {
                 self.assign_patterns_round_robin(patterns, &sparql_services, &mut assignments)?;
             }
             ServiceSelectionStrategy::CapabilityBased => {
-                self.assign_patterns_by_capability(patterns, &sparql_services, registry, &mut assignments)?;
+                self.assign_patterns_by_capability_advanced(
+                    patterns,
+                    &sparql_services,
+                    registry,
+                    &coverage_analysis,
+                    &mut assignments,
+                )?;
             }
             ServiceSelectionStrategy::LoadBased => {
-                self.assign_patterns_by_load(patterns, &sparql_services, registry, &mut assignments)?;
+                self.assign_patterns_by_load(
+                    patterns,
+                    &sparql_services,
+                    registry,
+                    &mut assignments,
+                )?;
             }
             ServiceSelectionStrategy::CostBased => {
-                self.assign_patterns_by_cost(patterns, &sparql_services, registry, &mut assignments)?;
+                self.assign_patterns_by_cost_advanced(
+                    patterns,
+                    &sparql_services,
+                    registry,
+                    &coverage_analysis,
+                    &mut assignments,
+                )?;
             }
             ServiceSelectionStrategy::PredicateBased => {
-                self.assign_patterns_by_predicate(patterns, &sparql_services, registry, &mut assignments)?;
+                self.assign_patterns_by_predicate(
+                    patterns,
+                    &sparql_services,
+                    registry,
+                    &mut assignments,
+                )?;
             }
             ServiceSelectionStrategy::First => {
                 // Original simple strategy - assign all to first service
@@ -903,6 +964,9 @@ impl QueryPlanner {
                 }
             }
         }
+
+        // Apply bloom filter optimization for final validation
+        self.optimize_assignments_with_bloom_filters(&mut assignments, &sparql_services, registry)?;
 
         Ok(assignments)
     }
@@ -1021,7 +1085,7 @@ impl QueryPlanner {
         Ok(())
     }
 
-    /// Assign patterns based on predicate specialization
+    /// Assign patterns based on predicate specialization with advanced filtering
     fn assign_patterns_by_predicate(
         &self,
         patterns: &[&TriplePattern],
@@ -1038,12 +1102,16 @@ impl QueryPlanner {
                 .push(pattern);
         }
 
-        // Assign each predicate group to the most suitable service
+        // Assign each predicate group to the most suitable service using advanced filtering
         for (predicate, predicate_patterns) in predicate_groups {
             let mut best_service = None;
             let mut best_score = 0.0;
 
-            for service in services {
+            // Apply predicate-based source filtering
+            let filtered_services =
+                self.filter_services_by_predicate(&predicate, services, registry);
+
+            for service in &filtered_services {
                 let score = self.calculate_predicate_affinity_score(&predicate, service, registry);
                 if score > best_score {
                     best_score = score;
@@ -1072,15 +1140,24 @@ impl QueryPlanner {
         let mut score = 0.0;
 
         // Basic capability scoring
-        if service.capabilities.contains(&ServiceCapability::SparqlQuery) {
+        if service
+            .capabilities
+            .contains(&ServiceCapability::SparqlQuery)
+        {
             score += 1.0;
         }
-        if service.capabilities.contains(&ServiceCapability::FullTextSearch) && 
-           pattern.pattern_string.contains("REGEX") {
+        if service
+            .capabilities
+            .contains(&ServiceCapability::FullTextSearch)
+            && pattern.pattern_string.contains("REGEX")
+        {
             score += 0.5;
         }
-        if service.capabilities.contains(&ServiceCapability::Geospatial) && 
-           pattern.predicate.contains("geo:") {
+        if service
+            .capabilities
+            .contains(&ServiceCapability::Geospatial)
+            && pattern.predicate.contains("geo:")
+        {
             score += 0.5;
         }
 
@@ -1096,7 +1173,11 @@ impl QueryPlanner {
     }
 
     /// Get current load of a service
-    fn get_service_load(&self, service: &crate::FederatedService, _registry: &ServiceRegistry) -> f64 {
+    fn get_service_load(
+        &self,
+        service: &crate::FederatedService,
+        _registry: &ServiceRegistry,
+    ) -> f64 {
         // In a real implementation, this would query service metrics
         // For now, use a simple heuristic based on performance characteristics
         if let Some(avg_response_time) = service.performance.average_response_time {
@@ -1144,7 +1225,11 @@ impl QueryPlanner {
         let mut score = 1.0; // Base score
 
         // Check if service has specialized capabilities for this predicate
-        if predicate.contains("geo:") && service.capabilities.contains(&ServiceCapability::Geospatial) {
+        if predicate.contains("geo:")
+            && service
+                .capabilities
+                .contains(&ServiceCapability::Geospatial)
+        {
             score += 2.0;
         }
         if predicate.contains("foaf:") && service.name.to_lowercase().contains("foaf") {
@@ -1217,39 +1302,45 @@ impl QueryPlanner {
 
         variables
     }
-    
+
     /// Build query from optimized service clause
-    fn build_optimized_service_query(&self, service: &crate::service_optimizer::OptimizedServiceClause) -> String {
+    fn build_optimized_service_query(
+        &self,
+        service: &crate::service_optimizer::OptimizedServiceClause,
+    ) -> String {
         let mut query = String::from("SELECT * WHERE {\n");
-        
+
         // Add patterns
         for pattern in &service.patterns {
             query.push_str("  ");
             query.push_str(&pattern.pattern_string);
             query.push_str(" .\n");
         }
-        
+
         // Add filters (both local and pushed)
         for filter in &service.filters {
             query.push_str("  FILTER(");
             query.push_str(&filter.expression);
             query.push_str(")\n");
         }
-        
+
         query.push_str("}");
-        
+
         // Add LIMIT if using batch processing
         if service.strategy.use_values_binding && service.strategy.batch_size > 0 {
             query.push_str(&format!(" LIMIT {}", service.strategy.batch_size));
         }
-        
+
         query
     }
-    
+
     /// Extract variables from optimized service clause
-    fn extract_service_variables(&self, service: &crate::service_optimizer::OptimizedServiceClause) -> HashSet<String> {
+    fn extract_service_variables(
+        &self,
+        service: &crate::service_optimizer::OptimizedServiceClause,
+    ) -> HashSet<String> {
         let mut vars = HashSet::new();
-        
+
         for pattern in &service.patterns {
             if pattern.subject.starts_with('?') {
                 vars.insert(pattern.subject.clone());
@@ -1261,11 +1352,11 @@ impl QueryPlanner {
                 vars.insert(pattern.object.clone());
             }
         }
-        
+
         for filter in &service.filters {
             vars.extend(filter.variables.iter().cloned());
         }
-        
+
         vars
     }
 
@@ -1298,6 +1389,327 @@ impl QueryPlanner {
 
         plan.estimated_duration = max_parallel_duration + sequential_duration;
     }
+
+    // ===== ADVANCED PATTERN-BASED SELECTION ALGORITHMS =====
+
+    /// Analyze triple pattern coverage across services
+    fn analyze_pattern_coverage(
+        &self,
+        patterns: &[&TriplePattern],
+        services: &[crate::FederatedService],
+        registry: &ServiceRegistry,
+    ) -> Result<PatternCoverageAnalysis> {
+        let mut coverage = PatternCoverageAnalysis {
+            pattern_service_map: HashMap::new(),
+            service_coverage_scores: HashMap::new(),
+            overlap_matrix: HashMap::new(),
+            recommendation_matrix: HashMap::new(),
+        };
+
+        // For each pattern, determine which services can handle it
+        for (pattern_idx, pattern) in patterns.iter().enumerate() {
+            let mut capable_services = Vec::new();
+            
+            for service in services {
+                let can_handle = self.can_service_handle_pattern(pattern, service, registry);
+                let coverage_score = self.calculate_pattern_coverage_score(pattern, service, registry);
+                
+                if can_handle && coverage_score > 0.1 {
+                    capable_services.push((service.id.clone(), coverage_score));
+                }
+            }
+            
+            // Sort by coverage score (descending)
+            capable_services.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            coverage.pattern_service_map.insert(pattern_idx, capable_services);
+        }
+
+        // Calculate service coverage scores
+        for service in services {
+            let mut total_score = 0.0;
+            let mut pattern_count = 0;
+            
+            for pattern in patterns {
+                let score = self.calculate_pattern_coverage_score(pattern, service, registry);
+                if score > 0.1 {
+                    total_score += score;
+                    pattern_count += 1;
+                }
+            }
+            
+            let avg_score = if pattern_count > 0 {
+                total_score / pattern_count as f64
+            } else {
+                0.0
+            };
+            
+            coverage.service_coverage_scores.insert(service.id.clone(), avg_score);
+        }
+
+        // Calculate overlap matrix for service pairs
+        for (i, service_a) in services.iter().enumerate() {
+            for service_b in services.iter().skip(i + 1) {
+                let overlap = self.calculate_service_overlap(service_a, service_b, patterns, registry);
+                coverage.overlap_matrix.insert(
+                    (service_a.id.clone(), service_b.id.clone()),
+                    overlap,
+                );
+            }
+        }
+
+        // Generate recommendations using ML-inspired heuristics
+        coverage.recommendation_matrix = self.generate_pattern_recommendations(
+            patterns,
+            services,
+            &coverage.pattern_service_map,
+            registry,
+        )?;
+
+        Ok(coverage)
+    }
+
+    /// Check if a service can handle a specific pattern
+    fn can_service_handle_pattern(
+        &self,
+        pattern: &TriplePattern,
+        service: &crate::FederatedService,
+        _registry: &ServiceRegistry,
+    ) -> bool {
+        // Basic capability check
+        if !service.capabilities.contains(&ServiceCapability::SparqlQuery) {
+            return false;
+        }
+
+        // Check for specialized requirements
+        if pattern.predicate.contains("geo:") {
+            return service.capabilities.contains(&ServiceCapability::Geospatial);
+        }
+        
+        if pattern.pattern_string.to_uppercase().contains("REGEX") {
+            return service.capabilities.contains(&ServiceCapability::FullTextSearch);
+        }
+        
+        if pattern.pattern_string.contains("[PropertyPath]") {
+            // Property paths require SPARQL 1.1 support
+            return service.sparql_version.as_ref().map_or(false, |v| v.contains("1.1") || v.contains("1.2"));
+        }
+
+        true
+    }
+
+    /// Calculate pattern coverage score for a service
+    fn calculate_pattern_coverage_score(
+        &self,
+        pattern: &TriplePattern,
+        service: &crate::FederatedService,
+        _registry: &ServiceRegistry,
+    ) -> f64 {
+        let mut score = 0.0;
+
+        // Base score for SPARQL capability
+        if service.capabilities.contains(&ServiceCapability::SparqlQuery) {
+            score += 1.0;
+        }
+
+        // Predicate specialization bonus
+        if let Some(ref description) = service.description {
+            let desc_lower = description.to_lowercase();
+            let pred_lower = pattern.predicate.to_lowercase();
+            
+            // Check for domain-specific matches
+            if pred_lower.contains("foaf:") && desc_lower.contains("person") {
+                score += 0.8;
+            } else if pred_lower.contains("dbo:") && desc_lower.contains("dbpedia") {
+                score += 0.8;
+            } else if pred_lower.contains("skos:") && desc_lower.contains("ontology") {
+                score += 0.6;
+            }
+        }
+
+        // Performance bonus/penalty
+        if let Some(avg_time) = service.performance.average_response_time {
+            let perf_factor = 1.0 - (avg_time.as_millis() as f64 / 2000.0).min(0.5);
+            score *= (1.0 + perf_factor * 0.3);
+        }
+
+        // Reliability bonus
+        if let Some(uptime) = service.performance.uptime_percentage {
+            score *= uptime / 100.0;
+        }
+
+        score
+    }
+
+    /// Advanced capability-based assignment with coverage analysis
+    fn assign_patterns_by_capability_advanced(
+        &self,
+        patterns: &[&TriplePattern],
+        services: &[crate::FederatedService],
+        registry: &ServiceRegistry,
+        coverage_analysis: &PatternCoverageAnalysis,
+        assignments: &mut HashMap<String, Vec<TriplePattern>>,
+    ) -> Result<()> {
+        for (pattern_idx, pattern) in patterns.iter().enumerate() {
+            let mut best_service = None;
+            let mut best_score = 0.0;
+
+            // Use coverage analysis for smarter capability matching
+            if let Some(capable_services) = coverage_analysis.pattern_service_map.get(&pattern_idx) {
+                for (service_id, coverage_score) in capable_services {
+                    if let Some(service) = services.iter().find(|s| &s.id == service_id) {
+                        let capability_score = self.calculate_service_capability_score(pattern, service, registry);
+                        
+                        // Combine capability score with coverage analysis
+                        let combined_score = capability_score * 0.6 + coverage_score * 0.4;
+                        
+                        // Apply ML-inspired recommendation bonus
+                        if let Some(recommendation_score) = coverage_analysis.recommendation_matrix
+                            .get(&(pattern_idx, service.id.clone())) {
+                            let final_score = combined_score * 0.8 + recommendation_score * 0.2;
+                            
+                            if final_score > best_score {
+                                best_score = final_score;
+                                best_service = Some(service);
+                            }
+                        } else if combined_score > best_score {
+                            best_score = combined_score;
+                            best_service = Some(service);
+                        }
+                    }
+                }
+            }
+
+            if let Some(service) = best_service {
+                assignments
+                    .entry(service.id.clone())
+                    .or_default()
+                    .push((*pattern).clone());
+            } else if let Some(fallback_service) = services.first() {
+                assignments
+                    .entry(fallback_service.id.clone())
+                    .or_default()
+                    .push((*pattern).clone());
+            }
+        }
+        Ok(())
+    }
+
+    /// Advanced cost-based assignment with coverage analysis
+    fn assign_patterns_by_cost_advanced(
+        &self,
+        patterns: &[&TriplePattern],
+        services: &[crate::FederatedService],
+        registry: &ServiceRegistry,
+        coverage_analysis: &PatternCoverageAnalysis,
+        assignments: &mut HashMap<String, Vec<TriplePattern>>,
+    ) -> Result<()> {
+        for (pattern_idx, pattern) in patterns.iter().enumerate() {
+            let mut best_service = None;
+            let mut lowest_total_cost = f64::INFINITY;
+
+            // Get services capable of handling this pattern from coverage analysis
+            if let Some(capable_services) = coverage_analysis.pattern_service_map.get(&pattern_idx) {
+                for (service_id, coverage_score) in capable_services {
+                    if let Some(service) = services.iter().find(|s| &s.id == service_id) {
+                        // Calculate multi-objective cost including network latency
+                        let base_cost = self.estimate_pattern_cost(pattern, service, registry) as f64;
+                        let network_cost = self.estimate_network_latency_cost(service, registry);
+                        let load_penalty = self.get_service_load(service, registry) * 100.0;
+                        
+                        // Apply coverage bonus (higher coverage = lower effective cost)
+                        let coverage_bonus = coverage_score * 50.0;
+                        
+                        let total_cost = base_cost + network_cost + load_penalty - coverage_bonus;
+                        
+                        if total_cost < lowest_total_cost {
+                            lowest_total_cost = total_cost;
+                            best_service = Some(service);
+                        }
+                    }
+                }
+            }
+
+            if let Some(service) = best_service {
+                assignments
+                    .entry(service.id.clone())
+                    .or_default()
+                    .push((*pattern).clone());
+            } else if let Some(fallback_service) = services.first() {
+                // Fallback to first service if no suitable service found
+                assignments
+                    .entry(fallback_service.id.clone())
+                    .or_default()
+                    .push((*pattern).clone());
+            }
+        }
+        Ok(())
+    }
+
+    /// Estimate network latency cost for a service
+    fn estimate_network_latency_cost(
+        &self,
+        service: &crate::FederatedService,
+        _registry: &ServiceRegistry,
+    ) -> f64 {
+        // Use average response time as proxy for network latency
+        if let Some(avg_time) = service.performance.average_response_time {
+            avg_time.as_millis() as f64 * 0.1
+        } else {
+            50.0 // Default latency cost
+        }
+    }
+}
+
+/// Simple bloom filter implementation for membership testing
+#[derive(Debug, Clone)]
+struct SimpleBloomFilter {
+    bits: Vec<bool>,
+    size: usize,
+}
+
+impl SimpleBloomFilter {
+    fn new() -> Self {
+        const FILTER_SIZE: usize = 1024;
+        Self {
+            bits: vec![false; FILTER_SIZE],
+            size: FILTER_SIZE,
+        }
+    }
+    
+    fn add(&mut self, item: &str) {
+        let hash1 = self.hash1(item) % self.size;
+        let hash2 = self.hash2(item) % self.size;
+        self.bits[hash1] = true;
+        self.bits[hash2] = true;
+    }
+    
+    fn might_contain(&self, item: &str) -> bool {
+        let hash1 = self.hash1(item) % self.size;
+        let hash2 = self.hash2(item) % self.size;
+        self.bits[hash1] && self.bits[hash2]
+    }
+    
+    fn hash1(&self, item: &str) -> usize {
+        let mut hasher = DefaultHasher::new();
+        item.hash(&mut hasher);
+        hasher.finish() as usize
+    }
+    
+    fn hash2(&self, item: &str) -> usize {
+        let mut hasher = DefaultHasher::new();
+        hasher.write(item.as_bytes());
+        hasher.write(&[42]); // Different salt for second hash
+        hasher.finish() as usize
+    }
+}
+
+/// Pattern coverage analysis result
+#[derive(Debug, Clone)]
+struct PatternCoverageAnalysis {
+    pattern_service_map: HashMap<usize, Vec<(String, f64)>>,
+    service_coverage_scores: HashMap<String, f64>,
+    overlap_matrix: HashMap<(String, String), f64>,
+    recommendation_matrix: HashMap<(usize, String), f64>,
 }
 
 impl Default for QueryPlanner {

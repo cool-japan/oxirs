@@ -7,8 +7,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use oxirs_core::{
     model::{BlankNode, NamedNode, RdfTerm, Term, Triple},
-    Store,
-    OxirsError,
+    OxirsError, Store,
 };
 
 use crate::{Result, ShaclError};
@@ -980,7 +979,7 @@ fn format_term_for_sparql(term: &Term) -> Result<String> {
         }
         Term::Variable(var) => Ok(format!("?{}", var.name())),
         Term::QuotedTriple(_) => Err(ShaclError::PropertyPath(
-            "Quoted triples not supported in property paths".to_string()
+            "Quoted triples not supported in property paths".to_string(),
         )),
     }
 }

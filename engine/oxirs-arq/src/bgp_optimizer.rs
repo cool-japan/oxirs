@@ -135,9 +135,9 @@ impl<'a> BGPOptimizer<'a> {
 
     /// Create optimizer with existing adaptive selector state
     pub fn with_adaptive_selector(
-        statistics: &'a Statistics, 
+        statistics: &'a Statistics,
         index_stats: &'a IndexStatistics,
-        adaptive_selector: AdaptiveIndexSelector
+        adaptive_selector: AdaptiveIndexSelector,
     ) -> Self {
         Self {
             statistics,
@@ -150,20 +150,18 @@ impl<'a> BGPOptimizer<'a> {
     pub fn optimize_bgp(&self, patterns: Vec<TriplePattern>) -> Result<OptimizedBGP> {
         // Step 1: Calculate selectivity for each pattern
         let pattern_selectivities = self.calculate_pattern_selectivities(&patterns)?;
-        
+
         // Step 2: Identify join variables and calculate join selectivities
-        let join_selectivities = self.calculate_join_selectivities(&patterns, &pattern_selectivities)?;
-        
+        let join_selectivities =
+            self.calculate_join_selectivities(&patterns, &pattern_selectivities)?;
+
         // Step 3: Determine optimal pattern ordering
-        let ordered_patterns = self.order_patterns_optimally(
-            &patterns,
-            &pattern_selectivities,
-            &join_selectivities,
-        )?;
-        
+        let ordered_patterns =
+            self.order_patterns_optimally(&patterns, &pattern_selectivities, &join_selectivities)?;
+
         // Step 4: Create index usage plan
         let index_plan = self.create_index_usage_plan(&ordered_patterns, &pattern_selectivities)?;
-        
+
         // Step 5: Calculate overall cost and selectivity
         let (overall_cost, overall_selectivity) = self.calculate_overall_metrics(
             &ordered_patterns,
@@ -171,7 +169,7 @@ impl<'a> BGPOptimizer<'a> {
             &join_selectivities,
             &index_plan,
         )?;
-        
+
         Ok(OptimizedBGP {
             patterns: ordered_patterns,
             estimated_cost: overall_cost,
@@ -201,16 +199,18 @@ impl<'a> BGPOptimizer<'a> {
         pattern: &TriplePattern,
     ) -> Result<PatternSelectivity> {
         // Calculate component selectivities
-        let subject_sel = self.calculate_term_selectivity(&pattern.subject, TermPosition::Subject)?;
-        let predicate_sel = self.calculate_term_selectivity(&pattern.predicate, TermPosition::Predicate)?;
+        let subject_sel =
+            self.calculate_term_selectivity(&pattern.subject, TermPosition::Subject)?;
+        let predicate_sel =
+            self.calculate_term_selectivity(&pattern.predicate, TermPosition::Predicate)?;
         let object_sel = self.calculate_term_selectivity(&pattern.object, TermPosition::Object)?;
-        
+
         // Calculate index factor
         let index_factor = self.calculate_index_factor(pattern)?;
-        
+
         // Calculate data distribution factor
         let distribution_factor = self.calculate_distribution_factor(pattern)?;
-        
+
         // Combine factors using advanced formula
         let combined_selectivity = self.combine_selectivity_factors(
             subject_sel,
@@ -219,11 +219,16 @@ impl<'a> BGPOptimizer<'a> {
             index_factor,
             distribution_factor,
         );
-        
+
         // Estimate cardinality
-        let total_triples = self.statistics.pattern_cardinality.values().sum::<usize>().max(1_000_000);
+        let total_triples = self
+            .statistics
+            .pattern_cardinality
+            .values()
+            .sum::<usize>()
+            .max(1_000_000);
         let cardinality = (total_triples as f64 * combined_selectivity).ceil() as usize;
-        
+
         Ok(PatternSelectivity {
             pattern: pattern.clone(),
             selectivity: combined_selectivity,
@@ -239,11 +244,7 @@ impl<'a> BGPOptimizer<'a> {
     }
 
     /// Calculate selectivity for a term based on its position
-    fn calculate_term_selectivity(
-        &self,
-        term: &Term,
-        position: TermPosition,
-    ) -> Result<f64> {
+    fn calculate_term_selectivity(&self, term: &Term, position: TermPosition) -> Result<f64> {
         match term {
             Term::Variable(_) => {
                 // Variables have low selectivity
@@ -257,10 +258,12 @@ impl<'a> BGPOptimizer<'a> {
                 // IRIs have selectivity based on statistics
                 let cardinality = match position {
                     TermPosition::Subject => self.statistics.subject_cardinality.get(iri.as_str()),
-                    TermPosition::Predicate => self.statistics.predicate_frequency.get(iri.as_str()),
+                    TermPosition::Predicate => {
+                        self.statistics.predicate_frequency.get(iri.as_str())
+                    }
                     TermPosition::Object => self.statistics.object_cardinality.get(iri.as_str()),
                 };
-                
+
                 if let Some(&card) = cardinality {
                     let total = self.get_total_count_for_position(position);
                     Ok((card as f64 / total as f64).min(1.0))
@@ -287,28 +290,47 @@ impl<'a> BGPOptimizer<'a> {
     /// Calculate index availability factor
     fn calculate_index_factor(&self, pattern: &TriplePattern) -> Result<f64> {
         let mut best_index_factor = 1.0;
-        
+
         // Check SPO index
-        if self.is_bound(&pattern.subject) && self.is_bound(&pattern.predicate) && self.is_bound(&pattern.object) {
-            if self.index_stats.available_indexes.contains(&IndexType::SubjectPredicate) {
+        if self.is_bound(&pattern.subject)
+            && self.is_bound(&pattern.predicate)
+            && self.is_bound(&pattern.object)
+        {
+            if self
+                .index_stats
+                .available_indexes
+                .contains(&IndexType::SubjectPredicate)
+            {
                 best_index_factor = 0.01; // Very efficient with full index
             }
         }
         // Check SP index
         else if self.is_bound(&pattern.subject) && self.is_bound(&pattern.predicate) {
-            if self.index_stats.available_indexes.contains(&IndexType::SubjectPredicate) {
+            if self
+                .index_stats
+                .available_indexes
+                .contains(&IndexType::SubjectPredicate)
+            {
                 best_index_factor = 0.1;
             }
         }
         // Check PO index
         else if self.is_bound(&pattern.predicate) && self.is_bound(&pattern.object) {
-            if self.index_stats.available_indexes.contains(&IndexType::PredicateObject) {
+            if self
+                .index_stats
+                .available_indexes
+                .contains(&IndexType::PredicateObject)
+            {
                 best_index_factor = 0.15;
             }
         }
         // Check SO index
         else if self.is_bound(&pattern.subject) && self.is_bound(&pattern.object) {
-            if self.index_stats.available_indexes.contains(&IndexType::SubjectObject) {
+            if self
+                .index_stats
+                .available_indexes
+                .contains(&IndexType::SubjectObject)
+            {
                 best_index_factor = 0.2;
             }
         }
@@ -316,7 +338,7 @@ impl<'a> BGPOptimizer<'a> {
         else if self.is_bound(&pattern.predicate) {
             best_index_factor = 0.5; // Predicate-only index is moderately efficient
         }
-        
+
         Ok(best_index_factor)
     }
 
@@ -333,7 +355,7 @@ impl<'a> BGPOptimizer<'a> {
                 return Ok(0.1); // More selective
             }
         }
-        
+
         Ok(1.0) // Neutral factor
     }
 
@@ -348,11 +370,11 @@ impl<'a> BGPOptimizer<'a> {
     ) -> f64 {
         // Use independence assumption with correlation adjustment
         let base_selectivity = subject_sel * predicate_sel * object_sel;
-        
+
         // Apply correlation factor (terms are not fully independent)
         let correlation_factor = 1.2; // Slight correlation penalty
         let adjusted_selectivity = (base_selectivity * correlation_factor).min(1.0);
-        
+
         // Apply index and distribution factors
         (adjusted_selectivity * index_factor * distribution_factor).max(0.000001)
     }
@@ -364,7 +386,7 @@ impl<'a> BGPOptimizer<'a> {
         pattern_selectivities: &[PatternSelectivity],
     ) -> Result<HashMap<(usize, usize), f64>> {
         let mut join_selectivities = HashMap::new();
-        
+
         for i in 0..patterns.len() {
             for j in i + 1..patterns.len() {
                 let join_vars = self.find_join_variables(&patterns[i], &patterns[j]);
@@ -380,7 +402,7 @@ impl<'a> BGPOptimizer<'a> {
                 }
             }
         }
-        
+
         Ok(join_selectivities)
     }
 
@@ -388,14 +410,14 @@ impl<'a> BGPOptimizer<'a> {
     fn find_join_variables(&self, p1: &TriplePattern, p2: &TriplePattern) -> Vec<String> {
         let vars1 = self.extract_variables(p1);
         let vars2 = self.extract_variables(p2);
-        
+
         vars1.intersection(&vars2).cloned().collect()
     }
 
     /// Extract variables from a pattern
     fn extract_variables(&self, pattern: &TriplePattern) -> HashSet<String> {
         let mut vars = HashSet::new();
-        
+
         if let Term::Variable(v) = &pattern.subject {
             vars.insert(v.to_string());
         }
@@ -405,7 +427,7 @@ impl<'a> BGPOptimizer<'a> {
         if let Term::Variable(v) = &pattern.object {
             vars.insert(v.to_string());
         }
-        
+
         vars
     }
 
@@ -420,7 +442,7 @@ impl<'a> BGPOptimizer<'a> {
     ) -> Result<f64> {
         // Base selectivity from pattern selectivities
         let base_selectivity = (sel1.selectivity * sel2.selectivity).sqrt();
-        
+
         // Adjust based on join variable position and type
         let mut position_factor = 1.0;
         for var in join_vars {
@@ -432,7 +454,7 @@ impl<'a> BGPOptimizer<'a> {
                 position_factor *= 0.5; // Mixed position joins
             }
         }
-        
+
         Ok((base_selectivity * position_factor).max(0.000001))
     }
 
@@ -446,31 +468,29 @@ impl<'a> BGPOptimizer<'a> {
         if patterns.len() <= 1 {
             return Ok(patterns.to_vec());
         }
-        
+
         // Use greedy algorithm for now (can be replaced with DP for optimal solution)
         let mut remaining: HashSet<usize> = (0..patterns.len()).collect();
         let mut ordered = Vec::new();
         let mut ordered_indices = Vec::new();
-        
+
         // Start with most selective pattern
         let start_idx = pattern_selectivities
             .iter()
             .enumerate()
-            .min_by(|(_, a), (_, b)| {
-                a.selectivity.partial_cmp(&b.selectivity).unwrap()
-            })
+            .min_by(|(_, a), (_, b)| a.selectivity.partial_cmp(&b.selectivity).unwrap())
             .map(|(idx, _)| idx)
             .unwrap();
-        
+
         ordered.push(patterns[start_idx].clone());
         ordered_indices.push(start_idx);
         remaining.remove(&start_idx);
-        
+
         // Greedily add patterns with best join selectivity
         while !remaining.is_empty() {
             let mut best_next = None;
             let mut best_cost = f64::MAX;
-            
+
             for &candidate in &remaining {
                 let cost = self.calculate_join_cost(
                     candidate,
@@ -478,13 +498,13 @@ impl<'a> BGPOptimizer<'a> {
                     pattern_selectivities,
                     join_selectivities,
                 )?;
-                
+
                 if cost < best_cost {
                     best_cost = cost;
                     best_next = Some(candidate);
                 }
             }
-            
+
             if let Some(next_idx) = best_next {
                 ordered.push(patterns[next_idx].clone());
                 ordered_indices.push(next_idx);
@@ -498,14 +518,14 @@ impl<'a> BGPOptimizer<'a> {
                         .partial_cmp(&pattern_selectivities[b].selectivity)
                         .unwrap()
                 });
-                
+
                 for idx in remaining_vec {
                     ordered.push(patterns[idx].clone());
                 }
                 break;
             }
         }
-        
+
         Ok(ordered)
     }
 
@@ -518,19 +538,19 @@ impl<'a> BGPOptimizer<'a> {
         join_selectivities: &HashMap<(usize, usize), f64>,
     ) -> Result<f64> {
         let mut min_cost = pattern_selectivities[candidate].selectivity;
-        
+
         for &existing in current_ordering {
             let key = if existing < candidate {
                 (existing, candidate)
             } else {
                 (candidate, existing)
             };
-            
+
             if let Some(&join_sel) = join_selectivities.get(&key) {
                 min_cost = min_cost.min(join_sel);
             }
         }
-        
+
         Ok(min_cost)
     }
 
@@ -542,7 +562,7 @@ impl<'a> BGPOptimizer<'a> {
     ) -> Result<IndexUsagePlan> {
         let mut pattern_indexes = Vec::new();
         let mut join_indexes = Vec::new();
-        
+
         // Assign indexes to patterns
         for (idx, pattern) in patterns.iter().enumerate() {
             let best_index = self.select_best_index_for_pattern(pattern)?;
@@ -551,21 +571,22 @@ impl<'a> BGPOptimizer<'a> {
                 &best_index,
                 pattern_selectivities[idx].cardinality,
             )?;
-            
+
             pattern_indexes.push(IndexAssignment {
                 pattern_idx: idx,
                 index_type: best_index,
                 scan_cost,
             });
         }
-        
+
         // Identify join index opportunities
         for i in 0..patterns.len() {
             for j in i + 1..patterns.len() {
                 let join_vars = self.find_join_variables(&patterns[i], &patterns[j]);
                 if !join_vars.is_empty() {
                     for var in join_vars {
-                        let speedup = self.estimate_join_index_speedup(&patterns[i], &patterns[j], &var)?;
+                        let speedup =
+                            self.estimate_join_index_speedup(&patterns[i], &patterns[j], &var)?;
                         if speedup > 1.5 {
                             join_indexes.push(JoinIndexOpportunity {
                                 left_pattern_idx: i,
@@ -578,7 +599,7 @@ impl<'a> BGPOptimizer<'a> {
                 }
             }
         }
-        
+
         Ok(IndexUsagePlan {
             pattern_indexes,
             join_indexes,
@@ -590,26 +611,38 @@ impl<'a> BGPOptimizer<'a> {
         let subject_bound = self.is_bound(&pattern.subject);
         let predicate_bound = self.is_bound(&pattern.predicate);
         let object_bound = self.is_bound(&pattern.object);
-        
+
         // Priority order for index selection
         if subject_bound && predicate_bound {
-            if self.index_stats.available_indexes.contains(&IndexType::SubjectPredicate) {
+            if self
+                .index_stats
+                .available_indexes
+                .contains(&IndexType::SubjectPredicate)
+            {
                 return Ok(IndexType::SubjectPredicate);
             }
         }
-        
+
         if predicate_bound && object_bound {
-            if self.index_stats.available_indexes.contains(&IndexType::PredicateObject) {
+            if self
+                .index_stats
+                .available_indexes
+                .contains(&IndexType::PredicateObject)
+            {
                 return Ok(IndexType::PredicateObject);
             }
         }
-        
+
         if subject_bound && object_bound {
-            if self.index_stats.available_indexes.contains(&IndexType::SubjectObject) {
+            if self
+                .index_stats
+                .available_indexes
+                .contains(&IndexType::SubjectObject)
+            {
                 return Ok(IndexType::SubjectObject);
             }
         }
-        
+
         // Default to subject-predicate index
         Ok(IndexType::SubjectPredicate)
     }
@@ -622,13 +655,14 @@ impl<'a> BGPOptimizer<'a> {
         cardinality: usize,
     ) -> Result<f64> {
         let base_cost = cardinality as f64;
-        
-        let index_overhead = self.index_stats
+
+        let index_overhead = self
+            .index_stats
             .index_access_cost
             .get(index_type)
             .copied()
             .unwrap_or(1.0);
-        
+
         Ok(base_cost * index_overhead)
     }
 
@@ -642,7 +676,7 @@ impl<'a> BGPOptimizer<'a> {
         // Check if join variable is indexed in both patterns
         let p1_indexed = self.is_variable_indexed(p1, join_var);
         let p2_indexed = self.is_variable_indexed(p2, join_var);
-        
+
         if p1_indexed && p2_indexed {
             Ok(10.0) // Significant speedup with indexed join
         } else if p1_indexed || p2_indexed {
@@ -662,11 +696,11 @@ impl<'a> BGPOptimizer<'a> {
     ) -> Result<(f64, f64)> {
         let mut total_cost = 0.0;
         let mut cumulative_selectivity = 1.0;
-        
+
         for (idx, assignment) in index_plan.pattern_indexes.iter().enumerate() {
             total_cost += assignment.scan_cost;
             cumulative_selectivity *= pattern_selectivities[idx].selectivity;
-            
+
             // Apply join selectivity reductions
             if idx > 0 {
                 for prev_idx in 0..idx {
@@ -675,14 +709,14 @@ impl<'a> BGPOptimizer<'a> {
                     } else {
                         (idx, prev_idx)
                     };
-                    
+
                     if let Some(&join_sel) = join_selectivities.get(&key) {
                         cumulative_selectivity *= join_sel;
                     }
                 }
             }
         }
-        
+
         Ok((total_cost, cumulative_selectivity))
     }
 
@@ -703,11 +737,21 @@ impl<'a> BGPOptimizer<'a> {
     fn is_variable_indexed(&self, pattern: &TriplePattern, var: &str) -> bool {
         // Check if the variable position would benefit from available indexes
         if self.is_subject_variable(pattern, var) {
-            self.index_stats.available_indexes.contains(&IndexType::SubjectPredicate)
-                || self.index_stats.available_indexes.contains(&IndexType::SubjectObject)
+            self.index_stats
+                .available_indexes
+                .contains(&IndexType::SubjectPredicate)
+                || self
+                    .index_stats
+                    .available_indexes
+                    .contains(&IndexType::SubjectObject)
         } else if self.is_object_variable(pattern, var) {
-            self.index_stats.available_indexes.contains(&IndexType::PredicateObject)
-                || self.index_stats.available_indexes.contains(&IndexType::SubjectObject)
+            self.index_stats
+                .available_indexes
+                .contains(&IndexType::PredicateObject)
+                || self
+                    .index_stats
+                    .available_indexes
+                    .contains(&IndexType::SubjectObject)
         } else {
             false
         }
@@ -715,9 +759,24 @@ impl<'a> BGPOptimizer<'a> {
 
     fn get_total_count_for_position(&self, position: TermPosition) -> usize {
         match position {
-            TermPosition::Subject => self.statistics.subject_cardinality.values().sum::<usize>().max(100_000),
-            TermPosition::Predicate => self.statistics.predicate_frequency.values().sum::<usize>().max(1_000),
-            TermPosition::Object => self.statistics.object_cardinality.values().sum::<usize>().max(100_000),
+            TermPosition::Subject => self
+                .statistics
+                .subject_cardinality
+                .values()
+                .sum::<usize>()
+                .max(100_000),
+            TermPosition::Predicate => self
+                .statistics
+                .predicate_frequency
+                .values()
+                .sum::<usize>()
+                .max(1_000),
+            TermPosition::Object => self
+                .statistics
+                .object_cardinality
+                .values()
+                .sum::<usize>()
+                .max(100_000),
         }
     }
 }
@@ -765,33 +824,43 @@ impl AdaptiveIndexSelector {
 
     /// Calculate pattern key for frequency tracking
     fn pattern_key(&self, pattern: &TriplePattern) -> String {
-        format!("{:?}_{:?}_{:?}", 
-                self.term_type(&pattern.subject),
-                self.term_type(&pattern.predicate),
-                self.term_type(&pattern.object))
+        format!(
+            "{:?}_{:?}_{:?}",
+            self.term_type(&pattern.subject),
+            self.term_type(&pattern.predicate),
+            self.term_type(&pattern.object)
+        )
     }
 
     /// Get term type for pattern analysis
     fn term_type(&self, term: &Term) -> &str {
         match term {
             Term::Variable(_) => "VAR",
-            Term::Iri(_) => "IRI", 
+            Term::Iri(_) => "IRI",
             Term::Literal(_) => "LIT",
             Term::BlankNode(_) => "BN",
         }
     }
 
     /// Calculate index effectiveness from execution results
-    fn calculate_index_effectiveness(&self, execution_time: std::time::Duration, result_count: usize) -> f64 {
+    fn calculate_index_effectiveness(
+        &self,
+        execution_time: std::time::Duration,
+        result_count: usize,
+    ) -> f64 {
         let time_factor = 1.0 / (execution_time.as_millis() as f64 + 1.0);
-        let result_factor = if result_count == 0 { 0.1 } else { (result_count as f64).ln() };
+        let result_factor = if result_count == 0 {
+            0.1
+        } else {
+            (result_count as f64).ln()
+        };
         time_factor * result_factor
     }
 
     /// Update workload characteristics
     fn update_workload_characteristics(&mut self, patterns: &[TriplePattern]) {
         let new_complexity = patterns.len() as f64;
-        self.workload_characteristics.avg_query_complexity = 
+        self.workload_characteristics.avg_query_complexity =
             (self.workload_characteristics.avg_query_complexity + new_complexity) / 2.0;
     }
 }
@@ -809,20 +878,37 @@ mod tests {
 
     fn create_test_statistics() -> Statistics {
         let mut stats = Statistics::new();
-        
+
         // Add predicate frequencies
-        stats.predicate_frequency.insert("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(), 10000);
-        stats.predicate_frequency.insert("http://xmlns.com/foaf/0.1/name".to_string(), 5000);
-        stats.predicate_frequency.insert("http://xmlns.com/foaf/0.1/knows".to_string(), 2000);
-        
+        stats.predicate_frequency.insert(
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
+            10000,
+        );
+        stats
+            .predicate_frequency
+            .insert("http://xmlns.com/foaf/0.1/name".to_string(), 5000);
+        stats
+            .predicate_frequency
+            .insert("http://xmlns.com/foaf/0.1/knows".to_string(), 2000);
+
         // Add subject cardinalities
-        stats.subject_cardinality.insert("http://example.org/person/1".to_string(), 10);
-        stats.subject_cardinality.insert("http://example.org/person/2".to_string(), 15);
-        
+        stats
+            .subject_cardinality
+            .insert("http://example.org/person/1".to_string(), 10);
+        stats
+            .subject_cardinality
+            .insert("http://example.org/person/2".to_string(), 15);
+
         // Add available indexes
-        stats.index_stats.available_indexes.insert(IndexType::SubjectPredicate);
-        stats.index_stats.available_indexes.insert(IndexType::PredicateObject);
-        
+        stats
+            .index_stats
+            .available_indexes
+            .insert(IndexType::SubjectPredicate);
+        stats
+            .index_stats
+            .available_indexes
+            .insert(IndexType::PredicateObject);
+
         stats
     }
 
@@ -830,16 +916,20 @@ mod tests {
     fn test_pattern_selectivity_calculation() {
         let stats = create_test_statistics();
         let optimizer = BGPOptimizer::new(&stats, &stats.index_stats);
-        
+
         // Test pattern with bound predicate
         let pattern = TriplePattern {
             subject: Term::Variable("s".to_string()),
-            predicate: Term::Iri(Iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string())),
+            predicate: Term::Iri(Iri(
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string()
+            )),
             object: Term::Variable("o".to_string()),
         };
-        
-        let selectivity = optimizer.calculate_single_pattern_selectivity(&pattern).unwrap();
-        
+
+        let selectivity = optimizer
+            .calculate_single_pattern_selectivity(&pattern)
+            .unwrap();
+
         // Should have relatively low selectivity due to common predicate
         assert!(selectivity.selectivity < 0.1);
         assert!(selectivity.factors.predicate_selectivity > 0.0);
@@ -849,19 +939,19 @@ mod tests {
     fn test_join_variable_detection() {
         let stats = create_test_statistics();
         let optimizer = BGPOptimizer::new(&stats, &stats.index_stats);
-        
+
         let p1 = TriplePattern {
             subject: Term::Variable("x".to_string()),
             predicate: Term::Iri(Iri("http://xmlns.com/foaf/0.1/name".to_string())),
             object: Term::Variable("name".to_string()),
         };
-        
+
         let p2 = TriplePattern {
             subject: Term::Variable("x".to_string()),
             predicate: Term::Iri(Iri("http://xmlns.com/foaf/0.1/knows".to_string())),
             object: Term::Variable("y".to_string()),
         };
-        
+
         let join_vars = optimizer.find_join_variables(&p1, &p2);
         assert_eq!(join_vars.len(), 1);
         assert!(join_vars.contains(&"x".to_string()));
@@ -871,12 +961,14 @@ mod tests {
     fn test_bgp_optimization() {
         let stats = create_test_statistics();
         let optimizer = BGPOptimizer::new(&stats, &stats.index_stats);
-        
+
         let patterns = vec![
             // Less selective pattern
             TriplePattern {
                 subject: Term::Variable("s".to_string()),
-                predicate: Term::Iri(Iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string())),
+                predicate: Term::Iri(Iri(
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string()
+                )),
                 object: Term::Variable("o".to_string()),
             },
             // More selective pattern
@@ -890,9 +982,9 @@ mod tests {
                 }),
             },
         ];
-        
+
         let optimized = optimizer.optimize_bgp(patterns.clone()).unwrap();
-        
+
         // The more selective pattern should be ordered first
         assert_eq!(optimized.patterns.len(), 2);
         assert!(matches!(&optimized.patterns[0].object, Term::Literal(_)));

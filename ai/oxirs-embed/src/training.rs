@@ -484,7 +484,10 @@ pub struct DistributedTrainer {
     early_stopping: Option<EarlyStopping>,
     metrics: Arc<RwLock<MetricsTracker>>,
     gradient_accumulator: Arc<Mutex<GradientAccumulator>>,
-    sync_channel: (broadcast::Sender<SyncMessage>, broadcast::Receiver<SyncMessage>),
+    sync_channel: (
+        broadcast::Sender<SyncMessage>,
+        broadcast::Receiver<SyncMessage>,
+    ),
 }
 
 /// Messages for distributed synchronization
@@ -610,9 +613,11 @@ impl DistributedTrainer {
 
         // Spawn worker tasks for each device
         let mut worker_handles = Vec::new();
-        
+
         for device_id in &self.distributed_config.device_ids {
-            let worker_handle = self.spawn_worker_task(*device_id, Arc::clone(&model)).await?;
+            let worker_handle = self
+                .spawn_worker_task(*device_id, Arc::clone(&model))
+                .await?;
             worker_handles.push(worker_handle);
         }
 
@@ -635,7 +640,7 @@ impl DistributedTrainer {
 
         let training_time = start_time.elapsed().as_secs_f64();
         let metrics = self.metrics.read().await;
-        
+
         Ok(final_stats.unwrap_or_else(|| TrainingStats {
             epochs_completed: metrics.epochs.len(),
             final_loss: metrics.losses.last().copied().unwrap_or(0.0),
@@ -660,8 +665,11 @@ impl DistributedTrainer {
         let sync_tx = self.sync_channel.0.clone();
 
         let handle = tokio::spawn(async move {
-            info!("Worker {} starting on device {}", distributed_config.rank, device_id);
-            
+            info!(
+                "Worker {} starting on device {}",
+                distributed_config.rank, device_id
+            );
+
             let mut local_early_stopping = if config.use_early_stopping {
                 Some(EarlyStopping::new(config.patience, config.min_delta))
             } else {
@@ -680,7 +688,7 @@ impl DistributedTrainer {
                 let mut model_guard = model.write().await;
                 let epoch_stats = model_guard.train(Some(1)).await?;
                 drop(model_guard);
-                
+
                 let epoch_loss = epoch_stats.final_loss;
                 let epoch_time = epoch_start.elapsed().as_secs_f64();
                 total_training_time += epoch_time;
@@ -724,15 +732,24 @@ impl DistributedTrainer {
                 // Check early stopping
                 if let Some(ref mut early_stop) = local_early_stopping {
                     if early_stop.update(epoch_loss) {
-                        info!("Worker {} early stopping triggered at epoch {}", distributed_config.rank, epoch);
-                        let _ = sync_tx.send(SyncMessage::EarlyStop { epoch, loss: epoch_loss });
+                        info!(
+                            "Worker {} early stopping triggered at epoch {}",
+                            distributed_config.rank, epoch
+                        );
+                        let _ = sync_tx.send(SyncMessage::EarlyStop {
+                            epoch,
+                            loss: epoch_loss,
+                        });
                         break;
                     }
                 }
 
                 // Simple convergence check
                 if epoch > 10 && epoch_loss < 1e-8 {
-                    info!("Worker {} converged at epoch {} with loss {:.6}", distributed_config.rank, epoch, epoch_loss);
+                    info!(
+                        "Worker {} converged at epoch {} with loss {:.6}",
+                        distributed_config.rank, epoch, epoch_loss
+                    );
                     break;
                 }
             }
@@ -742,7 +759,12 @@ impl DistributedTrainer {
                 epochs_completed: final_metrics.epochs.len(),
                 final_loss: final_metrics.losses.last().copied().unwrap_or(0.0),
                 training_time_seconds: total_training_time,
-                convergence_achieved: final_metrics.losses.last().copied().unwrap_or(f64::INFINITY) < 1e-6,
+                convergence_achieved: final_metrics
+                    .losses
+                    .last()
+                    .copied()
+                    .unwrap_or(f64::INFINITY)
+                    < 1e-6,
                 loss_history: final_metrics.losses.clone(),
             })
         });
@@ -759,19 +781,26 @@ impl DistributedTrainer {
 
         let handle = tokio::spawn(async move {
             info!("Coordinator starting for {} workers", world_size);
-            
+
             while let Ok(msg) = sync_rx.recv().await {
                 match msg {
-                    SyncMessage::GradientUpdate { epoch, rank, gradients } => {
-                        debug!("Received gradients from worker {} for epoch {}", rank, epoch);
-                        
+                    SyncMessage::GradientUpdate {
+                        epoch,
+                        rank,
+                        gradients,
+                    } => {
+                        debug!(
+                            "Received gradients from worker {} for epoch {}",
+                            rank, epoch
+                        );
+
                         // Simulate gradient accumulation and all-reduce
                         {
                             let _accumulator = gradient_accumulator.lock().unwrap();
                             // In a real implementation, this would accumulate actual gradients
                             // For now, we just simulate the process
                         }
-                        
+
                         // Broadcast parameter updates
                         let _ = sync_tx.send(SyncMessage::ParameterSync {
                             epoch,
@@ -779,7 +808,10 @@ impl DistributedTrainer {
                         });
                     }
                     SyncMessage::EarlyStop { epoch, loss } => {
-                        info!("Early stop signal received at epoch {} with loss {:.6}", epoch, loss);
+                        info!(
+                            "Early stop signal received at epoch {} with loss {:.6}",
+                            epoch, loss
+                        );
                         // In a real implementation, would coordinate early stopping across all workers
                     }
                     _ => {}
@@ -792,10 +824,7 @@ impl DistributedTrainer {
 
     /// Perform all-reduce operation on gradients
     #[allow(dead_code)]
-    async fn all_reduce_gradients(
-        &self,
-        gradients: Vec<Array2<f64>>,
-    ) -> Result<Vec<Array2<f64>>> {
+    async fn all_reduce_gradients(&self, gradients: Vec<Array2<f64>>) -> Result<Vec<Array2<f64>>> {
         // Simplified all-reduce - in practice would use NCCL/MPI
         match self.distributed_config.all_reduce_method {
             AllReduceMethod::Average => {
@@ -831,7 +860,10 @@ pub struct DistributedUtils;
 impl DistributedUtils {
     /// Initialize distributed training environment
     pub async fn init_distributed(rank: usize, world_size: usize) -> Result<()> {
-        info!("Initializing distributed training: rank {} of {}", rank, world_size);
+        info!(
+            "Initializing distributed training: rank {} of {}",
+            rank, world_size
+        );
         // In practice, would initialize NCCL/MPI here
         Ok(())
     }
@@ -852,7 +884,9 @@ impl DistributedUtils {
     /// Get optimal world size for current hardware
     pub fn get_optimal_world_size() -> usize {
         // In practice, would detect available GPUs
-        std::thread::available_parallelism().map(|p| p.get()).unwrap_or(1)
+        std::thread::available_parallelism()
+            .map(|p| p.get())
+            .unwrap_or(1)
     }
 }
 
@@ -915,16 +949,16 @@ mod tests {
     fn test_gradient_accumulator() {
         let mut accumulator = GradientAccumulator::new(2);
         assert!(!accumulator.is_ready());
-        
+
         let grad1 = vec![Array2::from_elem((2, 2), 1.0)];
         let grad2 = vec![Array2::from_elem((2, 2), 2.0)];
-        
+
         accumulator.accumulate(grad1);
         assert!(!accumulator.is_ready());
-        
+
         accumulator.accumulate(grad2);
         assert!(accumulator.is_ready());
-        
+
         let averaged = accumulator.get_averaged_gradients();
         assert_eq!(averaged.len(), 1);
         assert!((averaged[0][[0, 0]] - 1.5).abs() < 1e-10);

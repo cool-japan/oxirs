@@ -221,11 +221,21 @@ impl Ord for InsightSeverity {
             (InsightSeverity::Critical, _) => std::cmp::Ordering::Greater,
             (_, InsightSeverity::Critical) => std::cmp::Ordering::Less,
             (InsightSeverity::High, InsightSeverity::High) => std::cmp::Ordering::Equal,
-            (InsightSeverity::High, InsightSeverity::Medium | InsightSeverity::Low | InsightSeverity::Info) => std::cmp::Ordering::Greater,
-            (InsightSeverity::Medium | InsightSeverity::Low | InsightSeverity::Info, InsightSeverity::High) => std::cmp::Ordering::Less,
+            (
+                InsightSeverity::High,
+                InsightSeverity::Medium | InsightSeverity::Low | InsightSeverity::Info,
+            ) => std::cmp::Ordering::Greater,
+            (
+                InsightSeverity::Medium | InsightSeverity::Low | InsightSeverity::Info,
+                InsightSeverity::High,
+            ) => std::cmp::Ordering::Less,
             (InsightSeverity::Medium, InsightSeverity::Medium) => std::cmp::Ordering::Equal,
-            (InsightSeverity::Medium, InsightSeverity::Low | InsightSeverity::Info) => std::cmp::Ordering::Greater,
-            (InsightSeverity::Low | InsightSeverity::Info, InsightSeverity::Medium) => std::cmp::Ordering::Less,
+            (InsightSeverity::Medium, InsightSeverity::Low | InsightSeverity::Info) => {
+                std::cmp::Ordering::Greater
+            }
+            (InsightSeverity::Low | InsightSeverity::Info, InsightSeverity::Medium) => {
+                std::cmp::Ordering::Less
+            }
             (InsightSeverity::Low, InsightSeverity::Low) => std::cmp::Ordering::Equal,
             (InsightSeverity::Low, InsightSeverity::Info) => std::cmp::Ordering::Greater,
             (InsightSeverity::Info, InsightSeverity::Low) => std::cmp::Ordering::Less,

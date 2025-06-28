@@ -14,7 +14,7 @@ use std::{
 use tracing::{debug, info, warn};
 
 use crate::{
-    nl2sparql::{SPARQLGenerationResult, GenerationMethod, OptimizationHint, OptimizationHintType},
+    nl2sparql::{GenerationMethod, OptimizationHint, OptimizationHintType, SPARQLGenerationResult},
     rag::QueryIntent,
 };
 
@@ -51,9 +51,9 @@ impl Default for OptimizerConfig {
 /// Optimization levels
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum OptimizationLevel {
-    Conservative, // Safe optimizations only
-    Balanced,     // Mix of safety and performance
-    Aggressive,   // Maximum performance optimizations
+    Conservative,                      // Safe optimizations only
+    Balanced,                          // Mix of safety and performance
+    Aggressive,                        // Maximum performance optimizations
     Custom(Vec<OptimizationStrategy>), // User-defined strategies
 }
 
@@ -132,8 +132,8 @@ pub struct OptimizationOpportunity {
     pub strategy: OptimizationStrategy,
     pub description: String,
     pub estimated_improvement: f32, // Percentage improvement expected
-    pub confidence: f32,           // Confidence in the improvement estimate
-    pub applicable: bool,          // Whether this optimization can be applied
+    pub confidence: f32,            // Confidence in the improvement estimate
+    pub applicable: bool,           // Whether this optimization can be applied
 }
 
 /// Performance prediction
@@ -205,21 +205,33 @@ impl AdvancedSPARQLOptimizer {
             }
         }
 
-        info!("Starting advanced optimization for query: {}", query.chars().take(100).collect::<String>());
+        info!(
+            "Starting advanced optimization for query: {}",
+            query.chars().take(100).collect::<String>()
+        );
 
         // Step 1: Analyze the query
         let analysis = self.query_analyzer.analyze(query, intent).await?;
-        debug!("Query analysis complete: complexity={:.2}, issues={}", 
-               analysis.complexity_score, analysis.potential_issues.len());
+        debug!(
+            "Query analysis complete: complexity={:.2}, issues={}",
+            analysis.complexity_score,
+            analysis.potential_issues.len()
+        );
 
         // Step 2: Apply optimizations based on analysis
-        let optimized_query = self.rewriter.rewrite_query(query, &analysis, intent).await?;
-        
+        let optimized_query = self
+            .rewriter
+            .rewrite_query(query, &analysis, intent)
+            .await?;
+
         // Step 3: Calculate performance improvement
         let original_cost = &analysis.estimated_cost;
-        let optimized_analysis = self.query_analyzer.analyze(&optimized_query, intent).await?;
+        let optimized_analysis = self
+            .query_analyzer
+            .analyze(&optimized_query, intent)
+            .await?;
         let optimized_cost = &optimized_analysis.estimated_cost;
-        
+
         let performance_improvement = self.calculate_improvement(original_cost, optimized_cost);
 
         // Step 4: Collect applied optimizations
@@ -242,8 +254,11 @@ impl AdvancedSPARQLOptimizer {
             self.optimization_cache.insert(cache_key, result.clone());
         }
 
-        info!("Optimization complete: {:.1}% improvement expected in {:.1}ms", 
-              performance_improvement, optimization_time.as_millis());
+        info!(
+            "Optimization complete: {:.1}% improvement expected in {:.1}ms",
+            performance_improvement,
+            optimization_time.as_millis()
+        );
 
         Ok(result)
     }
@@ -253,7 +268,10 @@ impl AdvancedSPARQLOptimizer {
         &self,
         generation_result: &SPARQLGenerationResult,
     ) -> Result<Vec<OptimizationHint>> {
-        let analysis = self.query_analyzer.analyze(&generation_result.query, &QueryIntent::Exploration).await?;
+        let analysis = self
+            .query_analyzer
+            .analyze(&generation_result.query, &QueryIntent::Exploration)
+            .await?;
         let mut hints = Vec::new();
 
         // Generate hints based on analysis
@@ -287,7 +305,11 @@ impl AdvancedSPARQLOptimizer {
     }
 
     /// Analyze query performance without optimization
-    pub async fn analyze_performance(&self, query: &str, intent: &QueryIntent) -> Result<QueryAnalysis> {
+    pub async fn analyze_performance(
+        &self,
+        query: &str,
+        intent: &QueryIntent,
+    ) -> Result<QueryAnalysis> {
         self.query_analyzer.analyze(query, intent).await
     }
 
@@ -295,9 +317,11 @@ impl AdvancedSPARQLOptimizer {
     pub fn get_optimization_stats(&self) -> OptimizationStats {
         let total_optimizations = self.optimization_cache.len();
         let avg_improvement = if total_optimizations > 0 {
-            self.optimization_cache.values()
+            self.optimization_cache
+                .values()
                 .map(|r| r.performance_improvement)
-                .sum::<f32>() / total_optimizations as f32
+                .sum::<f32>()
+                / total_optimizations as f32
         } else {
             0.0
         };
@@ -308,7 +332,9 @@ impl AdvancedSPARQLOptimizer {
             total_optimizations,
             average_improvement: avg_improvement,
             cache_hit_rate,
-            total_optimization_time: self.optimization_cache.values()
+            total_optimization_time: self
+                .optimization_cache
+                .values()
                 .map(|r| r.optimization_time)
                 .sum(),
         }
@@ -325,19 +351,22 @@ impl AdvancedSPARQLOptimizer {
     }
 
     fn calculate_improvement(&self, original: &QueryCost, optimized: &QueryCost) -> f32 {
-        let time_improvement = if original.estimated_execution_time > optimized.estimated_execution_time {
-            let saved = original.estimated_execution_time - optimized.estimated_execution_time;
-            (saved.as_millis() as f32 / original.estimated_execution_time.as_millis() as f32) * 100.0
-        } else {
-            0.0
-        };
+        let time_improvement =
+            if original.estimated_execution_time > optimized.estimated_execution_time {
+                let saved = original.estimated_execution_time - optimized.estimated_execution_time;
+                (saved.as_millis() as f32 / original.estimated_execution_time.as_millis() as f32)
+                    * 100.0
+            } else {
+                0.0
+            };
 
-        let memory_improvement = if original.estimated_memory_usage > optimized.estimated_memory_usage {
-            let saved = original.estimated_memory_usage - optimized.estimated_memory_usage;
-            (saved as f32 / original.estimated_memory_usage as f32) * 100.0
-        } else {
-            0.0
-        };
+        let memory_improvement =
+            if original.estimated_memory_usage > optimized.estimated_memory_usage {
+                let saved = original.estimated_memory_usage - optimized.estimated_memory_usage;
+                (saved as f32 / original.estimated_memory_usage as f32) * 100.0
+            } else {
+                0.0
+            };
 
         let complexity_improvement = if original.complexity_factor > optimized.complexity_factor {
             let saved = original.complexity_factor - optimized.complexity_factor;
@@ -355,8 +384,15 @@ impl AdvancedSPARQLOptimizer {
 
         // Check if optimization introduced new issues
         for issue in &optimized.potential_issues {
-            if !original.potential_issues.iter().any(|orig| orig.issue_type == issue.issue_type) {
-                warnings.push(format!("Optimization introduced new issue: {}", issue.description));
+            if !original
+                .potential_issues
+                .iter()
+                .any(|orig| orig.issue_type == issue.issue_type)
+            {
+                warnings.push(format!(
+                    "Optimization introduced new issue: {}",
+                    issue.description
+                ));
             }
         }
 
@@ -461,9 +497,8 @@ impl QueryAnalyzer {
     fn estimate_cost(&self, query: &str, complexity: f32) -> QueryCost {
         // Simplified cost estimation model
         let base_time = Duration::from_millis(100);
-        let estimated_execution_time = Duration::from_millis(
-            (base_time.as_millis() as f32 * complexity) as u64
-        );
+        let estimated_execution_time =
+            Duration::from_millis((base_time.as_millis() as f32 * complexity) as u64);
 
         let base_memory = 1024 * 1024; // 1MB base
         let estimated_memory_usage = (base_memory as f32 * complexity.sqrt()) as usize;
@@ -486,7 +521,8 @@ impl QueryAnalyzer {
         if !query.to_uppercase().contains("FILTER") && query.matches(" . ").count() > 3 {
             issues.push(QueryIssue {
                 issue_type: QueryIssueType::CartesianProduct,
-                description: "Query may produce Cartesian product without proper filters".to_string(),
+                description: "Query may produce Cartesian product without proper filters"
+                    .to_string(),
                 severity: IssueSeverity::Warning,
                 location: None,
                 suggested_fix: Some("Add FILTER clauses to constrain results".to_string()),
@@ -500,7 +536,9 @@ impl QueryAnalyzer {
                 description: "REGEX operations can be expensive".to_string(),
                 severity: IssueSeverity::Info,
                 location: None,
-                suggested_fix: Some("Consider using CONTAINS or STARTS_WITH if possible".to_string()),
+                suggested_fix: Some(
+                    "Consider using CONTAINS or STARTS_WITH if possible".to_string(),
+                ),
             });
         }
 
@@ -516,17 +554,24 @@ impl QueryAnalyzer {
         }
 
         // Check for unbound variables in FILTER
-        let filter_regex = Regex::new(r"(?i)FILTER\s*\([^)]*\?([a-zA-Z][a-zA-Z0-9_]*)[^)]*\)").unwrap();
+        let filter_regex =
+            Regex::new(r"(?i)FILTER\s*\([^)]*\?([a-zA-Z][a-zA-Z0-9_]*)[^)]*\)").unwrap();
         if let Some(captures) = filter_regex.captures(query) {
             let var_name = &captures[1];
             let var_pattern = format!(r"\?{}\s+[^?]*\.", var_name);
             if !Regex::new(&var_pattern).unwrap().is_match(query) {
                 issues.push(QueryIssue {
                     issue_type: QueryIssueType::UnboundVariable,
-                    description: format!("Variable ?{} used in FILTER may not be properly bound", var_name),
+                    description: format!(
+                        "Variable ?{} used in FILTER may not be properly bound",
+                        var_name
+                    ),
                     severity: IssueSeverity::Warning,
                     location: Some(format!("FILTER clause with ?{}", var_name)),
-                    suggested_fix: Some("Ensure variable is bound in a triple pattern before use in FILTER".to_string()),
+                    suggested_fix: Some(
+                        "Ensure variable is bound in a triple pattern before use in FILTER"
+                            .to_string(),
+                    ),
                 });
             }
         }
@@ -534,7 +579,11 @@ impl QueryAnalyzer {
         issues
     }
 
-    fn find_optimization_opportunities(&self, query: &str, intent: &QueryIntent) -> Vec<OptimizationOpportunity> {
+    fn find_optimization_opportunities(
+        &self,
+        query: &str,
+        intent: &QueryIntent,
+    ) -> Vec<OptimizationOpportunity> {
         let mut opportunities = Vec::new();
 
         // Triple reordering opportunity
@@ -552,11 +601,12 @@ impl QueryAnalyzer {
         if query.to_uppercase().contains("FILTER") && query.to_uppercase().contains("OPTIONAL") {
             let filter_pos = query.to_uppercase().find("FILTER").unwrap_or(0);
             let optional_pos = query.to_uppercase().find("OPTIONAL").unwrap_or(0);
-            
+
             if filter_pos > optional_pos {
                 opportunities.push(OptimizationOpportunity {
                     strategy: OptimizationStrategy::FilterPushdown,
-                    description: "Move FILTER clauses before OPTIONAL for better performance".to_string(),
+                    description: "Move FILTER clauses before OPTIONAL for better performance"
+                        .to_string(),
                     estimated_improvement: 25.0,
                     confidence: 0.8,
                     applicable: true,
@@ -604,7 +654,8 @@ impl QueryAnalyzer {
             scalability_concerns.push("Performance may degrade with larger datasets".to_string());
         }
 
-        if cost.estimated_memory_usage > 10 * 1024 * 1024 { // > 10MB
+        if cost.estimated_memory_usage > 10 * 1024 * 1024 {
+            // > 10MB
             bottlenecks.push("High memory usage".to_string());
         }
 
@@ -636,7 +687,12 @@ impl QueryRewriter {
         }
     }
 
-    async fn rewrite_query(&mut self, query: &str, analysis: &QueryAnalysis, intent: &QueryIntent) -> Result<String> {
+    async fn rewrite_query(
+        &mut self,
+        query: &str,
+        analysis: &QueryAnalysis,
+        intent: &QueryIntent,
+    ) -> Result<String> {
         self.applied_optimizations.clear();
         let mut optimized_query = query.to_string();
 
@@ -665,15 +721,23 @@ impl QueryRewriter {
 
         for strategy in strategies {
             let before_optimization = optimized_query.clone();
-            
+
             optimized_query = match strategy {
-                OptimizationStrategy::RedundancyRemoval => self.remove_redundancy(&optimized_query)?,
+                OptimizationStrategy::RedundancyRemoval => {
+                    self.remove_redundancy(&optimized_query)?
+                }
                 OptimizationStrategy::FilterPushdown => self.pushdown_filters(&optimized_query)?,
                 OptimizationStrategy::TripleReordering => self.reorder_triples(&optimized_query)?,
-                OptimizationStrategy::LimitPushdown => self.pushdown_limit(&optimized_query, intent)?,
-                OptimizationStrategy::UnionSimplification => self.simplify_unions(&optimized_query)?,
+                OptimizationStrategy::LimitPushdown => {
+                    self.pushdown_limit(&optimized_query, intent)?
+                }
+                OptimizationStrategy::UnionSimplification => {
+                    self.simplify_unions(&optimized_query)?
+                }
                 OptimizationStrategy::JoinOptimization => self.optimize_joins(&optimized_query)?,
-                OptimizationStrategy::SubqueryElimination => self.eliminate_subqueries(&optimized_query)?,
+                OptimizationStrategy::SubqueryElimination => {
+                    self.eliminate_subqueries(&optimized_query)?
+                }
                 _ => optimized_query, // Other strategies not implemented yet
             };
 
@@ -699,17 +763,18 @@ impl QueryRewriter {
         // Remove duplicate SELECT DISTINCT
         let redundant_distinct = Regex::new(r"(?i)SELECT\s+DISTINCT\s+DISTINCT")?;
         let optimized = redundant_distinct.replace_all(query, "SELECT DISTINCT");
-        
+
         // Remove redundant WHERE clauses
         let redundant_where = Regex::new(r"(?i)WHERE\s+WHERE")?;
         let optimized = redundant_where.replace_all(&optimized, "WHERE");
-        
+
         Ok(optimized.to_string())
     }
 
     fn pushdown_filters(&self, query: &str) -> Result<String> {
         // Move FILTER clauses before OPTIONAL when possible
-        let filter_after_optional = Regex::new(r"(?i)(OPTIONAL\s*\{[^}]*\})\s*(FILTER\s*\([^)]*\))")?;
+        let filter_after_optional =
+            Regex::new(r"(?i)(OPTIONAL\s*\{[^}]*\})\s*(FILTER\s*\([^)]*\))")?;
         let optimized = filter_after_optional.replace_all(query, "$2 $1");
         Ok(optimized.to_string())
     }
@@ -724,7 +789,8 @@ impl QueryRewriter {
         if matches!(intent, QueryIntent::ListQuery) && !query.to_uppercase().contains("LIMIT") {
             if query.to_uppercase().contains("ORDER BY") {
                 // Add LIMIT after ORDER BY
-                let with_limit = Regex::new(r"(?i)(ORDER\s+BY\s+[^}]+)")?.replace(query, "$1 LIMIT 100");
+                let with_limit =
+                    Regex::new(r"(?i)(ORDER\s+BY\s+[^}]+)")?.replace(query, "$1 LIMIT 100");
                 Ok(with_limit.to_string())
             } else {
                 // Add LIMIT at the end

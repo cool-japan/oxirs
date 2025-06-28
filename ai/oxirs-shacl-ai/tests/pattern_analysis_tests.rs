@@ -193,7 +193,11 @@ fn test_constraint_usage_pattern() {
     assert_eq!(constraint_pattern.confidence(), 0.95);
 
     match &constraint_pattern {
-        Pattern::ConstraintUsage { constraint_type, usage_count, .. } => {
+        Pattern::ConstraintUsage {
+            constraint_type,
+            usage_count,
+            ..
+        } => {
             assert_eq!(*constraint_type, "MinCountConstraint");
             assert_eq!(*usage_count, 45);
         }
@@ -235,7 +239,10 @@ fn test_cardinality_types() {
         CardinalityType::InverseFunctional
     );
     assert_ne!(CardinalityType::Optional, CardinalityType::Required);
-    assert_ne!(CardinalityType::Functional, CardinalityType::InverseFunctional);
+    assert_ne!(
+        CardinalityType::Functional,
+        CardinalityType::InverseFunctional
+    );
 }
 
 #[test]

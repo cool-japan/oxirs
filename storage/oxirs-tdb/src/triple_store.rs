@@ -545,13 +545,13 @@ impl TripleStore {
         match self.insert_triple_tx(tx_id, triple) {
             Ok(()) => {
                 self.commit_transaction(tx_id)?;
-                
+
                 // Update stats after successful commit
                 if let Ok(mut stats) = self.stats.lock() {
                     stats.insert_count += 1;
                     stats.total_triples += 1;
                 }
-                
+
                 Ok(())
             }
             Err(e) => {
@@ -736,7 +736,7 @@ impl TripleStore {
         for triple_key in stored_keys {
             // Convert the key back to a triple based on the index type
             let triple = self.key_to_triple(index_type, &triple_key);
-            
+
             // Check if this triple matches our search pattern
             if self.matches_pattern(&triple, s, p, o) {
                 // Verify the triple still exists in this transaction
@@ -770,7 +770,13 @@ impl TripleStore {
     }
 
     /// Check if a triple matches the given pattern
-    fn matches_pattern(&self, triple: &Triple, s: Option<NodeId>, p: Option<NodeId>, o: Option<NodeId>) -> bool {
+    fn matches_pattern(
+        &self,
+        triple: &Triple,
+        s: Option<NodeId>,
+        p: Option<NodeId>,
+        o: Option<NodeId>,
+    ) -> bool {
         if let Some(subj) = s {
             if triple.subject != subj {
                 return false;
@@ -798,10 +804,10 @@ mod tests {
     #[test]
     fn test_triple_store_basic_operations() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         // Test basic constructor first
         let store = TripleStore::new(temp_dir.path()).unwrap();
-        
+
         // Test getting stats without doing anything
         let initial_stats = store.get_stats().unwrap();
         assert_eq!(initial_stats.total_triples, 0);

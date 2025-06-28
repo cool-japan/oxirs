@@ -15,6 +15,6 @@ pub mod serializer;
 
 // Re-export the main traits and types
 pub use error::*;
-pub use lexer::*;  
+pub use lexer::*;
 pub use parser::*;
 pub use serializer::*;

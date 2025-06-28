@@ -41,7 +41,7 @@ use chrono;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tracing::{debug, error, info, instrument, warn};
 
 /// SPARQL query parameters for GET requests
@@ -373,10 +373,10 @@ pub enum DiscoveryMethod {
     Kubernetes(String),
 }
 
+use crate::property_path_optimizer::AdvancedPropertyPathOptimizer;
 use chrono::{DateTime, Utc};
 use std::collections::HashSet;
 use std::sync::RwLock;
-use crate::property_path_optimizer::AdvancedPropertyPathOptimizer;
 
 impl Sparql12Features {
     pub fn new() -> Self {
@@ -402,21 +402,29 @@ impl PropertyPathOptimizer {
     pub async fn optimize_path(&self, path: &str) -> FusekiResult<OptimizedPath> {
         // Use the advanced property path optimizer for better optimization
         let advanced_optimizer = AdvancedPropertyPathOptimizer::new();
-        
+
         // Set up indexes if available (in production, this would come from the store)
         {
             let mut index_info = advanced_optimizer.index_info.write().await;
             // Add common property indexes
             index_info.property_indexes.insert("rdf:type".to_string());
-            index_info.property_indexes.insert("rdfs:subClassOf".to_string());
-            index_info.property_indexes.insert("rdfs:subPropertyOf".to_string());
+            index_info
+                .property_indexes
+                .insert("rdfs:subClassOf".to_string());
+            index_info
+                .property_indexes
+                .insert("rdfs:subPropertyOf".to_string());
             index_info.property_indexes.insert("owl:sameAs".to_string());
             index_info.property_indexes.insert("foaf:knows".to_string());
-            
+
             // Add inverse indexes
-            index_info.inverse_property_indexes.insert("rdf:type".to_string());
-            index_info.inverse_property_indexes.insert("rdfs:subClassOf".to_string());
-            
+            index_info
+                .inverse_property_indexes
+                .insert("rdf:type".to_string());
+            index_info
+                .inverse_property_indexes
+                .insert("rdfs:subClassOf".to_string());
+
             // Add path indexes for common transitive properties
             index_info.path_indexes.insert(
                 "rdfs:subClassOf+".to_string(),
@@ -428,7 +436,7 @@ impl PropertyPathOptimizer {
                 },
             );
         }
-        
+
         // Use advanced optimization
         match advanced_optimizer.optimize_path(path).await {
             Ok(optimized) => {
@@ -440,13 +448,16 @@ impl PropertyPathOptimizer {
                 Ok(optimized)
             }
             Err(e) => {
-                warn!("Advanced optimization failed, falling back to simple optimization: {}", e);
+                warn!(
+                    "Advanced optimization failed, falling back to simple optimization: {}",
+                    e
+                );
                 // Fall back to simple optimization
                 self.simple_optimize_path(path).await
             }
         }
     }
-    
+
     async fn simple_optimize_path(&self, path: &str) -> FusekiResult<OptimizedPath> {
         // Check cache first
         if let Ok(cache) = self.path_cache.read() {
@@ -609,7 +620,7 @@ impl AggregationEngine {
 
         Ok(optimized)
     }
-    
+
     /// Process aggregation functions in a query result set
     pub async fn process_aggregation_query(
         &self,
@@ -618,19 +629,19 @@ impl AggregationEngine {
     ) -> FusekiResult<Vec<HashMap<String, serde_json::Value>>> {
         // Extract aggregation functions from query
         let aggregations = self.extract_aggregations(query)?;
-        
+
         if aggregations.is_empty() {
             return Ok(bindings);
         }
-        
+
         // Create processor
         let mut processor = EnhancedAggregationProcessor::new();
-        
+
         // Register aggregations
         for (alias, function_name, args) in &aggregations {
             processor.register_aggregate(alias.clone(), function_name, args)?;
         }
-        
+
         // Process all bindings
         for binding in &bindings {
             for (alias, _, _) in &aggregations {
@@ -639,22 +650,22 @@ impl AggregationEngine {
                 }
             }
         }
-        
+
         // Get aggregation results
         let results = processor.get_results()?;
-        
+
         // Convert to bindings format
         let mut result_bindings = Vec::new();
         let mut result_binding = HashMap::new();
-        
+
         for (alias, result) in results {
             result_binding.insert(alias, result.value);
         }
-        
+
         result_bindings.push(result_binding);
         Ok(result_bindings)
     }
-    
+
     /// Extract aggregation functions from query
     fn extract_aggregations(
         &self,
@@ -662,7 +673,7 @@ impl AggregationEngine {
     ) -> FusekiResult<Vec<(String, String, HashMap<String, serde_json::Value>)>> {
         let mut aggregations = Vec::new();
         let query_upper = query.to_uppercase();
-        
+
         // Enhanced pattern matching for aggregation functions
         for func in &self.supported_functions {
             let pattern = format!("{}(", func);
@@ -673,7 +684,7 @@ impl AggregationEngine {
                 aggregations.push((alias, func.clone(), args));
             }
         }
-        
+
         Ok(aggregations)
     }
 }
@@ -713,28 +724,40 @@ impl SubqueryOptimizer {
     pub async fn optimize_subqueries(&self, query: &str) -> FusekiResult<String> {
         // Use advanced subquery optimizer if available
         let sparql_features = Sparql12Features::new();
-        let advanced_result = sparql_features.advanced_subquery_optimizer.optimize(query).await;
-        
+        let advanced_result = sparql_features
+            .advanced_subquery_optimizer
+            .optimize(query)
+            .await;
+
         match advanced_result {
             Ok(optimized_query) => {
                 info!("Advanced subquery optimization applied successfully");
-                info!("Cost reduction: {:.2}%", optimized_query.estimated_cost_reduction * 100.0);
-                info!("Rewrites applied: {}", optimized_query.rewrites_applied.len());
+                info!(
+                    "Cost reduction: {:.2}%",
+                    optimized_query.estimated_cost_reduction * 100.0
+                );
+                info!(
+                    "Rewrites applied: {}",
+                    optimized_query.rewrites_applied.len()
+                );
                 Ok(optimized_query.optimized_query)
             }
             Err(e) => {
-                warn!("Advanced subquery optimization failed, falling back to basic optimization: {}", e);
-                
+                warn!(
+                    "Advanced subquery optimization failed, falling back to basic optimization: {}",
+                    e
+                );
+
                 // Fall back to basic optimization
                 let mut optimized = query.to_string();
-                
+
                 // Apply basic rewrite rules
                 for rule in &self.rewrite_rules {
                     if self.rule_applicable(&optimized, rule)? {
                         optimized = optimized.replace(&rule.pattern, &rule.rewrite);
                     }
                 }
-                
+
                 Ok(optimized)
             }
         }
@@ -1650,11 +1673,11 @@ async fn execute_federated_query(
 
     // Process federated query with advanced optimization
     let start = std::time::Instant::now();
-    
+
     match optimizer.process_federated_query(query, timeout_ms).await {
         Ok(results) => {
             let execution_time = start.elapsed();
-            
+
             Ok(QueryResult {
                 query_type: determine_query_type(query),
                 execution_time_ms: execution_time.as_millis() as u64,
@@ -1667,7 +1690,7 @@ async fn execute_federated_query(
         }
         Err(e) => {
             warn!("Advanced federated query optimization failed: {}, falling back to simple execution", e);
-            
+
             // Fall back to simple federated execution
             execute_simple_federated_query(store, query, default_graphs, named_graphs).await
         }
@@ -1855,29 +1878,35 @@ async fn optimize_subqueries(query: &str) -> FusekiResult<u64> {
 
     // Create advanced subquery optimizer
     let optimizer = AdvancedSubqueryOptimizer::new();
-    
+
     // Apply advanced optimization
     match optimizer.optimize(query).await {
         Ok(optimized) => {
             debug!("Advanced subquery optimization successful");
-            debug!("Original query length: {}, Optimized: {}", 
-                   query.len(), optimized.optimized_query.len());
+            debug!(
+                "Original query length: {}, Optimized: {}",
+                query.len(),
+                optimized.optimized_query.len()
+            );
             debug!("Rewrites applied: {}", optimized.rewrites_applied.len());
-            debug!("Estimated cost reduction: {:.2}%", optimized.estimated_cost_reduction * 100.0);
-            
+            debug!(
+                "Estimated cost reduction: {:.2}%",
+                optimized.estimated_cost_reduction * 100.0
+            );
+
             // Return optimization time as metric
             Ok(optimized.optimization_time_ms as u64)
         }
         Err(e) => {
             warn!("Advanced subquery optimization failed: {}", e);
-            
+
             // Fall back to simple counting
             let subquery_count = query
                 .to_lowercase()
                 .matches("select")
                 .count()
                 .saturating_sub(1);
-            
+
             Ok(subquery_count as u64 * 10)
         }
     }
@@ -1891,10 +1920,10 @@ async fn execute_aggregation_query(
 
     // Create aggregation engine
     let aggregation_engine = AggregationEngine::new();
-    
+
     // Mock data bindings to aggregate (in real implementation, this would come from the store)
     let mut sample_bindings = Vec::new();
-    
+
     // Generate sample data based on query type
     if query.to_lowercase().contains("group_concat") {
         for i in 1..=5 {
@@ -1902,10 +1931,11 @@ async fn execute_aggregation_query(
             binding.insert("value".to_string(), serde_json::json!(format!("item{}", i)));
             sample_bindings.push(binding);
         }
-    } else if query.to_lowercase().contains("median") || 
-              query.to_lowercase().contains("stddev") ||
-              query.to_lowercase().contains("variance") ||
-              query.to_lowercase().contains("percentile") {
+    } else if query.to_lowercase().contains("median")
+        || query.to_lowercase().contains("stddev")
+        || query.to_lowercase().contains("variance")
+        || query.to_lowercase().contains("percentile")
+    {
         // Generate numeric data for statistical functions
         for i in 1..=10 {
             let mut binding = HashMap::new();
@@ -1928,32 +1958,34 @@ async fn execute_aggregation_query(
             sample_bindings.push(binding);
         }
     }
-    
+
     // Process the aggregation
-    let results = aggregation_engine.process_aggregation_query(query, sample_bindings).await?;
-    
+    let results = aggregation_engine
+        .process_aggregation_query(query, sample_bindings)
+        .await?;
+
     // If no enhanced aggregations were found, fall back to basic aggregations
     if results.is_empty() {
         let mut bindings = Vec::new();
-        
+
         if query.to_lowercase().contains("count(") {
             let mut binding = HashMap::new();
             binding.insert("count".to_string(), serde_json::json!(42));
             bindings.push(binding);
         }
-        
+
         if query.to_lowercase().contains("sum(") {
             let mut binding = HashMap::new();
             binding.insert("sum".to_string(), serde_json::json!(1337.5));
             bindings.push(binding);
         }
-        
+
         if query.to_lowercase().contains("avg(") {
             let mut binding = HashMap::new();
             binding.insert("avg".to_string(), serde_json::json!(12.75));
             bindings.push(binding);
         }
-        
+
         Ok(bindings)
     } else {
         Ok(results)
@@ -2140,10 +2172,10 @@ async fn process_bind_clauses(
 
     // Use enhanced BIND processor
     let bind_processor = EnhancedBindProcessor::new();
-    
+
     // Process BIND clauses with optimization
     bind_processor.process_bind_clauses(query, bindings).await?;
-    
+
     info!("Successfully processed BIND clauses with enhanced features");
     Ok(())
 }
@@ -2157,10 +2189,12 @@ async fn process_values_clauses(
 
     // Use enhanced VALUES processor
     let values_processor = EnhancedValuesProcessor::new();
-    
+
     // Process VALUES clauses with optimization
-    values_processor.process_values_clauses(query, bindings).await?;
-    
+    values_processor
+        .process_values_clauses(query, bindings)
+        .await?;
+
     info!("Successfully processed VALUES clauses with enhanced features");
     Ok(())
 }
@@ -2175,13 +2209,13 @@ pub async fn process_sparql_star_features(
     if contains_sparql_star_features(query) {
         // Parse and extract quoted triple patterns from query
         let quoted_patterns = extract_quoted_triple_patterns(query)?;
-        
+
         // Process each binding to handle quoted triples
         let mut new_bindings = Vec::new();
-        
+
         for binding in bindings.iter() {
             let mut processed_binding = binding.clone();
-            
+
             // Check if any variables in the binding represent quoted triples
             for (var_name, value) in binding.iter() {
                 if let Some(triple_str) = value.as_str() {
@@ -2208,7 +2242,7 @@ pub async fn process_sparql_star_features(
                                         serde_json::json!(parsed_triple.object),
                                     );
                                 }
-                                
+
                                 // Mark as triple for ISTRIPLE function
                                 processed_binding.insert(
                                     format!("{}_is_triple", var_name),
@@ -2222,7 +2256,7 @@ pub async fn process_sparql_star_features(
                     }
                 }
             }
-            
+
             // Handle annotation syntax {| ... |}
             if query.contains("{|") && query.contains("|}") {
                 // Extract and process annotations
@@ -2237,10 +2271,10 @@ pub async fn process_sparql_star_features(
                     }
                 }
             }
-            
+
             new_bindings.push(processed_binding);
         }
-        
+
         // Process quoted triple patterns in WHERE clause
         for pattern in quoted_patterns {
             // For each quoted triple pattern, generate appropriate bindings
@@ -2254,7 +2288,7 @@ pub async fn process_sparql_star_features(
                 }
             }
         }
-        
+
         *bindings = new_bindings;
     }
 
@@ -2276,17 +2310,17 @@ pub fn parse_quoted_triple_value(triple_str: &str) -> FusekiResult<ParsedQuotedT
         .trim_start_matches("<<")
         .trim_end_matches(">>")
         .trim();
-    
+
     // Simple tokenization - in production would use proper parser
     let parts: Vec<&str> = inner.split_whitespace().collect();
-    
+
     if parts.len() < 3 {
         return Err(FusekiError::bad_request(format!(
             "Invalid quoted triple format: {}",
             triple_str
         )));
     }
-    
+
     Ok(ParsedQuotedTriple {
         subject: parts[0].to_string(),
         predicate: parts[1].to_string(),
@@ -2301,7 +2335,7 @@ pub fn extract_quoted_triple_patterns(query: &str) -> FusekiResult<Vec<String>> 
     let mut current_pattern = String::new();
     let mut in_pattern = false;
     let mut depth = 0;
-    
+
     while let Some(ch) = chars.next() {
         if ch == '<' && chars.peek() == Some(&'<') {
             chars.next(); // Consume second <
@@ -2312,7 +2346,7 @@ pub fn extract_quoted_triple_patterns(query: &str) -> FusekiResult<Vec<String>> 
             chars.next(); // Consume second >
             current_pattern.push_str(">>");
             depth -= 1;
-            
+
             if depth == 0 {
                 patterns.push(current_pattern.clone());
                 current_pattern.clear();
@@ -2322,7 +2356,7 @@ pub fn extract_quoted_triple_patterns(query: &str) -> FusekiResult<Vec<String>> 
             current_pattern.push(ch);
         }
     }
-    
+
     Ok(patterns)
 }
 
@@ -2332,12 +2366,12 @@ pub fn extract_annotations(
     binding: &HashMap<String, serde_json::Value>,
 ) -> FusekiResult<Vec<(String, serde_json::Value)>> {
     let mut annotations = Vec::new();
-    
+
     // Simple annotation extraction - in production would use proper parser
     if let Some(start) = query.find("{|") {
         if let Some(end) = query[start..].find("|}") {
             let annotation_block = &query[start + 2..start + end];
-            
+
             // Parse annotation properties and values
             for line in annotation_block.lines() {
                 let line = line.trim();
@@ -2347,17 +2381,14 @@ pub fn extract_annotations(
                     if parts.len() >= 2 {
                         let prop = parts[0].trim_start_matches(':');
                         let val = parts[1..].join(" ").trim_matches('"');
-                        
-                        annotations.push((
-                            format!("annotation_{}", prop),
-                            serde_json::json!(val),
-                        ));
+
+                        annotations.push((format!("annotation_{}", prop), serde_json::json!(val)));
                     }
                 }
             }
         }
     }
-    
+
     Ok(annotations)
 }
 
@@ -2367,30 +2398,29 @@ fn evaluate_quoted_triple_pattern(
     existing_bindings: &[HashMap<String, serde_json::Value>],
 ) -> FusekiResult<Vec<HashMap<String, serde_json::Value>>> {
     let mut results = Vec::new();
-    
+
     // Parse the pattern
     let parsed = parse_quoted_triple_value(pattern)?;
-    
+
     // For demonstration, create bindings for quoted triple patterns
     // In production, this would query the actual triple store
     for binding in existing_bindings {
         let mut new_binding = binding.clone();
-        
+
         // If pattern contains variables, bind them
         if parsed.subject.starts_with('?') {
             new_binding.insert(
                 parsed.subject[1..].to_string(),
-                serde_json::json!(format!("<<{} {} {}>>", 
-                    "http://example.org/s1",
-                    "http://example.org/p1", 
-                    "http://example.org/o1"
+                serde_json::json!(format!(
+                    "<<{} {} {}>>",
+                    "http://example.org/s1", "http://example.org/p1", "http://example.org/o1"
                 )),
             );
         }
-        
+
         results.push(new_binding);
     }
-    
+
     Ok(results)
 }
 
@@ -2402,9 +2432,9 @@ fn merge_pattern_bindings(
     if pattern_bindings.is_empty() {
         return existing;
     }
-    
+
     let mut merged = Vec::new();
-    
+
     for existing_binding in &existing {
         for pattern_binding in &pattern_bindings {
             let mut combined = existing_binding.clone();
@@ -2414,7 +2444,7 @@ fn merge_pattern_bindings(
             merged.push(combined);
         }
     }
-    
+
     merged
 }
 
@@ -2797,33 +2827,53 @@ mod tests {
     #[test]
     fn test_sparql_star_detection() {
         // Test quoted triple detection
-        assert!(contains_sparql_star_features("SELECT ?s WHERE { << ?s ?p ?o >> ?confidence ?value }"));
-        assert!(contains_sparql_star_features("SELECT ?s WHERE { ?s ?p << ?x ?y ?z >> }"));
-        
+        assert!(contains_sparql_star_features(
+            "SELECT ?s WHERE { << ?s ?p ?o >> ?confidence ?value }"
+        ));
+        assert!(contains_sparql_star_features(
+            "SELECT ?s WHERE { ?s ?p << ?x ?y ?z >> }"
+        ));
+
         // Test annotation syntax detection
-        assert!(contains_sparql_star_features("SELECT ?s WHERE { ?s ?p ?o {| :confidence 0.9 |} }"));
-        
+        assert!(contains_sparql_star_features(
+            "SELECT ?s WHERE { ?s ?p ?o {| :confidence 0.9 |} }"
+        ));
+
         // Test RDF-star functions
-        assert!(contains_sparql_star_features("SELECT ?s WHERE { ?t a :Statement . BIND(SUBJECT(?t) AS ?s) }"));
-        assert!(contains_sparql_star_features("SELECT ?p WHERE { ?t a :Statement . BIND(PREDICATE(?t) AS ?p) }"));
-        assert!(contains_sparql_star_features("SELECT ?o WHERE { ?t a :Statement . BIND(OBJECT(?t) AS ?o) }"));
-        assert!(contains_sparql_star_features("SELECT ?t WHERE { ?t ?p ?o . FILTER(ISTRIPLE(?t)) }"));
-        
+        assert!(contains_sparql_star_features(
+            "SELECT ?s WHERE { ?t a :Statement . BIND(SUBJECT(?t) AS ?s) }"
+        ));
+        assert!(contains_sparql_star_features(
+            "SELECT ?p WHERE { ?t a :Statement . BIND(PREDICATE(?t) AS ?p) }"
+        ));
+        assert!(contains_sparql_star_features(
+            "SELECT ?o WHERE { ?t a :Statement . BIND(OBJECT(?t) AS ?o) }"
+        ));
+        assert!(contains_sparql_star_features(
+            "SELECT ?t WHERE { ?t ?p ?o . FILTER(ISTRIPLE(?t)) }"
+        ));
+
         // Test negative cases
-        assert!(!contains_sparql_star_features("SELECT ?s WHERE { ?s ?p ?o }"));
-        assert!(!contains_sparql_star_features("SELECT * WHERE { ?s a :Person }"));
+        assert!(!contains_sparql_star_features(
+            "SELECT ?s WHERE { ?s ?p ?o }"
+        ));
+        assert!(!contains_sparql_star_features(
+            "SELECT * WHERE { ?s a :Person }"
+        ));
     }
 
     #[test]
     fn test_quoted_triple_parsing() {
         // Test simple quoted triple
-        let result = parse_quoted_triple_value("<< <http://ex.org/s> <http://ex.org/p> <http://ex.org/o> >>");
+        let result = parse_quoted_triple_value(
+            "<< <http://ex.org/s> <http://ex.org/p> <http://ex.org/o> >>",
+        );
         assert!(result.is_ok());
         let parsed = result.unwrap();
         assert_eq!(parsed.subject, "<http://ex.org/s>");
         assert_eq!(parsed.predicate, "<http://ex.org/p>");
         assert_eq!(parsed.object, "<http://ex.org/o>");
-        
+
         // Test quoted triple with literal object
         let result = parse_quoted_triple_value("<< :alice :age \"25\"^^xsd:integer >>");
         assert!(result.is_ok());
@@ -2831,7 +2881,7 @@ mod tests {
         assert_eq!(parsed.subject, ":alice");
         assert_eq!(parsed.predicate, ":age");
         assert_eq!(parsed.object, "\"25\"^^xsd:integer");
-        
+
         // Test invalid quoted triple
         let result = parse_quoted_triple_value("<< :alice :knows >>");
         assert!(result.is_err());
@@ -2843,7 +2893,7 @@ mod tests {
         let patterns = extract_quoted_triple_patterns(query).unwrap();
         assert_eq!(patterns.len(), 1);
         assert_eq!(patterns[0], "<< ?s ?p ?o >>");
-        
+
         // Test nested quoted triples
         let query = "SELECT ?s WHERE { << << ?a ?b ?c >> ?p ?o >> :confidence ?value }";
         let patterns = extract_quoted_triple_patterns(query).unwrap();

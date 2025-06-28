@@ -53,25 +53,25 @@ use tokio::sync::RwLock;
 pub mod consensus;
 pub mod discovery;
 pub mod error;
+pub mod mvcc;
+pub mod mvcc_storage;
 pub mod network;
 pub mod raft;
 pub mod raft_state;
 pub mod replication;
-pub mod storage;
 pub mod shard;
 pub mod shard_manager;
 pub mod shard_routing;
+pub mod storage;
 pub mod transaction;
 pub mod transaction_optimizer;
-pub mod mvcc;
-pub mod mvcc_storage;
 
 #[cfg(feature = "bft")]
 pub mod bft;
 #[cfg(feature = "bft")]
-pub mod bft_network;
-#[cfg(feature = "bft")]
 pub mod bft_consensus;
+#[cfg(feature = "bft")]
+pub mod bft_network;
 
 pub use error::{ClusterError, Result};
 
@@ -134,7 +134,7 @@ impl NodeConfig {
         self.replication_strategy = Some(strategy);
         self
     }
-    
+
     /// Enable Byzantine fault tolerance
     #[cfg(feature = "bft")]
     pub fn with_bft(mut self, enable: bool) -> Self {
@@ -158,7 +158,9 @@ impl ClusterNode {
     pub async fn new(config: NodeConfig) -> Result<Self> {
         // Validate configuration
         if config.data_dir.is_empty() {
-            return Err(ClusterError::Config("Data directory cannot be empty".to_string()));
+            return Err(ClusterError::Config(
+                "Data directory cannot be empty".to_string(),
+            ));
         }
 
         // Create data directory if it doesn't exist
@@ -204,10 +206,9 @@ impl ClusterNode {
         );
 
         // Start discovery service
-        self.discovery
-            .start()
-            .await
-            .map_err(|e| ClusterError::Other(format!("Failed to start discovery service: {}", e)))?;
+        self.discovery.start().await.map_err(|e| {
+            ClusterError::Other(format!("Failed to start discovery service: {}", e))
+        })?;
 
         // Discover initial nodes
         let discovered_nodes = self
@@ -400,7 +401,9 @@ impl ClusterNode {
         address: SocketAddr,
     ) -> Result<()> {
         if node_id == self.config.node_id {
-            return Err(ClusterError::Config("Cannot add self to cluster".to_string()));
+            return Err(ClusterError::Config(
+                "Cannot add self to cluster".to_string(),
+            ));
         }
 
         // Add to configuration
@@ -424,7 +427,9 @@ impl ClusterNode {
     /// Remove a node from the cluster
     pub async fn remove_cluster_node(&mut self, node_id: OxirsNodeId) -> Result<()> {
         if node_id == self.config.node_id {
-            return Err(ClusterError::Config("Cannot remove self from cluster".to_string()));
+            return Err(ClusterError::Config(
+                "Cannot remove self from cluster".to_string(),
+            ));
         }
 
         // Remove from configuration
@@ -635,7 +640,10 @@ mod tests {
 
         let result = ClusterNode::new(config).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Data directory cannot be empty"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Data directory cannot be empty"));
     }
 
     #[tokio::test]

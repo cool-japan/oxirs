@@ -2,7 +2,9 @@
 //!
 //! This module provides pattern matching functionality for querying RDF triples.
 
-use crate::model::{BlankNode, Literal, NamedNode, Object, Predicate, Subject, Triple, Variable, RdfTerm};
+use crate::model::{
+    BlankNode, Literal, NamedNode, Object, Predicate, RdfTerm, Subject, Triple, Variable,
+};
 use serde::{Deserialize, Serialize};
 
 /// A pattern for matching triples

@@ -4,8 +4,8 @@
 //! SPARQL and GraphQL queries into optimal execution plans across multiple services.
 
 use anyhow::{anyhow, Result};
-use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::algo::toposort;
+use petgraph::graph::{DiGraph, NodeIndex};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, RwLock};
@@ -13,8 +13,8 @@ use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
 use crate::{
+    planner::{ExecutionPlan, ExecutionStep, FilterExpression, QueryInfo, StepType, TriplePattern},
     FederatedService, ServiceCapability, ServiceRegistry,
-    planner::{ExecutionPlan, ExecutionStep, QueryInfo, StepType, TriplePattern, FilterExpression},
 };
 
 /// Advanced query decomposer with optimization algorithms
@@ -47,27 +47,30 @@ impl QueryDecomposer {
         query_info: &QueryInfo,
         registry: &ServiceRegistry,
     ) -> Result<DecompositionResult> {
-        info!("Decomposing query with {} patterns", query_info.patterns.len());
+        info!(
+            "Decomposing query with {} patterns",
+            query_info.patterns.len()
+        );
 
         // Build query graph representation
         let query_graph = self.build_query_graph(query_info)?;
-        
+
         // Find connected components (subqueries that can be executed independently)
         let components = self.find_connected_components(&query_graph);
-        
+
         // Generate candidate plans for each component
         let mut component_plans = Vec::new();
         for component in components {
             let plans = self.generate_component_plans(&component, registry)?;
             component_plans.push(plans);
         }
-        
+
         // Select optimal plan combination
         let optimal_combination = self.select_optimal_plan_combination(&component_plans)?;
-        
+
         // Build final execution plan with proper ordering
         let execution_plan = self.build_execution_plan(optimal_combination, query_info)?;
-        
+
         Ok(DecompositionResult {
             plan: execution_plan,
             statistics: self.calculate_decomposition_stats(&component_plans),
@@ -94,12 +97,20 @@ impl QueryDecomposer {
             // Connect pattern to its variables
             if pattern.subject.starts_with('?') {
                 if let Some(&var_node) = variable_nodes.get(&pattern.subject) {
-                    graph.connect_pattern_to_variable(pattern_node, var_node, VariableRole::Subject);
+                    graph.connect_pattern_to_variable(
+                        pattern_node,
+                        var_node,
+                        VariableRole::Subject,
+                    );
                 }
             }
             if pattern.predicate.starts_with('?') {
                 if let Some(&var_node) = variable_nodes.get(&pattern.predicate) {
-                    graph.connect_pattern_to_variable(pattern_node, var_node, VariableRole::Predicate);
+                    graph.connect_pattern_to_variable(
+                        pattern_node,
+                        var_node,
+                        VariableRole::Predicate,
+                    );
                 }
             }
             if pattern.object.starts_with('?') {
@@ -112,7 +123,7 @@ impl QueryDecomposer {
         // Add filter nodes and dependencies
         for filter in &query_info.filters {
             let filter_node = graph.add_filter_node(filter.clone());
-            
+
             // Connect filter to patterns that provide its variables
             for var in &filter.variables {
                 if let Some(&var_node) = variable_nodes.get(var) {
@@ -133,7 +144,7 @@ impl QueryDecomposer {
     fn find_connected_components(&self, graph: &QueryGraph) -> Vec<QueryComponent> {
         let mut components = Vec::new();
         let mut visited = HashSet::new();
-        
+
         for node in graph.pattern_nodes() {
             if !visited.contains(&node) {
                 let component = self.explore_component(graph, node, &mut visited);
@@ -227,16 +238,26 @@ impl QueryDecomposer {
     }
 
     /// Check if a service can handle an entire component
-    fn can_service_handle_component(&self, service: &FederatedService, component: &QueryComponent) -> bool {
+    fn can_service_handle_component(
+        &self,
+        service: &FederatedService,
+        component: &QueryComponent,
+    ) -> bool {
         // Check basic capability
-        if !service.capabilities.contains(&ServiceCapability::SparqlQuery) {
+        if !service
+            .capabilities
+            .contains(&ServiceCapability::SparqlQuery)
+        {
             return false;
         }
 
         // Check for special requirements
         for filter in &component.filters {
-            if filter.expression.contains("REGEX") && 
-               !service.capabilities.contains(&ServiceCapability::FullTextSearch) {
+            if filter.expression.contains("REGEX")
+                && !service
+                    .capabilities
+                    .contains(&ServiceCapability::FullTextSearch)
+            {
                 return false;
             }
         }
@@ -257,7 +278,9 @@ impl QueryDecomposer {
         component: &QueryComponent,
     ) -> Result<ComponentPlan> {
         let query_fragment = self.build_component_query(component)?;
-        let estimated_cost = self.cost_estimator.estimate_single_service_cost(service, component);
+        let estimated_cost = self
+            .cost_estimator
+            .estimate_single_service_cost(service, component);
 
         Ok(ComponentPlan {
             strategy: PlanStrategy::SingleService,
@@ -304,7 +327,8 @@ impl QueryDecomposer {
         plans.push(even_plan);
 
         // Advanced Algorithm 5: Minimize intermediate results with bloom filters
-        let min_intermediate_plan = self.distribute_minimize_intermediate_advanced(component, services)?;
+        let min_intermediate_plan =
+            self.distribute_minimize_intermediate_advanced(component, services)?;
         plans.push(min_intermediate_plan);
 
         // Advanced Algorithm 6: Maximize parallelism with dependency analysis
@@ -423,11 +447,12 @@ impl QueryDecomposer {
         services: &[&FederatedService],
     ) -> Result<Option<ComponentPlan>> {
         let mut predicate_services: HashMap<String, &FederatedService> = HashMap::new();
-        
+
         // Map predicates to best services
         for (_, pattern) in &component.patterns {
             if !pattern.predicate.starts_with('?') {
-                let best_service = self.find_best_service_for_predicate(&pattern.predicate, services);
+                let best_service =
+                    self.find_best_service_for_predicate(&pattern.predicate, services);
                 if let Some(service) = best_service {
                     predicate_services.insert(pattern.predicate.clone(), service);
                 }
@@ -447,8 +472,11 @@ impl QueryDecomposer {
                 // Assign to service with most patterns
                 services[0].id.clone()
             };
-            
-            service_patterns.entry(service_id).or_default().push((*idx, pattern.clone()));
+
+            service_patterns
+                .entry(service_id)
+                .or_default()
+                .push((*idx, pattern.clone()));
         }
 
         let mut steps = Vec::new();
@@ -456,7 +484,9 @@ impl QueryDecomposer {
 
         for (service_id, patterns) in service_patterns {
             let service = services.iter().find(|s| s.id == service_id).unwrap();
-            let cost = self.cost_estimator.estimate_pattern_cost(service, &patterns);
+            let cost = self
+                .cost_estimator
+                .estimate_pattern_cost(service, &patterns);
             total_cost += cost;
 
             let estimated_results = self.estimate_result_size(service, &patterns);
@@ -484,8 +514,11 @@ impl QueryDecomposer {
         component: &QueryComponent,
         services: &[&FederatedService],
     ) -> Result<ComponentPlan> {
-        warn!("Using forced distribution for component with {} patterns", component.patterns.len());
-        
+        warn!(
+            "Using forced distribution for component with {} patterns",
+            component.patterns.len()
+        );
+
         // Just use the first available service
         let service = services[0];
         self.create_single_service_plan(service, component)
@@ -527,7 +560,11 @@ impl QueryDecomposer {
         if predicate.contains("foaf:") && service.name.to_lowercase().contains("foaf") {
             score += 1.5;
         }
-        if predicate.contains("geo:") && service.capabilities.contains(&ServiceCapability::Geospatial) {
+        if predicate.contains("geo:")
+            && service
+                .capabilities
+                .contains(&ServiceCapability::Geospatial)
+        {
             score += 2.0;
         }
 
@@ -545,7 +582,7 @@ impl QueryDecomposer {
 
         for pattern in patterns {
             let pattern_vars = self.extract_pattern_variables(&pattern.1);
-            
+
             if shared_vars.is_empty() || !shared_vars.is_disjoint(&pattern_vars) {
                 // Pattern shares variables with current group
                 current_group.push(pattern.clone());
@@ -578,7 +615,7 @@ impl QueryDecomposer {
         while !remaining.is_empty() {
             let mut group = vec![remaining.remove(0)];
             let mut group_vars = self.extract_pattern_variables(&group[0].1);
-            
+
             // Add patterns that don't share variables
             remaining.retain(|pattern| {
                 let pattern_vars = self.extract_pattern_variables(&pattern.1);
@@ -600,7 +637,7 @@ impl QueryDecomposer {
     /// Extract variables from a pattern
     fn extract_pattern_variables(&self, pattern: &TriplePattern) -> HashSet<String> {
         let mut vars = HashSet::new();
-        
+
         if pattern.subject.starts_with('?') {
             vars.insert(pattern.subject.clone());
         }
@@ -624,25 +661,25 @@ impl QueryDecomposer {
         let base_size = 1000;
         let pattern_factor = patterns.len() as u64;
         let selectivity = self.estimate_pattern_selectivity(patterns);
-        
+
         (base_size * pattern_factor as u64 * selectivity as u64).max(1)
     }
 
     /// Estimate selectivity of patterns
     fn estimate_pattern_selectivity(&self, patterns: &[(usize, TriplePattern)]) -> f64 {
         let mut selectivity = 1.0;
-        
+
         for (_, pattern) in patterns {
             let var_count = [&pattern.subject, &pattern.predicate, &pattern.object]
                 .iter()
                 .filter(|p| p.starts_with('?'))
                 .count();
-            
+
             selectivity *= match var_count {
-                0 => 0.001,  // All constants - very selective
-                1 => 0.01,   // One variable
-                2 => 0.1,    // Two variables
-                3 => 1.0,    // All variables - least selective
+                0 => 0.001, // All constants - very selective
+                1 => 0.01,  // One variable
+                2 => 0.1,   // Two variables
+                3 => 1.0,   // All variables - least selective
                 _ => 1.0,
             };
         }
@@ -667,24 +704,32 @@ impl QueryDecomposer {
                 OptimizationStrategy::MinimizeCost => {
                     plans.iter().min_by_key(|p| p.total_cost as u64).unwrap()
                 }
-                OptimizationStrategy::MinimizeTime => {
-                    plans.iter().min_by_key(|p| {
-                        if p.requires_join { p.steps.len() * 2 } else { p.steps.len() }
-                    }).unwrap()
-                }
-                OptimizationStrategy::MinimizeTransfer => {
-                    plans.iter().min_by_key(|p| {
-                        p.steps.iter().map(|s| s.estimated_results).sum::<u64>()
-                    }).unwrap()
-                }
+                OptimizationStrategy::MinimizeTime => plans
+                    .iter()
+                    .min_by_key(|p| {
+                        if p.requires_join {
+                            p.steps.len() * 2
+                        } else {
+                            p.steps.len()
+                        }
+                    })
+                    .unwrap(),
+                OptimizationStrategy::MinimizeTransfer => plans
+                    .iter()
+                    .min_by_key(|p| p.steps.iter().map(|s| s.estimated_results).sum::<u64>())
+                    .unwrap(),
                 OptimizationStrategy::Balanced => {
                     // Balance between cost, time, and data transfer
-                    plans.iter().min_by_key(|p| {
-                        let cost_factor = p.total_cost as u64;
-                        let time_factor = p.steps.len() as u64 * 100;
-                        let transfer_factor = p.steps.iter().map(|s| s.estimated_results).sum::<u64>() / 1000;
-                        cost_factor + time_factor + transfer_factor
-                    }).unwrap()
+                    plans
+                        .iter()
+                        .min_by_key(|p| {
+                            let cost_factor = p.total_cost as u64;
+                            let time_factor = p.steps.len() as u64 * 100;
+                            let transfer_factor =
+                                p.steps.iter().map(|s| s.estimated_results).sum::<u64>() / 1000;
+                            cost_factor + time_factor + transfer_factor
+                        })
+                        .unwrap()
                 }
             };
 
@@ -722,7 +767,9 @@ impl QueryDecomposer {
                     service_id: Some(plan_step.service_id.clone()),
                     query_fragment: self.build_step_query(plan_step)?,
                     expected_variables: self.extract_step_variables(plan_step),
-                    estimated_duration: Duration::from_millis((plan_step.estimated_cost * 10.0) as u64),
+                    estimated_duration: Duration::from_millis(
+                        (plan_step.estimated_cost * 10.0) as u64,
+                    ),
                     dependencies: Vec::new(),
                     parallel_group: Some(comp_idx),
                 };
@@ -755,7 +802,7 @@ impl QueryDecomposer {
         // Add final join if multiple components
         if step_ids_by_component.len() > 1 {
             let all_deps: Vec<String> = step_ids_by_component.into_iter().flatten().collect();
-            
+
             let final_join = ExecutionStep {
                 step_id: uuid::Uuid::new_v4().to_string(),
                 step_type: StepType::Join,
@@ -785,7 +832,7 @@ impl QueryDecomposer {
     /// Build query for a component
     fn build_component_query(&self, component: &QueryComponent) -> Result<String> {
         let mut query = String::from("SELECT ");
-        
+
         // Add variables
         if component.variables.is_empty() {
             query.push_str("* ");
@@ -855,7 +902,7 @@ impl QueryDecomposer {
     ) -> DecompositionStats {
         let total_plans_generated = component_plans.iter().map(|cp| cp.len()).sum();
         let components_count = component_plans.len();
-        
+
         let avg_plans_per_component = if components_count > 0 {
             total_plans_generated as f64 / components_count as f64
         } else {
@@ -882,14 +929,14 @@ impl QueryDecomposer {
         let mut join_graph = self.build_join_graph(&component.patterns);
         let mut service_assignments = HashMap::new();
         let mut steps = Vec::new();
-        
+
         // Find connected pattern groups that share variables
         let connected_groups = self.find_connected_pattern_groups(&join_graph);
-        
+
         for group in connected_groups {
             // Find service that can handle the most patterns in this group
             let best_service = self.find_best_service_for_group(&group, services);
-            
+
             if let Some(service) = best_service {
                 let cost = self.cost_estimator.estimate_pattern_cost(service, &group);
                 steps.push(PlanStep {
@@ -901,9 +948,9 @@ impl QueryDecomposer {
                 });
             }
         }
-        
+
         let total_cost = steps.iter().map(|s| s.estimated_cost).sum();
-        
+
         Ok(ComponentPlan {
             strategy: PlanStrategy::JoinAware,
             steps,
@@ -919,35 +966,37 @@ impl QueryDecomposer {
         services: &[&FederatedService],
     ) -> Result<ComponentPlan> {
         let mut pattern_assignments = Vec::new();
-        
+
         // For each pattern, rank services by cost and selectivity
         for (idx, pattern) in &component.patterns {
             let mut service_scores = Vec::new();
-            
+
             for service in services {
-                let base_cost = self.cost_estimator.estimate_single_pattern_cost(service, pattern);
+                let base_cost = self
+                    .cost_estimator
+                    .estimate_single_pattern_cost(service, pattern);
                 let selectivity = self.estimate_pattern_selectivity(service, pattern);
                 let network_cost = self.cost_estimator.estimate_network_cost(service);
-                
+
                 // Combined score: lower is better
                 let score = base_cost + (1.0 / selectivity) + network_cost;
                 service_scores.push((service, score));
             }
-            
+
             // Sort by score (ascending - lower is better)
             service_scores.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-            
+
             // Assign to best service
             if let Some((best_service, _)) = service_scores.first() {
                 pattern_assignments.push((*idx, pattern.clone(), best_service.id.clone()));
             }
         }
-        
+
         // Group patterns by assigned service
         let service_groups = self.group_patterns_by_service(pattern_assignments);
         let steps = self.create_steps_from_service_groups(service_groups, services)?;
         let total_cost = steps.iter().map(|s| s.estimated_cost).sum();
-        
+
         Ok(ComponentPlan {
             strategy: PlanStrategy::CostBased,
             steps,
@@ -964,21 +1013,24 @@ impl QueryDecomposer {
     ) -> Result<ComponentPlan> {
         let mut steps = Vec::new();
         let mut used_services = HashSet::new();
-        
+
         // Group patterns by predicate and namespace
         let predicate_groups = self.group_patterns_by_predicate(&component.patterns);
-        
+
         for (predicate, patterns) in predicate_groups {
             // Find services with data for this predicate
-            let candidate_services: Vec<_> = services.iter()
+            let candidate_services: Vec<_> = services
+                .iter()
                 .filter(|s| self.service_has_predicate_data(s, &predicate))
                 .cloned()
                 .collect();
-            
+
             if candidate_services.is_empty() {
                 // Use any available service as fallback
                 if let Some(service) = services.first() {
-                    let cost = self.cost_estimator.estimate_pattern_cost(service, &patterns);
+                    let cost = self
+                        .cost_estimator
+                        .estimate_pattern_cost(service, &patterns);
                     steps.push(PlanStep {
                         service_id: service.id.clone(),
                         patterns: patterns.clone(),
@@ -989,16 +1041,20 @@ impl QueryDecomposer {
                 }
                 continue;
             }
-            
+
             // Check for data overlap between candidate services
-            let overlap_matrix = self.calculate_data_overlap_matrix(&candidate_services, &predicate);
-            
+            let overlap_matrix =
+                self.calculate_data_overlap_matrix(&candidate_services, &predicate);
+
             // Select service with least overlap (most unique data)
-            let best_service = self.select_service_minimizing_overlap(&candidate_services, &overlap_matrix);
-            
+            let best_service =
+                self.select_service_minimizing_overlap(&candidate_services, &overlap_matrix);
+
             if let Some(service) = best_service {
                 used_services.insert(service.id.clone());
-                let cost = self.cost_estimator.estimate_pattern_cost(service, &patterns);
+                let cost = self
+                    .cost_estimator
+                    .estimate_pattern_cost(service, &patterns);
                 steps.push(PlanStep {
                     service_id: service.id.clone(),
                     patterns: patterns.clone(),
@@ -1008,9 +1064,9 @@ impl QueryDecomposer {
                 });
             }
         }
-        
+
         let total_cost = steps.iter().map(|s| s.estimated_cost).sum();
-        
+
         Ok(ComponentPlan {
             strategy: PlanStrategy::PatternBased,
             steps,
@@ -1027,44 +1083,52 @@ impl QueryDecomposer {
     ) -> Result<ComponentPlan> {
         let star_center = self.detect_star_center(&component.patterns)?;
         let mut steps = Vec::new();
-        
+
         // Find the service with most data for the star center variable
         let center_service = self.find_best_service_for_star_center(&star_center, services);
-        
+
         if let Some(service) = center_service {
             // Group patterns by their relationship to the star center
-            let center_patterns = self.get_patterns_with_variable(&component.patterns, &star_center);
-            let peripheral_patterns = self.get_patterns_without_variable(&component.patterns, &star_center);
-            
+            let center_patterns =
+                self.get_patterns_with_variable(&component.patterns, &star_center);
+            let peripheral_patterns =
+                self.get_patterns_without_variable(&component.patterns, &star_center);
+
             // Execute center patterns on the selected service
             if !center_patterns.is_empty() {
-                let cost = self.cost_estimator.estimate_pattern_cost(service, &center_patterns);
+                let cost = self
+                    .cost_estimator
+                    .estimate_pattern_cost(service, &center_patterns);
                 steps.push(PlanStep {
                     service_id: service.id.clone(),
                     patterns: center_patterns,
-                    filters: self.extract_applicable_filters(&component.filters, &component.patterns),
+                    filters: self
+                        .extract_applicable_filters(&component.filters, &component.patterns),
                     estimated_cost: cost,
                     estimated_results: self.estimate_result_size(service, &component.patterns),
                 });
             }
-            
+
             // Distribute peripheral patterns to other services
             for pattern_group in self.chunk_patterns(peripheral_patterns, services.len() - 1) {
                 if let Some(peripheral_service) = services.iter().find(|s| s.id != service.id) {
-                    let cost = self.cost_estimator.estimate_pattern_cost(peripheral_service, &pattern_group);
+                    let cost = self
+                        .cost_estimator
+                        .estimate_pattern_cost(peripheral_service, &pattern_group);
                     steps.push(PlanStep {
                         service_id: peripheral_service.id.clone(),
                         patterns: pattern_group,
                         filters: Vec::new(),
                         estimated_cost: cost,
-                        estimated_results: self.estimate_result_size(peripheral_service, &component.patterns),
+                        estimated_results: self
+                            .estimate_result_size(peripheral_service, &component.patterns),
                     });
                 }
             }
         }
-        
+
         let total_cost = steps.iter().map(|s| s.estimated_cost).sum();
-        
+
         Ok(ComponentPlan {
             strategy: PlanStrategy::StarJoinOptimized,
             steps,
@@ -1080,35 +1144,39 @@ impl QueryDecomposer {
         services: &[&FederatedService],
     ) -> Result<ComponentPlan> {
         let mut steps = Vec::new();
-        
+
         // Estimate intermediate result sizes for different execution orders
         let execution_orders = self.generate_execution_orders(&component.patterns);
-        let best_order = self.select_order_minimizing_intermediate_results(execution_orders, services);
-        
+        let best_order =
+            self.select_order_minimizing_intermediate_results(execution_orders, services);
+
         // Create execution steps with bloom filter hints
         for (service_id, patterns) in best_order {
             let service = services.iter().find(|s| s.id == service_id).unwrap();
-            let cost = self.cost_estimator.estimate_pattern_cost(service, &patterns);
-            
+            let cost = self
+                .cost_estimator
+                .estimate_pattern_cost(service, &patterns);
+
             // Add bloom filter optimization hint
             let estimated_results = self.estimate_result_size_with_bloom_filter(service, &patterns);
-            
+
             steps.push(PlanStep {
                 service_id: service_id.clone(),
                 patterns: patterns.clone(),
                 filters: Vec::new(),
                 estimated_cost: cost * 0.8, // Bloom filter reduces cost
-                estimated_results,
+                estimated_results: estimated_results as u64,
             });
         }
-        
+
         let total_cost = steps.iter().map(|s| s.estimated_cost).sum();
-        
+
+        let requires_join = steps.len() > 1;
         Ok(ComponentPlan {
             strategy: PlanStrategy::MinimizeIntermediateAdvanced,
             steps,
             total_cost,
-            requires_join: steps.len() > 1,
+            requires_join,
         })
     }
 
@@ -1120,18 +1188,18 @@ impl QueryDecomposer {
     ) -> Result<ComponentPlan> {
         // Build dependency graph between patterns
         let dependency_graph = self.build_pattern_dependency_graph(&component.patterns);
-        
+
         // Find patterns that can execute in parallel (no dependencies)
         let parallel_groups = self.find_parallel_execution_groups(&dependency_graph);
-        
+
         let mut steps = Vec::new();
         let mut service_idx = 0;
-        
+
         for group in parallel_groups {
             // Assign each parallel group to different services
             let service = services[service_idx % services.len()];
             service_idx += 1;
-            
+
             let cost = self.cost_estimator.estimate_pattern_cost(service, &group);
             steps.push(PlanStep {
                 service_id: service.id.clone(),
@@ -1141,26 +1209,31 @@ impl QueryDecomposer {
                 estimated_results: self.estimate_result_size(service, &component.patterns),
             });
         }
-        
+
         // Use maximum cost since they run in parallel
-        let total_cost = steps.iter().map(|s| s.estimated_cost).max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap_or(0.0);
-        
+        let total_cost = steps
+            .iter()
+            .map(|s| s.estimated_cost)
+            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .unwrap_or(0.0);
+        let requires_join = steps.len() > 1;
+
         Ok(ComponentPlan {
             strategy: PlanStrategy::MaximizeParallelAdvanced,
             steps,
             total_cost,
-            requires_join: steps.len() > 1,
+            requires_join,
         })
     }
 
     // ============= HELPER METHODS FOR ADVANCED ALGORITHMS =============
-    
+
     /// Detect if the component follows a star join pattern
     fn is_star_join_pattern(&self, component: &QueryComponent) -> bool {
         if component.patterns.len() < 3 {
             return false;
         }
-        
+
         let mut variable_counts = HashMap::new();
         for (_, pattern) in &component.patterns {
             for var in [&pattern.subject, &pattern.predicate, &pattern.object] {
@@ -1169,7 +1242,7 @@ impl QueryDecomposer {
                 }
             }
         }
-        
+
         // A star join has one central variable appearing in most patterns
         let max_count = variable_counts.values().max().unwrap_or(&0);
         *max_count >= (component.patterns.len() as i32 - 1) && component.patterns.len() >= 3
@@ -1185,24 +1258,28 @@ impl QueryDecomposer {
                 }
             }
         }
-        
-        variable_counts.into_iter()
+
+        variable_counts
+            .into_iter()
             .max_by_key(|(_, count)| *count)
             .map(|(var, _)| var)
             .ok_or_else(|| anyhow!("No star center found"))
     }
 
     /// Build a graph of pattern dependencies based on shared variables
-    fn build_pattern_dependency_graph(&self, patterns: &[(usize, TriplePattern)]) -> DiGraph<usize, ()> {
+    fn build_pattern_dependency_graph(
+        &self,
+        patterns: &[(usize, TriplePattern)],
+    ) -> DiGraph<usize, ()> {
         let mut graph = DiGraph::new();
         let mut node_map = HashMap::new();
-        
+
         // Add nodes for each pattern
         for (idx, _) in patterns {
             let node = graph.add_node(*idx);
             node_map.insert(*idx, node);
         }
-        
+
         // Add edges for dependencies (patterns that share variables)
         for (i, (idx1, pattern1)) in patterns.iter().enumerate() {
             for (idx2, pattern2) in patterns.iter().skip(i + 1) {
@@ -1213,7 +1290,7 @@ impl QueryDecomposer {
                 }
             }
         }
-        
+
         graph
     }
 
@@ -1221,48 +1298,206 @@ impl QueryDecomposer {
     fn patterns_share_variables(&self, p1: &TriplePattern, p2: &TriplePattern) -> bool {
         let p1_parts = vec![&p1.subject, &p1.predicate, &p1.object];
         let p1_vars: HashSet<_> = p1_parts
-            .into_iter().filter(|v| v.starts_with('?')).collect();
+            .into_iter()
+            .filter(|v| v.starts_with('?'))
+            .collect();
         let p2_parts = vec![&p2.subject, &p2.predicate, &p2.object];
         let p2_vars: HashSet<_> = p2_parts
-            .into_iter().filter(|v| v.starts_with('?')).collect();
-        
+            .into_iter()
+            .filter(|v| v.starts_with('?'))
+            .collect();
+
         !p1_vars.is_disjoint(&p2_vars)
     }
 
-    /// Stub implementations for helper methods (would be fully implemented)
-    fn build_join_graph(&self, _patterns: &[(usize, TriplePattern)]) -> HashMap<String, Vec<usize>> {
-        HashMap::new() // Simplified implementation
+    /// Build join graph showing variable dependencies between patterns
+    fn build_join_graph(&self, patterns: &[(usize, TriplePattern)]) -> HashMap<String, Vec<usize>> {
+        let mut join_graph = HashMap::new();
+
+        // For each variable, track which patterns use it
+        for (idx, pattern) in patterns {
+            let pattern_vars = self.extract_pattern_variables(pattern);
+            for var in pattern_vars {
+                join_graph.entry(var).or_insert_with(Vec::new).push(*idx);
+            }
+        }
+
+        // Remove variables that appear in only one pattern (no joins)
+        join_graph.retain(|_, pattern_indices| pattern_indices.len() > 1);
+
+        join_graph
     }
 
-    fn find_connected_pattern_groups(&self, _join_graph: &HashMap<String, Vec<usize>>) -> Vec<Vec<(usize, TriplePattern)>> {
-        Vec::new() // Simplified implementation
+    fn find_connected_pattern_groups(
+        &self,
+        join_graph: &HashMap<String, Vec<usize>>,
+    ) -> Vec<Vec<(usize, TriplePattern)>> {
+        let mut groups = Vec::new();
+        let mut visited_patterns = HashSet::new();
+
+        // Build pattern connectivity map
+        let mut pattern_connections: HashMap<usize, HashSet<usize>> = HashMap::new();
+        for (_, pattern_indices) in join_graph {
+            for &idx1 in pattern_indices {
+                for &idx2 in pattern_indices {
+                    if idx1 != idx2 {
+                        pattern_connections.entry(idx1).or_default().insert(idx2);
+                    }
+                }
+            }
+        }
+
+        // Find connected components using DFS
+        for &pattern_idx in pattern_connections.keys() {
+            if !visited_patterns.contains(&pattern_idx) {
+                let mut group = Vec::new();
+                let mut stack = vec![pattern_idx];
+
+                while let Some(current) = stack.pop() {
+                    if visited_patterns.insert(current) {
+                        // Find the pattern by index - this is a simplified lookup
+                        // In a real implementation, we'd maintain a proper index->pattern mapping
+                        if let Some(connections) = pattern_connections.get(&current) {
+                            for &connected in connections {
+                                if !visited_patterns.contains(&connected) {
+                                    stack.push(connected);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if !group.is_empty() {
+                    groups.push(group);
+                }
+            }
+        }
+
+        groups
     }
 
-    fn find_best_service_for_group<'a>(&self, _group: &[(usize, TriplePattern)], services: &[&'a FederatedService]) -> Option<&'a FederatedService> {
-        services.first().copied() // Simplified implementation
+    fn find_best_service_for_group<'a>(
+        &self,
+        group: &[(usize, TriplePattern)],
+        services: &[&'a FederatedService],
+    ) -> Option<&'a FederatedService> {
+        let mut best_service = None;
+        let mut best_score = 0.0;
+
+        for service in services {
+            let mut score = 0.0;
+
+            // Score based on predicate affinity
+            for (_, pattern) in group {
+                if !pattern.predicate.starts_with('?') {
+                    score += self.calculate_predicate_affinity(&pattern.predicate, service);
+                }
+            }
+
+            // Bonus for services that can handle the entire group
+            if self.can_service_handle_all_patterns(service, group) {
+                score += 5.0;
+            }
+
+            // Penalty for high load
+            let load_penalty = self.cost_estimator.get_service_load_factor(service) - 1.0;
+            score -= load_penalty * 2.0;
+
+            if score > best_score {
+                best_score = score;
+                best_service = Some(*service);
+            }
+        }
+
+        best_service
     }
 
-    fn extract_applicable_filters(&self, filters: &[FilterExpression], _patterns: &[(usize, TriplePattern)]) -> Vec<FilterExpression> {
-        filters.to_vec() // Simplified implementation
+    fn extract_applicable_filters(
+        &self,
+        filters: &[FilterExpression],
+        patterns: &[(usize, TriplePattern)],
+    ) -> Vec<FilterExpression> {
+        let pattern_variables: HashSet<String> = patterns
+            .iter()
+            .flat_map(|(_, pattern)| self.extract_pattern_variables(pattern))
+            .collect();
+
+        filters
+            .iter()
+            .filter(|filter| {
+                // Include filter if all its variables are provided by the patterns
+                filter
+                    .variables
+                    .iter()
+                    .all(|var| pattern_variables.contains(var))
+            })
+            .cloned()
+            .collect()
     }
 
-    fn estimate_pattern_selectivity(&self, _service: &FederatedService, _pattern: &TriplePattern) -> f64 {
-        0.1 // Simplified implementation
+    fn estimate_pattern_selectivity(
+        &self,
+        service: &FederatedService,
+        pattern: &TriplePattern,
+    ) -> f64 {
+        let mut selectivity = 1.0;
+
+        // Subject selectivity
+        if pattern.subject.starts_with('?') {
+            selectivity *= 0.1; // Variable subject is selective
+        } else if pattern.subject.starts_with('<') {
+            selectivity *= 0.001; // URI subject is very selective
+        }
+
+        // Predicate selectivity
+        if pattern.predicate.starts_with('?') {
+            selectivity *= 0.01; // Variable predicate is very selective
+        } else {
+            // Use service-specific predicate frequency if available
+            if let Some(freq) = self.get_predicate_frequency(service, &pattern.predicate) {
+                selectivity *= freq;
+            } else {
+                selectivity *= 0.1; // Default predicate selectivity
+            }
+        }
+
+        // Object selectivity
+        if pattern.object.starts_with('?') {
+            selectivity *= 0.3; // Variable object has moderate selectivity
+        } else if pattern.object.starts_with('<') {
+            selectivity *= 0.01; // URI object is selective
+        } else if pattern.object.starts_with('"') {
+            selectivity *= 0.05; // Literal object is quite selective
+        }
+
+        selectivity.max(0.0001) // Minimum selectivity
     }
 
-    fn group_patterns_by_service(&self, assignments: Vec<(usize, TriplePattern, String)>) -> HashMap<String, Vec<(usize, TriplePattern)>> {
+    fn group_patterns_by_service(
+        &self,
+        assignments: Vec<(usize, TriplePattern, String)>,
+    ) -> HashMap<String, Vec<(usize, TriplePattern)>> {
         let mut groups = HashMap::new();
         for (idx, pattern, service_id) in assignments {
-            groups.entry(service_id).or_insert_with(Vec::new).push((idx, pattern));
+            groups
+                .entry(service_id)
+                .or_insert_with(Vec::new)
+                .push((idx, pattern));
         }
         groups
     }
 
-    fn create_steps_from_service_groups(&self, groups: HashMap<String, Vec<(usize, TriplePattern)>>, services: &[&FederatedService]) -> Result<Vec<PlanStep>> {
+    fn create_steps_from_service_groups(
+        &self,
+        groups: HashMap<String, Vec<(usize, TriplePattern)>>,
+        services: &[&FederatedService],
+    ) -> Result<Vec<PlanStep>> {
         let mut steps = Vec::new();
         for (service_id, patterns) in groups {
             if let Some(service) = services.iter().find(|s| s.id == service_id) {
-                let cost = self.cost_estimator.estimate_pattern_cost(service, &patterns);
+                let cost = self
+                    .cost_estimator
+                    .estimate_pattern_cost(service, &patterns);
                 steps.push(PlanStep {
                     service_id: service_id.clone(),
                     patterns: patterns.clone(),
@@ -1273,6 +1508,254 @@ impl QueryDecomposer {
             }
         }
         Ok(steps)
+    }
+
+    /// Select service that minimizes data overlap
+    fn select_service_minimizing_overlap<'a>(
+        &self,
+        candidates: &[&'a FederatedService],
+        _overlap_matrix: &HashMap<String, f64>,
+    ) -> Option<&'a FederatedService> {
+        // Simplified implementation - select first candidate
+        candidates.first().copied()
+    }
+
+    /// Find best service for star center variable
+    fn find_best_service_for_star_center<'a>(
+        &self,
+        _star_center: &str,
+        services: &[&'a FederatedService],
+    ) -> Option<&'a FederatedService> {
+        // Simplified implementation - select first service
+        services.first().copied()
+    }
+
+    /// Get patterns containing a specific variable
+    fn get_patterns_with_variable(
+        &self,
+        patterns: &[(usize, TriplePattern)],
+        variable: &str,
+    ) -> Vec<(usize, TriplePattern)> {
+        patterns
+            .iter()
+            .filter(|(_, pattern)| {
+                pattern.subject == variable
+                    || pattern.predicate == variable
+                    || pattern.object == variable
+            })
+            .cloned()
+            .collect()
+    }
+
+    /// Get patterns NOT containing a specific variable
+    fn get_patterns_without_variable(
+        &self,
+        patterns: &[(usize, TriplePattern)],
+        variable: &str,
+    ) -> Vec<(usize, TriplePattern)> {
+        patterns
+            .iter()
+            .filter(|(_, pattern)| {
+                pattern.subject != variable
+                    && pattern.predicate != variable
+                    && pattern.object != variable
+            })
+            .cloned()
+            .collect()
+    }
+
+    /// Chunk patterns into groups
+    fn chunk_patterns(
+        &self,
+        patterns: Vec<(usize, TriplePattern)>,
+        chunk_size: usize,
+    ) -> Vec<Vec<(usize, TriplePattern)>> {
+        patterns
+            .chunks(chunk_size)
+            .map(|chunk| chunk.to_vec())
+            .collect()
+    }
+
+    /// Generate possible execution orders
+    fn generate_execution_orders(
+        &self,
+        patterns: &[(usize, TriplePattern)],
+    ) -> Vec<Vec<(usize, TriplePattern)>> {
+        // Simplified implementation - return original order
+        vec![patterns.to_vec()]
+    }
+
+    /// Select execution order that minimizes intermediate results
+    fn select_order_minimizing_intermediate_results(
+        &self,
+        orders: Vec<Vec<(usize, TriplePattern)>>,
+        _services: &[&FederatedService],
+    ) -> Vec<(usize, TriplePattern)> {
+        // Simplified implementation - return first order
+        orders.into_iter().next().unwrap_or_default()
+    }
+
+    /// Estimate result size with Bloom filter optimization
+    fn estimate_result_size_with_bloom_filter(
+        &self,
+        service: &FederatedService,
+        patterns: &[(usize, TriplePattern)],
+    ) -> usize {
+        // Simplified implementation - use regular estimate with reduction factor
+        let base_estimate = self.estimate_result_size(service, patterns);
+        (base_estimate as f64 * 0.7) as usize // 30% reduction with Bloom filter
+    }
+
+    /// Find groups of patterns that can execute in parallel
+    fn find_parallel_execution_groups(
+        &self,
+        _dependency_graph: &DiGraph<usize, ()>,
+    ) -> Vec<Vec<(usize, TriplePattern)>> {
+        // Simplified implementation - return empty groups
+        Vec::new()
+    }
+
+    /// Check if service can handle all patterns in a group
+    fn can_service_handle_all_patterns(
+        &self,
+        service: &FederatedService,
+        patterns: &[(usize, TriplePattern)],
+    ) -> bool {
+        for (_, pattern) in patterns {
+            if !self.can_service_handle_pattern(service, pattern) {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Check if service can handle a specific pattern
+    fn can_service_handle_pattern(
+        &self,
+        service: &FederatedService,
+        pattern: &TriplePattern,
+    ) -> bool {
+        // Check basic SPARQL capability
+        if !service
+            .capabilities
+            .contains(&ServiceCapability::SparqlQuery)
+        {
+            return false;
+        }
+
+        // Check for special predicate requirements
+        if pattern.predicate.contains("geo:")
+            && !service
+                .capabilities
+                .contains(&ServiceCapability::Geospatial)
+        {
+            return false;
+        }
+
+        if pattern.predicate.contains("text:")
+            && !service
+                .capabilities
+                .contains(&ServiceCapability::FullTextSearch)
+        {
+            return false;
+        }
+
+        // Check data pattern coverage if available
+        if !service.data_patterns.is_empty() && service.data_patterns[0] != "*" {
+            // Simple namespace matching
+            for data_pattern in &service.data_patterns {
+                if pattern.predicate.starts_with(data_pattern) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        true
+    }
+
+    /// Get predicate frequency for a service (estimated)
+    fn get_predicate_frequency(&self, service: &FederatedService, predicate: &str) -> Option<f64> {
+        // In a real implementation, this would query service statistics
+        // For now, provide reasonable estimates based on common vocabularies
+        if predicate.contains("rdf:type") {
+            Some(0.8) // Type predicates are very common
+        } else if predicate.contains("rdfs:label") || predicate.contains("dc:title") {
+            Some(0.5) // Label predicates are common
+        } else if predicate.contains("foaf:") {
+            Some(0.3) // FOAF predicates moderate frequency
+        } else if predicate.contains("geo:") {
+            Some(0.1) // Geographic predicates less common
+        } else {
+            None // Unknown frequency
+        }
+    }
+
+    /// Group patterns by predicate for pattern-based distribution
+    fn group_patterns_by_predicate(
+        &self,
+        patterns: &[(usize, TriplePattern)],
+    ) -> HashMap<String, Vec<(usize, TriplePattern)>> {
+        let mut groups = HashMap::new();
+
+        for &(idx, ref pattern) in patterns {
+            let predicate_key = if pattern.predicate.starts_with('?') {
+                "__VARIABLE__".to_string()
+            } else {
+                // Extract namespace for grouping
+                if let Some(ns_end) = pattern.predicate.rfind([':', '#']) {
+                    pattern.predicate[..=ns_end].to_string()
+                } else {
+                    pattern.predicate.clone()
+                }
+            };
+
+            groups
+                .entry(predicate_key)
+                .or_insert_with(Vec::new)
+                .push((idx, pattern.clone()));
+        }
+
+        groups
+    }
+
+    /// Check if service has data for specific predicate
+    fn service_has_predicate_data(&self, service: &FederatedService, predicate: &str) -> bool {
+        if service.data_patterns.is_empty() || service.data_patterns[0] == "*" {
+            return true; // Service claims to handle all predicates
+        }
+
+        // Check if predicate matches any data pattern
+        for pattern in &service.data_patterns {
+            if predicate.starts_with(pattern) || pattern.starts_with(predicate) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// Calculate data overlap matrix between services
+    fn calculate_data_overlap_matrix(
+        &self,
+        services: &[&FederatedService],
+        predicate: &str,
+    ) -> HashMap<String, f64> {
+        let mut overlap_matrix = HashMap::new();
+
+        for service in services {
+            // Simplified overlap calculation
+            // In reality, this would use Bloom filters or statistical samples
+            let overlap_score = if service.data_patterns.len() > 1 {
+                0.3 // Assume 30% overlap for services with multiple patterns
+            } else {
+                0.1 // Assume 10% overlap for specialized services
+            };
+
+            overlap_matrix.insert(service.id.clone(), overlap_score);
+        }
+
+        overlap_matrix
     }
 }
 
@@ -1377,21 +1860,22 @@ impl CostEstimator {
         let pattern_cost = self.estimate_pattern_computation_cost(&component.patterns, service);
         let filter_cost = self.estimate_filter_cost(&component.filters, service);
         let variable_cost = component.variables.len() as f64 * self.weights.variable_weight;
-        
+
         // Network and data transfer costs
         let network_cost = self.estimate_network_cost(service, component);
         let data_transfer_cost = self.estimate_data_transfer_cost(service, component);
-        
+
         // Service-specific factors
         let service_load_factor = self.get_service_load_factor(service);
         let cache_factor = self.estimate_cache_benefit(service, component);
-        
-        let base_cost = pattern_cost + filter_cost + variable_cost + network_cost + data_transfer_cost;
-        
+
+        let base_cost =
+            pattern_cost + filter_cost + variable_cost + network_cost + data_transfer_cost;
+
         // Apply dynamic factors
         base_cost * service_load_factor * cache_factor
     }
-    
+
     /// Estimate computation cost for patterns with selectivity analysis
     fn estimate_pattern_computation_cost(
         &self,
@@ -1399,68 +1883,79 @@ impl CostEstimator {
         service: &FederatedService,
     ) -> f64 {
         let mut total_cost = 0.0;
-        
+
         for (_, pattern) in patterns {
             let base_pattern_cost = self.weights.pattern_weight;
-            
+
             // Variable position affects selectivity
             let selectivity_factor = self.calculate_pattern_selectivity(pattern, service);
-            
+
             // Property path complexity
-            let complexity_factor = if pattern.predicate.contains('/') || 
-                                  pattern.predicate.contains('+') || 
-                                  pattern.predicate.contains('*') {
+            let complexity_factor = if pattern.predicate.contains('/')
+                || pattern.predicate.contains('+')
+                || pattern.predicate.contains('*')
+            {
                 3.0
             } else {
                 1.0
             };
-            
+
             total_cost += base_pattern_cost * selectivity_factor * complexity_factor;
         }
-        
+
         total_cost
     }
-    
+
     /// Calculate pattern selectivity based on variable positions and statistics
-    fn calculate_pattern_selectivity(&self, pattern: &TriplePattern, service: &FederatedService) -> f64 {
+    fn calculate_pattern_selectivity(
+        &self,
+        pattern: &TriplePattern,
+        service: &FederatedService,
+    ) -> f64 {
         let stats_guard = self.statistics.read().unwrap();
-        
+
         // Base selectivity factors
         let mut selectivity = 1.0;
-        
+
         // Subject variable (typically most selective)
         if pattern.subject.starts_with('?') {
             selectivity *= 0.1; // Variables in subject are highly selective
         }
-        
+
         // Predicate variable (least selective in most ontologies)
         if pattern.predicate.starts_with('?') {
             selectivity *= 0.01; // Very low selectivity
         } else {
             // Use historical selectivity data if available
-            if let Some(&predicate_selectivity) = stats_guard.pattern_selectivity.get(&pattern.predicate) {
+            if let Some(&predicate_selectivity) =
+                stats_guard.pattern_selectivity.get(&pattern.predicate)
+            {
                 selectivity *= predicate_selectivity;
             } else {
                 selectivity *= 0.5; // Default predicate selectivity
             }
         }
-        
+
         // Object variable
         if pattern.object.starts_with('?') {
             selectivity *= 0.3; // Moderate selectivity
         }
-        
+
         // Ensure minimum selectivity
         selectivity.max(0.001)
     }
-    
+
     /// Estimate filter execution cost
-    fn estimate_filter_cost(&self, filters: &[FilterExpression], service: &FederatedService) -> f64 {
+    fn estimate_filter_cost(
+        &self,
+        filters: &[FilterExpression],
+        service: &FederatedService,
+    ) -> f64 {
         let mut total_cost = 0.0;
-        
+
         for filter in filters {
             let base_cost = self.weights.filter_weight;
-            
+
             // Complex filter operations
             let complexity_multiplier = if filter.expression.to_uppercase().contains("REGEX") {
                 5.0
@@ -1473,70 +1968,83 @@ impl CostEstimator {
             } else {
                 1.0
             };
-            
+
             // Check if service supports advanced filtering
-            let service_support_factor = if complexity_multiplier > 2.0 && 
-                !service.capabilities.contains(&ServiceCapability::AdvancedFiltering) {
+            let service_support_factor = if complexity_multiplier > 2.0
+                && !service
+                    .capabilities
+                    .contains(&ServiceCapability::AdvancedFiltering)
+            {
                 2.0 // Higher cost if service doesn't support advanced filtering natively
             } else {
                 1.0
             };
-            
+
             total_cost += base_cost * complexity_multiplier * service_support_factor;
         }
-        
+
         total_cost
     }
-    
+
     /// Estimate network communication cost
     fn estimate_network_cost(&self, service: &FederatedService, component: &QueryComponent) -> f64 {
-        let base_latency_cost = self.network_model.base_latency.as_millis() as f64 
-            * self.weights.network_weight / 100.0;
-        
+        let base_latency_cost = self.network_model.base_latency.as_millis() as f64
+            * self.weights.network_weight
+            / 100.0;
+
         let connection_overhead = self.network_model.connection_overhead.as_millis() as f64
-            * self.weights.network_weight / 1000.0;
-        
+            * self.weights.network_weight
+            / 1000.0;
+
         // Query complexity affects round trips
         let round_trips = if component.patterns.len() > 10 || component.filters.len() > 5 {
             2.0 // May require multiple round trips for complex queries
         } else {
             1.0
         };
-        
+
         (base_latency_cost + connection_overhead) * round_trips
     }
-    
+
     /// Estimate data transfer cost based on expected result size
-    fn estimate_data_transfer_cost(&self, service: &FederatedService, component: &QueryComponent) -> f64 {
+    fn estimate_data_transfer_cost(
+        &self,
+        service: &FederatedService,
+        component: &QueryComponent,
+    ) -> f64 {
         let estimated_results = self.estimate_result_size_advanced(service, component);
         let estimated_size_mb = (estimated_results as f64 * 0.5) / 1_000_000.0; // ~0.5KB per result
-        
+
         let transfer_time = estimated_size_mb / self.network_model.bandwidth_mbps;
         let compressed_size = estimated_size_mb * self.network_model.compression_ratio;
-        
+
         (transfer_time + compressed_size) * self.weights.data_transfer_weight
     }
-    
+
     /// Advanced result size estimation using service statistics
-    fn estimate_result_size_advanced(&self, service: &FederatedService, component: &QueryComponent) -> usize {
+    fn estimate_result_size_advanced(
+        &self,
+        service: &FederatedService,
+        component: &QueryComponent,
+    ) -> usize {
         let stats_guard = self.statistics.read().unwrap();
-        
+
         if let Some(service_stats) = stats_guard.service_performance.get(&service.id) {
             // Use historical data to estimate result size
             let base_estimate = component.patterns.len() * 100; // Base estimate
             let throughput_factor = service_stats.throughput_patterns_per_sec / 10.0;
-            
+
             (base_estimate as f64 * throughput_factor) as usize
         } else {
             // Fallback to simple estimation
             component.patterns.len() * 50
         }
     }
-    
+
     /// Get current service load factor
     fn get_service_load_factor(&self, service: &FederatedService) -> f64 {
         let stats_guard = self.statistics.read().unwrap();
-        
+
         if let Some(service_stats) = stats_guard.service_performance.get(&service.id) {
             // Higher load factor means higher cost
             1.0 + service_stats.load_factor * 0.5
@@ -1544,11 +2052,15 @@ impl CostEstimator {
             1.0 // Default factor for unknown services
         }
     }
-    
+
     /// Estimate cache benefit factor
-    fn estimate_cache_benefit(&self, service: &FederatedService, component: &QueryComponent) -> f64 {
+    fn estimate_cache_benefit(
+        &self,
+        service: &FederatedService,
+        component: &QueryComponent,
+    ) -> f64 {
         let stats_guard = self.statistics.read().unwrap();
-        
+
         if let Some(&cache_hit_rate) = stats_guard.cache_hit_rates.get(&service.id) {
             // Cache hits reduce effective cost
             1.0 - (cache_hit_rate * 0.8) // Up to 80% cost reduction from cache
@@ -1556,7 +2068,7 @@ impl CostEstimator {
             1.0 // No cache benefit for unknown services
         }
     }
-    
+
     /// Update cost model with execution feedback
     pub fn update_with_execution_result(
         &mut self,
@@ -1568,7 +2080,7 @@ impl CostEstimator {
         filter_count: usize,
     ) {
         let actual_cost = actual_duration.as_millis() as f64;
-        
+
         let record = ExecutionRecord {
             query_hash: 0, // TODO: implement proper query hashing
             service_id: service_id.to_string(),
@@ -1580,16 +2092,19 @@ impl CostEstimator {
             result_count,
             timestamp: Instant::now(),
         };
-        
+
         // Update performance tracker
-        self.performance_tracker.execution_records.push_back(record.clone());
+        self.performance_tracker
+            .execution_records
+            .push_back(record.clone());
         if self.performance_tracker.execution_records.len() > 1000 {
             self.performance_tracker.execution_records.pop_front();
         }
-        
+
         // Update service statistics
         let mut stats_guard = self.statistics.write().unwrap();
-        let service_stats = stats_guard.service_performance
+        let service_stats = stats_guard
+            .service_performance
             .entry(service_id.to_string())
             .or_insert(ServiceStats {
                 average_response_time: Duration::from_millis(100),
@@ -1599,25 +2114,25 @@ impl CostEstimator {
                 load_factor: 0.5,
                 last_updated: Instant::now(),
             });
-        
+
         // Update moving averages
         let alpha = 0.1; // Smoothing factor
         service_stats.average_response_time = Duration::from_millis(
-            ((1.0 - alpha) * service_stats.average_response_time.as_millis() as f64 +
-             alpha * actual_duration.as_millis() as f64) as u64
+            ((1.0 - alpha) * service_stats.average_response_time.as_millis() as f64
+                + alpha * actual_duration.as_millis() as f64) as u64,
         );
-        
-        service_stats.throughput_patterns_per_sec = 
-            (1.0 - alpha) * service_stats.throughput_patterns_per_sec +
-            alpha * (pattern_count as f64 / actual_duration.as_secs_f64());
-        
+
+        service_stats.throughput_patterns_per_sec = (1.0 - alpha)
+            * service_stats.throughput_patterns_per_sec
+            + alpha * (pattern_count as f64 / actual_duration.as_secs_f64());
+
         service_stats.last_updated = Instant::now();
-        
+
         // Update prediction accuracy
         let prediction_error = (predicted_cost - actual_cost).abs() / actual_cost;
-        self.performance_tracker.prediction_accuracy = 
-            (1.0 - alpha) * self.performance_tracker.prediction_accuracy +
-            alpha * (1.0 - prediction_error.min(1.0));
+        self.performance_tracker.prediction_accuracy = (1.0 - alpha)
+            * self.performance_tracker.prediction_accuracy
+            + alpha * (1.0 - prediction_error.min(1.0));
     }
 
     fn estimate_pattern_cost(
@@ -1627,61 +2142,66 @@ impl CostEstimator {
     ) -> f64 {
         // Use the enhanced pattern computation cost method
         let computation_cost = self.estimate_pattern_computation_cost(patterns, service);
-        
+
         // Add estimated join cost if multiple patterns
         let join_cost = if patterns.len() > 1 {
             self.estimate_join_cost(patterns, service)
         } else {
             0.0
         };
-        
+
         computation_cost + join_cost
     }
-    
+
     /// Estimate join cost for multiple patterns
-    fn estimate_join_cost(&self, patterns: &[(usize, TriplePattern)], service: &FederatedService) -> f64 {
+    fn estimate_join_cost(
+        &self,
+        patterns: &[(usize, TriplePattern)],
+        service: &FederatedService,
+    ) -> f64 {
         if patterns.len() < 2 {
             return 0.0;
         }
-        
+
         let mut total_join_cost = 0.0;
         let stats_guard = self.statistics.read().unwrap();
-        
+
         // Estimate cost of joining pattern results
         for i in 0..patterns.len() - 1 {
             for j in i + 1..patterns.len() {
                 let shared_vars = self.count_shared_variables(&patterns[i].1, &patterns[j].1);
-                
+
                 if shared_vars > 0 {
                     let join_key = format!("{}-{}", i, j);
-                    let estimated_cardinality = stats_guard.join_cardinality
+                    let estimated_cardinality = stats_guard
+                        .join_cardinality
                         .get(&join_key)
                         .unwrap_or(&1000)
                         .clone();
-                    
+
                     // Join cost increases with cardinality and decreases with selectivity
                     let selectivity = shared_vars as f64 * 0.1;
-                    total_join_cost += self.weights.join_weight * 
-                                     (estimated_cardinality as f64).log10() * 
-                                     (1.0 + selectivity);
+                    total_join_cost += self.weights.join_weight
+                        * (estimated_cardinality as f64).log10()
+                        * (1.0 + selectivity);
                 }
             }
         }
-        
+
         total_join_cost
     }
-    
+
     /// Count shared variables between two patterns
     fn count_shared_variables(&self, pattern1: &TriplePattern, pattern2: &TriplePattern) -> usize {
         let vars1 = self.extract_pattern_variables_internal(pattern1);
         let vars2 = self.extract_pattern_variables_internal(pattern2);
         vars1.intersection(&vars2).count()
     }
-    
+
     /// Extract variables from a single pattern
     fn extract_pattern_variables_internal(&self, pattern: &TriplePattern) -> HashSet<String> {
         let mut vars = HashSet::new();
-        
+
         if pattern.subject.starts_with('?') {
             vars.insert(pattern.subject.clone());
         }
@@ -1691,8 +2211,65 @@ impl CostEstimator {
         if pattern.object.starts_with('?') {
             vars.insert(pattern.object.clone());
         }
-        
+
         vars
+    }
+
+    /// Estimate cost for single pattern on service
+    fn estimate_single_pattern_cost(
+        &self,
+        service: &FederatedService,
+        pattern: &TriplePattern,
+    ) -> f64 {
+        let base_cost = self.weights.pattern_weight;
+        let selectivity = self.calculate_pattern_selectivity(pattern, service);
+        let complexity_factor = self.calculate_pattern_complexity(pattern);
+
+        base_cost * (1.0 / selectivity) * complexity_factor
+    }
+
+    /// Calculate pattern complexity based on its structure
+    fn calculate_pattern_complexity(&self, pattern: &TriplePattern) -> f64 {
+        let mut complexity = 1.0;
+
+        // Property paths increase complexity
+        if pattern.predicate.contains('/')
+            || pattern.predicate.contains('+')
+            || pattern.predicate.contains('*')
+        {
+            complexity *= 3.0;
+        }
+
+        // Regex patterns in objects increase complexity
+        if pattern.object.contains("REGEX") {
+            complexity *= 2.0;
+        }
+
+        // Variable predicates increase complexity
+        if pattern.predicate.starts_with('?') {
+            complexity *= 1.5;
+        }
+
+        complexity
+    }
+
+    /// Estimate network cost for service
+    fn estimate_network_cost(&self, service: &FederatedService) -> f64 {
+        let base_latency = self.network_model.base_latency.as_millis() as f64;
+        let connection_overhead = self.network_model.connection_overhead.as_millis() as f64;
+
+        // Factor in service-specific network characteristics
+        let service_distance_factor =
+            if service.endpoint.contains("localhost") || service.endpoint.contains("127.0.0.1") {
+                0.1 // Local service
+            } else if service.endpoint.contains(".local") {
+                0.5 // Local network
+            } else {
+                1.0 // Remote service
+            };
+
+        (base_latency + connection_overhead) * service_distance_factor * self.weights.network_weight
+            / 100.0
     }
 }
 
@@ -1799,7 +2376,12 @@ impl QueryGraph {
         self.graph.add_node(NodeType::Filter(filter))
     }
 
-    fn connect_pattern_to_variable(&mut self, pattern: NodeIndex, var: NodeIndex, role: VariableRole) {
+    fn connect_pattern_to_variable(
+        &mut self,
+        pattern: NodeIndex,
+        var: NodeIndex,
+        role: VariableRole,
+    ) {
         self.graph.add_edge(pattern, var, EdgeType::Binds(role));
     }
 

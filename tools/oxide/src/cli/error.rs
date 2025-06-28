@@ -149,15 +149,15 @@ impl CliError {
     /// Format the error with all context and suggestions
     pub fn format_detailed(&self) -> String {
         let mut output = String::new();
-        
+
         // Main error message
         output.push_str(&format!("Error: {}\n", self.user_message()));
-        
+
         // Context if available
         if let Some(ref context) = self.context {
             output.push_str(&format!("\nContext: {}\n", context));
         }
-        
+
         // Suggestions if available
         if !self.suggestions.is_empty() {
             output.push_str("\nSuggestions:\n");
@@ -165,7 +165,7 @@ impl CliError {
                 output.push_str(&format!("  {}. {}\n", i + 1, suggestion));
             }
         }
-        
+
         // Error code for documentation
         if let Some(ref code) = self.code {
             output.push_str(&format!(
@@ -173,7 +173,7 @@ impl CliError {
                 code
             ));
         }
-        
+
         output
     }
 }
@@ -237,13 +237,13 @@ pub mod helpers {
 
     /// Create an error for invalid SPARQL query
     pub fn invalid_sparql_error(error: &str, line: Option<usize>) -> CliError {
-        let mut err = CliError::validation_error(error)
-            .with_context("Failed to parse SPARQL query");
-        
+        let mut err =
+            CliError::validation_error(error).with_context("Failed to parse SPARQL query");
+
         if let Some(line_num) = line {
             err = err.with_context(format!("Error at line {}", line_num));
         }
-        
+
         err.with_suggestions(vec![
             "Check the SPARQL syntax".to_string(),
             "Verify all prefixes are defined".to_string(),
@@ -265,7 +265,7 @@ pub mod helpers {
             ])
             .with_code("E004")
     }
-    
+
     /// Create an error for dataset not found
     pub fn dataset_not_found_error(name: &str) -> CliError {
         CliError::not_found(format!("Dataset '{}'", name))
@@ -277,7 +277,7 @@ pub mod helpers {
             ])
             .with_code("E005")
     }
-    
+
     /// Create an error for permission issues
     pub fn permission_error(path: &Path, operation: &str) -> CliError {
         CliError::permission_denied(path.display().to_string())
@@ -289,44 +289,56 @@ pub mod helpers {
             ])
             .with_code("E006")
     }
-    
+
     /// Create an error for timeout
     pub fn timeout_error(operation: &str, timeout_secs: u64) -> CliError {
-        CliError::new(CliErrorKind::Other(format!("Operation timed out after {}s", timeout_secs)))
-            .with_context(format!("Timeout while: {}", operation))
-            .with_suggestions(vec![
-                format!("Increase timeout with: --timeout {}", timeout_secs * 2),
-                "Check if the server is responding".to_string(),
-                "Try with a smaller dataset or query".to_string(),
-                "Check server logs for issues".to_string(),
-            ])
-            .with_code("E007")
+        CliError::new(CliErrorKind::Other(format!(
+            "Operation timed out after {}s",
+            timeout_secs
+        )))
+        .with_context(format!("Timeout while: {}", operation))
+        .with_suggestions(vec![
+            format!("Increase timeout with: --timeout {}", timeout_secs * 2),
+            "Check if the server is responding".to_string(),
+            "Try with a smaller dataset or query".to_string(),
+            "Check server logs for issues".to_string(),
+        ])
+        .with_code("E007")
     }
-    
+
     /// Create an error for incompatible versions
     pub fn version_mismatch_error(expected: &str, found: &str) -> CliError {
-        CliError::new(CliErrorKind::Other(format!("Version mismatch: expected {}, found {}", expected, found)))
-            .with_context("Incompatible dataset or file version")
-            .with_suggestions(vec![
-                format!("Migrate the dataset with: oxide migrate --from {} --to {}", found, expected),
-                "Use a compatible version of oxide".to_string(),
-                "Check the migration guide in the documentation".to_string(),
-            ])
-            .with_code("E008")
+        CliError::new(CliErrorKind::Other(format!(
+            "Version mismatch: expected {}, found {}",
+            expected, found
+        )))
+        .with_context("Incompatible dataset or file version")
+        .with_suggestions(vec![
+            format!(
+                "Migrate the dataset with: oxide migrate --from {} --to {}",
+                found, expected
+            ),
+            "Use a compatible version of oxide".to_string(),
+            "Check the migration guide in the documentation".to_string(),
+        ])
+        .with_code("E008")
     }
-    
+
     /// Create an error for missing dependencies
     pub fn missing_dependency_error(dependency: &str, feature: &str) -> CliError {
-        CliError::new(CliErrorKind::Other(format!("Missing dependency: {}", dependency)))
-            .with_context(format!("Required for: {}", feature))
-            .with_suggestions(vec![
-                format!("Install {} to enable this feature", dependency),
-                "Check the documentation for installation instructions".to_string(),
-                format!("This feature requires the '{}' feature flag", feature),
-            ])
-            .with_code("E009")
+        CliError::new(CliErrorKind::Other(format!(
+            "Missing dependency: {}",
+            dependency
+        )))
+        .with_context(format!("Required for: {}", feature))
+        .with_suggestions(vec![
+            format!("Install {} to enable this feature", dependency),
+            "Check the documentation for installation instructions".to_string(),
+            format!("This feature requires the '{}' feature flag", feature),
+        ])
+        .with_code("E009")
     }
-    
+
     /// Create an error for configuration issues with specific field
     pub fn config_field_error(field: &str, value: &str, expected: &str) -> CliError {
         CliError::config_error(format!("Invalid value '{}' for field '{}'", value, field))
@@ -344,11 +356,11 @@ pub mod helpers {
 /// Error recovery suggestions based on error type
 pub mod recovery {
     use super::*;
-    
+
     /// Suggest recovery actions for IO errors
     pub fn suggest_io_recovery(error: &io::Error) -> Vec<String> {
         use io::ErrorKind::*;
-        
+
         match error.kind() {
             NotFound => vec![
                 "Check if the file or directory exists".to_string(),
@@ -382,26 +394,26 @@ pub mod recovery {
             ],
         }
     }
-    
+
     /// Suggest fixes for common SPARQL errors
     pub fn suggest_sparql_fixes(error_msg: &str) -> Vec<String> {
         let mut suggestions = Vec::new();
-        
+
         if error_msg.contains("Undefined prefix") {
             suggestions.push("Define the prefix at the beginning of your query".to_string());
             suggestions.push("Example: PREFIX foaf: <http://xmlns.com/foaf/0.1/>".to_string());
         }
-        
+
         if error_msg.contains("Expected") && error_msg.contains("found") {
             suggestions.push("Check for syntax errors around the indicated position".to_string());
             suggestions.push("Verify brackets, quotes, and punctuation".to_string());
         }
-        
+
         if error_msg.contains("Variable") && error_msg.contains("not in scope") {
             suggestions.push("Ensure all variables in SELECT are defined in WHERE".to_string());
             suggestions.push("Check for typos in variable names".to_string());
         }
-        
+
         suggestions
     }
 }

@@ -16,11 +16,15 @@ async fn test_oauth2_service_creation() {
         auth_url: "https://provider.example.com/auth".to_string(),
         token_url: "https://provider.example.com/token".to_string(),
         user_info_url: "https://provider.example.com/userinfo".to_string(),
-        scopes: vec!["openid".to_string(), "profile".to_string(), "email".to_string()],
+        scopes: vec![
+            "openid".to_string(),
+            "profile".to_string(),
+            "email".to_string(),
+        ],
     };
 
     let service = OAuth2Service::new(oauth_config);
-    
+
     // Test authorization URL generation
     let (auth_url, state) = service
         .generate_authorization_url("http://localhost:3030/callback", &[], true)
@@ -47,7 +51,7 @@ async fn test_auth_service_oauth2_integration() {
     });
 
     let auth_service = AuthService::new(security_config);
-    
+
     // Verify OAuth2 is enabled
     assert!(auth_service.is_oauth2_enabled());
 
@@ -106,7 +110,10 @@ async fn test_oauth2_handler_authorization_flow() {
 
     // Create router with OAuth2 routes
     let app = Router::new()
-        .route("/auth/oauth2/authorize", axum::routing::get(initiate_oauth2_flow))
+        .route(
+            "/auth/oauth2/authorize",
+            axum::routing::get(initiate_oauth2_flow),
+        )
         .with_state(state);
 
     // Test authorization endpoint
@@ -132,8 +139,8 @@ async fn test_oauth2_handler_authorization_flow() {
 
 #[test]
 fn test_oauth2_token_serialization() {
-    use oxirs_fuseki::auth::oauth::{OAuth2Token, OAuth2TokenResponse};
     use chrono::Utc;
+    use oxirs_fuseki::auth::oauth::{OAuth2Token, OAuth2TokenResponse};
 
     let token = OAuth2Token {
         access_token: "test_access_token".to_string(),
@@ -182,16 +189,20 @@ fn test_oidc_user_info() {
 
     let json = serde_json::to_string(&user_info).unwrap();
     let deserialized: OIDCUserInfo = serde_json::from_str(&json).unwrap();
-    
+
     assert_eq!(deserialized.sub, "user123");
     assert_eq!(deserialized.email.as_ref().unwrap(), "john.doe@example.com");
-    assert!(deserialized.groups.as_ref().unwrap().contains(&"developers".to_string()));
+    assert!(deserialized
+        .groups
+        .as_ref()
+        .unwrap()
+        .contains(&"developers".to_string()));
 }
 
 #[tokio::test]
 async fn test_oauth2_error_handling() {
     use oxirs_fuseki::handlers::oauth2::{handle_oauth2_callback, OAuth2CallbackParams};
-    
+
     // Test error handling in callback
     let error_params = OAuth2CallbackParams {
         code: None,
@@ -206,8 +217,8 @@ async fn test_oauth2_error_handling() {
 
 #[test]
 fn test_oauth2_state_validation() {
-    use oxirs_fuseki::auth::oauth::OAuth2State;
     use chrono::{Duration, Utc};
+    use oxirs_fuseki::auth::oauth::OAuth2State;
 
     let state = OAuth2State {
         state: "test_state_123".to_string(),
@@ -220,21 +231,21 @@ fn test_oauth2_state_validation() {
 
     // Test state is valid
     assert!(state.expires_at > Utc::now());
-    
+
     // Test expired state
     let expired_state = OAuth2State {
         expires_at: Utc::now() - Duration::minutes(1),
         ..state
     };
-    
+
     assert!(expired_state.expires_at < Utc::now());
 }
 
-#[test] 
+#[test]
 fn test_pkce_generation() {
     // Test that PKCE code verifier and challenge are properly generated
     // This is handled internally by the OAuth2Service
-    
+
     // Verify code verifier is 128 characters
     // Verify code challenge is base64url encoded SHA256 hash
 }
@@ -265,8 +276,8 @@ fn test_bearer_token_extraction() {
     // Test the bearer token extraction from headers
     let mut headers = HeaderMap::new();
     headers.insert(
-        "authorization", 
-        HeaderValue::from_static("Bearer test_token_12345")
+        "authorization",
+        HeaderValue::from_static("Bearer test_token_12345"),
     );
 
     // The extract_bearer_token function should extract "test_token_12345"

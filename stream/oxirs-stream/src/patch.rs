@@ -11,10 +11,12 @@
 use crate::{PatchOperation, RdfPatch};
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
+use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
-use tracing::{debug, warn};
+use std::io::{Read, Write};
+use tracing::{debug, info, warn};
 
 /// RDF Patch parser with comprehensive support for the specification
 pub struct PatchParser {
@@ -195,23 +197,20 @@ impl PatchParser {
         if parts.len() < 2 {
             return Err(anyhow!("Prefix add requires prefix and namespace"));
         }
-        
+
         let prefix = parts[0].trim_end_matches(':').to_string();
         let namespace = parts[1].trim_matches('<').trim_matches('>').to_string();
-        
-        Ok(Some(PatchOperation::AddPrefix {
-            prefix,
-            namespace,
-        }))
+
+        Ok(Some(PatchOperation::AddPrefix { prefix, namespace }))
     }
 
     fn parse_prefix_delete(&self, parts: &[&str]) -> Result<Option<PatchOperation>> {
         if parts.is_empty() {
             return Err(anyhow!("Prefix delete requires prefix name"));
         }
-        
+
         let prefix = parts[0].trim_end_matches(':').to_string();
-        
+
         Ok(Some(PatchOperation::DeletePrefix { prefix }))
     }
 
@@ -239,18 +238,18 @@ impl PatchParser {
         } else {
             None
         };
-        
+
         Ok(Some(PatchOperation::TransactionBegin { transaction_id }))
     }
-    
+
     fn parse_header(&self, parts: &[&str]) -> Result<Option<PatchOperation>> {
         if parts.len() < 2 {
             return Err(anyhow!("Header requires key and value"));
         }
-        
+
         let key = parts[0].to_string();
         let value = parts[1..].join(" ");
-        
+
         Ok(Some(PatchOperation::Header { key, value }))
     }
 
@@ -415,9 +414,7 @@ impl PatchSerializer {
             PatchOperation::AddPrefix { prefix, namespace } => {
                 Ok(format!("PA {}: <{}> .", prefix, namespace))
             }
-            PatchOperation::DeletePrefix { prefix } => {
-                Ok(format!("PD {}: .", prefix))
-            }
+            PatchOperation::DeletePrefix { prefix } => Ok(format!("PD {}: .", prefix)),
             PatchOperation::TransactionBegin { transaction_id } => {
                 if let Some(id) = transaction_id {
                     Ok(format!("TX {} .", id))
@@ -427,9 +424,7 @@ impl PatchSerializer {
             }
             PatchOperation::TransactionCommit => Ok("TC .".to_string()),
             PatchOperation::TransactionAbort => Ok("TA .".to_string()),
-            PatchOperation::Header { key, value } => {
-                Ok(format!("H {} {} .", key, value))
-            }
+            PatchOperation::Header { key, value } => Ok(format!("H {} {} .", key, value)),
         }
     }
 
@@ -539,7 +534,10 @@ fn validate_operation(operation: &PatchOperation) -> Result<()> {
                 return Err(anyhow!("Graph operation has empty graph URI"));
             }
         }
-        PatchOperation::AddPrefix { prefix: _, namespace: _ } => {
+        PatchOperation::AddPrefix {
+            prefix: _,
+            namespace: _,
+        } => {
             // Prefix operations are always valid
         }
         PatchOperation::DeletePrefix { prefix: _ } => {
@@ -624,21 +622,21 @@ pub fn create_patch_from_sparql(update: &str) -> Result<RdfPatch> {
 pub fn create_transactional_patch(operations: Vec<PatchOperation>) -> RdfPatch {
     let mut patch = RdfPatch::new();
     let transaction_id = uuid::Uuid::new_v4().to_string();
-    
+
     // Add transaction begin
     patch.add_operation(PatchOperation::TransactionBegin {
         transaction_id: Some(transaction_id.clone()),
     });
     patch.transaction_id = Some(transaction_id);
-    
+
     // Add all operations
     for op in operations {
         patch.add_operation(op);
     }
-    
+
     // Add transaction commit
     patch.add_operation(PatchOperation::TransactionCommit);
-    
+
     patch
 }
 
@@ -646,7 +644,7 @@ pub fn create_transactional_patch(operations: Vec<PatchOperation>) -> RdfPatch {
 pub fn create_reverse_patch(patch: &RdfPatch) -> Result<RdfPatch> {
     let mut reverse_patch = RdfPatch::new();
     reverse_patch.id = format!("{}-reverse", patch.id);
-    
+
     // Copy headers and prefixes
     reverse_patch.headers = patch.headers.clone();
     reverse_patch.prefixes = patch.prefixes.clone();
@@ -654,7 +652,7 @@ pub fn create_reverse_patch(patch: &RdfPatch) -> Result<RdfPatch> {
     // Track if we're reversing a transaction
     let mut reversing_transaction = false;
     let mut transaction_operations = Vec::new();
-    
+
     // Reverse the operations and their order
     for operation in patch.operations.iter().rev() {
         let reverse_operation = match operation {
@@ -823,6 +821,768 @@ pub fn validate_patch(patch: &RdfPatch) -> Result<Vec<String>> {
     Ok(warnings)
 }
 
+/// Advanced conflict resolution for patch operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConflictResolver {
+    strategy: ConflictStrategy,
+    priority_rules: Vec<PriorityRule>,
+    merge_policies: HashMap<String, MergePolicy>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ConflictStrategy {
+    FirstWins,
+    LastWins,
+    Merge,
+    Manual,
+    Priority,
+    Temporal,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PriorityRule {
+    pub operation_type: String,
+    pub priority: i32,
+    pub source_pattern: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MergePolicy {
+    Union,
+    Intersection,
+    CustomLogic(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConflictReport {
+    pub conflicts_found: usize,
+    pub conflicts_resolved: usize,
+    pub resolution_strategy: ConflictStrategy,
+    pub detailed_conflicts: Vec<DetailedConflict>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DetailedConflict {
+    pub conflict_type: String,
+    pub operation1: PatchOperation,
+    pub operation2: PatchOperation,
+    pub resolution: ConflictResolution,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ConflictResolution {
+    KeepFirst,
+    KeepSecond,
+    KeepBoth,
+    Merged(PatchOperation),
+    RequiresManualReview,
+}
+
+impl ConflictResolver {
+    pub fn new(strategy: ConflictStrategy) -> Self {
+        Self {
+            strategy,
+            priority_rules: Vec::new(),
+            merge_policies: HashMap::new(),
+        }
+    }
+
+    pub fn with_priority_rule(mut self, rule: PriorityRule) -> Self {
+        self.priority_rules.push(rule);
+        self
+    }
+
+    pub fn with_merge_policy(mut self, operation_type: String, policy: MergePolicy) -> Self {
+        self.merge_policies.insert(operation_type, policy);
+        self
+    }
+
+    /// Resolve conflicts between two patches
+    pub fn resolve_conflicts(
+        &self,
+        patch1: &RdfPatch,
+        patch2: &RdfPatch,
+    ) -> Result<(RdfPatch, ConflictReport)> {
+        let mut merged_patch = RdfPatch::new();
+        merged_patch.id = format!("merged-{}-{}", patch1.id, patch2.id);
+
+        let mut conflicts = Vec::new();
+        let mut operation_map = BTreeMap::new();
+
+        // Index operations from both patches
+        for (idx, op) in patch1.operations.iter().enumerate() {
+            let key = self.operation_key(op);
+            operation_map.insert(format!("p1-{}-{}", idx, key), (op, "patch1"));
+        }
+
+        for (idx, op) in patch2.operations.iter().enumerate() {
+            let key = self.operation_key(op);
+            let conflict_key = format!("p2-{}-{}", idx, key);
+
+            // Check for conflicts
+            if let Some(existing) = operation_map
+                .iter()
+                .find(|(k, _)| self.operations_conflict(op, k.split('-').nth(2).unwrap_or("")))
+            {
+                let conflict = DetailedConflict {
+                    conflict_type: "operation_overlap".to_string(),
+                    operation1: existing.1 .0.clone(),
+                    operation2: op.clone(),
+                    resolution: self.resolve_operation_conflict(existing.1 .0, op)?,
+                };
+                conflicts.push(conflict);
+            } else {
+                operation_map.insert(conflict_key, (op, "patch2"));
+            }
+        }
+
+        // Apply resolution strategy
+        for (_, (operation, _source)) in operation_map {
+            merged_patch.add_operation(operation.clone());
+        }
+
+        // Apply conflict resolutions
+        for conflict in &conflicts {
+            match &conflict.resolution {
+                ConflictResolution::KeepFirst => {
+                    // Already in merged patch
+                }
+                ConflictResolution::KeepSecond => {
+                    // Replace with second operation
+                    merged_patch.add_operation(conflict.operation2.clone());
+                }
+                ConflictResolution::KeepBoth => {
+                    merged_patch.add_operation(conflict.operation1.clone());
+                    merged_patch.add_operation(conflict.operation2.clone());
+                }
+                ConflictResolution::Merged(merged_op) => {
+                    merged_patch.add_operation(merged_op.clone());
+                }
+                ConflictResolution::RequiresManualReview => {
+                    // Add as comment or metadata
+                    merged_patch.add_operation(PatchOperation::Header {
+                        key: "conflict".to_string(),
+                        value: format!("Manual review required: {:?}", conflict.conflict_type),
+                    });
+                }
+            }
+        }
+
+        let report = ConflictReport {
+            conflicts_found: conflicts.len(),
+            conflicts_resolved: conflicts
+                .iter()
+                .filter(|c| !matches!(c.resolution, ConflictResolution::RequiresManualReview))
+                .count(),
+            resolution_strategy: self.strategy.clone(),
+            detailed_conflicts: conflicts,
+        };
+
+        info!(
+            "Conflict resolution completed: {}/{} conflicts resolved",
+            report.conflicts_resolved, report.conflicts_found
+        );
+        Ok((merged_patch, report))
+    }
+
+    fn operation_key(&self, operation: &PatchOperation) -> String {
+        match operation {
+            PatchOperation::Add {
+                subject,
+                predicate,
+                object,
+            } => {
+                format!("add-{}-{}-{}", subject, predicate, object)
+            }
+            PatchOperation::Delete {
+                subject,
+                predicate,
+                object,
+            } => {
+                format!("delete-{}-{}-{}", subject, predicate, object)
+            }
+            PatchOperation::AddGraph { graph } => {
+                format!("add-graph-{}", graph)
+            }
+            PatchOperation::DeleteGraph { graph } => {
+                format!("delete-graph-{}", graph)
+            }
+            _ => format!("{:?}", operation),
+        }
+    }
+
+    fn operations_conflict(&self, _op1: &PatchOperation, _op2_key: &str) -> bool {
+        // Simplified conflict detection - in practice this would be more sophisticated
+        false
+    }
+
+    fn resolve_operation_conflict(
+        &self,
+        op1: &PatchOperation,
+        op2: &PatchOperation,
+    ) -> Result<ConflictResolution> {
+        match self.strategy {
+            ConflictStrategy::FirstWins => Ok(ConflictResolution::KeepFirst),
+            ConflictStrategy::LastWins => Ok(ConflictResolution::KeepSecond),
+            ConflictStrategy::Merge => {
+                // Attempt to merge operations
+                self.attempt_merge(op1, op2)
+            }
+            ConflictStrategy::Priority => {
+                // Use priority rules
+                self.resolve_by_priority(op1, op2)
+            }
+            ConflictStrategy::Temporal => {
+                // Use timestamps if available
+                Ok(ConflictResolution::KeepSecond) // Default to later operation
+            }
+            ConflictStrategy::Manual => Ok(ConflictResolution::RequiresManualReview),
+        }
+    }
+
+    fn attempt_merge(
+        &self,
+        op1: &PatchOperation,
+        op2: &PatchOperation,
+    ) -> Result<ConflictResolution> {
+        match (op1, op2) {
+            (
+                PatchOperation::Add {
+                    subject: s1,
+                    predicate: p1,
+                    object: o1,
+                },
+                PatchOperation::Add {
+                    subject: s2,
+                    predicate: p2,
+                    object: o2,
+                },
+            ) => {
+                if s1 == s2 && p1 == p2 {
+                    // Different objects for same subject/predicate - keep both
+                    Ok(ConflictResolution::KeepBoth)
+                } else {
+                    Ok(ConflictResolution::KeepBoth)
+                }
+            }
+            _ => Ok(ConflictResolution::RequiresManualReview),
+        }
+    }
+
+    fn resolve_by_priority(
+        &self,
+        op1: &PatchOperation,
+        op2: &PatchOperation,
+    ) -> Result<ConflictResolution> {
+        let priority1 = self.get_operation_priority(op1);
+        let priority2 = self.get_operation_priority(op2);
+
+        if priority1 > priority2 {
+            Ok(ConflictResolution::KeepFirst)
+        } else if priority2 > priority1 {
+            Ok(ConflictResolution::KeepSecond)
+        } else {
+            Ok(ConflictResolution::RequiresManualReview)
+        }
+    }
+
+    fn get_operation_priority(&self, operation: &PatchOperation) -> i32 {
+        let op_type = match operation {
+            PatchOperation::Add { .. } => "add",
+            PatchOperation::Delete { .. } => "delete",
+            PatchOperation::AddGraph { .. } => "add_graph",
+            PatchOperation::DeleteGraph { .. } => "delete_graph",
+            _ => "other",
+        };
+
+        for rule in &self.priority_rules {
+            if rule.operation_type == op_type {
+                return rule.priority;
+            }
+        }
+
+        0 // Default priority
+    }
+}
+
+/// Patch normalization utilities
+pub struct PatchNormalizer {
+    canonical_ordering: bool,
+    deduplicate_operations: bool,
+    normalize_uris: bool,
+    sort_by_subject: bool,
+}
+
+impl PatchNormalizer {
+    pub fn new() -> Self {
+        Self {
+            canonical_ordering: true,
+            deduplicate_operations: true,
+            normalize_uris: true,
+            sort_by_subject: true,
+        }
+    }
+
+    pub fn with_canonical_ordering(mut self, enabled: bool) -> Self {
+        self.canonical_ordering = enabled;
+        self
+    }
+
+    pub fn with_deduplication(mut self, enabled: bool) -> Self {
+        self.deduplicate_operations = enabled;
+        self
+    }
+
+    pub fn with_uri_normalization(mut self, enabled: bool) -> Self {
+        self.normalize_uris = enabled;
+        self
+    }
+
+    /// Normalize a patch according to configured rules
+    pub fn normalize(&self, patch: &RdfPatch) -> Result<RdfPatch> {
+        let mut normalized = patch.clone();
+        normalized.id = format!("{}-normalized", patch.id);
+
+        // Step 1: Normalize URIs
+        if self.normalize_uris {
+            normalized = self.normalize_uris_in_patch(normalized)?;
+        }
+
+        // Step 2: Deduplicate operations
+        if self.deduplicate_operations {
+            normalized = self.deduplicate_operations_in_patch(normalized)?;
+        }
+
+        // Step 3: Canonical ordering
+        if self.canonical_ordering {
+            normalized = self.apply_canonical_ordering(normalized)?;
+        }
+
+        // Step 4: Sort by subject if enabled
+        if self.sort_by_subject {
+            normalized = self.sort_operations_by_subject(normalized)?;
+        }
+
+        info!(
+            "Normalized patch: {} -> {} operations",
+            patch.operations.len(),
+            normalized.operations.len()
+        );
+        Ok(normalized)
+    }
+
+    fn normalize_uris_in_patch(&self, mut patch: RdfPatch) -> Result<RdfPatch> {
+        for operation in &mut patch.operations {
+            match operation {
+                PatchOperation::Add {
+                    subject,
+                    predicate,
+                    object,
+                } => {
+                    *subject = self.normalize_uri(subject);
+                    *predicate = self.normalize_uri(predicate);
+                    *object = self.normalize_uri(object);
+                }
+                PatchOperation::Delete {
+                    subject,
+                    predicate,
+                    object,
+                } => {
+                    *subject = self.normalize_uri(subject);
+                    *predicate = self.normalize_uri(predicate);
+                    *object = self.normalize_uri(object);
+                }
+                PatchOperation::AddGraph { graph } => {
+                    *graph = self.normalize_uri(graph);
+                }
+                PatchOperation::DeleteGraph { graph } => {
+                    *graph = self.normalize_uri(graph);
+                }
+                _ => {} // Other operations don't have URIs to normalize
+            }
+        }
+        Ok(patch)
+    }
+
+    fn normalize_uri(&self, uri: &str) -> String {
+        // Remove trailing slashes, normalize case, etc.
+        let mut normalized = uri.trim_end_matches('/').to_string();
+
+        // Convert to lowercase for schemes
+        if normalized.starts_with("http://") || normalized.starts_with("https://") {
+            if let Some(pos) = normalized.find("://") {
+                let (scheme, rest) = normalized.split_at(pos + 3);
+                if let Some(domain_end) = rest.find('/') {
+                    let (domain, path) = rest.split_at(domain_end);
+                    normalized =
+                        format!("{}{}{}", scheme.to_lowercase(), domain.to_lowercase(), path);
+                } else {
+                    normalized = format!("{}{}", scheme.to_lowercase(), rest.to_lowercase());
+                }
+            }
+        }
+
+        normalized
+    }
+
+    fn deduplicate_operations_in_patch(&self, mut patch: RdfPatch) -> Result<RdfPatch> {
+        let mut seen = BTreeSet::new();
+        patch.operations.retain(|op| {
+            let key = format!("{:?}", op);
+            if seen.contains(&key) {
+                false
+            } else {
+                seen.insert(key);
+                true
+            }
+        });
+        Ok(patch)
+    }
+
+    fn apply_canonical_ordering(&self, mut patch: RdfPatch) -> Result<RdfPatch> {
+        // Group operations by type and apply canonical ordering within each group
+        let mut headers = Vec::new();
+        let mut prefixes = Vec::new();
+        let mut tx_begin = Vec::new();
+        let mut adds = Vec::new();
+        let mut deletes = Vec::new();
+        let mut graphs = Vec::new();
+        let mut tx_end = Vec::new();
+
+        for operation in &patch.operations {
+            match operation {
+                PatchOperation::Header { .. } => headers.push(operation.clone()),
+                PatchOperation::AddPrefix { .. } | PatchOperation::DeletePrefix { .. } => {
+                    prefixes.push(operation.clone())
+                }
+                PatchOperation::TransactionBegin { .. } => tx_begin.push(operation.clone()),
+                PatchOperation::Add { .. } => adds.push(operation.clone()),
+                PatchOperation::Delete { .. } => deletes.push(operation.clone()),
+                PatchOperation::AddGraph { .. } | PatchOperation::DeleteGraph { .. } => {
+                    graphs.push(operation.clone())
+                }
+                PatchOperation::TransactionCommit | PatchOperation::TransactionAbort => {
+                    tx_end.push(operation.clone())
+                }
+            }
+        }
+
+        // Rebuild operations in canonical order
+        patch.operations.clear();
+        patch.operations.extend(headers);
+        patch.operations.extend(prefixes);
+        patch.operations.extend(tx_begin);
+        patch.operations.extend(graphs);
+        patch.operations.extend(deletes); // Deletes before adds
+        patch.operations.extend(adds);
+        patch.operations.extend(tx_end);
+
+        Ok(patch)
+    }
+
+    fn sort_operations_by_subject(&self, mut patch: RdfPatch) -> Result<RdfPatch> {
+        // Sort triple operations by subject
+        patch.operations.sort_by(|a, b| {
+            let subject_a = self.extract_subject(a);
+            let subject_b = self.extract_subject(b);
+            subject_a.cmp(&subject_b)
+        });
+
+        Ok(patch)
+    }
+
+    fn extract_subject(&self, operation: &PatchOperation) -> String {
+        match operation {
+            PatchOperation::Add { subject, .. } | PatchOperation::Delete { subject, .. } => {
+                subject.clone()
+            }
+            _ => String::new(), // Non-triple operations sort first
+        }
+    }
+}
+
+impl Default for PatchNormalizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Patch compression utilities
+pub struct PatchCompressor {
+    compression_level: u32,
+    enable_dictionary: bool,
+    prefix_compression: bool,
+}
+
+impl PatchCompressor {
+    pub fn new() -> Self {
+        Self {
+            compression_level: 6,
+            enable_dictionary: true,
+            prefix_compression: true,
+        }
+    }
+
+    pub fn with_compression_level(mut self, level: u32) -> Self {
+        self.compression_level = level.min(9);
+        self
+    }
+
+    pub fn with_dictionary_compression(mut self, enabled: bool) -> Self {
+        self.enable_dictionary = enabled;
+        self
+    }
+
+    pub fn with_prefix_compression(mut self, enabled: bool) -> Self {
+        self.prefix_compression = enabled;
+        self
+    }
+
+    /// Compress patch using gzip compression
+    pub fn compress_patch(&self, patch: &RdfPatch) -> Result<Vec<u8>> {
+        // Serialize patch to string
+        let serializer = PatchSerializer::new().with_pretty_print(false);
+        let patch_str = serializer.serialize(patch)?;
+        let original_len = patch_str.len();
+
+        // Apply dictionary compression if enabled
+        let optimized_str = if self.enable_dictionary {
+            self.apply_dictionary_compression(&patch_str)?
+        } else {
+            patch_str
+        };
+
+        // Apply gzip compression
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::new(self.compression_level));
+        encoder.write_all(optimized_str.as_bytes())?;
+        let compressed = encoder.finish()?;
+
+        info!(
+            "Compressed patch: {} -> {} bytes ({:.1}% reduction)",
+            original_len,
+            compressed.len(),
+            (1.0 - compressed.len() as f64 / original_len as f64) * 100.0
+        );
+
+        Ok(compressed)
+    }
+
+    /// Decompress patch from compressed bytes
+    pub fn decompress_patch(&self, compressed_data: &[u8]) -> Result<RdfPatch> {
+        // Decompress gzip
+        let mut decoder = GzDecoder::new(compressed_data);
+        let mut decompressed = String::new();
+        decoder.read_to_string(&mut decompressed)?;
+
+        // Apply dictionary decompression if needed
+        let patch_str = if self.enable_dictionary {
+            self.apply_dictionary_decompression(&decompressed)?
+        } else {
+            decompressed
+        };
+
+        // Parse patch
+        let mut parser = PatchParser::new();
+        parser.parse(&patch_str)
+    }
+
+    fn apply_dictionary_compression(&self, patch_str: &str) -> Result<String> {
+        // Build frequency dictionary of common terms
+        let mut word_freq = HashMap::new();
+        for word in patch_str.split_whitespace() {
+            *word_freq.entry(word.to_string()).or_insert(0) += 1;
+        }
+
+        // Create dictionary of most frequent terms
+        let mut freq_words: Vec<_> = word_freq.into_iter().collect();
+        freq_words.sort_by(|a, b| b.1.cmp(&a.1));
+
+        let mut dictionary = HashMap::new();
+        let mut compressed = patch_str.to_string();
+
+        // Replace most frequent words with short codes
+        for (i, (word, freq)) in freq_words.iter().take(256).enumerate() {
+            if word.len() > 3 && *freq > 2 {
+                let code = format!("#{:02x}", i);
+                dictionary.insert(code.clone(), word.clone());
+                compressed = compressed.replace(word, &code);
+            }
+        }
+
+        // Prepend dictionary to compressed string
+        let mut dict_header = String::new();
+        for (code, word) in dictionary {
+            dict_header.push_str(&format!("{}={}\n", code, word));
+        }
+        dict_header.push_str("---\n");
+        dict_header.push_str(&compressed);
+
+        Ok(dict_header)
+    }
+
+    fn apply_dictionary_decompression(&self, compressed_str: &str) -> Result<String> {
+        if let Some(separator_pos) = compressed_str.find("---\n") {
+            let (dict_part, content_part) = compressed_str.split_at(separator_pos);
+            let content = &content_part[4..]; // Skip "---\n"
+
+            let mut dictionary = HashMap::new();
+            for line in dict_part.lines() {
+                if let Some(eq_pos) = line.find('=') {
+                    let code = &line[..eq_pos];
+                    let word = &line[eq_pos + 1..];
+                    dictionary.insert(code, word);
+                }
+            }
+
+            let mut decompressed = content.to_string();
+            for (code, word) in dictionary {
+                decompressed = decompressed.replace(code, word);
+            }
+
+            Ok(decompressed)
+        } else {
+            Ok(compressed_str.to_string())
+        }
+    }
+
+    /// Compress using prefix compression for common namespaces
+    pub fn compress_with_prefixes(&self, patch: &RdfPatch) -> Result<RdfPatch> {
+        let mut compressed = patch.clone();
+        compressed.id = format!("{}-prefix-compressed", patch.id);
+
+        if !self.prefix_compression {
+            return Ok(compressed);
+        }
+
+        // Build frequency map of URI prefixes
+        let mut prefix_freq = HashMap::new();
+        for operation in &patch.operations {
+            self.collect_uris_from_operation(operation, &mut prefix_freq);
+        }
+
+        // Find common prefixes
+        let mut common_prefixes = HashMap::new();
+        for (uri, freq) in prefix_freq {
+            if freq > 2 {
+                if let Some(prefix) = self.extract_namespace_prefix(&uri) {
+                    if prefix.len() > 10 {
+                        let short_prefix = format!("ns{}", common_prefixes.len());
+                        common_prefixes.insert(prefix, short_prefix);
+                    }
+                }
+            }
+        }
+
+        // Add prefix declarations to patch
+        for (namespace, prefix) in &common_prefixes {
+            compressed.add_operation(PatchOperation::AddPrefix {
+                prefix: prefix.clone(),
+                namespace: namespace.clone(),
+            });
+        }
+
+        // Replace URIs with prefixed forms
+        for operation in &mut compressed.operations {
+            self.apply_prefix_compression_to_operation(operation, &common_prefixes);
+        }
+
+        info!(
+            "Applied prefix compression: {} prefixes defined",
+            common_prefixes.len()
+        );
+        Ok(compressed)
+    }
+
+    fn collect_uris_from_operation(
+        &self,
+        operation: &PatchOperation,
+        prefix_freq: &mut HashMap<String, usize>,
+    ) {
+        match operation {
+            PatchOperation::Add {
+                subject,
+                predicate,
+                object,
+            } => {
+                *prefix_freq.entry(subject.clone()).or_insert(0) += 1;
+                *prefix_freq.entry(predicate.clone()).or_insert(0) += 1;
+                *prefix_freq.entry(object.clone()).or_insert(0) += 1;
+            }
+            PatchOperation::Delete {
+                subject,
+                predicate,
+                object,
+            } => {
+                *prefix_freq.entry(subject.clone()).or_insert(0) += 1;
+                *prefix_freq.entry(predicate.clone()).or_insert(0) += 1;
+                *prefix_freq.entry(object.clone()).or_insert(0) += 1;
+            }
+            PatchOperation::AddGraph { graph } | PatchOperation::DeleteGraph { graph } => {
+                *prefix_freq.entry(graph.clone()).or_insert(0) += 1;
+            }
+            _ => {}
+        }
+    }
+
+    fn extract_namespace_prefix(&self, uri: &str) -> Option<String> {
+        // Extract namespace part of URI (everything up to last # or /)
+        if let Some(pos) = uri.rfind('#') {
+            Some(uri[..pos + 1].to_string())
+        } else if let Some(pos) = uri.rfind('/') {
+            Some(uri[..pos + 1].to_string())
+        } else {
+            None
+        }
+    }
+
+    fn apply_prefix_compression_to_operation(
+        &self,
+        operation: &mut PatchOperation,
+        prefixes: &HashMap<String, String>,
+    ) {
+        match operation {
+            PatchOperation::Add {
+                subject,
+                predicate,
+                object,
+            } => {
+                *subject = self.compress_uri_with_prefixes(subject, prefixes);
+                *predicate = self.compress_uri_with_prefixes(predicate, prefixes);
+                *object = self.compress_uri_with_prefixes(object, prefixes);
+            }
+            PatchOperation::Delete {
+                subject,
+                predicate,
+                object,
+            } => {
+                *subject = self.compress_uri_with_prefixes(subject, prefixes);
+                *predicate = self.compress_uri_with_prefixes(predicate, prefixes);
+                *object = self.compress_uri_with_prefixes(object, prefixes);
+            }
+            PatchOperation::AddGraph { graph } | PatchOperation::DeleteGraph { graph } => {
+                *graph = self.compress_uri_with_prefixes(graph, prefixes);
+            }
+            _ => {}
+        }
+    }
+
+    fn compress_uri_with_prefixes(&self, uri: &str, prefixes: &HashMap<String, String>) -> String {
+        for (namespace, prefix) in prefixes {
+            if uri.starts_with(namespace) {
+                let local_name = &uri[namespace.len()..];
+                return format!("{}:{}", prefix, local_name);
+            }
+        }
+        uri.to_string()
+    }
+}
+
+impl Default for PatchCompressor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -855,7 +1615,7 @@ mod tests {
 
         let serializer = PatchSerializer::new();
         let result = serializer.serialize(&patch);
-        
+
         assert!(result.is_ok());
         let serialized = result.unwrap();
         assert!(serialized.contains("H creator test-suite"));
@@ -886,20 +1646,26 @@ TC .
 
         let mut parser = PatchParser::new();
         let result = parser.parse(patch_content);
-        
+
         assert!(result.is_ok());
         let patch = result.unwrap();
         assert_eq!(patch.operations.len(), 9);
-        
+
         // Check header was captured
-        assert_eq!(patch.headers.get("creator"), Some(&"test-parser".to_string()));
-        
+        assert_eq!(
+            patch.headers.get("creator"),
+            Some(&"test-parser".to_string())
+        );
+
         // Check transaction ID was captured
         assert_eq!(patch.transaction_id, Some("tx-456".to_string()));
-        
+
         // Check prefix was captured
-        assert_eq!(patch.prefixes.get("ex2"), Some(&"http://example2.org/".to_string()));
-        
+        assert_eq!(
+            patch.prefixes.get("ex2"),
+            Some(&"http://example2.org/".to_string())
+        );
+
         match &patch.operations[0] {
             PatchOperation::Header { key, value } => {
                 assert_eq!(key, "creator");
@@ -907,7 +1673,7 @@ TC .
             }
             _ => panic!("Expected Header operation"),
         }
-        
+
         match &patch.operations[1] {
             PatchOperation::TransactionBegin { transaction_id } => {
                 assert_eq!(transaction_id, &Some("tx-456".to_string()));
@@ -927,17 +1693,28 @@ TC .
 
         // Serialize to string
         let serialized = original_patch.to_rdf_patch_format().unwrap();
-        
+
         // Parse back from string
         let parsed_patch = RdfPatch::from_rdf_patch_format(&serialized).unwrap();
-        
+
         // Check that we get the same operations
-        assert_eq!(original_patch.operations.len(), parsed_patch.operations.len());
-        
+        assert_eq!(
+            original_patch.operations.len(),
+            parsed_patch.operations.len()
+        );
+
         match (&original_patch.operations[0], &parsed_patch.operations[0]) {
             (
-                PatchOperation::Add { subject: s1, predicate: p1, object: o1 },
-                PatchOperation::Add { subject: s2, predicate: p2, object: o2 }
+                PatchOperation::Add {
+                    subject: s1,
+                    predicate: p1,
+                    object: o1,
+                },
+                PatchOperation::Add {
+                    subject: s2,
+                    predicate: p2,
+                    object: o2,
+                },
             ) => {
                 assert_eq!(s1, s2);
                 assert_eq!(p1, p2);
@@ -965,16 +1742,16 @@ TC .
         patch.transaction_id = Some("tx-789".to_string());
 
         let reverse = create_reverse_patch(&patch).unwrap();
-        
+
         // Should have TX, two reversed operations, and TC
         assert!(reverse.operations.len() >= 4);
-        
+
         // First should be transaction begin (reversing the commit)
         match &reverse.operations[0] {
-            PatchOperation::TransactionBegin { .. } => {},
+            PatchOperation::TransactionBegin { .. } => {}
             _ => panic!("Expected TransactionBegin operation"),
         }
-        
+
         // Find the reversed operations
         let has_delete_graph = reverse.operations.iter().any(|op| {
             matches!(op, PatchOperation::DeleteGraph { graph } if graph == "http://example.org/graph")
@@ -982,13 +1759,13 @@ TC .
         let has_delete_triple = reverse.operations.iter().any(|op| {
             matches!(op, PatchOperation::Delete { subject, .. } if subject == "http://example.org/s")
         });
-        
+
         assert!(has_delete_graph);
         assert!(has_delete_triple);
-        
+
         // Last should be transaction commit
         match reverse.operations.last() {
-            Some(PatchOperation::TransactionCommit) => {},
+            Some(PatchOperation::TransactionCommit) => {}
             _ => panic!("Expected TransactionCommit as last operation"),
         }
     }
@@ -1001,17 +1778,17 @@ TC .
             predicate: "http://example.org/p".to_string(),
             object: "http://example.org/o".to_string(),
         };
-        
+
         // Add the same operation twice
         patch.add_operation(operation.clone());
         patch.add_operation(operation);
-        
+
         let optimized = optimize_patch(&patch).unwrap();
-        
+
         // Should remove duplicate
         assert_eq!(optimized.operations.len(), 1);
     }
-    
+
     #[test]
     fn test_transactional_patch() {
         let operations = vec![
@@ -1026,18 +1803,24 @@ TC .
                 object: "o2".to_string(),
             },
         ];
-        
+
         let patch = create_transactional_patch(operations);
-        
+
         // Should have TX + 2 operations + TC = 4 total
         assert_eq!(patch.operations.len(), 4);
-        
+
         // First should be transaction begin
-        assert!(matches!(&patch.operations[0], PatchOperation::TransactionBegin { .. }));
-        
+        assert!(matches!(
+            &patch.operations[0],
+            PatchOperation::TransactionBegin { .. }
+        ));
+
         // Last should be transaction commit
-        assert!(matches!(&patch.operations[3], PatchOperation::TransactionCommit));
-        
+        assert!(matches!(
+            &patch.operations[3],
+            PatchOperation::TransactionCommit
+        ));
+
         // Should have transaction ID set
         assert!(patch.transaction_id.is_some());
     }
@@ -1050,9 +1833,9 @@ TC .
             predicate: "http://example.org/p".to_string(),
             object: "http://example.org/o".to_string(),
         });
-        
+
         let warnings = validate_patch(&patch).unwrap();
-        
+
         // Should warn about deleting without prior addition
         assert!(!warnings.is_empty());
         assert!(warnings[0].contains("deleted without prior addition"));
@@ -1074,7 +1857,7 @@ TC .
         };
 
         let result = apply_patch_with_context(&patch, &context).unwrap();
-        
+
         assert_eq!(result.total_operations, 1);
         assert_eq!(result.operations_applied, 1);
         assert!(result.is_success());

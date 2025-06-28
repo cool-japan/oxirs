@@ -5,18 +5,18 @@
 pub mod config;
 pub mod dataset;
 pub mod parallel;
-pub mod streaming;
 pub mod stats;
+pub mod streaming;
 
-// Re-export main types for convenience  
+// Re-export main types for convenience
 pub use config::{ExecutionContext, ParallelConfig, StreamingConfig, ThreadPoolConfig};
-pub use dataset::{Dataset, InMemoryDataset, DatasetPathAdapter, convert_property_path};
+pub use dataset::{convert_property_path, Dataset, DatasetPathAdapter, InMemoryDataset};
 pub use stats::ExecutionStats;
 
 use crate::algebra::{Algebra, Solution};
+use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use anyhow::Result;
 
 /// Function registry for custom functions
 #[derive(Debug, Clone)]
@@ -48,7 +48,7 @@ pub struct QueryExecutor {
 impl QueryExecutor {
     pub fn new() -> Self {
         let context = ExecutionContext::default();
-        
+
         let parallel_executor = if context.parallel {
             Some(Arc::new(parallel::ParallelExecutor::new()))
         } else {
@@ -78,14 +78,22 @@ impl QueryExecutor {
         }
     }
 
-    pub fn execute(&self, algebra: &Algebra, dataset: &dyn Dataset) -> Result<(Solution, stats::ExecutionStats)> {
+    pub fn execute(
+        &self,
+        algebra: &Algebra,
+        dataset: &dyn Dataset,
+    ) -> Result<(Solution, stats::ExecutionStats)> {
         // Simplified implementation for now
         let solution = Solution::new();
         let stats = stats::ExecutionStats::default();
         Ok((solution, stats))
     }
 
-    pub fn execute_algebra(&self, algebra: &Algebra, context: &mut crate::algebra::EvaluationContext) -> Result<Vec<Solution>> {
+    pub fn execute_algebra(
+        &self,
+        algebra: &Algebra,
+        context: &mut crate::algebra::EvaluationContext,
+    ) -> Result<Vec<Solution>> {
         // Simplified implementation for now
         let solution = Solution::new();
         Ok(vec![solution])

@@ -14,9 +14,8 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 use crate::{
-    Message, MessageRole, MessageMetadata, SessionMetrics, Topic, TopicTransition,
-    ChatSession, DetailedSessionMetrics,
-    rag::QueryIntent,
+    rag::QueryIntent, ChatSession, DetailedSessionMetrics, Message, MessageMetadata, MessageRole,
+    SessionMetrics, Topic, TopicTransition,
 };
 
 /// Configuration for analytics collection and processing
@@ -42,7 +41,7 @@ impl Default for AnalyticsConfig {
             enable_intent_tracking: true,
             analytics_retention_days: 30,
             pattern_detection_window: Duration::from_secs(3600), // 1 hour
-            anomaly_detection_threshold: 2.0, // Standard deviations
+            anomaly_detection_threshold: 2.0,                    // Standard deviations
             min_pattern_frequency: 3,
             privacy_mode: PrivacyMode::Aggregated,
         }
@@ -246,7 +245,8 @@ impl ConversationTracker {
             // Update response time
             if let Some(rt) = response_time {
                 let current_avg = analytics.average_response_time.as_millis() as f64;
-                let new_avg = (current_avg * (analytics.assistant_message_count - 1) as f64 + rt.as_millis() as f64) 
+                let new_avg = (current_avg * (analytics.assistant_message_count - 1) as f64
+                    + rt.as_millis() as f64)
                     / analytics.assistant_message_count as f64;
                 analytics.average_response_time = Duration::from_millis(new_avg as u64);
             }
@@ -260,22 +260,36 @@ impl ConversationTracker {
 
             // Real-time pattern detection
             if self.config.enable_pattern_detection {
-                let new_patterns = self.pattern_detector.analyze_message(message, analytics).await?;
+                let new_patterns = self
+                    .pattern_detector
+                    .analyze_message(message, analytics)
+                    .await?;
                 analytics.pattern_matches.extend(new_patterns);
             }
 
             // Anomaly detection
-            let anomalies = self.anomaly_detector.analyze_message(message, analytics, response_time).await?;
+            let anomalies = self
+                .anomaly_detector
+                .analyze_message(message, analytics, response_time)
+                .await?;
             analytics.anomalies.extend(anomalies);
 
             // Quality analysis for assistant messages
             if message.role == MessageRole::Assistant {
-                self.quality_analyzer.update_quality_metrics(message, analytics).await?;
+                self.quality_analyzer
+                    .update_quality_metrics(message, analytics)
+                    .await?;
             }
 
-            debug!("Tracked message for session {}: {} total messages", session_id, analytics.message_count);
+            debug!(
+                "Tracked message for session {}: {} total messages",
+                session_id, analytics.message_count
+            );
         } else {
-            warn!("Attempted to track message for unknown session: {}", session_id);
+            warn!(
+                "Attempted to track message for unknown session: {}",
+                session_id
+            );
         }
 
         Ok(())
@@ -285,18 +299,24 @@ impl ConversationTracker {
     pub async fn end_session(&mut self, session_id: &str) -> Result<ConversationAnalytics> {
         if let Some(mut analytics) = self.current_analytics.remove(session_id) {
             analytics.end_time = Some(SystemTime::now());
-            
+
             // Final quality calculation
-            analytics.conversation_quality = self.quality_analyzer.calculate_final_quality(&analytics).await?;
-            
+            analytics.conversation_quality = self
+                .quality_analyzer
+                .calculate_final_quality(&analytics)
+                .await?;
+
             // Infer user satisfaction
             analytics.user_satisfaction = Some(self.infer_user_satisfaction(&analytics).await?);
 
             // Store in historical data
-            if matches!(self.config.privacy_mode, PrivacyMode::Full | PrivacyMode::Aggregated) {
+            if matches!(
+                self.config.privacy_mode,
+                PrivacyMode::Full | PrivacyMode::Aggregated
+            ) {
                 let mut historical = self.historical_data.write().await;
                 historical.push_back(analytics.clone());
-                
+
                 // Maintain retention policy
                 let retention_limit = self.config.analytics_retention_days * 24; // Rough hourly limit
                 while historical.len() > retention_limit {
@@ -304,8 +324,12 @@ impl ConversationTracker {
                 }
             }
 
-            info!("Ended analytics tracking for session {}: {} messages, {:.2}s avg response time", 
-                  session_id, analytics.message_count, analytics.average_response_time.as_secs_f64());
+            info!(
+                "Ended analytics tracking for session {}: {} messages, {:.2}s avg response time",
+                session_id,
+                analytics.message_count,
+                analytics.average_response_time.as_secs_f64()
+            );
             Ok(analytics)
         } else {
             Err(anyhow!("Session not found: {}", session_id))
@@ -318,7 +342,10 @@ impl ConversationTracker {
     }
 
     /// Get aggregated analytics across all sessions
-    pub async fn get_aggregated_analytics(&self, time_window: Option<Duration>) -> Result<AggregatedAnalytics> {
+    pub async fn get_aggregated_analytics(
+        &self,
+        time_window: Option<Duration>,
+    ) -> Result<AggregatedAnalytics> {
         let historical = self.historical_data.read().await;
         let cutoff_time = time_window.map(|w| SystemTime::now() - w);
 
@@ -342,17 +369,22 @@ impl ConversationTracker {
         let total_tokens: usize = relevant_sessions.iter().map(|a| a.total_tokens).sum();
 
         let avg_response_time = {
-            let total_ms: u128 = relevant_sessions.iter()
+            let total_ms: u128 = relevant_sessions
+                .iter()
                 .map(|a| a.average_response_time.as_millis())
                 .sum();
             Duration::from_millis((total_ms / total_sessions as u128) as u64)
         };
 
         let avg_quality = {
-            let quality_sum: f32 = relevant_sessions.iter()
-                .map(|a| (a.conversation_quality.coherence_score + 
-                         a.conversation_quality.relevance_score + 
-                         a.conversation_quality.response_accuracy) / 3.0)
+            let quality_sum: f32 = relevant_sessions
+                .iter()
+                .map(|a| {
+                    (a.conversation_quality.coherence_score
+                        + a.conversation_quality.relevance_score
+                        + a.conversation_quality.response_accuracy)
+                        / 3.0
+                })
                 .sum();
             quality_sum / total_sessions as f32
         };
@@ -361,7 +393,9 @@ impl ConversationTracker {
         let mut pattern_frequency: HashMap<String, usize> = HashMap::new();
         for session in &relevant_sessions {
             for pattern in &session.pattern_matches {
-                *pattern_frequency.entry(pattern.description.clone()).or_insert(0) += pattern.frequency;
+                *pattern_frequency
+                    .entry(pattern.description.clone())
+                    .or_insert(0) += pattern.frequency;
             }
         }
 
@@ -373,16 +407,17 @@ impl ConversationTracker {
         let mut intent_distribution: HashMap<String, usize> = HashMap::new();
         for session in &relevant_sessions {
             for intent in &session.unique_intents {
-                *intent_distribution.entry(format!("{:?}", intent)).or_insert(0) += 1;
+                *intent_distribution
+                    .entry(format!("{:?}", intent))
+                    .or_insert(0) += 1;
             }
         }
 
         // Anomaly summary
-        let total_anomalies: usize = relevant_sessions.iter()
-            .map(|a| a.anomalies.len())
-            .sum();
+        let total_anomalies: usize = relevant_sessions.iter().map(|a| a.anomalies.len()).sum();
 
-        let critical_anomalies: usize = relevant_sessions.iter()
+        let critical_anomalies: usize = relevant_sessions
+            .iter()
             .flat_map(|a| &a.anomalies)
             .filter(|anomaly| matches!(anomaly.severity, AnomalySeverity::Critical))
             .count();
@@ -405,7 +440,9 @@ impl ConversationTracker {
 
     /// Generate insights and recommendations
     pub async fn generate_insights(&self) -> Result<Vec<ConversationInsight>> {
-        let aggregated = self.get_aggregated_analytics(Some(Duration::from_secs(86400 * 7))).await?; // Last 7 days
+        let aggregated = self
+            .get_aggregated_analytics(Some(Duration::from_secs(86400 * 7)))
+            .await?; // Last 7 days
         let mut insights = Vec::new();
 
         // Response time insights
@@ -485,7 +522,10 @@ impl ConversationTracker {
             });
         }
 
-        info!("Generated {} insights from conversation analytics", insights.len());
+        info!(
+            "Generated {} insights from conversation analytics",
+            insights.len()
+        );
         Ok(insights)
     }
 
@@ -503,29 +543,54 @@ impl ConversationTracker {
         }
     }
 
-    async fn infer_user_satisfaction(&self, analytics: &ConversationAnalytics) -> Result<UserSatisfaction> {
+    async fn infer_user_satisfaction(
+        &self,
+        analytics: &ConversationAnalytics,
+    ) -> Result<UserSatisfaction> {
         // Infer satisfaction from conversation patterns
-        let session_duration = analytics.end_time
+        let session_duration = analytics
+            .end_time
             .unwrap_or_else(SystemTime::now)
             .duration_since(analytics.start_time)
             .unwrap_or(Duration::ZERO);
 
         let task_completion = analytics.conversation_quality.completion_rate > 0.8;
-        
+
         let implicit_satisfaction = {
             let mut score: f32 = 0.5; // Baseline
-            
+
             // Positive indicators
-            if analytics.conversation_quality.response_accuracy > 0.8 { score += 0.2; }
-            if analytics.conversation_quality.coherence_score > 0.8 { score += 0.1; }
-            if task_completion { score += 0.2; }
-            if session_duration > Duration::from_secs(60) && session_duration < Duration::from_secs(1800) { score += 0.1; }
-            
+            if analytics.conversation_quality.response_accuracy > 0.8 {
+                score += 0.2;
+            }
+            if analytics.conversation_quality.coherence_score > 0.8 {
+                score += 0.1;
+            }
+            if task_completion {
+                score += 0.2;
+            }
+            if session_duration > Duration::from_secs(60)
+                && session_duration < Duration::from_secs(1800)
+            {
+                score += 0.1;
+            }
+
             // Negative indicators
-            if analytics.conversation_quality.error_rate > 0.2 { score -= 0.3; }
-            if analytics.anomalies.iter().any(|a| matches!(a.severity, AnomalySeverity::High | AnomalySeverity::Critical)) { score -= 0.2; }
-            if analytics.message_count > 20 && !task_completion { score -= 0.1; } // Long unsuccessful conversation
-            
+            if analytics.conversation_quality.error_rate > 0.2 {
+                score -= 0.3;
+            }
+            if analytics.anomalies.iter().any(|a| {
+                matches!(
+                    a.severity,
+                    AnomalySeverity::High | AnomalySeverity::Critical
+                )
+            }) {
+                score -= 0.2;
+            }
+            if analytics.message_count > 20 && !task_completion {
+                score -= 0.1;
+            } // Long unsuccessful conversation
+
             score.max(0.0_f32).min(1.0_f32)
         };
 
@@ -543,7 +608,10 @@ impl ConversationTracker {
         })
     }
 
-    fn calculate_satisfaction_stats(&self, sessions: &[&ConversationAnalytics]) -> SatisfactionStats {
+    fn calculate_satisfaction_stats(
+        &self,
+        sessions: &[&ConversationAnalytics],
+    ) -> SatisfactionStats {
         if sessions.is_empty() {
             return SatisfactionStats::default();
         }
@@ -553,18 +621,17 @@ impl ConversationTracker {
             .filter_map(|s| s.user_satisfaction.as_ref())
             .collect();
 
-        let avg_implicit = satisfactions.iter()
+        let avg_implicit = satisfactions
+            .iter()
             .map(|s| s.implicit_satisfaction)
-            .sum::<f32>() / satisfactions.len() as f32;
+            .sum::<f32>()
+            / satisfactions.len() as f32;
 
-        let completion_rate = satisfactions.iter()
-            .filter(|s| s.task_completion)
-            .count() as f32 / satisfactions.len() as f32;
+        let completion_rate = satisfactions.iter().filter(|s| s.task_completion).count() as f32
+            / satisfactions.len() as f32;
 
         let avg_session_duration = {
-            let total_duration: Duration = satisfactions.iter()
-                .map(|s| s.session_duration)
-                .sum();
+            let total_duration: Duration = satisfactions.iter().map(|s| s.session_duration).sum();
             total_duration / satisfactions.len() as u32
         };
 
@@ -572,9 +639,11 @@ impl ConversationTracker {
             average_implicit_satisfaction: avg_implicit,
             task_completion_rate: completion_rate,
             average_session_duration: avg_session_duration,
-            abandonment_rate: satisfactions.iter()
+            abandonment_rate: satisfactions
+                .iter()
                 .filter(|s| s.abandonment_point.is_some())
-                .count() as f32 / satisfactions.len() as f32,
+                .count() as f32
+                / satisfactions.len() as f32,
         }
     }
 }
@@ -686,12 +755,13 @@ impl PatternDetector {
         _analytics: &ConversationAnalytics,
     ) -> Result<Vec<ConversationPattern>> {
         self.recent_messages.push_back(message.clone());
-        
+
         // Keep only recent messages within the detection window
         let cutoff_time = SystemTime::now() - self.config.pattern_detection_window;
         while let Some(front_msg) = self.recent_messages.front() {
             // Convert chrono::DateTime to SystemTime for comparison
-            let msg_system_time = SystemTime::UNIX_EPOCH + Duration::from_secs(front_msg.timestamp.timestamp() as u64);
+            let msg_system_time = SystemTime::UNIX_EPOCH
+                + Duration::from_secs(front_msg.timestamp.timestamp() as u64);
             if msg_system_time < cutoff_time {
                 self.recent_messages.pop_front();
             } else {
@@ -703,13 +773,15 @@ impl PatternDetector {
 
         // Detect question sequences
         if self.recent_messages.len() >= 3 {
-            let user_messages: Vec<&Message> = self.recent_messages
+            let user_messages: Vec<&Message> = self
+                .recent_messages
                 .iter()
                 .filter(|m| m.role == MessageRole::User)
                 .collect();
 
             if user_messages.len() >= 3 {
-                let recent_questions = user_messages.iter()
+                let recent_questions = user_messages
+                    .iter()
                     .rev()
                     .take(3)
                     .filter(|m| m.content.contains('?'))
@@ -723,7 +795,8 @@ impl PatternDetector {
                         confidence: 0.8,
                         first_occurrence: SystemTime::now(),
                         last_occurrence: SystemTime::now(),
-                        example_messages: user_messages.iter()
+                        example_messages: user_messages
+                            .iter()
                             .rev()
                             .take(3)
                             .map(|m| m.content.clone())
@@ -735,7 +808,8 @@ impl PatternDetector {
 
         // Detect repetitive queries
         if message.role == MessageRole::User {
-            let similar_count = self.recent_messages
+            let similar_count = self
+                .recent_messages
                 .iter()
                 .filter(|m| m.role == MessageRole::User && m.id != message.id)
                 .filter(|m| self.calculate_similarity(&m.content, &message.content) > 0.7)
@@ -807,16 +881,31 @@ impl AnomalyDetector {
             if self.response_time_history.len() >= 5 {
                 let mean = self.calculate_mean_duration(&self.response_time_history);
                 let std_dev = self.calculate_std_dev_duration(&self.response_time_history, mean);
-                
-                if rt > mean + Duration::from_millis((std_dev.as_millis() as f32 * self.config.anomaly_detection_threshold) as u64) {
+
+                if rt
+                    > mean
+                        + Duration::from_millis(
+                            (std_dev.as_millis() as f32 * self.config.anomaly_detection_threshold)
+                                as u64,
+                        )
+                {
                     anomalies.push(ConversationAnomaly {
                         anomaly_type: AnomalyType::UnusualResponseTime,
-                        description: format!("Response time {:.2}s is significantly higher than average {:.2}s", 
-                                           rt.as_secs_f64(), mean.as_secs_f64()),
-                        severity: if rt > mean * 3 { AnomalySeverity::High } else { AnomalySeverity::Medium },
+                        description: format!(
+                            "Response time {:.2}s is significantly higher than average {:.2}s",
+                            rt.as_secs_f64(),
+                            mean.as_secs_f64()
+                        ),
+                        severity: if rt > mean * 3 {
+                            AnomalySeverity::High
+                        } else {
+                            AnomalySeverity::Medium
+                        },
                         detected_at: SystemTime::now(),
                         message_context: vec![message.content.clone()],
-                        suggested_action: Some("Check system resources and query complexity".to_string()),
+                        suggested_action: Some(
+                            "Check system resources and query complexity".to_string(),
+                        ),
                     });
                 }
             }
@@ -833,11 +922,16 @@ impl AnomalyDetector {
                 if confidence < 0.3 {
                     anomalies.push(ConversationAnomaly {
                         anomaly_type: AnomalyType::LowQualityResponses,
-                        description: format!("Response confidence {:.2} is below acceptable threshold", confidence),
+                        description: format!(
+                            "Response confidence {:.2} is below acceptable threshold",
+                            confidence
+                        ),
                         severity: AnomalySeverity::Medium,
                         detected_at: SystemTime::now(),
                         message_context: vec![message.content.clone()],
-                        suggested_action: Some("Review retrieval results and LLM outputs".to_string()),
+                        suggested_action: Some(
+                            "Review retrieval results and LLM outputs".to_string(),
+                        ),
                     });
                 }
             }
@@ -847,12 +941,16 @@ impl AnomalyDetector {
         if analytics.conversation_quality.error_rate > 0.5 && analytics.message_count > 5 {
             anomalies.push(ConversationAnomaly {
                 anomaly_type: AnomalyType::HighErrorRate,
-                description: format!("Error rate {:.2}% is above acceptable threshold", 
-                                   analytics.conversation_quality.error_rate * 100.0),
+                description: format!(
+                    "Error rate {:.2}% is above acceptable threshold",
+                    analytics.conversation_quality.error_rate * 100.0
+                ),
                 severity: AnomalySeverity::High,
                 detected_at: SystemTime::now(),
                 message_context: vec![],
-                suggested_action: Some("Investigate system errors and data quality issues".to_string()),
+                suggested_action: Some(
+                    "Investigate system errors and data quality issues".to_string(),
+                ),
             });
         }
 
@@ -864,14 +962,20 @@ impl AnomalyDetector {
         Duration::from_millis((total / durations.len() as u128) as u64)
     }
 
-    fn calculate_std_dev_duration(&self, durations: &VecDeque<Duration>, mean: Duration) -> Duration {
-        let variance: f64 = durations.iter()
+    fn calculate_std_dev_duration(
+        &self,
+        durations: &VecDeque<Duration>,
+        mean: Duration,
+    ) -> Duration {
+        let variance: f64 = durations
+            .iter()
             .map(|d| {
                 let diff = d.as_millis() as f64 - mean.as_millis() as f64;
                 diff * diff
             })
-            .sum::<f64>() / durations.len() as f64;
-        
+            .sum::<f64>()
+            / durations.len() as f64;
+
         Duration::from_millis(variance.sqrt() as u64)
     }
 }
@@ -888,34 +992,51 @@ impl QualityAnalyzer {
         }
     }
 
-    async fn update_quality_metrics(&self, message: &Message, analytics: &mut ConversationAnalytics) -> Result<()> {
+    async fn update_quality_metrics(
+        &self,
+        message: &Message,
+        analytics: &mut ConversationAnalytics,
+    ) -> Result<()> {
         // Update quality metrics based on message metadata
         if let Some(ref metadata) = message.metadata {
             let mut quality = &mut analytics.conversation_quality;
-            
+
             // Update response accuracy
             if let Some(confidence) = metadata.confidence_score {
-                quality.response_accuracy = (quality.response_accuracy * (analytics.assistant_message_count - 1) as f32 + confidence) 
+                quality.response_accuracy = (quality.response_accuracy
+                    * (analytics.assistant_message_count - 1) as f32
+                    + confidence)
                     / analytics.assistant_message_count as f32;
             }
 
             // Update relevance score (simplified)
-            let relevance = if metadata.context_used.unwrap_or(false) { 0.8 } else { 0.5 };
-            quality.relevance_score = (quality.relevance_score * (analytics.assistant_message_count - 1) as f32 + relevance) 
+            let relevance = if metadata.context_used.unwrap_or(false) {
+                0.8
+            } else {
+                0.5
+            };
+            quality.relevance_score = (quality.relevance_score
+                * (analytics.assistant_message_count - 1) as f32
+                + relevance)
                 / analytics.assistant_message_count as f32;
 
             // Update coherence score (based on message length and structure)
             let coherence = self.calculate_coherence_score(&message.content);
-            quality.coherence_score = (quality.coherence_score * (analytics.assistant_message_count - 1) as f32 + coherence) 
+            quality.coherence_score = (quality.coherence_score
+                * (analytics.assistant_message_count - 1) as f32
+                + coherence)
                 / analytics.assistant_message_count as f32;
         }
 
         Ok(())
     }
 
-    async fn calculate_final_quality(&self, analytics: &ConversationAnalytics) -> Result<ConversationQuality> {
+    async fn calculate_final_quality(
+        &self,
+        analytics: &ConversationAnalytics,
+    ) -> Result<ConversationQuality> {
         let mut quality = analytics.conversation_quality.clone();
-        
+
         // Calculate completion rate based on conversation patterns
         quality.completion_rate = if analytics.message_count > 1 {
             // Simple heuristic: if conversation ended naturally (even number of messages)
@@ -931,8 +1052,8 @@ impl QualityAnalyzer {
 
         // Calculate user engagement
         quality.user_engagement = if analytics.message_count > 0 {
-            (analytics.user_message_count as f32 / analytics.message_count as f32) * 
-            (analytics.message_count as f32 / 10.0).min(1.0) // Normalize by expected conversation length
+            (analytics.user_message_count as f32 / analytics.message_count as f32)
+                * (analytics.message_count as f32 / 10.0).min(1.0) // Normalize by expected conversation length
         } else {
             0.0
         };
@@ -943,14 +1064,17 @@ impl QualityAnalyzer {
     fn calculate_coherence_score(&self, content: &str) -> f32 {
         // Simple coherence calculation based on structure
         let word_count = content.split_whitespace().count();
-        let sentence_count = content.split(&['.', '!', '?'][..]).filter(|s| !s.trim().is_empty()).count();
-        
+        let sentence_count = content
+            .split(&['.', '!', '?'][..])
+            .filter(|s| !s.trim().is_empty())
+            .count();
+
         if sentence_count == 0 {
             return 0.5;
         }
 
         let avg_sentence_length = word_count as f32 / sentence_count as f32;
-        
+
         // Optimal sentence length is around 15-20 words
         let length_score = if avg_sentence_length >= 10.0 && avg_sentence_length <= 25.0 {
             1.0
@@ -961,8 +1085,12 @@ impl QualityAnalyzer {
         };
 
         // Has proper punctuation
-        let punctuation_score = if content.ends_with(&['.', '!', '?'][..]) { 1.0 } else { 0.8 };
-        
+        let punctuation_score = if content.ends_with(&['.', '!', '?'][..]) {
+            1.0
+        } else {
+            0.8
+        };
+
         (length_score + punctuation_score) / 2.0
     }
 }

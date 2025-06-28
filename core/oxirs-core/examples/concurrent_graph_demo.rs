@@ -73,9 +73,7 @@ fn demo_concurrent_writes(graph: &Arc<ConcurrentGraph>) {
                         Predicate::NamedNode(
                             NamedNode::new("http://example.org/property").unwrap(),
                         ),
-                        Object::NamedNode(
-                            NamedNode::new(&format!("http://value{}", i)).unwrap(),
-                        ),
+                        Object::NamedNode(NamedNode::new(&format!("http://value{}", i)).unwrap()),
                     );
                     graph.insert(triple).unwrap();
                 }
@@ -213,7 +211,10 @@ fn demo_performance(graph: &Arc<ConcurrentGraph>) {
     let read_duration = start.elapsed();
 
     println!("Concurrent write performance:");
-    println!("  {} operations in {:?}", num_operations, concurrent_duration);
+    println!(
+        "  {} operations in {:?}",
+        num_operations, concurrent_duration
+    );
     println!(
         "  {:.2} operations/sec",
         num_operations as f64 / concurrent_duration.as_secs_f64()

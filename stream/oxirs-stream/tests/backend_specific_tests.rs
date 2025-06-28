@@ -2,9 +2,9 @@
 //!
 //! Detailed tests for each streaming backend's unique features and capabilities.
 
-use oxirs_stream::*;
 use anyhow::Result;
 use chrono::Utc;
+use oxirs_stream::*;
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::timeout;
@@ -107,12 +107,17 @@ mod kafka_specific_tests {
 
         for (partition_key, data) in &events {
             let mut event = create_test_event_with_metadata(partition_key, data);
-            
+
             // Add partition key to metadata
-            if let StreamEvent::TripleAdded { ref mut metadata, .. } = event {
-                metadata.properties.insert("partition_key".to_string(), partition_key.to_string());
+            if let StreamEvent::TripleAdded {
+                ref mut metadata, ..
+            } = event
+            {
+                metadata
+                    .properties
+                    .insert("partition_key".to_string(), partition_key.to_string());
             }
-            
+
             producer.publish(event).await?;
         }
 
@@ -136,7 +141,10 @@ mod kafka_specific_tests {
         }
 
         let total_consumed = consumer1_events.len() + consumer2_events.len();
-        assert!(total_consumed >= 2, "Should consume at least 2 events across consumers");
+        assert!(
+            total_consumed >= 2,
+            "Should consume at least 2 events across consumers"
+        );
 
         producer.close().await?;
         consumer1.close().await?;
@@ -218,7 +226,7 @@ mod kafka_specific_tests {
     async fn test_kafka_schema_registry_integration() -> Result<()> {
         // This would test integration with Confluent Schema Registry
         // for Avro/JSON Schema validation of RDF events
-        
+
         let config = StreamConfig {
             backend: StreamBackend::Kafka {
                 brokers: vec!["localhost:9092".to_string()],
@@ -302,7 +310,12 @@ mod kafka_specific_tests {
         if let Ok(Some(received)) = timeout(Duration::from_secs(5), stream.consume()).await {
             let event = received?;
             match event {
-                StreamEvent::TripleAdded { subject, predicate, object, .. } => {
+                StreamEvent::TripleAdded {
+                    subject,
+                    predicate,
+                    object,
+                    ..
+                } => {
                     assert!(subject.contains("schema.org"));
                     assert!(predicate.contains("name"));
                     assert!(object.contains("John Doe"));
@@ -475,13 +488,17 @@ mod nats_specific_tests {
 
         // Test resilience during node failures
         for i in 0..10 {
-            let event = create_test_event_with_metadata(&format!("cluster_{}", i), &format!("data_{}", i));
-            
+            let event =
+                create_test_event_with_metadata(&format!("cluster_{}", i), &format!("data_{}", i));
+
             let result = stream.publish(event).await;
             if result.is_err() {
-                println!("Expected some failures during cluster failover: {:?}", result.err());
+                println!(
+                    "Expected some failures during cluster failover: {:?}",
+                    result.err()
+                );
             }
-            
+
             // Small delay to allow cluster operations
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
@@ -627,7 +644,8 @@ mod redis_specific_tests {
 
         // Publish events
         for i in 0..6 {
-            let event = create_test_event_with_metadata(&format!("cg_{}", i), &format!("group_data_{}", i));
+            let event =
+                create_test_event_with_metadata(&format!("cg_{}", i), &format!("group_data_{}", i));
             producer.publish(event).await?;
         }
 
@@ -647,8 +665,14 @@ mod redis_specific_tests {
         }
 
         let total_consumed = consumer1_count + consumer2_count;
-        assert!(total_consumed >= 3, "Consumer group should distribute messages");
-        assert!(consumer1_count > 0 || consumer2_count > 0, "At least one consumer should receive messages");
+        assert!(
+            total_consumed >= 3,
+            "Consumer group should distribute messages"
+        );
+        assert!(
+            consumer1_count > 0 || consumer2_count > 0,
+            "At least one consumer should receive messages"
+        );
 
         producer.close().await?;
         consumer1.close().await?;
@@ -719,7 +743,10 @@ mod redis_specific_tests {
 
         // Test sharding across cluster nodes
         for i in 0..15 {
-            let event = create_test_event_with_metadata(&format!("shard_{}", i), &format!("cluster_data_{}", i));
+            let event = create_test_event_with_metadata(
+                &format!("shard_{}", i),
+                &format!("cluster_data_{}", i),
+            );
             stream.publish(event).await?;
         }
 
@@ -899,7 +926,7 @@ mod pulsar_specific_tests {
 
         // Send the same event multiple times (simulate duplicates)
         let event = create_test_event_with_metadata("dedup_test", "duplicate_data");
-        
+
         stream.publish(event.clone()).await?;
         stream.publish(event.clone()).await?;
         stream.publish(event).await?;
@@ -915,7 +942,10 @@ mod pulsar_specific_tests {
         }
 
         // Pulsar's deduplication should prevent duplicates
-        assert!(received_count <= 2, "Deduplication should prevent excessive duplicates");
+        assert!(
+            received_count <= 2,
+            "Deduplication should prevent excessive duplicates"
+        );
 
         stream.close().await?;
         Ok(())
@@ -985,8 +1015,11 @@ mod kinesis_specific_tests {
 
         // Test high-volume publishing to trigger auto-scaling
         for i in 0..100 {
-            let event = create_test_event_with_metadata(&format!("scale_{}", i), &format!("scaling_data_{}", i));
-            
+            let event = create_test_event_with_metadata(
+                &format!("scale_{}", i),
+                &format!("scaling_data_{}", i),
+            );
+
             let result = stream.publish(event).await;
             if result.is_err() && i < 10 {
                 // Early failures might be due to throttling
@@ -1072,7 +1105,10 @@ mod kinesis_specific_tests {
 
         // Publish events
         for i in 0..12 {
-            let event = create_test_event_with_metadata(&format!("fanout_{}", i), &format!("fanout_data_{}", i));
+            let event = create_test_event_with_metadata(
+                &format!("fanout_{}", i),
+                &format!("fanout_data_{}", i),
+            );
             producer.publish(event).await?;
         }
 

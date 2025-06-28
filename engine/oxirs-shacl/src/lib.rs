@@ -49,8 +49,7 @@ use uuid::Uuid;
 use oxirs_core::{
     graph::Graph,
     model::{BlankNode, Literal, NamedNode, Quad, Term, Triple, Variable},
-    Store,
-    OxirsError,
+    OxirsError, Store,
 };
 
 pub mod constraints;
@@ -71,7 +70,7 @@ pub use targets::*;
 pub use validation::*;
 
 // Re-export optimization types
-pub use targets::{TargetOptimizationConfig, TargetCacheStats, TargetSelectionStats};
+pub use targets::{TargetCacheStats, TargetOptimizationConfig, TargetSelectionStats};
 
 /// SHACL namespace IRI
 pub static SHACL_NS: &str = "http://www.w3.org/ns/shacl#";
@@ -223,7 +222,7 @@ pub struct Shape {
     pub messages: IndexMap<String, String>, // language -> message
 
     /// --- Enhanced features ---
-    
+
     /// Parent shapes for inheritance (sh:extends)
     pub extends: Vec<ShapeId>,
 
@@ -339,22 +338,22 @@ impl Default for Shape {
 pub struct ShapeMetadata {
     /// Author of the shape
     pub author: Option<String>,
-    
+
     /// Creation timestamp
     pub created: Option<chrono::DateTime<chrono::Utc>>,
-    
+
     /// Last modification timestamp
     pub modified: Option<chrono::DateTime<chrono::Utc>>,
-    
+
     /// Version string
     pub version: Option<String>,
-    
+
     /// License information
     pub license: Option<String>,
-    
+
     /// Tags for categorization
     pub tags: Vec<String>,
-    
+
     /// Custom properties
     pub custom: HashMap<String, String>,
 }
@@ -501,11 +500,11 @@ impl Validator {
         let removed = self.shapes.remove(shape_id);
         if removed.is_some() {
             self.target_cache.clear();
-            
+
             // Remove from dependency graph
             use petgraph::visit::IntoNodeReferences;
             let mut node_to_remove = None;
-            
+
             // Find the node index for this shape
             for (node_idx, node_shape_id) in self.shape_dependencies.node_references() {
                 if node_shape_id == shape_id {
@@ -513,7 +512,7 @@ impl Validator {
                     break;
                 }
             }
-            
+
             // Remove the node if found
             if let Some(node_idx) = node_to_remove {
                 self.shape_dependencies.remove_node(node_idx);
@@ -626,59 +625,59 @@ impl Validator {
     /// Update shape dependency graph
     fn update_shape_dependencies(&mut self, shape_id: ShapeId) -> Result<()> {
         use petgraph::graph::NodeIndex;
-        
+
         // Find or create node for this shape
         let shape_node = self.get_or_create_shape_node(&shape_id);
-        
+
         // Collect all dependencies first to avoid borrow checker issues
         let mut all_dependencies = Vec::new();
-        
+
         if let Some(shape) = self.shapes.get(&shape_id) {
             // Collect dependencies from inheritance
             all_dependencies.extend(shape.extends.iter().cloned());
-            
+
             // Collect dependencies from constraints
             for (_, constraint) in &shape.constraints {
                 let dependencies = self.extract_constraint_dependencies(constraint);
                 all_dependencies.extend(dependencies);
             }
         }
-        
+
         // Now add all the edges
         for dep_shape_id in all_dependencies {
             let dep_node = self.get_or_create_shape_node(&dep_shape_id);
             self.shape_dependencies.add_edge(shape_node, dep_node, ());
         }
-        
+
         // Check for circular dependencies
         if petgraph::algo::is_cyclic_directed(&self.shape_dependencies) {
             return Err(ShaclError::ShapeParsing(
-                "Circular dependency detected in shape definitions".to_string()
+                "Circular dependency detected in shape definitions".to_string(),
             ));
         }
-        
+
         Ok(())
     }
-    
+
     /// Get or create a node in the dependency graph for a shape
     fn get_or_create_shape_node(&mut self, shape_id: &ShapeId) -> petgraph::graph::NodeIndex {
         use petgraph::visit::IntoNodeReferences;
-        
+
         // Check if node already exists
         for (node_idx, node_shape_id) in self.shape_dependencies.node_references() {
             if node_shape_id == shape_id {
                 return node_idx;
             }
         }
-        
+
         // Create new node
         self.shape_dependencies.add_node(shape_id.clone())
     }
-    
+
     /// Extract shape dependencies from a constraint
     fn extract_constraint_dependencies(&self, constraint: &Constraint) -> Vec<ShapeId> {
         let mut dependencies = Vec::new();
-        
+
         match constraint {
             Constraint::Node(node_constraint) => {
                 dependencies.push(node_constraint.shape.clone());
@@ -702,7 +701,7 @@ impl Validator {
                 // Other constraints don't have shape dependencies
             }
         }
-        
+
         dependencies
     }
 
@@ -710,15 +709,14 @@ impl Validator {
     pub fn get_evaluation_order(&self) -> Vec<ShapeId> {
         use petgraph::algo::toposort;
         use petgraph::visit::IntoNodeReferences;
-        
+
         // Perform topological sort on the dependency graph
         match toposort(&self.shape_dependencies, None) {
             Ok(sorted_nodes) => {
                 // Map node indices back to shape IDs
-                sorted_nodes.into_iter()
-                    .filter_map(|node_idx| {
-                        self.shape_dependencies.node_weight(node_idx).cloned()
-                    })
+                sorted_nodes
+                    .into_iter()
+                    .filter_map(|node_idx| self.shape_dependencies.node_weight(node_idx).cloned())
                     .collect()
             }
             Err(_) => {
@@ -729,22 +727,25 @@ impl Validator {
             }
         }
     }
-    
+
     /// Clear all internal caches
     pub fn clear_caches(&mut self) {
         self.target_cache.clear();
     }
 
     /// Resolve inherited constraints for a shape
-    pub fn resolve_inherited_constraints(&self, shape_id: &ShapeId) -> Result<IndexMap<ConstraintComponentId, Constraint>> {
+    pub fn resolve_inherited_constraints(
+        &self,
+        shape_id: &ShapeId,
+    ) -> Result<IndexMap<ConstraintComponentId, Constraint>> {
         let mut resolved_constraints = IndexMap::new();
         let mut visited = HashSet::new();
-        
+
         self.collect_inherited_constraints(shape_id, &mut resolved_constraints, &mut visited)?;
-        
+
         Ok(resolved_constraints)
     }
-    
+
     /// Recursively collect constraints from a shape and its parents
     fn collect_inherited_constraints(
         &self,
@@ -757,22 +758,22 @@ impl Validator {
             return Ok(());
         }
         visited.insert(shape_id.clone());
-        
+
         if let Some(shape) = self.shapes.get(shape_id) {
             // First process parent shapes (depth-first)
             for parent_id in &shape.extends {
                 self.collect_inherited_constraints(parent_id, resolved_constraints, visited)?;
             }
-            
+
             // Then add this shape's constraints, potentially overriding parent constraints
             for (component_id, constraint) in &shape.constraints {
                 resolved_constraints.insert(component_id.clone(), constraint.clone());
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Resolve shapes with priority-based conflict resolution
     /// Returns shapes sorted by priority (highest first)
     pub fn resolve_shapes_by_priority(&self, shape_ids: &[ShapeId]) -> Vec<&Shape> {
@@ -780,27 +781,27 @@ impl Validator {
             .iter()
             .filter_map(|id| self.shapes.get(id))
             .collect();
-        
+
         // Sort by priority (highest first), then by ID for stability
         shapes.sort_by(|a, b| {
             b.effective_priority()
                 .cmp(&a.effective_priority())
                 .then_with(|| a.id.as_str().cmp(b.id.as_str()))
         });
-        
+
         shapes
     }
-    
+
     /// Get all shapes that a given shape inherits from (transitively)
     pub fn get_all_parent_shapes(&self, shape_id: &ShapeId) -> Result<Vec<ShapeId>> {
         let mut parents = Vec::new();
         let mut visited = HashSet::new();
-        
+
         self.collect_parent_shapes(shape_id, &mut parents, &mut visited)?;
-        
+
         Ok(parents)
     }
-    
+
     fn collect_parent_shapes(
         &self,
         shape_id: &ShapeId,
@@ -811,14 +812,14 @@ impl Validator {
             return Ok(());
         }
         visited.insert(shape_id.clone());
-        
+
         if let Some(shape) = self.shapes.get(shape_id) {
             for parent_id in &shape.extends {
                 parents.push(parent_id.clone());
                 self.collect_parent_shapes(parent_id, parents, visited)?;
             }
         }
-        
+
         Ok(())
     }
 

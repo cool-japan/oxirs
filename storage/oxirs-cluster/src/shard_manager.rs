@@ -3,16 +3,16 @@
 //! This module manages the lifecycle of shards including creation,
 //! splitting, merging, and migration operations.
 
-use crate::shard::{ShardId, ShardMetadata, ShardRouter, ShardState, ShardingStrategy};
-use crate::storage::StorageBackend;
 use crate::network::{NetworkService, RpcMessage};
 use crate::raft::OxirsNodeId;
+use crate::shard::{ShardId, ShardMetadata, ShardRouter, ShardState, ShardingStrategy};
+use crate::storage::StorageBackend;
 use crate::{ClusterError, Result};
 use oxirs_core::model::Triple;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, error, info, warn};
 
 /// Shard operation types
@@ -41,9 +41,7 @@ pub enum ShardOperation {
         to_nodes: Vec<OxirsNodeId>,
     },
     /// Rebalance shards across nodes
-    Rebalance {
-        rebalance_plan: RebalancePlan,
-    },
+    Rebalance { rebalance_plan: RebalancePlan },
 }
 
 /// Rebalance plan for shard distribution
@@ -128,7 +126,7 @@ impl ShardManager {
         network: Arc<NetworkService>,
     ) -> Self {
         let (tx, rx) = mpsc::channel(100);
-        
+
         Self {
             node_id,
             router,
@@ -141,22 +139,22 @@ impl ShardManager {
             operation_rx: Arc::new(RwLock::new(rx)),
         }
     }
-    
+
     /// Start the shard manager
     pub async fn start(&self) -> Result<()> {
         info!("Starting shard manager on node {}", self.node_id);
-        
+
         // Start operation processor
         self.start_operation_processor().await;
-        
+
         // Start auto-management if enabled
         if self.config.auto_manage {
             self.start_auto_management().await;
         }
-        
+
         Ok(())
     }
-    
+
     /// Initialize shards based on strategy
     pub async fn initialize_shards(
         &self,
@@ -164,22 +162,28 @@ impl ShardManager {
         nodes: Vec<OxirsNodeId>,
     ) -> Result<()> {
         let num_shards = match strategy {
-            ShardingStrategy::Hash { num_shards } |
-            ShardingStrategy::Subject { num_shards } => *num_shards,
+            ShardingStrategy::Hash { num_shards } | ShardingStrategy::Subject { num_shards } => {
+                *num_shards
+            }
             ShardingStrategy::Predicate { predicate_groups } => predicate_groups.len() as u32,
             ShardingStrategy::Namespace { namespace_mapping } => namespace_mapping.len() as u32,
             ShardingStrategy::Graph { graph_mapping } => graph_mapping.len() as u32,
-            ShardingStrategy::Semantic { concept_clusters, .. } => concept_clusters.len() as u32,
+            ShardingStrategy::Semantic {
+                concept_clusters, ..
+            } => concept_clusters.len() as u32,
             ShardingStrategy::Hybrid { .. } => 4, // Default for hybrid
         };
-        
+
         // Initialize router shards
-        self.router.init_shards(num_shards, self.config.replication_factor).await?;
-        
+        self.router
+            .init_shards(num_shards, self.config.replication_factor)
+            .await?;
+
         // Assign nodes to shards
-        let nodes_per_shard = (nodes.len() / num_shards as usize).max(self.config.replication_factor);
+        let nodes_per_shard =
+            (nodes.len() / num_shards as usize).max(self.config.replication_factor);
         let mut node_iter = nodes.into_iter().cycle();
-        
+
         for shard_id in 0..num_shards {
             let mut shard_nodes = Vec::new();
             for _ in 0..nodes_per_shard.min(self.config.replication_factor) {
@@ -187,24 +191,29 @@ impl ShardManager {
                     shard_nodes.push(node);
                 }
             }
-            
+
             // Create shard on assigned nodes
             self.create_shard(shard_id, shard_nodes).await?;
         }
-        
+
         info!("Initialized {} shards", num_shards);
         Ok(())
     }
-    
+
     /// Create a new shard
     async fn create_shard(&self, shard_id: ShardId, node_ids: Vec<OxirsNodeId>) -> Result<()> {
         if node_ids.is_empty() {
-            return Err(ClusterError::Config("No nodes assigned to shard".to_string()));
+            return Err(ClusterError::Config(
+                "No nodes assigned to shard".to_string(),
+            ));
         }
-        
+
         // Update ownership
-        self.shard_ownership.write().await.insert(shard_id, node_ids.iter().copied().collect());
-        
+        self.shard_ownership
+            .write()
+            .await
+            .insert(shard_id, node_ids.iter().copied().collect());
+
         // Create shard metadata
         let metadata = ShardMetadata {
             shard_id,
@@ -218,10 +227,10 @@ impl ShardManager {
                 .unwrap()
                 .as_secs(),
         };
-        
+
         // Update router metadata
         self.router.update_shard_metadata(metadata).await?;
-        
+
         // Notify nodes to create shard storage
         for &node_id in &node_ids {
             if node_id == self.node_id {
@@ -236,23 +245,25 @@ impl ShardManager {
                 self.network.send_message(node_id, msg).await?;
             }
         }
-        
+
         info!("Created shard {} on nodes {:?}", shard_id, node_ids);
         Ok(())
     }
-    
+
     /// Route and store a triple
     pub async fn store_triple(&self, triple: Triple) -> Result<()> {
         // Route triple to appropriate shard
         let shard_id = self.router.route_triple(&triple).await?;
-        
+
         // Check if we own this shard
         let ownership = self.shard_ownership.read().await;
         if let Some(owners) = ownership.get(&shard_id) {
             if owners.contains(&self.node_id) {
                 // Store locally
-                self.storage.insert_triple_to_shard(shard_id, triple.clone()).await?;
-                
+                self.storage
+                    .insert_triple_to_shard(shard_id, triple.clone())
+                    .await?;
+
                 // Replicate to other owners
                 for &owner in owners {
                     if owner != self.node_id {
@@ -267,22 +278,22 @@ impl ShardManager {
                 // Forward to primary owner
                 if let Some(metadata) = self.router.get_shard_metadata(shard_id).await {
                     let primary = metadata.primary_node as OxirsNodeId;
-                    let msg = RpcMessage::StoreTriple {
-                        shard_id,
-                        triple,
-                    };
+                    let msg = RpcMessage::StoreTriple { shard_id, triple };
                     self.network.send_message(primary, msg).await?;
                 } else {
                     return Err(ClusterError::Other(format!("Shard {} not found", shard_id)));
                 }
             }
         } else {
-            return Err(ClusterError::Other(format!("No owners found for shard {}", shard_id)));
+            return Err(ClusterError::Other(format!(
+                "No owners found for shard {}",
+                shard_id
+            )));
         }
-        
+
         Ok(())
     }
-    
+
     /// Query triples from shards
     pub async fn query_triples(
         &self,
@@ -291,16 +302,22 @@ impl ShardManager {
         object: Option<&str>,
     ) -> Result<Vec<Triple>> {
         // Determine which shards to query
-        let shard_ids = self.router.route_query_pattern(subject, predicate, object).await?;
-        
+        let shard_ids = self
+            .router
+            .route_query_pattern(subject, predicate, object)
+            .await?;
+
         let mut all_results = Vec::new();
-        
+
         for shard_id in shard_ids {
             let ownership = self.shard_ownership.read().await;
             if let Some(owners) = ownership.get(&shard_id) {
                 if owners.contains(&self.node_id) {
                     // Query local shard
-                    let results = self.storage.query_shard(shard_id, subject, predicate, object).await?;
+                    let results = self
+                        .storage
+                        .query_shard(shard_id, subject, predicate, object)
+                        .await?;
                     all_results.extend(results);
                 } else {
                     // Query remote shard
@@ -312,7 +329,7 @@ impl ShardManager {
                             predicate: predicate.map(String::from),
                             object: object.map(String::from),
                         };
-                        
+
                         // Send query and wait for response
                         // In a real implementation, this would use a request-response pattern
                         self.network.send_message(primary, msg).await?;
@@ -320,10 +337,10 @@ impl ShardManager {
                 }
             }
         }
-        
+
         Ok(all_results)
     }
-    
+
     /// Get the primary node for a shard
     pub async fn get_primary_node(&self, shard_id: ShardId) -> Result<OxirsNodeId> {
         if let Some(metadata) = self.router.get_shard_metadata(shard_id).await {
@@ -332,7 +349,7 @@ impl ShardManager {
             Err(ClusterError::ShardNotFound(shard_id).into())
         }
     }
-    
+
     /// Check if a shard needs splitting
     async fn check_shard_split(&self, shard_id: ShardId) -> Result<bool> {
         if let Some(metadata) = self.router.get_shard_metadata(shard_id).await {
@@ -341,43 +358,47 @@ impl ShardManager {
             Ok(false)
         }
     }
-    
+
     /// Check if shards need merging
     async fn check_shard_merge(&self, shard_ids: &[ShardId]) -> Result<bool> {
         let mut total_triples = 0;
-        
+
         for &shard_id in shard_ids {
             if let Some(metadata) = self.router.get_shard_metadata(shard_id).await {
                 total_triples += metadata.triple_count;
             }
         }
-        
+
         Ok(total_triples < self.config.min_triples_per_shard * shard_ids.len())
     }
-    
+
     /// Calculate load imbalance
     async fn calculate_imbalance(&self) -> Result<f64> {
         let stats = self.router.get_statistics().await;
-        
+
         if stats.distribution.is_empty() {
             return Ok(0.0);
         }
-        
+
         let avg_load = stats.total_triples as f64 / stats.distribution.len() as f64;
-        let max_load = stats.distribution.iter()
+        let max_load = stats
+            .distribution
+            .iter()
             .map(|d| d.triple_count as f64)
             .fold(0.0, f64::max);
-        let min_load = stats.distribution.iter()
+        let min_load = stats
+            .distribution
+            .iter()
             .map(|d| d.triple_count as f64)
             .fold(f64::INFINITY, f64::min);
-        
+
         if avg_load > 0.0 {
             Ok(max_load / min_load)
         } else {
             Ok(0.0)
         }
     }
-    
+
     /// Start operation processor
     async fn start_operation_processor(&self) {
         let rx = self.operation_rx.clone();
@@ -385,14 +406,19 @@ impl ShardManager {
         let storage = self.storage.clone();
         let network = self.network.clone();
         let node_id = self.node_id;
-        
+
         tokio::spawn(async move {
             let mut rx = rx.write().await;
             while let Some(operation) = rx.recv().await {
                 let op_id = uuid::Uuid::new_v4().to_string();
-                active_ops.write().await.insert(op_id.clone(), operation.clone());
-                
-                match Self::process_operation(operation, storage.clone(), network.clone(), node_id).await {
+                active_ops
+                    .write()
+                    .await
+                    .insert(op_id.clone(), operation.clone());
+
+                match Self::process_operation(operation, storage.clone(), network.clone(), node_id)
+                    .await
+                {
                     Ok(()) => {
                         info!("Completed shard operation {}", op_id);
                     }
@@ -400,12 +426,12 @@ impl ShardManager {
                         error!("Failed to process shard operation {}: {}", op_id, e);
                     }
                 }
-                
+
                 active_ops.write().await.remove(&op_id);
             }
         });
     }
-    
+
     /// Process a shard operation
     async fn process_operation(
         operation: ShardOperation,
@@ -419,61 +445,89 @@ impl ShardManager {
                     storage.create_shard(shard_id).await?;
                 }
             }
-            
-            ShardOperation::Split { source_shard, target_shards, split_points } => {
+
+            ShardOperation::Split {
+                source_shard,
+                target_shards,
+                split_points,
+            } => {
                 // TODO: Implement shard splitting logic
                 warn!("Shard split not yet implemented");
             }
-            
-            ShardOperation::Merge { source_shards, target_shard } => {
+
+            ShardOperation::Merge {
+                source_shards,
+                target_shard,
+            } => {
                 // TODO: Implement shard merging logic
                 warn!("Shard merge not yet implemented");
             }
-            
-            ShardOperation::Migrate { shard_id, from_nodes, to_nodes } => {
+
+            ShardOperation::Migrate {
+                shard_id,
+                from_nodes,
+                to_nodes,
+            } => {
                 // TODO: Implement shard migration logic
                 warn!("Shard migration not yet implemented");
             }
-            
+
             ShardOperation::Rebalance { rebalance_plan } => {
                 // TODO: Implement rebalancing logic
                 warn!("Shard rebalancing not yet implemented");
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Start automatic shard management
     async fn start_auto_management(&self) {
         let config = self.config.clone();
         let router = self.router.clone();
         let tx = self.operation_tx.clone();
-        
+
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(
-                std::time::Duration::from_secs(config.check_interval_secs)
-            );
-            
+            let mut interval =
+                tokio::time::interval(std::time::Duration::from_secs(config.check_interval_secs));
+
             loop {
                 interval.tick().await;
-                
+
                 // Check for shards that need splitting
                 let stats = router.get_statistics().await;
                 for dist in &stats.distribution {
                     if dist.triple_count > config.max_triples_per_shard {
-                        warn!("Shard {} needs splitting ({}  triples)", dist.shard_id, dist.triple_count);
+                        warn!(
+                            "Shard {} needs splitting ({}  triples)",
+                            dist.shard_id, dist.triple_count
+                        );
                         // TODO: Create split operation
                     }
                 }
-                
+
                 // Check for load imbalance
                 if stats.distribution.len() > 1 {
-                    let max_load = stats.distribution.iter().map(|d| d.triple_count).max().unwrap_or(0);
-                    let min_load = stats.distribution.iter().map(|d| d.triple_count).min().unwrap_or(0);
-                    
-                    if min_load > 0 && (max_load as f64 / min_load as f64) > config.max_imbalance_ratio {
-                        warn!("Shard imbalance detected: max={}, min={}", max_load, min_load);
+                    let max_load = stats
+                        .distribution
+                        .iter()
+                        .map(|d| d.triple_count)
+                        .max()
+                        .unwrap_or(0);
+                    let min_load = stats
+                        .distribution
+                        .iter()
+                        .map(|d| d.triple_count)
+                        .min()
+                        .unwrap_or(0);
+
+                    if min_load > 0
+                        && (max_load as f64 / min_load as f64) > config.max_imbalance_ratio
+                    {
+                        warn!(
+                            "Shard imbalance detected: max={}, min={}",
+                            max_load, min_load
+                        );
                         // TODO: Create rebalance operation
                     }
                 }
@@ -485,9 +539,9 @@ impl ShardManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::mock::MockStorageBackend;
     use crate::network::NetworkConfig;
-    
+    use crate::storage::mock::MockStorageBackend;
+
     #[tokio::test]
     async fn test_shard_manager_creation() {
         let strategy = ShardingStrategy::Hash { num_shards: 4 };
@@ -495,11 +549,11 @@ mod tests {
         let config = ShardManagerConfig::default();
         let storage = Arc::new(MockStorageBackend::new());
         let network = Arc::new(NetworkService::new(1, NetworkConfig::default()));
-        
+
         let manager = ShardManager::new(1, router, config, storage, network);
         assert_eq!(manager.node_id, 1);
     }
-    
+
     #[tokio::test]
     async fn test_shard_initialization() {
         let strategy = ShardingStrategy::Hash { num_shards: 2 };
@@ -510,12 +564,12 @@ mod tests {
         };
         let storage = Arc::new(MockStorageBackend::new());
         let network = Arc::new(NetworkService::new(1, NetworkConfig::default()));
-        
+
         let manager = ShardManager::new(1, router, config, storage, network);
-        
+
         let nodes = vec![1, 2, 3, 4];
         manager.initialize_shards(&strategy, nodes).await.unwrap();
-        
+
         // Check that shards were created
         let ownership = manager.shard_ownership.read().await;
         assert_eq!(ownership.len(), 2);

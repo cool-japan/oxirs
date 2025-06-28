@@ -1,17 +1,17 @@
 //! SPARQL integration for vector search and hybrid symbolic-vector queries
 
 use crate::{
+    clustering::{ClusteringAlgorithm, ClusteringConfig, ClusteringEngine},
     embeddings::{EmbeddableContent, EmbeddingManager, EmbeddingStrategy},
-    clustering::{ClusteringEngine, ClusteringConfig, ClusteringAlgorithm},
-    graph_aware_search::{GraphAwareSearch, GraphAwareConfig, GraphContext, GraphSearchScope},
+    graph_aware_search::{GraphAwareConfig, GraphAwareSearch, GraphContext, GraphSearchScope},
     Vector, VectorStore,
 };
 use anyhow::{anyhow, Result};
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use parking_lot::RwLock;
 
 /// SPARQL vector service configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -162,7 +162,7 @@ impl PerformanceMonitor {
     pub fn record_query(&self, duration: Duration, success: bool) {
         let mut stats = self.query_stats.write();
         stats.total_queries += 1;
-        
+
         if success {
             stats.successful_queries += 1;
         } else {
@@ -175,9 +175,12 @@ impl PerformanceMonitor {
             stats.min_response_time = duration;
         } else {
             // Update running average
-            let total_time = stats.avg_response_time.mul_f64(stats.total_queries as f64 - 1.0) + duration;
+            let total_time = stats
+                .avg_response_time
+                .mul_f64(stats.total_queries as f64 - 1.0)
+                + duration;
             stats.avg_response_time = total_time.div_f64(stats.total_queries as f64);
-            
+
             if duration > stats.max_response_time {
                 stats.max_response_time = duration;
             }
@@ -189,7 +192,10 @@ impl PerformanceMonitor {
 
     pub fn record_operation(&self, operation: &str, duration: Duration) {
         let mut timings = self.operation_timings.write();
-        timings.entry(operation.to_string()).or_default().push(duration);
+        timings
+            .entry(operation.to_string())
+            .or_default()
+            .push(duration);
     }
 
     pub fn record_cache_hit(&self) {
@@ -470,14 +476,18 @@ impl SparqlVectorService {
     }
 
     /// Register a custom vector function implementation
-    pub fn register_custom_function(&mut self, name: String, function: Box<dyn CustomVectorFunction>) {
+    pub fn register_custom_function(
+        &mut self,
+        name: String,
+        function: Box<dyn CustomVectorFunction>,
+    ) {
         self.custom_functions.insert(name, function);
     }
 
     /// Execute query with performance monitoring and optimization
     pub fn execute_optimized_query(&mut self, query: &VectorQuery) -> Result<VectorQueryResult> {
         let start_time = Instant::now();
-        
+
         // Apply query optimization if enabled
         let optimized_query = if self.query_optimizer.enable_index_selection {
             self.optimize_query(query)?
@@ -487,43 +497,43 @@ impl SparqlVectorService {
 
         // Execute the query
         let result = self.execute_query_internal(&optimized_query);
-        
+
         // Record performance metrics
         let duration = start_time.elapsed();
         if let Some(ref monitor) = self.performance_monitor {
             monitor.record_query(duration, result.is_ok());
             monitor.record_operation(&format!("query_{}", query.operation_type), duration);
         }
-        
+
         result
     }
 
     /// Optimize query for better performance
     fn optimize_query(&self, query: &VectorQuery) -> Result<VectorQuery> {
         let mut optimized = query.clone();
-        
+
         // Index selection optimization
         if self.query_optimizer.enable_index_selection {
             optimized.preferred_index = self.select_optimal_index(&query)?;
         }
-        
+
         // Caching optimization
         if self.query_optimizer.enable_caching {
             optimized.use_cache = true;
         }
-        
+
         // Parallel execution optimization
         if self.query_optimizer.enable_parallel_execution && query.can_parallelize() {
             optimized.parallel_execution = true;
         }
-        
+
         Ok(optimized)
     }
 
     /// Select optimal index for query execution
     fn select_optimal_index(&self, query: &VectorQuery) -> Result<Option<String>> {
         let cost_model = &self.query_optimizer.cost_model;
-        
+
         match query.operation_type.as_str() {
             "similarity_search" => {
                 // For similarity search, index is usually better for large datasets
@@ -554,33 +564,43 @@ impl SparqlVectorService {
                 monitor.record_cache_miss();
             }
         }
-        
+
         // Execute based on operation type
         let result = match query.operation_type.as_str() {
             "similarity_search" => self.execute_similarity_search_query(query),
             "threshold_search" => self.execute_threshold_search_query(query),
             "text_search" => self.execute_text_search_query(query),
-            _ => Err(anyhow!("Unknown query operation type: {}", query.operation_type)),
+            _ => Err(anyhow!(
+                "Unknown query operation type: {}",
+                query.operation_type
+            )),
         }?;
-        
+
         // Cache result if enabled
         if query.use_cache && self.config.enable_caching {
             self.cache_result(&query.cache_key(), &result);
         }
-        
+
         Ok(result)
     }
 
     /// Execute similarity search query
-    fn execute_similarity_search_query(&mut self, query: &VectorQuery) -> Result<VectorQueryResult> {
-        let resource_uri = query.parameters.get("resource_uri")
+    fn execute_similarity_search_query(
+        &mut self,
+        query: &VectorQuery,
+    ) -> Result<VectorQueryResult> {
+        let resource_uri = query
+            .parameters
+            .get("resource_uri")
             .ok_or_else(|| anyhow!("Missing resource_uri parameter"))?;
-        let limit = query.parameters.get("limit")
+        let limit = query
+            .parameters
+            .get("limit")
             .and_then(|v| v.parse().ok())
             .unwrap_or(self.config.default_limit);
-        
+
         let results = self.vector_store.similarity_search(resource_uri, limit)?;
-        
+
         Ok(VectorQueryResult {
             results,
             metadata: query.metadata.clone(),
@@ -591,14 +611,18 @@ impl SparqlVectorService {
 
     /// Execute threshold search query
     fn execute_threshold_search_query(&mut self, query: &VectorQuery) -> Result<VectorQueryResult> {
-        let query_text = query.parameters.get("query_text")
+        let query_text = query
+            .parameters
+            .get("query_text")
             .ok_or_else(|| anyhow!("Missing query_text parameter"))?;
-        let threshold = query.parameters.get("threshold")
+        let threshold = query
+            .parameters
+            .get("threshold")
             .and_then(|v| v.parse().ok())
             .unwrap_or(self.config.default_threshold);
-        
+
         let results = self.vector_store.threshold_search(query_text, threshold)?;
-        
+
         Ok(VectorQueryResult {
             results,
             metadata: query.metadata.clone(),
@@ -609,14 +633,18 @@ impl SparqlVectorService {
 
     /// Execute text search query
     fn execute_text_search_query(&mut self, query: &VectorQuery) -> Result<VectorQueryResult> {
-        let query_text = query.parameters.get("query_text")
+        let query_text = query
+            .parameters
+            .get("query_text")
             .ok_or_else(|| anyhow!("Missing query_text parameter"))?;
-        let limit = query.parameters.get("limit")
+        let limit = query
+            .parameters
+            .get("limit")
             .and_then(|v| v.parse().ok())
             .unwrap_or(self.config.default_limit);
-        
+
         let results = self.vector_store.similarity_search(query_text, limit)?;
-        
+
         Ok(VectorQueryResult {
             results,
             metadata: query.metadata.clone(),
@@ -627,14 +655,14 @@ impl SparqlVectorService {
 
     /// Get cached result
     fn get_cached_result(&self, cache_key: &str) -> Option<VectorQueryResult> {
-        self.query_cache.get(cache_key).map(|results| {
-            VectorQueryResult {
+        self.query_cache
+            .get(cache_key)
+            .map(|results| VectorQueryResult {
                 results: results.clone(),
                 metadata: HashMap::new(),
                 execution_time: None,
                 cache_hit: true,
-            }
-        })
+            })
     }
 
     /// Cache query result
@@ -645,7 +673,8 @@ impl SparqlVectorService {
                 self.query_cache.remove(&key);
             }
         }
-        self.query_cache.insert(cache_key.to_string(), result.results.clone());
+        self.query_cache
+            .insert(cache_key.to_string(), result.results.clone());
     }
 
     /// Get performance statistics
@@ -660,28 +689,28 @@ impl SparqlVectorService {
         args: &[VectorServiceArg],
     ) -> Result<VectorServiceResult> {
         let start_time = Instant::now();
-        
+
         // Check if it's a custom function first
         if let Some(custom_function) = self.custom_functions.get(function_name) {
             let result = custom_function.execute(args);
-            
+
             // Record performance
             let duration = start_time.elapsed();
             if let Some(ref monitor) = self.performance_monitor {
                 monitor.record_operation(&format!("custom_{}", function_name), duration);
             }
-            
+
             return result;
         }
-        
+
         // Execute built-in functions
         let result = match function_name {
             "similar" => self.execute_similar(args),
             "similarity" => self.execute_similarity(args),
             "embed_text" => self.execute_embed_text(args),
             "search_text" => self.execute_search_text(args),
-            "search" => self.execute_search(args),  // New vec:search function
-            "searchIn" => self.execute_search_in(args),  // New vec:searchIn function
+            "search" => self.execute_search(args), // New vec:search function
+            "searchIn" => self.execute_search_in(args), // New vec:searchIn function
             "cluster" => self.execute_cluster(args),
             "vector_similarity" => self.execute_vector_similarity(args),
             "search_in_graph" => self.execute_search_in_graph(args),
@@ -690,13 +719,13 @@ impl SparqlVectorService {
                 function_name
             )),
         };
-        
+
         // Record performance
         let duration = start_time.elapsed();
         if let Some(ref monitor) = self.performance_monitor {
             monitor.record_operation(&format!("builtin_{}", function_name), duration);
         }
-        
+
         result
     }
 
@@ -717,12 +746,12 @@ impl SparqlVectorService {
     ) -> Result<()> {
         // Add to vector store
         self.add_resource_embedding(uri, content)?;
-        
+
         // Register graph membership if graph-aware search is enabled
         if let Some(ref mut graph_search) = self.graph_aware_search {
             graph_search.register_resource_graph(uri.to_string(), graphs);
         }
-        
+
         Ok(())
     }
 
@@ -869,23 +898,26 @@ impl SparqlVectorService {
         };
 
         // Check cache first
-        let cache_key = format!("similar:{}:{}:{}:{:?}", resource_uri, limit, threshold, metric);
-        
+        let cache_key = format!(
+            "similar:{}:{}:{}:{:?}",
+            resource_uri, limit, threshold, metric
+        );
+
         // Execute similarity search with specified metric
         let results = self.vector_store.similarity_search(resource_uri, limit)?;
-        
+
         if self.config.enable_explanations {
             // Return detailed results with explanations
             let mut detailed_results = Vec::new();
             let mut rank = 1;
-            
+
             for (resource, score) in results {
                 if score >= threshold {
                     let explanation = Some(format!(
                         "Resource '{}' has a {:?} similarity score of {:.3} with '{}'",
                         resource, metric, score, resource_uri
                     ));
-                    
+
                     detailed_results.push(SimilarityResult {
                         resource: resource.clone(),
                         score,
@@ -896,8 +928,10 @@ impl SparqlVectorService {
                     rank += 1;
                 }
             }
-            
-            Ok(VectorServiceResult::DetailedSimilarityList(detailed_results))
+
+            Ok(VectorServiceResult::DetailedSimilarityList(
+                detailed_results,
+            ))
         } else {
             // Return simple results
             let filtered_results: Vec<(String, f32)> = results
@@ -1041,7 +1075,10 @@ impl SparqlVectorService {
         Ok(VectorServiceResult::Clusters(clusters))
     }
 
-    fn execute_vector_similarity(&mut self, args: &[VectorServiceArg]) -> Result<VectorServiceResult> {
+    fn execute_vector_similarity(
+        &mut self,
+        args: &[VectorServiceArg],
+    ) -> Result<VectorServiceResult> {
         if args.len() != 2 {
             return Err(anyhow!(
                 "vector_similarity function requires exactly two arguments"
@@ -1103,19 +1140,19 @@ impl SparqlVectorService {
 
         // Execute text-based search
         let results = self.vector_store.similarity_search(query_text, limit)?;
-        
+
         if self.config.enable_explanations {
             // Return detailed results with explanations
             let mut detailed_results = Vec::new();
             let mut rank = 1;
-            
+
             for (resource, score) in results {
                 if score >= threshold {
                     let explanation = Some(format!(
                         "Text query '{}' matched resource '{}' with {:?} similarity score of {:.3}",
                         query_text, resource, metric, score
                     ));
-                    
+
                     detailed_results.push(SimilarityResult {
                         resource: resource.clone(),
                         score,
@@ -1126,8 +1163,10 @@ impl SparqlVectorService {
                     rank += 1;
                 }
             }
-            
-            Ok(VectorServiceResult::DetailedSimilarityList(detailed_results))
+
+            Ok(VectorServiceResult::DetailedSimilarityList(
+                detailed_results,
+            ))
         } else {
             let filtered_results: Vec<(String, f32)> = results
                 .into_iter()
@@ -1162,7 +1201,7 @@ impl SparqlVectorService {
         };
 
         // Use graph-aware search if available
-        let results = if let Some(ref graph_search) = self.graph_aware_search {
+        let results: Vec<(String, f32)> = if let Some(ref graph_search) = self.graph_aware_search {
             // Create graph context for search
             let graph_context = GraphContext {
                 primary_graph: graph_uri.clone(),
@@ -1187,7 +1226,7 @@ impl SparqlVectorService {
         } else {
             // Fallback to regular search with simple graph filtering
             let all_results = self.vector_store.similarity_search(query_text, limit * 2)?;
-            
+
             // Filter results to only include items from the specified graph
             // This is a simplified approach - in practice would use proper graph membership
             all_results
@@ -1199,17 +1238,17 @@ impl SparqlVectorService {
                 .take(limit)
                 .collect()
         };
-        
+
         if self.config.enable_explanations {
             let mut detailed_results = Vec::new();
             let mut rank = 1;
-            
+
             for (resource, score) in results.iter() {
                 let explanation = Some(format!(
                     "Text query '{}' in graph '{}' matched resource '{}' with score {:.3}",
                     query_text, graph_uri, resource, score
                 ));
-                
+
                 detailed_results.push(SimilarityResult {
                     resource: resource.clone(),
                     score: *score,
@@ -1219,14 +1258,19 @@ impl SparqlVectorService {
                 });
                 rank += 1;
             }
-            
-            Ok(VectorServiceResult::DetailedSimilarityList(detailed_results))
+
+            Ok(VectorServiceResult::DetailedSimilarityList(
+                detailed_results,
+            ))
         } else {
             Ok(VectorServiceResult::SimilarityList(results))
         }
     }
 
-    fn execute_search_in_graph(&mut self, args: &[VectorServiceArg]) -> Result<VectorServiceResult> {
+    fn execute_search_in_graph(
+        &mut self,
+        args: &[VectorServiceArg],
+    ) -> Result<VectorServiceResult> {
         if args.len() < 2 {
             return Err(anyhow!(
                 "search_in_graph function requires at least two arguments"
@@ -1255,15 +1299,13 @@ impl SparqlVectorService {
         // Check for hierarchical search scope parameter
         let scope = if args.len() > 3 {
             match &args[3] {
-                VectorServiceArg::String(scope_str) => {
-                    match scope_str.to_lowercase().as_str() {
-                        "exact" => GraphSearchScope::Exact,
-                        "children" | "include_children" => GraphSearchScope::IncludeChildren,
-                        "parents" | "include_parents" => GraphSearchScope::IncludeParents,
-                        "hierarchy" | "full_hierarchy" => GraphSearchScope::FullHierarchy,
-                        "related" => GraphSearchScope::Related,
-                        _ => GraphSearchScope::Exact,
-                    }
+                VectorServiceArg::String(scope_str) => match scope_str.to_lowercase().as_str() {
+                    "exact" => GraphSearchScope::Exact,
+                    "children" | "include_children" => GraphSearchScope::IncludeChildren,
+                    "parents" | "include_parents" => GraphSearchScope::IncludeParents,
+                    "hierarchy" | "full_hierarchy" => GraphSearchScope::FullHierarchy,
+                    "related" => GraphSearchScope::Related,
+                    _ => GraphSearchScope::Exact,
                 },
                 _ => GraphSearchScope::Exact,
             }
@@ -1294,7 +1336,7 @@ impl SparqlVectorService {
         } else {
             // Fallback implementation
             let mut results = self.vector_store.similarity_search(query_text, limit)?;
-            
+
             // Simple graph filtering
             results.retain(|(uri, _)| uri.starts_with(graph_uri));
             results
@@ -1466,10 +1508,10 @@ impl VectorQuery {
     pub fn cache_key(&self) -> String {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
         self.operation_type.hash(&mut hasher);
-        
+
         // Create a sorted parameter string for consistent hashing
         let mut params: Vec<(&String, &String)> = self.parameters.iter().collect();
         params.sort_by_key(|(k, _)| *k);
@@ -1477,12 +1519,15 @@ impl VectorQuery {
             k.hash(&mut hasher);
             v.hash(&mut hasher);
         }
-        
+
         format!("query_{:x}", hasher.finish())
     }
 
     pub fn can_parallelize(&self) -> bool {
-        matches!(self.operation_type.as_str(), "similarity_search" | "text_search" | "threshold_search")
+        matches!(
+            self.operation_type.as_str(),
+            "similarity_search" | "text_search" | "threshold_search"
+        )
     }
 }
 

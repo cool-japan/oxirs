@@ -2,9 +2,9 @@
 //!
 //! This module manages federated services, their capabilities, and health status.
 
+use crate::HealthStatus;
 use anyhow::{anyhow, Result};
 use base64::encode;
-use crate::HealthStatus;
 use governor::{
     clock::DefaultClock,
     state::{InMemoryState, NotKeyed},
@@ -406,7 +406,7 @@ impl ServiceRegistry {
             Err(anyhow!("Service {} not found", service_id))
         }
     }
-    
+
     /// Collect dataset statistics for a SPARQL service
     pub async fn collect_dataset_statistics(&mut self, service_id: &str) -> Result<()> {
         let service = self
@@ -414,11 +414,13 @@ impl ServiceRegistry {
             .get(service_id)
             .ok_or_else(|| anyhow!("Service {} not found", service_id))?
             .clone();
-        
-        if service.service_type != ServiceType::Sparql && service.service_type != ServiceType::Hybrid {
+
+        if service.service_type != ServiceType::Sparql
+            && service.service_type != ServiceType::Hybrid
+        {
             return Err(anyhow!("Service {} does not support SPARQL", service_id));
         }
-        
+
         // Query to get dataset statistics
         let stats_query = r#"
             SELECT 
@@ -428,7 +430,7 @@ impl ServiceRegistry {
                 (COUNT(DISTINCT ?o) as ?objects)
             WHERE { ?s ?p ?o }
         "#;
-        
+
         let mut headers = HeaderMap::new();
         headers.insert(
             CONTENT_TYPE,
@@ -438,11 +440,11 @@ impl ServiceRegistry {
             ACCEPT,
             HeaderValue::from_static("application/sparql-results+json"),
         );
-        
+
         if let Some(auth) = &service.auth {
             self.add_auth_header(&mut headers, auth).await?;
         }
-        
+
         let response = self
             .http_client
             .post(&service.endpoint)
@@ -450,59 +452,64 @@ impl ServiceRegistry {
             .body(stats_query)
             .send()
             .await?;
-        
+
         if response.status().is_success() {
             // Parse statistics and update extended metadata
             let json: serde_json::Value = response.json().await?;
-            
+
             if let Some(service) = self.services.get_mut(service_id) {
                 if let Some(ref mut extended) = service.extended_metadata {
                     // Parse SPARQL JSON results
-                    if let Some(results) = json.get("results")
+                    if let Some(results) = json
+                        .get("results")
                         .and_then(|r| r.get("bindings"))
                         .and_then(|b| b.as_array())
-                        .and_then(|a| a.first()) 
+                        .and_then(|a| a.first())
                     {
-                        if let Some(total) = results.get("totalTriples")
+                        if let Some(total) = results
+                            .get("totalTriples")
                             .and_then(|v| v.get("value"))
                             .and_then(|v| v.as_str())
-                            .and_then(|s| s.parse::<u64>().ok()) 
+                            .and_then(|s| s.parse::<u64>().ok())
                         {
                             extended.dataset_stats.triple_count = Some(total);
                         }
-                        
-                        if let Some(subjects) = results.get("subjects")
+
+                        if let Some(subjects) = results
+                            .get("subjects")
                             .and_then(|v| v.get("value"))
                             .and_then(|v| v.as_str())
-                            .and_then(|s| s.parse::<u64>().ok()) 
+                            .and_then(|s| s.parse::<u64>().ok())
                         {
                             extended.dataset_stats.subject_count = Some(subjects);
                         }
-                        
-                        if let Some(predicates) = results.get("predicates")
+
+                        if let Some(predicates) = results
+                            .get("predicates")
                             .and_then(|v| v.get("value"))
                             .and_then(|v| v.as_str())
-                            .and_then(|s| s.parse::<u64>().ok()) 
+                            .and_then(|s| s.parse::<u64>().ok())
                         {
                             extended.dataset_stats.predicate_count = Some(predicates);
                         }
-                        
-                        if let Some(objects) = results.get("objects")
+
+                        if let Some(objects) = results
+                            .get("objects")
                             .and_then(|v| v.get("value"))
                             .and_then(|v| v.as_str())
-                            .and_then(|s| s.parse::<u64>().ok()) 
+                            .and_then(|s| s.parse::<u64>().ok())
                         {
                             extended.dataset_stats.object_count = Some(objects);
                         }
-                        
+
                         extended.dataset_stats.last_modified = Some(chrono::Utc::now());
                     }
-                    
+
                     debug!("Updated dataset statistics for service: {}", service_id);
                 }
             }
         }
-        
+
         // Also try to get named graphs
         let graphs_query = "SELECT DISTINCT ?g WHERE { GRAPH ?g { ?s ?p ?o } } LIMIT 100";
         if let Ok(graphs_response) = self
@@ -517,13 +524,16 @@ impl ServiceRegistry {
                 if let Ok(json) = graphs_response.json::<serde_json::Value>().await {
                     if let Some(service) = self.services.get_mut(service_id) {
                         if let Some(ref mut extended) = service.extended_metadata {
-                            if let Some(results) = json.get("results")
+                            if let Some(results) = json
+                                .get("results")
                                 .and_then(|r| r.get("bindings"))
                                 .and_then(|b| b.as_array())
                             {
-                                extended.dataset_stats.named_graphs = results.iter()
+                                extended.dataset_stats.named_graphs = results
+                                    .iter()
                                     .filter_map(|binding| {
-                                        binding.get("g")
+                                        binding
+                                            .get("g")
                                             .and_then(|v| v.get("value"))
                                             .and_then(|v| v.as_str())
                                             .map(|uri| crate::metadata::NamedGraphInfo {
@@ -539,10 +549,10 @@ impl ServiceRegistry {
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Check health of a specific service
     async fn check_service_health(&self, service: &FederatedService) -> Result<ServiceStatus> {
         let start_time = Instant::now();
@@ -584,7 +594,7 @@ impl ServiceRegistry {
                     None
                 },
             };
-            
+
             // We need mutable access to update - will be handled in caller
             debug!("Health check result recorded for extended metadata");
         }
@@ -718,40 +728,67 @@ impl ServiceRegistry {
                 {
                     detected_capabilities.insert(ServiceCapability::SparqlService);
                 }
-                
+
                 // Test SPARQL 1.1 Extended Features
-                if self.test_sparql_feature(service, "SELECT (COUNT(*) as ?count) WHERE { ?s ?p ?o }").await {
+                if self
+                    .test_sparql_feature(service, "SELECT (COUNT(*) as ?count) WHERE { ?s ?p ?o }")
+                    .await
+                {
                     detected_capabilities.insert(ServiceCapability::SparqlAggregation);
                 }
-                
-                if self.test_sparql_feature(service, "SELECT ?s WHERE { ?s ?p ?o { SELECT ?s WHERE { ?s a ?type } LIMIT 10 } }").await {
+
+                if self
+                    .test_sparql_feature(
+                        service,
+                        "SELECT ?s WHERE { ?s ?p ?o { SELECT ?s WHERE { ?s a ?type } LIMIT 10 } }",
+                    )
+                    .await
+                {
                     detected_capabilities.insert(ServiceCapability::SparqlSubqueries);
                 }
-                
-                if self.test_sparql_feature(service, "SELECT ?s WHERE { ?s ?p ?o . FILTER NOT EXISTS { ?s a ?type } }").await {
+
+                if self
+                    .test_sparql_feature(
+                        service,
+                        "SELECT ?s WHERE { ?s ?p ?o . FILTER NOT EXISTS { ?s a ?type } }",
+                    )
+                    .await
+                {
                     detected_capabilities.insert(ServiceCapability::SparqlNegation);
                 }
-                
+
                 if self.test_sparql_feature(service, "SELECT ?s ?o WHERE { ?s (<http://example.org/p1>|<http://example.org/p2>)+ ?o }").await {
                     detected_capabilities.insert(ServiceCapability::SparqlPropertyPaths);
                 }
-                
-                if self.test_sparql_feature(service, "SELECT ?s ?p ?o WHERE { ?s ?p ?o } GROUP BY ?p").await {
+
+                if self
+                    .test_sparql_feature(service, "SELECT ?s ?p ?o WHERE { ?s ?p ?o } GROUP BY ?p")
+                    .await
+                {
                     detected_capabilities.insert(ServiceCapability::SparqlGroupBy);
                 }
-                
+
                 // Test SPARQL 1.2 Features (if available)
                 if self.test_sparql_feature(service, "SELECT ?s WHERE { VALUES ?s { <http://example.org/1> <http://example.org/2> } ?s ?p ?o }").await {
                     detected_capabilities.insert(ServiceCapability::SparqlValues);
                 }
-                
+
                 // Test RDF-star support
-                if self.test_sparql_feature(service, "SELECT ?s ?p ?o WHERE { << ?s ?p ?o >> ?m ?v }").await {
+                if self
+                    .test_sparql_feature(service, "SELECT ?s ?p ?o WHERE { << ?s ?p ?o >> ?m ?v }")
+                    .await
+                {
                     detected_capabilities.insert(ServiceCapability::RDFStar);
                 }
-                
+
                 // Test reasoning capabilities
-                if self.test_sparql_feature(service, "SELECT ?s WHERE { ?s a ?class . ?class rdfs:subClassOf ?super }").await {
+                if self
+                    .test_sparql_feature(
+                        service,
+                        "SELECT ?s WHERE { ?s a ?class . ?class rdfs:subClassOf ?super }",
+                    )
+                    .await
+                {
                     // If this works without explicit subClassOf triples, reasoning is likely enabled
                     detected_capabilities.insert(ServiceCapability::RDFSReasoning);
                 }
@@ -773,7 +810,10 @@ impl ServiceRegistry {
             }
             ServiceType::RestRdf => {
                 // REST-RDF services typically support basic SPARQL capabilities
-                if self.test_sparql_feature(service, "SELECT ?s WHERE { ?s ?p ?o } LIMIT 1").await {
+                if self
+                    .test_sparql_feature(service, "SELECT ?s WHERE { ?s ?p ?o } LIMIT 1")
+                    .await
+                {
                     detected_capabilities.insert(ServiceCapability::SparqlQuery);
                 }
                 // Usually support Graph Store Protocol
@@ -869,7 +909,11 @@ impl ServiceRegistry {
             }
             AuthType::ApiKey => {
                 if let Some(api_key) = &auth.credentials.api_key {
-                    let header_name = auth.credentials.api_key_header.as_deref().unwrap_or("X-API-Key");
+                    let header_name = auth
+                        .credentials
+                        .api_key_header
+                        .as_deref()
+                        .unwrap_or("X-API-Key");
                     headers.insert(header_name, HeaderValue::from_str(api_key)?);
                 }
             }
@@ -914,7 +958,7 @@ impl ServiceRegistry {
 
         stats
     }
-    
+
     /// Collect vocabulary information for a SPARQL service
     pub async fn collect_vocabulary_info(&mut self, service_id: &str) -> Result<()> {
         let service = self
@@ -922,11 +966,13 @@ impl ServiceRegistry {
             .get(service_id)
             .ok_or_else(|| anyhow!("Service {} not found", service_id))?
             .clone();
-        
-        if service.service_type != ServiceType::Sparql && service.service_type != ServiceType::Hybrid {
+
+        if service.service_type != ServiceType::Sparql
+            && service.service_type != ServiceType::Hybrid
+        {
             return Err(anyhow!("Service {} does not support SPARQL", service_id));
         }
-        
+
         // Query to get vocabulary/ontology URIs
         let vocab_query = r#"
             SELECT DISTINCT ?vocab WHERE {
@@ -943,7 +989,7 @@ impl ServiceRegistry {
             }
             LIMIT 100
         "#;
-        
+
         let mut headers = HeaderMap::new();
         headers.insert(
             CONTENT_TYPE,
@@ -953,11 +999,11 @@ impl ServiceRegistry {
             ACCEPT,
             HeaderValue::from_static("application/sparql-results+json"),
         );
-        
+
         if let Some(auth) = &service.auth {
             self.add_auth_header(&mut headers, auth).await?;
         }
-        
+
         let response = self
             .http_client
             .post(&service.endpoint)
@@ -965,31 +1011,34 @@ impl ServiceRegistry {
             .body(vocab_query)
             .send()
             .await?;
-        
+
         if response.status().is_success() {
             let json: serde_json::Value = response.json().await?;
-            
+
             if let Some(service) = self.services.get_mut(service_id) {
                 if let Some(ref mut extended) = service.extended_metadata {
-                    if let Some(results) = json.get("results")
+                    if let Some(results) = json
+                        .get("results")
                         .and_then(|r| r.get("bindings"))
                         .and_then(|b| b.as_array())
                     {
-                        let vocabs: HashSet<String> = results.iter()
+                        let vocabs: HashSet<String> = results
+                            .iter()
                             .filter_map(|binding| {
-                                binding.get("vocab")
+                                binding
+                                    .get("vocab")
                                     .and_then(|v| v.get("value"))
                                     .and_then(|v| v.as_str())
                                     .map(|s| s.to_string())
                             })
                             .collect();
-                        
+
                         extended.dataset_stats.vocabularies = vocabs.into_iter().collect();
                     }
                 }
             }
         }
-        
+
         // Also collect language tags
         let lang_query = r#"
             SELECT DISTINCT (LANG(?o) AS ?lang) WHERE {
@@ -998,7 +1047,7 @@ impl ServiceRegistry {
             }
             LIMIT 50
         "#;
-        
+
         let lang_response = self
             .http_client
             .post(&service.endpoint)
@@ -1006,19 +1055,22 @@ impl ServiceRegistry {
             .body(lang_query)
             .send()
             .await?;
-        
+
         if lang_response.status().is_success() {
             let json: serde_json::Value = lang_response.json().await?;
-            
+
             if let Some(service) = self.services.get_mut(service_id) {
                 if let Some(ref mut extended) = service.extended_metadata {
-                    if let Some(results) = json.get("results")
+                    if let Some(results) = json
+                        .get("results")
                         .and_then(|r| r.get("bindings"))
                         .and_then(|b| b.as_array())
                     {
-                        extended.dataset_stats.languages = results.iter()
+                        extended.dataset_stats.languages = results
+                            .iter()
                             .filter_map(|binding| {
-                                binding.get("lang")
+                                binding
+                                    .get("lang")
                                     .and_then(|v| v.get("value"))
                                     .and_then(|v| v.as_str())
                                     .map(|s| s.to_string())
@@ -1028,39 +1080,47 @@ impl ServiceRegistry {
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Perform comprehensive service assessment including extended metadata
     pub async fn assess_service_comprehensively(&mut self, service_id: &str) -> Result<()> {
-        info!("Performing comprehensive assessment for service: {}", service_id);
-        
+        info!(
+            "Performing comprehensive assessment for service: {}",
+            service_id
+        );
+
         // Enable extended metadata if not already enabled
         self.enable_extended_metadata(service_id).await?;
-        
+
         // Collect dataset statistics
         if let Err(e) = self.collect_dataset_statistics(service_id).await {
             warn!("Failed to collect dataset statistics: {}", e);
         }
-        
+
         // Collect vocabulary information
         if let Err(e) = self.collect_vocabulary_info(service_id).await {
             warn!("Failed to collect vocabulary info: {}", e);
         }
-        
+
         // Update capabilities with more detailed detection
-        let service = self.services.get(service_id)
+        let service = self
+            .services
+            .get(service_id)
             .ok_or_else(|| anyhow!("Service {} not found", service_id))?
             .clone();
-        
+
         let detected_capabilities = self.detect_service_capabilities(&service).await?;
-        
+
         if let Some(service) = self.services.get_mut(service_id) {
             service.capabilities.extend(detected_capabilities);
         }
-        
-        info!("Comprehensive assessment completed for service: {}", service_id);
+
+        info!(
+            "Comprehensive assessment completed for service: {}",
+            service_id
+        );
         Ok(())
     }
 
@@ -1072,7 +1132,6 @@ impl ServiceRegistry {
             true // No rate limit configured
         }
     }
-
 }
 
 impl Default for ServiceRegistry {
@@ -1209,7 +1268,6 @@ impl FederatedService {
     }
 }
 
-
 /// Service metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceMetadata {
@@ -1275,7 +1333,6 @@ pub struct ServiceRegistryStats {
     #[serde(skip)]
     pub last_health_check: Option<Instant>,
 }
-
 
 /// OAuth2 token response
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -57,7 +57,7 @@ impl TrigParserState {
         self.graph_name_buffer.clear();
         self.parsing_graph_name = false;
     }
-    
+
     fn enter_graph_block(&mut self, graph: Option<StarTerm>) {
         self.current_graph = graph;
         self.in_graph_block = true;
@@ -65,7 +65,7 @@ impl TrigParserState {
         self.parsing_graph_name = false;
         self.graph_name_buffer.clear();
     }
-    
+
     fn exit_graph_block(&mut self) -> bool {
         if self.brace_depth > 0 {
             self.brace_depth -= 1;
@@ -781,11 +781,8 @@ impl StarParser {
                     }
                     Err(e) => {
                         error_count += 1;
-                        let error_context = format!(
-                            "line {}: {}",
-                            line_num + 1,
-                            accumulated_line.trim()
-                        );
+                        let error_context =
+                            format!("line {}: {}", line_num + 1, accumulated_line.trim());
                         context.add_error(
                             format!("TriG-star parse error: {}", e),
                             error_context,
@@ -807,7 +804,7 @@ impl StarParser {
 
                         // Try to recover by resetting the accumulated line and state
                         accumulated_line.clear();
-                        
+
                         // If we're in a nested structure, try to recover the state
                         if trig_state.brace_depth > 0 {
                             debug!("Attempting to recover from error in nested graph block");
@@ -839,13 +836,16 @@ impl StarParser {
         // Check for unclosed graph blocks
         if trig_state.in_graph_block {
             context.add_error(
-                format!("Unclosed graph block at end of input. Missing {} closing brace(s)", trig_state.brace_depth),
+                format!(
+                    "Unclosed graph block at end of input. Missing {} closing brace(s)",
+                    trig_state.brace_depth
+                ),
                 "End of file".to_string(),
                 ErrorSeverity::Error,
             );
             if context.strict_mode {
                 return Err(StarError::ParseError(
-                    "Unclosed graph block at end of input".to_string()
+                    "Unclosed graph block at end of input".to_string(),
                 ));
             }
         }
@@ -1293,17 +1293,17 @@ impl StarParser {
     /// Check if a TriG statement is complete (enhanced version)
     fn is_complete_trig_statement(&self, statement: &str, state: &mut TrigParserState) -> bool {
         let trimmed = statement.trim();
-        
+
         // Handle directives (always complete on one line)
         if trimmed.starts_with("@prefix") || trimmed.starts_with("@base") {
             return trimmed.ends_with('.');
         }
-        
+
         // Handle graph block closing
         if trimmed == "}" {
             return true;
         }
-        
+
         let mut brace_count: i32 = 0;
         let mut in_string = false;
         let mut escape_next = false;
@@ -1355,7 +1355,7 @@ impl StarParser {
             // We have an opening brace - this is a complete graph declaration start
             return true;
         }
-        
+
         // Check for complete graph block
         if brace_count == 0 && state.in_graph_block && trimmed.ends_with('}') {
             return true;
@@ -1425,14 +1425,17 @@ impl StarParser {
         context: &mut ParseContext,
     ) -> StarResult<StarTerm> {
         let graph_name = graph_name.trim();
-        
+
         // Try different graph name formats with recovery
-        
+
         // Check for quoted graph names (common mistake)
         if graph_name.starts_with('"') && graph_name.ends_with('"') {
             let inner = &graph_name[1..graph_name.len() - 1];
             context.add_error(
-                format!("Graph names should not be quoted strings. Converting '{}' to IRI", inner),
+                format!(
+                    "Graph names should not be quoted strings. Converting '{}' to IRI",
+                    inner
+                ),
                 graph_name.to_string(),
                 ErrorSeverity::Warning,
             );
@@ -1441,7 +1444,7 @@ impl StarParser {
                 return StarTerm::iri(inner);
             }
         }
-        
+
         // Parse normally
         self.parse_term_safe(graph_name, context)
     }
@@ -1672,19 +1675,21 @@ mod tests {
     #[test]
     fn test_nquads_star_parsing() {
         let parser = StarParser::new();
-        
+
         // Simple quad
         let nquads = r#"<http://example.org/s> <http://example.org/p> "test" <http://example.org/g> .
 <http://example.org/s2> <http://example.org/p2> <http://example.org/o2> ."#;
-        
+
         let result = parser.parse_str(nquads, StarFormat::NQuadsStar).unwrap();
         assert_eq!(result.quad_len(), 2);
         assert_eq!(result.total_len(), 2);
-        
+
         // Quad with quoted triple
         let nquads_with_quoted = r#"<< <http://example.org/alice> <http://example.org/says> "hello" >> <http://example.org/certainty> "0.9" <http://example.org/provenance> ."#;
-        
-        let result = parser.parse_str(nquads_with_quoted, StarFormat::NQuadsStar).unwrap();
+
+        let result = parser
+            .parse_str(nquads_with_quoted, StarFormat::NQuadsStar)
+            .unwrap();
         assert_eq!(result.quad_len(), 1);
         assert!(result.count_quoted_triples() > 0);
     }
@@ -1692,7 +1697,7 @@ mod tests {
     #[test]
     fn test_trig_star_parsing() {
         let parser = StarParser::new();
-        
+
         // Simple TriG with named graphs
         let trig = r#"
 @prefix ex: <http://example.org/> .
@@ -1706,15 +1711,15 @@ ex:graph1 {
     << ex:charlie ex:likes ex:dave >> ex:certainty "0.8" .
 }
 "#;
-        
+
         let result = parser.parse_str(trig, StarFormat::TrigStar).unwrap();
         assert_eq!(result.quad_len(), 3);
         assert_eq!(result.named_graph_names().len(), 1);
-        
+
         // Test default graph
         let default_triples = result.triples();
         assert_eq!(default_triples.len(), 1);
-        
+
         // Test named graph
         let graph_name = result.named_graph_names()[0];
         let named_triples = result.named_graph_triples(graph_name).unwrap();
@@ -1726,7 +1731,7 @@ ex:graph1 {
         let mut config = StarConfig::default();
         config.strict_mode = false; // Enable error recovery
         let parser = StarParser::with_config(config);
-        
+
         // TriG with errors that should be recoverable
         let trig_with_errors = r#"
 @prefix ex: <http://example.org/> .
@@ -1750,7 +1755,7 @@ ex:graph2 {
 # Valid triple after error
 ex:frank ex:knows ex:grace .
 "#;
-        
+
         let result = parser.parse_str(trig_with_errors, StarFormat::TrigStar);
         // Should parse successfully with errors logged
         assert!(result.is_ok());
@@ -1762,10 +1767,10 @@ ex:frank ex:knows ex:grace .
     #[test]
     fn test_nquads_star_with_blank_nodes() {
         let parser = StarParser::new();
-        
+
         let nquads = r#"_:b1 <http://example.org/p> "test" <http://example.org/g> .
 << _:b1 <http://example.org/says> "hello" >> <http://example.org/certainty> "0.9" _:g1 ."#;
-        
+
         let result = parser.parse_str(nquads, StarFormat::NQuadsStar).unwrap();
         assert_eq!(result.quad_len(), 2);
     }

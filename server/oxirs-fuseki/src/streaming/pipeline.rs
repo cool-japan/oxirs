@@ -1,17 +1,17 @@
 //! Stream processing pipelines for real-time analytics
 
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, VecDeque},
     sync::Arc,
     time::{Duration, Instant},
 };
-use async_trait::async_trait;
 use tokio::sync::{mpsc, RwLock};
-use serde::{Deserialize, Serialize};
 
 use crate::{
     error::Result,
-    streaming::{PipelineConfig, RDFEvent, EventHandler},
+    streaming::{EventHandler, PipelineConfig, RDFEvent},
 };
 
 /// Pipeline stage for processing events
@@ -19,7 +19,7 @@ use crate::{
 pub trait PipelineStage: Send + Sync {
     /// Process an event and optionally produce output events
     async fn process(&self, event: RDFEvent) -> Result<Vec<RDFEvent>>;
-    
+
     /// Get stage name for monitoring
     fn name(&self) -> &str;
 }
@@ -90,10 +90,10 @@ impl WindowAggregator {
     async fn update_watermark(&self, event_time: Instant) -> Vec<RDFEvent> {
         let mut watermark = self.watermark.write().await;
         *watermark = (*watermark).max(event_time);
-        
+
         let mut results = Vec::new();
         let mut windows = self.windows.write().await;
-        
+
         // Check for completed windows
         while let Some(window) = windows.front() {
             if window.end <= *watermark {
@@ -105,21 +105,23 @@ impl WindowAggregator {
                 break;
             }
         }
-        
+
         results
     }
 
     /// Get or create window for a timestamp
     async fn get_window(&self, timestamp: Instant) -> Result<()> {
         let mut windows = self.windows.write().await;
-        
+
         match &self.window_type {
             WindowType::Fixed(duration) => {
                 // Calculate window start
-                let window_start = timestamp - Duration::from_millis(
-                    timestamp.duration_since(Instant::now()).as_millis() as u64 % duration.as_millis() as u64
-                );
-                
+                let window_start = timestamp
+                    - Duration::from_millis(
+                        timestamp.duration_since(Instant::now()).as_millis() as u64
+                            % duration.as_millis() as u64,
+                    );
+
                 // Check if window exists
                 let exists = windows.iter().any(|w| w.contains(timestamp));
                 if !exists {
@@ -130,9 +132,9 @@ impl WindowAggregator {
                 // Create multiple overlapping windows
                 let mut window_start = timestamp - *size;
                 while window_start <= timestamp {
-                    let exists = windows.iter().any(|w| 
-                        w.start == window_start && w.contains(timestamp)
-                    );
+                    let exists = windows
+                        .iter()
+                        .any(|w| w.start == window_start && w.contains(timestamp));
                     if !exists {
                         windows.push_back(TimeWindow::new(window_start, *size));
                     }
@@ -144,7 +146,7 @@ impl WindowAggregator {
                 // TODO: Implement session window logic
             }
         }
-        
+
         Ok(())
     }
 }
@@ -153,10 +155,10 @@ impl WindowAggregator {
 impl PipelineStage for WindowAggregator {
     async fn process(&self, event: RDFEvent) -> Result<Vec<RDFEvent>> {
         let event_time = Instant::now(); // TODO: Extract actual event time
-        
+
         // Create window if needed
         self.get_window(event_time).await?;
-        
+
         // Add event to appropriate windows
         let mut windows = self.windows.write().await;
         for window in windows.iter_mut() {
@@ -165,7 +167,7 @@ impl PipelineStage for WindowAggregator {
             }
         }
         drop(windows);
-        
+
         // Update watermark and emit results
         Ok(self.update_watermark(event_time).await)
     }
@@ -285,17 +287,19 @@ impl StreamPipeline {
         let start = Instant::now();
         let mut current_events = vec![event];
         let mut metrics = self.metrics.write().await;
-        
+
         for stage in &self.stages {
             let stage_start = Instant::now();
             let mut next_events = Vec::new();
-            
+
             let stage_name = stage.name().to_string();
-            let stage_metrics = metrics.stage_metrics.entry(stage_name.clone())
+            let stage_metrics = metrics
+                .stage_metrics
+                .entry(stage_name.clone())
                 .or_insert_with(StageMetrics::default);
-            
+
             stage_metrics.events_in += current_events.len() as u64;
-            
+
             for event in current_events {
                 match stage.process(event).await {
                     Ok(outputs) => {
@@ -307,22 +311,22 @@ impl StreamPipeline {
                     }
                 }
             }
-            
+
             stage_metrics.events_out += next_events.len() as u64;
             stage_metrics.processing_time += stage_start.elapsed();
-            
+
             current_events = next_events;
             if current_events.is_empty() {
                 break;
             }
         }
-        
+
         metrics.events_processed += 1;
         if current_events.is_empty() {
             metrics.events_dropped += 1;
         }
         metrics.processing_time += start.elapsed();
-        
+
         Ok(current_events)
     }
 
@@ -360,10 +364,8 @@ impl PipelineBuilder {
     where
         F: Fn(&RDFEvent) -> bool + Send + Sync + 'static,
     {
-        self.stages.push(Box::new(FilterStage::new(
-            name.to_string(),
-            predicate,
-        )));
+        self.stages
+            .push(Box::new(FilterStage::new(name.to_string(), predicate)));
         self
     }
 
@@ -384,10 +386,8 @@ impl PipelineBuilder {
     where
         F: Fn(&[RDFEvent]) -> Option<RDFEvent> + Send + Sync + 'static,
     {
-        self.stages.push(Box::new(WindowAggregator::new(
-            window_type,
-            aggregation_fn,
-        )));
+        self.stages
+            .push(Box::new(WindowAggregator::new(window_type, aggregation_fn)));
         self
     }
 
@@ -407,25 +407,24 @@ mod tests {
 
     #[tokio::test]
     async fn test_filter_stage() {
-        let stage = FilterStage::new(
-            "test_filter".to_string(),
-            |event| matches!(event, RDFEvent::GraphCleared { .. }),
-        );
-        
+        let stage = FilterStage::new("test_filter".to_string(), |event| {
+            matches!(event, RDFEvent::GraphCleared { .. })
+        });
+
         let event1 = RDFEvent::GraphCleared {
             graph: "test".to_string(),
             timestamp: 12345,
         };
-        
+
         let event2 = RDFEvent::TripleAdded {
             triple: unsafe { std::mem::zeroed() },
             graph: None,
             timestamp: 12345,
         };
-        
+
         let result1 = stage.process(event1).await.unwrap();
         assert_eq!(result1.len(), 1);
-        
+
         let result2 = stage.process(event2).await.unwrap();
         assert_eq!(result2.len(), 0);
     }
@@ -441,7 +440,7 @@ mod tests {
                 Ok(event)
             })
             .build();
-        
+
         assert_eq!(pipeline.name, "test_pipeline");
         assert_eq!(pipeline.stages.len(), 2);
     }

@@ -4,12 +4,8 @@
 //! allowing OxiRS to be used as a drop-in replacement for Oxigraph.
 
 use crate::{
-    model::*,
-    Store as OxirsStore,
-    rdf_store::OxirsQueryResults,
-    parser::RdfFormat,
-    serializer::Serializer,
-    OxirsError, Result,
+    model::*, parser::RdfFormat, rdf_store::OxirsQueryResults, serializer::Serializer, OxirsError,
+    Result, Store as OxirsStore,
 };
 use std::io::{BufRead, Write};
 use std::path::Path;
@@ -18,7 +14,7 @@ use std::sync::{Arc, RwLock};
 /// Oxigraph-compatible store implementation
 ///
 /// This provides the same API as oxigraph::Store for compatibility
-/// 
+///
 /// Uses interior mutability to match Oxigraph's API where mutations take &self
 pub struct Store {
     inner: Arc<RwLock<OxirsStore>>,
@@ -54,19 +50,24 @@ impl Store {
             quad_ref.object().to_owned(),
             quad_ref.graph_name().to_owned(),
         );
-        
-        let mut store = self.inner.write().map_err(|e| {
-            OxirsError::Store(format!("Failed to acquire write lock: {}", e))
-        })?;
+
+        let mut store = self
+            .inner
+            .write()
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {}", e)))?;
         store.insert_quad(quad)
     }
 
     /// Extends the store with an iterator of quads
-    pub fn extend<'a>(&self, quads: impl IntoIterator<Item = impl Into<QuadRef<'a>>>) -> Result<()> {
-        let mut store = self.inner.write().map_err(|e| {
-            OxirsError::Store(format!("Failed to acquire write lock: {}", e))
-        })?;
-        
+    pub fn extend<'a>(
+        &self,
+        quads: impl IntoIterator<Item = impl Into<QuadRef<'a>>>,
+    ) -> Result<()> {
+        let mut store = self
+            .inner
+            .write()
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {}", e)))?;
+
         for quad in quads {
             let quad_ref = quad.into();
             let quad = Quad::new(
@@ -77,7 +78,7 @@ impl Store {
             );
             store.insert_quad(quad)?;
         }
-        
+
         Ok(())
     }
 
@@ -92,10 +93,11 @@ impl Store {
             quad_ref.object().to_owned(),
             quad_ref.graph_name().to_owned(),
         );
-        
-        let mut store = self.inner.write().map_err(|e| {
-            OxirsError::Store(format!("Failed to acquire write lock: {}", e))
-        })?;
+
+        let mut store = self
+            .inner
+            .write()
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {}", e)))?;
         store.remove_quad(&quad)
     }
 
@@ -108,29 +110,30 @@ impl Store {
         graph: Option<impl Into<GraphName>>,
     ) -> Result<()> {
         use crate::parser::Parser;
-        
+
         // Read all data into a string
         let mut data = String::new();
         let mut reader = reader;
         use std::io::Read;
-        reader.read_to_string(&mut data).map_err(|e| {
-            OxirsError::Parse(format!("Failed to read input: {}", e))
-        })?;
-        
+        reader
+            .read_to_string(&mut data)
+            .map_err(|e| OxirsError::Parse(format!("Failed to read input: {}", e)))?;
+
         // Create parser with base IRI if provided
         let mut parser = Parser::new(format);
         if let Some(base) = base_iri {
             parser = parser.with_base_iri(base);
         }
-        
+
         // Parse to quads
         let quads = parser.parse_str_to_quads(&data)?;
-        
+
         // Get write lock on store
-        let mut store = self.inner.write().map_err(|e| {
-            OxirsError::Store(format!("Failed to acquire write lock: {}", e))
-        })?;
-        
+        let mut store = self
+            .inner
+            .write()
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {}", e)))?;
+
         // Insert quads, potentially modifying graph name
         let target_graph = graph.map(|g| g.into());
         for quad in quads {
@@ -147,7 +150,7 @@ impl Store {
             };
             store.insert_quad(final_quad)?;
         }
-        
+
         Ok(())
     }
 
@@ -158,15 +161,16 @@ impl Store {
         format: RdfFormat,
         graph: Option<impl Into<GraphNameRef<'a>>>,
     ) -> Result<()> {
-        use crate::serializer::Serializer;
         use crate::model::{dataset::Dataset, graph::Graph};
-        
-        let store = self.inner.read().map_err(|e| {
-            OxirsError::Store(format!("Failed to acquire read lock: {}", e))
-        })?;
-        
+        use crate::serializer::Serializer;
+
+        let store = self
+            .inner
+            .read()
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {}", e)))?;
+
         let serializer = Serializer::new(format);
-        
+
         // Get quads to serialize
         let quads = if let Some(g) = graph {
             let graph_ref = g.into();
@@ -175,12 +179,13 @@ impl Store {
         } else {
             store.iter_quads()?
         };
-        
+
         // Serialize based on format capabilities
         let output = match format {
             RdfFormat::Turtle | RdfFormat::NTriples | RdfFormat::RdfXml => {
                 // These formats only support triples, so filter to default graph
-                let triples: Vec<_> = quads.into_iter()
+                let triples: Vec<_> = quads
+                    .into_iter()
                     .filter(|q| q.is_default_graph())
                     .map(|q| q.to_triple())
                     .collect();
@@ -193,11 +198,11 @@ impl Store {
                 serializer.serialize_dataset(&dataset)?
             }
         };
-        
-        writer.write_all(output.as_bytes()).map_err(|e| {
-            OxirsError::Serialize(format!("Failed to write output: {}", e))
-        })?;
-        
+
+        writer
+            .write_all(output.as_bytes())
+            .map_err(|e| OxirsError::Serialize(format!("Failed to write output: {}", e)))?;
+
         Ok(())
     }
 
@@ -210,26 +215,29 @@ impl Store {
             quad_ref.object().to_owned(),
             quad_ref.graph_name().to_owned(),
         );
-        
-        let store = self.inner.read().map_err(|e| {
-            OxirsError::Store(format!("Failed to acquire read lock: {}", e))
-        })?;
+
+        let store = self
+            .inner
+            .read()
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {}", e)))?;
         store.contains_quad(&quad)
     }
 
     /// Returns the number of quads in the store
     pub fn len(&self) -> Result<usize> {
-        let store = self.inner.read().map_err(|e| {
-            OxirsError::Store(format!("Failed to acquire read lock: {}", e))
-        })?;
+        let store = self
+            .inner
+            .read()
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {}", e)))?;
         store.len()
     }
 
     /// Checks if the store is empty
     pub fn is_empty(&self) -> Result<bool> {
-        let store = self.inner.read().map_err(|e| {
-            OxirsError::Store(format!("Failed to acquire read lock: {}", e))
-        })?;
+        let store = self
+            .inner
+            .read()
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {}", e)))?;
         store.is_empty()
     }
 
@@ -313,7 +321,7 @@ impl Store {
                 }
             }
         }
-        
+
         GraphNameIter {
             graphs: graph_names.into_iter().collect(),
             index: 0,
@@ -321,26 +329,31 @@ impl Store {
     }
 
     /// Checks if the store contains a given named graph
-    pub fn contains_named_graph<'a>(&self, graph_name: impl Into<NamedOrBlankNodeRef<'a>>) -> Result<bool> {
+    pub fn contains_named_graph<'a>(
+        &self,
+        graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
+    ) -> Result<bool> {
         let graph_ref = graph_name.into();
         let graph = match graph_ref {
             NamedOrBlankNodeRef::NamedNode(n) => GraphName::NamedNode(n.to_owned()),
             NamedOrBlankNodeRef::BlankNode(b) => GraphName::BlankNode(b.to_owned()),
         };
-        
+
         // Check if any quads exist in this graph
-        let store = self.inner.read().map_err(|e| {
-            OxirsError::Store(format!("Failed to acquire read lock: {}", e))
-        })?;
+        let store = self
+            .inner
+            .read()
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {}", e)))?;
         let quads = store.query_quads(None, None, None, Some(&graph))?;
         Ok(!quads.is_empty())
     }
 
     /// Clears the store
     pub fn clear(&self) -> Result<()> {
-        let mut store = self.inner.write().map_err(|e| {
-            OxirsError::Store(format!("Failed to acquire write lock: {}", e))
-        })?;
+        let mut store = self
+            .inner
+            .write()
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {}", e)))?;
         store.clear()
     }
 
@@ -348,27 +361,29 @@ impl Store {
     pub fn clear_graph<'a>(&self, graph_name: impl Into<GraphNameRef<'a>>) -> Result<()> {
         let graph_ref = graph_name.into();
         let graph = graph_ref.to_owned();
-        
-        let mut store = self.inner.write().map_err(|e| {
-            OxirsError::Store(format!("Failed to acquire write lock: {}", e))
-        })?;
-        
+
+        let mut store = self
+            .inner
+            .write()
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {}", e)))?;
+
         // Get all quads in the specified graph
         let quads_to_remove = store.query_quads(None, None, None, Some(&graph))?;
-        
+
         // Remove each quad
         for quad in quads_to_remove {
             store.remove_quad(&quad)?;
         }
-        
+
         Ok(())
     }
 
     /// Executes a SPARQL query
     pub fn query(&self, query: &str) -> Result<QueryResults> {
-        let store = self.inner.read().map_err(|e| {
-            OxirsError::Store(format!("Failed to acquire read lock: {}", e))
-        })?;
+        let store = self
+            .inner
+            .read()
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {}", e)))?;
         let results = store.query(query)?;
         Ok(QueryResults { inner: results })
     }
@@ -379,7 +394,10 @@ impl Store {
     }
 
     /// Creates a transaction for the store
-    pub fn transaction<T, E>(&self, f: impl FnOnce(&mut Transaction) -> std::result::Result<T, E>) -> std::result::Result<T, E>
+    pub fn transaction<T, E>(
+        &self,
+        f: impl FnOnce(&mut Transaction) -> std::result::Result<T, E>,
+    ) -> std::result::Result<T, E>
     where
         E: From<OxirsError>,
     {
@@ -395,9 +413,10 @@ impl Store {
     /// Optimizes the store layout
     pub fn optimize(&self) -> Result<()> {
         // Trigger arena cleanup if using ultra-performance mode
-        let store = self.inner.read().map_err(|e| {
-            OxirsError::Store(format!("Failed to acquire read lock: {}", e))
-        })?;
+        let store = self
+            .inner
+            .read()
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {}", e)))?;
         store.clear_arena();
         Ok(())
     }
@@ -488,8 +507,8 @@ impl QueryResults {
 }
 
 /// Oxigraph-compatible transaction
-/// 
-/// Note: This is a placeholder implementation. Full transactional support 
+///
+/// Note: This is a placeholder implementation. Full transactional support
 /// would require implementing proper transaction isolation in OxiRS.
 pub struct Transaction {
     // Placeholder for future transaction implementation
@@ -507,7 +526,7 @@ impl Transaction {
             operations: Vec::new(),
         }
     }
-    
+
     /// Inserts a quad in the transaction
     pub fn insert<'b>(&mut self, quad: impl Into<QuadRef<'b>>) -> Result<bool> {
         let quad_ref = quad.into();
@@ -559,7 +578,7 @@ impl From<OxirsError> for OxigraphCompatError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{BlankNode, Literal, NamedNode, Triple, NamedNodeRef, LiteralRef};
+    use crate::model::{BlankNode, Literal, LiteralRef, NamedNode, NamedNodeRef, Triple};
     use crate::parser::RdfFormat;
     use std::io::Cursor;
 
@@ -573,38 +592,40 @@ mod tests {
     #[test]
     fn test_oxigraph_compat_insert_and_query() {
         let store = Store::new().unwrap();
-        
+
         // Create test quad
         let subject = NamedNode::new("http://example.org/subject").unwrap();
         let predicate = NamedNode::new("http://example.org/predicate").unwrap();
         let object = Literal::new("test object");
         let graph = NamedNode::new("http://example.org/graph").unwrap();
-        
+
         let quad = Quad::new(
             subject.clone(),
             predicate.clone(),
             object.clone(),
             graph.clone(),
         );
-        
+
         // Insert quad
         assert!(store.insert(QuadRef::from(&quad)).unwrap());
         assert_eq!(store.len().unwrap(), 1);
         assert!(!store.is_empty().unwrap());
-        
+
         // Check contains
         assert!(store.contains(QuadRef::from(&quad)).unwrap());
-        
+
         // Query by pattern
-        let quads: Vec<_> = store.quads_for_pattern(
-            Some(SubjectRef::NamedNode(&subject)),
-            None::<PredicateRef>,
-            None::<ObjectRef>,
-            None::<GraphNameRef>,
-        ).collect();
+        let quads: Vec<_> = store
+            .quads_for_pattern(
+                Some(SubjectRef::NamedNode(&subject)),
+                None::<PredicateRef>,
+                None::<ObjectRef>,
+                None::<GraphNameRef>,
+            )
+            .collect();
         assert_eq!(quads.len(), 1);
         assert_eq!(quads[0], quad);
-        
+
         // Remove quad
         assert!(store.remove(QuadRef::from(&quad)).unwrap());
         assert!(store.is_empty().unwrap());
@@ -613,7 +634,7 @@ mod tests {
     #[test]
     fn test_oxigraph_compat_extend() {
         let store = Store::new().unwrap();
-        
+
         let quads = vec![
             Quad::new(
                 NamedNode::new("http://example.org/s1").unwrap(),
@@ -628,7 +649,7 @@ mod tests {
                 NamedNode::new("http://example.org/g1").unwrap(),
             ),
         ];
-        
+
         store.extend(quads.iter().map(QuadRef::from)).unwrap();
         assert_eq!(store.len().unwrap(), 2);
     }
@@ -636,7 +657,7 @@ mod tests {
     #[test]
     fn test_oxigraph_compat_named_graphs() {
         let store = Store::new().unwrap();
-        
+
         // Create nodes
         let s1 = NamedNode::new("http://example.org/s1").unwrap();
         let s2 = NamedNode::new("http://example.org/s2").unwrap();
@@ -646,37 +667,45 @@ mod tests {
         let o2 = Literal::new("o2");
         let g1 = NamedNode::new("http://example.org/g1").unwrap();
         let g2 = NamedNode::new("http://example.org/g2").unwrap();
-        
+
         // Insert quads in different graphs
-        store.insert(QuadRef::new(
-            SubjectRef::NamedNode(&s1),
-            PredicateRef::NamedNode(&p1),
-            ObjectRef::Literal(&o1),
-            GraphNameRef::NamedNode(&g1),
-        )).unwrap();
-        
-        store.insert(QuadRef::new(
-            SubjectRef::NamedNode(&s2),
-            PredicateRef::NamedNode(&p2),
-            ObjectRef::Literal(&o2),
-            GraphNameRef::NamedNode(&g2),
-        )).unwrap();
-        
+        store
+            .insert(QuadRef::new(
+                SubjectRef::NamedNode(&s1),
+                PredicateRef::NamedNode(&p1),
+                ObjectRef::Literal(&o1),
+                GraphNameRef::NamedNode(&g1),
+            ))
+            .unwrap();
+
+        store
+            .insert(QuadRef::new(
+                SubjectRef::NamedNode(&s2),
+                PredicateRef::NamedNode(&p2),
+                ObjectRef::Literal(&o2),
+                GraphNameRef::NamedNode(&g2),
+            ))
+            .unwrap();
+
         // Check named graphs
         let graphs: Vec<_> = store.named_graphs().collect();
         assert_eq!(graphs.len(), 2);
         assert!(graphs.contains(&g1));
         assert!(graphs.contains(&g2));
-        
+
         // Check contains_named_graph
-        assert!(store.contains_named_graph(NamedOrBlankNodeRef::NamedNode(&g1)).unwrap());
-        assert!(store.contains_named_graph(NamedOrBlankNodeRef::NamedNode(&g2)).unwrap());
+        assert!(store
+            .contains_named_graph(NamedOrBlankNodeRef::NamedNode(&g1))
+            .unwrap());
+        assert!(store
+            .contains_named_graph(NamedOrBlankNodeRef::NamedNode(&g2))
+            .unwrap());
     }
 
     #[test]
     fn test_oxigraph_compat_clear_graph() {
         let store = Store::new().unwrap();
-        
+
         // Create nodes
         let s1 = NamedNode::new("http://example.org/s1").unwrap();
         let s2 = NamedNode::new("http://example.org/s2").unwrap();
@@ -685,28 +714,32 @@ mod tests {
         let o1 = Literal::new("o1");
         let o2 = Literal::new("o2");
         let graph = NamedNode::new("http://example.org/graph").unwrap();
-        
+
         // Add quads to specific graph and default graph
-        store.insert(QuadRef::new(
-            SubjectRef::NamedNode(&s1),
-            PredicateRef::NamedNode(&p1),
-            ObjectRef::Literal(&o1),
-            GraphNameRef::NamedNode(&graph),
-        )).unwrap();
-        
-        store.insert(QuadRef::new(
-            SubjectRef::NamedNode(&s2),
-            PredicateRef::NamedNode(&p2),
-            ObjectRef::Literal(&o2),
-            GraphNameRef::DefaultGraph,
-        )).unwrap();
-        
+        store
+            .insert(QuadRef::new(
+                SubjectRef::NamedNode(&s1),
+                PredicateRef::NamedNode(&p1),
+                ObjectRef::Literal(&o1),
+                GraphNameRef::NamedNode(&graph),
+            ))
+            .unwrap();
+
+        store
+            .insert(QuadRef::new(
+                SubjectRef::NamedNode(&s2),
+                PredicateRef::NamedNode(&p2),
+                ObjectRef::Literal(&o2),
+                GraphNameRef::DefaultGraph,
+            ))
+            .unwrap();
+
         assert_eq!(store.len().unwrap(), 2);
-        
+
         // Clear specific graph
         store.clear_graph(GraphNameRef::NamedNode(&graph)).unwrap();
         assert_eq!(store.len().unwrap(), 1); // Only default graph quad remains
-        
+
         // Clear all
         store.clear().unwrap();
         assert!(store.is_empty().unwrap());
@@ -715,54 +748,62 @@ mod tests {
     #[test]
     fn test_oxigraph_compat_load_from_reader() {
         let store = Store::new().unwrap();
-        
+
         let turtle_data = r#"
             @prefix ex: <http://example.org/> .
             ex:subject ex:predicate "object" .
         "#;
-        
+
         let reader = Cursor::new(turtle_data.as_bytes());
-        store.load_from_reader(
-            reader,
-            RdfFormat::Turtle,
-            Some("http://example.org/"),
-            None::<GraphName>,
-        ).unwrap();
-        
+        store
+            .load_from_reader(
+                reader,
+                RdfFormat::Turtle,
+                Some("http://example.org/"),
+                None::<GraphName>,
+            )
+            .unwrap();
+
         assert_eq!(store.len().unwrap(), 1);
-        
+
         // Verify the loaded data
         let quads: Vec<_> = store.iter().collect();
         assert_eq!(quads.len(), 1);
-        assert_eq!(quads[0].subject().to_string(), "<http://example.org/subject>");
-        assert_eq!(quads[0].predicate().to_string(), "<http://example.org/predicate>");
+        assert_eq!(
+            quads[0].subject().to_string(),
+            "<http://example.org/subject>"
+        );
+        assert_eq!(
+            quads[0].predicate().to_string(),
+            "<http://example.org/predicate>"
+        );
     }
 
     #[test]
     fn test_oxigraph_compat_dump_to_writer() {
         let store = Store::new().unwrap();
-        
+
         // Create nodes
         let subject = NamedNode::new("http://example.org/subject").unwrap();
         let predicate = NamedNode::new("http://example.org/predicate").unwrap();
         let object = Literal::new("object");
-        
+
         // Add some test data
-        store.insert(QuadRef::new(
-            SubjectRef::NamedNode(&subject),
-            PredicateRef::NamedNode(&predicate),
-            ObjectRef::Literal(&object),
-            GraphNameRef::DefaultGraph,
-        )).unwrap();
-        
+        store
+            .insert(QuadRef::new(
+                SubjectRef::NamedNode(&subject),
+                PredicateRef::NamedNode(&predicate),
+                ObjectRef::Literal(&object),
+                GraphNameRef::DefaultGraph,
+            ))
+            .unwrap();
+
         // Dump to N-Triples format
         let mut output = Vec::new();
-        store.dump_to_writer(
-            &mut output,
-            RdfFormat::NTriples,
-            None::<GraphNameRef>,
-        ).unwrap();
-        
+        store
+            .dump_to_writer(&mut output, RdfFormat::NTriples, None::<GraphNameRef>)
+            .unwrap();
+
         let result = String::from_utf8(output).unwrap();
         assert!(result.contains("<http://example.org/subject>"));
         assert!(result.contains("<http://example.org/predicate>"));

@@ -10,9 +10,12 @@ use std::sync::Arc;
 use tracing::{debug, info, warn};
 
 use crate::{
+    planner::{
+        ExecutionPlan, FilterExpression, QueryInfo as PlannerQueryInfo,
+        ServiceClause as PlannerServiceClause, TriplePattern,
+    },
+    query_decomposition::{DecompositionResult, QueryDecomposer},
     FederatedService, ServiceCapability, ServiceRegistry,
-    planner::{ExecutionPlan, QueryInfo as PlannerQueryInfo, TriplePattern, FilterExpression, ServiceClause as PlannerServiceClause},
-    query_decomposition::{QueryDecomposer, DecompositionResult},
 };
 
 /// SERVICE clause optimizer
@@ -45,29 +48,32 @@ impl ServiceOptimizer {
         query_info: &PlannerQueryInfo,
         registry: &ServiceRegistry,
     ) -> Result<OptimizedQuery> {
-        info!("Optimizing query with {} SERVICE clauses", query_info.service_clauses.len());
+        info!(
+            "Optimizing query with {} SERVICE clauses",
+            query_info.service_clauses.len()
+        );
 
         let mut optimized_services = Vec::new();
         let mut global_filters = query_info.filters.clone();
         let mut cross_service_joins = Vec::new();
 
         // Convert planner SERVICE clauses to optimizer format
-        let service_clauses: Vec<ServiceClause> = query_info.service_clauses.iter().map(|sc| {
-            ServiceClause {
+        let service_clauses: Vec<ServiceClause> = query_info
+            .service_clauses
+            .iter()
+            .map(|sc| ServiceClause {
                 endpoint: Some(sc.service_url.clone()),
                 patterns: self.extract_patterns_from_subquery(&sc.subquery),
                 filters: self.extract_filters_from_subquery(&sc.subquery),
                 silent: sc.silent,
-            }
-        }).collect();
+            })
+            .collect();
 
         // Analyze SERVICE clauses
         for service_clause in &service_clauses {
-            let optimized = self.optimize_service_clause(
-                service_clause,
-                &mut global_filters,
-                registry,
-            ).await?;
+            let optimized = self
+                .optimize_service_clause(service_clause, &mut global_filters, registry)
+                .await?;
             optimized_services.push(optimized);
         }
 
@@ -75,10 +81,8 @@ impl ServiceOptimizer {
         cross_service_joins = self.identify_cross_service_joins(&optimized_services);
 
         // Apply global optimizations
-        let execution_strategy = self.determine_execution_strategy(
-            &optimized_services,
-            &cross_service_joins,
-        );
+        let execution_strategy =
+            self.determine_execution_strategy(&optimized_services, &cross_service_joins);
 
         Ok(OptimizedQuery {
             services: optimized_services,
@@ -96,7 +100,10 @@ impl ServiceOptimizer {
         global_filters: &mut Vec<FilterExpression>,
         registry: &ServiceRegistry,
     ) -> Result<OptimizedServiceClause> {
-        debug!("Optimizing SERVICE clause for: {:?}", service_clause.endpoint);
+        debug!(
+            "Optimizing SERVICE clause for: {:?}",
+            service_clause.endpoint
+        );
 
         // Resolve service endpoint
         let service = if let Some(endpoint) = &service_clause.endpoint {
@@ -110,32 +117,20 @@ impl ServiceOptimizer {
         let mut local_filters = service_clause.filters.clone();
 
         // Apply filter pushdown
-        let pushed_filters = self.push_down_filters(
-            &patterns,
-            global_filters,
-            &mut local_filters,
-            &service,
-        );
+        let pushed_filters =
+            self.push_down_filters(&patterns, global_filters, &mut local_filters, &service);
 
         // Optimize patterns for the service
-        let optimized_patterns = self.optimize_patterns_for_service(
-            &patterns,
-            &service,
-        );
+        let optimized_patterns = self.optimize_patterns_for_service(&patterns, &service);
 
         // Determine execution strategy
-        let strategy = self.determine_service_strategy(
-            &service,
-            &optimized_patterns,
-            &local_filters,
-        );
+        let strategy =
+            self.determine_service_strategy(&service, &optimized_patterns, &local_filters);
 
         // Estimate cost
-        let estimated_cost = self.estimate_service_cost(
-            &service,
-            &optimized_patterns,
-            &local_filters,
-        ).await;
+        let estimated_cost = self
+            .estimate_service_cost(&service, &optimized_patterns, &local_filters)
+            .await;
 
         Ok(OptimizedServiceClause {
             service_id: service.id.clone(),
@@ -208,7 +203,8 @@ impl ServiceOptimizer {
         let mut remaining_global = Vec::new();
         for filter in global_filters.drain(..) {
             // Check if all variables in filter are bound by patterns
-            let filter_vars_bound = filter.variables
+            let filter_vars_bound = filter
+                .variables
                 .iter()
                 .all(|var| pattern_vars.contains(var));
 
@@ -234,19 +230,27 @@ impl ServiceOptimizer {
     ) -> bool {
         // Check for specific filter capabilities
         if filter.expression.contains("REGEX") {
-            return service.capabilities.contains(&ServiceCapability::FullTextSearch);
+            return service
+                .capabilities
+                .contains(&ServiceCapability::FullTextSearch);
         }
 
         if filter.expression.contains("geof:") || filter.expression.contains("DISTANCE") {
-            return service.capabilities.contains(&ServiceCapability::Geospatial);
+            return service
+                .capabilities
+                .contains(&ServiceCapability::Geospatial);
         }
 
         if filter.expression.contains("NOW()") || filter.expression.contains("YEAR(") {
-            return service.capabilities.contains(&ServiceCapability::TemporalQueries);
+            return service
+                .capabilities
+                .contains(&ServiceCapability::TemporalQueries);
         }
 
         // Basic filters can be handled by any SPARQL service
-        service.capabilities.contains(&ServiceCapability::SparqlQuery)
+        service
+            .capabilities
+            .contains(&ServiceCapability::SparqlQuery)
     }
 
     /// Optimize patterns for a specific service
@@ -295,7 +299,10 @@ impl ServiceOptimizer {
         }
 
         // Use cached statistics if available
-        if let Some(stats) = self.statistics_cache.get_predicate_stats(&pattern.predicate) {
+        if let Some(stats) = self
+            .statistics_cache
+            .get_predicate_stats(&pattern.predicate)
+        {
             score = score.saturating_sub(stats.frequency / 1000);
         }
 
@@ -313,12 +320,12 @@ impl ServiceOptimizer {
             grouped.push(seed.clone());
 
             let seed_vars = self.extract_pattern_variables(&seed);
-            
+
             // Find patterns that share variables with seed
             let mut i = 0;
             while i < remaining.len() {
                 let pattern_vars = self.extract_pattern_variables(&remaining[i]);
-                
+
                 if !seed_vars.is_disjoint(&pattern_vars) {
                     grouped.push(remaining.remove(i));
                 } else {
@@ -333,7 +340,7 @@ impl ServiceOptimizer {
     /// Extract variables from a pattern
     fn extract_pattern_variables(&self, pattern: &TriplePattern) -> HashSet<String> {
         let mut vars = HashSet::new();
-        
+
         if pattern.subject.starts_with('?') {
             vars.insert(pattern.subject.clone());
         }
@@ -379,15 +386,19 @@ impl ServiceOptimizer {
         filters: &[FilterExpression],
     ) -> ServiceExecutionStrategy {
         // Check if we should use VALUES clause for bindings
-        let use_values_binding = service.capabilities.contains(&ServiceCapability::SparqlValues)
+        let use_values_binding = service
+            .capabilities
+            .contains(&ServiceCapability::SparqlValues)
             && patterns.len() < self.config.max_patterns_for_values;
 
         // Check if we should stream results
-        let stream_results = self.estimate_result_size(patterns, filters) 
-            > self.config.streaming_threshold;
+        let stream_results =
+            self.estimate_result_size(patterns, filters) > self.config.streaming_threshold;
 
         // Check if we can use subqueries
-        let use_subqueries = service.capabilities.contains(&ServiceCapability::SparqlSubqueries)
+        let use_subqueries = service
+            .capabilities
+            .contains(&ServiceCapability::SparqlSubqueries)
             && patterns.len() > self.config.min_patterns_for_subquery;
 
         ServiceExecutionStrategy {
@@ -439,27 +450,30 @@ impl ServiceOptimizer {
 
         // Use cached statistics if available
         for pattern in patterns {
-            if let Some(stats) = self.statistics_cache.get_predicate_stats(&pattern.predicate) {
+            if let Some(stats) = self
+                .statistics_cache
+                .get_predicate_stats(&pattern.predicate)
+            {
                 cost += (stats.frequency as f64).log10() * 10.0;
             }
         }
 
         cost
     }
-    
+
     /// Extract patterns from a subquery string
     fn extract_patterns_from_subquery(&self, subquery: &str) -> Vec<TriplePattern> {
         let mut patterns = Vec::new();
-        
+
         // Simple pattern extraction - in real implementation would use proper SPARQL parser
         let lines: Vec<&str> = subquery.split('.').collect();
-        
+
         for line in lines {
             let line = line.trim();
             if line.is_empty() || line.starts_with("FILTER") {
                 continue;
             }
-            
+
             let parts: Vec<&str> = line.split_whitespace().collect();
             if parts.len() >= 3 {
                 patterns.push(TriplePattern {
@@ -470,22 +484,22 @@ impl ServiceOptimizer {
                 });
             }
         }
-        
+
         patterns
     }
-    
+
     /// Extract filters from a subquery string
     fn extract_filters_from_subquery(&self, subquery: &str) -> Vec<FilterExpression> {
         let mut filters = Vec::new();
-        
+
         let mut pos = 0;
         while let Some(filter_pos) = subquery[pos..].find("FILTER") {
             let actual_pos = pos + filter_pos;
-            
+
             if let Some(start) = subquery[actual_pos..].find('(') {
                 let mut paren_count = 0;
                 let mut end_pos = None;
-                
+
                 for (i, ch) in subquery[actual_pos + start..].char_indices() {
                     if ch == '(' {
                         paren_count += 1;
@@ -497,35 +511,35 @@ impl ServiceOptimizer {
                         }
                     }
                 }
-                
+
                 if let Some(end) = end_pos {
                     let expression = subquery[actual_pos + start + 1..end - 1].trim().to_string();
                     let variables = self.extract_filter_variables(&expression);
-                    
+
                     filters.push(FilterExpression {
                         expression,
                         variables,
                     });
                 }
             }
-            
+
             pos = actual_pos + 6;
         }
-        
+
         filters
     }
-    
+
     /// Extract variables from a filter expression
     fn extract_filter_variables(&self, expression: &str) -> HashSet<String> {
         let mut variables = HashSet::new();
-        
+
         for word in expression.split_whitespace() {
             if word.starts_with('?') {
                 let clean_var = word.trim_matches(|c: char| !c.is_alphanumeric() && c != '?');
                 variables.insert(clean_var.to_string());
             }
         }
-        
+
         variables
     }
 
@@ -545,10 +559,7 @@ impl ServiceOptimizer {
                 let vars1 = self.extract_service_variables(service1);
                 let vars2 = self.extract_service_variables(service2);
 
-                let shared_vars: Vec<String> = vars1
-                    .intersection(&vars2)
-                    .cloned()
-                    .collect();
+                let shared_vars: Vec<String> = vars1.intersection(&vars2).cloned().collect();
 
                 if !shared_vars.is_empty() {
                     joins.push(CrossServiceJoin {
@@ -608,7 +619,9 @@ impl ServiceOptimizer {
     /// Check if join pattern is complex
     fn has_complex_join_pattern(&self, joins: &[CrossServiceJoin]) -> bool {
         // Check for multi-way joins or low selectivity
-        joins.iter().any(|j| j.join_variables.len() > 2 || j.estimated_selectivity > 0.5)
+        joins
+            .iter()
+            .any(|j| j.join_variables.len() > 2 || j.estimated_selectivity > 0.5)
     }
 
     /// Estimate total cost of execution
@@ -617,13 +630,10 @@ impl ServiceOptimizer {
     }
 
     /// Apply SERVICE clause merging optimization
-    pub fn merge_service_clauses(
-        &self,
-        services: &mut Vec<OptimizedServiceClause>,
-    ) -> Result<()> {
+    pub fn merge_service_clauses(&self, services: &mut Vec<OptimizedServiceClause>) -> Result<()> {
         // Group services by endpoint
         let mut endpoint_groups: HashMap<String, Vec<usize>> = HashMap::new();
-        
+
         for (idx, service) in services.iter().enumerate() {
             endpoint_groups
                 .entry(service.endpoint.clone())
@@ -634,31 +644,35 @@ impl ServiceOptimizer {
         // Merge services with same endpoint
         for (endpoint, indices) in endpoint_groups {
             if indices.len() > 1 && self.config.enable_service_merging {
-                debug!("Merging {} SERVICE clauses for endpoint: {}", indices.len(), endpoint);
-                
+                debug!(
+                    "Merging {} SERVICE clauses for endpoint: {}",
+                    indices.len(),
+                    endpoint
+                );
+
                 // Merge patterns and filters
                 let mut merged_patterns = Vec::new();
                 let mut merged_filters = Vec::new();
-                
+
                 for &idx in &indices[1..] {
                     if let Some(service) = services.get(idx) {
                         merged_patterns.extend(service.patterns.clone());
                         merged_filters.extend(service.filters.clone());
                     }
                 }
-                
+
                 // Update first service with merged data
                 if let Some(first_service) = services.get_mut(indices[0]) {
                     first_service.patterns.extend(merged_patterns);
                     first_service.filters.extend(merged_filters);
-                    
+
                     // Deduplicate
-                    first_service.patterns.sort_by(|a, b| {
-                        a.pattern_string.cmp(&b.pattern_string)
-                    });
-                    first_service.patterns.dedup_by(|a, b| {
-                        a.pattern_string == b.pattern_string
-                    });
+                    first_service
+                        .patterns
+                        .sort_by(|a, b| a.pattern_string.cmp(&b.pattern_string));
+                    first_service
+                        .patterns
+                        .dedup_by(|a, b| a.pattern_string == b.pattern_string);
                 }
             }
         }
@@ -678,25 +692,25 @@ impl Default for ServiceOptimizer {
 pub struct ServiceOptimizerConfig {
     /// Enable pattern grouping
     pub enable_pattern_grouping: bool,
-    
+
     /// Enable SERVICE clause merging
     pub enable_service_merging: bool,
-    
+
     /// Maximum patterns for VALUES binding
     pub max_patterns_for_values: usize,
-    
+
     /// Minimum patterns for subquery
     pub min_patterns_for_subquery: usize,
-    
+
     /// Result size threshold for streaming
     pub streaming_threshold: usize,
-    
+
     /// Default batch size
     pub default_batch_size: usize,
-    
+
     /// Service timeout in milliseconds
     pub service_timeout_ms: u64,
-    
+
     /// Enable statistics-based optimization
     pub enable_statistics: bool,
 }
@@ -721,13 +735,13 @@ impl Default for ServiceOptimizerConfig {
 pub struct ServiceClause {
     /// Service endpoint or identifier
     pub endpoint: Option<String>,
-    
+
     /// Patterns in the SERVICE clause
     pub patterns: Vec<TriplePattern>,
-    
+
     /// Filters in the SERVICE clause
     pub filters: Vec<FilterExpression>,
-    
+
     /// Whether SERVICE is SILENT
     pub silent: bool,
 }
@@ -737,25 +751,25 @@ pub struct ServiceClause {
 pub struct OptimizedServiceClause {
     /// Resolved service ID
     pub service_id: String,
-    
+
     /// Service endpoint
     pub endpoint: String,
-    
+
     /// Optimized patterns
     pub patterns: Vec<TriplePattern>,
-    
+
     /// Local filters
     pub filters: Vec<FilterExpression>,
-    
+
     /// Filters pushed down from global scope
     pub pushed_filters: Vec<FilterExpression>,
-    
+
     /// Execution strategy
     pub strategy: ServiceExecutionStrategy,
-    
+
     /// Estimated execution cost
     pub estimated_cost: f64,
-    
+
     /// Service capabilities
     pub capabilities: HashSet<ServiceCapability>,
 }
@@ -765,16 +779,16 @@ pub struct OptimizedServiceClause {
 pub struct ServiceExecutionStrategy {
     /// Use VALUES clause for bindings
     pub use_values_binding: bool,
-    
+
     /// Stream results
     pub stream_results: bool,
-    
+
     /// Use subqueries
     pub use_subqueries: bool,
-    
+
     /// Batch size for processing
     pub batch_size: usize,
-    
+
     /// Timeout in milliseconds
     pub timeout_ms: u64,
 }
@@ -784,16 +798,16 @@ pub struct ServiceExecutionStrategy {
 pub struct CrossServiceJoin {
     /// Left service ID
     pub left_service: String,
-    
+
     /// Right service ID
     pub right_service: String,
-    
+
     /// Join variables
     pub join_variables: Vec<String>,
-    
+
     /// Join type
     pub join_type: JoinType,
-    
+
     /// Estimated selectivity
     pub estimated_selectivity: f64,
 }
@@ -821,16 +835,16 @@ pub enum ExecutionStrategy {
 pub struct OptimizedQuery {
     /// Optimized SERVICE clauses
     pub services: Vec<OptimizedServiceClause>,
-    
+
     /// Remaining global filters
     pub global_filters: Vec<FilterExpression>,
-    
+
     /// Cross-service joins
     pub cross_service_joins: Vec<CrossServiceJoin>,
-    
+
     /// Overall execution strategy
     pub execution_strategy: ExecutionStrategy,
-    
+
     /// Total estimated cost
     pub estimated_cost: f64,
 }
@@ -862,10 +876,10 @@ impl StatisticsCache {
 struct PredicateStatistics {
     /// Frequency of the predicate
     pub frequency: u64,
-    
+
     /// Average number of objects per subject
     pub avg_objects_per_subject: f64,
-    
+
     /// Selectivity estimate
     pub selectivity: f64,
 }
@@ -899,7 +913,7 @@ mod tests {
     #[test]
     fn test_execution_strategy_determination() {
         let optimizer = ServiceOptimizer::new();
-        
+
         // Single service
         let services = vec![OptimizedServiceClause {
             service_id: "test".to_string(),

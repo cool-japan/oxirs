@@ -1,9 +1,7 @@
 //! Integration tests for adaptive indexing
 
 use oxirs_core::model::*;
-use oxirs_core::store::{
-    IndexedGraph, AdaptiveIndexManager, AdaptiveConfig, QueryPattern,
-};
+use oxirs_core::store::{AdaptiveConfig, AdaptiveIndexManager, IndexedGraph, QueryPattern};
 use std::time::Duration;
 
 #[test]
@@ -66,7 +64,9 @@ fn test_query_pattern_detection() {
         (None, None, None, QueryPattern::FullScan),
         // Subject query
         (
-            Some(Subject::NamedNode(NamedNode::new("http://example.org/person1").unwrap())),
+            Some(Subject::NamedNode(
+                NamedNode::new("http://example.org/person1").unwrap(),
+            )),
             None,
             None,
             QueryPattern::SubjectQuery,
@@ -74,25 +74,34 @@ fn test_query_pattern_detection() {
         // Predicate query
         (
             None,
-            Some(Predicate::NamedNode(NamedNode::new("http://example.org/name").unwrap())),
+            Some(Predicate::NamedNode(
+                NamedNode::new("http://example.org/name").unwrap(),
+            )),
             None,
             QueryPattern::PredicateQuery,
         ),
         // Subject-Predicate query
         (
-            Some(Subject::NamedNode(NamedNode::new("http://example.org/person1").unwrap())),
-            Some(Predicate::NamedNode(NamedNode::new("http://example.org/name").unwrap())),
+            Some(Subject::NamedNode(
+                NamedNode::new("http://example.org/person1").unwrap(),
+            )),
+            Some(Predicate::NamedNode(
+                NamedNode::new("http://example.org/name").unwrap(),
+            )),
             None,
             QueryPattern::SubjectPredicate,
         ),
     ];
 
     for (subject, predicate, object, expected_pattern) in patterns_tested {
-        let results = manager.query(subject.as_ref(), predicate.as_ref(), object.as_ref()).unwrap();
+        let results = manager
+            .query(subject.as_ref(), predicate.as_ref(), object.as_ref())
+            .unwrap();
         assert!(!results.is_empty() || matches!(expected_pattern, QueryPattern::FullScan));
-        
+
         // Verify pattern detection
-        let detected = QueryPattern::from_components(subject.as_ref(), predicate.as_ref(), object.as_ref());
+        let detected =
+            QueryPattern::from_components(subject.as_ref(), predicate.as_ref(), object.as_ref());
         assert_eq!(detected, expected_pattern);
     }
 }
@@ -168,9 +177,9 @@ fn test_concurrent_adaptive_queries() {
             let manager = manager.clone();
             thread::spawn(move || {
                 let pred = Predicate::NamedNode(
-                    NamedNode::new(&format!("http://example.org/p{}", thread_id)).unwrap()
+                    NamedNode::new(&format!("http://example.org/p{}", thread_id)).unwrap(),
                 );
-                
+
                 for _ in 0..10 {
                     let results = manager.query(None, Some(&pred), None).unwrap();
                     assert_eq!(results.len(), 10);
@@ -231,7 +240,7 @@ fn test_index_benefit_estimation() {
     // Check that appropriate indexes were created
     let stats = manager.get_stats();
     println!("Created indexes: {:?}", stats.active_indexes);
-    
+
     // Both patterns should be tracked
     assert!(!stats.pattern_stats.is_empty());
 }

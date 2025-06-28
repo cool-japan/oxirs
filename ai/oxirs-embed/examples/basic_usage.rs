@@ -8,11 +8,11 @@
 //! 5. Integrate with other OxiRS components
 
 use anyhow::Result;
-use oxirs_embed::{NamedNode, Triple};
 use oxirs_embed::{
     models::{ComplEx, DistMult, RotatE, TransE},
     EmbeddingModel, ModelConfig,
 };
+use oxirs_embed::{NamedNode, Triple};
 use std::time::Instant;
 
 #[tokio::main]

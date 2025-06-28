@@ -1,17 +1,17 @@
 //! Streaming result sets for large query results with minimal memory overhead
 
-use crate::model::{Term, Variable, Triple, NamedNode, Literal};
+use crate::model::{Literal, NamedNode, Term, Triple, Variable};
 use crate::OxirsError;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use tokio::sync::mpsc;
-use futures::stream::{Stream, StreamExt};
-use std::pin::Pin;
-use std::task::{Context, Poll};
-use std::collections::HashMap;
-use parking_lot::RwLock;
 use crossbeam::channel;
+use futures::stream::{Stream, StreamExt};
+use parking_lot::RwLock;
+use std::collections::HashMap;
+use std::pin::Pin;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
+use tokio::sync::mpsc;
 
 /// Configuration for streaming result sets
 #[derive(Debug, Clone)]
@@ -230,7 +230,7 @@ impl SelectResults {
     /// Collect next batch of solutions
     pub fn next_batch(&mut self, max_size: usize) -> Result<Vec<Solution>, OxirsError> {
         self.buffer.clear();
-        
+
         for _ in 0..max_size {
             match self.try_next()? {
                 Some(solution) => self.buffer.push(solution),
@@ -254,7 +254,7 @@ impl SelectResults {
     /// Take up to n solutions
     pub fn take_results(&mut self, n: usize) -> Result<Vec<Solution>, OxirsError> {
         let mut results = Vec::with_capacity(n.min(self.config.buffer_size));
-        
+
         for _ in 0..n {
             match self.next()? {
                 Some(solution) => results.push(solution),
@@ -402,7 +402,7 @@ impl ConstructResults {
 
     pub fn collect_batch(&mut self, max_size: usize) -> Result<Vec<Triple>, OxirsError> {
         let mut batch = Vec::with_capacity(max_size.min(self.config.buffer_size));
-        
+
         for _ in 0..max_size {
             match self.next()? {
                 Some(triple) => batch.push(triple),
@@ -551,7 +551,12 @@ impl StreamingResultBuilder {
         (results, tx)
     }
 
-    pub fn build_construct(self) -> (ConstructResults, channel::Sender<Result<Triple, OxirsError>>) {
+    pub fn build_construct(
+        self,
+    ) -> (
+        ConstructResults,
+        channel::Sender<Result<Triple, OxirsError>>,
+    ) {
         let (tx, rx) = channel::bounded(self.config.buffer_size);
         let results = ConstructResults::new(rx, self.config);
         (results, tx)
@@ -576,9 +581,8 @@ mod tests {
 
     #[test]
     fn test_streaming_select_results() {
-        let builder = StreamingResultBuilder::new()
-            .with_buffer_size(10);
-        
+        let builder = StreamingResultBuilder::new().with_buffer_size(10);
+
         let variables = vec![Variable::new("x").unwrap()];
         let (mut results, sender) = builder.build_select(variables.clone());
 
@@ -596,7 +600,7 @@ mod tests {
         while let Ok(Some(solution)) = results.next() {
             collected.push(solution);
         }
-        
+
         assert_eq!(collected.len(), 5);
         assert_eq!(results.progress().processed, 5);
     }

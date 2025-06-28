@@ -819,23 +819,24 @@ impl RedisConsumer {
     #[cfg(feature = "redis")]
     async fn claim_pending_messages(&mut self) -> Result<Vec<StreamEvent>> {
         let mut claimed_events = Vec::new();
-        
+
         match &mut self.connection {
             Some(RedisConnectionManager::Standalone(manager)) => {
                 // Get pending messages older than 5 minutes
                 let min_idle_time = 5 * 60 * 1000; // 5 minutes in milliseconds
-                
-                let result: RedisResult<Vec<(String, HashMap<String, String>)>> = redis::cmd("XAUTOCLAIM")
-                    .arg(&self.redis_config.stream_name)
-                    .arg(&self.redis_config.consumer_group)
-                    .arg(&self.redis_config.consumer_name)
-                    .arg(min_idle_time)
-                    .arg("0-0") // Start from beginning
-                    .arg("COUNT")
-                    .arg(10) // Claim up to 10 messages at a time
-                    .query_async(manager)
-                    .await;
-                
+
+                let result: RedisResult<Vec<(String, HashMap<String, String>)>> =
+                    redis::cmd("XAUTOCLAIM")
+                        .arg(&self.redis_config.stream_name)
+                        .arg(&self.redis_config.consumer_group)
+                        .arg(&self.redis_config.consumer_name)
+                        .arg(min_idle_time)
+                        .arg("0-0") // Start from beginning
+                        .arg("COUNT")
+                        .arg(10) // Claim up to 10 messages at a time
+                        .query_async(manager)
+                        .await;
+
                 if let Ok(messages) = result {
                     for (id, fields) in messages {
                         if let Ok(Some(event)) = self.parse_redis_message(&fields).await {
@@ -851,10 +852,10 @@ impl RedisConsumer {
             }
             _ => {}
         }
-        
+
         Ok(claimed_events)
     }
-    
+
     /// Acknowledge processed message
     #[cfg(feature = "redis")]
     pub async fn acknowledge(&mut self, message_id: &str) -> Result<()> {
@@ -866,10 +867,10 @@ impl RedisConsumer {
                     .arg(message_id)
                     .query_async(manager)
                     .await;
-                
+
                 let mut stats = self.stats.write().await;
                 stats.acknowledged_messages += 1;
-                
+
                 // Remove from pending messages
                 self.pending_messages.write().await.remove(message_id);
             }
@@ -880,25 +881,25 @@ impl RedisConsumer {
                     .arg(message_id)
                     .query_async(connection)
                     .await;
-                    
+
                 let mut stats = self.stats.write().await;
                 stats.acknowledged_messages += 1;
-                
+
                 self.pending_messages.write().await.remove(message_id);
             }
             _ => {}
         }
-        
+
         Ok(())
     }
-    
+
     pub async fn consume(&mut self) -> Result<Option<StreamEvent>> {
         #[cfg(feature = "redis")]
         {
             if self.connection.is_none() {
                 self.connect().await?;
             }
-            
+
             // First, try to claim any pending messages
             let claimed = self.claim_pending_messages().await?;
             if !claimed.is_empty() {
@@ -924,9 +925,11 @@ impl RedisConsumer {
                             if let Some(stream_key) = reply.keys.first() {
                                 if let Some(stream_id) = stream_key.ids.first() {
                                     self.last_id = stream_id.id.clone();
-                                    
+
                                     // Track as pending message
-                                    if let Ok(Some(event)) = self.parse_redis_message(&stream_id.map).await {
+                                    if let Ok(Some(event)) =
+                                        self.parse_redis_message(&stream_id.map).await
+                                    {
                                         let pending_msg = PendingMessage {
                                             message_id: stream_id.id.clone(),
                                             consumer: self.redis_config.consumer_name.clone(),
@@ -935,10 +938,12 @@ impl RedisConsumer {
                                             last_delivered: Utc::now(),
                                             data: RedisStreamEvent::from(event.clone()),
                                         };
-                                        
-                                        self.pending_messages.write().await
+
+                                        self.pending_messages
+                                            .write()
+                                            .await
                                             .insert(stream_id.id.clone(), pending_msg);
-                                        
+
                                         return Ok(Some(event));
                                     }
                                 }
@@ -1126,12 +1131,12 @@ impl RedisConsumer {
     pub async fn get_stats(&self) -> ConsumerStats {
         self.stats.read().await.clone()
     }
-    
+
     /// Get consumer group information and lag
     #[cfg(feature = "redis")]
     pub async fn get_consumer_group_info(&mut self) -> Result<HashMap<String, serde_json::Value>> {
         let mut info = HashMap::new();
-        
+
         match &mut self.connection {
             Some(RedisConnectionManager::Standalone(manager)) => {
                 // Get consumer group info
@@ -1140,39 +1145,50 @@ impl RedisConsumer {
                     .arg(&self.redis_config.stream_name)
                     .query_async(manager)
                     .await;
-                
+
                 if let Ok(groups) = result {
                     for group in groups {
                         if group.get("name") == Some(&self.redis_config.consumer_group) {
-                            info.insert("pending".to_string(), 
-                                serde_json::json!(group.get("pending").unwrap_or(&"0".to_string())));
-                            info.insert("consumers".to_string(), 
-                                serde_json::json!(group.get("consumers").unwrap_or(&"0".to_string())));
-                            info.insert("last_delivered_id".to_string(), 
-                                serde_json::json!(group.get("last-delivered-id").unwrap_or(&"0".to_string())));
+                            info.insert(
+                                "pending".to_string(),
+                                serde_json::json!(group.get("pending").unwrap_or(&"0".to_string())),
+                            );
+                            info.insert(
+                                "consumers".to_string(),
+                                serde_json::json!(group
+                                    .get("consumers")
+                                    .unwrap_or(&"0".to_string())),
+                            );
+                            info.insert(
+                                "last_delivered_id".to_string(),
+                                serde_json::json!(group
+                                    .get("last-delivered-id")
+                                    .unwrap_or(&"0".to_string())),
+                            );
                         }
                     }
                 }
-                
+
                 // Get stream info for lag calculation
                 let stream_info: RedisResult<HashMap<String, redis::Value>> = redis::cmd("XINFO")
                     .arg("STREAM")
                     .arg(&self.redis_config.stream_name)
                     .query_async(manager)
                     .await;
-                
+
                 if let Ok(stream_data) = stream_info {
                     if let Some(redis::Value::Data(length_bytes)) = stream_data.get("length") {
                         if let Ok(length_str) = String::from_utf8(length_bytes.clone()) {
                             if let Ok(length) = length_str.parse::<u64>() {
-                                let pending = info.get("pending")
+                                let pending = info
+                                    .get("pending")
                                     .and_then(|v| v.as_str())
                                     .and_then(|s| s.parse::<u64>().ok())
                                     .unwrap_or(0);
-                                
+
                                 let lag = length - pending;
                                 info.insert("lag".to_string(), serde_json::json!(lag));
-                                
+
                                 // Update stats
                                 let mut stats = self.stats.write().await;
                                 stats.consumer_lag = lag;
@@ -1186,15 +1202,25 @@ impl RedisConsumer {
             }
             _ => return Err(anyhow!("No Redis connection available")),
         }
-        
+
         Ok(info)
     }
-    
+
     /// Handle dead letter messages
     #[cfg(feature = "redis")]
-    async fn send_to_dead_letter(&mut self, message_id: &str, event: &RedisStreamEvent, reason: &str) -> Result<()> {
-        let dlq_stream = &self.dead_letter_handler.read().await.dead_letter_stream.clone();
-        
+    async fn send_to_dead_letter(
+        &mut self,
+        message_id: &str,
+        event: &RedisStreamEvent,
+        reason: &str,
+    ) -> Result<()> {
+        let dlq_stream = &self
+            .dead_letter_handler
+            .read()
+            .await
+            .dead_letter_stream
+            .clone();
+
         match &mut self.connection {
             Some(RedisConnectionManager::Standalone(manager)) => {
                 let fields = vec![
@@ -1203,14 +1229,14 @@ impl RedisConsumer {
                     ("failed_at", &Utc::now().to_rfc3339()),
                     ("data", &serde_json::to_string(event)?),
                 ];
-                
+
                 let _: RedisResult<String> = redis::cmd("XADD")
                     .arg(dlq_stream)
                     .arg("*")
                     .arg(&fields[..])
                     .query_async(manager)
                     .await;
-                
+
                 let mut stats = self.stats.write().await;
                 stats.dead_letters += 1;
             }
@@ -1219,7 +1245,7 @@ impl RedisConsumer {
             }
             _ => {}
         }
-        
+
         Ok(())
     }
 }

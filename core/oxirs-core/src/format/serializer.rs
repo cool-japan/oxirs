@@ -3,12 +3,12 @@
 //! Provides a consistent API for serializing to all supported RDF formats.
 //! Extracted and adapted from OxiGraph with OxiRS enhancements.
 
-use crate::model::{Quad, QuadRef, Triple, TripleRef};
-use super::format::RdfFormat;
-use super::error::{FormatError};
+use super::error::FormatError;
 pub use super::error::SerializeResult;
-use std::io::Write;
+use super::format::RdfFormat;
+use crate::model::{Quad, QuadRef, Triple, TripleRef};
 use std::collections::HashMap;
+use std::io::Write;
 
 /// Result type for quad serialization operations
 pub type QuadSerializeResult = SerializeResult<()>;
@@ -23,18 +23,21 @@ impl<W: Write> WriterQuadSerializer<W> {
     pub fn new(serializer: Box<dyn QuadSerializer<W>>) -> Self {
         Self { inner: serializer }
     }
-    
+
     /// Serialize a quad
     pub fn serialize_quad<'a>(&mut self, quad: impl Into<QuadRef<'a>>) -> QuadSerializeResult {
         self.inner.serialize_quad(quad.into())
     }
-    
+
     /// Serialize a triple (placed in default graph)
-    pub fn serialize_triple<'a>(&mut self, triple: impl Into<TripleRef<'a>>) -> QuadSerializeResult {
+    pub fn serialize_triple<'a>(
+        &mut self,
+        triple: impl Into<TripleRef<'a>>,
+    ) -> QuadSerializeResult {
         let quad = triple.into().in_graph(None);
         self.serialize_quad(quad)
     }
-    
+
     /// Serialize multiple quads
     pub fn serialize_quads<I>(&mut self, quads: I) -> QuadSerializeResult
     where
@@ -46,7 +49,7 @@ impl<W: Write> WriterQuadSerializer<W> {
         }
         Ok(())
     }
-    
+
     /// Finish serialization and return the writer
     pub fn finish(self) -> SerializeResult<W> {
         self.inner.finish()
@@ -57,7 +60,7 @@ impl<W: Write> WriterQuadSerializer<W> {
 pub trait QuadSerializer<W: Write> {
     /// Serialize a quad
     fn serialize_quad(&mut self, quad: QuadRef<'_>) -> QuadSerializeResult;
-    
+
     /// Finish serialization and return the writer
     fn finish(self: Box<Self>) -> SerializeResult<W>;
 }
@@ -98,25 +101,25 @@ impl RdfSerializer {
             pretty: false,
         }
     }
-    
+
     /// Set the base IRI for relative IRI generation
     pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Self {
         self.base_iri = Some(base_iri.into());
         self
     }
-    
+
     /// Add a namespace prefix
     pub fn with_prefix(mut self, prefix: impl Into<String>, iri: impl Into<String>) -> Self {
         self.prefixes.insert(prefix.into(), iri.into());
         self
     }
-    
+
     /// Enable pretty formatting (indentation, line breaks)
     pub fn pretty(mut self) -> Self {
         self.pretty = true;
         self
     }
-    
+
     /// Create a writer-based serializer
     pub fn for_writer<W: Write + 'static>(self, writer: W) -> WriterQuadSerializer<W> {
         match self.format {
@@ -129,59 +132,59 @@ impl RdfSerializer {
             RdfFormat::N3 => self.create_n3_serializer(writer),
         }
     }
-    
+
     /// Get the format being serialized
     pub fn format(&self) -> RdfFormat {
         self.format.clone()
     }
-    
+
     /// Get the base IRI
     pub fn base_iri(&self) -> Option<&str> {
         self.base_iri.as_deref()
     }
-    
+
     /// Get the prefixes
     pub fn prefixes(&self) -> &HashMap<String, String> {
         &self.prefixes
     }
-    
+
     /// Check if pretty formatting is enabled
     pub fn is_pretty(&self) -> bool {
         self.pretty
     }
 
     // Format-specific serializer implementations
-    
+
     fn create_turtle_serializer<W: Write + 'static>(self, writer: W) -> WriterQuadSerializer<W> {
         // TODO: Implement actual Turtle serialization using extracted oxttl components
         WriterQuadSerializer::new(Box::new(DummySerializer::new(writer)))
     }
-    
+
     fn create_ntriples_serializer<W: Write + 'static>(self, writer: W) -> WriterQuadSerializer<W> {
         // TODO: Implement N-Triples serialization
         WriterQuadSerializer::new(Box::new(DummySerializer::new(writer)))
     }
-    
+
     fn create_nquads_serializer<W: Write + 'static>(self, writer: W) -> WriterQuadSerializer<W> {
         // TODO: Implement N-Quads serialization
         WriterQuadSerializer::new(Box::new(DummySerializer::new(writer)))
     }
-    
+
     fn create_trig_serializer<W: Write + 'static>(self, writer: W) -> WriterQuadSerializer<W> {
         // TODO: Implement TriG serialization
         WriterQuadSerializer::new(Box::new(DummySerializer::new(writer)))
     }
-    
+
     fn create_rdfxml_serializer<W: Write + 'static>(self, writer: W) -> WriterQuadSerializer<W> {
         // TODO: Implement RDF/XML serialization using extracted oxrdfxml components
         WriterQuadSerializer::new(Box::new(DummySerializer::new(writer)))
     }
-    
+
     fn create_jsonld_serializer<W: Write + 'static>(self, writer: W) -> WriterQuadSerializer<W> {
         // TODO: Implement JSON-LD serialization using extracted oxjsonld components
         WriterQuadSerializer::new(Box::new(DummySerializer::new(writer)))
     }
-    
+
     fn create_n3_serializer<W: Write + 'static>(self, writer: W) -> WriterQuadSerializer<W> {
         // TODO: Implement N3 serialization
         WriterQuadSerializer::new(Box::new(DummySerializer::new(writer)))
@@ -210,7 +213,7 @@ impl<W: Write> QuadSerializer<W> for DummySerializer<W> {
         // TODO: Replace with actual serialization logic
         Ok(())
     }
-    
+
     fn finish(self: Box<Self>) -> SerializeResult<W> {
         Ok(self.writer)
     }
@@ -267,7 +270,7 @@ impl LineEnding {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Unix => "\n",
-            Self::Windows => "\r\n", 
+            Self::Windows => "\r\n",
             Self::Mac => "\r",
             Self::Platform => {
                 #[cfg(windows)]
@@ -293,37 +296,37 @@ impl ConfigurableSerializer {
             config,
         }
     }
-    
+
     /// Set base IRI
     pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Self {
         self.serializer = self.serializer.with_base_iri(base_iri);
         self
     }
-    
+
     /// Add prefix
     pub fn with_prefix(mut self, prefix: impl Into<String>, iri: impl Into<String>) -> Self {
         self.serializer = self.serializer.with_prefix(prefix, iri);
         self
     }
-    
+
     /// Create a writer with configuration
     pub fn for_writer<W: Write + 'static>(self, writer: W) -> WriterQuadSerializer<W> {
         // Apply configuration settings and create serializer
         let mut serializer = self.serializer;
-        
+
         if !self.config.compact {
             serializer = serializer.pretty();
         }
-        
+
         // TODO: Apply other configuration options
         serializer.for_writer(writer)
     }
-    
+
     /// Get the configuration
     pub fn config(&self) -> &SerializeConfig {
         &self.config
     }
-    
+
     /// Get the serializer
     pub fn serializer(&self) -> &RdfSerializer {
         &self.serializer
@@ -333,9 +336,12 @@ impl ConfigurableSerializer {
 /// Simple serialization functions for common use cases
 pub mod simple {
     use super::*;
-    
+
     /// Serialize triples to a string in the specified format
-    pub fn serialize_triples_to_string(triples: &[Triple], format: RdfFormat) -> Result<String, FormatError> {
+    pub fn serialize_triples_to_string(
+        triples: &[Triple],
+        format: RdfFormat,
+    ) -> Result<String, FormatError> {
         let buffer = Vec::new();
         let mut serializer = RdfSerializer::new(format).for_writer(buffer);
         for triple in triples {
@@ -344,9 +350,12 @@ pub mod simple {
         let buffer = serializer.finish()?;
         String::from_utf8(buffer).map_err(|e| FormatError::invalid_data(e.to_string()))
     }
-    
+
     /// Serialize quads to a string in the specified format
-    pub fn serialize_quads_to_string(quads: &[Quad], format: RdfFormat) -> Result<String, FormatError> {
+    pub fn serialize_quads_to_string(
+        quads: &[Quad],
+        format: RdfFormat,
+    ) -> Result<String, FormatError> {
         let buffer = Vec::new();
         let mut serializer = RdfSerializer::new(format).for_writer(buffer);
         for quad in quads {
@@ -355,22 +364,22 @@ pub mod simple {
         let buffer = serializer.finish()?;
         String::from_utf8(buffer).map_err(|e| FormatError::invalid_data(e.to_string()))
     }
-    
+
     /// Serialize triples to Turtle string
     pub fn serialize_turtle(triples: &[Triple]) -> Result<String, FormatError> {
         serialize_triples_to_string(triples, RdfFormat::Turtle)
     }
-    
+
     /// Serialize triples to N-Triples string
     pub fn serialize_ntriples(triples: &[Triple]) -> Result<String, FormatError> {
         serialize_triples_to_string(triples, RdfFormat::NTriples)
     }
-    
+
     /// Serialize quads to N-Quads string
     pub fn serialize_nquads(quads: &[Quad]) -> Result<String, FormatError> {
         serialize_quads_to_string(quads, RdfFormat::NQuads)
     }
-    
+
     /// Serialize quads to TriG string
     pub fn serialize_trig(quads: &[Quad]) -> Result<String, FormatError> {
         serialize_quads_to_string(quads, RdfFormat::TriG)
@@ -396,9 +405,12 @@ mod tests {
             .with_base_iri("http://example.org/")
             .with_prefix("ex", "http://example.org/ns#")
             .pretty();
-            
+
         assert_eq!(serializer.base_iri(), Some("http://example.org/"));
-        assert_eq!(serializer.prefixes().get("ex"), Some(&"http://example.org/ns#".to_string()));
+        assert_eq!(
+            serializer.prefixes().get("ex"),
+            Some(&"http://example.org/ns#".to_string())
+        );
         assert!(serializer.is_pretty());
     }
 
@@ -409,7 +421,7 @@ mod tests {
             sort_output: true,
             ..Default::default()
         };
-        
+
         let serializer = ConfigurableSerializer::new(RdfFormat::NQuads, config);
         assert!(serializer.config().compact);
         assert!(serializer.config().sort_output);

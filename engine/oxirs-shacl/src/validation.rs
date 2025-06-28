@@ -5,12 +5,12 @@
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use oxirs_core::{
     model::{BlankNode, Literal, NamedNode, RdfTerm, Term, Triple},
-    Store,
-    OxirsError,
+    OxirsError, Store,
 };
 
 use crate::{
@@ -48,12 +48,13 @@ pub struct ValidationEngine<'a> {
 
     /// Validation statistics
     stats: ValidationStats,
-    
+
     /// Cache for constraint evaluation results
     constraint_cache: std::cell::RefCell<HashMap<ConstraintCacheKey, ConstraintEvaluationResult>>,
-    
+
     /// Cache for resolved inherited constraints
-    inheritance_cache: std::cell::RefCell<HashMap<ShapeId, IndexMap<ConstraintComponentId, Constraint>>>,
+    inheritance_cache:
+        std::cell::RefCell<HashMap<ShapeId, IndexMap<ConstraintComponentId, Constraint>>>,
 }
 
 impl<'a> ValidationEngine<'a> {
@@ -261,18 +262,19 @@ impl<'a> ValidationEngine<'a> {
         for (component_id, constraint) in &resolved_constraints {
             // Collect allowed properties for closed shape validation
             let mut allowed_properties = Vec::new();
-            
+
             // Add the shape's own path if it's a property shape
             if let Some(shape_path) = &shape.path {
                 allowed_properties.push(shape_path.clone());
             }
-            
-            // TODO: In a complete implementation, we would need to collect paths from 
+
+            // TODO: In a complete implementation, we would need to collect paths from
             // all property shapes associated with this node shape
-            
+
             let context = ConstraintContext::new(focus_node.clone(), shape.id.clone())
                 .with_values(values.to_vec())
-                .with_allowed_properties(allowed_properties);
+                .with_allowed_properties(allowed_properties)
+                .with_shapes_registry(std::rc::Rc::new(self.shapes.clone()));
 
             let constraint_result =
                 self.validate_constraint(store, constraint, &context, path, graph_name)?;
@@ -332,7 +334,7 @@ impl<'a> ValidationEngine<'a> {
                 constraint_component_id: constraint.component_id(),
                 property_path: path.cloned(),
             };
-            
+
             // Check if we have a cached result
             if let Some(cached_result) = self.constraint_cache.borrow().get(&cache_key) {
                 self.stats.cache_hits += 1;
@@ -340,7 +342,7 @@ impl<'a> ValidationEngine<'a> {
             }
             self.stats.cache_misses += 1;
         }
-        
+
         let start_time = std::time::Instant::now();
         let result = match constraint {
             // Core Value Constraints
@@ -397,7 +399,7 @@ impl<'a> ValidationEngine<'a> {
             // SPARQL Constraints
             Constraint::Sparql(c) => self.validate_sparql_constraint(store, c, context, graph_name),
         }?;
-        
+
         // Cache the result if caching is enabled
         if self.config.max_violations == 0 || !self.config.fail_fast {
             let cache_key = ConstraintCacheKey {
@@ -406,14 +408,17 @@ impl<'a> ValidationEngine<'a> {
                 constraint_component_id: constraint.component_id(),
                 property_path: path.cloned(),
             };
-            
-            self.constraint_cache.borrow_mut().insert(cache_key, result.clone());
+
+            self.constraint_cache
+                .borrow_mut()
+                .insert(cache_key, result.clone());
         }
-        
+
         // Record constraint evaluation time
         let duration = start_time.elapsed();
-        self.stats.record_constraint_evaluation(constraint.component_id().as_str().to_string(), duration);
-        
+        self.stats
+            .record_constraint_evaluation(constraint.component_id().as_str().to_string(), duration);
+
         Ok(result)
     }
 
@@ -1542,16 +1547,16 @@ impl<'a> ValidationEngine<'a> {
             // Validate disjoint constraint by checking against other qualified value shapes
             // in the same property shape context
             let disjoint_violation = self.validate_qualified_value_shapes_disjoint(
-                store, 
-                context, 
+                store,
+                context,
                 &constraint.qualified_value_shape,
-                graph_name
+                graph_name,
             )?;
-            
+
             if let Some(violation_message) = disjoint_violation {
                 return Ok(ConstraintEvaluationResult::violated(
                     None,
-                    Some(violation_message)
+                    Some(violation_message),
                 ));
             }
         }
@@ -1598,14 +1603,18 @@ impl<'a> ValidationEngine<'a> {
             let mut conforming_shapes = Vec::new();
 
             for qvs_constraint in &qualified_constraints {
-                let shape = self.shapes.get(&qvs_constraint.qualified_value_shape).ok_or_else(|| {
-                    ShaclError::ValidationEngine(format!(
-                        "Shape not found for qualified value shape constraint: {}",
-                        qvs_constraint.qualified_value_shape.as_str()
-                    ))
-                })?;
+                let shape = self
+                    .shapes
+                    .get(&qvs_constraint.qualified_value_shape)
+                    .ok_or_else(|| {
+                        ShaclError::ValidationEngine(format!(
+                            "Shape not found for qualified value shape constraint: {}",
+                            qvs_constraint.qualified_value_shape.as_str()
+                        ))
+                    })?;
 
-                let validation_result = self.validate_node_against_shape(store, shape, value, graph_name)?;
+                let validation_result =
+                    self.validate_node_against_shape(store, shape, value, graph_name)?;
                 if validation_result.conforms() {
                     conforming_shapes.push(&qvs_constraint.qualified_value_shape);
                 }
@@ -1617,7 +1626,7 @@ impl<'a> ValidationEngine<'a> {
                     .iter()
                     .map(|s| s.as_str().to_string())
                     .collect();
-                
+
                 return Ok(Some(format!(
                     "Qualified value shapes disjoint constraint violated: value {} conforms to multiple qualified value shapes: {}",
                     self.format_term_for_message(value),
@@ -1837,7 +1846,7 @@ impl<'a> ValidationEngine<'a> {
     pub fn get_statistics(&self) -> &ValidationStats {
         &self.stats
     }
-    
+
     /// Get cache hit rate
     pub fn get_cache_hit_rate(&self) -> f64 {
         let total = self.stats.cache_hits + self.stats.cache_misses;
@@ -1857,50 +1866,56 @@ impl<'a> ValidationEngine<'a> {
 
     /// Compare two literals for ordering (supports numeric and string comparison)
     fn compare_literals(&self, left: &Literal, right: &Literal) -> Result<std::cmp::Ordering> {
-        
         // First check if they have the same datatype
         let left_datatype = left.datatype();
         let right_datatype = right.datatype();
-        
+
         // If datatypes don't match, we can't compare (except for numeric types)
         if left_datatype != right_datatype {
             // Special case: allow comparison between different numeric types
-            if self.is_numeric_datatype(left_datatype.as_str()) && self.is_numeric_datatype(right_datatype.as_str()) {
+            if self.is_numeric_datatype(left_datatype.as_str())
+                && self.is_numeric_datatype(right_datatype.as_str())
+            {
                 return self.compare_numeric_literals(left, right);
             }
-            return Err(ShaclError::ConstraintValidation(
-                format!("Cannot compare literals with different datatypes: {} and {}", 
-                    left_datatype.as_str(), right_datatype.as_str())
-            ));
+            return Err(ShaclError::ConstraintValidation(format!(
+                "Cannot compare literals with different datatypes: {} and {}",
+                left_datatype.as_str(),
+                right_datatype.as_str()
+            )));
         }
-        
+
         // Compare based on datatype
         match left_datatype.as_str() {
             // Numeric types
-            "http://www.w3.org/2001/XMLSchema#integer" |
-            "http://www.w3.org/2001/XMLSchema#int" |
-            "http://www.w3.org/2001/XMLSchema#long" |
-            "http://www.w3.org/2001/XMLSchema#short" |
-            "http://www.w3.org/2001/XMLSchema#byte" |
-            "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" |
-            "http://www.w3.org/2001/XMLSchema#positiveInteger" |
-            "http://www.w3.org/2001/XMLSchema#nonPositiveInteger" |
-            "http://www.w3.org/2001/XMLSchema#negativeInteger" => {
+            "http://www.w3.org/2001/XMLSchema#integer"
+            | "http://www.w3.org/2001/XMLSchema#int"
+            | "http://www.w3.org/2001/XMLSchema#long"
+            | "http://www.w3.org/2001/XMLSchema#short"
+            | "http://www.w3.org/2001/XMLSchema#byte"
+            | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+            | "http://www.w3.org/2001/XMLSchema#positiveInteger"
+            | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
+            | "http://www.w3.org/2001/XMLSchema#negativeInteger" => {
                 match (left.as_str().parse::<i64>(), right.as_str().parse::<i64>()) {
                     (Ok(l), Ok(r)) => Ok(l.cmp(&r)),
-                    _ => Err(ShaclError::ConstraintValidation(
-                        format!("Invalid integer values: {} or {}", left.as_str(), right.as_str())
-                    ))
+                    _ => Err(ShaclError::ConstraintValidation(format!(
+                        "Invalid integer values: {} or {}",
+                        left.as_str(),
+                        right.as_str()
+                    ))),
                 }
             }
-            "http://www.w3.org/2001/XMLSchema#decimal" |
-            "http://www.w3.org/2001/XMLSchema#float" |
-            "http://www.w3.org/2001/XMLSchema#double" => {
+            "http://www.w3.org/2001/XMLSchema#decimal"
+            | "http://www.w3.org/2001/XMLSchema#float"
+            | "http://www.w3.org/2001/XMLSchema#double" => {
                 match (left.as_str().parse::<f64>(), right.as_str().parse::<f64>()) {
                     (Ok(l), Ok(r)) => Ok(l.partial_cmp(&r).unwrap_or(std::cmp::Ordering::Equal)),
-                    _ => Err(ShaclError::ConstraintValidation(
-                        format!("Invalid numeric values: {} or {}", left.as_str(), right.as_str())
-                    ))
+                    _ => Err(ShaclError::ConstraintValidation(format!(
+                        "Invalid numeric values: {} or {}",
+                        left.as_str(),
+                        right.as_str()
+                    ))),
                 }
             }
             // Date/DateTime types
@@ -1919,46 +1934,56 @@ impl<'a> ValidationEngine<'a> {
                 Ok(left.as_str().cmp(right.as_str()))
             }
             // String types and default
-            "http://www.w3.org/2001/XMLSchema#string" |
-            "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString" |
-            _ => {
+            "http://www.w3.org/2001/XMLSchema#string"
+            | "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
+            | _ => {
                 // String comparison
                 Ok(left.as_str().cmp(right.as_str()))
             }
         }
     }
-    
+
     /// Check if a datatype is numeric
     fn is_numeric_datatype(&self, datatype: &str) -> bool {
-        matches!(datatype,
-            "http://www.w3.org/2001/XMLSchema#integer" |
-            "http://www.w3.org/2001/XMLSchema#int" |
-            "http://www.w3.org/2001/XMLSchema#long" |
-            "http://www.w3.org/2001/XMLSchema#short" |
-            "http://www.w3.org/2001/XMLSchema#byte" |
-            "http://www.w3.org/2001/XMLSchema#decimal" |
-            "http://www.w3.org/2001/XMLSchema#float" |
-            "http://www.w3.org/2001/XMLSchema#double" |
-            "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" |
-            "http://www.w3.org/2001/XMLSchema#positiveInteger" |
-            "http://www.w3.org/2001/XMLSchema#nonPositiveInteger" |
-            "http://www.w3.org/2001/XMLSchema#negativeInteger"
+        matches!(
+            datatype,
+            "http://www.w3.org/2001/XMLSchema#integer"
+                | "http://www.w3.org/2001/XMLSchema#int"
+                | "http://www.w3.org/2001/XMLSchema#long"
+                | "http://www.w3.org/2001/XMLSchema#short"
+                | "http://www.w3.org/2001/XMLSchema#byte"
+                | "http://www.w3.org/2001/XMLSchema#decimal"
+                | "http://www.w3.org/2001/XMLSchema#float"
+                | "http://www.w3.org/2001/XMLSchema#double"
+                | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+                | "http://www.w3.org/2001/XMLSchema#positiveInteger"
+                | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
+                | "http://www.w3.org/2001/XMLSchema#negativeInteger"
         )
     }
-    
+
     /// Compare numeric literals of possibly different types
-    fn compare_numeric_literals(&self, left: &Literal, right: &Literal) -> Result<std::cmp::Ordering> {
+    fn compare_numeric_literals(
+        &self,
+        left: &Literal,
+        right: &Literal,
+    ) -> Result<std::cmp::Ordering> {
         // Convert both to f64 for comparison
         match (left.as_str().parse::<f64>(), right.as_str().parse::<f64>()) {
             (Ok(l), Ok(r)) => Ok(l.partial_cmp(&r).unwrap_or(std::cmp::Ordering::Equal)),
-            _ => Err(ShaclError::ConstraintValidation(
-                format!("Invalid numeric values for comparison: {} or {}", left.as_str(), right.as_str())
-            ))
+            _ => Err(ShaclError::ConstraintValidation(format!(
+                "Invalid numeric values for comparison: {} or {}",
+                left.as_str(),
+                right.as_str()
+            ))),
         }
     }
 
     /// Resolve inherited constraints for a shape
-    pub fn resolve_inherited_constraints(&self, shape_id: &ShapeId) -> Result<IndexMap<ConstraintComponentId, Constraint>> {
+    pub fn resolve_inherited_constraints(
+        &self,
+        shape_id: &ShapeId,
+    ) -> Result<IndexMap<ConstraintComponentId, Constraint>> {
         // Check cache first
         if let Some(cached_constraints) = self.inheritance_cache.borrow().get(shape_id) {
             return Ok(cached_constraints.clone());
@@ -1966,15 +1991,17 @@ impl<'a> ValidationEngine<'a> {
 
         let mut resolved_constraints = IndexMap::new();
         let mut visited = HashSet::new();
-        
+
         self.collect_inherited_constraints(shape_id, &mut resolved_constraints, &mut visited)?;
-        
+
         // Cache the result
-        self.inheritance_cache.borrow_mut().insert(shape_id.clone(), resolved_constraints.clone());
-        
+        self.inheritance_cache
+            .borrow_mut()
+            .insert(shape_id.clone(), resolved_constraints.clone());
+
         Ok(resolved_constraints)
     }
-    
+
     /// Recursively collect constraints from a shape and its parents
     fn collect_inherited_constraints(
         &self,
@@ -1987,42 +2014,50 @@ impl<'a> ValidationEngine<'a> {
             return Ok(());
         }
         visited.insert(shape_id.clone());
-        
+
         if let Some(shape) = self.shapes.get(shape_id) {
             // First process parent shapes (depth-first) in priority order
             let mut parent_shapes: Vec<_> = shape.extends.iter().collect();
-            
+
             // Sort parent shapes by priority if they exist
             parent_shapes.sort_by(|a, b| {
-                let priority_a = self.shapes.get(*a).map(|s| s.effective_priority()).unwrap_or(0);
-                let priority_b = self.shapes.get(*b).map(|s| s.effective_priority()).unwrap_or(0);
+                let priority_a = self
+                    .shapes
+                    .get(*a)
+                    .map(|s| s.effective_priority())
+                    .unwrap_or(0);
+                let priority_b = self
+                    .shapes
+                    .get(*b)
+                    .map(|s| s.effective_priority())
+                    .unwrap_or(0);
                 priority_b.cmp(&priority_a) // Higher priority first
             });
-            
+
             for parent_id in parent_shapes {
                 self.collect_inherited_constraints(parent_id, resolved_constraints, visited)?;
             }
-            
+
             // Then add this shape's constraints, potentially overriding parent constraints
             // Child constraints override parent constraints (standard inheritance behavior)
             for (component_id, constraint) in &shape.constraints {
                 resolved_constraints.insert(component_id.clone(), constraint.clone());
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Get all shapes that a given shape inherits from (transitively)
     fn get_all_parent_shapes(&self, shape_id: &ShapeId) -> Result<Vec<ShapeId>> {
         let mut parents = Vec::new();
         let mut visited = HashSet::new();
-        
+
         self.collect_parent_shapes(shape_id, &mut parents, &mut visited)?;
-        
+
         Ok(parents)
     }
-    
+
     fn collect_parent_shapes(
         &self,
         shape_id: &ShapeId,
@@ -2033,14 +2068,14 @@ impl<'a> ValidationEngine<'a> {
             return Ok(());
         }
         visited.insert(shape_id.clone());
-        
+
         if let Some(shape) = self.shapes.get(shape_id) {
             for parent_id in &shape.extends {
                 parents.push(parent_id.clone());
                 self.collect_parent_shapes(parent_id, parents, visited)?;
             }
         }
-        
+
         Ok(())
     }
 }
@@ -2105,7 +2140,7 @@ pub struct ValidationViolation {
 
     /// Additional details about the violation
     pub details: HashMap<String, String>,
-    
+
     /// Nested validation results (sh:detail) for complex constraints
     /// Used by logical constraints (and, or, xone) and shape-based constraints (node, qualifiedValueShape)
     pub nested_results: Vec<ValidationViolation>,
@@ -2150,18 +2185,17 @@ impl ValidationViolation {
         self.details.insert(key, value);
         self
     }
-    
+
     pub fn with_nested_result(mut self, nested: ValidationViolation) -> Self {
         self.nested_results.push(nested);
         self
     }
-    
+
     pub fn with_nested_results(mut self, nested: Vec<ValidationViolation>) -> Self {
         self.nested_results.extend(nested);
         self
     }
 }
-
 
 /// Result of constraint evaluation
 #[derive(Debug, Clone)]
@@ -2363,16 +2397,16 @@ mod tests {
         let config = ValidationConfig::default();
         ValidationEngine::new(shapes, config)
     }
-    
+
     #[test]
     fn test_constraint_caching() {
         let mut shapes = IndexMap::new();
         let shape = Shape::new(ShapeId::new("test_shape"), ShapeType::NodeShape);
         shapes.insert(shape.id.clone(), shape);
-        
+
         let config = ValidationConfig::default();
         let mut engine = ValidationEngine::new(&shapes, config);
-        
+
         // Create a constraint and context
         let constraint = Constraint::NodeKind(NodeKindConstraint {
             node_kind: NodeKind::Iri,
@@ -2384,30 +2418,34 @@ mod tests {
         .with_values(vec![Term::NamedNode(
             NamedNode::new("http://example.org/value").unwrap(),
         )]);
-        
+
         // First evaluation - should miss cache
         let store = Store::new().unwrap();
-        let result1 = engine.validate_constraint(&store, &constraint, &context, None, None).unwrap();
+        let result1 = engine
+            .validate_constraint(&store, &constraint, &context, None, None)
+            .unwrap();
         assert_eq!(engine.stats.cache_misses, 1);
         assert_eq!(engine.stats.cache_hits, 0);
-        
+
         // Second evaluation with same constraint - should hit cache
-        let result2 = engine.validate_constraint(&store, &constraint, &context, None, None).unwrap();
+        let result2 = engine
+            .validate_constraint(&store, &constraint, &context, None, None)
+            .unwrap();
         assert_eq!(engine.stats.cache_misses, 1);
         assert_eq!(engine.stats.cache_hits, 1);
-        
+
         // Results should be the same
         assert!(matches!(result1, ConstraintEvaluationResult::Satisfied));
         assert!(matches!(result2, ConstraintEvaluationResult::Satisfied));
-        
+
         // Check cache hit rate
         assert_eq!(engine.get_cache_hit_rate(), 0.5);
     }
-    
+
     #[test]
     fn test_literal_comparison_numeric() {
         let engine = create_test_engine();
-        
+
         // Test integer comparison
         let int_literal1 = Literal::new_typed(
             "42",
@@ -2417,10 +2455,12 @@ mod tests {
             "100",
             NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
         );
-        
-        let result = engine.compare_literals(&int_literal1, &int_literal2).unwrap();
+
+        let result = engine
+            .compare_literals(&int_literal1, &int_literal2)
+            .unwrap();
         assert_eq!(result, std::cmp::Ordering::Less);
-        
+
         // Test decimal comparison
         let dec_literal1 = Literal::new_typed(
             "42.5",
@@ -2430,10 +2470,12 @@ mod tests {
             "42.3",
             NamedNode::new("http://www.w3.org/2001/XMLSchema#decimal").unwrap(),
         );
-        
-        let result = engine.compare_literals(&dec_literal1, &dec_literal2).unwrap();
+
+        let result = engine
+            .compare_literals(&dec_literal1, &dec_literal2)
+            .unwrap();
         assert_eq!(result, std::cmp::Ordering::Greater);
-        
+
         // Test mixed numeric comparison (integer vs decimal)
         let int_literal = Literal::new_typed(
             "42",
@@ -2443,15 +2485,15 @@ mod tests {
             "42.0",
             NamedNode::new("http://www.w3.org/2001/XMLSchema#decimal").unwrap(),
         );
-        
+
         let result = engine.compare_literals(&int_literal, &dec_literal).unwrap();
         assert_eq!(result, std::cmp::Ordering::Equal);
     }
-    
+
     #[test]
     fn test_literal_comparison_string() {
         let engine = create_test_engine();
-        
+
         // Test string comparison
         let str_literal1 = Literal::new_typed(
             "apple",
@@ -2461,8 +2503,10 @@ mod tests {
             "banana",
             NamedNode::new("http://www.w3.org/2001/XMLSchema#string").unwrap(),
         );
-        
-        let result = engine.compare_literals(&str_literal1, &str_literal2).unwrap();
+
+        let result = engine
+            .compare_literals(&str_literal1, &str_literal2)
+            .unwrap();
         assert_eq!(result, std::cmp::Ordering::Less);
     }
 }
@@ -2478,7 +2522,7 @@ fn format_term_for_sparql(term: &Term) -> Result<String> {
         }
         Term::Variable(var) => Ok(format!("?{}", var.name())),
         Term::QuotedTriple(_) => Err(ShaclError::ValidationEngine(
-            "Quoted triples not supported in validation queries".to_string()
+            "Quoted triples not supported in validation queries".to_string(),
         )),
     }
 }

@@ -4,10 +4,10 @@
 //! including expression optimization, value set management, and performance improvements.
 
 use crate::error::{FusekiError, FusekiResult};
-use std::collections::{HashMap, HashSet, BTreeMap};
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use serde::{Serialize, Deserialize};
 use tracing::{debug, info, warn};
 
 /// Enhanced BIND processor with expression optimization
@@ -63,14 +63,14 @@ pub enum ExpressionFunction {
     StrAfter,
     Replace,
     Regex,
-    
+
     // Numeric functions
     Abs,
     Round,
     Ceil,
     Floor,
     Rand,
-    
+
     // Date/Time functions
     Now,
     Year,
@@ -81,14 +81,14 @@ pub enum ExpressionFunction {
     Seconds,
     Timezone,
     Tz,
-    
+
     // Hash functions (SPARQL 1.2)
     MD5,
     SHA1,
     SHA256,
     SHA384,
     SHA512,
-    
+
     // Type conversion
     Str,
     Uri,
@@ -96,14 +96,14 @@ pub enum ExpressionFunction {
     BNode,
     Lang,
     Datatype,
-    
+
     // Conditional
     If,
     Coalesce,
-    
+
     // Aggregate-like (for BIND)
     Sample,
-    
+
     // Custom
     Custom(String),
 }
@@ -168,11 +168,21 @@ pub struct BindOptimizationRule {
 #[derive(Debug, Clone)]
 pub enum ExpressionPattern {
     /// Function call pattern
-    FunctionCall { function: String, args: Vec<ArgPattern> },
+    FunctionCall {
+        function: String,
+        args: Vec<ArgPattern>,
+    },
     /// Binary operation pattern
-    BinaryOp { op: String, left: Box<ExpressionPattern>, right: Box<ExpressionPattern> },
+    BinaryOp {
+        op: String,
+        left: Box<ExpressionPattern>,
+        right: Box<ExpressionPattern>,
+    },
     /// Unary operation pattern
-    UnaryOp { op: String, operand: Box<ExpressionPattern> },
+    UnaryOp {
+        op: String,
+        operand: Box<ExpressionPattern>,
+    },
     /// Variable pattern
     Variable(String),
     /// Literal pattern
@@ -540,7 +550,7 @@ impl EnhancedBindProcessor {
             statistics: Arc::new(RwLock::new(BindStatistics::default())),
         }
     }
-    
+
     /// Process BIND clauses with optimization
     pub async fn process_bind_clauses(
         &self,
@@ -548,50 +558,53 @@ impl EnhancedBindProcessor {
         bindings: &mut Vec<HashMap<String, serde_json::Value>>,
     ) -> FusekiResult<()> {
         let bind_expressions = self.extract_bind_expressions(query)?;
-        
+
         for (var, expr) in bind_expressions {
             // Optimize the expression
             let optimized_expr = self.bind_optimizer.optimize_expression(&expr)?;
-            
+
             // Check cache
             let cache_key = self.compute_cache_key(&optimized_expr);
             if let Some(cached_result) = self.get_cached_result(&cache_key).await? {
                 self.apply_bind_result(bindings, &var, cached_result);
                 continue;
             }
-            
+
             // Evaluate the expression
             let start_time = std::time::Instant::now();
-            let result = self.expression_evaluator.evaluate(&optimized_expr, bindings)?;
+            let result = self
+                .expression_evaluator
+                .evaluate(&optimized_expr, bindings)?;
             let eval_time = start_time.elapsed().as_millis() as f64;
-            
+
             // Cache the result
-            self.cache_result(cache_key, result.clone(), eval_time).await?;
-            
+            self.cache_result(cache_key, result.clone(), eval_time)
+                .await?;
+
             // Apply to bindings
             self.apply_bind_result(bindings, &var, result);
-            
+
             // Update statistics
             self.update_statistics(eval_time).await;
         }
-        
+
         Ok(())
     }
-    
+
     fn extract_bind_expressions(&self, query: &str) -> FusekiResult<Vec<(String, String)>> {
         let mut expressions = Vec::new();
-        
+
         // Find BIND clauses
         let query_lower = query.to_lowercase();
         let mut pos = 0;
-        
+
         while let Some(bind_pos) = query_lower[pos..].find("bind(") {
             let bind_start = pos + bind_pos;
-            
+
             // Extract the BIND expression
             if let Some(expr_end) = self.find_expression_end(&query[bind_start + 5..]) {
                 let expr = &query[bind_start + 5..bind_start + 5 + expr_end];
-                
+
                 // Extract the variable (AS ?var)
                 if let Some(as_pos) = expr.rfind(" as ") {
                     let var_part = expr[as_pos + 4..].trim();
@@ -602,24 +615,24 @@ impl EnhancedBindProcessor {
                     }
                 }
             }
-            
+
             pos = bind_start + 5;
         }
-        
+
         Ok(expressions)
     }
-    
+
     fn find_expression_end(&self, expr: &str) -> Option<usize> {
         let mut paren_count = 1;
         let mut in_string = false;
         let mut escape_next = false;
-        
+
         for (i, ch) in expr.chars().enumerate() {
             if escape_next {
                 escape_next = false;
                 continue;
             }
-            
+
             match ch {
                 '\\' => escape_next = true,
                 '"' => in_string = !in_string,
@@ -633,24 +646,24 @@ impl EnhancedBindProcessor {
                 _ => {}
             }
         }
-        
+
         None
     }
-    
+
     fn compute_cache_key(&self, expr: &str) -> String {
         format!("{:x}", md5::compute(expr))
     }
-    
+
     async fn get_cached_result(&self, key: &str) -> FusekiResult<Option<serde_json::Value>> {
         let cache = self.expression_cache.read().await;
-        
+
         if let Some(cached) = cache.cache.get(key) {
             Ok(Some(cached.result.clone()))
         } else {
             Ok(None)
         }
     }
-    
+
     async fn cache_result(
         &self,
         key: String,
@@ -658,7 +671,7 @@ impl EnhancedBindProcessor {
         compute_time: f64,
     ) -> FusekiResult<()> {
         let mut cache = self.expression_cache.write().await;
-        
+
         let cached_expr = CachedExpression {
             expression_hash: key.clone(),
             result,
@@ -666,17 +679,17 @@ impl EnhancedBindProcessor {
             access_count: 1,
             last_accessed: chrono::Utc::now(),
         };
-        
+
         cache.cache.insert(key, cached_expr);
-        
+
         // Evict if necessary
         if cache.cache.len() > cache.max_size {
             cache.evict_lru();
         }
-        
+
         Ok(())
     }
-    
+
     fn apply_bind_result(
         &self,
         bindings: &mut Vec<HashMap<String, serde_json::Value>>,
@@ -687,13 +700,13 @@ impl EnhancedBindProcessor {
             binding.insert(var.to_string(), result.clone());
         }
     }
-    
+
     async fn update_statistics(&self, eval_time: f64) {
         if let Ok(mut stats) = self.statistics.write().await {
             stats.total_bind_expressions += 1;
-            
+
             let total_time = stats.average_evaluation_time_ms * stats.total_bind_expressions as f64;
-            stats.average_evaluation_time_ms = 
+            stats.average_evaluation_time_ms =
                 (total_time + eval_time) / (stats.total_bind_expressions as f64);
         }
     }
@@ -708,7 +721,7 @@ impl EnhancedValuesProcessor {
             statistics: Arc::new(RwLock::new(ValuesStatistics::default())),
         }
     }
-    
+
     /// Process VALUES clauses with optimization
     pub async fn process_values_clauses(
         &self,
@@ -716,59 +729,62 @@ impl EnhancedValuesProcessor {
         bindings: &mut Vec<HashMap<String, serde_json::Value>>,
     ) -> FusekiResult<()> {
         let values_clauses = self.extract_values_clauses(query)?;
-        
+
         for values_clause in values_clauses {
             // Optimize the VALUES clause
             let optimized = self.values_optimizer.optimize(&values_clause)?;
-            
+
             // Create value set
             let value_set = self.create_value_set(&optimized)?;
-            
+
             // Store in manager
             let set_id = self.value_set_manager.store_value_set(value_set).await?;
-            
+
             // Select join strategy
-            let strategy = self.join_strategy_selector.select_strategy(&optimized, bindings)?;
-            
+            let strategy = self
+                .join_strategy_selector
+                .select_strategy(&optimized, bindings)?;
+
             // Apply VALUES using selected strategy
-            self.apply_values_with_strategy(bindings, &set_id, strategy).await?;
-            
+            self.apply_values_with_strategy(bindings, &set_id, strategy)
+                .await?;
+
             // Update statistics
             self.update_statistics(&optimized).await;
         }
-        
+
         Ok(())
     }
-    
+
     fn extract_values_clauses(&self, query: &str) -> FusekiResult<Vec<ValuesClause>> {
         let mut clauses = Vec::new();
-        
+
         // Find VALUES clauses
         let query_lower = query.to_lowercase();
         let mut pos = 0;
-        
+
         while let Some(values_pos) = query_lower[pos..].find("values") {
             let values_start = pos + values_pos;
-            
+
             // Extract the VALUES clause
             if let Some(clause_end) = self.find_values_end(&query[values_start..]) {
                 let clause_text = &query[values_start..values_start + clause_end];
-                
+
                 if let Ok(parsed) = self.parse_values_clause(clause_text) {
                     clauses.push(parsed);
                 }
             }
-            
+
             pos = values_start + 6;
         }
-        
+
         Ok(clauses)
     }
-    
+
     fn find_values_end(&self, text: &str) -> Option<usize> {
         let mut brace_count = 0;
         let mut found_opening = false;
-        
+
         for (i, ch) in text.chars().enumerate() {
             match ch {
                 '{' => {
@@ -784,27 +800,27 @@ impl EnhancedValuesProcessor {
                 _ => {}
             }
         }
-        
+
         None
     }
-    
+
     fn parse_values_clause(&self, text: &str) -> FusekiResult<ValuesClause> {
         // Parse VALUES clause structure
         // This is a simplified parser
-        
+
         let variables = Vec::new();
         let rows = Vec::new();
-        
+
         Ok(ValuesClause {
             variables,
             rows,
             is_inline: text.len() < 1000,
         })
     }
-    
+
     fn create_value_set(&self, clause: &ValuesClause) -> FusekiResult<ValueSet> {
         let mut values = Vec::new();
-        
+
         for row in &clause.rows {
             let mut binding = HashMap::new();
             for (i, var) in clause.variables.iter().enumerate() {
@@ -814,7 +830,7 @@ impl EnhancedValuesProcessor {
             }
             values.push(binding);
         }
-        
+
         Ok(ValueSet {
             id: uuid::Uuid::new_v4().to_string(),
             values,
@@ -823,7 +839,7 @@ impl EnhancedValuesProcessor {
             compressed: false,
         })
     }
-    
+
     async fn apply_values_with_strategy(
         &self,
         bindings: &mut Vec<HashMap<String, serde_json::Value>>,
@@ -831,28 +847,22 @@ impl EnhancedValuesProcessor {
         strategy: JoinStrategy,
     ) -> FusekiResult<()> {
         match strategy.strategy_type {
-            JoinStrategyType::NestedLoop => {
-                self.apply_nested_loop_join(bindings, set_id).await
-            }
-            JoinStrategyType::HashJoin => {
-                self.apply_hash_join(bindings, set_id).await
-            }
-            JoinStrategyType::SortMergeJoin => {
-                self.apply_sort_merge_join(bindings, set_id).await
-            }
+            JoinStrategyType::NestedLoop => self.apply_nested_loop_join(bindings, set_id).await,
+            JoinStrategyType::HashJoin => self.apply_hash_join(bindings, set_id).await,
+            JoinStrategyType::SortMergeJoin => self.apply_sort_merge_join(bindings, set_id).await,
             _ => self.apply_nested_loop_join(bindings, set_id).await,
         }
     }
-    
+
     async fn apply_nested_loop_join(
         &self,
         bindings: &mut Vec<HashMap<String, serde_json::Value>>,
         set_id: &str,
     ) -> FusekiResult<()> {
         let value_set = self.value_set_manager.get_value_set(set_id).await?;
-        
+
         let mut new_bindings = Vec::new();
-        
+
         for binding in bindings.iter() {
             for value_row in &value_set.values {
                 let mut combined = binding.clone();
@@ -862,11 +872,11 @@ impl EnhancedValuesProcessor {
                 new_bindings.push(combined);
             }
         }
-        
+
         *bindings = new_bindings;
         Ok(())
     }
-    
+
     async fn apply_hash_join(
         &self,
         bindings: &mut Vec<HashMap<String, serde_json::Value>>,
@@ -875,7 +885,7 @@ impl EnhancedValuesProcessor {
         // Implement hash join
         self.apply_nested_loop_join(bindings, set_id).await
     }
-    
+
     async fn apply_sort_merge_join(
         &self,
         bindings: &mut Vec<HashMap<String, serde_json::Value>>,
@@ -884,7 +894,7 @@ impl EnhancedValuesProcessor {
         // Implement sort-merge join
         self.apply_nested_loop_join(bindings, set_id).await
     }
-    
+
     async fn update_statistics(&self, clause: &ValuesClause) {
         if let Ok(mut stats) = self.statistics.write().await {
             stats.total_values_clauses += 1;
@@ -896,7 +906,7 @@ impl EnhancedValuesProcessor {
 impl ExpressionEvaluator {
     pub fn new() -> Self {
         let mut functions = HashMap::new();
-        
+
         // Register built-in functions
         functions.insert("CONCAT".to_string(), ExpressionFunction::Concat);
         functions.insert("SUBSTR".to_string(), ExpressionFunction::Substr);
@@ -906,14 +916,14 @@ impl ExpressionEvaluator {
         functions.insert("NOW".to_string(), ExpressionFunction::Now);
         functions.insert("MD5".to_string(), ExpressionFunction::MD5);
         functions.insert("SHA256".to_string(), ExpressionFunction::SHA256);
-        
+
         Self {
             functions,
             custom_functions: HashMap::new(),
             type_coercion: TypeCoercionRules::default(),
         }
     }
-    
+
     pub fn evaluate(
         &self,
         expression: &str,
@@ -921,7 +931,7 @@ impl ExpressionEvaluator {
     ) -> FusekiResult<serde_json::Value> {
         // Simplified evaluation
         // In a real implementation, this would parse and evaluate the expression
-        
+
         // For now, return a mock result
         Ok(serde_json::json!("evaluated_result"))
     }
@@ -936,7 +946,7 @@ impl AdvancedBindOptimizer {
             cse: CommonSubexpressionEliminator::new(),
         }
     }
-    
+
     fn create_default_rules() -> Vec<BindOptimizationRule> {
         vec![
             // Constant folding rules
@@ -963,34 +973,34 @@ impl AdvancedBindOptimizer {
             },
         ]
     }
-    
+
     pub fn optimize_expression(&self, expr: &str) -> FusekiResult<String> {
         let mut optimized = expr.to_string();
-        
+
         // Apply optimization rules
         for rule in &self.optimization_rules {
             if self.matches_pattern(&optimized, &rule.pattern) {
                 optimized = self.apply_transformation(&optimized, &rule.transformation)?;
             }
         }
-        
+
         // Simplify
         optimized = self.simplifier.simplify(&optimized)?;
-        
+
         // Fold constants
         optimized = self.constant_folder.fold(&optimized)?;
-        
+
         // Eliminate common subexpressions
         optimized = self.cse.eliminate(&optimized)?;
-        
+
         Ok(optimized)
     }
-    
+
     fn matches_pattern(&self, expr: &str, pattern: &ExpressionPattern) -> bool {
         // Pattern matching implementation
         true
     }
-    
+
     fn apply_transformation(
         &self,
         expr: &str,
@@ -1010,44 +1020,46 @@ impl AdvancedValuesOptimizer {
             index_builder: ValueIndexBuilder::new(),
         }
     }
-    
+
     fn create_default_strategies() -> Vec<ValuesOptimizationStrategy> {
         vec![
             ValuesOptimizationStrategy::HashJoin { threshold: 1000 },
-            ValuesOptimizationStrategy::IndexBuild { 
-                index_type: IndexType::Hash 
+            ValuesOptimizationStrategy::IndexBuild {
+                index_type: IndexType::Hash,
             },
-            ValuesOptimizationStrategy::Compress { 
-                algorithm: CompressionAlgorithm::Dictionary 
+            ValuesOptimizationStrategy::Compress {
+                algorithm: CompressionAlgorithm::Dictionary,
             },
         ]
     }
-    
+
     pub fn optimize(&self, clause: &ValuesClause) -> FusekiResult<ValuesClause> {
         let mut optimized = clause.clone();
-        
+
         // Deduplicate values
         optimized = self.deduplicator.deduplicate(optimized)?;
-        
+
         // Apply optimization strategies
         for strategy in &self.strategies {
             if self.should_apply_strategy(&optimized, strategy) {
                 optimized = self.apply_strategy(optimized, strategy)?;
             }
         }
-        
+
         Ok(optimized)
     }
-    
-    fn should_apply_strategy(&self, clause: &ValuesClause, strategy: &ValuesOptimizationStrategy) -> bool {
+
+    fn should_apply_strategy(
+        &self,
+        clause: &ValuesClause,
+        strategy: &ValuesOptimizationStrategy,
+    ) -> bool {
         match strategy {
-            ValuesOptimizationStrategy::HashJoin { threshold } => {
-                clause.rows.len() > *threshold
-            }
+            ValuesOptimizationStrategy::HashJoin { threshold } => clause.rows.len() > *threshold,
             _ => true,
         }
     }
-    
+
     fn apply_strategy(
         &self,
         clause: ValuesClause,
@@ -1066,17 +1078,20 @@ impl ValueSetManager {
             memory_manager: MemoryManager::new(),
         }
     }
-    
+
     pub async fn store_value_set(&self, value_set: ValueSet) -> FusekiResult<String> {
         let id = value_set.id.clone();
         let size_bytes = serde_json::to_vec(&value_set.values)?.len();
-        
+
         // Check memory limits
         self.memory_manager.check_and_evict(size_bytes).await?;
-        
+
         // Store value set
-        self.value_sets.write().await.insert(id.clone(), value_set.clone());
-        
+        self.value_sets
+            .write()
+            .await
+            .insert(id.clone(), value_set.clone());
+
         // Store metadata
         let metadata = ValueSetMetadata {
             created_at: chrono::Utc::now(),
@@ -1086,15 +1101,15 @@ impl ValueSetManager {
             cardinality: value_set.values.len(),
             selectivity: 1.0,
         };
-        
+
         self.metadata.write().await.insert(id.clone(), metadata);
-        
+
         Ok(id)
     }
-    
+
     pub async fn get_value_set(&self, id: &str) -> FusekiResult<ValueSet> {
         let sets = self.value_sets.read().await;
-        
+
         sets.get(id)
             .cloned()
             .ok_or_else(|| FusekiError::internal(format!("Value set not found: {}", id)))
@@ -1112,7 +1127,7 @@ impl ExpressionCache {
             },
         }
     }
-    
+
     pub fn evict_lru(&mut self) {
         if let Some(oldest_key) = self.lru_tracker.access_order.first().cloned() {
             self.cache.remove(&oldest_key);
@@ -1126,10 +1141,10 @@ impl TypeCoercionRules {
     pub fn default() -> Self {
         let mut rules = HashMap::new();
         let mut implicit_coercions = HashSet::new();
-        
+
         // Integer to Decimal
         implicit_coercions.insert((ValueType::Integer, ValueType::Decimal));
-        
+
         // String to URI
         rules.insert(
             (ValueType::String, ValueType::Uri),
@@ -1140,7 +1155,7 @@ impl TypeCoercionRules {
                 is_safe: false,
             },
         );
-        
+
         Self {
             rules,
             implicit_coercions,
@@ -1155,7 +1170,7 @@ impl ExpressionSimplifier {
             algebra_rules: Vec::new(),
         }
     }
-    
+
     pub fn simplify(&self, expr: &str) -> FusekiResult<String> {
         // Simplification logic
         Ok(expr.to_string())
@@ -1169,7 +1184,7 @@ impl ConstantFolder {
             partial_evaluation: true,
         }
     }
-    
+
     pub fn fold(&self, expr: &str) -> FusekiResult<String> {
         // Constant folding logic
         Ok(expr.to_string())
@@ -1187,7 +1202,7 @@ impl CommonSubexpressionEliminator {
             sharing_threshold: 2,
         }
     }
-    
+
     pub fn eliminate(&self, expr: &str) -> FusekiResult<String> {
         // CSE logic
         Ok(expr.to_string())
@@ -1201,7 +1216,7 @@ impl ValueDeduplicator {
             hash_algorithm: HashAlgorithm::XXHash,
         }
     }
-    
+
     pub fn deduplicate(&self, clause: ValuesClause) -> FusekiResult<ValuesClause> {
         // Deduplication logic
         Ok(clause)
@@ -1242,28 +1257,27 @@ impl JoinStrategySelector {
             },
         }
     }
-    
+
     fn create_default_strategies() -> Vec<JoinStrategy> {
         vec![
             JoinStrategy {
                 name: "nested_loop".to_string(),
                 strategy_type: JoinStrategyType::NestedLoop,
-                applicable_conditions: vec![
-                    JoinCondition::SizeThreshold { min: 0, max: 100 },
-                ],
+                applicable_conditions: vec![JoinCondition::SizeThreshold { min: 0, max: 100 }],
                 estimated_cost: 100.0,
             },
             JoinStrategy {
                 name: "hash_join".to_string(),
                 strategy_type: JoinStrategyType::HashJoin,
-                applicable_conditions: vec![
-                    JoinCondition::SizeThreshold { min: 100, max: 10000 },
-                ],
+                applicable_conditions: vec![JoinCondition::SizeThreshold {
+                    min: 100,
+                    max: 10000,
+                }],
                 estimated_cost: 50.0,
             },
         ]
     }
-    
+
     pub fn select_strategy(
         &self,
         clause: &ValuesClause,
@@ -1272,18 +1286,23 @@ impl JoinStrategySelector {
         // Select best strategy based on sizes
         let values_size = clause.rows.len();
         let bindings_size = bindings.len();
-        
+
         for strategy in &self.strategies {
             if self.strategy_applicable(strategy, values_size, bindings_size) {
                 return Ok(strategy.clone());
             }
         }
-        
+
         // Default to nested loop
         Ok(self.strategies[0].clone())
     }
-    
-    fn strategy_applicable(&self, strategy: &JoinStrategy, values_size: usize, bindings_size: usize) -> bool {
+
+    fn strategy_applicable(
+        &self,
+        strategy: &JoinStrategy,
+        values_size: usize,
+        bindings_size: usize,
+    ) -> bool {
         for condition in &strategy.applicable_conditions {
             match condition {
                 JoinCondition::SizeThreshold { min, max } => {
@@ -1306,16 +1325,16 @@ impl MemoryManager {
             eviction_policy: EvictionPolicy::LRU,
         }
     }
-    
+
     pub async fn check_and_evict(&self, required_bytes: usize) -> FusekiResult<()> {
         let current = *self.current_usage_bytes.read().await;
         let max_bytes = self.max_memory_mb * 1024 * 1024;
-        
+
         if current + required_bytes > max_bytes {
             // Implement eviction logic
             warn!("Memory limit reached, eviction needed");
         }
-        
+
         *self.current_usage_bytes.write().await += required_bytes;
         Ok(())
     }
@@ -1332,11 +1351,11 @@ pub struct ValuesClause {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_bind_expression_extraction() {
         let processor = EnhancedBindProcessor::new();
-        
+
         let query = r#"
             SELECT ?name ?age ?category
             WHERE {
@@ -1345,17 +1364,17 @@ mod tests {
                 BIND(IF(?age < 18, "minor", "adult") AS ?category)
             }
         "#;
-        
+
         let expressions = processor.extract_bind_expressions(query).unwrap();
         assert_eq!(expressions.len(), 2);
         assert_eq!(expressions[0].0, "?age");
         assert_eq!(expressions[1].0, "?category");
     }
-    
+
     #[tokio::test]
     async fn test_values_clause_extraction() {
         let processor = EnhancedValuesProcessor::new();
-        
+
         let query = r#"
             SELECT ?person ?email
             WHERE {
@@ -1366,18 +1385,18 @@ mod tests {
                 }
             }
         "#;
-        
+
         let clauses = processor.extract_values_clauses(query).unwrap();
         assert!(!clauses.is_empty());
     }
-    
+
     #[test]
     fn test_expression_optimizer() {
         let optimizer = AdvancedBindOptimizer::new();
-        
+
         let expr = "CONCAT(\"Hello\", \" \", \"World\")";
         let optimized = optimizer.optimize_expression(expr).unwrap();
-        
+
         // Should optimize constant concatenation
         assert_ne!(optimized, expr);
     }

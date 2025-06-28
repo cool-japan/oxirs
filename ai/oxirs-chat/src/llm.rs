@@ -5,23 +5,25 @@
 
 use anyhow::{anyhow, Result};
 use async_openai::{
+    config::OpenAIConfig,
     types::{
-        ChatCompletionRequestMessage, CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
-        Role, ChatCompletionRequestSystemMessageContent, ChatCompletionRequestUserMessageContent,
-        ChatCompletionRequestAssistantMessageContent, ChatCompletionRequestSystemMessage,
-        ChatCompletionRequestUserMessage, ChatCompletionRequestAssistantMessage,
+        ChatCompletionRequestAssistantMessage, ChatCompletionRequestAssistantMessageContent,
+        ChatCompletionRequestMessage, ChatCompletionRequestSystemMessage,
+        ChatCompletionRequestSystemMessageContent, ChatCompletionRequestUserMessage,
+        ChatCompletionRequestUserMessageContent, CreateChatCompletionRequest,
+        CreateChatCompletionRequestArgs, Role,
     },
     Client as OpenAIClient,
-    config::OpenAIConfig,
 };
+use futures_util::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     path::PathBuf,
     time::{Duration, Instant},
 };
-use tokio::time::timeout;
 use tokio::sync::Mutex as TokioMutex;
+use tokio::time::timeout;
 use tracing::{debug, error, info, warn};
 
 /// LLM Provider configuration
@@ -257,6 +259,27 @@ pub struct LLMResponse {
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
+/// Streaming response chunk
+#[derive(Debug, Clone)]
+pub struct LLMResponseChunk {
+    pub content: String,
+    pub is_final: bool,
+    pub chunk_index: usize,
+    pub model_used: String,
+    pub provider_used: String,
+    pub latency: Duration,
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+/// Streaming response wrapper
+pub struct LLMResponseStream {
+    pub stream:
+        std::pin::Pin<Box<dyn futures_util::Stream<Item = Result<LLMResponseChunk>> + Send>>,
+    pub model_used: String,
+    pub provider_used: String,
+    pub started_at: std::time::Instant,
+}
+
 /// Token usage information
 #[derive(Debug, Clone)]
 pub struct Usage {
@@ -386,6 +409,132 @@ impl LLMManager {
         ))
     }
 
+    /// Generate streaming response using intelligent routing
+    pub async fn generate_response_stream(&self, request: LLMRequest) -> Result<LLMResponseStream> {
+        // Select the best provider and model
+        let (provider_name, model_name) = self.select_provider_and_model(&request)?;
+
+        debug!(
+            "Selected provider: {} (streaming), model: {}",
+            provider_name, model_name
+        );
+
+        // Check if provider supports streaming
+        if let Some(provider) = self.providers.get(&provider_name) {
+            if !provider.supports_streaming() {
+                warn!(
+                    "Provider {} doesn't support streaming, falling back to non-streaming",
+                    provider_name
+                );
+                // Convert non-streaming response to streaming
+                let response = self.generate_response(request).await?;
+                return self.convert_to_stream(response);
+            }
+        }
+
+        // Attempt streaming generation with fallback
+        let mut attempts = 0;
+        let max_attempts = self.config.fallback.max_attempts;
+
+        while attempts < max_attempts {
+            match self
+                .try_generate_stream(&provider_name, &model_name, &request)
+                .await
+            {
+                Ok(stream) => {
+                    info!(
+                        "Streaming response initiated with {} provider",
+                        provider_name
+                    );
+                    return Ok(stream);
+                }
+                Err(e) => {
+                    attempts += 1;
+                    warn!("Streaming attempt {} failed: {}", attempts, e);
+
+                    if attempts < max_attempts {
+                        // Try fallback provider/model
+                        if let Ok((fallback_provider, fallback_model)) =
+                            self.select_fallback_provider(&provider_name, &model_name)
+                        {
+                            continue;
+                        }
+                    }
+
+                    if attempts == max_attempts {
+                        error!("All streaming attempts failed, returning error");
+                        return Err(e);
+                    }
+                }
+            }
+        }
+
+        Err(anyhow!(
+            "Failed to generate streaming response after {} attempts",
+            max_attempts
+        ))
+    }
+
+    /// Convert a regular response to a streaming response
+    fn convert_to_stream(&self, response: LLMResponse) -> Result<LLMResponseStream> {
+        let words: Vec<String> = response
+            .content
+            .split_whitespace()
+            .map(String::from)
+            .collect();
+        let chunk_size = 8; // Words per chunk
+        let started_at = Instant::now();
+
+        // Create chunks with owned data
+        let chunks: Vec<Result<LLMResponseChunk>> = words
+            .chunks(chunk_size)
+            .enumerate()
+            .map(|(index, chunk)| {
+                let total_words = words.len();
+                let is_final = (index + 1) * chunk_size >= total_words;
+                Ok(LLMResponseChunk {
+                    content: chunk.join(" ") + if !is_final { " " } else { "" },
+                    is_final,
+                    chunk_index: index,
+                    model_used: response.model_used.clone(),
+                    provider_used: response.provider_used.clone(),
+                    latency: started_at.elapsed(),
+                    metadata: HashMap::new(),
+                })
+            })
+            .collect();
+
+        // Create stream from owned chunks
+        let stream = futures_util::stream::iter(chunks);
+
+        Ok(LLMResponseStream {
+            stream: Box::pin(stream),
+            model_used: response.model_used,
+            provider_used: response.provider_used,
+            started_at,
+        })
+    }
+
+    async fn try_generate_stream(
+        &self,
+        provider_name: &str,
+        model_name: &str,
+        request: &LLMRequest,
+    ) -> Result<LLMResponseStream> {
+        if let Some(provider) = self.providers.get(provider_name) {
+            let timeout_duration = request.timeout.unwrap_or(Duration::from_secs(30));
+
+            timeout(
+                timeout_duration,
+                provider.generate_stream(model_name, request),
+            )
+            .await
+            .map_err(|_| anyhow!("Streaming request timed out"))?
+        } else {
+            Err(anyhow!("Provider {} not found", provider_name))
+        }
+    }
+
     async fn try_generate(
         &self,
         provider_name: &str,
@@ -407,7 +556,7 @@ impl LLMManager {
     fn select_provider_and_model(&self, request: &LLMRequest) -> Result<(String, String)> {
         // Calculate routing scores for all available providers/models
         let mut routing_candidates = Vec::new();
-        
+
         for (provider_name, provider) in &self.providers {
             for model_name in provider.get_available_models() {
                 let score = self.calculate_routing_score(provider_name, &model_name, request)?;
@@ -418,44 +567,72 @@ impl LLMManager {
                 });
             }
         }
-        
+
         // Sort by score and select the best candidate
-        routing_candidates.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
-        
+        routing_candidates.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
         if let Some(best_candidate) = routing_candidates.first() {
-            debug!("Selected provider: {}, model: {}, score: {}", 
-                   best_candidate.provider, best_candidate.model, best_candidate.score);
-            Ok((best_candidate.provider.clone(), best_candidate.model.clone()))
+            debug!(
+                "Selected provider: {}, model: {}, score: {}",
+                best_candidate.provider, best_candidate.model, best_candidate.score
+            );
+            Ok((
+                best_candidate.provider.clone(),
+                best_candidate.model.clone(),
+            ))
         } else {
             Err(anyhow!("No suitable provider/model combination found"))
         }
     }
-    
+
     /// Calculate comprehensive routing score for a provider/model combination
-    fn calculate_routing_score(&self, provider_name: &str, model_name: &str, request: &LLMRequest) -> Result<f32> {
+    fn calculate_routing_score(
+        &self,
+        provider_name: &str,
+        model_name: &str,
+        request: &LLMRequest,
+    ) -> Result<f32> {
         let mut score = 0.0f32;
-        
+
         // Get base scores from different factors
         let quality_score = self.get_quality_score(provider_name, model_name, &request.use_case);
         let cost_score = self.get_cost_efficiency_score(provider_name, model_name, request);
         let latency_score = self.get_latency_score(provider_name, model_name);
         let availability_score = self.get_availability_score(provider_name);
-        let use_case_fit_score = self.get_use_case_fit_score(provider_name, model_name, &request.use_case);
+        let use_case_fit_score =
+            self.get_use_case_fit_score(provider_name, model_name, &request.use_case);
         let priority_score = self.get_priority_score(&request.priority);
-        
+
         // Apply routing strategy weights
         match self.config.routing.strategy {
             RoutingStrategy::QualityFirst => {
-                score = quality_score * 0.6 + use_case_fit_score * 0.2 + availability_score * 0.1 + latency_score * 0.1;
+                score = quality_score * 0.6
+                    + use_case_fit_score * 0.2
+                    + availability_score * 0.1
+                    + latency_score * 0.1;
             }
             RoutingStrategy::CostOptimized => {
-                score = cost_score * 0.5 + quality_score * 0.2 + use_case_fit_score * 0.2 + availability_score * 0.1;
+                score = cost_score * 0.5
+                    + quality_score * 0.2
+                    + use_case_fit_score * 0.2
+                    + availability_score * 0.1;
             }
             RoutingStrategy::LatencyOptimized => {
-                score = latency_score * 0.5 + availability_score * 0.2 + quality_score * 0.2 + cost_score * 0.1;
+                score = latency_score * 0.5
+                    + availability_score * 0.2
+                    + quality_score * 0.2
+                    + cost_score * 0.1;
             }
             RoutingStrategy::Balanced => {
-                score = quality_score * 0.3 + cost_score * 0.25 + latency_score * 0.25 + use_case_fit_score * 0.15 + availability_score * 0.05;
+                score = quality_score * 0.3
+                    + cost_score * 0.25
+                    + latency_score * 0.25
+                    + use_case_fit_score * 0.15
+                    + availability_score * 0.05;
             }
             RoutingStrategy::RoundRobin => {
                 // For round-robin, use a base score and add randomness
@@ -463,18 +640,18 @@ impl LLMManager {
                 score += (fastrand::f32() - 0.5) * 0.2; // Add some randomness
             }
         }
-        
+
         // Apply priority multiplier
         score *= priority_score;
-        
+
         // Apply threshold filters
         if quality_score < self.config.routing.quality_threshold {
             score *= 0.1; // Heavily penalize low-quality options
         }
-        
+
         Ok(score.max(0.0).min(1.0))
     }
-    
+
     /// Get quality score for provider/model combination
     fn get_quality_score(&self, provider_name: &str, model_name: &str, use_case: &UseCase) -> f32 {
         let base_quality = match (provider_name, model_name) {
@@ -486,9 +663,9 @@ impl LLMManager {
             ("local", "llama-2-13b") => 0.70f32,
             ("local", "mistral-7b") => 0.65f32,
             ("local", "codellama-7b") => 0.75f32, // Better for code
-            _ => 0.50f32, // Default for unknown models
+            _ => 0.50f32,                         // Default for unknown models
         };
-        
+
         // Adjust for use case specific quality
         let use_case_adjustment = match use_case {
             UseCase::ComplexReasoning | UseCase::Analysis => {
@@ -518,27 +695,33 @@ impl LLMManager {
             }
             _ => 1.0f32,
         };
-        
+
         (base_quality * use_case_adjustment).min(1.0f32)
     }
-    
+
     /// Get cost efficiency score (higher score = better cost efficiency)
-    fn get_cost_efficiency_score(&self, provider_name: &str, model_name: &str, request: &LLMRequest) -> f32 {
+    fn get_cost_efficiency_score(
+        &self,
+        provider_name: &str,
+        model_name: &str,
+        request: &LLMRequest,
+    ) -> f32 {
         let estimated_input_tokens = self.estimate_input_tokens(request);
         let estimated_output_tokens = 500; // Rough estimate
-        
+
         if let Some(provider) = self.providers.get(provider_name) {
-            let estimated_cost = provider.estimate_cost(model_name, estimated_input_tokens, estimated_output_tokens);
-            
+            let estimated_cost =
+                provider.estimate_cost(model_name, estimated_input_tokens, estimated_output_tokens);
+
             // Convert cost to efficiency score (lower cost = higher score)
             if estimated_cost <= 0.0 {
                 return 1.0; // Free models get perfect efficiency score
             }
-            
+
             // Normalize cost to 0-1 scale, where $0.10 = 0.0 score and $0.001 = 1.0 score
             let max_acceptable_cost = 0.10;
             let min_cost = 0.001;
-            
+
             if estimated_cost >= max_acceptable_cost {
                 0.0
             } else if estimated_cost <= min_cost {
@@ -550,7 +733,7 @@ impl LLMManager {
             0.5 // Default score if provider not found
         }
     }
-    
+
     /// Get latency score (higher score = lower expected latency)
     fn get_latency_score(&self, provider_name: &str, model_name: &str) -> f32 {
         match (provider_name, model_name) {
@@ -564,7 +747,7 @@ impl LLMManager {
             _ => 0.50,
         }
     }
-    
+
     /// Get availability score based on current provider status
     fn get_availability_score(&self, provider_name: &str) -> f32 {
         // In a production system, this would check actual provider health/status
@@ -576,9 +759,14 @@ impl LLMManager {
             _ => 0.80,
         }
     }
-    
+
     /// Get use case fit score
-    fn get_use_case_fit_score(&self, provider_name: &str, model_name: &str, use_case: &UseCase) -> f32 {
+    fn get_use_case_fit_score(
+        &self,
+        provider_name: &str,
+        model_name: &str,
+        use_case: &UseCase,
+    ) -> f32 {
         match use_case {
             UseCase::SparqlGeneration | UseCase::CodeGeneration => {
                 if model_name.contains("gpt-4") || model_name.contains("codellama") {
@@ -616,7 +804,7 @@ impl LLMManager {
             }
         }
     }
-    
+
     /// Get priority score multiplier
     fn get_priority_score(&self, priority: &Priority) -> f32 {
         match priority {
@@ -626,19 +814,19 @@ impl LLMManager {
             Priority::Low => 0.9,
         }
     }
-    
+
     /// Estimate input tokens from request
     fn estimate_input_tokens(&self, request: &LLMRequest) -> usize {
         let mut total_chars = 0;
-        
+
         if let Some(ref system_prompt) = request.system_prompt {
             total_chars += system_prompt.len();
         }
-        
+
         for message in &request.messages {
             total_chars += message.content.len();
         }
-        
+
         // Rough approximation: 1 token ≈ 4 characters
         (total_chars / 4).max(10)
     }
@@ -655,7 +843,7 @@ impl LLMManager {
             "local" => vec!["openai", "anthropic"],
             _ => vec!["openai", "anthropic", "local"],
         };
-        
+
         for provider_name in fallback_order {
             if let Some(provider) = self.providers.get(provider_name) {
                 // Select appropriate fallback model based on the failed model's capability
@@ -665,18 +853,24 @@ impl LLMManager {
                     ("openai", model) if model.contains("gpt-4") => "gpt-4".to_string(),
                     ("openai", model) if model.contains("claude-3-opus") => "gpt-4".to_string(),
                     ("openai", _) => "gpt-3.5-turbo".to_string(),
-                    
+
                     // Anthropic fallbacks
-                    ("anthropic", model) if model.contains("gpt-4") => "claude-3-opus-20240229".to_string(),
-                    ("anthropic", model) if model.contains("opus") => "claude-3-opus-20240229".to_string(),
-                    ("anthropic", model) if model.contains("turbo") => "claude-3-haiku-20240307".to_string(),
+                    ("anthropic", model) if model.contains("gpt-4") => {
+                        "claude-3-opus-20240229".to_string()
+                    }
+                    ("anthropic", model) if model.contains("opus") => {
+                        "claude-3-opus-20240229".to_string()
+                    }
+                    ("anthropic", model) if model.contains("turbo") => {
+                        "claude-3-haiku-20240307".to_string()
+                    }
                     ("anthropic", _) => "claude-3-sonnet-20240229".to_string(),
-                    
+
                     // Local fallbacks
                     ("local", model) if model.contains("code") => "codellama-7b".to_string(),
                     ("local", model) if model.contains("13b") => "llama-2-13b".to_string(),
                     ("local", _) => "mistral-7b".to_string(),
-                    
+
                     _ => {
                         let models = provider.get_available_models();
                         if models.is_empty() {
@@ -686,11 +880,11 @@ impl LLMManager {
                         }
                     }
                 };
-                
+
                 return Ok((provider_name.to_string(), fallback_model));
             }
         }
-        
+
         Err(anyhow!("No fallback provider available"))
     }
 
@@ -704,6 +898,8 @@ impl LLMManager {
 #[async_trait::async_trait]
 pub trait LLMProvider: Send + Sync {
     async fn generate(&self, model: &str, request: &LLMRequest) -> Result<LLMResponse>;
+    async fn generate_stream(&self, model: &str, request: &LLMRequest)
+        -> Result<LLMResponseStream>;
     fn get_available_models(&self) -> Vec<String>;
     fn supports_streaming(&self) -> bool;
     fn get_provider_name(&self) -> &str;
@@ -748,7 +944,9 @@ impl LLMProvider for OpenAIProvider {
                 ChatRole::System => {
                     messages.push(ChatCompletionRequestMessage::System(
                         ChatCompletionRequestSystemMessage {
-                            content: ChatCompletionRequestSystemMessageContent::Text(msg.content.clone()),
+                            content: ChatCompletionRequestSystemMessageContent::Text(
+                                msg.content.clone(),
+                            ),
                             name: None,
                         },
                     ));
@@ -775,11 +973,7 @@ impl LLMProvider for OpenAIProvider {
             .max_tokens(request.max_tokens.unwrap_or(1000) as u16)
             .build()?;
 
-        let response = self
-            .client
-            .chat()
-            .create(openai_request)
-            .await?;
+        let response = self.client.chat().create(openai_request).await?;
 
         let choice = response
             .choices
@@ -825,11 +1019,11 @@ impl LLMProvider for OpenAIProvider {
     fn supports_streaming(&self) -> bool {
         true
     }
-    
+
     fn get_provider_name(&self) -> &str {
         "openai"
     }
-    
+
     fn estimate_cost(&self, model: &str, input_tokens: usize, output_tokens: usize) -> f64 {
         // Pricing as of 2024 (per 1K tokens)
         let (input_price, output_price) = match model {
@@ -840,8 +1034,112 @@ impl LLMProvider for OpenAIProvider {
             "gpt-3.5-turbo-16k" => (0.003, 0.004),
             _ => (0.002, 0.002), // Default pricing
         };
-        
-        (input_tokens as f64 * input_price / 1000.0) + (output_tokens as f64 * output_price / 1000.0)
+
+        (input_tokens as f64 * input_price / 1000.0)
+            + (output_tokens as f64 * output_price / 1000.0)
+    }
+
+    async fn generate_stream(
+        &self,
+        model: &str,
+        request: &LLMRequest,
+    ) -> Result<LLMResponseStream> {
+        use async_openai::types::{
+            ChatCompletionRequestSystemMessage, ChatCompletionRequestUserMessage,
+        };
+
+        let mut messages: Vec<ChatCompletionRequestMessage> = Vec::new();
+
+        // Add system message if provided
+        if let Some(system_prompt) = &request.system_prompt {
+            messages.push(ChatCompletionRequestMessage::System(
+                ChatCompletionRequestSystemMessage {
+                    content: ChatCompletionRequestSystemMessageContent::Text(system_prompt.clone()),
+                    name: None,
+                },
+            ));
+        }
+
+        // Add user messages
+        for msg in &request.messages {
+            match msg.role {
+                ChatRole::System => {
+                    messages.push(ChatCompletionRequestMessage::System(
+                        ChatCompletionRequestSystemMessage {
+                            content: ChatCompletionRequestSystemMessageContent::Text(
+                                msg.content.clone(),
+                            ),
+                            name: None,
+                        },
+                    ));
+                }
+                ChatRole::User => {
+                    messages.push(ChatCompletionRequestMessage::User(
+                        ChatCompletionRequestUserMessage {
+                            content: msg.content.clone().into(),
+                            name: None,
+                        },
+                    ));
+                }
+                ChatRole::Assistant => {
+                    // Handle assistant messages - simplified for now
+                    continue;
+                }
+            }
+        }
+
+        let openai_request = CreateChatCompletionRequestArgs::default()
+            .model(model)
+            .messages(messages)
+            .temperature(request.temperature)
+            .max_tokens(request.max_tokens.unwrap_or(1000) as u16)
+            .stream(true)
+            .build()?;
+
+        let stream = self.client.chat().create_stream(openai_request).await?;
+
+        let model_name = model.to_string();
+        let provider_name = "openai".to_string();
+        let started_at = Instant::now();
+
+        // Transform the OpenAI stream into our custom stream
+        let transformed_stream =
+            stream
+                .enumerate()
+                .map(move |(index, chunk_result)| match chunk_result {
+                    Ok(chunk) => {
+                        let content = chunk
+                            .choices
+                            .first()
+                            .and_then(|choice| choice.delta.content.as_ref())
+                            .map(|s| s.clone())
+                            .unwrap_or_default();
+
+                        let is_final = chunk
+                            .choices
+                            .first()
+                            .map(|choice| choice.finish_reason.is_some())
+                            .unwrap_or(false);
+
+                        Ok(LLMResponseChunk {
+                            content,
+                            is_final,
+                            chunk_index: index,
+                            model_used: model_name.clone(),
+                            provider_used: provider_name.clone(),
+                            latency: started_at.elapsed(),
+                            metadata: HashMap::new(),
+                        })
+                    }
+                    Err(e) => Err(anyhow!("Stream error: {}", e)),
+                });
+
+        Ok(LLMResponseStream {
+            stream: Box::pin(transformed_stream),
+            model_used: model.to_string(),
+            provider_used: "openai".to_string(),
+            started_at,
+        })
     }
 }
 
@@ -855,22 +1153,26 @@ pub struct AnthropicProvider {
 
 impl AnthropicProvider {
     pub fn new(config: ProviderConfig) -> Result<Self> {
-        let api_key = config.api_key.as_ref()
+        let api_key = config
+            .api_key
+            .as_ref()
             .ok_or_else(|| anyhow!("Anthropic API key not provided"))?
             .clone();
-        
-        let base_url = config.base_url.clone()
+
+        let base_url = config
+            .base_url
+            .clone()
             .unwrap_or_else(|| "https://api.anthropic.com".to_string());
-        
+
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert("anthropic-version", "2023-06-01".parse().unwrap());
         headers.insert("content-type", "application/json".parse().unwrap());
-        
+
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(120))
             .default_headers(headers)
             .build()?;
-            
+
         Ok(Self {
             api_key,
             config,
@@ -885,28 +1187,28 @@ impl LLMProvider for AnthropicProvider {
     async fn generate(&self, model: &str, request: &LLMRequest) -> Result<LLMResponse> {
         let mut messages = Vec::new();
         let mut system_messages = Vec::new();
-        
+
         // Separate system messages from conversation messages
         for msg in &request.messages {
             match msg.role {
                 ChatRole::System => {
                     system_messages.push(msg.content.clone());
-                },
+                }
                 ChatRole::User => {
                     messages.push(serde_json::json!({
                         "role": "user",
                         "content": msg.content
                     }));
-                },
+                }
                 ChatRole::Assistant => {
                     messages.push(serde_json::json!({
-                        "role": "assistant", 
+                        "role": "assistant",
                         "content": msg.content
                     }));
-                },
+                }
             }
         }
-        
+
         // Combine system messages
         let mut system_content = Vec::new();
         if let Some(ref system_prompt) = request.system_prompt {
@@ -918,7 +1220,7 @@ impl LLMProvider for AnthropicProvider {
         } else {
             Some(system_content.join("\n\n"))
         };
-        
+
         // Prepare request body
         let mut body = serde_json::json!({
             "model": model,
@@ -926,38 +1228,55 @@ impl LLMProvider for AnthropicProvider {
             "max_tokens": request.max_tokens.unwrap_or(4096),
             "temperature": request.temperature,
         });
-        
+
         if let Some(system) = combined_system {
             body["system"] = serde_json::Value::String(system);
         }
-        
+
         // Add metadata if present
         let mut metadata = HashMap::new();
-        metadata.insert("user_id".to_string(), serde_json::Value::String("oxirs-chat".to_string()));
+        metadata.insert(
+            "user_id".to_string(),
+            serde_json::Value::String("oxirs-chat".to_string()),
+        );
         body["metadata"] = serde_json::to_value(&metadata)?;
-        
-        debug!("Sending request to Anthropic API: {}", serde_json::to_string_pretty(&body)?);
-        
-        let response = self.client
+
+        debug!(
+            "Sending request to Anthropic API: {}",
+            serde_json::to_string_pretty(&body)?
+        );
+
+        let response = self
+            .client
             .post(&format!("{}/v1/messages", self.base_url))
             .header("x-api-key", &self.api_key)
             .json(&body)
             .send()
             .await?;
-            
+
         let status = response.status();
         let response_text = response.text().await?;
-        
+
         if !status.is_success() {
             error!("Anthropic API error: {} - {}", status, response_text);
-            return Err(anyhow!("Anthropic API error: {} - {}", status, response_text));
+            return Err(anyhow!(
+                "Anthropic API error: {} - {}",
+                status,
+                response_text
+            ));
         }
-        
+
         debug!("Anthropic API response: {}", response_text);
-        
-        let response_json: serde_json::Value = serde_json::from_str(&response_text)
-            .map_err(|e| anyhow!("Failed to parse Anthropic response: {} - Response: {}", e, response_text))?;
-        
+
+        let response_json: serde_json::Value =
+            serde_json::from_str(&response_text).map_err(|e| {
+                anyhow!(
+                    "Failed to parse Anthropic response: {} - Response: {}",
+                    e,
+                    response_text
+                )
+            })?;
+
         // Extract content with better error handling
         let content = response_json
             .get("content")
@@ -965,11 +1284,14 @@ impl LLMProvider for AnthropicProvider {
             .and_then(|c| c.get("text"))
             .and_then(|t| t.as_str())
             .unwrap_or_else(|| {
-                warn!("Unexpected response format from Anthropic: {}", response_json);
+                warn!(
+                    "Unexpected response format from Anthropic: {}",
+                    response_json
+                );
                 "No content available"
             })
             .to_string();
-            
+
         // Extract usage statistics
         let usage_data = response_json.get("usage");
         let input_tokens = usage_data
@@ -980,10 +1302,10 @@ impl LLMProvider for AnthropicProvider {
             .and_then(|u| u.get("output_tokens"))
             .and_then(|t| t.as_u64())
             .unwrap_or(0) as usize;
-        
+
         let total_tokens = input_tokens + output_tokens;
         let cost = self.estimate_cost(model, input_tokens, output_tokens);
-        
+
         // Create response metadata
         let mut response_metadata = HashMap::new();
         if let Some(id) = response_json.get("id") {
@@ -992,7 +1314,7 @@ impl LLMProvider for AnthropicProvider {
         if let Some(stop_reason) = response_json.get("stop_reason") {
             response_metadata.insert("stop_reason".to_string(), stop_reason.clone());
         }
-        
+
         Ok(LLMResponse {
             content,
             model_used: model.to_string(),
@@ -1004,11 +1326,11 @@ impl LLMProvider for AnthropicProvider {
                 cost,
             },
             latency: Duration::from_secs(0), // Will be set by caller
-            quality_score: Some(0.85), // Anthropic generally provides high quality
+            quality_score: Some(0.85),       // Anthropic generally provides high quality
             metadata: response_metadata,
         })
     }
-    
+
     fn get_available_models(&self) -> Vec<String> {
         vec![
             "claude-3-opus-20240229".to_string(),
@@ -1019,15 +1341,15 @@ impl LLMProvider for AnthropicProvider {
             "claude-instant-1.2".to_string(),
         ]
     }
-    
+
     fn supports_streaming(&self) -> bool {
         true
     }
-    
+
     fn get_provider_name(&self) -> &str {
         "anthropic"
     }
-    
+
     fn estimate_cost(&self, model: &str, input_tokens: usize, output_tokens: usize) -> f64 {
         // Pricing as of 2024 (per 1K tokens)
         let (input_price, output_price) = match model {
@@ -1038,8 +1360,61 @@ impl LLMProvider for AnthropicProvider {
             "claude-instant-1.2" => (0.0008, 0.0024),
             _ => (0.001, 0.003), // Default pricing
         };
-        
-        (input_tokens as f64 * input_price / 1000.0) + (output_tokens as f64 * output_price / 1000.0)
+
+        (input_tokens as f64 * input_price / 1000.0)
+            + (output_tokens as f64 * output_price / 1000.0)
+    }
+
+    async fn generate_stream(
+        &self,
+        model: &str,
+        request: &LLMRequest,
+    ) -> Result<LLMResponseStream> {
+        // Note: This is a simplified implementation. Production version would implement actual streaming
+        // using Anthropic's streaming API when available.
+
+        // For now, simulate streaming by breaking response into chunks
+        // In production, this would use Anthropic's streaming API
+        let response = self.generate(model, request).await?;
+        let words: Vec<String> = response
+            .content
+            .split_whitespace()
+            .map(String::from)
+            .collect();
+        let chunk_size = 5; // Words per chunk
+
+        let model_name = model.to_string();
+        let provider_name = "anthropic".to_string();
+        let started_at = Instant::now();
+
+        // Create chunks with owned data
+        let chunks: Vec<Result<LLMResponseChunk>> = words
+            .chunks(chunk_size)
+            .enumerate()
+            .map(|(index, chunk)| {
+                let total_words = words.len();
+                let is_final = (index + 1) * chunk_size >= total_words;
+                Ok(LLMResponseChunk {
+                    content: chunk.join(" ") + if !is_final { " " } else { "" },
+                    is_final,
+                    chunk_index: index,
+                    model_used: model_name.clone(),
+                    provider_used: provider_name.clone(),
+                    latency: started_at.elapsed(),
+                    metadata: HashMap::new(),
+                })
+            })
+            .collect();
+
+        // Create stream from owned chunks
+        let stream = futures_util::stream::iter(chunks);
+
+        Ok(LLMResponseStream {
+            stream: Box::pin(stream),
+            model_used: model.to_string(),
+            provider_used: "anthropic".to_string(),
+            started_at,
+        })
     }
 }
 
@@ -1052,18 +1427,17 @@ pub struct LocalModelProvider {
 impl LocalModelProvider {
     pub fn new(config: ProviderConfig) -> Result<Self> {
         let model_path = PathBuf::from(
-            config.base_url.as_ref()
-                .ok_or_else(|| anyhow!("Model path not specified for local provider"))?
+            config
+                .base_url
+                .as_ref()
+                .ok_or_else(|| anyhow!("Model path not specified for local provider"))?,
         );
-        
+
         if !model_path.exists() {
             return Err(anyhow!("Model file does not exist: {:?}", model_path));
         }
-        
-        Ok(Self {
-            config,
-            model_path,
-        })
+
+        Ok(Self { config, model_path })
     }
 }
 
@@ -1072,26 +1446,28 @@ impl LLMProvider for LocalModelProvider {
     async fn generate(&self, model: &str, request: &LLMRequest) -> Result<LLMResponse> {
         // This is a placeholder implementation
         // In production, this would interface with llama.cpp, candle, or another local inference engine
-        
+
         let prompt = format!(
             "{}\n\n{}",
             request.system_prompt.as_deref().unwrap_or(""),
-            request.messages.iter()
+            request
+                .messages
+                .iter()
                 .map(|m| format!("{:?}: {}", m.role, m.content))
                 .collect::<Vec<_>>()
                 .join("\n")
         );
-        
+
         // Simulate local model response
         let content = format!(
             "Local model response to: {}... (Model: {})",
             &prompt.chars().take(50).collect::<String>(),
             model
         );
-        
+
         let prompt_tokens = prompt.split_whitespace().count();
         let completion_tokens = content.split_whitespace().count();
-        
+
         Ok(LLMResponse {
             content,
             model_used: model.to_string(),
@@ -1107,7 +1483,7 @@ impl LLMProvider for LocalModelProvider {
             metadata: HashMap::new(),
         })
     }
-    
+
     fn get_available_models(&self) -> Vec<String> {
         vec![
             "llama-2-7b".to_string(),
@@ -1116,17 +1492,65 @@ impl LLMProvider for LocalModelProvider {
             "codellama-7b".to_string(),
         ]
     }
-    
+
     fn supports_streaming(&self) -> bool {
         true
     }
-    
+
     fn get_provider_name(&self) -> &str {
         "local"
     }
-    
+
     fn estimate_cost(&self, _model: &str, _input_tokens: usize, _output_tokens: usize) -> f64 {
         0.0 // Local models are free
+    }
+
+    async fn generate_stream(
+        &self,
+        model: &str,
+        request: &LLMRequest,
+    ) -> Result<LLMResponseStream> {
+        // Simulate streaming for local models
+        let response = self.generate(model, request).await?;
+        let words: Vec<String> = response
+            .content
+            .split_whitespace()
+            .map(String::from)
+            .collect();
+        let chunk_size = 3; // Words per chunk
+
+        let model_name = model.to_string();
+        let provider_name = "local".to_string();
+        let started_at = Instant::now();
+
+        // Create chunks with owned data
+        let chunks: Vec<Result<LLMResponseChunk>> = words
+            .chunks(chunk_size)
+            .enumerate()
+            .map(|(index, chunk)| {
+                let total_words = words.len();
+                let is_final = (index + 1) * chunk_size >= total_words;
+                Ok(LLMResponseChunk {
+                    content: chunk.join(" ") + if !is_final { " " } else { "" },
+                    is_final,
+                    chunk_index: index,
+                    model_used: model_name.clone(),
+                    provider_used: provider_name.clone(),
+                    latency: started_at.elapsed(),
+                    metadata: HashMap::new(),
+                })
+            })
+            .collect();
+
+        // Create stream from owned chunks
+        let stream = futures_util::stream::iter(chunks);
+
+        Ok(LLMResponseStream {
+            stream: Box::pin(stream),
+            model_used: model.to_string(),
+            provider_used: "local".to_string(),
+            started_at,
+        })
     }
 }
 
@@ -1166,7 +1590,6 @@ pub struct UsageStats {
     pub average_latency: Duration,
     pub success_rate: f32,
 }
-
 
 /// Rate limiter for LLM providers
 pub struct RateLimiter {

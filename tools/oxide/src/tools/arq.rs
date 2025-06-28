@@ -99,7 +99,11 @@ pub async fn run(config: ArqConfig) -> ToolResult {
 
     // Execute query
     println!("\nExecuting query...");
-    let execution_start = if config.time { Some(Instant::now()) } else { None };
+    let execution_start = if config.time {
+        Some(Instant::now())
+    } else {
+        None
+    };
 
     let results = execute_sparql_query(&query_string, &query_info, &data_sources)?;
 

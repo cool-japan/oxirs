@@ -130,7 +130,7 @@ pub struct SessionQuery {
 #[serde(tag = "type")]
 pub enum WebSocketMessage {
     #[serde(rename = "send_message")]
-    SendMessage { 
+    SendMessage {
         content: String,
         thread_id: Option<String>,
         parent_message_id: Option<String>,
@@ -204,9 +204,18 @@ impl ChatServer {
             .route("/api/sessions/:session_id/messages", post(send_message))
             .route("/api/sessions/:session_id/messages", get(get_messages))
             .route("/api/sessions/:session_id/threads", get(get_threads))
-            .route("/api/sessions/:session_id/threads/:thread_id/messages", get(get_thread_messages))
-            .route("/api/sessions/:session_id/messages/:message_id/replies", get(get_message_replies))
-            .route("/api/sessions/:session_id/messages/:message_id/reactions", post(add_reaction))
+            .route(
+                "/api/sessions/:session_id/threads/:thread_id/messages",
+                get(get_thread_messages),
+            )
+            .route(
+                "/api/sessions/:session_id/messages/:message_id/replies",
+                get(get_message_replies),
+            )
+            .route(
+                "/api/sessions/:session_id/messages/:message_id/reactions",
+                post(add_reaction),
+            )
             .route("/api/sessions/:session_id/ws", get(websocket_handler))
             .route("/api/stats", get(get_stats))
             .route("/health", get(health_check))
@@ -275,16 +284,19 @@ async fn send_message(
 ) -> Result<Json<MessageResponse>, StatusCode> {
     if let Some(session_arc) = state.chat_manager.get_session(&session_id).await {
         let mut session = session_arc.lock().await;
-        match session.process_message_with_options(
-            request.content,
-            request.thread_id,
-            request.parent_message_id,
-        ).await {
+        match session
+            .process_message_with_options(
+                request.content,
+                request.thread_id,
+                request.parent_message_id,
+            )
+            .await
+        {
             Ok(message) => {
                 // Save session after processing
                 drop(session);
                 let _ = state.chat_manager.save_session(&session_id).await;
-                
+
                 let response = MessageResponse {
                     message_id: message.id,
                     content: message.content,
@@ -294,7 +306,9 @@ async fn send_message(
                         MessageRole::System => "system".to_string(),
                     },
                     timestamp: message.timestamp.to_rfc3339(),
-                    metadata: message.metadata.map(|m| serde_json::to_value(m).unwrap_or_default()),
+                    metadata: message
+                        .metadata
+                        .map(|m| serde_json::to_value(m).unwrap_or_default()),
                     thread_id: message.thread_id,
                     parent_message_id: message.parent_message_id,
                     reactions: message.reactions,
@@ -333,7 +347,10 @@ async fn get_messages(
                     MessageRole::System => "system".to_string(),
                 },
                 timestamp: msg.timestamp.to_rfc3339(),
-                metadata: msg.metadata.as_ref().map(|m| serde_json::to_value(m).unwrap_or_default()),
+                metadata: msg
+                    .metadata
+                    .as_ref()
+                    .map(|m| serde_json::to_value(m).unwrap_or_default()),
                 thread_id: msg.thread_id.clone(),
                 parent_message_id: msg.parent_message_id.clone(),
                 reactions: msg.reactions.clone(),
@@ -385,7 +402,10 @@ async fn get_thread_messages(
                     MessageRole::System => "system".to_string(),
                 },
                 timestamp: msg.timestamp.to_rfc3339(),
-                metadata: msg.metadata.as_ref().map(|m| serde_json::to_value(m).unwrap_or_default()),
+                metadata: msg
+                    .metadata
+                    .as_ref()
+                    .map(|m| serde_json::to_value(m).unwrap_or_default()),
                 thread_id: msg.thread_id.clone(),
                 parent_message_id: msg.parent_message_id.clone(),
                 reactions: msg.reactions.clone(),
@@ -416,7 +436,10 @@ async fn get_message_replies(
                     MessageRole::System => "system".to_string(),
                 },
                 timestamp: msg.timestamp.to_rfc3339(),
-                metadata: msg.metadata.as_ref().map(|m| serde_json::to_value(m).unwrap_or_default()),
+                metadata: msg
+                    .metadata
+                    .as_ref()
+                    .map(|m| serde_json::to_value(m).unwrap_or_default()),
                 thread_id: msg.thread_id.clone(),
                 parent_message_id: msg.parent_message_id.clone(),
                 reactions: msg.reactions.clone(),
@@ -456,9 +479,7 @@ async fn add_reaction(
     }
 }
 
-async fn get_stats(
-    State(state): State<AppState>,
-) -> Result<Json<crate::SessionStats>, StatusCode> {
+async fn get_stats(State(state): State<AppState>) -> Result<Json<crate::SessionStats>, StatusCode> {
     let stats = state.chat_manager.get_session_stats().await;
     Ok(Json(stats))
 }
@@ -479,11 +500,11 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
 
     let (mut sender, mut receiver) = socket.split();
     let mut broadcast_rx = state.broadcast_tx.subscribe();
-    
+
     // Create a channel for sending messages to the websocket
     let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(100);
     let tx_clone = tx.clone();
-    
+
     let session_id_clone = session_id.clone();
     let send_task = tokio::spawn(async move {
         loop {
@@ -529,11 +550,22 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
                     axum::extract::ws::Message::Text(text) => {
                         if let Ok(ws_msg) = serde_json::from_str::<WebSocketMessage>(&text) {
                             match ws_msg {
-                                WebSocketMessage::SendMessage { content, thread_id, parent_message_id } => {
-                                    if let Some(session_arc) = state.chat_manager.get_session(&session_id).await {
+                                WebSocketMessage::SendMessage {
+                                    content,
+                                    thread_id,
+                                    parent_message_id,
+                                } => {
+                                    if let Some(session_arc) =
+                                        state.chat_manager.get_session(&session_id).await
+                                    {
                                         let mut session = session_arc.lock().await;
-                                        if let Ok(response_msg) =
-                                            session.process_message_with_options(content, thread_id, parent_message_id).await
+                                        if let Ok(response_msg) = session
+                                            .process_message_with_options(
+                                                content,
+                                                thread_id,
+                                                parent_message_id,
+                                            )
+                                            .await
                                         {
                                             let response = WebSocketResponse::Message {
                                                 message_id: response_msg.id,
@@ -546,12 +578,15 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
                                                     MessageRole::System => "system".to_string(),
                                                 },
                                                 timestamp: response_msg.timestamp.to_rfc3339(),
-                                                metadata: response_msg.metadata.map(|m| serde_json::to_value(m).unwrap_or_default()),
+                                                metadata: response_msg.metadata.map(|m| {
+                                                    serde_json::to_value(m).unwrap_or_default()
+                                                }),
                                             };
 
                                             // Save session after message
                                             drop(session);
-                                            let _ = state.chat_manager.save_session(&session_id).await;
+                                            let _ =
+                                                state.chat_manager.save_session(&session_id).await;
 
                                             if let Ok(json) = serde_json::to_string(&response) {
                                                 let _ = tx.send(json).await;
@@ -568,13 +603,21 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
                                 WebSocketMessage::Subscribe { topics: _ } => {
                                     // TODO: Implement topic subscription
                                 }
-                                WebSocketMessage::AddReaction { message_id, emoji, user_id } => {
-                                    if let Some(session_arc) = state.chat_manager.get_session(&session_id).await {
+                                WebSocketMessage::AddReaction {
+                                    message_id,
+                                    emoji,
+                                    user_id,
+                                } => {
+                                    if let Some(session_arc) =
+                                        state.chat_manager.get_session(&session_id).await
+                                    {
                                         let mut session = session_arc.lock().await;
-                                        if session.add_reaction(&message_id, emoji, user_id).is_ok() {
+                                        if session.add_reaction(&message_id, emoji, user_id).is_ok()
+                                        {
                                             drop(session);
-                                            let _ = state.chat_manager.save_session(&session_id).await;
-                                            
+                                            let _ =
+                                                state.chat_manager.save_session(&session_id).await;
+
                                             let response = WebSocketResponse::Status {
                                                 status: "reaction_added".to_string(),
                                                 data: serde_json::json!({
@@ -582,7 +625,7 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
                                                     "success": true
                                                 }),
                                             };
-                                            
+
                                             if let Ok(json) = serde_json::to_string(&response) {
                                                 let _ = tx.send(json).await;
                                             }
@@ -621,57 +664,105 @@ async fn health_check() -> Json<serde_json::Value> {
 async fn metrics_handler() -> Result<String, StatusCode> {
     // Basic Prometheus metrics implementation
     let mut metrics = Vec::new();
-    
+
     // Help and type declarations
     metrics.push("# HELP oxirs_chat_requests_total Total number of requests received".to_string());
     metrics.push("# TYPE oxirs_chat_requests_total counter".to_string());
-    
+
     metrics.push("# HELP oxirs_chat_sessions_active Number of active chat sessions".to_string());
     metrics.push("# TYPE oxirs_chat_sessions_active gauge".to_string());
-    
+
     metrics.push("# HELP oxirs_chat_messages_total Total number of messages processed".to_string());
     metrics.push("# TYPE oxirs_chat_messages_total counter".to_string());
-    
+
     metrics.push("# HELP oxirs_chat_response_time_seconds Response time in seconds".to_string());
     metrics.push("# TYPE oxirs_chat_response_time_seconds histogram".to_string());
-    
-    metrics.push("# HELP oxirs_chat_sparql_queries_total Total number of SPARQL queries generated".to_string());
+
+    metrics.push(
+        "# HELP oxirs_chat_sparql_queries_total Total number of SPARQL queries generated"
+            .to_string(),
+    );
     metrics.push("# TYPE oxirs_chat_sparql_queries_total counter".to_string());
-    
+
     metrics.push("# HELP oxirs_chat_llm_requests_total Total number of LLM requests".to_string());
     metrics.push("# TYPE oxirs_chat_llm_requests_total counter".to_string());
-    
+
     metrics.push("# HELP oxirs_chat_errors_total Total number of errors".to_string());
     metrics.push("# TYPE oxirs_chat_errors_total counter".to_string());
-    
+
     // Sample metric values (in production, these would be collected from actual metrics)
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_millis();
-    
-    metrics.push(format!("oxirs_chat_requests_total{{method=\"POST\",endpoint=\"/api/sessions\"}} 150 {}", timestamp));
-    metrics.push(format!("oxirs_chat_requests_total{{method=\"GET\",endpoint=\"/api/sessions\"}} 45 {}", timestamp));
-    metrics.push(format!("oxirs_chat_requests_total{{method=\"POST\",endpoint=\"/api/sessions/messages\"}} 320 {}", timestamp));
-    
+
+    metrics.push(format!(
+        "oxirs_chat_requests_total{{method=\"POST\",endpoint=\"/api/sessions\"}} 150 {}",
+        timestamp
+    ));
+    metrics.push(format!(
+        "oxirs_chat_requests_total{{method=\"GET\",endpoint=\"/api/sessions\"}} 45 {}",
+        timestamp
+    ));
+    metrics.push(format!(
+        "oxirs_chat_requests_total{{method=\"POST\",endpoint=\"/api/sessions/messages\"}} 320 {}",
+        timestamp
+    ));
+
     metrics.push(format!("oxirs_chat_sessions_active 12 {}", timestamp));
     metrics.push(format!("oxirs_chat_messages_total 1250 {}", timestamp));
-    
-    metrics.push(format!("oxirs_chat_response_time_seconds_bucket{{le=\"0.1\"}} 45 {}", timestamp));
-    metrics.push(format!("oxirs_chat_response_time_seconds_bucket{{le=\"0.5\"}} 120 {}", timestamp));
-    metrics.push(format!("oxirs_chat_response_time_seconds_bucket{{le=\"1.0\"}} 180 {}", timestamp));
-    metrics.push(format!("oxirs_chat_response_time_seconds_bucket{{le=\"2.0\"}} 195 {}", timestamp));
-    metrics.push(format!("oxirs_chat_response_time_seconds_bucket{{le=\"+Inf\"}} 200 {}", timestamp));
-    
-    metrics.push(format!("oxirs_chat_sparql_queries_total{{status=\"success\"}} 85 {}", timestamp));
-    metrics.push(format!("oxirs_chat_sparql_queries_total{{status=\"failed\"}} 5 {}", timestamp));
-    
-    metrics.push(format!("oxirs_chat_llm_requests_total{{provider=\"openai\",model=\"gpt-4\"}} 120 {}", timestamp));
-    metrics.push(format!("oxirs_chat_llm_requests_total{{provider=\"anthropic\",model=\"claude-3-opus\"}} 80 {}", timestamp));
-    
-    metrics.push(format!("oxirs_chat_errors_total{{type=\"validation\"}} 3 {}", timestamp));
-    metrics.push(format!("oxirs_chat_errors_total{{type=\"llm_timeout\"}} 2 {}", timestamp));
-    metrics.push(format!("oxirs_chat_errors_total{{type=\"sparql_generation\"}} 1 {}", timestamp));
-    
+
+    metrics.push(format!(
+        "oxirs_chat_response_time_seconds_bucket{{le=\"0.1\"}} 45 {}",
+        timestamp
+    ));
+    metrics.push(format!(
+        "oxirs_chat_response_time_seconds_bucket{{le=\"0.5\"}} 120 {}",
+        timestamp
+    ));
+    metrics.push(format!(
+        "oxirs_chat_response_time_seconds_bucket{{le=\"1.0\"}} 180 {}",
+        timestamp
+    ));
+    metrics.push(format!(
+        "oxirs_chat_response_time_seconds_bucket{{le=\"2.0\"}} 195 {}",
+        timestamp
+    ));
+    metrics.push(format!(
+        "oxirs_chat_response_time_seconds_bucket{{le=\"+Inf\"}} 200 {}",
+        timestamp
+    ));
+
+    metrics.push(format!(
+        "oxirs_chat_sparql_queries_total{{status=\"success\"}} 85 {}",
+        timestamp
+    ));
+    metrics.push(format!(
+        "oxirs_chat_sparql_queries_total{{status=\"failed\"}} 5 {}",
+        timestamp
+    ));
+
+    metrics.push(format!(
+        "oxirs_chat_llm_requests_total{{provider=\"openai\",model=\"gpt-4\"}} 120 {}",
+        timestamp
+    ));
+    metrics.push(format!(
+        "oxirs_chat_llm_requests_total{{provider=\"anthropic\",model=\"claude-3-opus\"}} 80 {}",
+        timestamp
+    ));
+
+    metrics.push(format!(
+        "oxirs_chat_errors_total{{type=\"validation\"}} 3 {}",
+        timestamp
+    ));
+    metrics.push(format!(
+        "oxirs_chat_errors_total{{type=\"llm_timeout\"}} 2 {}",
+        timestamp
+    ));
+    metrics.push(format!(
+        "oxirs_chat_errors_total{{type=\"sparql_generation\"}} 1 {}",
+        timestamp
+    ));
+
     Ok(metrics.join("\n"))
 }

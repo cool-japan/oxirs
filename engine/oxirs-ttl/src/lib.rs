@@ -36,9 +36,9 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub mod error;
-pub mod toolkit;
-pub mod lexer;
 pub mod formats;
+pub mod lexer;
+pub mod toolkit;
 
 // Re-export the main format APIs
 pub mod turtle {
@@ -68,4 +68,4 @@ pub mod n3 {
 
 // Re-export common types
 pub use error::{TurtleParseError, TurtleSyntaxError};
-pub use toolkit::{TokenRecognizer, RuleRecognizer, Parser, Serializer};
+pub use toolkit::{Parser, RuleRecognizer, Serializer, TokenRecognizer};

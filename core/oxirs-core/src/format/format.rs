@@ -3,8 +3,8 @@
 //! Extracted and adapted from OxiGraph oxrdfio with OxiRS enhancements.
 //! Based on W3C RDF specifications and IANA media type registry.
 
-use std::fmt;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 /// JSON-LD profile for enhanced features
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -13,7 +13,7 @@ pub enum JsonLdProfile {
     Standard,
     /// Expanded JSON-LD (no compaction)
     Expanded,
-    /// Compacted JSON-LD 
+    /// Compacted JSON-LD
     Compacted,
     /// Flattened JSON-LD
     Flattened,
@@ -32,7 +32,7 @@ impl JsonLdProfile {
             _ => None,
         }
     }
-    
+
     /// Get IRI for profile
     pub fn iri(&self) -> &'static str {
         match self {
@@ -45,7 +45,7 @@ impl JsonLdProfile {
     }
 }
 
-/// Set of JSON-LD profiles 
+/// Set of JSON-LD profiles
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct JsonLdProfileSet {
     profiles: Vec<JsonLdProfile>,
@@ -54,26 +54,30 @@ pub struct JsonLdProfileSet {
 impl JsonLdProfileSet {
     /// Create empty profile set
     pub const fn empty() -> Self {
-        Self { profiles: Vec::new() }
+        Self {
+            profiles: Vec::new(),
+        }
     }
-    
+
     /// Create from single profile
     pub fn from_profile(profile: JsonLdProfile) -> Self {
-        Self { profiles: vec![profile] }
+        Self {
+            profiles: vec![profile],
+        }
     }
-    
+
     /// Check if contains profile
     pub fn contains(&self, profile: JsonLdProfile) -> bool {
         self.profiles.contains(&profile)
     }
-    
+
     /// Add profile to set
     pub fn insert(&mut self, profile: JsonLdProfile) {
         if !self.contains(profile) {
             self.profiles.push(profile);
         }
     }
-    
+
     /// Get all profiles
     pub fn profiles(&self) -> &[JsonLdProfile] {
         &self.profiles
@@ -88,7 +92,7 @@ impl From<JsonLdProfile> for JsonLdProfileSet {
 
 impl std::ops::BitOr for JsonLdProfile {
     type Output = JsonLdProfileSet;
-    
+
     fn bitor(self, rhs: Self) -> Self::Output {
         let mut set = JsonLdProfileSet::from_profile(self);
         set.insert(rhs);
@@ -458,9 +462,12 @@ mod tests {
         assert_eq!(RdfFormat::from_extension("nt"), Some(RdfFormat::NTriples));
         assert_eq!(RdfFormat::from_extension("nq"), Some(RdfFormat::NQuads));
         assert_eq!(RdfFormat::from_extension("rdf"), Some(RdfFormat::RdfXml));
-        assert_eq!(RdfFormat::from_extension("jsonld"), Some(RdfFormat::JsonLd {
-            profile: JsonLdProfileSet::empty()
-        }));
+        assert_eq!(
+            RdfFormat::from_extension("jsonld"),
+            Some(RdfFormat::JsonLd {
+                profile: JsonLdProfileSet::empty()
+            })
+        );
         assert_eq!(RdfFormat::from_extension("unknown"), None);
     }
 
@@ -468,10 +475,10 @@ mod tests {
     fn test_format_properties() {
         assert!(RdfFormat::NQuads.supports_datasets());
         assert!(!RdfFormat::NTriples.supports_datasets());
-        
+
         assert!(RdfFormat::Turtle.supports_rdf_star());
         assert!(!RdfFormat::RdfXml.supports_rdf_star());
-        
+
         assert_eq!(RdfFormat::Turtle.file_extension(), "ttl");
         assert_eq!(RdfFormat::NTriples.media_type(), "application/n-triples");
         assert_eq!(RdfFormat::Turtle.name(), "Turtle");
@@ -481,10 +488,10 @@ mod tests {
     fn test_jsonld_profiles() {
         let mut profile_set = JsonLdProfileSet::empty();
         assert!(!profile_set.contains(JsonLdProfile::Streaming));
-        
+
         profile_set.insert(JsonLdProfile::Streaming);
         assert!(profile_set.contains(JsonLdProfile::Streaming));
-        
+
         let combined = JsonLdProfile::Streaming | JsonLdProfile::Expanded;
         assert!(combined.contains(JsonLdProfile::Streaming));
         assert!(combined.contains(JsonLdProfile::Expanded));

@@ -4,7 +4,6 @@
 //! validation, and dataset management. Inspired by Apache Jena's CLI tools
 //! but built in Rust for performance and safety.
 
-
 /// Common result type for all tools
 pub type ToolResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
