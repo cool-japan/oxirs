@@ -258,7 +258,9 @@ impl CustomFunction for BoundFunction {
 
         match &args[0] {
             Value::String(var_name) => {
-                let is_bound = context.variables.contains_key(var_name);
+                // Convert string to Variable type
+                let variable = crate::algebra::Variable::new(var_name)?;
+                let is_bound = context.variables.contains_key(&variable);
                 Ok(Value::Boolean(is_bound))
             }
             _ => bail!("bound() requires a variable name as string"),

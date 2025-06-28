@@ -33,6 +33,7 @@ pub struct DistMult {
     /// Whether embeddings have been initialized
     embeddings_initialized: bool,
     /// Whether to apply dropout during training
+    #[allow(dead_code)]
     dropout_rate: f64,
     /// Loss function type
     loss_function: LossFunction,
@@ -135,12 +136,13 @@ impl DistMult {
         let t = self.entity_embeddings.row(object_id);
 
         // DistMult score: sum of element-wise multiplication
-        let score = (&h * &r * &t).sum();
+        let score = (&h * &r * t).sum();
 
         Ok(score)
     }
 
     /// Apply dropout to embeddings during training
+    #[allow(dead_code)]
     fn apply_dropout(&self, embeddings: &Array1<f64>, rng: &mut impl Rng) -> Array1<f64> {
         if self.dropout_rate > 0.0 {
             embeddings.mapv(|x| {

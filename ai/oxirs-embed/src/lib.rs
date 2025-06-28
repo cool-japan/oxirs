@@ -16,7 +16,7 @@ pub mod training;
 pub mod utils;
 
 // Local type definitions (normally would import from oxirs-core and oxirs-vec)
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -211,9 +211,15 @@ pub use api::{ApiState, ApiConfig, start_server};
 pub use caching::{CacheManager, CacheConfig, CachedEmbeddingModel};
 pub use models::{
     ComplEx, DistMult, RotatE, TransE,
-    TransformerEmbedding, TransformerType, TransformerConfig,
+    TransformerEmbedding, TransformerType, TransformerConfig, PoolingStrategy,
     GNNEmbedding, GNNType, GNNConfig, AggregationType
 };
+
+#[cfg(feature = "tucker")]
+pub use models::TuckER;
+
+#[cfg(feature = "quatd")]
+pub use models::QuatD;
 
 // Re-export model registry types
 pub use crate::model_registry::{ModelRegistry, ModelVersion, ResourceAllocation};

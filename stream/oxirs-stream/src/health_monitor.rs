@@ -130,7 +130,7 @@ pub struct ConnectionHealthRecord {
 /// Health check result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HealthCheckResult {
-    #[serde(skip)]
+    #[serde(skip, default = "Instant::now")]
     pub timestamp: Instant,
     pub success: bool,
     pub response_time_ms: f64,

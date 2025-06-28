@@ -226,7 +226,7 @@ impl DiagnosticAnalyzer {
     }
 
     /// Register a health monitor for a component
-    pub fn register_health_monitor(&mut self, name: String, monitor: Arc<RwLock<HealthMonitor>>) {
+    pub fn register_health_monitor(&mut self, name: String, monitor: Arc<RwLock<HealthMonitor<Box<dyn crate::connection_pool::PooledConnection>>>>) {
         self.health_monitors.insert(name, monitor);
     }
 

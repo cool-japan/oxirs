@@ -15,7 +15,7 @@ use oxirs_shacl::{
     constraints::*, Constraint, Severity, Shape, ShapeId, ValidationConfig, ValidationReport,
 };
 
-use crate::{patterns::Pattern, Result, ShaclAiError};
+use crate::{patterns::Pattern, Result, ShaclAiError, ModelTrainingResult};
 
 /// Training data for prediction models
 #[derive(Debug, Clone)]
@@ -53,15 +53,6 @@ pub struct PredictionTrainingMetadata {
     pub feature_descriptions: std::collections::HashMap<String, String>,
 }
 
-/// Model training result
-#[derive(Debug, Clone)]
-pub struct ModelTrainingResult {
-    pub success: bool,
-    pub accuracy: f64,
-    pub loss: f64,
-    pub epochs_trained: usize,
-    pub training_time: std::time::Duration,
-}
 
 /// Configuration for validation prediction
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -176,7 +167,7 @@ impl ValidationPredictor {
     pub fn with_config(config: PredictionConfig) -> Self {
         Self {
             config,
-            model_state: PredictionModelState::default(),
+            model_state: PredictionModelState::new(),
             prediction_cache: HashMap::new(),
             validation_history: Vec::new(),
             stats: PredictionStatistics::default(),
@@ -194,7 +185,7 @@ impl ValidationPredictor {
     }
 
     /// Predict validation outcome (simplified API for tests)
-    pub fn predict_validation(&mut self, store: &Store, shapes: &[crate::shape::Shape]) -> Result<ValidationPrediction> {
+    pub fn predict_validation(&mut self, store: &Store, shapes: &[Shape]) -> Result<ValidationPrediction> {
         // Convert our simplified shapes to SHACL validation config
         let validation_config = ValidationConfig::default();
         self.predict_validation_outcome(store, shapes, &validation_config)
@@ -227,8 +218,8 @@ impl ValidationPredictor {
         let training_time = start_time.elapsed();
 
         // Update model state
-        self.model_state.training_iterations += epochs_trained;
-        self.model_state.last_training_accuracy = accuracy;
+        self.model_state.training_epochs += epochs_trained;
+        self.model_state.accuracy = accuracy;
 
         tracing::info!("Training completed: accuracy={:.3}, loss={:.3}", accuracy, loss);
 
@@ -245,8 +236,8 @@ impl ValidationPredictor {
     fn simulate_training_epoch(&mut self, _training_data: &PredictionTrainingData) -> Result<f64> {
         // Simulate training with decreasing loss
         let base_loss = 0.5;
-        let iterations = self.model_state.training_iterations as f64;
-        let loss = base_loss * (-0.1 * iterations).exp();
+        let iterations = self.model_state.training_epochs as f64;
+        let loss = base_loss * (-0.1_f64 * iterations).exp();
         Ok(loss)
     }
 
@@ -376,53 +367,7 @@ impl ValidationPredictor {
         Ok(())
     }
 
-    /// Train the prediction model
-    pub fn train_model(
-        &mut self,
-        training_data: &PredictionTrainingData,
-    ) -> Result<crate::ModelTrainingResult> {
-        tracing::info!(
-            "Training validation prediction model on {} examples",
-            training_data.examples.len()
-        );
 
-        let start_time = Instant::now();
-
-        // Simulate training process
-        let mut accuracy = 0.0;
-        let mut loss = 1.0;
-
-        for epoch in 0..self.config.model_params.ensemble_size * 20 {
-            // Simulate training epoch
-            accuracy = 0.5 + (epoch as f64 / 100.0) * 0.4;
-            loss = 1.0 - accuracy * 0.8;
-
-            if accuracy >= 0.9 {
-                break;
-            }
-        }
-
-        // Update model state
-        self.model_state.accuracy = accuracy;
-        self.model_state.loss = loss;
-        self.model_state.training_epochs += (accuracy * 100.0) as usize;
-        self.model_state.last_training = Some(chrono::Utc::now());
-
-        self.stats.model_trained = true;
-
-        Ok(crate::ModelTrainingResult {
-            success: accuracy >= 0.8,
-            accuracy,
-            loss,
-            epochs_trained: (accuracy * 100.0) as usize,
-            training_time: start_time.elapsed(),
-        })
-    }
-
-    /// Get prediction statistics
-    pub fn get_statistics(&self) -> &PredictionStatistics {
-        &self.stats
-    }
 
     /// Clear prediction cache
     pub fn clear_cache(&mut self) {
@@ -1491,21 +1436,6 @@ pub struct PredictionStatistics {
     pub model_trained: bool,
 }
 
-/// Training data for prediction models
-#[derive(Debug, Clone)]
-pub struct PredictionTrainingData {
-    pub examples: Vec<PredictionExample>,
-    pub validation_examples: Vec<PredictionExample>,
-}
-
-/// Training example for prediction
-#[derive(Debug, Clone)]
-pub struct PredictionExample {
-    pub features: HashMap<String, f64>,
-    pub expected_outcome: OutcomePrediction,
-    pub expected_performance: PerformancePrediction,
-    pub actual_result: ValidationOutcome,
-}
 
 #[cfg(test)]
 mod tests {

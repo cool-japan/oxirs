@@ -51,6 +51,9 @@ pub struct ValidationEngine<'a> {
     
     /// Cache for constraint evaluation results
     constraint_cache: std::cell::RefCell<HashMap<ConstraintCacheKey, ConstraintEvaluationResult>>,
+    
+    /// Cache for resolved inherited constraints
+    inheritance_cache: std::cell::RefCell<HashMap<ShapeId, IndexMap<ConstraintComponentId, Constraint>>>,
 }
 
 impl<'a> ValidationEngine<'a> {
@@ -64,6 +67,7 @@ impl<'a> ValidationEngine<'a> {
             sparql_executor: SparqlConstraintExecutor::new(),
             stats: ValidationStats::default(),
             constraint_cache: std::cell::RefCell::new(HashMap::new()),
+            inheritance_cache: std::cell::RefCell::new(HashMap::new()),
         }
     }
 
@@ -251,7 +255,10 @@ impl<'a> ValidationEngine<'a> {
     ) -> Result<Vec<Option<ValidationViolation>>> {
         let mut results = Vec::new();
 
-        for (component_id, constraint) in &shape.constraints {
+        // Resolve inherited constraints (includes shape's own constraints)
+        let resolved_constraints = self.resolve_inherited_constraints(&shape.id)?;
+
+        for (component_id, constraint) in &resolved_constraints {
             // Collect allowed properties for closed shape validation
             let mut allowed_properties = Vec::new();
             
@@ -1948,6 +1955,93 @@ impl<'a> ValidationEngine<'a> {
                 format!("Invalid numeric values for comparison: {} or {}", left.as_str(), right.as_str())
             ))
         }
+    }
+
+    /// Resolve inherited constraints for a shape
+    pub fn resolve_inherited_constraints(&self, shape_id: &ShapeId) -> Result<IndexMap<ConstraintComponentId, Constraint>> {
+        // Check cache first
+        if let Some(cached_constraints) = self.inheritance_cache.borrow().get(shape_id) {
+            return Ok(cached_constraints.clone());
+        }
+
+        let mut resolved_constraints = IndexMap::new();
+        let mut visited = HashSet::new();
+        
+        self.collect_inherited_constraints(shape_id, &mut resolved_constraints, &mut visited)?;
+        
+        // Cache the result
+        self.inheritance_cache.borrow_mut().insert(shape_id.clone(), resolved_constraints.clone());
+        
+        Ok(resolved_constraints)
+    }
+    
+    /// Recursively collect constraints from a shape and its parents
+    fn collect_inherited_constraints(
+        &self,
+        shape_id: &ShapeId,
+        resolved_constraints: &mut IndexMap<ConstraintComponentId, Constraint>,
+        visited: &mut HashSet<ShapeId>,
+    ) -> Result<()> {
+        // Avoid infinite recursion
+        if visited.contains(shape_id) {
+            return Ok(());
+        }
+        visited.insert(shape_id.clone());
+        
+        if let Some(shape) = self.shapes.get(shape_id) {
+            // First process parent shapes (depth-first) in priority order
+            let mut parent_shapes: Vec<_> = shape.extends.iter().collect();
+            
+            // Sort parent shapes by priority if they exist
+            parent_shapes.sort_by(|a, b| {
+                let priority_a = self.shapes.get(*a).map(|s| s.effective_priority()).unwrap_or(0);
+                let priority_b = self.shapes.get(*b).map(|s| s.effective_priority()).unwrap_or(0);
+                priority_b.cmp(&priority_a) // Higher priority first
+            });
+            
+            for parent_id in parent_shapes {
+                self.collect_inherited_constraints(parent_id, resolved_constraints, visited)?;
+            }
+            
+            // Then add this shape's constraints, potentially overriding parent constraints
+            // Child constraints override parent constraints (standard inheritance behavior)
+            for (component_id, constraint) in &shape.constraints {
+                resolved_constraints.insert(component_id.clone(), constraint.clone());
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Get all shapes that a given shape inherits from (transitively)
+    fn get_all_parent_shapes(&self, shape_id: &ShapeId) -> Result<Vec<ShapeId>> {
+        let mut parents = Vec::new();
+        let mut visited = HashSet::new();
+        
+        self.collect_parent_shapes(shape_id, &mut parents, &mut visited)?;
+        
+        Ok(parents)
+    }
+    
+    fn collect_parent_shapes(
+        &self,
+        shape_id: &ShapeId,
+        parents: &mut Vec<ShapeId>,
+        visited: &mut HashSet<ShapeId>,
+    ) -> Result<()> {
+        if visited.contains(shape_id) {
+            return Ok(());
+        }
+        visited.insert(shape_id.clone());
+        
+        if let Some(shape) = self.shapes.get(shape_id) {
+            for parent_id in &shape.extends {
+                parents.push(parent_id.clone());
+                self.collect_parent_shapes(parent_id, parents, visited)?;
+            }
+        }
+        
+        Ok(())
     }
 }
 

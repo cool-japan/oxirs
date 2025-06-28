@@ -16,7 +16,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::sync::RwLock;
 use url::Url;
 
-use crate::error::Result;
+use crate::error::FusekiResult;
 
 /// Federation configuration
 #[derive(Debug, Clone)]
@@ -124,6 +124,9 @@ pub struct ServiceCapabilities {
     /// Supported result formats
     pub result_formats: Vec<String>,
 }
+
+/// Alias for compatibility with query planner
+pub type EndpointCapabilities = ServiceCapabilities;
 
 /// Federation manager for coordinating distributed queries
 pub struct FederationManager {

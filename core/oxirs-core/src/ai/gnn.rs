@@ -3,15 +3,12 @@
 //! This module implements various Graph Neural Network architectures optimized
 //! for RDF knowledge graphs, including GCN, GraphSAGE, GAT, and custom architectures.
 
-use crate::model::{Triple, NamedNode, Subject, Predicate, Object};
-use crate::OxirsError;
+use crate::model::Triple;
 use anyhow::{anyhow, Result};
-use dashmap::DashMap;
-use ndarray::{Array1, Array2, Array3, Axis};
+use ndarray::{Array1, Array2};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
 /// Graph Neural Network trait
 #[async_trait::async_trait]
@@ -726,7 +723,7 @@ mod tests {
         ];
         
         let graph = RdfGraph::from_triples(&triples).unwrap();
-        assert_eq!(graph.num_nodes, 4); // person1, name, age, Alice, 30
+        assert_eq!(graph.num_nodes, 3); // person1, Alice, 30 (predicates are not counted as nodes)
         assert_eq!(graph.num_edges, 2);
     }
     

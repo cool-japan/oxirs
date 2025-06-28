@@ -8,6 +8,7 @@ use crate::algebra::{
     OrderCondition, PropertyPath, PropertyPathPattern, Term, TriplePattern, UnaryOperator,
     Variable,
 };
+use oxirs_core::model::NamedNode;
 use anyhow::{anyhow, bail, Context, Result};
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
@@ -377,10 +378,17 @@ impl QueryParser {
 
     fn parse_identifier(&self, chars: &mut std::iter::Peekable<std::str::Chars>) -> String {
         let mut identifier = String::new();
+        let mut found_colon = false;
+        
         while let Some(&ch) = chars.peek() {
-            if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' {
+            if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' || ch == '.' {
                 identifier.push(ch);
                 chars.next();
+            } else if ch == ':' && !found_colon {
+                // Include one colon for prefixed names
+                identifier.push(ch);
+                chars.next();
+                found_colon = true;
             } else {
                 break;
             }
@@ -470,8 +478,14 @@ impl QueryParser {
             dataset: DatasetClause::default(),
         };
 
+        // Skip initial whitespace/newlines
+        self.skip_whitespace();
+
         // Parse prologue (PREFIX and BASE declarations)
         self.parse_prologue(&mut query)?;
+
+        // Skip whitespace after prologue
+        self.skip_whitespace();
 
         // Parse main query
         match self.peek() {
@@ -537,7 +551,7 @@ impl QueryParser {
                 && !matches!(self.peek(), Some(Token::Where) | Some(Token::From))
             {
                 if let Some(Token::Variable(var)) = self.peek() {
-                    query.select_variables.push(var.clone());
+                    query.select_variables.push(Variable::new(var.clone())?);
                     self.advance();
                 } else {
                     break;
@@ -605,7 +619,7 @@ impl QueryParser {
         // Parse variables or IRIs to describe
         while !self.is_at_end() && !matches!(self.peek(), Some(Token::Where) | Some(Token::From)) {
             if let Some(Token::Variable(var)) = self.peek() {
-                query.select_variables.push(var.clone());
+                query.select_variables.push(Variable::new(var.clone())?);
                 self.advance();
             } else if matches!(
                 self.peek(),
@@ -635,10 +649,10 @@ impl QueryParser {
         while self.match_token(&Token::From) {
             if self.match_token(&Token::Named) {
                 let iri = self.expect_iri()?;
-                dataset.named_graphs.push(Iri(iri));
+                dataset.named_graphs.push(NamedNode::new_unchecked(iri));
             } else {
                 let iri = self.expect_iri()?;
-                dataset.default_graphs.push(Iri(iri));
+                dataset.default_graphs.push(NamedNode::new_unchecked(iri));
             }
         }
         Ok(())
@@ -721,11 +735,20 @@ impl QueryParser {
     }
 
     fn parse_triple_pattern(&mut self) -> Result<TriplePattern> {
+        // Skip whitespace and newlines before parsing
+        self.skip_whitespace_and_newlines();
+        
         let subject = self.parse_term()?;
+
+        // Skip whitespace between subject and predicate
+        self.skip_whitespace_and_newlines();
 
         // Check if we have a property path instead of a simple predicate
         if self.is_property_path_start() {
             let path = self.parse_property_path()?;
+            
+            // Skip whitespace between path and object
+            self.skip_whitespace_and_newlines();
             let object = self.parse_term()?;
 
             // Convert property path pattern to BGP with property path algebra
@@ -733,12 +756,15 @@ impl QueryParser {
             // TODO: Create separate handling for property paths in the algebra
             return Ok(TriplePattern::new(
                 subject,
-                Term::Iri(Iri("__property_path__".to_string())), // Placeholder
+                Term::Iri(NamedNode::new_unchecked("__property_path__")), // Placeholder
                 object,
             ));
         }
 
         let predicate = self.parse_term()?;
+        
+        // Skip whitespace between predicate and object
+        self.skip_whitespace_and_newlines();
         let object = self.parse_term()?;
 
         Ok(TriplePattern::new(subject, predicate, object))
@@ -821,24 +847,20 @@ impl QueryParser {
             Some(Token::Iri(iri)) => {
                 let iri = iri.clone();
                 self.advance();
-                Ok(PropertyPath::iri(Iri(iri)))
+                Ok(PropertyPath::iri(NamedNode::new_unchecked(iri)))
             }
             Some(Token::PrefixedName(prefix, local)) => {
                 let prefix = prefix.clone();
                 let local = local.clone();
                 self.advance();
 
-                let full_iri = if let Some(base) = self.prefixes.get(&prefix) {
-                    format!("{}{}", base, local)
-                } else {
-                    format!("{}:{}", prefix, local)
-                };
-                Ok(PropertyPath::iri(Iri(full_iri)))
+                let full_iri = self.resolve_prefixed_name(&prefix, &local)?;
+                Ok(PropertyPath::iri(NamedNode::new_unchecked(full_iri)))
             }
             Some(Token::Variable(var)) => {
                 let var = var.clone();
                 self.advance();
-                Ok(PropertyPath::Variable(var))
+                Ok(PropertyPath::Variable(Variable::new(var)?))
             }
             Some(Token::LeftParen) => {
                 self.advance(); // consume (
@@ -866,29 +888,29 @@ impl QueryParser {
     }
 
     fn parse_term(&mut self) -> Result<Term> {
+        // Skip whitespace/newlines
+        self.skip_whitespace_and_newlines();
+        
         match self.peek() {
             Some(Token::Variable(var)) => {
                 let var = var.clone();
                 self.advance();
-                self.variables.insert(var.clone());
-                Ok(Term::Variable(var))
+                let variable = Variable::new(&var)?;
+                self.variables.insert(variable.clone());
+                Ok(Term::Variable(variable))
             }
             Some(Token::Iri(iri)) => {
                 let iri = iri.clone();
                 self.advance();
-                Ok(Term::Iri(Iri(iri)))
+                Ok(Term::Iri(NamedNode::new_unchecked(iri)))
             }
             Some(Token::PrefixedName(prefix, local)) => {
                 let prefix = prefix.clone();
                 let local = local.clone();
                 self.advance();
 
-                let full_iri = if let Some(base) = self.prefixes.get(&prefix) {
-                    format!("{}{}", base, local)
-                } else {
-                    format!("{}:{}", prefix, local)
-                };
-                Ok(Term::Iri(Iri(full_iri)))
+                let full_iri = self.resolve_prefixed_name(&prefix, &local)?;
+                Ok(Term::Iri(NamedNode::new_unchecked(full_iri)))
             }
             Some(Token::StringLiteral(value)) => {
                 let value = value.clone();
@@ -905,7 +927,7 @@ impl QueryParser {
                 Ok(Term::Literal(Literal {
                     value,
                     language: None,
-                    datatype: Some(Iri("http://www.w3.org/2001/XMLSchema#decimal".to_string())),
+                    datatype: Some(NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#decimal")),
                 }))
             }
             Some(Token::BooleanLiteral(value)) => {
@@ -914,7 +936,7 @@ impl QueryParser {
                 Ok(Term::Literal(Literal {
                     value: value.to_string(),
                     language: None,
-                    datatype: Some(Iri("http://www.w3.org/2001/XMLSchema#boolean".to_string())),
+                    datatype: Some(NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#boolean")),
                 }))
             }
             Some(Token::BlankNode(id)) => {
@@ -1178,12 +1200,12 @@ impl QueryParser {
             Some(Token::Variable(var)) => {
                 let var = var.clone();
                 self.advance();
-                Ok(Expression::Variable(var))
+                Ok(Expression::Variable(Variable::new(var)?))
             }
             Some(Token::Iri(iri)) => {
                 let iri = iri.clone();
                 self.advance();
-                Ok(Expression::Iri(Iri(iri)))
+                Ok(Expression::Iri(NamedNode::new_unchecked(iri)))
             }
             Some(Token::StringLiteral(value)) | Some(Token::NumericLiteral(value)) => {
                 let value = value.clone();
@@ -1233,7 +1255,7 @@ impl QueryParser {
                     } else {
                         name
                     };
-                    Ok(Expression::Iri(Iri(full_iri)))
+                    Ok(Expression::Iri(NamedNode::new_unchecked(full_iri)))
                 }
             }
             _ => bail!("Expected primary expression"),
@@ -1313,6 +1335,38 @@ impl QueryParser {
         self.tokens.get(self.position)
     }
 
+    fn skip_whitespace(&mut self) {
+        while let Some(token) = self.peek() {
+            match token {
+                Token::Newline => {
+                    self.advance();
+                }
+                _ => break,
+            }
+        }
+    }
+
+    /// Skip whitespace and newlines more comprehensively
+    fn skip_whitespace_and_newlines(&mut self) {
+        while let Some(token) = self.peek() {
+            match token {
+                Token::Newline => {
+                    self.advance();
+                }
+                _ => break,
+            }
+        }
+    }
+
+    /// Resolve a prefixed name to its full IRI
+    fn resolve_prefixed_name(&self, prefix: &str, local: &str) -> Result<String> {
+        if let Some(base) = self.prefixes.get(prefix) {
+            Ok(format!("{}{}", base, local))
+        } else {
+            bail!("Undefined prefix '{}' in prefixed name '{}:{}'", prefix, prefix, local)
+        }
+    }
+
     fn advance(&mut self) -> Option<&Token> {
         if !self.is_at_end() {
             self.position += 1;
@@ -1354,7 +1408,7 @@ impl QueryParser {
         if let Some(Token::Variable(var)) = self.peek() {
             let var = var.clone();
             self.advance();
-            Ok(var)
+            Ok(Variable::new(var)?)
         } else {
             bail!("Expected variable")
         }
@@ -1372,11 +1426,7 @@ impl QueryParser {
                 let local = local.clone();
                 self.advance();
 
-                if let Some(base) = self.prefixes.get(&prefix) {
-                    Ok(format!("{}{}", base, local))
-                } else {
-                    Ok(format!("{}:{}", prefix, local))
-                }
+                self.resolve_prefixed_name(&prefix, &local)
             }
             _ => bail!("Expected IRI"),
         }
@@ -1562,6 +1612,14 @@ mod tests {
     fn test_tokenization() {
         let mut parser = QueryParser::new();
         parser.tokenize("SELECT ?x WHERE { ?x ?y ?z }").unwrap();
+        
+        // Debug print tokens
+        println!("Tokens: {:?}", parser.tokens);
+        
+        // Also test prefixed name tokenization specifically
+        let mut parser2 = QueryParser::new();
+        parser2.tokenize("foaf:name").unwrap();
+        println!("Prefixed name tokens: {:?}", parser2.tokens);
 
         assert!(matches!(parser.tokens[0], Token::Select));
         assert!(matches!(parser.tokens[1], Token::Variable(_)));

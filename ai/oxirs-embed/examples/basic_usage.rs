@@ -10,11 +10,7 @@
 use anyhow::Result;
 use oxirs_embed::{NamedNode, Triple};
 use oxirs_embed::{
-    evaluation::{EvaluationConfig, EvaluationSuite},
-    inference::{InferenceConfig, InferenceEngine},
     models::{ComplEx, DistMult, RotatE, TransE},
-    training::{AdvancedTrainer, OptimizerType, TrainingConfig},
-    utils::{compute_dataset_statistics, data_loader, dataset_splitter},
     EmbeddingModel, ModelConfig,
 };
 use std::time::Instant;

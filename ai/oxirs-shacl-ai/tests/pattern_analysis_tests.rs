@@ -59,16 +59,14 @@ fn test_pattern_cache_settings() {
     let cache_settings = PatternCacheSettings {
         enable_caching: true,
         max_cache_size: 500,
-        cache_ttl_minutes: 30,
-        enable_persistent_cache: false,
-        cache_compression: true,
+        cache_ttl_seconds: 1800, // 30 minutes in seconds
+        enable_similarity_cache: true,
     };
 
     assert!(cache_settings.enable_caching);
     assert_eq!(cache_settings.max_cache_size, 500);
-    assert_eq!(cache_settings.cache_ttl_minutes, 30);
-    assert!(!cache_settings.enable_persistent_cache);
-    assert!(cache_settings.cache_compression);
+    assert_eq!(cache_settings.cache_ttl_seconds, 1800);
+    assert!(cache_settings.enable_similarity_cache);
 }
 
 #[test]
@@ -90,7 +88,6 @@ fn test_pattern_types() {
     let property_pattern = Pattern::PropertyUsage {
         property: NamedNode::new("http://example.org/name").unwrap(),
         usage_count: 95,
-        total_entities: 100,
         support: 0.95,
         confidence: 1.0,
         pattern_type: PatternType::Usage,
@@ -165,7 +162,7 @@ fn test_datatype_pattern() {
     let datatype_pattern = Pattern::Datatype {
         property: NamedNode::new("http://example.org/age").unwrap(),
         datatype: NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
-        usage_ratio: 0.98,
+        usage_count: 98,
         support: 0.95,
         confidence: 0.98,
         pattern_type: PatternType::Structural,
@@ -175,70 +172,58 @@ fn test_datatype_pattern() {
     assert_eq!(datatype_pattern.confidence(), 0.98);
 
     match &datatype_pattern {
-        Pattern::Datatype { usage_ratio, .. } => {
-            assert_eq!(*usage_ratio, 0.98);
+        Pattern::Datatype { usage_count, .. } => {
+            assert_eq!(*usage_count, 98);
         }
         _ => panic!("Expected Datatype pattern"),
     }
 }
 
 #[test]
-fn test_range_pattern() {
-    let literal_min = Literal::new_typed_literal(
-        "18",
-        NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
-    );
-    let literal_max = Literal::new_typed_literal(
-        "65",
-        NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
-    );
-
-    let range_pattern = Pattern::Range {
-        property: NamedNode::new("http://example.org/age").unwrap(),
-        min_value: Some(literal_min),
-        max_value: Some(literal_max),
-        avg_value: 35.5,
+fn test_constraint_usage_pattern() {
+    let constraint_pattern = Pattern::ConstraintUsage {
+        constraint_type: "MinCountConstraint".to_string(),
+        usage_count: 45,
         support: 0.9,
         confidence: 0.95,
         pattern_type: PatternType::Usage,
     };
 
-    assert_eq!(range_pattern.support(), 0.9);
-    assert_eq!(range_pattern.confidence(), 0.95);
+    assert_eq!(constraint_pattern.support(), 0.9);
+    assert_eq!(constraint_pattern.confidence(), 0.95);
 
-    match &range_pattern {
-        Pattern::Range { avg_value, .. } => {
-            assert_eq!(*avg_value, 35.5);
+    match &constraint_pattern {
+        Pattern::ConstraintUsage { constraint_type, usage_count, .. } => {
+            assert_eq!(*constraint_type, "MinCountConstraint");
+            assert_eq!(*usage_count, 45);
         }
-        _ => panic!("Expected Range pattern"),
+        _ => panic!("Expected ConstraintUsage pattern"),
     }
 }
 
 #[test]
-fn test_co_occurrence_pattern() {
-    let co_occurrence_pattern = Pattern::CoOccurrence {
-        property1: NamedNode::new("http://example.org/firstName").unwrap(),
-        property2: NamedNode::new("http://example.org/lastName").unwrap(),
-        co_occurrence_ratio: 0.95,
-        conditional_probability: 0.98,
+fn test_target_usage_pattern() {
+    let target_pattern = Pattern::TargetUsage {
+        target_type: "ClassTarget".to_string(),
+        usage_count: 25,
         support: 0.9,
         confidence: 0.95,
         pattern_type: PatternType::Usage,
     };
 
-    assert_eq!(co_occurrence_pattern.support(), 0.9);
-    assert_eq!(co_occurrence_pattern.confidence(), 0.95);
+    assert_eq!(target_pattern.support(), 0.9);
+    assert_eq!(target_pattern.confidence(), 0.95);
 
-    match &co_occurrence_pattern {
-        Pattern::CoOccurrence {
-            co_occurrence_ratio,
-            conditional_probability,
+    match &target_pattern {
+        Pattern::TargetUsage {
+            target_type,
+            usage_count,
             ..
         } => {
-            assert_eq!(*co_occurrence_ratio, 0.95);
-            assert_eq!(*conditional_probability, 0.98);
+            assert_eq!(*target_type, "ClassTarget");
+            assert_eq!(*usage_count, 25);
         }
-        _ => panic!("Expected CoOccurrence pattern"),
+        _ => panic!("Expected TargetUsage pattern"),
     }
 }
 
@@ -250,7 +235,7 @@ fn test_cardinality_types() {
         CardinalityType::InverseFunctional
     );
     assert_ne!(CardinalityType::Optional, CardinalityType::Required);
-    assert_ne!(CardinalityType::Multiple, CardinalityType::Single);
+    assert_ne!(CardinalityType::Functional, CardinalityType::InverseFunctional);
 }
 
 #[test]
@@ -262,7 +247,7 @@ fn test_hierarchy_types() {
 }
 
 #[test]
-fn test_pattern_types() {
+fn test_pattern_type_enum() {
     assert_eq!(PatternType::Structural, PatternType::Structural);
     assert_ne!(PatternType::Structural, PatternType::Usage);
     assert_ne!(PatternType::Usage, PatternType::Temporal);
@@ -271,7 +256,7 @@ fn test_pattern_types() {
 
 #[test]
 fn test_pattern_analysis_statistics() {
-    let stats = PatternAnalysisStatistics {
+    let stats = PatternStatistics {
         total_patterns_discovered: 50,
         structural_patterns: 20,
         usage_patterns: 25,

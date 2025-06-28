@@ -352,7 +352,7 @@ impl JoinExecutor {
             }
             _ => {
                 // Handle multiple inputs or mixed types
-                self.execute_multi_way_join(inputs).await
+                Box::pin(self.execute_multi_way_join(inputs)).await
             }
         }
     }

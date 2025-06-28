@@ -20,6 +20,9 @@ use std::time::Instant;
 use tracing::{debug, info};
 use uuid::Uuid;
 
+/// Type alias for gradient tensors
+type GradientTuple = (Array2<f64>, Array2<f64>, Array2<f64>, Array2<f64>);
+
 /// ComplEx embedding model using complex-valued embeddings
 #[derive(Debug)]
 pub struct ComplEx {
@@ -144,10 +147,10 @@ impl ComplEx {
 
         // Complex multiplication: (h_real + i*h_imag) * (r_real + i*r_imag) * conj(t_real + i*t_imag)
         // = (h_real + i*h_imag) * (r_real + i*r_imag) * (t_real - i*t_imag)
-        let score = (&h_real * &r_real * &t_real).sum()
-            + (&h_real * &r_imag * &t_imag).sum()
-            + (&h_imag * &r_real * &t_imag).sum()
-            - (&h_imag * &r_imag * &t_real).sum();
+        let score = (&h_real * &r_real * t_real).sum()
+            + (&h_real * &r_imag * t_imag).sum()
+            + (&h_imag * &r_real * t_imag).sum()
+            - (&h_imag * &r_imag * t_real).sum();
 
         Ok(score)
     }
@@ -159,7 +162,7 @@ impl ComplEx {
         neg_triple: (usize, usize, usize),
         pos_score: f64,
         neg_score: f64,
-    ) -> Result<(Array2<f64>, Array2<f64>, Array2<f64>, Array2<f64>)> {
+    ) -> Result<GradientTuple> {
         let mut entity_grads_real = Array2::zeros(self.entity_embeddings_real.raw_dim());
         let mut entity_grads_imag = Array2::zeros(self.entity_embeddings_imag.raw_dim());
         let mut relation_grads_real = Array2::zeros(self.relation_embeddings_real.raw_dim());

@@ -105,10 +105,10 @@ pub trait KGEmbeddingModel: Send + Sync {
     fn predict_head(&self, relation: &str, tail: &str, k: usize) -> Vec<(String, f32)>;
     
     /// Get all entity embeddings
-    fn get_entity_embeddings(&self) -> &HashMap<String, Vector>;
+    fn get_entity_embeddings(&self) -> HashMap<String, Vector>;
     
     /// Get all relation embeddings
-    fn get_relation_embeddings(&self) -> &HashMap<String, Vector>;
+    fn get_relation_embeddings(&self) -> HashMap<String, Vector>;
 }
 
 /// TransE: Translation-based embeddings
@@ -447,12 +447,16 @@ impl KGEmbeddingModel for TransE {
         scores
     }
     
-    fn get_entity_embeddings(&self) -> &HashMap<String, Vector> {
-        &self.entity_embeddings
+    fn get_entity_embeddings(&self) -> HashMap<String, Vector> {
+        self.entity_embeddings_real.iter()
+            .map(|(k, v)| (k.clone(), Vector::new(v.as_slice().to_vec())))
+            .collect()
     }
     
-    fn get_relation_embeddings(&self) -> &HashMap<String, Vector> {
-        &self.relation_embeddings
+    fn get_relation_embeddings(&self) -> HashMap<String, Vector> {
+        self.relation_embeddings_real.iter()
+            .map(|(k, v)| (k.clone(), Vector::new(v.as_slice().to_vec())))
+            .collect()
     }
 }
 
@@ -630,12 +634,16 @@ impl KGEmbeddingModel for ComplEx {
         scores
     }
     
-    fn get_entity_embeddings(&self) -> &HashMap<String, Vector> {
-        &self.entity_embeddings
+    fn get_entity_embeddings(&self) -> HashMap<String, Vector> {
+        self.entity_embeddings_real.iter()
+            .map(|(k, v)| (k.clone(), Vector::new(v.as_slice().to_vec())))
+            .collect()
     }
     
-    fn get_relation_embeddings(&self) -> &HashMap<String, Vector> {
-        &self.relation_embeddings
+    fn get_relation_embeddings(&self) -> HashMap<String, Vector> {
+        self.relation_embeddings_real.iter()
+            .map(|(k, v)| (k.clone(), Vector::new(v.as_slice().to_vec())))
+            .collect()
     }
 }
 
@@ -834,12 +842,19 @@ impl KGEmbeddingModel for RotatE {
         scores
     }
     
-    fn get_entity_embeddings(&self) -> &HashMap<String, Vector> {
-        &self.entity_embeddings
+    fn get_entity_embeddings(&self) -> HashMap<String, Vector> {
+        self.entity_embeddings.iter()
+            .map(|(k, v)| {
+                let real_values: Vec<f32> = v.iter().map(|c| c.re).collect();
+                (k.clone(), Vector::new(real_values))
+            })
+            .collect()
     }
     
-    fn get_relation_embeddings(&self) -> &HashMap<String, Vector> {
-        &self.relation_embeddings
+    fn get_relation_embeddings(&self) -> HashMap<String, Vector> {
+        self.relation_embeddings.iter()
+            .map(|(k, v)| (k.clone(), Vector::new(v.as_slice().to_vec())))
+            .collect()
     }
 }
 
@@ -853,9 +868,9 @@ impl KGEmbedding {
     /// Create a new knowledge graph embedding model
     pub fn new(config: KGEmbeddingConfig) -> Self {
         let model: Box<dyn KGEmbeddingModel> = match config.model {
-            KGEmbeddingModel::TransE => Box::new(TransE::new(config.clone())),
-            KGEmbeddingModel::ComplEx => Box::new(ComplEx::new(config.clone())),
-            KGEmbeddingModel::RotatE => Box::new(RotatE::new(config.clone())),
+            KGEmbeddingModelType::TransE => Box::new(TransE::new(config.clone())),
+            KGEmbeddingModelType::ComplEx => Box::new(ComplEx::new(config.clone())),
+            KGEmbeddingModelType::RotatE => Box::new(RotatE::new(config.clone())),
         };
         
         Self { model, config }
@@ -914,7 +929,7 @@ mod tests {
     #[test]
     fn test_transe() {
         let config = KGEmbeddingConfig {
-            model: KGEmbeddingModel::TransE,
+            model: KGEmbeddingModelType::TransE,
             dimensions: 50,
             epochs: 10,
             ..Default::default()
@@ -941,7 +956,7 @@ mod tests {
     #[test]
     fn test_complex() {
         let config = KGEmbeddingConfig {
-            model: KGEmbeddingModel::ComplEx,
+            model: KGEmbeddingModelType::ComplEx,
             dimensions: 50,
             epochs: 10,
             ..Default::default()
@@ -961,7 +976,7 @@ mod tests {
     #[test]
     fn test_rotate() {
         let config = KGEmbeddingConfig {
-            model: KGEmbeddingModel::RotatE,
+            model: KGEmbeddingModelType::RotatE,
             dimensions: 50,
             epochs: 10,
             ..Default::default()

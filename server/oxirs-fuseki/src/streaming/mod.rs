@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, RwLock};
 use url::Url;
 
-use crate::error::Result;
+use crate::error::FusekiResult;
 use oxirs_core::{Triple, Quad, Dataset};
 
 /// Streaming configuration
@@ -340,8 +340,8 @@ impl StreamingManager {
         // Initialize Kafka if configured
         if let Some(kafka_config) = &self.config.kafka {
             tracing::info!("Initializing Kafka streaming");
-            let producer = kafka::KafkaProducer::new(kafka_config.clone()).await?;
-            let consumer = kafka::KafkaConsumer::new(kafka_config.clone()).await?;
+            let producer = crate::streaming::kafka::KafkaProducer::new(kafka_config.clone()).await?;
+            let consumer = crate::streaming::kafka::KafkaConsumer::new(kafka_config.clone()).await?;
             
             let mut producers = self.producers.write().await;
             let mut consumers = self.consumers.write().await;
@@ -353,8 +353,8 @@ impl StreamingManager {
         // Initialize NATS if configured
         if let Some(nats_config) = &self.config.nats {
             tracing::info!("Initializing NATS streaming");
-            let producer = nats::NatsProducer::new(nats_config.clone()).await?;
-            let consumer = nats::NatsConsumer::new(nats_config.clone()).await?;
+            let producer = crate::streaming::nats::NatsProducer::new(nats_config.clone()).await?;
+            let consumer = crate::streaming::nats::NatsConsumer::new(nats_config.clone()).await?;
             
             let mut producers = self.producers.write().await;
             let mut consumers = self.consumers.write().await;
@@ -370,7 +370,7 @@ impl StreamingManager {
     }
 
     /// Send an RDF event to all configured streams
-    pub async fn send_event(&self, event: RDFEvent) -> Result<()> {
+    pub async fn send_event(&self, event: RDFEvent) -> crate::error::Result<()> {
         // Buffer the event
         self.event_buffer.send(event.clone()).await
             .map_err(|_| crate::error::Error::Custom("Event buffer full".to_string()))?;
@@ -433,7 +433,7 @@ impl StreamingManager {
     }
 
     /// Shutdown streaming connections
-    pub async fn shutdown(&self) -> Result<()> {
+    pub async fn shutdown(&self) -> crate::error::Result<()> {
         // Flush all producers
         let producers = self.producers.read().await;
         for (name, producer) in producers.iter() {

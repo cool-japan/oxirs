@@ -435,20 +435,26 @@ impl BindingContext {
     
     /// Bind a variable to a term
     pub fn bind(&mut self, var: &str, term: Term) {
-        self.bindings.insert(var.to_string(), term);
+        if let Ok(variable) = Variable::new(var) {
+            self.bindings.insert(variable, term);
+        }
     }
     
     /// Get binding for a variable
     pub fn get(&self, var: &str) -> Option<&Term> {
         // Check current scope first
-        if let Some(term) = self.bindings.get(var) {
-            return Some(term);
+        if let Ok(variable) = Variable::new(var) {
+            if let Some(term) = self.bindings.get(&variable) {
+                return Some(term);
+            }
         }
         
         // Check parent scopes
         for scope in self.scopes.iter().rev() {
-            if let Some(term) = scope.get(var) {
-                return Some(term);
+            if let Ok(variable) = Variable::new(var) {
+                if let Some(term) = scope.get(&variable) {
+                    return Some(term);
+                }
             }
         }
         
@@ -546,12 +552,12 @@ impl Term {
     /// Convert from algebra::Term to term::Term
     pub fn from_algebra_term(algebra_term: &AlgebraTerm) -> Self {
         match algebra_term {
-            AlgebraTerm::Iri(iri) => Term::iri(&iri.0),
+            AlgebraTerm::Iri(iri) => Term::iri(iri.as_str()),
             AlgebraTerm::Literal(lit) => {
                 if let Some(lang) = &lit.language {
                     Term::lang_literal(&lit.value, lang)
                 } else if let Some(datatype) = &lit.datatype {
-                    Term::typed_literal(&lit.value, &datatype.0).unwrap_or_else(|_| Term::literal(&lit.value))
+                    Term::typed_literal(&lit.value, datatype.as_str()).unwrap_or_else(|_| Term::literal(&lit.value))
                 } else {
                     Term::literal(&lit.value)
                 }
@@ -564,14 +570,14 @@ impl Term {
     /// Convert from term::Term to algebra::Term
     pub fn to_algebra_term(&self) -> AlgebraTerm {
         match self {
-            Term::Iri(iri) => AlgebraTerm::Iri(Iri(iri.clone())),
+            Term::Iri(iri) => AlgebraTerm::Iri(iri.clone()),
             Term::BlankNode(bn) => AlgebraTerm::BlankNode(bn.clone()),
             Term::Literal(lit_val) => {
                 AlgebraTerm::Literal(Literal {
                     value: lit_val.lexical_form.clone(),
                     language: lit_val.language_tag.clone(),
                     datatype: if lit_val.datatype != xsd::STRING {
-                        Some(Iri(lit_val.datatype.clone()))
+                        Some(lit_val.datatype.clone())
                     } else {
                         None
                     },
@@ -604,6 +610,15 @@ impl Term {
             }
             Term::Iri(_) | Term::BlankNode(_) => Ok(true),
             Term::Variable(_) => bail!("Cannot evaluate variable as boolean"),
+        }
+    }
+
+    /// Convert term to numeric value
+    pub fn to_numeric(&self) -> Result<NumericValue> {
+        match self {
+            Term::Literal(lit_val) => lit_val.to_numeric(),
+            Term::Iri(_) | Term::BlankNode(_) => bail!("Cannot convert IRI or blank node to numeric"),
+            Term::Variable(_) => bail!("Cannot convert unbound variable to numeric"),
         }
     }
 }

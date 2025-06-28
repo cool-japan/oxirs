@@ -20,6 +20,12 @@ pub struct IndexStats {
     pub predicate_counts: std::sync::RwLock<HashMap<String, usize>>,
     /// Total number of triples
     pub total_triples: std::sync::atomic::AtomicUsize,
+    /// Subject cardinality estimates
+    pub subject_cardinality: std::sync::RwLock<HashMap<String, usize>>,
+    /// Object cardinality estimates  
+    pub object_cardinality: std::sync::RwLock<HashMap<String, usize>>,
+    /// Join selectivity cache
+    pub join_selectivity_cache: std::sync::RwLock<HashMap<String, f64>>,
 }
 
 impl IndexStats {
@@ -29,6 +35,9 @@ impl IndexStats {
             base_stats: Arc::new(BaseIndexStats::new()),
             predicate_counts: std::sync::RwLock::new(HashMap::new()),
             total_triples: std::sync::atomic::AtomicUsize::new(0),
+            subject_cardinality: std::sync::RwLock::new(HashMap::new()),
+            object_cardinality: std::sync::RwLock::new(HashMap::new()),
+            join_selectivity_cache: std::sync::RwLock::new(HashMap::new()),
         }
     }
     
@@ -42,6 +51,36 @@ impl IndexStats {
     /// Set total triples
     pub fn set_total_triples(&self, count: usize) {
         self.total_triples.store(count, std::sync::atomic::Ordering::Relaxed);
+    }
+    
+    /// Update subject cardinality estimate
+    pub fn update_subject_cardinality(&self, predicate: &str, cardinality: usize) {
+        if let Ok(mut card) = self.subject_cardinality.write() {
+            card.insert(predicate.to_string(), cardinality);
+        }
+    }
+    
+    /// Update object cardinality estimate
+    pub fn update_object_cardinality(&self, predicate: &str, cardinality: usize) {
+        if let Ok(mut card) = self.object_cardinality.write() {
+            card.insert(predicate.to_string(), cardinality);
+        }
+    }
+    
+    /// Cache join selectivity
+    pub fn cache_join_selectivity(&self, pattern_pair: &str, selectivity: f64) {
+        if let Ok(mut cache) = self.join_selectivity_cache.write() {
+            cache.insert(pattern_pair.to_string(), selectivity);
+        }
+    }
+    
+    /// Get cached join selectivity
+    pub fn get_join_selectivity(&self, pattern_pair: &str) -> Option<f64> {
+        if let Ok(cache) = self.join_selectivity_cache.read() {
+            cache.get(pattern_pair).copied()
+        } else {
+            None
+        }
     }
 }
 
@@ -70,6 +109,35 @@ pub enum IndexType {
     OPS,
 }
 
+/// Variable position in a triple pattern
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum VarPosition {
+    Subject,
+    Predicate,
+    Object,
+}
+
+/// Filter expression for evaluation optimization
+#[derive(Debug, Clone)]
+pub enum FilterExpression {
+    /// Equality comparison
+    Equals(Variable, Term),
+    /// Less than comparison
+    LessThan(Variable, Term),
+    /// Greater than comparison
+    GreaterThan(Variable, Term),
+    /// String regex match
+    Regex(Variable, String),
+    /// In list 
+    In(Variable, Vec<Term>),
+    /// Logical AND
+    And(Box<FilterExpression>, Box<FilterExpression>),
+    /// Logical OR
+    Or(Box<FilterExpression>, Box<FilterExpression>),
+    /// Logical NOT
+    Not(Box<FilterExpression>),
+}
+
 /// Pattern matching strategy
 #[derive(Debug, Clone)]
 pub struct PatternStrategy {
@@ -81,6 +149,8 @@ pub struct PatternStrategy {
     pub selectivity: f64,
     /// Variables that will be bound after executing this pattern
     pub bound_vars: HashSet<Variable>,
+    /// Associated filter expressions that can be pushed down
+    pub pushdown_filters: Vec<FilterExpression>,
 }
 
 /// Optimized pattern execution order
@@ -223,6 +293,7 @@ impl PatternOptimizer {
                 estimated_cost: cost,
                 selectivity,
                 bound_vars,
+                pushdown_filters: Vec::new(), // Will be populated by filter optimization
             });
         }
 
@@ -283,32 +354,82 @@ impl PatternOptimizer {
         (adjusted_cost, selectivity)
     }
 
-    /// Estimate selectivity of a pattern
+    /// Estimate selectivity of a pattern using advanced statistics
     fn estimate_selectivity(&self, pattern: &AlgebraTriplePattern) -> f64 {
         // Base selectivity
         let mut selectivity: f64 = 1.0;
+        let total_triples = self.index_stats.total_triples.load(std::sync::atomic::Ordering::Relaxed) as f64;
+        
+        if total_triples == 0.0 {
+            return 0.001; // Default for empty dataset
+        }
 
-        // Adjust based on predicate (most selective component usually)
-        if let TermPattern::NamedNode(pred) = &pattern.predicate {
-            if let Ok(counts) = self.index_stats.predicate_counts.read() {
-                if let Some(pred_count) = counts.get(pred.as_str()) {
-                    let total_triples = self.index_stats.total_triples.load(std::sync::atomic::Ordering::Relaxed) as f64;
-                    if total_triples > 0.0 {
-                        selectivity *= (*pred_count as f64) / total_triples;
+        // Subject selectivity
+        match &pattern.subject {
+            TermPattern::NamedNode(_) | TermPattern::BlankNode(_) => {
+                // Bound subject - highly selective
+                selectivity *= 0.001;
+            }
+            TermPattern::Variable(_) => {
+                // Variable subject - depends on predicate cardinality
+                if let TermPattern::NamedNode(pred) = &pattern.predicate {
+                    if let Ok(card) = self.index_stats.subject_cardinality.read() {
+                        if let Some(subj_card) = card.get(pred.as_str()) {
+                            selectivity *= (*subj_card as f64) / total_triples;
+                        }
                     }
-                } else {
-                    // Unknown predicate - assume low selectivity
-                    selectivity *= 0.01;
+                }
+            }
+            _ => {}
+        }
+
+        // Predicate selectivity (most important for triple stores)
+        match &pattern.predicate {
+            TermPattern::NamedNode(pred) => {
+                if let Ok(counts) = self.index_stats.predicate_counts.read() {
+                    if let Some(pred_count) = counts.get(pred.as_str()) {
+                        selectivity *= (*pred_count as f64) / total_triples;
+                    } else {
+                        // Unknown predicate - assume very low frequency
+                        selectivity *= 0.001;
+                    }
+                }
+            }
+            TermPattern::Variable(_) => {
+                // Variable predicate - less selective
+                selectivity *= 0.5;
+            }
+            _ => {}
+        }
+
+        // Object selectivity
+        match &pattern.object {
+            TermPattern::Literal(_) => {
+                // Literals are usually very selective
+                selectivity *= 0.01;
+            }
+            TermPattern::NamedNode(_) => {
+                // Named nodes moderately selective
+                selectivity *= 0.1;
+            }
+            TermPattern::BlankNode(_) => {
+                // Blank nodes moderately selective
+                selectivity *= 0.1;
+            }
+            TermPattern::Variable(_) => {
+                // Variable object - depends on predicate object cardinality
+                if let TermPattern::NamedNode(pred) = &pattern.predicate {
+                    if let Ok(card) = self.index_stats.object_cardinality.read() {
+                        if let Some(obj_card) = card.get(pred.as_str()) {
+                            selectivity *= (*obj_card as f64) / total_triples;
+                        }
+                    }
                 }
             }
         }
 
-        // Literals in object position are usually selective
-        if let TermPattern::Literal(_) = &pattern.object {
-            selectivity *= 0.1;
-        }
-
-        selectivity.max(0.0001).min(1.0)
+        // Apply bounds and handle edge cases
+        selectivity.max(0.00001).min(1.0)
     }
 
     /// Extract variables that will be bound by this pattern
@@ -383,6 +504,184 @@ impl PatternOptimizer {
         }
 
         best_strategy
+    }
+    
+    /// Estimate join selectivity between two patterns
+    pub fn estimate_join_selectivity(
+        &self,
+        left: &AlgebraTriplePattern,
+        right: &AlgebraTriplePattern,
+    ) -> f64 {
+        // Create cache key for this pattern pair
+        let cache_key = format!("{:?}|{:?}", left, right);
+        
+        // Check cache first
+        if let Some(cached) = self.index_stats.get_join_selectivity(&cache_key) {
+            return cached;
+        }
+        
+        // Find common variables
+        let left_vars = self.extract_bound_vars(left);
+        let right_vars = self.extract_bound_vars(right);
+        let common_vars: HashSet<_> = left_vars.intersection(&right_vars).cloned().collect();
+        
+        let selectivity = if common_vars.is_empty() {
+            // Cartesian product - very expensive
+            1.0
+        } else {
+            // Estimate based on type of join variables
+            let mut join_selectivity = 1.0;
+            
+            for var in common_vars.iter() {
+                // Estimate selectivity based on variable position and pattern types
+                let var_selectivity = self.estimate_variable_join_selectivity(var, left, right);
+                join_selectivity *= var_selectivity;
+            }
+            
+            // Apply correlation factor for multiple join variables
+            if common_vars.len() > 1 {
+                join_selectivity *= 0.1_f64.powf(common_vars.len() as f64 - 1.0);
+            }
+            
+            join_selectivity
+        };
+        
+        // Cache the result
+        self.index_stats.cache_join_selectivity(&cache_key, selectivity);
+        
+        selectivity.max(0.00001).min(1.0)
+    }
+    
+    /// Estimate selectivity for a variable join
+    fn estimate_variable_join_selectivity(
+        &self,
+        var: &Variable,
+        left: &AlgebraTriplePattern,
+        right: &AlgebraTriplePattern,
+    ) -> f64 {
+        // Find position of variable in each pattern
+        let left_pos = self.find_variable_position(var, left);
+        let right_pos = self.find_variable_position(var, right);
+        
+        match (left_pos, right_pos) {
+            (Some(pos1), Some(pos2)) => {
+                // Subject-subject joins are usually more selective than object-object
+                match (pos1, pos2) {
+                    (VarPosition::Subject, VarPosition::Subject) => 0.01, // Very selective
+                    (VarPosition::Subject, VarPosition::Object) => 0.1,   // Moderately selective
+                    (VarPosition::Object, VarPosition::Subject) => 0.1,   // Moderately selective
+                    (VarPosition::Object, VarPosition::Object) => 0.2,    // Less selective
+                    (VarPosition::Predicate, _) | (_, VarPosition::Predicate) => 0.05, // Predicate joins rare but selective
+                }
+            }
+            _ => 1.0, // No actual join
+        }
+    }
+    
+    /// Find position of variable in pattern
+    fn find_variable_position(&self, var: &Variable, pattern: &AlgebraTriplePattern) -> Option<VarPosition> {
+        if let TermPattern::Variable(v) = &pattern.subject {
+            if v == var {
+                return Some(VarPosition::Subject);
+            }
+        }
+        if let TermPattern::Variable(v) = &pattern.predicate {
+            if v == var {
+                return Some(VarPosition::Predicate);
+            }
+        }
+        if let TermPattern::Variable(v) = &pattern.object {
+            if v == var {
+                return Some(VarPosition::Object);
+            }
+        }
+        None
+    }
+    
+    /// Optimize filter expressions and determine pushdown opportunities
+    pub fn optimize_filters(
+        &self,
+        patterns: &[AlgebraTriplePattern],
+        filters: &[FilterExpression],
+    ) -> Vec<(usize, Vec<FilterExpression>)> {
+        let mut pushdown_map = Vec::new();
+        
+        for (pattern_idx, pattern) in patterns.iter().enumerate() {
+            let mut pattern_filters = Vec::new();
+            
+            // Find filters that can be pushed down to this pattern
+            for filter in filters {
+                if self.can_pushdown_filter(filter, pattern) {
+                    pattern_filters.push(filter.clone());
+                }
+            }
+            
+            if !pattern_filters.is_empty() {
+                pushdown_map.push((pattern_idx, pattern_filters));
+            }
+        }
+        
+        pushdown_map
+    }
+    
+    /// Check if filter can be pushed down to pattern
+    fn can_pushdown_filter(&self, filter: &FilterExpression, pattern: &AlgebraTriplePattern) -> bool {
+        match filter {
+            FilterExpression::Equals(var, _) |
+            FilterExpression::LessThan(var, _) |
+            FilterExpression::GreaterThan(var, _) |
+            FilterExpression::Regex(var, _) |
+            FilterExpression::In(var, _) => {
+                // Can push down if pattern binds this variable
+                self.pattern_binds_variable(var, pattern)
+            }
+            FilterExpression::And(left, right) => {
+                // Can push down if either side can be pushed down
+                self.can_pushdown_filter(left, pattern) || self.can_pushdown_filter(right, pattern)
+            }
+            FilterExpression::Or(left, right) => {
+                // Can only push down if both sides can be pushed down
+                self.can_pushdown_filter(left, pattern) && self.can_pushdown_filter(right, pattern)
+            }
+            FilterExpression::Not(inner) => {
+                self.can_pushdown_filter(inner, pattern)
+            }
+        }
+    }
+    
+    /// Check if pattern binds variable
+    fn pattern_binds_variable(&self, var: &Variable, pattern: &AlgebraTriplePattern) -> bool {
+        matches!(&pattern.subject, TermPattern::Variable(v) if v == var) ||
+        matches!(&pattern.predicate, TermPattern::Variable(v) if v == var) ||
+        matches!(&pattern.object, TermPattern::Variable(v) if v == var)
+    }
+    
+    /// Estimate filter selectivity
+    pub fn estimate_filter_selectivity(&self, filter: &FilterExpression) -> f64 {
+        match filter {
+            FilterExpression::Equals(_, _) => 0.1,      // Equality is selective
+            FilterExpression::LessThan(_, _) => 0.3,    // Range filters moderately selective
+            FilterExpression::GreaterThan(_, _) => 0.3,
+            FilterExpression::Regex(_, _) => 0.2,       // String matches moderately selective
+            FilterExpression::In(_, values) => {
+                // Selectivity depends on number of values
+                (values.len() as f64 * 0.1).min(0.9)
+            }
+            FilterExpression::And(left, right) => {
+                // AND is more selective
+                self.estimate_filter_selectivity(left) * self.estimate_filter_selectivity(right)
+            }
+            FilterExpression::Or(left, right) => {
+                // OR is less selective
+                let left_sel = self.estimate_filter_selectivity(left);
+                let right_sel = self.estimate_filter_selectivity(right);
+                left_sel + right_sel - (left_sel * right_sel)
+            }
+            FilterExpression::Not(inner) => {
+                // NOT inverts selectivity
+                1.0 - self.estimate_filter_selectivity(inner)
+            }
+        }
     }
 
     /// Get optimal index type for a pattern execution
@@ -678,5 +977,117 @@ mod tests {
         assert_eq!(plan.patterns.len(), 2);
         assert!(plan.total_cost > 0.0);
         assert_eq!(plan.binding_order.len(), 2);
+    }
+    
+    #[test]
+    fn test_advanced_selectivity_estimation() {
+        let stats = Arc::new(IndexStats::new());
+        
+        // Setup some statistics
+        stats.set_total_triples(100000);
+        stats.update_predicate_count("http://example.org/type", 5000);
+        stats.update_subject_cardinality("http://example.org/type", 1000);
+        stats.update_object_cardinality("http://example.org/name", 10000);
+        
+        let optimizer = PatternOptimizer::new(stats);
+        
+        // Pattern with literal object should be very selective
+        let literal_pattern = AlgebraTriplePattern {
+            subject: TermPattern::Variable(Variable::new("s").unwrap()),
+            predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/name").unwrap()),
+            object: TermPattern::Literal(Literal::new("John")),
+        };
+        
+        let selectivity = optimizer.estimate_selectivity(&literal_pattern);
+        assert!(selectivity < 0.1, "Literal pattern should be highly selective");
+        
+        // Pattern with known predicate should use statistics
+        let known_pred_pattern = AlgebraTriplePattern {
+            subject: TermPattern::Variable(Variable::new("s").unwrap()),
+            predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/type").unwrap()),
+            object: TermPattern::Variable(Variable::new("o").unwrap()),
+        };
+        
+        let pred_selectivity = optimizer.estimate_selectivity(&known_pred_pattern);
+        assert!(pred_selectivity > 0.0 && pred_selectivity < 1.0);
+    }
+    
+    #[test]
+    fn test_join_selectivity_estimation() {
+        let stats = Arc::new(IndexStats::new());
+        let optimizer = PatternOptimizer::new(stats);
+        
+        let pattern1 = AlgebraTriplePattern {
+            subject: TermPattern::Variable(Variable::new("s").unwrap()),
+            predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/type").unwrap()),
+            object: TermPattern::NamedNode(NamedNode::new("http://example.org/Person").unwrap()),
+        };
+        
+        let pattern2 = AlgebraTriplePattern {
+            subject: TermPattern::Variable(Variable::new("s").unwrap()),
+            predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/name").unwrap()),
+            object: TermPattern::Variable(Variable::new("name").unwrap()),
+        };
+        
+        // Subject-subject join should be selective
+        let join_sel = optimizer.estimate_join_selectivity(&pattern1, &pattern2);
+        assert!(join_sel < 0.5, "Subject-subject join should be selective");
+        
+        // Test caching
+        let cached_sel = optimizer.estimate_join_selectivity(&pattern1, &pattern2);
+        assert_eq!(join_sel, cached_sel, "Should return cached value");
+    }
+    
+    #[test]
+    fn test_filter_optimization() {
+        let stats = Arc::new(IndexStats::new());
+        let optimizer = PatternOptimizer::new(stats);
+        
+        let patterns = vec![
+            AlgebraTriplePattern {
+                subject: TermPattern::Variable(Variable::new("s").unwrap()),
+                predicate: TermPattern::NamedNode(NamedNode::new("http://example.org/name").unwrap()),
+                object: TermPattern::Variable(Variable::new("name").unwrap()),
+            },
+        ];
+        
+        let filters = vec![
+            FilterExpression::Equals(
+                Variable::new("name").unwrap(),
+                Term::Literal(Literal::new("John")),
+            ),
+        ];
+        
+        let pushdown_map = optimizer.optimize_filters(&patterns, &filters);
+        
+        // Filter should be pushed down to the pattern that binds the variable
+        assert_eq!(pushdown_map.len(), 1);
+        assert_eq!(pushdown_map[0].0, 0); // Pattern index 0
+        assert_eq!(pushdown_map[0].1.len(), 1); // One filter
+    }
+    
+    #[test]
+    fn test_filter_selectivity() {
+        let stats = Arc::new(IndexStats::new());
+        let optimizer = PatternOptimizer::new(stats);
+        
+        let eq_filter = FilterExpression::Equals(
+            Variable::new("x").unwrap(),
+            Term::Literal(Literal::new("test")),
+        );
+        
+        let and_filter = FilterExpression::And(
+            Box::new(eq_filter.clone()),
+            Box::new(FilterExpression::LessThan(
+                Variable::new("y").unwrap(),
+                Term::Literal(Literal::new("10")),
+            )),
+        );
+        
+        let eq_sel = optimizer.estimate_filter_selectivity(&eq_filter);
+        let and_sel = optimizer.estimate_filter_selectivity(&and_filter);
+        
+        assert!(eq_sel > 0.0 && eq_sel < 1.0);
+        assert!(and_sel < eq_sel, "AND filter should be more selective");
     }
 }

@@ -1,0 +1,36 @@
+[package]
+name = "oxirs-ttl"
+version = "0.1.0-alpha.1"
+edition = "2021"
+authors = ["OxiRS Contributors"]
+description = "Turtle-family RDF parser and serializer for OxiRS - ported from Oxigraph"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/oxigraph/oxirs"
+keywords = ["rdf", "turtle", "sparql", "parser", "serializer"]
+categories = ["parsing", "data-structures", "web-programming"]
+
+[dependencies]
+oxirs-core = { path = "../../core/oxirs-core" }
+memchr = "2.7"
+thiserror = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+
+# Optional async support
+tokio = { version = "1.0", features = ["io-util", "fs"], optional = true }
+
+# Optional parallel processing
+rayon = { version = "1.8", optional = true }
+
+[features]
+default = []
+async-tokio = ["tokio"]
+parallel = ["rayon"]
+rdf-12 = []  # RDF 1.2 features (quoted triples, directional language tags)
+
+[dev-dependencies]
+tokio-test = "0.4"
+criterion = "0.5"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

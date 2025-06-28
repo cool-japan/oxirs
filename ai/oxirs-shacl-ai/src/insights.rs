@@ -677,7 +677,7 @@ impl InsightCollection {
         recommendations
     }
 
-    /// Filter insights by severity
+    /// Filter insights by minimum severity (inclusive)
     pub fn filter_by_severity(&self, min_severity: InsightSeverity) -> InsightCollection {
         let mut filtered = InsightCollection::new();
 
@@ -1011,6 +1011,811 @@ impl InsightTrait for DataInsight {
     }
 }
 
+/// Insight generation engine
+#[derive(Debug)]
+pub struct InsightGenerator {
+    config: InsightGenerationConfig,
+    validation_analyzer: ValidationInsightAnalyzer,
+    quality_analyzer: QualityInsightAnalyzer,
+    performance_analyzer: PerformanceInsightAnalyzer,
+    shape_analyzer: ShapeInsightAnalyzer,
+    data_analyzer: DataInsightAnalyzer,
+}
+
+/// Configuration for insight generation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InsightGenerationConfig {
+    /// Minimum confidence threshold for insights
+    pub min_confidence_threshold: f64,
+    
+    /// Enable validation insights
+    pub enable_validation_insights: bool,
+    
+    /// Enable quality insights
+    pub enable_quality_insights: bool,
+    
+    /// Enable performance insights
+    pub enable_performance_insights: bool,
+    
+    /// Enable shape insights
+    pub enable_shape_insights: bool,
+    
+    /// Enable data insights
+    pub enable_data_insights: bool,
+    
+    /// Maximum insights per category
+    pub max_insights_per_category: usize,
+    
+    /// Time window for trend analysis (in seconds)
+    pub trend_analysis_window: u64,
+}
+
+impl Default for InsightGenerationConfig {
+    fn default() -> Self {
+        Self {
+            min_confidence_threshold: 0.7,
+            enable_validation_insights: true,
+            enable_quality_insights: true,
+            enable_performance_insights: true,
+            enable_shape_insights: true,
+            enable_data_insights: true,
+            max_insights_per_category: 50,
+            trend_analysis_window: 3600, // 1 hour
+        }
+    }
+}
+
+impl InsightGenerator {
+    /// Create a new insight generator
+    pub fn new(config: InsightGenerationConfig) -> Self {
+        Self {
+            config: config.clone(),
+            validation_analyzer: ValidationInsightAnalyzer::new(config.clone()),
+            quality_analyzer: QualityInsightAnalyzer::new(config.clone()),
+            performance_analyzer: PerformanceInsightAnalyzer::new(config.clone()),
+            shape_analyzer: ShapeInsightAnalyzer::new(config.clone()),
+            data_analyzer: DataInsightAnalyzer::new(config),
+        }
+    }
+
+    /// Generate comprehensive insights from all available data
+    pub fn generate_insights(
+        &mut self,
+        validation_data: &crate::ValidationData,
+        quality_data: &crate::quality::QualityAssessmentData,
+        performance_data: &crate::PerformanceData,
+        shape_data: &crate::ShapeData,
+        rdf_data: &crate::RdfData,
+    ) -> crate::Result<InsightCollection> {
+        let start_time = std::time::Instant::now();
+        let mut collection = InsightCollection::new();
+
+        tracing::info!("Starting comprehensive insight generation");
+
+        // Generate validation insights
+        if self.config.enable_validation_insights {
+            match self.validation_analyzer.analyze(validation_data) {
+                Ok(mut insights) => {
+                    insights.truncate(self.config.max_insights_per_category);
+                    collection.validation_insights = insights;
+                    tracing::debug!("Generated {} validation insights", collection.validation_insights.len());
+                }
+                Err(e) => tracing::warn!("Failed to generate validation insights: {}", e),
+            }
+        }
+
+        // Generate quality insights
+        if self.config.enable_quality_insights {
+            match self.quality_analyzer.analyze(quality_data) {
+                Ok(mut insights) => {
+                    insights.truncate(self.config.max_insights_per_category);
+                    collection.quality_insights = insights;
+                    tracing::debug!("Generated {} quality insights", collection.quality_insights.len());
+                }
+                Err(e) => tracing::warn!("Failed to generate quality insights: {}", e),
+            }
+        }
+
+        // Generate performance insights
+        if self.config.enable_performance_insights {
+            match self.performance_analyzer.analyze(performance_data) {
+                Ok(mut insights) => {
+                    insights.truncate(self.config.max_insights_per_category);
+                    collection.performance_insights = insights;
+                    tracing::debug!("Generated {} performance insights", collection.performance_insights.len());
+                }
+                Err(e) => tracing::warn!("Failed to generate performance insights: {}", e),
+            }
+        }
+
+        // Generate shape insights
+        if self.config.enable_shape_insights {
+            match self.shape_analyzer.analyze(shape_data) {
+                Ok(mut insights) => {
+                    insights.truncate(self.config.max_insights_per_category);
+                    collection.shape_insights = insights;
+                    tracing::debug!("Generated {} shape insights", collection.shape_insights.len());
+                }
+                Err(e) => tracing::warn!("Failed to generate shape insights: {}", e),
+            }
+        }
+
+        // Generate data insights
+        if self.config.enable_data_insights {
+            match self.data_analyzer.analyze(rdf_data) {
+                Ok(mut insights) => {
+                    insights.truncate(self.config.max_insights_per_category);
+                    collection.data_insights = insights;
+                    tracing::debug!("Generated {} data insights", collection.data_insights.len());
+                }
+                Err(e) => tracing::warn!("Failed to generate data insights: {}", e),
+            }
+        }
+
+        // Update metadata
+        collection.metadata.generation_duration = start_time.elapsed();
+        collection.metadata.engine_version = env!("CARGO_PKG_VERSION").to_string();
+        collection.metadata.confidence_threshold = self.config.min_confidence_threshold;
+
+        tracing::info!(
+            "Generated {} total insights in {:?}",
+            collection.total_insights(),
+            collection.metadata.generation_duration
+        );
+
+        Ok(collection)
+    }
+
+    /// Generate insights from validation results only
+    pub fn generate_validation_insights(
+        &mut self,
+        validation_data: &crate::ValidationData,
+    ) -> crate::Result<Vec<ValidationInsight>> {
+        self.validation_analyzer.analyze(validation_data)
+    }
+
+    /// Generate insights from quality assessment only
+    pub fn generate_quality_insights(
+        &mut self,
+        quality_data: &crate::quality::QualityAssessmentData,
+    ) -> crate::Result<Vec<QualityInsight>> {
+        self.quality_analyzer.analyze(quality_data)
+    }
+
+    /// Update configuration
+    pub fn update_config(&mut self, config: InsightGenerationConfig) {
+        self.config = config.clone();
+        self.validation_analyzer.update_config(config.clone());
+        self.quality_analyzer.update_config(config.clone());
+        self.performance_analyzer.update_config(config.clone());
+        self.shape_analyzer.update_config(config.clone());
+        self.data_analyzer.update_config(config);
+    }
+}
+
+/// Validation insight analyzer
+#[derive(Debug)]
+struct ValidationInsightAnalyzer {
+    config: InsightGenerationConfig,
+}
+
+impl ValidationInsightAnalyzer {
+    fn new(config: InsightGenerationConfig) -> Self {
+        Self { config }
+    }
+
+    fn update_config(&mut self, config: InsightGenerationConfig) {
+        self.config = config;
+    }
+
+    fn analyze(&self, data: &crate::ValidationData) -> crate::Result<Vec<ValidationInsight>> {
+        let mut insights = Vec::new();
+
+        // Analyze success rates
+        if let Some(insight) = self.analyze_success_rates(data)? {
+            insights.push(insight);
+        }
+
+        // Analyze violation patterns
+        insights.extend(self.analyze_violation_patterns(data)?);
+
+        // Analyze performance trends
+        if let Some(insight) = self.analyze_performance_trends(data)? {
+            insights.push(insight);
+        }
+
+        // Filter by confidence
+        insights.retain(|i| i.confidence >= self.config.min_confidence_threshold);
+
+        Ok(insights)
+    }
+
+    fn analyze_success_rates(&self, data: &crate::ValidationData) -> crate::Result<Option<ValidationInsight>> {
+        let success_rate = data.calculate_success_rate();
+        
+        if success_rate < 0.7 {
+            let severity = if success_rate < 0.3 {
+                InsightSeverity::Critical
+            } else if success_rate < 0.5 {
+                InsightSeverity::High
+            } else {
+                InsightSeverity::Medium
+            };
+
+            let insight = ValidationInsight {
+                insight_type: ValidationInsightType::LowSuccessRate,
+                title: "Low Validation Success Rate Detected".to_string(),
+                description: format!(
+                    "Validation success rate is {:.1}%, which is below the recommended threshold of 70%.",
+                    success_rate * 100.0
+                ),
+                severity,
+                confidence: 0.95,
+                affected_shapes: data.get_failing_shapes(),
+                recommendations: vec![
+                    "Review failing shape constraints for overly restrictive rules".to_string(),
+                    "Analyze common violation patterns to identify data quality issues".to_string(),
+                    "Consider refining target selectors to improve precision".to_string(),
+                ],
+                supporting_data: {
+                    let mut data_map = HashMap::new();
+                    data_map.insert("success_rate".to_string(), format!("{:.3}", success_rate));
+                    data_map.insert("total_validations".to_string(), data.total_validations().to_string());
+                    data_map.insert("failed_validations".to_string(), data.failed_validations().to_string());
+                    data_map
+                },
+            };
+
+            Ok(Some(insight))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn analyze_violation_patterns(&self, data: &crate::ValidationData) -> crate::Result<Vec<ValidationInsight>> {
+        let mut insights = Vec::new();
+        let patterns = data.extract_violation_patterns();
+
+        for pattern in patterns {
+            if pattern.frequency >= 0.1 && pattern.confidence >= self.config.min_confidence_threshold {
+                let insight = ValidationInsight {
+                    insight_type: ValidationInsightType::ViolationPattern,
+                    title: format!("Recurring Violation Pattern: {}", pattern.pattern_type),
+                    description: format!(
+                        "Pattern '{}' occurs in {:.1}% of validation failures, indicating a systematic issue.",
+                        pattern.description, pattern.frequency * 100.0
+                    ),
+                    severity: if pattern.frequency > 0.5 {
+                        InsightSeverity::High
+                    } else if pattern.frequency > 0.2 {
+                        InsightSeverity::Medium
+                    } else {
+                        InsightSeverity::Low
+                    },
+                    confidence: pattern.confidence,
+                    affected_shapes: pattern.affected_shapes,
+                    recommendations: pattern.recommendations,
+                    supporting_data: pattern.evidence,
+                };
+                insights.push(insight);
+            }
+        }
+
+        Ok(insights)
+    }
+
+    fn analyze_performance_trends(&self, data: &crate::ValidationData) -> crate::Result<Option<ValidationInsight>> {
+        let trend = data.calculate_performance_trend();
+        
+        if trend.is_degrading() && trend.significance > 0.8 {
+            let insight = ValidationInsight {
+                insight_type: ValidationInsightType::PerformanceDegradation,
+                title: "Validation Performance Degradation".to_string(),
+                description: format!(
+                    "Validation performance has degraded by {:.1}% over the last {} validations.",
+                    trend.degradation_percentage, trend.sample_size
+                ),
+                severity: InsightSeverity::Medium,
+                confidence: trend.significance,
+                affected_shapes: Vec::new(),
+                recommendations: vec![
+                    "Review recent changes to shape definitions".to_string(),
+                    "Analyze query complexity and optimization opportunities".to_string(),
+                    "Consider implementing validation result caching".to_string(),
+                ],
+                supporting_data: trend.to_map(),
+            };
+
+            Ok(Some(insight))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+/// Quality insight analyzer
+#[derive(Debug)]
+struct QualityInsightAnalyzer {
+    config: InsightGenerationConfig,
+}
+
+impl QualityInsightAnalyzer {
+    fn new(config: InsightGenerationConfig) -> Self {
+        Self { config }
+    }
+
+    fn update_config(&mut self, config: InsightGenerationConfig) {
+        self.config = config;
+    }
+
+    fn analyze(&self, data: &crate::quality::QualityAssessmentData) -> crate::Result<Vec<QualityInsight>> {
+        let mut insights = Vec::new();
+
+        // Analyze each quality dimension
+        for dimension in &data.quality_dimensions {
+            if let Some(insight) = self.analyze_quality_dimension(dimension)? {
+                insights.push(insight);
+            }
+        }
+
+        // Analyze overall trends
+        insights.extend(self.analyze_quality_trends(data)?);
+
+        // Filter by confidence
+        insights.retain(|i| i.confidence >= self.config.min_confidence_threshold);
+
+        Ok(insights)
+    }
+
+    fn analyze_quality_dimension(&self, dimension: &crate::quality::QualityDimension) -> crate::Result<Option<QualityInsight>> {
+        if dimension.score < 0.6 {
+            let insight_type = match dimension.dimension_type.as_str() {
+                "completeness" => QualityInsightType::Completeness,
+                "consistency" => QualityInsightType::Consistency,
+                "accuracy" => QualityInsightType::Accuracy,
+                "validity" => QualityInsightType::Validity,
+                _ => QualityInsightType::Custom(dimension.dimension_type.clone()),
+            };
+
+            let severity = if dimension.score < 0.3 {
+                InsightSeverity::Critical
+            } else if dimension.score < 0.45 {
+                InsightSeverity::High
+            } else {
+                InsightSeverity::Medium
+            };
+
+            let insight = QualityInsight {
+                insight_type,
+                title: format!("{} Quality Issue", dimension.dimension_type.to_uppercase()),
+                description: format!(
+                    "{} quality score is {:.1}%, indicating significant quality issues in this dimension.",
+                    dimension.dimension_type, dimension.score * 100.0
+                ),
+                severity,
+                confidence: dimension.confidence,
+                quality_dimension: dimension.dimension_type.clone(),
+                current_score: dimension.score,
+                trend_direction: dimension.trend_direction.clone(),
+                recommendations: dimension.improvement_recommendations.clone(),
+                supporting_data: dimension.evidence.clone(),
+            };
+
+            Ok(Some(insight))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn analyze_quality_trends(&self, data: &crate::quality::QualityAssessmentData) -> crate::Result<Vec<QualityInsight>> {
+        let mut insights = Vec::new();
+
+        // Analyze overall quality trend
+        let overall_trend = data.calculate_overall_trend();
+        if overall_trend.is_significant_decline() {
+            let insight = QualityInsight {
+                insight_type: QualityInsightType::TrendAnalysis,
+                title: "Overall Data Quality Declining".to_string(),
+                description: format!(
+                    "Overall data quality has declined by {:.1}% over the analysis period.",
+                    overall_trend.decline_percentage
+                ),
+                severity: InsightSeverity::High,
+                confidence: overall_trend.confidence,
+                quality_dimension: "overall".to_string(),
+                current_score: data.overall_score,
+                trend_direction: TrendDirection::Decreasing,
+                recommendations: vec![
+                    "Implement data quality monitoring alerts".to_string(),
+                    "Review data ingestion processes for quality controls".to_string(),
+                    "Establish data quality improvement initiatives".to_string(),
+                ],
+                supporting_data: overall_trend.to_map(),
+            };
+            insights.push(insight);
+        }
+
+        Ok(insights)
+    }
+}
+
+/// Performance insight analyzer
+#[derive(Debug)]
+struct PerformanceInsightAnalyzer {
+    config: InsightGenerationConfig,
+}
+
+impl PerformanceInsightAnalyzer {
+    fn new(config: InsightGenerationConfig) -> Self {
+        Self { config }
+    }
+
+    fn update_config(&mut self, config: InsightGenerationConfig) {
+        self.config = config;
+    }
+
+    fn analyze(&self, data: &crate::PerformanceData) -> crate::Result<Vec<PerformanceInsight>> {
+        let mut insights = Vec::new();
+
+        // Analyze execution time trends
+        if let Some(insight) = self.analyze_execution_times(data)? {
+            insights.push(insight);
+        }
+
+        // Analyze memory usage
+        if let Some(insight) = self.analyze_memory_usage(data)? {
+            insights.push(insight);
+        }
+
+        // Analyze throughput
+        if let Some(insight) = self.analyze_throughput(data)? {
+            insights.push(insight);
+        }
+
+        // Filter by confidence
+        insights.retain(|i| i.confidence >= self.config.min_confidence_threshold);
+
+        Ok(insights)
+    }
+
+    fn analyze_execution_times(&self, data: &crate::PerformanceData) -> crate::Result<Option<PerformanceInsight>> {
+        let execution_trend = data.calculate_execution_time_trend();
+        
+        if execution_trend.is_increasing() && execution_trend.significance > 0.75 {
+            let insight = PerformanceInsight {
+                insight_type: PerformanceInsightType::DegradingPerformance,
+                title: "Execution Time Increasing".to_string(),
+                description: format!(
+                    "Average execution time has increased by {:.1}% over recent validations.",
+                    execution_trend.increase_percentage
+                ),
+                severity: if execution_trend.increase_percentage > 50.0 {
+                    InsightSeverity::High
+                } else {
+                    InsightSeverity::Medium
+                },
+                confidence: execution_trend.significance,
+                metric_name: "execution_time".to_string(),
+                current_value: data.current_avg_execution_time,
+                trend_direction: TrendDirection::Increasing,
+                recommendations: vec![
+                    "Profile validation queries for optimization opportunities".to_string(),
+                    "Consider implementing query result caching".to_string(),
+                    "Review shape complexity and constraint ordering".to_string(),
+                ],
+                supporting_data: execution_trend.to_map(),
+            };
+
+            Ok(Some(insight))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn analyze_memory_usage(&self, data: &crate::PerformanceData) -> crate::Result<Option<PerformanceInsight>> {
+        if data.peak_memory_usage > data.memory_threshold {
+            let insight = PerformanceInsight {
+                insight_type: PerformanceInsightType::MemoryIssue,
+                title: "High Memory Usage Detected".to_string(),
+                description: format!(
+                    "Peak memory usage ({:.1} MB) exceeds threshold ({:.1} MB).",
+                    data.peak_memory_usage / 1024.0 / 1024.0,
+                    data.memory_threshold / 1024.0 / 1024.0
+                ),
+                severity: InsightSeverity::Medium,
+                confidence: 0.9,
+                metric_name: "memory_usage".to_string(),
+                current_value: data.peak_memory_usage,
+                trend_direction: TrendDirection::Stable,
+                recommendations: vec![
+                    "Implement memory-efficient validation strategies".to_string(),
+                    "Consider processing data in smaller batches".to_string(),
+                    "Review memory usage patterns for optimization".to_string(),
+                ],
+                supporting_data: {
+                    let mut map = HashMap::new();
+                    map.insert("peak_memory".to_string(), data.peak_memory_usage.to_string());
+                    map.insert("threshold".to_string(), data.memory_threshold.to_string());
+                    map
+                },
+            };
+
+            Ok(Some(insight))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn analyze_throughput(&self, data: &crate::PerformanceData) -> crate::Result<Option<PerformanceInsight>> {
+        let throughput_trend = data.calculate_throughput_trend();
+        
+        if throughput_trend.is_declining() && throughput_trend.significance > 0.8 {
+            let insight = PerformanceInsight {
+                insight_type: PerformanceInsightType::ThroughputIssue,
+                title: "Validation Throughput Declining".to_string(),
+                description: format!(
+                    "Validation throughput has decreased by {:.1}% over recent validations.",
+                    throughput_trend.decline_percentage
+                ),
+                severity: InsightSeverity::Medium,
+                confidence: throughput_trend.significance,
+                metric_name: "throughput".to_string(),
+                current_value: data.current_throughput,
+                trend_direction: TrendDirection::Decreasing,
+                recommendations: vec![
+                    "Investigate performance bottlenecks".to_string(),
+                    "Consider parallel validation processing".to_string(),
+                    "Optimize shape definitions for better performance".to_string(),
+                ],
+                supporting_data: throughput_trend.to_map(),
+            };
+
+            Ok(Some(insight))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+/// Shape insight analyzer
+#[derive(Debug)]
+struct ShapeInsightAnalyzer {
+    config: InsightGenerationConfig,
+}
+
+impl ShapeInsightAnalyzer {
+    fn new(config: InsightGenerationConfig) -> Self {
+        Self { config }
+    }
+
+    fn update_config(&mut self, config: InsightGenerationConfig) {
+        self.config = config;
+    }
+
+    fn analyze(&self, data: &crate::ShapeData) -> crate::Result<Vec<ShapeInsight>> {
+        let mut insights = Vec::new();
+
+        for shape_analysis in &data.shape_analyses {
+            if let Some(insight) = self.analyze_shape_complexity(shape_analysis)? {
+                insights.push(insight);
+            }
+
+            if let Some(insight) = self.analyze_shape_effectiveness(shape_analysis)? {
+                insights.push(insight);
+            }
+        }
+
+        // Filter by confidence
+        insights.retain(|i| i.confidence >= self.config.min_confidence_threshold);
+
+        Ok(insights)
+    }
+
+    fn analyze_shape_complexity(&self, analysis: &crate::ShapeAnalysis) -> crate::Result<Option<ShapeInsight>> {
+        if analysis.complexity_metrics.overall_complexity >= ComplexityLevel::High {
+            let insight = ShapeInsight {
+                insight_type: ShapeInsightType::OverlyComplex,
+                title: format!("Shape {} is Overly Complex", analysis.shape_id.as_str()),
+                description: format!(
+                    "Shape has high complexity with {} constraints and nesting depth of {}.",
+                    analysis.complexity_metrics.constraint_count,
+                    analysis.complexity_metrics.nesting_depth
+                ),
+                severity: InsightSeverity::Medium,
+                confidence: 0.85,
+                shape_id: analysis.shape_id.clone(),
+                effectiveness_score: analysis.effectiveness_score,
+                complexity_metrics: analysis.complexity_metrics.clone(),
+                recommendations: vec![
+                    "Consider breaking down complex constraints into simpler ones".to_string(),
+                    "Review necessity of all constraints".to_string(),
+                    "Optimize constraint ordering for better performance".to_string(),
+                ],
+                supporting_data: {
+                    let mut map = HashMap::new();
+                    map.insert("constraint_count".to_string(), analysis.complexity_metrics.constraint_count.to_string());
+                    map.insert("nesting_depth".to_string(), analysis.complexity_metrics.nesting_depth.to_string());
+                    map
+                },
+            };
+
+            Ok(Some(insight))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn analyze_shape_effectiveness(&self, analysis: &crate::ShapeAnalysis) -> crate::Result<Option<ShapeInsight>> {
+        if analysis.effectiveness_score < 0.6 {
+            let insight = ShapeInsight {
+                insight_type: ShapeInsightType::EffectivenessAnalysis,
+                title: format!("Shape {} Has Low Effectiveness", analysis.shape_id.as_str()),
+                description: format!(
+                    "Shape effectiveness score is {:.1}%, indicating potential design issues.",
+                    analysis.effectiveness_score * 100.0
+                ),
+                severity: InsightSeverity::Medium,
+                confidence: 0.8,
+                shape_id: analysis.shape_id.clone(),
+                effectiveness_score: analysis.effectiveness_score,
+                complexity_metrics: analysis.complexity_metrics.clone(),
+                recommendations: vec![
+                    "Review shape targets for precision".to_string(),
+                    "Analyze constraint relevance and accuracy".to_string(),
+                    "Consider user feedback on shape usefulness".to_string(),
+                ],
+                supporting_data: {
+                    let mut map = HashMap::new();
+                    map.insert("effectiveness_score".to_string(), analysis.effectiveness_score.to_string());
+                    map
+                },
+            };
+
+            Ok(Some(insight))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+/// Data insight analyzer
+#[derive(Debug)]
+struct DataInsightAnalyzer {
+    config: InsightGenerationConfig,
+}
+
+impl DataInsightAnalyzer {
+    fn new(config: InsightGenerationConfig) -> Self {
+        Self { config }
+    }
+
+    fn update_config(&mut self, config: InsightGenerationConfig) {
+        self.config = config;
+    }
+
+    fn analyze(&self, data: &crate::RdfData) -> crate::Result<Vec<DataInsight>> {
+        let mut insights = Vec::new();
+
+        // Analyze missing data patterns
+        if let Some(insight) = self.analyze_missing_data(data)? {
+            insights.push(insight);
+        }
+
+        // Analyze data inconsistencies
+        insights.extend(self.analyze_data_inconsistencies(data)?);
+
+        // Analyze data distribution
+        if let Some(insight) = self.analyze_data_distribution(data)? {
+            insights.push(insight);
+        }
+
+        // Filter by confidence
+        insights.retain(|i| i.confidence >= self.config.min_confidence_threshold);
+
+        Ok(insights)
+    }
+
+    fn analyze_missing_data(&self, data: &crate::RdfData) -> crate::Result<Option<DataInsight>> {
+        let missing_data_percentage = data.calculate_missing_data_percentage();
+        
+        if missing_data_percentage > 0.15 {
+            let insight = DataInsight {
+                insight_type: DataInsightType::MissingData,
+                title: "Significant Missing Data Detected".to_string(),
+                description: format!(
+                    "{:.1}% of expected data properties are missing across the dataset.",
+                    missing_data_percentage * 100.0
+                ),
+                severity: if missing_data_percentage > 0.3 {
+                    InsightSeverity::High
+                } else {
+                    InsightSeverity::Medium
+                },
+                confidence: 0.9,
+                affected_elements: data.get_missing_data_elements(),
+                quality_impact: if missing_data_percentage > 0.3 {
+                    QualityImpact::High
+                } else {
+                    QualityImpact::Medium
+                },
+                data_improvements: vec![
+                    "Implement data completeness validation".to_string(),
+                    "Review data collection processes".to_string(),
+                    "Add default values where appropriate".to_string(),
+                ],
+                statistics: {
+                    let mut map = HashMap::new();
+                    map.insert("missing_percentage".to_string(), missing_data_percentage);
+                    map.insert("total_elements".to_string(), data.total_elements() as f64);
+                    map
+                },
+            };
+
+            Ok(Some(insight))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn analyze_data_inconsistencies(&self, data: &crate::RdfData) -> crate::Result<Vec<DataInsight>> {
+        let mut insights = Vec::new();
+        let inconsistencies = data.detect_inconsistencies();
+
+        for inconsistency in inconsistencies {
+            if inconsistency.significance > self.config.min_confidence_threshold {
+                let insight = DataInsight {
+                    insight_type: DataInsightType::InconsistentPatterns,
+                    title: format!("Data Inconsistency: {}", inconsistency.pattern_type),
+                    description: inconsistency.description,
+                    severity: match inconsistency.impact_level {
+                        crate::InconsistencyImpact::High => InsightSeverity::High,
+                        crate::InconsistencyImpact::Medium => InsightSeverity::Medium,
+                        crate::InconsistencyImpact::Low => InsightSeverity::Low,
+                    },
+                    confidence: inconsistency.significance,
+                    affected_elements: inconsistency.affected_elements,
+                    quality_impact: match inconsistency.impact_level {
+                        crate::InconsistencyImpact::High => QualityImpact::High,
+                        crate::InconsistencyImpact::Medium => QualityImpact::Medium,
+                        crate::InconsistencyImpact::Low => QualityImpact::Low,
+                    },
+                    data_improvements: inconsistency.suggested_fixes,
+                    statistics: inconsistency.evidence,
+                };
+                insights.push(insight);
+            }
+        }
+
+        Ok(insights)
+    }
+
+    fn analyze_data_distribution(&self, data: &crate::RdfData) -> crate::Result<Option<DataInsight>> {
+        let distribution_analysis = data.analyze_distribution();
+        
+        if distribution_analysis.has_significant_anomalies() {
+            let insight = DataInsight {
+                insight_type: DataInsightType::DistributionAnomalies,
+                title: "Data Distribution Anomalies Detected".to_string(),
+                description: "Unusual patterns in data distribution detected that may indicate quality issues.".to_string(),
+                severity: InsightSeverity::Medium,
+                confidence: distribution_analysis.confidence,
+                affected_elements: distribution_analysis.anomalous_elements,
+                quality_impact: QualityImpact::Medium,
+                data_improvements: vec![
+                    "Investigate outlier values".to_string(),
+                    "Review data collection and processing procedures".to_string(),
+                    "Consider data normalization techniques".to_string(),
+                ],
+                statistics: distribution_analysis.statistics,
+            };
+
+            Ok(Some(insight))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1136,7 +1941,7 @@ mod tests {
         assert_eq!(collection.high_priority_count(), 1);
 
         let filtered = collection.filter_by_severity(InsightSeverity::High);
-        assert_eq!(filtered.total_insights(), 1);
+        assert_eq!(filtered.total_insights(), 1); // Should only include High severity insights
     }
 
     #[test]

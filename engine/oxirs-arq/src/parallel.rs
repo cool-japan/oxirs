@@ -8,6 +8,7 @@ use crate::algebra::{
     Algebra, Binding, Expression, Solution, Term as AlgebraTerm, TriplePattern, Variable,
     Aggregate, Iri, Literal, PropertyPath
 };
+use oxirs_core::model::NamedNode;
 use crate::executor::{Dataset, ExecutionContext, ParallelConfig};
 use crate::executor::stats::ExecutionStats;
 use crate::term::{Term, BindingContext};
@@ -532,7 +533,7 @@ impl ParallelQueryExecutor {
                 // Create binding context from HashMap
                 let mut ctx = BindingContext::new();
                 for (var, term) in binding {
-                    ctx.bind(var, Term::from_algebra_term(term));
+                    ctx.bind(var.as_str(), Term::from_algebra_term(term));
                 }
                 let evaluator_with_ctx = ExpressionEvaluator::with_context(
                     extension_registry.clone(),
@@ -572,10 +573,10 @@ impl ParallelQueryExecutor {
                 let mut ctx_a = BindingContext::new();
                 let mut ctx_b = BindingContext::new();
                 for (var, term) in a {
-                    ctx_a.bind(var, Term::from_algebra_term(term));
+                    ctx_a.bind(var.as_str(), Term::from_algebra_term(term));
                 }
                 for (var, term) in b {
-                    ctx_b.bind(var, Term::from_algebra_term(term));
+                    ctx_b.bind(var.as_str(), Term::from_algebra_term(term));
                 }
                 
                 let evaluator_a = ExpressionEvaluator::with_context(
@@ -689,7 +690,7 @@ impl ParallelQueryExecutor {
                 let values = self.collect_aggregate_values(expr.as_ref(), group, *distinct, context)?;
                 Ok(AlgebraTerm::Literal(Literal::typed(
                     values.len().to_string(),
-                    Iri("http://www.w3.org/2001/XMLSchema#integer".to_string()),
+                    NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#integer"),
                 )))
             }
             Aggregate::Sum { expr, distinct } => {
@@ -717,7 +718,7 @@ impl ParallelQueryExecutor {
                         let val = lit.value.parse::<f64>().unwrap_or(0.0);
                         Ok(AlgebraTerm::Literal(Literal::typed(
                             (val / count).to_string(),
-                            Iri("http://www.w3.org/2001/XMLSchema#decimal".to_string()),
+                            NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#decimal"),
                         )))
                     }
                     _ => Err(anyhow!("Invalid sum for AVG")),
@@ -753,7 +754,7 @@ impl ParallelQueryExecutor {
                 if let Some(expr) = expr {
                     let mut ctx = BindingContext::new();
                     for (var, term) in binding {
-                        ctx.bind(var, Term::from_algebra_term(term));
+                        ctx.bind(var.as_str(), Term::from_algebra_term(term));
                     }
                     let evaluator = ExpressionEvaluator::with_context(
                         extension_registry.clone(),
@@ -790,14 +791,14 @@ impl ParallelQueryExecutor {
 
         Ok(AlgebraTerm::Literal(Literal::typed(
             sum.to_string(),
-            Iri("http://www.w3.org/2001/XMLSchema#decimal".to_string()),
+            NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#decimal"),
         )))
     }
 
     /// Convert term to string
     fn term_to_string(&self, term: &AlgebraTerm) -> String {
         match term {
-            AlgebraTerm::Iri(iri) => iri.0.to_string(),
+            AlgebraTerm::Iri(iri) => iri.as_str().to_string(),
             AlgebraTerm::Literal(lit) => lit.value.to_string(),
             AlgebraTerm::Variable(var) => format!("?{}", var),
             AlgebraTerm::BlankNode(id) => format!("_:{}", id),
@@ -895,7 +896,7 @@ impl ParallelQueryExecutor {
                 for (var, val) in binding {
                     // Convert algebra::Term to term::Term for binding context
                     let term_val = Term::from_algebra_term(val);
-                    binding_context.bind(var, term_val);
+                    binding_context.bind(var.as_str(), term_val);
                 }
                 
                 match evaluator.evaluate(expr) {
@@ -1095,7 +1096,7 @@ impl ParallelQueryExecutor {
                             // Set up binding context
                             for (var, val) in &joined {
                                 let term_val = Term::from_algebra_term(val);
-                                binding_context.bind(var, term_val);
+                                binding_context.bind(var.as_str(), term_val);
                             }
                             
                             if let Ok(result) = evaluator.evaluate(filter_expr) {

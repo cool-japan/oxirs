@@ -97,6 +97,31 @@ pub struct JoinIndexOpportunity {
 pub struct BGPOptimizer<'a> {
     statistics: &'a Statistics,
     index_stats: &'a IndexStatistics,
+    adaptive_selector: AdaptiveIndexSelector,
+}
+
+/// Adaptive index selector for dynamic optimization
+#[derive(Debug, Clone)]
+pub struct AdaptiveIndexSelector {
+    /// Query pattern frequency
+    pattern_frequency: HashMap<String, usize>,
+    /// Index effectiveness history
+    index_effectiveness: HashMap<IndexType, f64>,
+    /// Workload characteristics
+    workload_characteristics: WorkloadCharacteristics,
+}
+
+/// Workload characteristics for adaptive optimization
+#[derive(Debug, Clone, Default)]
+pub struct WorkloadCharacteristics {
+    /// Average query complexity (number of patterns)
+    pub avg_query_complexity: f64,
+    /// Predicate diversity
+    pub predicate_diversity: f64,
+    /// Join frequency patterns
+    pub join_frequency: HashMap<String, usize>,
+    /// Temporal query patterns
+    pub temporal_access_patterns: HashMap<String, Vec<std::time::Instant>>,
 }
 
 impl<'a> BGPOptimizer<'a> {
@@ -104,6 +129,20 @@ impl<'a> BGPOptimizer<'a> {
         Self {
             statistics,
             index_stats,
+            adaptive_selector: AdaptiveIndexSelector::new(),
+        }
+    }
+
+    /// Create optimizer with existing adaptive selector state
+    pub fn with_adaptive_selector(
+        statistics: &'a Statistics, 
+        index_stats: &'a IndexStatistics,
+        adaptive_selector: AdaptiveIndexSelector
+    ) -> Self {
+        Self {
+            statistics,
+            index_stats,
+            adaptive_selector,
         }
     }
 
@@ -217,9 +256,9 @@ impl<'a> BGPOptimizer<'a> {
             Term::Iri(iri) => {
                 // IRIs have selectivity based on statistics
                 let cardinality = match position {
-                    TermPosition::Subject => self.statistics.subject_cardinality.get(&iri.0),
-                    TermPosition::Predicate => self.statistics.predicate_frequency.get(&iri.0),
-                    TermPosition::Object => self.statistics.object_cardinality.get(&iri.0),
+                    TermPosition::Subject => self.statistics.subject_cardinality.get(iri.as_str()),
+                    TermPosition::Predicate => self.statistics.predicate_frequency.get(iri.as_str()),
+                    TermPosition::Object => self.statistics.object_cardinality.get(iri.as_str()),
                 };
                 
                 if let Some(&card) = cardinality {
@@ -286,11 +325,11 @@ impl<'a> BGPOptimizer<'a> {
         // Check for known patterns with skewed distributions
         if let Term::Iri(pred) = &pattern.predicate {
             // rdf:type often has skewed distribution
-            if pred.0.ends_with("#type") || pred.0.ends_with("/type") {
+            if pred.as_str().ends_with("#type") || pred.as_str().ends_with("/type") {
                 return Ok(0.8); // Less selective due to skew
             }
             // Labels and comments are usually unique
-            if pred.0.ends_with("#label") || pred.0.ends_with("#comment") {
+            if pred.as_str().ends_with("#label") || pred.as_str().ends_with("#comment") {
                 return Ok(0.1); // More selective
             }
         }
@@ -358,13 +397,13 @@ impl<'a> BGPOptimizer<'a> {
         let mut vars = HashSet::new();
         
         if let Term::Variable(v) = &pattern.subject {
-            vars.insert(v.clone());
+            vars.insert(v.to_string());
         }
         if let Term::Variable(v) = &pattern.predicate {
-            vars.insert(v.clone());
+            vars.insert(v.to_string());
         }
         if let Term::Variable(v) = &pattern.object {
-            vars.insert(v.clone());
+            vars.insert(v.to_string());
         }
         
         vars
@@ -654,11 +693,11 @@ impl<'a> BGPOptimizer<'a> {
     }
 
     fn is_subject_variable(&self, pattern: &TriplePattern, var: &str) -> bool {
-        matches!(&pattern.subject, Term::Variable(v) if v == var)
+        matches!(&pattern.subject, Term::Variable(v) if v.to_string() == var)
     }
 
     fn is_object_variable(&self, pattern: &TriplePattern, var: &str) -> bool {
-        matches!(&pattern.object, Term::Variable(v) if v == var)
+        matches!(&pattern.object, Term::Variable(v) if v.to_string() == var)
     }
 
     fn is_variable_indexed(&self, pattern: &TriplePattern, var: &str) -> bool {
@@ -688,6 +727,79 @@ enum TermPosition {
     Subject,
     Predicate,
     Object,
+}
+
+impl AdaptiveIndexSelector {
+    pub fn new() -> Self {
+        Self {
+            pattern_frequency: HashMap::new(),
+            index_effectiveness: HashMap::new(),
+            workload_characteristics: WorkloadCharacteristics::default(),
+        }
+    }
+
+    /// Update selector with query execution feedback
+    pub fn update_from_execution(
+        &mut self,
+        patterns: &[TriplePattern],
+        index_used: IndexType,
+        execution_time: std::time::Duration,
+        result_count: usize,
+    ) {
+        // Update pattern frequency
+        for pattern in patterns {
+            let pattern_key = self.pattern_key(pattern);
+            *self.pattern_frequency.entry(pattern_key).or_insert(0) += 1;
+        }
+
+        // Update index effectiveness
+        let effectiveness = self.calculate_index_effectiveness(execution_time, result_count);
+        self.index_effectiveness
+            .entry(index_used)
+            .and_modify(|e| *e = (*e + effectiveness) / 2.0)
+            .or_insert(effectiveness);
+
+        // Update workload characteristics
+        self.update_workload_characteristics(patterns);
+    }
+
+    /// Calculate pattern key for frequency tracking
+    fn pattern_key(&self, pattern: &TriplePattern) -> String {
+        format!("{:?}_{:?}_{:?}", 
+                self.term_type(&pattern.subject),
+                self.term_type(&pattern.predicate),
+                self.term_type(&pattern.object))
+    }
+
+    /// Get term type for pattern analysis
+    fn term_type(&self, term: &Term) -> &str {
+        match term {
+            Term::Variable(_) => "VAR",
+            Term::Iri(_) => "IRI", 
+            Term::Literal(_) => "LIT",
+            Term::BlankNode(_) => "BN",
+        }
+    }
+
+    /// Calculate index effectiveness from execution results
+    fn calculate_index_effectiveness(&self, execution_time: std::time::Duration, result_count: usize) -> f64 {
+        let time_factor = 1.0 / (execution_time.as_millis() as f64 + 1.0);
+        let result_factor = if result_count == 0 { 0.1 } else { (result_count as f64).ln() };
+        time_factor * result_factor
+    }
+
+    /// Update workload characteristics
+    fn update_workload_characteristics(&mut self, patterns: &[TriplePattern]) {
+        let new_complexity = patterns.len() as f64;
+        self.workload_characteristics.avg_query_complexity = 
+            (self.workload_characteristics.avg_query_complexity + new_complexity) / 2.0;
+    }
+}
+
+impl Default for AdaptiveIndexSelector {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

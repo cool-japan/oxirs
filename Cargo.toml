@@ -8,6 +8,7 @@ members = [
     "engine/oxirs-rule",
     "engine/oxirs-shacl",
     "engine/oxirs-star",
+    "engine/oxirs-ttl",
     "engine/oxirs-vec",
     "storage/oxirs-tdb",
     "storage/oxirs-cluster",
@@ -94,6 +95,7 @@ chrono = { version = "0.4", features = ["serde"] }
 # WebSocket support for GraphQL subscriptions
 tokio-tungstenite = "0.21"
 futures-util = "0.3"
+futures = "0.3"
 
 # Rand must be the latest version
 rand = "0.9.1"

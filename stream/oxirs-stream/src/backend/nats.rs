@@ -499,9 +499,8 @@ impl NatsProducer {
             .name("oxirs-nats-producer")
             .retry_on_initial_connect()
             .ping_interval(Duration::from_secs(10))
-            .max_reconnects(10)
             .reconnect_delay_callback(|attempt| {
-                std::cmp::min(attempt * 100, 5000).try_into().unwrap()
+                Duration::from_millis(std::cmp::min(attempt * 100, 5000) as u64)
             });
         
         // Add authentication if configured
@@ -518,9 +517,11 @@ impl NatsProducer {
         let client = if let Some(ref cluster_urls) = self.nats_config.cluster_urls {
             let all_urls = std::iter::once(self.nats_config.url.clone())
                 .chain(cluster_urls.iter().cloned())
-                .collect::<Vec<_>>();  
+                .collect::<Vec<_>>();
             
-            async_nats::connect_with_options(all_urls, connect_options)
+            // Convert Vec<String> to comma-separated string for NATS
+            let urls_str = all_urls.join(",");
+            async_nats::connect_with_options(urls_str, connect_options)
                 .await
                 .map_err(|e| anyhow!("Failed to connect to NATS cluster: {}", e))?
         } else {
@@ -646,13 +647,16 @@ impl NatsProducer {
                         stats.avg_latency_ms = (stats.avg_latency_ms + latency as f64) / 2.0;
                         
                         // Update stream metadata
-                        if let Ok(mut metadata) = self.stream_metadata.write().await.get_mut(&self.nats_config.stream_name) {
+                        if let Some(metadata) = self.stream_metadata.write().await.get_mut(&self.nats_config.stream_name) {
                             metadata.message_count += 1;
                             metadata.bytes_stored += payload.len() as u64;
-                            metadata.last_sequence = ack.sequence;
+                            // TODO: Fix field name - ack.sequence doesn't exist
+                            // metadata.last_sequence = ack.sequence;
                         }
                         
-                        debug!("Published event to NATS: {} (seq: {})", nats_event.event_id, ack.sequence);
+                        // TODO: Fix field name - ack.sequence doesn't exist
+                        // debug!("Published event to NATS: {} (seq: {})", nats_event.event_id, ack.sequence);
+                        debug!("Published event to NATS: {}", nats_event.event_id);
                     }
                     Err(e) => {
                         let mut stats = self.stats.write().await;
@@ -729,6 +733,50 @@ impl NatsProducer {
                 PatchOperation::DeleteGraph { graph } => StreamEvent::GraphDeleted {
                     graph: graph.clone(),
                     metadata,
+                },
+                PatchOperation::AddPrefix { prefix, namespace } => {
+                    // Use schema definition event for prefix operations
+                    StreamEvent::SchemaDefinitionAdded {
+                        schema_type: "prefix".to_string(),
+                        schema_uri: namespace.clone(),
+                        definition: format!("PREFIX {} <{}>", prefix, namespace),
+                        metadata,
+                    }
+                },
+                PatchOperation::DeletePrefix { prefix } => {
+                    StreamEvent::SchemaDefinitionRemoved {
+                        schema_type: "prefix".to_string(),
+                        schema_uri: format!("prefix:{}", prefix),
+                        metadata,
+                    }
+                },
+                PatchOperation::TransactionBegin { transaction_id } => {
+                    StreamEvent::TransactionBegin {
+                        transaction_id: transaction_id.clone().unwrap_or_else(|| "unknown".to_string()),
+                        isolation_level: None,
+                        metadata,
+                    }
+                },
+                PatchOperation::TransactionCommit => {
+                    StreamEvent::TransactionCommit {
+                        transaction_id: "unknown".to_string(), // We'd need to track this
+                        metadata,
+                    }
+                },
+                PatchOperation::TransactionAbort => {
+                    StreamEvent::TransactionAbort {
+                        transaction_id: "unknown".to_string(), // We'd need to track this
+                        metadata,
+                    }
+                },
+                PatchOperation::Header { key, value } => {
+                    // Use schema definition event for header operations
+                    StreamEvent::SchemaDefinitionAdded {
+                        schema_type: "header".to_string(),
+                        schema_uri: key.clone(),
+                        definition: format!("HEADER {} {}", key, value),
+                        metadata,
+                    }
                 },
             };
             self.publish(event).await?;
@@ -1017,8 +1065,9 @@ impl NatsConsumer {
                                             
                                             // Track pending acknowledgments
                                             let mut state = self.consumer_state.write().await;
-                                            state.pending_acks.insert(msg.info().stream_sequence, processing_start);
-                                            state.last_sequence = msg.info().stream_sequence;
+                                            let msg_info = msg.info().unwrap();
+                                            state.pending_acks.insert(msg_info.stream_sequence, processing_start);
+                                            state.last_sequence = msg_info.stream_sequence;
 
                                             // Acknowledge the message
                                             let ack_result = msg.ack().await;
@@ -1027,7 +1076,9 @@ impl NatsConsumer {
                                             // Update stats and state
                                             let mut stats = self.stats.write().await;
                                             let mut state = self.consumer_state.write().await;
-                                            state.pending_acks.remove(&msg.info().stream_sequence);
+                                            if let Ok(info) = msg.info() {
+                                                state.pending_acks.remove(&info.stream_sequence);
+                                            }
                                             
                                             if let Err(e) = ack_result {
                                                 warn!("Failed to acknowledge NATS message: {}", e);
@@ -1054,7 +1105,9 @@ impl NatsConsumer {
                                                     Ok(Some(stream_event))
                                                 }
                                                 Err(e) => {
-                                                    self.stats.events_failed += 1;
+                                                    let mut stats = self.stats.write().await;
+                                                    stats.events_failed += 1;
+                                                    drop(stats);
                                                     error!("Failed to convert NATS event: {}", e);
                                                     Err(anyhow!("Event conversion failed: {}", e))
                                                 }

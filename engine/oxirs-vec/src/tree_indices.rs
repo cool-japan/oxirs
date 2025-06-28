@@ -766,8 +766,8 @@ impl CoverTree {
     fn insert(&mut self, point_idx: usize) -> Result<()> {
         // Simplified insert - in practice, this would be more complex
         // to maintain the cover tree invariants
+        let level = self.get_level(point_idx);
         if let Some(root) = &mut self.root {
-            let level = self.get_level(point_idx);
             root.children.push(Box::new(CoverNode {
                 point: point_idx,
                 level,
@@ -876,7 +876,7 @@ impl RandomProjectionTree {
         
         // Generate random projection vector
         let projection: Vec<f32> = Standard
-            .sample_iter(rng)
+            .sample_iter(&mut *rng)
             .take(dimensions)
             .collect();
         

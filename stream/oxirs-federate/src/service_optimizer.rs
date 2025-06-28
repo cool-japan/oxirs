@@ -281,7 +281,7 @@ impl ServiceOptimizer {
         pattern: &TriplePattern,
         service: &FederatedService,
     ) -> u32 {
-        let mut score = 0;
+        let mut score: u32 = 0;
 
         // Constants are more selective than variables
         if !pattern.subject.starts_with('?') {

@@ -198,14 +198,40 @@ impl Default for OverallHealth {
     }
 }
 
-/// Insight severity levels
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+/// Insight severity levels (Higher values = Higher severity)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum InsightSeverity {
-    Critical,
-    High,
-    Medium,
-    Low,
     Info,
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+impl PartialOrd for InsightSeverity {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for InsightSeverity {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match (self, other) {
+            (InsightSeverity::Critical, InsightSeverity::Critical) => std::cmp::Ordering::Equal,
+            (InsightSeverity::Critical, _) => std::cmp::Ordering::Greater,
+            (_, InsightSeverity::Critical) => std::cmp::Ordering::Less,
+            (InsightSeverity::High, InsightSeverity::High) => std::cmp::Ordering::Equal,
+            (InsightSeverity::High, InsightSeverity::Medium | InsightSeverity::Low | InsightSeverity::Info) => std::cmp::Ordering::Greater,
+            (InsightSeverity::Medium | InsightSeverity::Low | InsightSeverity::Info, InsightSeverity::High) => std::cmp::Ordering::Less,
+            (InsightSeverity::Medium, InsightSeverity::Medium) => std::cmp::Ordering::Equal,
+            (InsightSeverity::Medium, InsightSeverity::Low | InsightSeverity::Info) => std::cmp::Ordering::Greater,
+            (InsightSeverity::Low | InsightSeverity::Info, InsightSeverity::Medium) => std::cmp::Ordering::Less,
+            (InsightSeverity::Low, InsightSeverity::Low) => std::cmp::Ordering::Equal,
+            (InsightSeverity::Low, InsightSeverity::Info) => std::cmp::Ordering::Greater,
+            (InsightSeverity::Info, InsightSeverity::Low) => std::cmp::Ordering::Less,
+            (InsightSeverity::Info, InsightSeverity::Info) => std::cmp::Ordering::Equal,
+        }
+    }
 }
 
 /// Performance analysis

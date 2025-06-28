@@ -8,6 +8,8 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use uuid;
 
+// Event metadata is defined as a struct below
+
 /// Enhanced RDF streaming events with metadata and provenance
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum StreamEvent {
@@ -101,31 +103,37 @@ pub enum StreamEvent {
         metadata_type: String,
         old_value: Option<String>,
         new_value: String,
+        metadata: EventMetadata,
     },
     GraphPermissionsChanged {
         graph: String,
         permission_type: String, // "read", "write", "admin"
         principal: String,       // user or role
         granted: bool,
+        metadata: EventMetadata,
     },
     GraphStatisticsUpdated {
         graph: String,
         triple_count: u64,
         size_bytes: u64,
         last_modified: u64,
+        metadata: EventMetadata,
     },
     GraphRenamed {
         old_name: String,
         new_name: String,
+        metadata: EventMetadata,
     },
     GraphMerged {
         source_graphs: Vec<String>,
         target_graph: String,
+        metadata: EventMetadata,
     },
     GraphSplit {
         source_graph: String,
         target_graphs: Vec<String>,
         split_criteria: String,
+        metadata: EventMetadata,
     },
     
     // Schema Change Events
@@ -133,56 +141,67 @@ pub enum StreamEvent {
         schema_type: String, // "class", "property", "datatype"
         schema_uri: String,
         definition: String,
+        metadata: EventMetadata,
     },
     SchemaDefinitionRemoved {
         schema_type: String,
         schema_uri: String,
+        metadata: EventMetadata,
     },
     SchemaDefinitionModified {
         schema_type: String,
         schema_uri: String,
         old_definition: String,
         new_definition: String,
+        metadata: EventMetadata,
     },
     OntologyImported {
         ontology_uri: String,
         version: Option<String>,
         import_method: String, // "owl:imports", "explicit", "inference"
+        metadata: EventMetadata,
     },
     OntologyRemoved {
         ontology_uri: String,
         version: Option<String>,
+        metadata: EventMetadata,
     },
     ConstraintAdded {
         constraint_type: String, // "cardinality", "range", "domain", "functional"
         target: String,          // property or class URI
         constraint_definition: String,
+        metadata: EventMetadata,
     },
     ConstraintRemoved {
         constraint_type: String,
         target: String,
         constraint_definition: String,
+        metadata: EventMetadata,
     },
     ConstraintViolated {
         constraint_type: String,
         target: String,
         violating_data: String,
         severity: String, // "error", "warning", "info"
+        metadata: EventMetadata,
     },
     IndexCreated {
         index_name: String,
         index_type: String, // "btree", "hash", "fulltext", "spatial"
         target_properties: Vec<String>,
         graph: Option<String>,
+        metadata: EventMetadata,
     },
     IndexDropped {
         index_name: String,
         index_type: String,
+        metadata: EventMetadata,
     },
     IndexRebuilt {
         index_name: String,
         reason: String,
         duration_ms: u64,
+        metadata: EventMetadata,
     },
     
     // SHACL Shape Events
@@ -360,6 +379,44 @@ pub struct QueryResult {
 }
 
 impl StreamEvent {
+    /// Get the metadata for this event
+    pub fn metadata(&self) -> &EventMetadata {
+        match self {
+            StreamEvent::TripleAdded { metadata, .. } => metadata,
+            StreamEvent::TripleRemoved { metadata, .. } => metadata,
+            StreamEvent::QuadAdded { metadata, .. } => metadata,
+            StreamEvent::QuadRemoved { metadata, .. } => metadata,
+            StreamEvent::GraphCreated { metadata, .. } => metadata,
+            StreamEvent::GraphCleared { metadata, .. } => metadata,
+            StreamEvent::GraphDeleted { metadata, .. } => metadata,
+            StreamEvent::GraphMetadataUpdated { metadata, .. } => metadata,
+            StreamEvent::GraphPermissionsChanged { metadata, .. } => metadata,
+            StreamEvent::QueryExecuted { metadata, .. } => metadata,
+            StreamEvent::TransactionStarted { metadata, .. } => metadata,
+            StreamEvent::TransactionCommitted { metadata, .. } => metadata,
+            StreamEvent::TransactionAborted { metadata, .. } => metadata,
+            StreamEvent::ServiceRegistered { metadata, .. } => metadata,
+            StreamEvent::ServiceUnregistered { metadata, .. } => metadata,
+            StreamEvent::ServiceHealthChanged { metadata, .. } => metadata,
+            StreamEvent::Custom { metadata, .. } => metadata,
+            StreamEvent::GraphStatisticsUpdated { metadata, .. } => metadata,
+            StreamEvent::GraphRenamed { metadata, .. } => metadata,
+            StreamEvent::SchemaUpdated { metadata, .. } => metadata,
+            StreamEvent::IndexCreated { metadata, .. } => metadata,
+            StreamEvent::IndexDropped { metadata, .. } => metadata,
+            StreamEvent::IndexRebuilt { metadata, .. } => metadata,
+            StreamEvent::ShapeAdded { metadata, .. } => metadata,
+            StreamEvent::ShapeRemoved { metadata, .. } => metadata,
+            StreamEvent::ShapeUpdated { metadata, .. } => metadata,
+            StreamEvent::ShapeValidationStarted { metadata, .. } => metadata,
+            StreamEvent::ShapeValidationCompleted { metadata, .. } => metadata,
+            StreamEvent::ShapeViolationDetected { metadata, .. } => metadata,
+            StreamEvent::QueryResultAdded { metadata, .. } => metadata,
+            StreamEvent::QueryResultRemoved { metadata, .. } => metadata,
+            StreamEvent::QueryCompleted { metadata, .. } => metadata,
+            StreamEvent::Heartbeat { metadata, .. } => metadata,
+        }
+    }
 
     // Helper methods for creating specific event types
 
@@ -370,6 +427,7 @@ impl StreamEvent {
             metadata_type,
             old_value,
             new_value,
+            metadata: EventMetadata::default(),
         }
     }
 
@@ -380,6 +438,7 @@ impl StreamEvent {
             permission_type,
             principal,
             granted,
+            metadata: EventMetadata::default(),
         }
     }
 
@@ -393,6 +452,7 @@ impl StreamEvent {
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_secs(),
+            metadata: EventMetadata::default(),
         }
     }
 
@@ -402,6 +462,7 @@ impl StreamEvent {
             schema_type,
             schema_uri,
             definition,
+            metadata: EventMetadata::default(),
         }
     }
 
@@ -412,6 +473,7 @@ impl StreamEvent {
             schema_uri,
             old_definition,
             new_definition,
+            metadata: EventMetadata::default(),
         }
     }
 
@@ -421,6 +483,7 @@ impl StreamEvent {
             ontology_uri,
             version,
             import_method,
+            metadata: EventMetadata::default(),
         }
     }
 
@@ -431,6 +494,7 @@ impl StreamEvent {
             target,
             violating_data,
             severity,
+            metadata: EventMetadata::default(),
         }
     }
 
@@ -441,6 +505,7 @@ impl StreamEvent {
             index_type,
             target_properties,
             graph,
+            metadata: EventMetadata::default(),
         }
     }
 
@@ -450,6 +515,7 @@ impl StreamEvent {
             shape_uri,
             shape_definition,
             target_class,
+            metadata: EventMetadata::default(),
         }
     }
 
@@ -461,6 +527,7 @@ impl StreamEvent {
             success,
             violation_count,
             duration_ms,
+            metadata: EventMetadata::default(),
         }
     }
 
@@ -472,6 +539,7 @@ impl StreamEvent {
             violating_node,
             severity,
             message,
+            metadata: EventMetadata::default(),
         }
     }
 
@@ -586,8 +654,7 @@ impl StreamEvent {
             StreamEvent::IndexCreated { graph, .. } => {
                 graph.as_ref().map_or(false, |g| g == target_graph)
             }
-            StreamEvent::ShapeValidationStarted { target_graph: shape_target, .. } |
-            StreamEvent::ShapeValidationCompleted { target_graph: shape_target, .. } => {
+            StreamEvent::ShapeValidationStarted { target_graph: shape_target, .. } => {
                 shape_target.as_ref().map_or(false, |g| g == target_graph)
             }
             _ => false,

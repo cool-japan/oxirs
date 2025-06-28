@@ -174,21 +174,21 @@ impl StatisticsCollector {
             Term::Iri(iri) => {
                 match position {
                     TermPosition::Subject => {
-                        *self.stats.subject_cardinality.entry(iri.0.clone()).or_insert(0) += 1;
+                        *self.stats.subject_cardinality.entry(iri.as_str().to_string()).or_insert(0) += 1;
                     }
                     TermPosition::Predicate => {
-                        *self.stats.predicate_frequency.entry(iri.0.clone()).or_insert(0) += 1;
+                        *self.stats.predicate_frequency.entry(iri.as_str().to_string()).or_insert(0) += 1;
                         
                         // Create histogram for this predicate if needed
-                        if !self.histograms.contains_key(&iri.0) {
+                        if !self.histograms.contains_key(iri.as_str()) {
                             self.histograms.insert(
-                                iri.0.clone(),
+                                iri.as_str().to_string(),
                                 Histogram::new(self.max_histogram_buckets),
                             );
                         }
                     }
                     TermPosition::Object => {
-                        *self.stats.object_cardinality.entry(iri.0.clone()).or_insert(0) += 1;
+                        *self.stats.object_cardinality.entry(iri.as_str().to_string()).or_insert(0) += 1;
                     }
                 }
             }
@@ -387,7 +387,7 @@ impl StatisticsCollector {
         // Apply subject selectivity
         match &pattern.subject {
             Term::Iri(iri) => {
-                if let Some(&count) = self.stats.subject_cardinality.get(&iri.0) {
+                if let Some(&count) = self.stats.subject_cardinality.get(iri.as_str()) {
                     selectivity *= count as f64 / base_cardinality as f64;
                 } else {
                     selectivity *= 0.001;
@@ -401,7 +401,7 @@ impl StatisticsCollector {
         // Apply predicate selectivity
         match &pattern.predicate {
             Term::Iri(iri) => {
-                if let Some(&freq) = self.stats.predicate_frequency.get(&iri.0) {
+                if let Some(&freq) = self.stats.predicate_frequency.get(iri.as_str()) {
                     selectivity *= freq as f64 / base_cardinality as f64;
                 } else {
                     selectivity *= 0.01;
@@ -414,7 +414,7 @@ impl StatisticsCollector {
         // Apply object selectivity
         match &pattern.object {
             Term::Iri(iri) => {
-                if let Some(&count) = self.stats.object_cardinality.get(&iri.0) {
+                if let Some(&count) = self.stats.object_cardinality.get(iri.as_str()) {
                     selectivity *= count as f64 / base_cardinality as f64;
                 } else {
                     selectivity *= 0.001;

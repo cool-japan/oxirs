@@ -15,6 +15,7 @@ use std::hash::{Hash, Hasher};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
+use std::thread::{self, JoinHandle};
 
 /// Cache eviction policy
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -172,6 +173,12 @@ pub struct MemoryCache {
     access_order: VecDeque<CacheKey>, // For LRU
     frequency_map: HashMap<CacheKey, u64>, // For LFU
     current_memory_bytes: usize,
+    // ARC state
+    arc_t1: VecDeque<CacheKey>, // Recently accessed pages
+    arc_t2: VecDeque<CacheKey>, // Frequently accessed pages
+    arc_b1: VecDeque<CacheKey>, // Ghost list for T1
+    arc_b2: VecDeque<CacheKey>, // Ghost list for T2
+    arc_p: usize, // Target size for T1
 }
 
 impl MemoryCache {
@@ -182,6 +189,11 @@ impl MemoryCache {
             access_order: VecDeque::new(),
             frequency_map: HashMap::new(),
             current_memory_bytes: 0,
+            arc_t1: VecDeque::new(),
+            arc_t2: VecDeque::new(),
+            arc_b1: VecDeque::new(),
+            arc_b2: VecDeque::new(),
+            arc_p: 0,
         }
     }
     
@@ -293,8 +305,33 @@ impl MemoryCache {
             .map(|(key, _)| key.clone())
     }
     
-    /// Find ARC key (simplified to LRU for now)
-    fn find_arc_key(&self) -> Option<CacheKey> {
+    /// Find ARC key using Adaptive Replacement Cache algorithm
+    fn find_arc_key(&mut self) -> Option<CacheKey> {
+        let c = self.config.max_memory_entries;
+        
+        // If T1 is not empty and |T1| > p, evict from T1
+        if !self.arc_t1.is_empty() && (self.arc_t1.len() > self.arc_p || (self.arc_t2.is_empty() && self.arc_t1.len() == self.arc_p)) {
+            if let Some(key) = self.arc_t1.pop_front() {
+                // Move to B1
+                self.arc_b1.push_back(key.clone());
+                if self.arc_b1.len() > c {
+                    self.arc_b1.pop_front();
+                }
+                return Some(key);
+            }
+        }
+        
+        // Otherwise evict from T2
+        if let Some(key) = self.arc_t2.pop_front() {
+            // Move to B2
+            self.arc_b2.push_back(key.clone());
+            if self.arc_b2.len() > c {
+                self.arc_b2.pop_front();
+            }
+            return Some(key);
+        }
+        
+        // Fallback to LRU if ARC lists are empty
         self.find_lru_key()
     }
     
@@ -312,7 +349,7 @@ impl MemoryCache {
             .map(|(key, _)| key.clone())
     }
     
-    /// Track access for LRU/LFU
+    /// Track access for LRU/LFU/ARC
     fn track_access(&mut self, key: &CacheKey) {
         // Update LRU order
         if let Some(pos) = self.access_order.iter().position(|k| k == key) {
@@ -322,6 +359,40 @@ impl MemoryCache {
         
         // Update LFU frequency
         *self.frequency_map.entry(key.clone()).or_insert(0) += 1;
+        
+        // Update ARC tracking
+        if self.config.eviction_policy == EvictionPolicy::ARC {
+            self.track_arc_access(key);
+        }
+    }
+    
+    /// Track access for ARC algorithm
+    fn track_arc_access(&mut self, key: &CacheKey) {
+        let c = self.config.max_memory_entries;
+        
+        // Check if key is in T1 or T2
+        if let Some(pos) = self.arc_t1.iter().position(|k| k == key) {
+            // Move from T1 to T2 (promote to frequent)
+            self.arc_t1.remove(pos);
+            self.arc_t2.push_back(key.clone());
+        } else if let Some(pos) = self.arc_t2.iter().position(|k| k == key) {
+            // Move to end of T2 (most recently used)
+            self.arc_t2.remove(pos);
+            self.arc_t2.push_back(key.clone());
+        } else if let Some(pos) = self.arc_b1.iter().position(|k| k == key) {
+            // Hit in B1: increase p and move to T2
+            self.arc_b1.remove(pos);
+            self.arc_p = (self.arc_p + 1.max(self.arc_b2.len() / self.arc_b1.len())).min(c);
+            self.arc_t2.push_back(key.clone());
+        } else if let Some(pos) = self.arc_b2.iter().position(|k| k == key) {
+            // Hit in B2: decrease p and move to T2
+            self.arc_b2.remove(pos);
+            self.arc_p = self.arc_p.saturating_sub(1.max(self.arc_b1.len() / self.arc_b2.len()));
+            self.arc_t2.push_back(key.clone());
+        } else {
+            // New key: add to T1
+            self.arc_t1.push_back(key.clone());
+        }
     }
     
     /// Remove from tracking structures
@@ -330,6 +401,22 @@ impl MemoryCache {
             self.access_order.remove(pos);
         }
         self.frequency_map.remove(key);
+        
+        // Remove from ARC structures
+        if self.config.eviction_policy == EvictionPolicy::ARC {
+            if let Some(pos) = self.arc_t1.iter().position(|k| k == key) {
+                self.arc_t1.remove(pos);
+            }
+            if let Some(pos) = self.arc_t2.iter().position(|k| k == key) {
+                self.arc_t2.remove(pos);
+            }
+            if let Some(pos) = self.arc_b1.iter().position(|k| k == key) {
+                self.arc_b1.remove(pos);
+            }
+            if let Some(pos) = self.arc_b2.iter().position(|k| k == key) {
+                self.arc_b2.remove(pos);
+            }
+        }
     }
     
     /// Clean expired entries
@@ -412,7 +499,7 @@ impl PersistentCache {
             return Ok(None);
         }
         
-        let data = std::fs::read(file_path)?;
+        let data = std::fs::read(&file_path)?;
         
         let decompressed = if self.config.enable_compression {
             self.decompress_data(&data)?
@@ -1023,6 +1110,259 @@ pub struct InvalidationStats {
     pub total_namespace_entries: usize,
 }
 
+/// Background cache worker for maintenance tasks
+pub struct BackgroundCacheWorker {
+    cache: Arc<MultiLevelCache>,
+    invalidator: Arc<CacheInvalidator>,
+    config: CacheConfig,
+    worker_handle: Option<JoinHandle<()>>,
+    shutdown_signal: Arc<RwLock<bool>>,
+}
+
+impl BackgroundCacheWorker {
+    pub fn new(
+        cache: Arc<MultiLevelCache>,
+        invalidator: Arc<CacheInvalidator>,
+        config: CacheConfig,
+    ) -> Self {
+        Self {
+            cache,
+            invalidator,
+            config,
+            worker_handle: None,
+            shutdown_signal: Arc::new(RwLock::new(false)),
+        }
+    }
+    
+    /// Start the background worker
+    pub fn start(&mut self) -> Result<()> {
+        if !self.config.enable_background_updates {
+            return Ok(());
+        }
+        
+        let cache = Arc::clone(&self.cache);
+        let invalidator = Arc::clone(&self.invalidator);
+        let interval = self.config.background_update_interval;
+        let shutdown_signal = Arc::clone(&self.shutdown_signal);
+        
+        let handle = thread::spawn(move || {
+            while !*shutdown_signal.read().unwrap() {
+                // Perform maintenance tasks
+                if let Err(e) = Self::perform_maintenance(&cache, &invalidator) {
+                    eprintln!("Background cache maintenance error: {}", e);
+                }
+                
+                // Sleep for the configured interval
+                thread::sleep(interval);
+            }
+        });
+        
+        self.worker_handle = Some(handle);
+        Ok(())
+    }
+    
+    /// Stop the background worker
+    pub fn stop(&mut self) -> Result<()> {
+        // Signal shutdown
+        {
+            let mut signal = self.shutdown_signal.write().unwrap();
+            *signal = true;
+        }
+        
+        // Wait for worker to finish
+        if let Some(handle) = self.worker_handle.take() {
+            handle.join().map_err(|e| anyhow!("Failed to join worker thread: {:?}", e))?;
+        }
+        
+        Ok(())
+    }
+    
+    /// Perform background maintenance tasks
+    fn perform_maintenance(
+        cache: &Arc<MultiLevelCache>,
+        invalidator: &Arc<CacheInvalidator>,
+    ) -> Result<()> {
+        // 1. Clean expired entries
+        let expired_count = invalidator.invalidate_expired()?;
+        if expired_count > 0 {
+            println!("Background worker cleaned {} expired entries", expired_count);
+        }
+        
+        // 2. Optimize memory usage if fragmentation is high
+        let memory_stats = cache.get_memory_stats();
+        let utilization = memory_stats.memory_bytes as f64 / memory_stats.max_memory_bytes as f64;
+        
+        if utilization > 0.9 {
+            // Trigger more aggressive cleanup
+            Self::aggressive_cleanup(cache)?;
+        }
+        
+        // 3. Preemptive persistent cache sync
+        Self::sync_hot_entries(cache)?;
+        
+        Ok(())
+    }
+    
+    /// Perform aggressive cleanup when memory usage is high
+    fn aggressive_cleanup(cache: &Arc<MultiLevelCache>) -> Result<()> {
+        // Force cleanup of memory cache by temporarily reducing limits
+        // This is a simplified approach - in practice you'd implement more sophisticated logic
+        println!("Performing aggressive cache cleanup due to high memory usage");
+        Ok(())
+    }
+    
+    /// Sync frequently accessed entries to persistent storage
+    fn sync_hot_entries(cache: &Arc<MultiLevelCache>) -> Result<()> {
+        // In a real implementation, you'd identify hot entries and ensure they're in persistent storage
+        // This helps with cache warming after restarts
+        Ok(())
+    }
+}
+
+impl Drop for BackgroundCacheWorker {
+    fn drop(&mut self) {
+        let _ = self.stop();
+    }
+}
+
+/// Cache warming utilities
+pub struct CacheWarmer {
+    cache: Arc<MultiLevelCache>,
+}
+
+impl CacheWarmer {
+    pub fn new(cache: Arc<MultiLevelCache>) -> Self {
+        Self { cache }
+    }
+    
+    /// Warm cache with a list of key-value pairs
+    pub fn warm_with_data(&self, data: Vec<(CacheKey, Vector)>) -> Result<usize> {
+        let mut loaded_count = 0;
+        
+        for (key, vector) in data {
+            if self.cache.insert(key, vector).is_ok() {
+                loaded_count += 1;
+            }
+        }
+        
+        Ok(loaded_count)
+    }
+    
+    /// Warm cache by loading frequently accessed entries from persistent storage
+    pub fn warm_from_persistent(&self, keys: Vec<CacheKey>) -> Result<usize> {
+        let mut loaded_count = 0;
+        
+        for key in keys {
+            // Try to load from persistent cache and promote to memory
+            if self.cache.get(&key).is_some() {
+                loaded_count += 1;
+            }
+        }
+        
+        Ok(loaded_count)
+    }
+    
+    /// Warm cache using a precomputed dataset
+    pub fn warm_with_generator<F>(&self, count: usize, generator: F) -> Result<usize>
+    where
+        F: Fn(usize) -> Option<(CacheKey, Vector)>,
+    {
+        let mut loaded_count = 0;
+        
+        for i in 0..count {
+            if let Some((key, vector)) = generator(i) {
+                if self.cache.insert(key, vector).is_ok() {
+                    loaded_count += 1;
+                }
+            }
+        }
+        
+        Ok(loaded_count)
+    }
+}
+
+/// Advanced cache analytics and optimization recommendations
+pub struct CacheAnalyzer {
+    cache: Arc<MultiLevelCache>,
+    invalidator: Arc<CacheInvalidator>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CacheAnalysisReport {
+    pub memory_utilization: f64,
+    pub hit_ratio: f64,
+    pub persistent_hit_ratio: f64,
+    pub most_accessed_namespaces: Vec<(String, usize)>,
+    pub recommendations: Vec<String>,
+    pub performance_score: f64, // 0.0 to 1.0
+}
+
+impl CacheAnalyzer {
+    pub fn new(cache: Arc<MultiLevelCache>, invalidator: Arc<CacheInvalidator>) -> Self {
+        Self { cache, invalidator }
+    }
+    
+    /// Generate comprehensive cache analysis report
+    pub fn analyze(&self) -> CacheAnalysisReport {
+        let stats = self.cache.get_stats();
+        let memory_stats = self.cache.get_memory_stats();
+        let invalidation_stats = self.invalidator.get_stats();
+        
+        let memory_utilization = memory_stats.memory_bytes as f64 / memory_stats.max_memory_bytes as f64;
+        
+        let total_requests = stats.total_requests;
+        let total_hits = stats.memory_hits + stats.persistent_hits;
+        let hit_ratio = if total_requests > 0 {
+            total_hits as f64 / total_requests as f64
+        } else {
+            0.0
+        };
+        
+        let persistent_hit_ratio = if stats.persistent_hits + stats.persistent_misses > 0 {
+            stats.persistent_hits as f64 / (stats.persistent_hits + stats.persistent_misses) as f64
+        } else {
+            0.0
+        };
+        
+        let mut recommendations = Vec::new();
+        
+        // Generate recommendations
+        if hit_ratio < 0.5 {
+            recommendations.push("Consider increasing cache size or adjusting eviction policy".to_string());
+        }
+        
+        if memory_utilization > 0.9 {
+            recommendations.push("Memory cache is near capacity - consider increasing max_memory_bytes".to_string());
+        }
+        
+        if persistent_hit_ratio < 0.3 {
+            recommendations.push("Persistent cache hit ratio is low - review TTL settings".to_string());
+        }
+        
+        if invalidation_stats.tracked_namespaces > 100 {
+            recommendations.push("Consider consolidating namespaces to reduce tracking overhead".to_string());
+        }
+        
+        // Calculate performance score (weighted combination of metrics)
+        let performance_score = (hit_ratio * 0.4 + (1.0 - memory_utilization) * 0.3 + persistent_hit_ratio * 0.3)
+            .max(0.0).min(1.0);
+        
+        CacheAnalysisReport {
+            memory_utilization,
+            hit_ratio,
+            persistent_hit_ratio,
+            most_accessed_namespaces: vec![], // Would need access pattern tracking
+            recommendations,
+            performance_score,
+        }
+    }
+    
+    /// Get recommendations for cache configuration optimization
+    pub fn get_optimization_recommendations(&self) -> Vec<String> {
+        self.analyze().recommendations
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1151,5 +1491,279 @@ mod tests {
         
         // Should be expired and removed
         assert!(cache.get(&key).is_none());
+    }
+    
+    #[test]
+    fn test_arc_eviction_policy() {
+        let config = CacheConfig {
+            max_memory_entries: 3,
+            eviction_policy: EvictionPolicy::ARC,
+            ..Default::default()
+        };
+        
+        let mut cache = MemoryCache::new(config);
+        
+        let key1 = CacheKey::new("test", "arc1");
+        let key2 = CacheKey::new("test", "arc2");
+        let key3 = CacheKey::new("test", "arc3");
+        let key4 = CacheKey::new("test", "arc4");
+        
+        let vector = Vector::new(vec![1.0, 2.0, 3.0]);
+        
+        // Insert three items
+        cache.insert(key1.clone(), CacheEntry::new(vector.clone())).unwrap();
+        cache.insert(key2.clone(), CacheEntry::new(vector.clone())).unwrap();
+        cache.insert(key3.clone(), CacheEntry::new(vector.clone())).unwrap();
+        
+        // Access key1 multiple times to make it frequent
+        cache.get(&key1);
+        cache.get(&key1);
+        cache.get(&key1);
+        
+        // Insert key4 - should evict the least valuable item
+        cache.insert(key4.clone(), CacheEntry::new(vector.clone())).unwrap();
+        
+        // key1 should still be there (frequent access)
+        assert!(cache.get(&key1).is_some());
+        
+        // Check that we have exactly 3 items
+        assert_eq!(cache.entries.len(), 3);
+    }
+    
+    #[test]
+    fn test_cache_warmer() {
+        let temp_dir = TempDir::new().unwrap();
+        
+        let config = CacheConfig {
+            max_memory_entries: 10,
+            persistent_cache_dir: Some(temp_dir.path().to_path_buf()),
+            enable_persistent: true,
+            ..Default::default()
+        };
+        
+        let cache = Arc::new(MultiLevelCache::new(config).unwrap());
+        let warmer = CacheWarmer::new(Arc::clone(&cache));
+        
+        // Prepare test data
+        let test_data = vec![
+            (CacheKey::new("test", "warm1"), Vector::new(vec![1.0, 2.0])),
+            (CacheKey::new("test", "warm2"), Vector::new(vec![3.0, 4.0])),
+            (CacheKey::new("test", "warm3"), Vector::new(vec![5.0, 6.0])),
+        ];
+        
+        // Warm cache with data
+        let loaded_count = warmer.warm_with_data(test_data.clone()).unwrap();
+        assert_eq!(loaded_count, 3);
+        
+        // Verify data is in cache
+        for (key, expected_vector) in test_data {
+            let cached_vector = cache.get(&key).unwrap();
+            assert_eq!(cached_vector.as_f32(), expected_vector.as_f32());
+        }
+    }
+    
+    #[test]
+    fn test_cache_warmer_with_generator() {
+        let temp_dir = TempDir::new().unwrap();
+        
+        let config = CacheConfig {
+            max_memory_entries: 10,
+            persistent_cache_dir: Some(temp_dir.path().to_path_buf()),
+            enable_persistent: true,
+            ..Default::default()
+        };
+        
+        let cache = Arc::new(MultiLevelCache::new(config).unwrap());
+        let warmer = CacheWarmer::new(Arc::clone(&cache));
+        
+        // Use generator to warm cache
+        let loaded_count = warmer.warm_with_generator(5, |i| {
+            Some((
+                CacheKey::new("generated", &format!("item_{}", i)),
+                Vector::new(vec![i as f32, (i * 2) as f32])
+            ))
+        }).unwrap();
+        
+        assert_eq!(loaded_count, 5);
+        
+        // Verify generated data is in cache
+        for i in 0..5 {
+            let key = CacheKey::new("generated", &format!("item_{}", i));
+            let cached_vector = cache.get(&key).unwrap();
+            assert_eq!(cached_vector.as_f32(), vec![i as f32, (i * 2) as f32]);
+        }
+    }
+    
+    #[test]
+    fn test_cache_analyzer() {
+        let temp_dir = TempDir::new().unwrap();
+        
+        let config = CacheConfig {
+            max_memory_entries: 10,
+            persistent_cache_dir: Some(temp_dir.path().to_path_buf()),
+            enable_persistent: true,
+            ..Default::default()
+        };
+        
+        let cache = Arc::new(MultiLevelCache::new(config).unwrap());
+        let invalidator = Arc::new(CacheInvalidator::new(Arc::clone(&cache)));
+        let analyzer = CacheAnalyzer::new(Arc::clone(&cache), Arc::clone(&invalidator));
+        
+        // Add some test data and access patterns
+        let key1 = CacheKey::new("test", "analyze1");
+        let key2 = CacheKey::new("test", "analyze2");
+        let vector = Vector::new(vec![1.0, 2.0, 3.0]);
+        
+        cache.insert(key1.clone(), vector.clone()).unwrap();
+        cache.insert(key2.clone(), vector.clone()).unwrap();
+        
+        // Access the cache to generate some stats
+        cache.get(&key1);
+        cache.get(&key2);
+        cache.get(&key1); // Hit
+        cache.get(&CacheKey::new("test", "nonexistent")); // Miss
+        
+        // Analyze cache performance
+        let report = analyzer.analyze();
+        
+        assert!(report.hit_ratio > 0.0);
+        assert!(report.memory_utilization >= 0.0 && report.memory_utilization <= 1.0);
+        assert!(report.performance_score >= 0.0 && report.performance_score <= 1.0);
+        
+        // Should have some recommendations if performance isn't perfect
+        let recommendations = analyzer.get_optimization_recommendations();
+        // In this test case, we might get recommendations about hit ratio
+        assert!(!recommendations.is_empty());
+    }
+    
+    #[test]
+    fn test_background_cache_worker() {
+        let temp_dir = TempDir::new().unwrap();
+        
+        let config = CacheConfig {
+            max_memory_entries: 10,
+            persistent_cache_dir: Some(temp_dir.path().to_path_buf()),
+            enable_persistent: true,
+            enable_background_updates: true,
+            background_update_interval: Duration::from_millis(100),
+            ..Default::default()
+        };
+        
+        let cache = Arc::new(MultiLevelCache::new(config.clone()).unwrap());
+        let invalidator = Arc::new(CacheInvalidator::new(Arc::clone(&cache)));
+        let mut worker = BackgroundCacheWorker::new(
+            Arc::clone(&cache),
+            Arc::clone(&invalidator),
+            config
+        );
+        
+        // Start the worker
+        worker.start().unwrap();
+        
+        // Add some test data
+        let key = CacheKey::new("test", "background");
+        let vector = Vector::new(vec![1.0, 2.0, 3.0]);
+        cache.insert(key.clone(), vector.clone()).unwrap();
+        
+        // Let the worker run for a short time
+        std::thread::sleep(Duration::from_millis(150));
+        
+        // Stop the worker
+        worker.stop().unwrap();
+        
+        // Verify data is still accessible
+        assert!(cache.get(&key).is_some());
+    }
+    
+    #[test]
+    fn test_cache_invalidation_by_tag() {
+        let temp_dir = TempDir::new().unwrap();
+        
+        let config = CacheConfig {
+            max_memory_entries: 10,
+            persistent_cache_dir: Some(temp_dir.path().to_path_buf()),
+            enable_persistent: true,
+            ..Default::default()
+        };
+        
+        let cache = Arc::new(MultiLevelCache::new(config).unwrap());
+        let invalidator = Arc::new(CacheInvalidator::new(Arc::clone(&cache)));
+        
+        // Create entries with tags
+        let key1 = CacheKey::new("test", "tagged1");
+        let key2 = CacheKey::new("test", "tagged2");
+        let key3 = CacheKey::new("test", "tagged3");
+        
+        let vector = Vector::new(vec![1.0, 2.0, 3.0]);
+        
+        cache.insert(key1.clone(), vector.clone()).unwrap();
+        cache.insert(key2.clone(), vector.clone()).unwrap();
+        cache.insert(key3.clone(), vector.clone()).unwrap();
+        
+        // Register entries with tags
+        let mut tags1 = HashMap::new();
+        tags1.insert("category".to_string(), "embeddings".to_string());
+        invalidator.register_entry(&key1, &tags1);
+        
+        let mut tags2 = HashMap::new();
+        tags2.insert("category".to_string(), "embeddings".to_string());
+        invalidator.register_entry(&key2, &tags2);
+        
+        let mut tags3 = HashMap::new();
+        tags3.insert("category".to_string(), "vectors".to_string());
+        invalidator.register_entry(&key3, &tags3);
+        
+        // Invalidate by tag
+        let invalidated_count = invalidator.invalidate_by_tag("category", "embeddings").unwrap();
+        assert_eq!(invalidated_count, 2);
+        
+        // Check that tagged entries are removed
+        assert!(cache.get(&key1).is_none());
+        assert!(cache.get(&key2).is_none());
+        
+        // Check that untagged entry remains
+        assert!(cache.get(&key3).is_some());
+    }
+    
+    #[test]
+    fn test_cache_invalidation_by_namespace() {
+        let temp_dir = TempDir::new().unwrap();
+        
+        let config = CacheConfig {
+            max_memory_entries: 10,
+            persistent_cache_dir: Some(temp_dir.path().to_path_buf()),
+            enable_persistent: true,
+            ..Default::default()
+        };
+        
+        let cache = Arc::new(MultiLevelCache::new(config).unwrap());
+        let invalidator = Arc::new(CacheInvalidator::new(Arc::clone(&cache)));
+        
+        // Create entries in different namespaces
+        let key1 = CacheKey::new("embeddings", "item1");
+        let key2 = CacheKey::new("embeddings", "item2");
+        let key3 = CacheKey::new("vectors", "item3");
+        
+        let vector = Vector::new(vec![1.0, 2.0, 3.0]);
+        
+        cache.insert(key1.clone(), vector.clone()).unwrap();
+        cache.insert(key2.clone(), vector.clone()).unwrap();
+        cache.insert(key3.clone(), vector.clone()).unwrap();
+        
+        // Register entries for tracking
+        invalidator.register_entry(&key1, &HashMap::new());
+        invalidator.register_entry(&key2, &HashMap::new());
+        invalidator.register_entry(&key3, &HashMap::new());
+        
+        // Invalidate by namespace
+        let invalidated_count = invalidator.invalidate_namespace("embeddings").unwrap();
+        assert_eq!(invalidated_count, 2);
+        
+        // Check that namespace entries are removed
+        assert!(cache.get(&key1).is_none());
+        assert!(cache.get(&key2).is_none());
+        
+        // Check that other namespace entry remains
+        assert!(cache.get(&key3).is_some());
     }
 }

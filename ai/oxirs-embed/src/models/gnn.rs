@@ -3,7 +3,7 @@
 //! This module provides various GNN architectures for knowledge graph embeddings
 //! including GCN, GraphSAGE, GAT, and Graph Transformers.
 
-use crate::{EmbeddingError, EmbeddingModel, ModelConfig, ModelStats, NamedNode, TrainingStats, Triple, Vector};
+use crate::{EmbeddingError, EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector};
 use anyhow::Result;
 use async_trait::async_trait;
 use chrono::Utc;
@@ -545,7 +545,7 @@ impl GNNEmbedding {
     fn forward(&self, initial_features: HashMap<usize, Array1<f32>>) -> HashMap<usize, Array1<f32>> {
         let mut features = initial_features;
         
-        for (i, layer) in self.layers.iter().enumerate() {
+        for layer in self.layers.iter() {
             let new_features = self.apply_layer(layer, &features);
             
             // Apply dropout during training (simplified - always applied here)
@@ -629,7 +629,7 @@ impl EmbeddingModel for GNNEmbedding {
         let dimensions = self.config.base_config.dimensions;
         
         let mut initial_features = HashMap::new();
-        for (entity, idx) in &self.entity_to_idx {
+        for idx in self.entity_to_idx.values() {
             let embedding = Array1::from_shape_fn(dimensions, |_| {
                 rng.gen::<f32>() * 0.1 - 0.05
             });
@@ -639,7 +639,7 @@ impl EmbeddingModel for GNNEmbedding {
         // Training loop (simplified)
         let mut loss_history = Vec::new();
         
-        for epoch in 0..epochs {
+        for _epoch in 0..epochs {
             // Forward pass
             let output_features = self.forward(initial_features.clone());
             
@@ -830,12 +830,12 @@ impl EmbeddingModel for GNNEmbedding {
         }
     }
 
-    fn save(&self, path: &str) -> Result<()> {
+    fn save(&self, _path: &str) -> Result<()> {
         // Implementation would save model weights and configuration
         Ok(())
     }
 
-    fn load(&mut self, path: &str) -> Result<()> {
+    fn load(&mut self, _path: &str) -> Result<()> {
         // Implementation would load model weights and configuration
         Ok(())
     }
@@ -892,7 +892,7 @@ mod tests {
         model.add_triple(triple2).unwrap();
         
         // Train the model
-        let stats = model.train(Some(10)).await.unwrap();
+        let _stats = model.train(Some(10)).await.unwrap();
         assert!(model.is_trained());
         
         // Get embeddings
@@ -926,7 +926,7 @@ mod tests {
             );
             
             model.add_triple(triple).unwrap();
-            let stats = model.train(Some(5)).await.unwrap();
+            let _stats = model.train(Some(5)).await.unwrap();
             assert!(model.is_trained());
         }
     }

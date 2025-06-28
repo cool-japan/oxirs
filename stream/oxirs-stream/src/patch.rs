@@ -539,7 +539,7 @@ fn validate_operation(operation: &PatchOperation) -> Result<()> {
                 return Err(anyhow!("Graph operation has empty graph URI"));
             }
         }
-        PatchOperation::AddPrefix { prefix: _, uri: _ } => {
+        PatchOperation::AddPrefix { prefix: _, namespace: _ } => {
             // Prefix operations are always valid
         }
         PatchOperation::DeletePrefix { prefix: _ } => {

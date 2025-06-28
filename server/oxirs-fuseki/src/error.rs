@@ -10,6 +10,12 @@ use std::fmt;
 use thiserror::Error;
 use tracing::{error, warn};
 
+/// Fuseki result type
+pub type FusekiResult<T> = std::result::Result<T, FusekiError>;
+
+/// Short alias for FusekiResult (for backward compatibility)
+pub type Result<T> = FusekiResult<T>;
+
 /// Main error type for OxiRS Fuseki
 #[derive(Error, Debug)]
 pub enum FusekiError {
@@ -141,7 +147,7 @@ impl FusekiError {
 
             FusekiError::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
 
-            FusekiError::Timeout => StatusCode::REQUEST_TIMEOUT,
+            FusekiError::Timeout | FusekiError::TimeoutWithMessage(..) => StatusCode::REQUEST_TIMEOUT,
 
             FusekiError::UnsupportedMediaType { .. } => StatusCode::UNSUPPORTED_MEDIA_TYPE,
 
@@ -181,7 +187,7 @@ impl FusekiError {
             FusekiError::NotFound { .. } => "not_found",
             FusekiError::MethodNotAllowed => "method_not_allowed",
             FusekiError::UnsupportedMediaType { .. } => "unsupported_media_type",
-            FusekiError::Timeout => "timeout",
+            FusekiError::Timeout | FusekiError::TimeoutWithMessage(..) => "timeout",
             FusekiError::ServiceUnavailable { .. } => "service_unavailable",
             FusekiError::Internal { .. } => "internal_error",
             FusekiError::Io(..) => "io_error",
@@ -271,8 +277,6 @@ impl IntoResponse for FusekiError {
     }
 }
 
-/// Convenience type for Results that can return FusekiError
-pub type FusekiResult<T> = Result<T, FusekiError>;
 
 /// Convenience functions for creating common errors
 impl FusekiError {

@@ -148,7 +148,7 @@ impl Statistics {
         // Adjust based on subject term
         match &pattern.subject {
             Term::Iri(iri) => {
-                cardinality = self.subject_cardinality.get(&iri.0).copied().unwrap_or(100);
+                cardinality = self.subject_cardinality.get(iri.as_str()).copied().unwrap_or(100);
             }
             Term::Variable(_) => {
                 cardinality *= 10; // Variables are less selective
@@ -161,7 +161,7 @@ impl Statistics {
             Term::Iri(iri) => {
                 let pred_freq = self
                     .predicate_frequency
-                    .get(&iri.0)
+                    .get(iri.as_str())
                     .copied()
                     .unwrap_or(1000);
                 cardinality = std::cmp::min(cardinality, pred_freq);
@@ -175,7 +175,7 @@ impl Statistics {
         // Adjust based on object term
         match &pattern.object {
             Term::Iri(iri) => {
-                let obj_card = self.object_cardinality.get(&iri.0).copied().unwrap_or(100);
+                let obj_card = self.object_cardinality.get(iri.as_str()).copied().unwrap_or(100);
                 cardinality = std::cmp::min(cardinality, obj_card);
             }
             Term::Literal(_) => {

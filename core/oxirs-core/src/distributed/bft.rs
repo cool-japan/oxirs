@@ -199,6 +199,7 @@ pub struct PreparedProof {
     pub prepares: Vec<BftMessage>,
 }
 
+
 /// Byzantine fault tolerant node
 pub struct BftNode {
     /// Node configuration
@@ -242,6 +243,9 @@ pub struct BftNode {
     
     /// View change timer
     view_change_timer: Arc<Mutex<Option<Instant>>>,
+    
+    /// Byzantine behavior detection
+    byzantine_detector: Arc<RwLock<ByzantineDetector>>,
 }
 
 /// Consensus state for a specific view and sequence
@@ -275,6 +279,449 @@ pub struct RdfStateMachine {
     digest_cache: Option<(u64, Vec<u8>)>,
 }
 
+/// Byzantine behavior detection system with advanced threat detection
+pub struct ByzantineDetector {
+    /// Suspected Byzantine nodes
+    suspected_nodes: HashSet<NodeId>,
+    
+    /// Message timing anomalies with detailed analysis
+    timing_anomalies: HashMap<NodeId, TimingAnalysis>,
+    
+    /// Signature verification failures
+    signature_failures: HashMap<NodeId, usize>,
+    
+    /// Inconsistent message patterns
+    inconsistent_patterns: HashMap<NodeId, usize>,
+    
+    /// Detection threshold
+    detection_threshold: usize,
+    
+    /// Network partition detection
+    partition_detector: PartitionDetector,
+    
+    /// Message replay attack detection
+    replay_detector: ReplayDetector,
+    
+    /// Equivocation detection (sending different messages for same view/sequence)
+    equivocation_detector: EquivocationDetector,
+    
+    /// Resource exhaustion attack detection
+    resource_monitor: ResourceMonitor,
+    
+    /// Collusion detection between nodes
+    collusion_detector: CollusionDetector,
+}
+
+/// Advanced timing analysis for Byzantine detection
+#[derive(Debug, Clone)]
+pub struct TimingAnalysis {
+    /// Recent message timestamps
+    message_times: VecDeque<Instant>,
+    /// Average response time
+    avg_response_time: Duration,
+    /// Standard deviation of response times
+    response_time_stddev: Duration,
+    /// Suspicious timing patterns count
+    suspicious_patterns: usize,
+}
+
+/// Network partition detection system
+#[derive(Debug, Clone)]
+pub struct PartitionDetector {
+    /// Last communication time with each node
+    last_communication: HashMap<NodeId, Instant>,
+    /// Suspected partitioned nodes
+    partitioned_nodes: HashSet<NodeId>,
+    /// Partition timeout threshold
+    partition_timeout: Duration,
+}
+
+impl PartitionDetector {
+    pub fn new() -> Self {
+        Self {
+            last_communication: HashMap::new(),
+            partitioned_nodes: HashSet::new(),
+            partition_timeout: Duration::from_secs(30),
+        }
+    }
+}
+
+/// Replay attack detection system
+#[derive(Debug, Clone)]
+pub struct ReplayDetector {
+    /// Recently seen message hashes with timestamps
+    seen_messages: HashMap<Vec<u8>, Instant>,
+    /// Replay attack threshold
+    replay_window: Duration,
+    /// Detected replay attempts
+    replay_attempts: HashMap<NodeId, usize>,
+}
+
+impl ReplayDetector {
+    pub fn new() -> Self {
+        Self {
+            seen_messages: HashMap::new(),
+            replay_window: Duration::from_secs(60), // 1 minute window
+            replay_attempts: HashMap::new(),
+        }
+    }
+}
+
+/// Equivocation detection system
+#[derive(Debug, Clone)]
+pub struct EquivocationDetector {
+    /// Messages per view/sequence from each node
+    node_messages: HashMap<NodeId, HashMap<(ViewNumber, SequenceNumber), Vec<Vec<u8>>>>,
+    /// Detected equivocations
+    equivocations: HashMap<NodeId, usize>,
+}
+
+impl EquivocationDetector {
+    pub fn new() -> Self {
+        Self {
+            node_messages: HashMap::new(),
+            equivocations: HashMap::new(),
+        }
+    }
+}
+
+/// Resource exhaustion monitoring
+#[derive(Debug, Clone)]
+pub struct ResourceMonitor {
+    /// Message rate per node
+    message_rates: HashMap<NodeId, VecDeque<Instant>>,
+    /// Rate limit threshold (messages per second)
+    rate_limit: f64,
+    /// Memory usage tracking
+    memory_usage: HashMap<NodeId, usize>,
+    /// Detected resource attacks
+    resource_attacks: HashMap<NodeId, usize>,
+}
+
+impl ResourceMonitor {
+    pub fn new() -> Self {
+        Self {
+            message_rates: HashMap::new(),
+            rate_limit: 100.0, // 100 messages per second default limit
+            memory_usage: HashMap::new(),
+            resource_attacks: HashMap::new(),
+        }
+    }
+}
+
+/// Collusion detection between Byzantine nodes
+#[derive(Debug, Clone)]
+pub struct CollusionDetector {
+    /// Coordinated behavior patterns
+    coordination_patterns: HashMap<Vec<NodeId>, usize>,
+    /// Simultaneous actions tracking
+    simultaneous_actions: VecDeque<(Instant, Vec<NodeId>)>,
+    /// Collusion threshold
+    collusion_threshold: usize,
+}
+
+impl CollusionDetector {
+    pub fn new() -> Self {
+        Self {
+            coordination_patterns: HashMap::new(),
+            simultaneous_actions: VecDeque::new(),
+            collusion_threshold: 5, // 5 coordinated actions trigger suspicion
+        }
+    }
+}
+
+impl ByzantineDetector {
+    pub fn new(detection_threshold: usize) -> Self {
+        Self {
+            suspected_nodes: HashSet::new(),
+            timing_anomalies: HashMap::new(),
+            signature_failures: HashMap::new(),
+            inconsistent_patterns: HashMap::new(),
+            detection_threshold,
+            partition_detector: PartitionDetector::new(),
+            replay_detector: ReplayDetector::new(),
+            equivocation_detector: EquivocationDetector::new(),
+            resource_monitor: ResourceMonitor::new(),
+            collusion_detector: CollusionDetector::new(),
+        }
+    }
+    
+    /// Report advanced timing anomaly with detailed analysis
+    pub fn report_timing_anomaly(&mut self, node_id: NodeId, response_time: Duration) {
+        let now = Instant::now();
+        
+        // First, update/create the timing analysis
+        {
+            let analysis = self.timing_anomalies.entry(node_id).or_insert_with(|| TimingAnalysis {
+                message_times: VecDeque::new(),
+                avg_response_time: Duration::from_millis(100), // Default
+                response_time_stddev: Duration::from_millis(50),
+                suspicious_patterns: 0,
+            });
+            
+            analysis.message_times.push_back(now);
+            
+            // Keep only recent timing data (last 100 messages)
+            while analysis.message_times.len() > 100 {
+                analysis.message_times.pop_front();
+            }
+        }
+        
+        // Update statistics (separate borrow)
+        self.update_timing_statistics(node_id, response_time);
+        
+        // Detect suspicious patterns and update if needed
+        let is_suspicious = self.detect_timing_attack(node_id, response_time);
+        if is_suspicious {
+            if let Some(analysis) = self.timing_anomalies.get_mut(&node_id) {
+                analysis.suspicious_patterns += 1;
+                if analysis.suspicious_patterns >= self.detection_threshold {
+                    self.suspected_nodes.insert(node_id);
+                    tracing::warn!("Node {} suspected of timing attacks", node_id);
+                }
+            }
+        }
+    }
+    
+    /// Detect potential timing-based attacks
+    fn detect_timing_attack(&self, node_id: NodeId, response_time: Duration) -> bool {
+        if let Some(analysis) = self.timing_anomalies.get(&node_id) {
+            // Check for extremely fast responses (potential pre-computation)
+            if response_time < Duration::from_millis(1) {
+                return true;
+            }
+            
+            // Check for extremely slow responses (potential DoS)
+            if response_time > analysis.avg_response_time + 3 * analysis.response_time_stddev {
+                return true;
+            }
+            
+            // Check for suspiciously regular timing (potential automation)
+            if analysis.message_times.len() >= 10 {
+                let intervals: Vec<_> = analysis.message_times
+                    .iter()
+                    .zip(analysis.message_times.iter().skip(1))
+                    .map(|(a, b)| b.duration_since(*a))
+                    .collect();
+                
+                // If all intervals are too similar, it's suspicious
+                if let (Some(&min), Some(&max)) = (intervals.iter().min(), intervals.iter().max()) {
+                    if max - min < Duration::from_millis(10) && intervals.len() >= 5 {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+    
+    /// Update timing statistics for a node
+    fn update_timing_statistics(&mut self, node_id: NodeId, response_time: Duration) {
+        if let Some(analysis) = self.timing_anomalies.get_mut(&node_id) {
+            // Simple exponential moving average
+            let alpha = 0.1;
+            let new_time = response_time.as_millis() as f64;
+            let old_avg = analysis.avg_response_time.as_millis() as f64;
+            let new_avg = alpha * new_time + (1.0 - alpha) * old_avg;
+            analysis.avg_response_time = Duration::from_millis(new_avg as u64);
+        }
+    }
+    
+    pub fn report_signature_failure(&mut self, node_id: NodeId) {
+        *self.signature_failures.entry(node_id).or_default() += 1;
+        if self.signature_failures[&node_id] >= self.detection_threshold {
+            self.suspected_nodes.insert(node_id);
+            tracing::warn!("Node {} suspected due to signature failures", node_id);
+        }
+    }
+    
+    pub fn report_inconsistent_pattern(&mut self, node_id: NodeId) {
+        *self.inconsistent_patterns.entry(node_id).or_default() += 1;
+        if self.inconsistent_patterns[&node_id] >= self.detection_threshold {
+            self.suspected_nodes.insert(node_id);
+            tracing::warn!("Node {} suspected due to inconsistent patterns", node_id);
+        }
+    }
+    
+    /// Check for message replay attacks
+    pub fn check_replay_attack(&mut self, node_id: NodeId, message_hash: Vec<u8>) -> bool {
+        let now = Instant::now();
+        
+        // Clean old entries
+        self.replay_detector.seen_messages.retain(|_, &mut timestamp| {
+            now.duration_since(timestamp) <= self.replay_detector.replay_window
+        });
+        
+        // Check if message was seen recently
+        if let Some(&timestamp) = self.replay_detector.seen_messages.get(&message_hash) {
+            if now.duration_since(timestamp) <= self.replay_detector.replay_window {
+                *self.replay_detector.replay_attempts.entry(node_id).or_default() += 1;
+                if self.replay_detector.replay_attempts[&node_id] >= self.detection_threshold {
+                    self.suspected_nodes.insert(node_id);
+                    tracing::warn!("Node {} suspected of replay attacks", node_id);
+                }
+                return true;
+            }
+        }
+        
+        self.replay_detector.seen_messages.insert(message_hash, now);
+        false
+    }
+    
+    /// Detect equivocation (sending different messages for same view/sequence)
+    pub fn check_equivocation(&mut self, node_id: NodeId, view: ViewNumber, sequence: SequenceNumber, message_hash: Vec<u8>) -> bool {
+        let messages = self.equivocation_detector.node_messages
+            .entry(node_id)
+            .or_default()
+            .entry((view, sequence))
+            .or_default();
+        
+        // Check if we've seen a different message for this view/sequence
+        if !messages.is_empty() && !messages.contains(&message_hash) {
+            *self.equivocation_detector.equivocations.entry(node_id).or_default() += 1;
+            if self.equivocation_detector.equivocations[&node_id] >= self.detection_threshold {
+                self.suspected_nodes.insert(node_id);
+                tracing::warn!("Node {} suspected of equivocation", node_id);
+            }
+            return true;
+        }
+        
+        messages.push(message_hash);
+        false
+    }
+    
+    /// Monitor resource usage for DoS attacks
+    pub fn monitor_resource_usage(&mut self, node_id: NodeId) -> bool {
+        let now = Instant::now();
+        let rates = self.resource_monitor.message_rates.entry(node_id).or_default();
+        
+        rates.push_back(now);
+        
+        // Keep only messages from the last second
+        while let Some(&front_time) = rates.front() {
+            if now.duration_since(front_time) > Duration::from_secs(1) {
+                rates.pop_front();
+            } else {
+                break;
+            }
+        }
+        
+        // Check if rate exceeds threshold
+        let current_rate = rates.len() as f64;
+        if current_rate > self.resource_monitor.rate_limit {
+            *self.resource_monitor.resource_attacks.entry(node_id).or_default() += 1;
+            if self.resource_monitor.resource_attacks[&node_id] >= self.detection_threshold {
+                self.suspected_nodes.insert(node_id);
+                tracing::warn!("Node {} suspected of resource exhaustion attack", node_id);
+            }
+            return true;
+        }
+        
+        false
+    }
+    
+    /// Detect potential collusion between nodes
+    pub fn check_collusion(&mut self, coordinating_nodes: Vec<NodeId>) {
+        if coordinating_nodes.len() >= 2 {
+            let now = Instant::now();
+            
+            // Record simultaneous action
+            self.collusion_detector.simultaneous_actions.push_back((now, coordinating_nodes.clone()));
+            
+            // Clean old entries (keep last hour)
+            while let Some((timestamp, _)) = self.collusion_detector.simultaneous_actions.front() {
+                if now.duration_since(*timestamp) > Duration::from_secs(3600) {
+                    self.collusion_detector.simultaneous_actions.pop_front();
+                } else {
+                    break;
+                }
+            }
+            
+            // Check for repeated coordination
+            *self.collusion_detector.coordination_patterns.entry(coordinating_nodes.clone()).or_default() += 1;
+            
+            if self.collusion_detector.coordination_patterns[&coordinating_nodes] >= self.collusion_detector.collusion_threshold {
+                for &node_id in &coordinating_nodes {
+                    self.suspected_nodes.insert(node_id);
+                }
+                tracing::warn!("Suspected collusion detected between nodes: {:?}", coordinating_nodes);
+            }
+        }
+    }
+    
+    /// Check network partition status
+    pub fn check_network_partition(&mut self, node_id: NodeId) {
+        let now = Instant::now();
+        self.partition_detector.last_communication.insert(node_id, now);
+        
+        // Check for partitioned nodes
+        for (&id, &last_time) in &self.partition_detector.last_communication {
+            if now.duration_since(last_time) > self.partition_detector.partition_timeout {
+                self.partition_detector.partitioned_nodes.insert(id);
+            } else {
+                self.partition_detector.partitioned_nodes.remove(&id);
+            }
+        }
+    }
+    
+    /// Get comprehensive threat assessment
+    pub fn get_threat_assessment(&self, node_id: NodeId) -> ThreatLevel {
+        let mut score = 0;
+        
+        if self.suspected_nodes.contains(&node_id) {
+            score += 10;
+        }
+        
+        if let Some(failures) = self.signature_failures.get(&node_id) {
+            score += failures * 2;
+        }
+        
+        if let Some(patterns) = self.inconsistent_patterns.get(&node_id) {
+            score += patterns;
+        }
+        
+        if let Some(replays) = self.replay_detector.replay_attempts.get(&node_id) {
+            score += replays * 3;
+        }
+        
+        if let Some(equivocations) = self.equivocation_detector.equivocations.get(&node_id) {
+            score += equivocations * 5;
+        }
+        
+        if let Some(attacks) = self.resource_monitor.resource_attacks.get(&node_id) {
+            score += attacks;
+        }
+        
+        match score {
+            0..=2 => ThreatLevel::Low,
+            3..=7 => ThreatLevel::Medium,
+            8..=15 => ThreatLevel::High,
+            _ => ThreatLevel::Critical,
+        }
+    }
+    
+    pub fn is_suspected(&self, node_id: NodeId) -> bool {
+        self.suspected_nodes.contains(&node_id)
+    }
+    
+    pub fn get_suspected_nodes(&self) -> &HashSet<NodeId> {
+        &self.suspected_nodes
+    }
+    
+    pub fn is_partitioned(&self, node_id: NodeId) -> bool {
+        self.partition_detector.partitioned_nodes.contains(&node_id)
+    }
+}
+
+/// Threat level assessment
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThreatLevel {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
 impl BftNode {
     /// Create a new BFT node
     pub fn new(config: BftConfig, node_id: NodeId, nodes: Vec<NodeInfo>) -> Self {
@@ -286,7 +733,7 @@ impl BftNode {
         }
         
         Self {
-            config,
+            config: config.clone(),
             node_id,
             view: Arc::new(RwLock::new(0)),
             phase: Arc::new(RwLock::new(Phase::Idle)),
@@ -300,6 +747,7 @@ impl BftNode {
             message_rx: Arc::new(Mutex::new(message_rx)),
             state_machine: Arc::new(RwLock::new(RdfStateMachine::new())),
             view_change_timer: Arc::new(Mutex::new(None)),
+            byzantine_detector: Arc::new(RwLock::new(ByzantineDetector::new(3))), // Default threshold of 3
         }
     }
     
@@ -324,8 +772,36 @@ impl BftNode {
         hasher.finalize().to_vec()
     }
     
-    /// Process incoming message
+    /// Process incoming message with enhanced Byzantine detection
     pub async fn process_message(&self, from: NodeId, message: BftMessage) -> Result<()> {
+        let start_time = Instant::now();
+        
+        // Enhanced Byzantine detection checks
+        {
+            let mut detector = self.byzantine_detector.write();
+            
+            // Check for replay attacks
+            let message_hash = Self::calculate_digest(&message);
+            if detector.check_replay_attack(from, message_hash.clone()) {
+                return Err(anyhow!("Replay attack detected from node {}", from));
+            }
+            
+            // Monitor resource usage
+            detector.monitor_resource_usage(from);
+            
+            // Update network partition status
+            detector.check_network_partition(from);
+            
+            // Check for equivocation (view and sequence dependent)
+            if let BftMessage::PrePrepare { view, sequence, .. } | 
+               BftMessage::Prepare { view, sequence, .. } | 
+               BftMessage::Commit { view, sequence, .. } = &message {
+                if detector.check_equivocation(from, *view, *sequence, message_hash) {
+                    return Err(anyhow!("Equivocation detected from node {}", from));
+                }
+            }
+        }
+        
         // Log message
         self.log_message(message.clone());
         
@@ -361,6 +837,13 @@ impl BftNode {
             }
             
             _ => {}
+        }
+        
+        // Record timing information for Byzantine detection
+        let response_time = start_time.elapsed();
+        {
+            let mut detector = self.byzantine_detector.write();
+            detector.report_timing_anomaly(from, response_time);
         }
         
         Ok(())
@@ -673,27 +1156,425 @@ impl BftNode {
     
     /// Handle view change message
     async fn handle_view_change(&self, message: BftMessage) -> Result<()> {
-        // TODO: Implement view change protocol
-        // This is complex and involves collecting view change messages,
-        // verifying prepared certificates, and transitioning to new view
+        let message_clone = message.clone();
+        if let BftMessage::ViewChange { 
+            new_view, 
+            node_id, 
+            last_sequence, 
+            ref checkpoints, 
+            ref prepared_messages 
+        } = message {
+            let current_view = *self.view.read();
+            
+            // Only process if this is for a future view
+            if new_view <= current_view {
+                return Ok(());
+            }
+            
+            // Verify the view change message
+            if !self.verify_view_change(&new_view, &node_id, &checkpoints, &prepared_messages).await? {
+                return Err(anyhow!("Invalid view change message from node {}", node_id));
+            }
+            
+            // Store the view change message
+            self.store_view_change_message(message_clone);
+            
+            // Check if we have enough view change messages (2f+1)
+            let view_change_count = self.count_view_change_messages(new_view);
+            if view_change_count >= 2 * self.config.fault_tolerance + 1 {
+                // If we're the new primary, send new view message
+                if self.get_primary(new_view) == self.node_id {
+                    self.send_new_view(new_view).await?;
+                }
+                
+                // Transition to new view
+                self.transition_to_view(new_view).await?;
+            }
+        }
+        
         Ok(())
     }
     
     /// Handle new view message
     async fn handle_new_view(&self, message: BftMessage) -> Result<()> {
-        // TODO: Implement new view validation and transition
+        if let BftMessage::NewView { view, view_changes, pre_prepares } = message {
+            let current_view = *self.view.read();
+            
+            // Only process if this is for a future view
+            if view <= current_view {
+                return Ok(());
+            }
+            
+            // Verify the new view message
+            if !self.verify_new_view(&view, &view_changes, &pre_prepares).await? {
+                return Err(anyhow!("Invalid new view message"));
+            }
+            
+            // Transition to the new view
+            self.transition_to_view(view).await?;
+            
+            // Process any pre-prepare messages included
+            for pre_prepare in pre_prepares {
+                if let BftMessage::PrePrepare { view: pp_view, sequence, digest, request } = pre_prepare {
+                    if pp_view == view {
+                        self.handle_pre_prepare(self.get_primary(view), pp_view, sequence, digest, *request).await?;
+                    }
+                }
+            }
+        }
+        
         Ok(())
     }
     
-    /// Broadcast message to all nodes
-    async fn broadcast_message(&self, message: BftMessage) -> Result<()> {
-        let nodes = self.nodes.read();
-        for (node_id, _) in nodes.iter() {
-            if *node_id != self.node_id {
-                self.message_tx.send((*node_id, message.clone()))?;
+    /// Verify view change message authenticity and validity
+    async fn verify_view_change(
+        &self,
+        new_view: &ViewNumber,
+        node_id: &NodeId,
+        checkpoints: &[CheckpointProof],
+        prepared_messages: &[PreparedProof],
+    ) -> Result<bool> {
+        // Verify the view number is increasing
+        if *new_view <= *self.view.read() {
+            return Ok(false);
+        }
+        
+        // Verify checkpoints
+        for checkpoint in checkpoints {
+            if checkpoint.signatures.len() < 2 * self.config.fault_tolerance + 1 {
+                return Ok(false);
             }
         }
+        
+        // Verify prepared messages
+        for prepared in prepared_messages {
+            if prepared.prepares.len() < 2 * self.config.fault_tolerance {
+                return Ok(false);
+            }
+        }
+        
+        // Verify cryptographic signatures if enabled
+        if self.config.enable_signatures {
+            if !self.verify_signatures_for_view_change(node_id, checkpoints, prepared_messages).await? {
+                let mut detector = self.byzantine_detector.write();
+                detector.report_signature_failure(*node_id);
+                return Ok(false);
+            }
+        }
+        
+        Ok(true)
+    }
+    
+    /// Verify cryptographic signatures for view change messages
+    async fn verify_signatures_for_view_change(
+        &self,
+        node_id: &NodeId,
+        checkpoints: &[CheckpointProof],
+        prepared_messages: &[PreparedProof],
+    ) -> Result<bool> {
+        // Get the public key for the node
+        let public_key = {
+            let nodes = self.nodes.read();
+            let node_info = nodes.get(node_id).ok_or_else(|| anyhow!("Unknown node ID: {}", node_id))?;
+            node_info.public_key.clone()
+        }; // Drop the lock here
+        
+        if let Some(public_key) = public_key {
+            // Verify checkpoint signatures
+            for checkpoint in checkpoints {
+                if !self.verify_checkpoint_signatures(checkpoint, &public_key).await? {
+                    return Ok(false);
+                }
+            }
+            
+            // Verify prepared message signatures
+            for prepared in prepared_messages {
+                if !self.verify_prepared_signatures(prepared, &public_key).await? {
+                    return Ok(false);
+                }
+            }
+            
+            return Ok(true);
+        }
+        
+        // If no public key available, skip signature verification but log warning
+        tracing::warn!("No public key available for node {}, skipping signature verification", node_id);
+        Ok(true)
+    }
+    
+    /// Verify signatures in a checkpoint proof
+    async fn verify_checkpoint_signatures(&self, checkpoint: &CheckpointProof, _public_key: &[u8]) -> Result<bool> {
+        // Simplified signature verification - in real implementation would use proper cryptographic verification
+        // For now, just check that we have enough signatures
+        let required_sigs = 2 * self.config.fault_tolerance + 1;
+        
+        if checkpoint.signatures.len() < required_sigs {
+            return Ok(false);
+        }
+        
+        // In a real implementation, you would:
+        // 1. Reconstruct the checkpoint message
+        // 2. Hash the message content
+        // 3. Verify each signature against the corresponding node's public key
+        // 4. Ensure signatures are from valid nodes
+        
+        // For demonstration, check that signatures are not empty (basic validation)
+        for (signing_node_id, signature) in &checkpoint.signatures {
+            {
+                let nodes = self.nodes.read();
+                if !nodes.contains_key(signing_node_id) {
+                    return Ok(false); // Invalid node
+                }
+            } // Drop the lock here
+            
+            // In real implementation: verify signature cryptographically
+            if signature.is_empty() {
+                return Ok(false); // Empty signature is invalid
+            }
+        }
+        
+        Ok(true)
+    }
+    
+    /// Verify signatures in prepared message proofs
+    async fn verify_prepared_signatures(&self, prepared: &PreparedProof, _public_key: &[u8]) -> Result<bool> {
+        // Verify that we have enough prepare messages
+        let required_prepares = 2 * self.config.fault_tolerance;
+        
+        if prepared.prepares.len() < required_prepares {
+            return Ok(false);
+        }
+        
+        // Verify each prepare message signature
+        for prepare_msg in &prepared.prepares {
+            if let BftMessage::Prepare { view, sequence, digest, node_id } = prepare_msg {
+                // Verify consistency
+                if *view != prepared.view || *sequence != prepared.sequence || *digest != prepared.digest {
+                    return Ok(false);
+                }
+                
+                // Verify the node exists
+                let nodes = self.nodes.read();
+                if !nodes.contains_key(node_id) {
+                    return Ok(false);
+                }
+                
+                // In real implementation: verify cryptographic signature
+                // For now, basic validation passed
+            } else {
+                return Ok(false); // Wrong message type
+            }
+        }
+        
+        Ok(true)
+    }
+    
+    /// Store view change message for later processing
+    fn store_view_change_message(&self, message: BftMessage) {
+        // TODO: Store in a dedicated view change message store
+        // For now, just log it
+        self.log_message(message);
+    }
+    
+    /// Count view change messages for a specific view
+    fn count_view_change_messages(&self, view: ViewNumber) -> usize {
+        // TODO: Count actual view change messages from stored messages
+        // Simplified implementation - in real system would count from dedicated store
+        let log = self.message_log.read();
+        log.iter()
+            .filter(|msg| {
+                if let BftMessage::ViewChange { new_view, .. } = msg {
+                    *new_view == view
+                } else {
+                    false
+                }
+            })
+            .count()
+    }
+    
+    /// Send new view message (called by new primary)
+    async fn send_new_view(&self, view: ViewNumber) -> Result<()> {
+        // Collect view change messages
+        let view_changes = self.collect_view_change_messages(view);
+        
+        // Create pre-prepare messages for any prepared operations
+        let pre_prepares = self.create_new_view_pre_prepares(view, &view_changes);
+        
+        let new_view_message = BftMessage::NewView {
+            view,
+            view_changes,
+            pre_prepares,
+        };
+        
+        self.broadcast_message(new_view_message).await
+    }
+    
+    /// Collect view change messages for a specific view
+    fn collect_view_change_messages(&self, view: ViewNumber) -> Vec<BftMessage> {
+        let log = self.message_log.read();
+        log.iter()
+            .filter(|msg| {
+                if let BftMessage::ViewChange { new_view, .. } = msg {
+                    *new_view == view
+                } else {
+                    false
+                }
+            })
+            .cloned()
+            .collect()
+    }
+    
+    /// Create pre-prepare messages for new view based on prepared operations
+    fn create_new_view_pre_prepares(&self, view: ViewNumber, view_changes: &[BftMessage]) -> Vec<BftMessage> {
+        let mut pre_prepares = Vec::new();
+        
+        // Collect all prepared operations from view change messages
+        for msg in view_changes {
+            if let BftMessage::ViewChange { prepared_messages, .. } = msg {
+                for prepared in prepared_messages {
+                    // Create new pre-prepare with updated view number
+                    if let BftMessage::PrePrepare { sequence, digest, request, .. } = prepared.pre_prepare.as_ref() {
+                        let new_pre_prepare = BftMessage::PrePrepare {
+                            view,
+                            sequence: *sequence,
+                            digest: digest.clone(),
+                            request: request.clone(),
+                        };
+                        pre_prepares.push(new_pre_prepare);
+                    }
+                }
+            }
+        }
+        
+        pre_prepares
+    }
+    
+    /// Verify new view message
+    async fn verify_new_view(
+        &self,
+        view: &ViewNumber,
+        view_changes: &[BftMessage],
+        pre_prepares: &[BftMessage],
+    ) -> Result<bool> {
+        // Verify we have enough view change messages (2f+1)
+        if view_changes.len() < 2 * self.config.fault_tolerance + 1 {
+            return Ok(false);
+        }
+        
+        // Verify all view change messages are for this view
+        for msg in view_changes {
+            if let BftMessage::ViewChange { new_view, .. } = msg {
+                if *new_view != *view {
+                    return Ok(false);
+                }
+            } else {
+                return Ok(false);
+            }
+        }
+        
+        // Verify pre-prepare messages are valid
+        for msg in pre_prepares {
+            if let BftMessage::PrePrepare { view: pp_view, .. } = msg {
+                if *pp_view != *view {
+                    return Ok(false);
+                }
+            } else {
+                return Ok(false);
+            }
+        }
+        
+        Ok(true)
+    }
+    
+    /// Transition to new view
+    async fn transition_to_view(&self, new_view: ViewNumber) -> Result<()> {
+        let mut view = self.view.write();
+        *view = new_view;
+        
+        // Reset view change timer
+        let mut timer = self.view_change_timer.lock();
+        *timer = Some(Instant::now());
+        
+        // Reset phase to idle
+        let mut phase = self.phase.write();
+        *phase = Phase::Idle;
+        
+        // Clear any view-specific state
+        self.clear_view_state(new_view);
+        
+        println!("Node {} transitioned to view {}", self.node_id, new_view);
         Ok(())
+    }
+    
+    /// Clear view-specific state during view transition
+    fn clear_view_state(&self, new_view: ViewNumber) {
+        // Remove states from previous views
+        self.states.retain(|(view, _), _| *view >= new_view);
+    }
+    
+    /// Broadcast message to all nodes with Byzantine behavior analysis
+    async fn broadcast_message(&self, message: BftMessage) -> Result<()> {
+        let mut recipients = Vec::new();
+        
+        // Scope the locks to avoid holding them across await points
+        {
+            let nodes = self.nodes.read();
+            
+            for (node_id, _) in nodes.iter() {
+                if *node_id != self.node_id {
+                    // Check if node is suspected before sending
+                    let is_suspected = {
+                        let detector = self.byzantine_detector.read();
+                        detector.is_suspected(*node_id) || detector.is_partitioned(*node_id)
+                    };
+                    
+                    if !is_suspected {
+                        self.message_tx.send((*node_id, message.clone()))?;
+                        recipients.push(*node_id);
+                    } else {
+                        tracing::warn!("Skipping message broadcast to suspected/partitioned node {}", node_id);
+                    }
+                }
+            }
+        } // nodes lock dropped here
+        
+        // Analyze broadcast patterns for potential attacks
+        self.analyze_broadcast_pattern(&recipients).await;
+        
+        Ok(())
+    }
+    
+    /// Analyze broadcast patterns for Byzantine behavior detection
+    async fn analyze_broadcast_pattern(&self, recipients: &[NodeId]) {
+        // Check for selective message sending (potential partition attack)
+        let total_nodes = {
+            let nodes = self.nodes.read();
+            nodes.len() - 1 // Exclude self
+        };
+        let sent_ratio = recipients.len() as f64 / total_nodes as f64;
+        
+        if sent_ratio < 0.7 {
+            // If sending to less than 70% of nodes, it might be suspicious
+            let mut detector = self.byzantine_detector.write();
+            detector.report_inconsistent_pattern(self.node_id);
+        }
+        
+        // Check for collusion patterns - if multiple nodes are consistently excluded
+        if recipients.len() < total_nodes {
+            let excluded_nodes: Vec<_> = {
+                let nodes = self.nodes.read();
+                nodes
+                    .keys()
+                    .filter(|&&id| id != self.node_id && !recipients.contains(&id))
+                    .copied()
+                    .collect()
+            };
+            
+            if !excluded_nodes.is_empty() {
+                let mut detector = self.byzantine_detector.write();
+                detector.check_collusion(excluded_nodes);
+            }
+        }
     }
     
     /// Log message for debugging
@@ -851,6 +1732,7 @@ impl Clone for BftNode {
             message_rx: Arc::new(Mutex::new(message_rx)),
             state_machine: self.state_machine.clone(),
             view_change_timer: self.view_change_timer.clone(),
+            byzantine_detector: self.byzantine_detector.clone(),
         }
     }
 }

@@ -76,8 +76,15 @@ metrics-exporter-prometheus = "0.16"
 lru = "0.12"
 moka = { version = "0.12", features = ["future"] }
 
-# Rate limiting
-governor = { version = "0.6", optional = true }
+# Rate limiting and concurrent data structures
+governor = "0.6"
+dashmap = "6.1"
+parking_lot = "0.12"
+
+# Streaming
+rdkafka = { version = "0.36", optional = true }
+async-nats = { version = "0.37", optional = true }
+bytes = "1.8"
 
 # Validation
 validator = { version = "0.18", features = ["derive"] }
@@ -99,6 +106,10 @@ flate2 = "1.0"
 # OAuth2 and HTTP client
 reqwest = { version = "0.12", features = ["json"] }
 percent-encoding = "2.3"
+url = "2.5"
+
+# SAML security (optional)
+xmlsec = { version = "0.2", optional = true }
 
 # LDAP authentication
 ldap3 = { version = "0.11", optional = true }
@@ -110,6 +121,14 @@ libc = "0.2"
 futures = "0.3"
 futures-util = "0.3"
 tokio-stream = "0.1"
+async-trait = "0.1"
+
+# DNS resolution for service discovery
+trust-dns-resolver = "0.23"
+
+# X.509 certificate parsing for client authentication
+x509-parser = "0.16"
+der-parser = "9.0"
 
 # File watching for hot reload
 notify = { version = "6.1", optional = true }
@@ -139,9 +158,12 @@ metrics = ["prometheus", "axum-prometheus"]
 auth = ["jsonwebtoken", "bcrypt"]
 admin-ui = ["askama"]
 tracing = ["tracing-opentelemetry"]
-rate-limit = ["governor"]
+rate-limit = []
+kafka = ["rdkafka"]
+nats = ["async-nats"]
 hot-reload = ["notify"]
 ldap = ["ldap3"]
+saml = ["xmlsec"]
 development = ["admin-ui", "tracing"]
 production = ["metrics", "auth", "rate-limit", "ldap"]
 

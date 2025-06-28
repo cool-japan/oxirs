@@ -869,7 +869,7 @@ impl InjectionDetector {
 impl ServiceDelegator {
     pub fn new() -> Self {
         Self {
-            federation_planner: crate::federation::FederationPlanner::new(),
+            federation_planner: crate::federation::FederationManager::new(),
             parallel_executor: ParallelServiceExecutor::new(),
             result_merger: ServiceResultMerger::new(),
             endpoint_discovery: EndpointDiscovery::new(),
@@ -2025,10 +2025,10 @@ async fn execute_construct_describe(
 /// Generate CONSTRUCT graph result
 fn generate_construct_graph(query: &str) -> String {
     format!(
-        "@prefix ex: <http://example.org/> .\n"
-            + "ex:subject1 ex:predicate \"constructed object 1\" .\n"
-            + "ex:subject2 ex:predicate \"constructed object 2\" .\n"
-            + "# Generated from CONSTRUCT query: {}...",
+        "@prefix ex: <http://example.org/> .\n\
+        ex:subject1 ex:predicate \"constructed object 1\" .\n\
+        ex:subject2 ex:predicate \"constructed object 2\" .\n\
+        # Generated from CONSTRUCT query: {}...",
         query.chars().take(50).collect::<String>()
     )
 }
@@ -2036,11 +2036,11 @@ fn generate_construct_graph(query: &str) -> String {
 /// Generate DESCRIBE graph result  
 fn generate_describe_graph(query: &str) -> String {
     format!(
-        "@prefix ex: <http://example.org/> .\n"
-            + "@prefix foaf: <http://xmlns.com/foaf/0.1/> .\n"
-            + "ex:resource foaf:name \"Description Resource\" ;\n"
-            + "           ex:type \"Described Entity\" ;\n"
-            + "           ex:created \"{}\" .",
+        "@prefix ex: <http://example.org/> .\n\
+        @prefix foaf: <http://xmlns.com/foaf/0.1/> .\n\
+        ex:resource foaf:name \"Description Resource\" ;\n\
+                   ex:type \"Described Entity\" ;\n\
+                   ex:created \"{}\" .",
         chrono::Utc::now().to_rfc3339()
     )
 }

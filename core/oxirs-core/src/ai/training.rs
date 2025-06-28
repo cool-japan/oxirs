@@ -5,7 +5,6 @@
 
 use crate::ai::{KnowledgeGraphEmbedding, GraphNeuralNetwork};
 use crate::model::Triple;
-use crate::OxirsError;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -858,7 +857,7 @@ pub enum OptimizationStrategy {
     GridSearch,
     BayesianOptimization,
     TPE, // Tree-structured Parzen Estimator
-    CMA_ES, // Covariance Matrix Adaptation Evolution Strategy
+    CmaEs, // Covariance Matrix Adaptation Evolution Strategy
 }
 
 impl HyperparameterOptimizer {
@@ -936,6 +935,6 @@ mod tests {
         assert_eq!(trainer.current_lr, 0.001);
         
         trainer.update_learning_rate(100, None);
-        assert_eq!(trainer.current_lr, 0.0001);
+        assert!((trainer.current_lr - 0.0001).abs() < 1e-8);
     }
 }

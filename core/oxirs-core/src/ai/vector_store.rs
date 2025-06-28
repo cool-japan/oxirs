@@ -3,10 +3,8 @@
 //! This module provides high-performance vector storage and similarity search
 //! capabilities optimized for knowledge graph embeddings and AI applications.
 
-use crate::OxirsError;
 use anyhow::{anyhow, Result};
 use dashmap::DashMap;
-use ndarray::{Array1, Array2, Axis};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::{BinaryHeap, HashMap, HashSet};

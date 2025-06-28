@@ -412,56 +412,108 @@ impl StarStore {
         let span = span!(Level::DEBUG, "remove_triple");
         let _enter = span.enter();
 
-        let mut star_triples = self.star_triples.write().unwrap();
+        // First try to remove from star triples
+        if triple.contains_quoted_triples() {
+            let mut star_triples = self.star_triples.write().unwrap();
 
-        if let Some(pos) = star_triples.iter().position(|t| t == triple) {
-            star_triples.remove(pos);
+            if let Some(pos) = star_triples.iter().position(|t| t == triple) {
+                star_triples.remove(pos);
 
-            // Update all indices
-            let mut index = self.quoted_triple_index.write().unwrap();
+                // Update all indices
+                let mut index = self.quoted_triple_index.write().unwrap();
 
-            // Update signature index
-            for (_, indices) in index.signature_to_indices.iter_mut() {
-                Self::update_indices_after_removal(indices, pos);
+                // Update signature index
+                for (_, indices) in index.signature_to_indices.iter_mut() {
+                    Self::update_indices_after_removal(indices, pos);
+                }
+
+                // Update subject index
+                for (_, indices) in index.subject_index.iter_mut() {
+                    Self::update_indices_after_removal(indices, pos);
+                }
+
+                // Update predicate index
+                for (_, indices) in index.predicate_index.iter_mut() {
+                    Self::update_indices_after_removal(indices, pos);
+                }
+
+                // Update object index
+                for (_, indices) in index.object_index.iter_mut() {
+                    Self::update_indices_after_removal(indices, pos);
+                }
+
+                // Update nesting depth index
+                for (_, indices) in index.nesting_depth_index.iter_mut() {
+                    Self::update_indices_after_removal(indices, pos);
+                }
+
+                debug!("Removed star triple: {}", triple);
+                return Ok(true);
             }
-
-            // Update subject index
-            for (_, indices) in index.subject_index.iter_mut() {
-                Self::update_indices_after_removal(indices, pos);
-            }
-
-            // Update predicate index
-            for (_, indices) in index.predicate_index.iter_mut() {
-                Self::update_indices_after_removal(indices, pos);
-            }
-
-            // Update object index
-            for (_, indices) in index.object_index.iter_mut() {
-                Self::update_indices_after_removal(indices, pos);
-            }
-
-            // Update nesting depth index
-            for (_, indices) in index.nesting_depth_index.iter_mut() {
-                Self::update_indices_after_removal(indices, pos);
-            }
-
-            debug!("Removed triple: {}", triple);
-            Ok(true)
         } else {
-            Ok(false)
+            // Try to remove from core store for regular triples
+            let mut core_store = self.core_store.write().unwrap();
+            if let Ok(core_triple) = self.convert_to_core_triple(triple) {
+                let core_quad = oxirs_core::model::Quad::from_triple(core_triple);
+                if let Ok(removed) = core_store.remove_quad(&core_quad) {
+                    if removed {
+                        debug!("Removed regular triple: {}", triple);
+                        return Ok(true);
+                    }
+                }
+            }
         }
+        
+        Ok(false)
     }
 
     /// Check if the store contains a specific triple
     pub fn contains(&self, triple: &StarTriple) -> bool {
+        // First check star triples
         let star_triples = self.star_triples.read().unwrap();
-        star_triples.contains(triple)
+        if star_triples.contains(triple) {
+            return true;
+        }
+        
+        // Then check regular triples in core store
+        if !triple.contains_quoted_triples() {
+            let core_store = self.core_store.read().unwrap();
+            if let Ok(core_triple) = self.convert_to_core_triple(triple) {
+                // Convert triple to quad with default graph
+                let core_quad = oxirs_core::model::Quad::from_triple(core_triple);
+                if let Ok(exists) = core_store.contains_quad(&core_quad) {
+                    return exists;
+                }
+            }
+        }
+        
+        false
     }
 
     /// Get all triples in the store
     pub fn triples(&self) -> Vec<StarTriple> {
-        let star_triples = self.star_triples.read().unwrap();
-        star_triples.clone()
+        let mut all_triples = Vec::new();
+        
+        // Add star triples (clone to release lock quickly)
+        {
+            let star_triples = self.star_triples.read().unwrap();
+            all_triples.extend(star_triples.clone());
+        }
+        
+        // Add regular triples from core store (release lock quickly)
+        {
+            let core_store = self.core_store.read().unwrap();
+            if let Ok(core_triples) = core_store.triples() {
+                drop(core_store); // Release lock before conversion
+                for core_triple in core_triples {
+                    if let Ok(star_triple) = self.convert_from_core_triple(&core_triple) {
+                        all_triples.push(star_triple);
+                    }
+                }
+            }
+        }
+        
+        all_triples
     }
 
 
@@ -608,13 +660,22 @@ impl StarStore {
     /// Get the number of triples in the store
     pub fn len(&self) -> usize {
         let star_triples = self.star_triples.read().unwrap();
-        star_triples.len()
+        let core_store = self.core_store.read().unwrap();
+        
+        // Count both star triples and regular triples from core store
+        let regular_count = core_store.len().unwrap_or(0);
+        let star_count = star_triples.len();
+        
+        regular_count + star_count
     }
 
     /// Check if the store is empty
     pub fn is_empty(&self) -> bool {
         let star_triples = self.star_triples.read().unwrap();
-        star_triples.is_empty()
+        let core_store = self.core_store.read().unwrap();
+        
+        // Empty only if both stores are empty
+        star_triples.is_empty() && core_store.is_empty().unwrap_or(true)
     }
 
     /// Clear all triples from the store

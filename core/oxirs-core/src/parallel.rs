@@ -78,6 +78,33 @@ where
     }
 }
 
+/// Map a function over a slice in parallel
+pub fn map<T, R, F>(slice: &[T], f: F) -> Vec<R>
+where
+    T: Sync,
+    F: Fn(&T) -> R + Sync + Send,
+    R: Send,
+{
+    #[cfg(feature = "parallel")]
+    {
+        slice.par_iter().map(f).collect()
+    }
+    #[cfg(not(feature = "parallel"))]
+    {
+        slice.iter().map(f).collect()
+    }
+}
+
+/// Map a function over a slice in parallel (alias for map)
+pub fn parallel_map<T, R, F>(slice: &[T], f: F) -> Vec<R>
+where
+    T: Sync,
+    F: Fn(&T) -> R + Sync + Send,
+    R: Send,
+{
+    map(slice, f)
+}
+
 /// Sequential implementations for when parallel feature is disabled
 #[cfg(not(feature = "parallel"))]
 mod sequential {

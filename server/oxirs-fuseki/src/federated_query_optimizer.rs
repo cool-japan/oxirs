@@ -386,7 +386,7 @@ impl FederatedQueryOptimizer {
         // Extract SERVICE clauses
         let service_patterns = self.extract_service_patterns(query)?;
         if service_patterns.is_empty() {
-            return Err(FusekiError::BadRequest("No SERVICE patterns found".into()));
+            return Err(FusekiError::bad_request("No SERVICE patterns found".into()));
         }
 
         // Check endpoint health
@@ -405,7 +405,7 @@ impl FederatedQueryOptimizer {
             self.executor.execute_plan(&plan),
         )
         .await
-        .map_err(|_| FusekiError::Timeout("Federated query timeout".into()))??;
+        .map_err(|_| FusekiError::timeout("Federated query timeout".into()))??;
 
         // Record metrics
         let duration = start.elapsed();
@@ -477,7 +477,7 @@ impl FederatedQueryOptimizer {
                 let health_check = endpoints.check_endpoint_health(endpoint.clone());
                 futures.push(health_check);
             } else if !pattern.is_silent {
-                return Err(FusekiError::BadRequest(
+                return Err(FusekiError::bad_request(
                     format!("Unknown endpoint: {}", endpoint_url)
                 ));
             }
@@ -520,7 +520,7 @@ impl EndpointRegistry {
         let client = ClientBuilder::new()
             .timeout(Duration::from_millis(5000))
             .build()
-            .map_err(|e| FusekiError::InternalError(format!("Client error: {}", e)))?;
+            .map_err(|e| FusekiError::internal(format!("Client error: {}", e)))?;
 
         let start = Instant::now();
         let response = client
@@ -547,7 +547,7 @@ impl EndpointRegistry {
                 Ok(())
             }
             Ok(resp) => {
-                Err(FusekiError::BadRequest(
+                Err(FusekiError::bad_request(
                     format!("Endpoint returned status: {}", resp.status())
                 ))
             }
@@ -562,7 +562,7 @@ impl EndpointRegistry {
                         success_count: 0,
                     },
                 );
-                Err(FusekiError::InternalError(format!("Health check failed: {}", e)))
+                Err(FusekiError::internal(format!("Health check failed: {}", e)))
             }
         }
     }
@@ -912,7 +912,7 @@ impl FederatedExecutor {
         endpoint_url: &str,
     ) -> FusekiResult<QueryResults> {
         let _permit = self.semaphore.acquire().await
-            .map_err(|_| FusekiError::InternalError("Semaphore error".into()))?;
+            .map_err(|_| FusekiError::internal("Semaphore error".into()))?;
 
         let client = self.client_pool.get_client(endpoint_url).await?;
         
@@ -944,16 +944,16 @@ impl FederatedExecutor {
             .body(query.to_string())
             .send()
             .await
-            .map_err(|e| FusekiError::InternalError(format!("Request failed: {}", e)))?;
+            .map_err(|e| FusekiError::internal(format!("Request failed: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(FusekiError::BadRequest(
+            return Err(FusekiError::bad_request(
                 format!("Endpoint returned status: {}", response.status())
             ));
         }
 
         let json: serde_json::Value = response.json().await
-            .map_err(|e| FusekiError::InternalError(format!("JSON parse error: {}", e)))?;
+            .map_err(|e| FusekiError::internal(format!("JSON parse error: {}", e)))?;
 
         // Parse SPARQL results
         let bindings = self.parse_sparql_results(json)?;
@@ -975,7 +975,7 @@ impl FederatedExecutor {
             .get("results")
             .and_then(|r| r.get("bindings"))
             .and_then(|b| b.as_array())
-            .ok_or_else(|| FusekiError::InternalError("Invalid SPARQL results format".into()))?;
+            .ok_or_else(|| FusekiError::internal("Invalid SPARQL results format".into()))?;
 
         let mut bindings = Vec::new();
         for result in results {
@@ -1018,7 +1018,7 @@ impl ClientPool {
             .pool_max_idle_per_host(self.max_connections_per_endpoint)
             .timeout(Duration::from_secs(30))
             .build()
-            .map_err(|e| FusekiError::InternalError(format!("Client creation failed: {}", e)))?;
+            .map_err(|e| FusekiError::internal(format!("Client creation failed: {}", e)))?;
 
         self.clients.insert(endpoint_url.to_string(), client.clone());
         Ok(client)
@@ -1247,7 +1247,7 @@ impl MergeStrategy for JoinMergeStrategy {
 
     async fn merge(&self, results: Vec<QueryResults>) -> FusekiResult<QueryResults> {
         if results.len() != 2 {
-            return Err(FusekiError::InternalError("Join requires exactly 2 result sets".into()));
+            return Err(FusekiError::internal("Join requires exactly 2 result sets".into()));
         }
 
         let left = &results[0];

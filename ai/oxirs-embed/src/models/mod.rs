@@ -30,7 +30,7 @@ pub use complex::ComplEx;
 pub use distmult::DistMult;
 pub use rotate::RotatE;
 pub use transe::TransE;
-pub use transformer::{TransformerEmbedding, TransformerType, TransformerConfig};
+pub use transformer::{TransformerEmbedding, TransformerType, TransformerConfig, PoolingStrategy};
 pub use gnn::{GNNEmbedding, GNNType, GNNConfig, AggregationType};
 
 #[cfg(feature = "tucker")]

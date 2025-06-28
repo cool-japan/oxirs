@@ -219,10 +219,10 @@ impl AsyncStreamingParser {
     fn check_cancelled(cancel_token: &Option<Arc<AtomicBool>>) -> Result<()> {
         if let Some(token) = cancel_token {
             if token.load(Ordering::Relaxed) {
-                return Err(OxirsError::Io(std::io::Error::new(
+                return Err(std::io::Error::new(
                     std::io::ErrorKind::Interrupted,
                     "Operation cancelled",
-                )));
+                ).into());
             }
         }
         Ok(())
@@ -533,10 +533,10 @@ impl AsyncStreamingSerializer {
     fn check_cancelled(cancel_token: &Option<Arc<AtomicBool>>) -> Result<()> {
         if let Some(token) = cancel_token {
             if token.load(Ordering::Relaxed) {
-                return Err(OxirsError::Io(std::io::Error::new(
+                return Err(std::io::Error::new(
                     std::io::ErrorKind::Interrupted,
                     "Operation cancelled",
-                )));
+                ).into());
             }
         }
         Ok(())

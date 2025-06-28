@@ -897,10 +897,6 @@ impl ShapeLearner {
         }
     }
 
-    /// Get learning statistics
-    pub fn get_statistics(&self) -> &LearningStatistics {
-        &self.stats
-    }
 
     /// Clear learning cache
     pub fn clear_cache(&mut self) {

@@ -5,7 +5,8 @@
 
 use crate::indexing::IndexStats;
 use crate::model::Variable;
-use crate::query::algebra::{GraphPattern, TriplePattern, TermPattern, Query, QueryForm};
+use crate::query::algebra::{GraphPattern, TriplePattern, TermPattern, QueryForm, Query as AlgebraQuery};
+use crate::query::sparql_query::Query;
 use crate::query::plan::{ExecutionPlan, QueryPlanner};
 use crate::OxirsError;
 use std::collections::{HashMap, VecDeque};
@@ -170,7 +171,7 @@ impl AIQueryOptimizer {
     }
 
     /// Optimize a query using AI techniques
-    pub fn optimize_query(&self, query: &Query) -> Result<OptimizedPlan, OxirsError> {
+    pub fn optimize_query(&self, query: &AlgebraQuery) -> Result<OptimizedPlan, OxirsError> {
         // Extract query pattern for learning
         let pattern = self.extract_query_pattern(query)?;
 
@@ -207,17 +208,17 @@ impl AIQueryOptimizer {
     }
 
     /// Extract pattern from query for learning
-    fn extract_query_pattern(&self, query: &Query) -> Result<QueryPattern, OxirsError> {
+    fn extract_query_pattern(&self, query: &AlgebraQuery) -> Result<QueryPattern, OxirsError> {
         match &query.form {
             QueryForm::Select { where_clause, .. } => {
                 let (num_patterns, predicates, join_types) =
-                    self.analyze_graph_pattern(where_clause)?;
+                    self.analyze_graph_pattern(&where_clause)?;
 
                 Ok(QueryPattern {
                     num_patterns,
                     predicates,
                     join_types,
-                    has_filter: self.has_filter(where_clause),
+                    has_filter: self.has_filter(&where_clause),
                 })
             }
             _ => Err(OxirsError::Query("Unsupported query form".to_string())),
@@ -301,7 +302,7 @@ impl AIQueryOptimizer {
     }
 
     /// Generate candidate execution plans
-    fn generate_candidate_plans(&self, query: &Query) -> Result<Vec<ExecutionPlan>, OxirsError> {
+    fn generate_candidate_plans(&self, query: &AlgebraQuery) -> Result<Vec<ExecutionPlan>, OxirsError> {
         let mut candidates = Vec::new();
 
         // Basic plan from base planner
@@ -393,7 +394,7 @@ impl AIQueryOptimizer {
     }
 
     /// Generate index-based execution plans
-    fn generate_index_plans(&self, _query: &Query) -> Result<Vec<ExecutionPlan>, OxirsError> {
+    fn generate_index_plans(&self, _query: &AlgebraQuery) -> Result<Vec<ExecutionPlan>, OxirsError> {
         // Would generate plans that leverage specific indexes
         Ok(Vec::new())
     }
@@ -636,7 +637,7 @@ impl MultiQueryOptimizer {
     }
 
     /// Optimize multiple queries together
-    pub fn optimize_batch(&self, queries: &[Query]) -> Result<Vec<OptimizedPlan>, OxirsError> {
+    pub fn optimize_batch(&self, queries: &[AlgebraQuery]) -> Result<Vec<OptimizedPlan>, OxirsError> {
         // Detect common subexpressions
         let common_subs = self.detect_common_subexpressions(queries)?;
 
@@ -658,7 +659,7 @@ impl MultiQueryOptimizer {
     /// Detect common subexpressions across queries
     fn detect_common_subexpressions(
         &self,
-        queries: &[Query],
+        queries: &[AlgebraQuery],
     ) -> Result<HashMap<String, ExecutionPlan>, OxirsError> {
         let mut common_subs = HashMap::new();
 
@@ -693,11 +694,11 @@ impl MultiQueryOptimizer {
     /// Count pattern occurrences
     fn count_patterns(
         &self,
-        query: &Query,
+        query: &AlgebraQuery,
         counts: &mut HashMap<String, usize>,
     ) -> Result<(), OxirsError> {
         if let QueryForm::Select { where_clause, .. } = &query.form {
-            self.count_graph_patterns(where_clause, counts)?;
+            self.count_graph_patterns(&where_clause, counts)?;
         }
         Ok(())
     }

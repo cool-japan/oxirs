@@ -2,11 +2,14 @@
 
 use crate::auth::ldap::LdapService;
 use crate::auth::oauth::OAuth2Service;
+#[cfg(feature = "saml")]
 use crate::auth::saml::{SamlProvider, SamlConfig};
 use crate::config::{JwtConfig, LdapConfig, OAuthConfig, SecurityConfig, UserConfig};
 use crate::error::{FusekiError, FusekiResult};
 use argon2::password_hash::{rand_core::OsRng, SaltString};
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
+use x509_parser::prelude::*;
+use der_parser::oid::Oid;
 use axum::{
     extract::{FromRequestParts, State},
     http::{request::Parts, HeaderMap, StatusCode},
@@ -26,6 +29,7 @@ use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, 
 
 pub mod ldap;
 pub mod oauth;
+#[cfg(feature = "saml")]
 pub mod saml;
 
 /// Authentication result
@@ -141,6 +145,7 @@ pub struct AuthService {
     sessions: Arc<RwLock<HashMap<String, UserSession>>>,
     oauth2_service: Option<OAuth2Service>,
     ldap_service: Option<LdapService>,
+    #[cfg(feature = "saml")]
     saml_provider: Option<Arc<SamlProvider>>,
 }
 
@@ -201,6 +206,7 @@ impl AuthService {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             oauth2_service,
             ldap_service,
+            #[cfg(feature = "saml")]
             saml_provider: None, // TODO: Initialize from config when SAML config is added
         }
     }
@@ -748,28 +754,85 @@ impl AuthService {
         Ok(AuthResult::Authenticated(user))
     }
 
-    /// Parse X.509 certificate (simplified implementation)
+    /// Parse X.509 certificate using x509-parser
     fn parse_x509_certificate(&self, cert_data: &[u8]) -> FusekiResult<CertificateAuth> {
-        // This is a simplified implementation
-        // In production, you would use a proper X.509 parsing library like 'x509-parser'
+        // Parse DER-encoded certificate
+        let (_, cert) = X509Certificate::from_der(cert_data)
+            .map_err(|e| FusekiError::authentication(format!("Failed to parse X.509 certificate: {}", e)))?;
 
-        // Mock certificate parsing for demonstration
+        // Extract subject DN
+        let subject_dn = cert.subject().to_string();
+
+        // Extract issuer DN
+        let issuer_dn = cert.issuer().to_string();
+
+        // Extract serial number
+        let serial_number = cert.serial.to_str_radix(16).to_uppercase();
+
+        // Calculate SHA-256 fingerprint
+        let fingerprint = sha2::Sha256::digest(cert_data)
+            .iter()
+            .map(|b| format!("{:02X}", b))
+            .collect::<Vec<_>>()
+            .join(":");
+
+        // Extract validity period
+        let not_before = cert.validity()
+            .not_before
+            .timestamp()
+            .map(|ts| chrono::DateTime::from_timestamp(ts, 0).unwrap_or_else(|| Utc::now()))
+            .unwrap_or_else(|| Utc::now());
+
+        let not_after = cert.validity()
+            .not_after
+            .timestamp()
+            .map(|ts| chrono::DateTime::from_timestamp(ts, 0).unwrap_or_else(|| Utc::now()))
+            .unwrap_or_else(|| Utc::now());
+
+        // Extract key usage
+        let mut key_usage = Vec::new();
+        if let Some(ext) = cert.extensions().get(&x509_parser::extensions::OID_X509_EXT_KEY_USAGE) {
+            if let Ok(ku) = ext.parsed_extension::<KeyUsage>() {
+                if ku.digital_signature() {
+                    key_usage.push("digitalSignature".to_string());
+                }
+                if ku.key_encipherment() {
+                    key_usage.push("keyEncipherment".to_string());
+                }
+                if ku.key_agreement() {
+                    key_usage.push("keyAgreement".to_string());
+                }
+                if ku.non_repudiation() {
+                    key_usage.push("nonRepudiation".to_string());
+                }
+            }
+        }
+
+        // Extract extended key usage
+        let mut extended_key_usage = Vec::new();
+        if let Some(ext) = cert.extensions().get(&x509_parser::extensions::OID_X509_EXT_EXTENDED_KEY_USAGE) {
+            if let Ok(eku) = ext.parsed_extension::<ExtendedKeyUsage>() {
+                for purpose in eku.any {
+                    if purpose == &x509_parser::extensions::OID_EKU_CLIENT_AUTH {
+                        extended_key_usage.push("clientAuth".to_string());
+                    } else if purpose == &x509_parser::extensions::OID_EKU_SERVER_AUTH {
+                        extended_key_usage.push("serverAuth".to_string());
+                    } else if purpose == &x509_parser::extensions::OID_EKU_EMAIL_PROTECTION {
+                        extended_key_usage.push("emailProtection".to_string());
+                    }
+                }
+            }
+        }
+
         let cert_info = CertificateAuth {
-            subject_dn: "CN=John Doe,OU=Engineering,O=Example Corp,C=US".to_string(),
-            issuer_dn: "CN=Example Corp Root CA,O=Example Corp,C=US".to_string(),
-            serial_number: "1234567890ABCDEF".to_string(),
-            fingerprint: sha2::Sha256::digest(cert_data)
-                .iter()
-                .map(|b| format!("{:02X}", b))
-                .collect::<Vec<_>>()
-                .join(":"),
-            not_before: Utc::now() - chrono::Duration::days(30),
-            not_after: Utc::now() + chrono::Duration::days(365),
-            key_usage: vec![
-                "digitalSignature".to_string(),
-                "keyEncipherment".to_string(),
-            ],
-            extended_key_usage: vec!["clientAuth".to_string()],
+            subject_dn,
+            issuer_dn,
+            serial_number,
+            fingerprint,
+            not_before,
+            not_after,
+            key_usage,
+            extended_key_usage,
         };
 
         Ok(cert_info)
@@ -780,6 +843,7 @@ impl AuthService {
         // Check certificate validity period
         let now = Utc::now();
         if now < cert_info.not_before || now > cert_info.not_after {
+            warn!("Certificate is expired or not yet valid: {} - {}", cert_info.not_before, cert_info.not_after);
             return Ok(false);
         }
 
@@ -788,14 +852,119 @@ impl AuthService {
             .extended_key_usage
             .contains(&"clientAuth".to_string())
         {
+            warn!("Certificate does not have clientAuth extended key usage");
             return Ok(false);
         }
 
-        // TODO: Implement proper certificate chain validation
-        // TODO: Check Certificate Revocation List (CRL)
-        // TODO: Validate against configured trust store
+        // Check if certificate is in configured trust store
+        if !self.is_certificate_trusted(cert_info).await? {
+            warn!("Certificate is not in trust store: {}", cert_info.subject_dn);
+            return Ok(false);
+        }
 
+        // Check Certificate Revocation List (CRL) if configured
+        if let Err(e) = self.check_certificate_revocation(cert_info).await {
+            warn!("Certificate revocation check failed: {}", e);
+            return Ok(false);
+        }
+
+        // Validate certificate chain if full chain is available
+        if let Err(e) = self.validate_certificate_chain(cert_info).await {
+            warn!("Certificate chain validation failed: {}", e);
+            return Ok(false);
+        }
+
+        info!("Certificate validation successful for: {}", cert_info.subject_dn);
         Ok(true)
+    }
+
+    /// Check if certificate is in the configured trust store
+    async fn is_certificate_trusted(&self, cert_info: &CertificateAuth) -> FusekiResult<bool> {
+        // For now, implement a simple trust store based on issuer DN patterns
+        // In production, this would check against a proper PKCS#12 trust store
+        
+        let trusted_issuers = vec![
+            "CN=Example Corp Root CA,O=Example Corp,C=US",
+            "CN=Internal CA,OU=IT Department,O=Example Corp,C=US",
+            // Add more trusted CAs as needed
+        ];
+        
+        // Check if the issuer is in our trust list
+        let is_trusted = trusted_issuers.iter().any(|&issuer| {
+            cert_info.issuer_dn.contains(issuer) || 
+            // Allow partial matches for flexibility
+            self.is_issuer_pattern_match(&cert_info.issuer_dn, issuer)
+        });
+        
+        if is_trusted {
+            debug!("Certificate issuer is trusted: {}", cert_info.issuer_dn);
+        } else {
+            debug!("Certificate issuer is not in trust store: {}", cert_info.issuer_dn);
+        }
+        
+        Ok(is_trusted)
+    }
+    
+    /// Check if issuer DN matches trusted patterns
+    fn is_issuer_pattern_match(&self, actual_issuer: &str, trusted_pattern: &str) -> bool {
+        // Simple pattern matching - in production you'd use proper DN parsing
+        actual_issuer.contains("Example Corp") && actual_issuer.contains("CA")
+    }
+
+    /// Check certificate against Certificate Revocation List (CRL)
+    async fn check_certificate_revocation(&self, cert_info: &CertificateAuth) -> FusekiResult<()> {
+        // In a real implementation, this would:
+        // 1. Download CRL from certificate's CRL distribution points
+        // 2. Parse the CRL
+        // 3. Check if the certificate serial number is in the revoked list
+        
+        debug!("CRL check not yet implemented for certificate: {}", cert_info.serial_number);
+        
+        // For now, maintain a simple in-memory revocation list
+        let revoked_serials = vec![
+            "DEADBEEF12345678", // Example revoked certificate
+        ];
+        
+        if revoked_serials.contains(&cert_info.serial_number.as_str()) {
+            return Err(FusekiError::authentication(format!(
+                "Certificate is revoked: {}", cert_info.serial_number
+            )));
+        }
+        
+        Ok(())
+    }
+
+    /// Validate the certificate chain
+    async fn validate_certificate_chain(&self, cert_info: &CertificateAuth) -> FusekiResult<()> {
+        // In a complete implementation, this would:
+        // 1. Build the certificate chain from the client cert to a trusted root
+        // 2. Verify each certificate in the chain
+        // 3. Check that each certificate properly signs the next one
+        // 4. Ensure the chain leads to a trusted root CA
+        
+        debug!("Certificate chain validation not fully implemented for: {}", cert_info.subject_dn);
+        
+        // For now, do basic checks
+        if cert_info.subject_dn == cert_info.issuer_dn {
+            // Self-signed certificate - only allow if explicitly configured
+            if self.allow_self_signed_certificates() {
+                debug!("Allowing self-signed certificate: {}", cert_info.subject_dn);
+                Ok(())
+            } else {
+                Err(FusekiError::authentication("Self-signed certificates not allowed".to_string()))
+            }
+        } else {
+            // Assume valid chain for now - in production this needs proper implementation
+            debug!("Assuming valid certificate chain for: {}", cert_info.subject_dn);
+            Ok(())
+        }
+    }
+    
+    /// Check if self-signed certificates are allowed
+    fn allow_self_signed_certificates(&self) -> bool {
+        // This would be configurable in SecurityConfig
+        // For development/testing purposes only
+        false
     }
 
     /// Map certificate to internal user

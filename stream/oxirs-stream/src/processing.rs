@@ -44,6 +44,22 @@ pub struct Watermark {
     pub allowed_lateness: ChronoDuration,
 }
 
+impl Watermark {
+    /// Create a new watermark with default values
+    pub fn new() -> Self {
+        Self {
+            timestamp: Utc::now(),
+            allowed_lateness: ChronoDuration::seconds(60),
+        }
+    }
+}
+
+impl Default for Watermark {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Aggregation functions for window processing
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AggregateFunction {

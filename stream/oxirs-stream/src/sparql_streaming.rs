@@ -500,6 +500,47 @@ impl ContinuousQueryManager {
         Ok(())
     }
     
+    /// Register a SPARQL subscription query with enhanced syntax
+    pub async fn register_subscription(
+        &self,
+        query: String,
+        metadata: QueryMetadata,
+        channel: QueryResultChannel,
+    ) -> Result<String> {
+        // Parse subscription syntax extensions
+        let enhanced_query = self.parse_subscription_syntax(&query)?;
+        
+        // Register as continuous query
+        self.register_query(enhanced_query, metadata, channel).await
+    }
+    
+    /// Parse SPARQL subscription syntax extensions
+    fn parse_subscription_syntax(&self, query: &str) -> Result<String> {
+        let mut enhanced_query = query.to_string();
+        
+        // Check for SUBSCRIBE keyword (custom extension)
+        if enhanced_query.to_lowercase().contains("subscribe") {
+            // Convert SUBSCRIBE to SELECT for standard SPARQL processing
+            enhanced_query = enhanced_query.replace("SUBSCRIBE", "SELECT");
+            enhanced_query = enhanced_query.replace("subscribe", "SELECT");
+        }
+        
+        // Parse ON CHANGE clauses for change detection
+        if enhanced_query.to_lowercase().contains("on change") {
+            // Extract change detection patterns
+            // This would be expanded to parse custom change detection syntax
+            info!("Detected ON CHANGE clause in subscription query");
+        }
+        
+        // Parse WINDOW clauses for temporal windows
+        if enhanced_query.to_lowercase().contains("window") {
+            // Extract windowing information
+            info!("Detected WINDOW clause in subscription query");
+        }
+        
+        Ok(enhanced_query)
+    }
+    
     /// Start query execution
     async fn start_query_execution(&self, query_id: &str) -> Result<()> {
         let queries = self.queries.clone();
@@ -926,6 +967,31 @@ impl ResultCache {
 }
 
 impl ResultDispatcher {
+    /// Create a stream producer for a specific topic
+    async fn create_stream_producer_for_topic(&self, topic: &str) -> Result<crate::StreamProducer> {
+        // Create a default stream configuration for this topic
+        let config = crate::StreamConfig {
+            backend: crate::StreamBackend::Memory {
+                max_size: Some(10000),
+                persistence: false,
+            },
+            topic: topic.to_string(),
+            batch_size: 100,
+            flush_interval_ms: 100,
+            max_connections: 10,
+            connection_timeout: Duration::from_secs(30),
+            enable_compression: false,
+            compression_type: crate::CompressionType::None,
+            retry_config: crate::RetryConfig::default(),
+            circuit_breaker: crate::CircuitBreakerConfig::default(),
+            security: crate::SecurityConfig::default(),
+            performance: crate::PerformanceConfig::default(),
+            monitoring: crate::MonitoringConfig::default(),
+        };
+        
+        // Create and return the producer
+        crate::StreamProducer::new(config).await
+    }
     /// Send results via webhook
     async fn send_webhook(
         &self,
@@ -991,9 +1057,13 @@ impl ResultDispatcher {
     ) -> Result<()> {
         // Convert query result update to stream event
         let stream_event = match update.update_type {
-            UpdateType::ResultAdded => StreamEvent::QueryResultAdded {
+            UpdateType::Added => StreamEvent::QueryResultAdded {
                 query_id: update.query_id.clone(),
-                result: update.result.clone(),
+                result: crate::event::QueryResult {
+                    query_id: update.query_id.clone(),
+                    bindings: update.bindings.first().cloned().unwrap_or_default(),
+                    execution_time: Duration::from_millis(0),
+                },
                 metadata: EventMetadata {
                     event_id: uuid::Uuid::new_v4().to_string(),
                     timestamp: chrono::Utc::now(),
@@ -1011,9 +1081,13 @@ impl ResultDispatcher {
                     checksum: None,
                 },
             },
-            UpdateType::ResultRemoved => StreamEvent::QueryResultRemoved {
+            UpdateType::Removed => StreamEvent::QueryResultRemoved {
                 query_id: update.query_id.clone(),
-                result: update.result.clone(),
+                result: crate::event::QueryResult {
+                    query_id: update.query_id.clone(),
+                    bindings: update.bindings.first().cloned().unwrap_or_default(),
+                    execution_time: Duration::from_millis(0),
+                },
                 metadata: EventMetadata {
                     event_id: uuid::Uuid::new_v4().to_string(),
                     timestamp: chrono::Utc::now(),
@@ -1031,35 +1105,58 @@ impl ResultDispatcher {
                     checksum: None,
                 },
             },
-            UpdateType::QueryComplete => StreamEvent::QueryCompleted {
-                query_id: update.query_id.clone(),
-                execution_time: update.execution_time,
-                metadata: EventMetadata {
-                    event_id: uuid::Uuid::new_v4().to_string(),
-                    timestamp: chrono::Utc::now(),
-                    source: "sparql-streaming".to_string(),
-                    user: Some("query-engine".to_string()),
-                    context: Some(update.query_id.clone()),
-                    caused_by: None,
-                    version: "1.0".to_string(),
-                    properties: {
-                        let mut props = std::collections::HashMap::new();
-                        props.insert("topic".to_string(), topic.to_string());
-                        props.insert("update_type".to_string(), "query_complete".to_string());
-                        props
+            UpdateType::Initial | UpdateType::Refresh => {
+                // For initial and refresh updates, we just use QueryResultAdded
+                StreamEvent::QueryResultAdded {
+                    query_id: update.query_id.clone(),
+                    result: crate::event::QueryResult {
+                        query_id: update.query_id.clone(),
+                        bindings: update.bindings.first().cloned().unwrap_or_default(),
+                        execution_time: Duration::from_millis(0), // Default execution time
                     },
-                    checksum: None,
-                },
+                    metadata: EventMetadata {
+                        event_id: uuid::Uuid::new_v4().to_string(),
+                        timestamp: chrono::Utc::now(),
+                        source: "sparql-streaming".to_string(),
+                        user: Some("query-engine".to_string()),
+                        context: Some(update.query_id.clone()),
+                        caused_by: None,
+                        version: "1.0".to_string(),
+                        properties: {
+                            let mut props = std::collections::HashMap::new();
+                            props.insert("topic".to_string(), topic.to_string());
+                            props.insert("update_type".to_string(), format!("{:?}", update.update_type).to_lowercase());
+                            props
+                        },
+                        checksum: None,
+                    },
+                }
+            },
+            UpdateType::Error { message } => {
+                // For errors, we'll just log and return Ok for now
+                warn!("Query error in stream: {}", message);
+                return Ok(());
             },
         };
         
-        // Here we would typically publish to a stream backend
-        // For now, we'll just log the event
-        info!("Publishing query result to stream topic '{}': {:?}", topic, stream_event);
-        
-        // TODO: Integrate with actual stream producer
-        // This could be implemented as:
-        // self.stream_producer.publish(topic, stream_event).await?;
+        // Create a stream producer for the topic and publish the event
+        match self.create_stream_producer_for_topic(topic).await {
+            Ok(mut producer) => {
+                match producer.publish(stream_event).await {
+                    Ok(_) => {
+                        info!("Successfully published query result to stream topic '{}'", topic);
+                    }
+                    Err(e) => {
+                        error!("Failed to publish to stream topic '{}': {}", topic, e);
+                        return Err(anyhow!("Stream publishing failed: {}", e));
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to create stream producer for topic '{}': {}", topic, e);
+                return Err(anyhow!("Stream producer creation failed: {}", e));
+            }
+        }
         
         Ok(())
     }

@@ -118,7 +118,7 @@ impl EvaluationSuite {
             .collect();
 
         let mut negative_samples = Vec::new();
-        let mut rng = rand::thread_rng();
+        let _rng = rand::thread_rng();
 
         for positive_triple in &self.test_triples {
             let mut negatives_for_triple = 0;
@@ -404,6 +404,7 @@ impl EvaluationSuite {
 /// Benchmark suite for comparing multiple models
 pub struct BenchmarkSuite {
     evaluations: HashMap<String, EvaluationResults>,
+    #[allow(dead_code)]
     datasets: Vec<String>,
 }
 

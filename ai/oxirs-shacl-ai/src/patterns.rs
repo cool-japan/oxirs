@@ -156,7 +156,7 @@ impl PatternAnalyzer {
         Self {
             config,
             pattern_cache: HashMap::new(),
-            model_state: PatternModelState::default(),
+            model_state: PatternModelState::new(),
             stats: PatternStatistics::default(),
         }
     }
@@ -373,10 +373,6 @@ impl PatternAnalyzer {
         })
     }
 
-    /// Get pattern analysis statistics
-    pub fn get_statistics(&self) -> &PatternStatistics {
-        &self.stats
-    }
 
     /// Clear pattern cache
     pub fn clear_cache(&mut self) {
@@ -1906,14 +1902,14 @@ impl PatternModelState {
 }
 
 #[derive(Debug, Clone)]
-struct CachedPatternResult {
-    patterns: Vec<Pattern>,
-    timestamp: chrono::DateTime<chrono::Utc>,
-    ttl: std::time::Duration,
+pub struct CachedPatternResult {
+    pub patterns: Vec<Pattern>,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub ttl: std::time::Duration,
 }
 
 impl CachedPatternResult {
-    fn is_expired(&self) -> bool {
+    pub fn is_expired(&self) -> bool {
         let now = chrono::Utc::now();
         let expiry = self.timestamp + chrono::Duration::from_std(self.ttl).unwrap_or_default();
         now > expiry

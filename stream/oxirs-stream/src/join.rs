@@ -360,7 +360,7 @@ impl StreamJoinProcessor {
 fn create_null_joined_event(event: &StreamEvent, is_right_null: bool) -> Result<StreamEvent> {
     // This is a simplified implementation - in production you'd want more sophisticated handling
     let mut metadata = event.metadata().clone();
-    metadata.insert(
+    metadata.properties.insert(
         "join_type".to_string(), 
         if is_right_null { "right_null".to_string() } else { "left_null".to_string() }
     );
@@ -513,12 +513,12 @@ pub mod patterns {
             
             if let Some(right_event) = right {
                 // Merge metadata from both events
-                for (k, v) in right_event.metadata() {
-                    metadata.insert(format!("right_{}", k), v.clone());
+                for (k, v) in right_event.metadata().properties.iter() {
+                    metadata.properties.insert(format!("right_{}", k), v.clone());
                 }
-                metadata.insert("join_result".to_string(), "matched".to_string());
+                metadata.properties.insert("join_result".to_string(), "matched".to_string());
             } else {
-                metadata.insert("join_result".to_string(), "unmatched".to_string());
+                metadata.properties.insert("join_result".to_string(), "unmatched".to_string());
             }
 
             // Return modified left event with merged metadata
@@ -550,7 +550,7 @@ mod tests {
             predicate: "http://example.org/predicate".to_string(),
             object: "http://example.org/object".to_string(),
             graph: None,
-            metadata: HashMap::new(),
+            metadata: EventMetadata::default(),
         }
     }
 

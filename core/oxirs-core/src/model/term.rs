@@ -1,6 +1,6 @@
 //! Core RDF term types and implementations
 
-use crate::model::{Literal, LiteralRef, NamedNode, NamedNodeRef, ObjectTerm, RdfTerm, SubjectTerm};
+use crate::model::{Literal, LiteralRef, NamedNode, NamedNodeRef, ObjectTerm, PredicateTerm, RdfTerm, SubjectTerm};
 use crate::OxirsError;
 use lazy_static::lazy_static;
 use rand::random;
@@ -486,6 +486,13 @@ impl fmt::Display for Variable {
     }
 }
 
+impl Variable {
+    /// Formats using the SPARQL S-Expression syntax
+    pub fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
+        write!(f, "?{}", self.name)
+    }
+}
+
 impl RdfTerm for Variable {
     fn as_str(&self) -> &str {
         &self.name
@@ -736,6 +743,35 @@ impl From<Variable> for Subject {
     }
 }
 
+impl RdfTerm for Subject {
+    fn as_str(&self) -> &str {
+        match self {
+            Subject::NamedNode(n) => n.as_str(),
+            Subject::BlankNode(b) => b.as_str(),
+            Subject::Variable(v) => v.as_str(),
+            Subject::QuotedTriple(_) => "<<quoted-triple>>",
+        }
+    }
+
+    fn is_named_node(&self) -> bool {
+        matches!(self, Subject::NamedNode(_))
+    }
+
+    fn is_blank_node(&self) -> bool {
+        matches!(self, Subject::BlankNode(_))
+    }
+
+    fn is_variable(&self) -> bool {
+        matches!(self, Subject::Variable(_))
+    }
+
+    fn is_quoted_triple(&self) -> bool {
+        matches!(self, Subject::QuotedTriple(_))
+    }
+}
+
+impl SubjectTerm for Subject {}
+
 /// Union type for terms that can be predicates in RDF triples
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -755,6 +791,25 @@ impl From<Variable> for Predicate {
         Predicate::Variable(variable)
     }
 }
+
+impl RdfTerm for Predicate {
+    fn as_str(&self) -> &str {
+        match self {
+            Predicate::NamedNode(n) => n.as_str(),
+            Predicate::Variable(v) => v.as_str(),
+        }
+    }
+
+    fn is_named_node(&self) -> bool {
+        matches!(self, Predicate::NamedNode(_))
+    }
+
+    fn is_variable(&self) -> bool {
+        matches!(self, Predicate::Variable(_))
+    }
+}
+
+impl PredicateTerm for Predicate {}
 
 /// Union type for terms that can be objects in RDF triples
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -825,6 +880,40 @@ impl From<Term> for Object {
         }
     }
 }
+
+impl RdfTerm for Object {
+    fn as_str(&self) -> &str {
+        match self {
+            Object::NamedNode(n) => n.as_str(),
+            Object::BlankNode(b) => b.as_str(),
+            Object::Literal(l) => l.as_str(),
+            Object::Variable(v) => v.as_str(),
+            Object::QuotedTriple(_) => "<<quoted-triple>>",
+        }
+    }
+
+    fn is_named_node(&self) -> bool {
+        matches!(self, Object::NamedNode(_))
+    }
+
+    fn is_blank_node(&self) -> bool {
+        matches!(self, Object::BlankNode(_))
+    }
+
+    fn is_literal(&self) -> bool {
+        matches!(self, Object::Literal(_))
+    }
+
+    fn is_variable(&self) -> bool {
+        matches!(self, Object::Variable(_))
+    }
+
+    fn is_quoted_triple(&self) -> bool {
+        matches!(self, Object::QuotedTriple(_))
+    }
+}
+
+impl ObjectTerm for Object {}
 
 // Term to position conversions (needed for rdfxml parser)
 impl TryFrom<Term> for Subject {

@@ -13,13 +13,17 @@ use futures;
 use regex;
 
 use oxirs_core::{
-    NamedNode,
-    sparql::{Query, QueryType},
+    model::NamedNode,
+    query::QueryResults,
+};
+use oxirs_arq::{
+    Query,
+    QueryType,
 };
 
 use crate::{
     error::{FusekiError as Error, FusekiResult as Result},
-    federation::{FederationConfig, ServiceEndpoint, ServiceHealth, EndpointCapabilities},
+    federation::{FederationConfig, ServiceEndpoint, ServiceHealth, ServiceCapabilities as EndpointCapabilities},
 };
 
 /// Query plan for federated execution
@@ -1104,6 +1108,45 @@ impl QueryPlanner {
             service_stats.average_result_size,
             service_stats.availability * 100.0
         );
+    }
+    
+    /// Update statistics for a service (public method for executor)
+    pub async fn update_statistics(
+        &self,
+        service_id: &str,
+        query_pattern: String,
+        result_count: usize,
+        execution_time: Duration,
+        success: bool,
+    ) {
+        self.update_service_statistics(service_id, execution_time, result_count).await;
+        
+        // Also update pattern statistics
+        let mut stats = self.statistics.write().await;
+        let pattern_stats = stats.pattern_stats.entry(query_pattern)
+            .or_insert_with(PatternStatistics::default);
+            
+        pattern_stats.execution_count += 1;
+        
+        if success {
+            // Update moving averages
+            let count = pattern_stats.execution_count as f64;
+            let current_avg_time = pattern_stats.average_execution_time.as_millis() as f64;
+            let new_time = execution_time.as_millis() as f64;
+            let new_avg_time = (current_avg_time * (count - 1.0) + new_time) / count;
+            pattern_stats.average_execution_time = Duration::from_millis(new_avg_time as u64);
+            
+            let current_avg_size = pattern_stats.average_result_size as f64;
+            let new_avg_size = (current_avg_size * (count - 1.0) + result_count as f64) / count;
+            pattern_stats.average_result_size = new_avg_size as usize;
+            
+            // Update success rate
+            pattern_stats.success_rate = (pattern_stats.success_rate * (count - 1.0) + 1.0) / count;
+        } else {
+            // Update success rate for failure
+            let count = pattern_stats.execution_count as f64;
+            pattern_stats.success_rate = (pattern_stats.success_rate * (count - 1.0)) / count;
+        }
     }
 }
 

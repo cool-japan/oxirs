@@ -11,6 +11,7 @@ use std::collections::HashMap;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oxirs_shacl::Shape;
 
     #[test]
     fn test_basic_optimization() {
@@ -85,22 +86,19 @@ mod tests {
     }
 
     fn create_person_shape() -> Shape {
-        use oxirs_shacl_ai::shape::*;
+        use oxirs_shacl::{ShapeId, ShapeType, Target};
+        use oxirs_core::model::NamedNode;
 
-        let mut shape = Shape::new("http://example.org/PersonShape".to_string());
-        shape.set_target_class("http://example.org/Person".to_string());
-
-        let mut name_constraint = PropertyConstraint::new("http://example.org/name".to_string());
-        name_constraint.min_count = Some(1);
-        name_constraint.max_count = Some(1);
-        shape.add_property_constraint(name_constraint);
-
-        shape
+        // Create a basic shape using oxirs_shacl types
+        Shape::new(
+            ShapeId::new("http://example.org/PersonShape"),
+            ShapeType::NodeShape
+        )
     }
 }
 
 // Placeholder optimization functions
-pub fn optimize_shapes(shapes: &[Shape]) -> Vec<Shape> {
+pub fn optimize_shapes(shapes: &[oxirs_shacl::Shape]) -> Vec<oxirs_shacl::Shape> {
     // Simplified optimization - just return a copy
     shapes.to_vec()
 }
@@ -110,7 +108,7 @@ pub fn optimize_query(query: &str) -> String {
     query.to_string()
 }
 
-pub fn get_performance_optimization_hints(store: &Store, shapes: &[Shape]) -> Vec<String> {
+pub fn get_performance_optimization_hints(store: &Store, shapes: &[oxirs_shacl::Shape]) -> Vec<String> {
     // Placeholder implementation
     vec![
         "Consider adding indexes for frequently queried properties".to_string(),

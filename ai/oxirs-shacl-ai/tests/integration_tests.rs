@@ -3,8 +3,9 @@
 //! This module contains comprehensive integration tests for the AI-powered
 //! SHACL validation and shape generation system.
 
-use oxirs_core::model::{Literal, NamedNode, Term, Triple};
+use oxirs_core::model::{Literal, NamedNode, Term, Triple, Quad};
 use oxirs_core::Store;
+use oxirs_shacl::Shape;
 use oxirs_shacl_ai::*;
 use std::collections::HashMap;
 
@@ -94,7 +95,8 @@ async fn test_full_ai_assistant_workflow() {
     // Generate and load test data
     let test_data = generate_test_data(test_config.test_data_size);
     for triple in test_data {
-        store.insert(&triple).expect("Failed to insert test data");
+        let quad = Quad::new(triple.subject, triple.predicate, triple.object, None);
+        store.insert(&quad).expect("Failed to insert test data");
     }
 
     // Test shape learning
@@ -183,7 +185,7 @@ fn test_error_handling() {
 
     // Test error handling with empty store
     let result =
-        tokio_test::block_on(async { assistant.learn_shapes_from_store(&empty_store, None).await });
+        assistant.learn_shapes(&empty_store, None);
 
     // Should handle empty store gracefully
     match result {
@@ -224,7 +226,7 @@ fn test_concurrent_operations() {
             set.spawn(async move {
                 let graph_name = format!("test_graph_{}", i);
                 assistant_clone
-                    .discover_patterns(&*store_clone, Some(&graph_name))
+                    .learn_shapes(&*store_clone, Some(&graph_name))
                     .await
             });
         }
@@ -255,7 +257,8 @@ fn test_memory_usage() {
     // Test with large dataset
     let large_dataset = generate_test_data(10000);
     for triple in large_dataset {
-        store.insert(&triple).expect("Failed to insert test data");
+        let quad = Quad::new(triple.subject, triple.predicate, triple.object, None);
+        store.insert(&quad).expect("Failed to insert test data");
     }
 
     // Memory usage should be reasonable
@@ -291,19 +294,20 @@ fn test_performance_benchmarks() {
     // Load test data
     let test_data = generate_test_data(1000);
     for triple in test_data {
-        store.insert(&triple).expect("Failed to insert test data");
+        let quad = Quad::new(triple.subject, triple.predicate, triple.object, None);
+        store.insert(&quad).expect("Failed to insert test data");
     }
 
     // Benchmark shape learning
     let start = Instant::now();
     let _shapes =
-        tokio_test::block_on(async { assistant.learn_shapes_from_store(&store, None).await })
+        assistant.learn_shapes(&store, None)
             .expect("Shape learning failed");
     let shape_learning_duration = start.elapsed();
 
     // Benchmark pattern discovery
     let start = Instant::now();
-    let _patterns = tokio_test::block_on(async { assistant.discover_patterns(&store, None).await })
+    let _patterns = assistant.learn_shapes(&store, None)
         .expect("Pattern discovery failed");
     let pattern_discovery_duration = start.elapsed();
 

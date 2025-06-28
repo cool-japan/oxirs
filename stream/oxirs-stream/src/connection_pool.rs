@@ -141,6 +141,30 @@ pub trait PooledConnection: Send + Sync + 'static {
     fn update_activity(&mut self);
 }
 
+/// Implement PooledConnection for Box<dyn PooledConnection> to enable trait object usage
+#[async_trait::async_trait]
+impl PooledConnection for Box<dyn PooledConnection> {
+    async fn is_healthy(&self) -> bool {
+        self.as_ref().is_healthy().await
+    }
+
+    async fn close(&mut self) -> Result<()> {
+        self.as_mut().close().await
+    }
+
+    fn created_at(&self) -> Instant {
+        self.as_ref().created_at()
+    }
+
+    fn last_activity(&self) -> Instant {
+        self.as_ref().last_activity()
+    }
+
+    fn update_activity(&mut self) {
+        self.as_mut().update_activity()
+    }
+}
+
 /// Connection wrapper with comprehensive metadata and monitoring
 struct PooledConnectionWrapper<T: PooledConnection> {
     connection: T,

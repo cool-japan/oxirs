@@ -152,6 +152,25 @@ impl Quad {
             self.object.clone(),
         )
     }
+    
+    /// Returns a reference to this quad
+    pub fn as_ref(&self) -> QuadRef<'_> {
+        QuadRef::from(self)
+    }
+    
+    /// Returns true if this quad is in the default graph
+    pub fn is_default_graph(&self) -> bool {
+        matches!(self.graph_name, GraphName::DefaultGraph)
+    }
+    
+    /// Returns the triple if this quad is in the default graph, None otherwise
+    pub fn triple_in_default_graph(&self) -> Option<Triple> {
+        if self.is_default_graph() {
+            Some(self.to_triple())
+        } else {
+            None
+        }
+    }
 
     /// Returns true if this quad contains any variables
     pub fn has_variables(&self) -> bool {
@@ -166,10 +185,6 @@ impl Quad {
         !self.has_variables()
     }
 
-    /// Returns true if this quad is in the default graph
-    pub fn is_default_graph(&self) -> bool {
-        self.graph_name.is_default_graph()
-    }
 }
 
 impl fmt::Display for Quad {
@@ -245,6 +260,16 @@ impl<'a> QuadRef<'a> {
     /// Converts to a triple reference, discarding the graph name
     pub fn to_triple_ref(&self) -> TripleRef<'a> {
         TripleRef::new(self.subject, self.predicate, self.object)
+    }
+    
+    /// Returns the triple part of this quad (alias for to_triple_ref)
+    pub fn triple(&self) -> TripleRef<'a> {
+        self.to_triple_ref()
+    }
+
+    /// Converts to an owned quad (alias for to_owned)
+    pub fn into_owned(self) -> Quad {
+        self.to_owned()
     }
 }
 

@@ -171,7 +171,7 @@ impl ModelRepository {
             .get(name)
             .ok_or_else(|| anyhow!("Model not found: {}", name))?;
 
-        let model_file = format!("{}/model.bin", model_info.path);
+        let _model_file = format!("{}/model.bin", model_info.path);
 
         // This is a placeholder - in a real implementation, we'd need to:
         // 1. Determine the model type from metadata

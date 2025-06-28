@@ -678,40 +678,49 @@ impl ReteNetwork {
             // Check which side the token is from before borrowing memory
             let is_left_token = self.is_left_token(&token, beta_id)?;
             
-            let (left_memory, right_memory) = self.beta_memory.get_mut(&beta_id)
-                .ok_or_else(|| anyhow::anyhow!("Beta memory not found for node {}", beta_id))?;
-
             let mut joined_tokens = Vec::new();
 
             if is_left_token {
-                // Store copies for iteration to avoid borrowing conflicts
-                let right_tokens: Vec<_> = right_memory.iter().cloned().collect();
-                left_memory.push(token.clone());
+                // Get copies to avoid borrowing conflicts
+                let right_tokens: Vec<_> = {
+                    let (_, right_memory) = self.beta_memory.get(&beta_id)
+                        .ok_or_else(|| anyhow::anyhow!("Beta memory not found for node {}", beta_id))?;
+                    right_memory.iter().cloned().collect()
+                };
                 
+                // Add token to left memory
+                {
+                    let (left_memory, _) = self.beta_memory.get_mut(&beta_id)
+                        .ok_or_else(|| anyhow::anyhow!("Beta memory not found for node {}", beta_id))?;
+                    left_memory.push(token.clone());
+                }
+                
+                // Now perform joins
                 for right_token in right_tokens {
-                    // Now we can safely call methods that borrow self immutably
-                    let (left_mem, _) = self.beta_memory.get(&beta_id)
-                        .ok_or_else(|| anyhow::anyhow!("Beta memory not found"))?;
-                    let current_token = left_mem.last().unwrap(); // The token we just added
-                    
-                    if self.satisfies_join_condition(current_token, &right_token, join_condition)? {
-                        let joined = self.join_tokens(current_token, &right_token)?;
+                    if self.satisfies_join_condition(&token, &right_token, join_condition)? {
+                        let joined = self.join_tokens(&token, &right_token)?;
                         joined_tokens.push(joined);
                     }
                 }
             } else {
-                // Store copies for iteration to avoid borrowing conflicts  
-                let left_tokens: Vec<_> = left_memory.iter().cloned().collect();
-                right_memory.push(token.clone());
+                // Get copies to avoid borrowing conflicts  
+                let left_tokens: Vec<_> = {
+                    let (left_memory, _) = self.beta_memory.get(&beta_id)
+                        .ok_or_else(|| anyhow::anyhow!("Beta memory not found for node {}", beta_id))?;
+                    left_memory.iter().cloned().collect()
+                };
                 
+                // Add token to right memory
+                {
+                    let (_, right_memory) = self.beta_memory.get_mut(&beta_id)
+                        .ok_or_else(|| anyhow::anyhow!("Beta memory not found for node {}", beta_id))?;
+                    right_memory.push(token.clone());
+                }
+                
+                // Now perform joins
                 for left_token in left_tokens {
-                    // Now we can safely call methods that borrow self immutably
-                    let (_, right_mem) = self.beta_memory.get(&beta_id)
-                        .ok_or_else(|| anyhow::anyhow!("Beta memory not found"))?;
-                    let current_token = right_mem.last().unwrap(); // The token we just added
-                    
-                    if self.satisfies_join_condition(&left_token, current_token, join_condition)? {
-                        let joined = self.join_tokens(&left_token, current_token)?;
+                    if self.satisfies_join_condition(&left_token, &token, join_condition)? {
+                        let joined = self.join_tokens(&left_token, &token)?;
                         joined_tokens.push(joined);
                     }
                 }
@@ -719,11 +728,15 @@ impl ReteNetwork {
 
             // Simple memory management
             const MAX_MEMORY_SIZE: usize = 10000;
-            if left_memory.len() > MAX_MEMORY_SIZE {
-                left_memory.drain(0..left_memory.len() / 2);
-            }
-            if right_memory.len() > MAX_MEMORY_SIZE {
-                right_memory.drain(0..right_memory.len() / 2);
+            {
+                let (left_memory, right_memory) = self.beta_memory.get_mut(&beta_id)
+                    .ok_or_else(|| anyhow::anyhow!("Beta memory not found for node {}", beta_id))?;
+                if left_memory.len() > MAX_MEMORY_SIZE {
+                    left_memory.drain(0..left_memory.len() / 2);
+                }
+                if right_memory.len() > MAX_MEMORY_SIZE {
+                    right_memory.drain(0..right_memory.len() / 2);
+                }
             }
 
             Ok(joined_tokens)

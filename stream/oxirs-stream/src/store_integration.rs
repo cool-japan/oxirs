@@ -479,9 +479,13 @@ impl StoreChangeDetector {
                             // Convert events to store changes
                             let changes = Self::convert_events_to_changes(events);
                             
-                            // Update last event ID
+                            // Update last event ID from metadata if available
                             if let Some(last_change) = changes.last() {
-                                last_event_id = last_change.event_id.unwrap_or(last_event_id);
+                                if let Some(event_id_str) = last_change.metadata.get("event_id") {
+                                    if let Ok(event_id) = event_id_str.parse::<u64>() {
+                                        last_event_id = event_id;
+                                    }
+                                }
                             }
                             
                             // Convert to stream events and publish
@@ -712,20 +716,100 @@ impl StoreChangeDetector {
 
     /// Take a snapshot of the store
     async fn take_snapshot(store: &Arc<dyn RdfStore>) -> Result<StoreSnapshot> {
-        // This would query the store to get current state
-        // For now, return a placeholder
+        let stats = store.get_statistics().await?;
+        
+        // Generate a basic content hash by querying key metrics
+        let checksum = format!("{}-{}-{}", 
+            stats.total_triples, 
+            stats.total_graphs, 
+            stats.last_modified.timestamp()
+        );
+        
         Ok(StoreSnapshot {
             timestamp: chrono::Utc::now(),
-            triple_count: 0,
-            graph_count: 0,
-            checksum: String::new(),
+            triple_count: stats.total_triples,
+            graph_count: stats.total_graphs,
+            checksum,
         })
     }
 
     /// Compare two snapshots to detect changes
     fn compare_snapshots(old: &StoreSnapshot, new: &StoreSnapshot) -> Vec<StoreChange> {
-        // This would implement snapshot comparison logic
-        vec![]
+        let mut changes = Vec::new();
+        
+        // Detect triple count changes
+        if new.triple_count != old.triple_count {
+            let change = if new.triple_count > old.triple_count {
+                StoreChange {
+                    change_type: ChangeType::BulkUpdate,
+                    timestamp: new.timestamp,
+                    transaction_id: None,
+                    user: Some("system".to_string()),
+                    affected_triples: vec![],
+                    metadata: {
+                        let mut meta = HashMap::new();
+                        meta.insert("change_type".to_string(), "triples_added".to_string());
+                        meta.insert("old_count".to_string(), old.triple_count.to_string());
+                        meta.insert("new_count".to_string(), new.triple_count.to_string());
+                        meta
+                    },
+                }
+            } else {
+                StoreChange {
+                    change_type: ChangeType::BulkUpdate,
+                    timestamp: new.timestamp,
+                    transaction_id: None,
+                    user: Some("system".to_string()),
+                    affected_triples: vec![],
+                    metadata: {
+                        let mut meta = HashMap::new();
+                        meta.insert("change_type".to_string(), "triples_removed".to_string());
+                        meta.insert("old_count".to_string(), old.triple_count.to_string());
+                        meta.insert("new_count".to_string(), new.triple_count.to_string());
+                        meta
+                    },
+                }
+            };
+            changes.push(change);
+        }
+        
+        // Detect graph count changes
+        if new.graph_count != old.graph_count {
+            let change = if new.graph_count > old.graph_count {
+                StoreChange {
+                    change_type: ChangeType::GraphCreated,
+                    timestamp: new.timestamp,
+                    transaction_id: None,
+                    user: Some("system".to_string()),
+                    affected_triples: vec![],
+                    metadata: {
+                        let mut meta = HashMap::new();
+                        meta.insert("change_type".to_string(), "graphs_added".to_string());
+                        meta.insert("old_count".to_string(), old.graph_count.to_string());
+                        meta.insert("new_count".to_string(), new.graph_count.to_string());
+                        meta
+                    },
+                }
+            } else {
+                StoreChange {
+                    change_type: ChangeType::GraphDeleted,
+                    timestamp: new.timestamp,
+                    transaction_id: None,
+                    user: Some("system".to_string()),
+                    affected_triples: vec![],
+                    metadata: {
+                        let mut meta = HashMap::new();
+                        meta.insert("change_type".to_string(), "graphs_removed".to_string());
+                        meta.insert("old_count".to_string(), old.graph_count.to_string());
+                        meta.insert("new_count".to_string(), new.graph_count.to_string());
+                        meta
+                    },
+                }
+            };
+            changes.push(change);
+        }
+        
+        changes
     }
 
     /// Get statistics
@@ -1192,8 +1276,35 @@ impl RealtimeUpdateManager {
                 }
             }
             UpdateChannel::Webhook { url, headers } => {
-                // This would implement webhook delivery
-                warn!("Webhook delivery not implemented yet");
+                // Implement webhook delivery using reqwest
+                let client = reqwest::Client::new();
+                let mut request = client.post(url).json(&notification);
+                
+                // Add custom headers
+                for (key, value) in headers {
+                    request = request.header(key, value);
+                }
+                
+                // Send webhook with timeout
+                match tokio::time::timeout(
+                    Duration::from_secs(5),
+                    request.send()
+                ).await {
+                    Ok(Ok(response)) => {
+                        if response.status().is_success() {
+                            stats.write().await.updates_sent += 1;
+                            debug!("Webhook delivered successfully to {}", url);
+                        } else {
+                            warn!("Webhook delivery failed with status {}: {}", response.status(), url);
+                        }
+                    }
+                    Ok(Err(e)) => {
+                        warn!("Webhook delivery error for {}: {}", url, e);
+                    }
+                    Err(_) => {
+                        warn!("Webhook delivery timeout for {}", url);
+                    }
+                }
             }
             _ => {
                 warn!("Update channel not implemented yet");

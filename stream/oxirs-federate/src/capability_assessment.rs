@@ -79,6 +79,19 @@ impl CapabilityAssessor {
                     warn!("GraphQL assessment failed for hybrid service: {}", e);
                 }
             }
+            ServiceType::RestRdf => {
+                // REST-RDF typically supports SPARQL-like capabilities
+                self.assess_sparql_capabilities(service, &mut result).await?;
+            }
+            ServiceType::Custom(_) => {
+                // For custom services, try to assess both types
+                if let Err(e) = self.assess_sparql_capabilities(service, &mut result).await {
+                    warn!("SPARQL assessment failed for custom service: {}", e);
+                }
+                if let Err(e) = self.assess_graphql_capabilities(service, &mut result).await {
+                    warn!("GraphQL assessment failed for custom service: {}", e);
+                }
+            }
         }
 
         let assessment_time = start_time.elapsed();
@@ -479,6 +492,8 @@ impl CapabilityAssessor {
                 ServiceType::Sparql => self.test_sparql_query(service, query).await,
                 ServiceType::GraphQL => self.test_graphql_query(service, query).await.map(|_| ()),
                 ServiceType::Hybrid => self.test_sparql_query(service, query).await,
+                ServiceType::RestRdf => self.test_sparql_query(service, query).await,
+                ServiceType::Custom(_) => self.test_sparql_query(service, query).await,
             };
 
             let duration = start.elapsed();

@@ -3,10 +3,9 @@
 //! This module implements various knowledge graph embedding models including
 //! TransE, DistMult, ComplEx, RotatE, and other state-of-the-art approaches.
 
-use crate::model::{Triple, NamedNode, Subject, Predicate, Object};
-use crate::OxirsError;
+use crate::model::Triple;
 use anyhow::{anyhow, Result};
-use ndarray::{Array1, Array2, Array3, Axis};
+use ndarray::Array1;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -281,11 +280,13 @@ impl KnowledgeGraphEmbedding for TransE {
         let mut embeddings = Vec::new();
         
         for triple in triples {
+            let subject_str = triple.subject().to_string();
+            let object_str = triple.object().to_string();
             let head_emb = entity_embs
-                .get(&triple.subject().to_string())
+                .get(&subject_str)
                 .ok_or_else(|| anyhow!("Entity not found"))?;
             let tail_emb = entity_embs
-                .get(&triple.object().to_string())
+                .get(&object_str)
                 .ok_or_else(|| anyhow!("Entity not found"))?;
             
             // Combine head and tail embeddings
@@ -379,8 +380,8 @@ impl KnowledgeGraphEmbedding for TransE {
                 let positive_score = self.compute_score(&positive.0, &positive.1, &positive.2).await?;
                 
                 if i < negatives.len() {
-                    let negative = &negatives[i];
-                    let negative_score = self.compute_score(&negative.0, &negative.1, &negative.2).await?;
+                    let (head, relation, tail) = &negatives[i];
+                    let negative_score = self.compute_score(head, relation, tail).await?;
                     
                     // Margin-based loss: max(0, positive_score - negative_score + margin)
                     let loss = (positive_score - negative_score + margin).max(0.0);
@@ -469,11 +470,13 @@ impl KnowledgeGraphEmbedding for DistMult {
         let mut embeddings = Vec::new();
         
         for triple in triples {
+            let subject_str = triple.subject().to_string();
+            let object_str = triple.object().to_string();
             let head_emb = entity_embs
-                .get(&triple.subject().to_string())
+                .get(&subject_str)
                 .ok_or_else(|| anyhow!("Entity not found"))?;
             let tail_emb = entity_embs
-                .get(&triple.object().to_string())
+                .get(&object_str)
                 .ok_or_else(|| anyhow!("Entity not found"))?;
             
             let combined: Vec<f32> = head_emb
@@ -608,11 +611,12 @@ impl KnowledgeGraphEmbedding for ComplEx {
         let mut embeddings = Vec::new();
         
         for triple in triples {
+            let subject_str = triple.subject().to_string();
             let head_real = entity_real
-                .get(&triple.subject().to_string())
+                .get(&subject_str)
                 .ok_or_else(|| anyhow!("Entity not found"))?;
             let head_imag = entity_imag
-                .get(&triple.subject().to_string())
+                .get(&subject_str)
                 .ok_or_else(|| anyhow!("Entity not found"))?;
             
             // Combine real and imaginary parts
@@ -741,7 +745,7 @@ pub fn create_embedding_model(config: EmbeddingConfig) -> Result<Arc<dyn Knowled
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{NamedNode, Literal};
+    use crate::model::NamedNode;
     
     #[tokio::test]
     async fn test_transe_creation() {
@@ -770,9 +774,9 @@ mod tests {
         transe.initialize_embeddings(&triples).await.unwrap();
         
         let score = transe.score_triple(
-            "http://example.org/alice",
-            "http://example.org/knows",
-            "http://example.org/bob",
+            "<http://example.org/alice>",
+            "<http://example.org/knows>",
+            "<http://example.org/bob>",
         ).await.unwrap();
         
         assert!(score > 0.0);

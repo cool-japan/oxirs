@@ -49,7 +49,7 @@ fn test_training_data_structure() {
     let subject = NamedNode::new("http://example.org/person1").unwrap();
     let name_literal = Literal::new_simple_literal("John Doe");
 
-    let triple = Triple::new(subject.into(), name_predicate.into(), name_literal.into());
+    let triple = Triple::new(subject, name_predicate, name_literal);
 
     let example = ShapeExample {
         graph_data: vec![triple],

@@ -1175,7 +1175,8 @@ pub fn print_quoted_str(string: &str, f: &mut impl Write) -> fmt::Result {
 
 /// A [directional language-tagged string](https://www.w3.org/TR/rdf12-concepts/#dfn-dir-lang-string) [base-direction](https://www.w3.org/TR/rdf12-concepts/#dfn-base-direction)
 #[cfg(feature = "rdf-12")]
-#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum BaseDirection {
     /// the initial text direction is set to left-to-right
     Ltr,

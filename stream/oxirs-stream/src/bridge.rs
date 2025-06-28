@@ -932,8 +932,10 @@ impl MessageBridgeManager {
             // Update average processing time
             let total_messages = bridge.stats.messages_sent + bridge.stats.messages_failed;
             if total_messages > 0 {
-                bridge.stats.avg_processing_time = 
-                    (bridge.stats.avg_processing_time * (total_messages - 1) + duration) / total_messages;
+                let avg_nanos = bridge.stats.avg_processing_time.as_nanos() as u64;
+                let duration_nanos = duration.as_nanos() as u64;
+                let new_avg_nanos = (avg_nanos * (total_messages - 1) + duration_nanos) / total_messages;
+                bridge.stats.avg_processing_time = Duration::from_nanos(new_avg_nanos);
             }
         }
     }

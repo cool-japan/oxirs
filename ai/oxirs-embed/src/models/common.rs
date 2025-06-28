@@ -1,6 +1,6 @@
 //! Common utilities and functions used across embedding models
 
-use anyhow::Result;
+// Removed unused import
 use ndarray::{Array1, Array2};
 use rand::prelude::*;
 use rand_distr::{Distribution, Uniform};

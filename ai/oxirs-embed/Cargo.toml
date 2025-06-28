@@ -12,8 +12,7 @@ categories = ["database", "science", "data-structures", "algorithms"]
 rust-version = "1.70"
 
 [dependencies]
-# Core dependencies
-oxirs-core = { path = "../../core/oxirs-core" }
+# Core dependencies - avoiding broken oxirs-core for now
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 anyhow = "1.0"
@@ -28,6 +27,8 @@ tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "sync", "ti
 async-trait = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
 rand_distr = "0.4"
+tracing-subscriber = "0.3"
+tempfile = "3.0"
 
 # API dependencies (optional)
 axum = { version = "0.7", features = ["json"], optional = true }

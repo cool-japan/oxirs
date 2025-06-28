@@ -5,8 +5,7 @@
 
 use crate::ai::AiConfig;
 use crate::model::{Triple, NamedNode, Literal};
-use crate::OxirsError;
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

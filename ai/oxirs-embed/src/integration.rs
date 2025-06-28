@@ -60,7 +60,7 @@ impl VectorStoreBridge {
         let entities = model.get_entities();
         for entity in &entities {
             match model.get_entity_embedding(entity) {
-                Ok(embedding) => {
+                Ok(_embedding) => {
                     let uri = self.generate_entity_uri(entity);
                     self.entity_mappings.insert(entity.clone(), uri);
                     sync_stats.entities_synced += 1;
@@ -76,7 +76,7 @@ impl VectorStoreBridge {
         let relations = model.get_relations();
         for relation in &relations {
             match model.get_relation_embedding(relation) {
-                Ok(embedding) => {
+                Ok(_embedding) => {
                     let uri = self.generate_relation_uri(relation);
                     self.relation_mappings.insert(relation.clone(), uri);
                     sync_stats.relations_synced += 1;
@@ -102,8 +102,8 @@ impl VectorStoreBridge {
     }
 
     /// Find similar entities using vector similarity
-    pub fn find_similar_entities(&self, entity: &str, k: usize) -> Result<Vec<(String, f32)>> {
-        if let Some(uri) = self.entity_mappings.get(entity) {
+    pub fn find_similar_entities(&self, entity: &str, _k: usize) -> Result<Vec<(String, f32)>> {
+        if let Some(_uri) = self.entity_mappings.get(entity) {
             // This would require extending VectorStore to support querying by URI
             // For now, we return empty results
             debug!("Searching for entities similar to: {}", entity);
@@ -114,8 +114,8 @@ impl VectorStoreBridge {
     }
 
     /// Find similar relations using vector similarity
-    pub fn find_similar_relations(&self, relation: &str, k: usize) -> Result<Vec<(String, f32)>> {
-        if let Some(uri) = self.relation_mappings.get(relation) {
+    pub fn find_similar_relations(&self, relation: &str, _k: usize) -> Result<Vec<(String, f32)>> {
+        if let Some(_uri) = self.relation_mappings.get(relation) {
             debug!("Searching for relations similar to: {}", relation);
             Ok(vec![])
         } else {
@@ -234,7 +234,7 @@ impl ChatIntegration {
         }
 
         // Take the last N messages based on context window
-        let recent_messages: Vec<&String> =
+        let _recent_messages: Vec<&String> =
             messages.iter().rev().take(self.context_window).collect();
 
         // For now, just return a dummy embedding
@@ -248,7 +248,9 @@ impl ChatIntegration {
 
 /// SPARQL integration for query enhancement
 pub struct SparqlIntegration {
+    #[allow(dead_code)]
     model: Box<dyn EmbeddingModel>,
+    #[allow(dead_code)]
     similarity_boost: f32,
 }
 
@@ -376,9 +378,9 @@ mod tests {
     #[test]
     fn test_vector_store_bridge() {
         let config = ModelConfig::default().with_dimensions(10);
-        let model = TransE::new(config);
+        let _model = TransE::new(config);
 
-        let mut bridge = VectorStoreBridge::new();
+        let bridge = VectorStoreBridge::new();
 
         // Test URI generation
         let entity_uri = bridge.generate_entity_uri("test_entity");

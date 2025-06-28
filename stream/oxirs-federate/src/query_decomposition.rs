@@ -459,20 +459,22 @@ impl QueryDecomposer {
             let cost = self.cost_estimator.estimate_pattern_cost(service, &patterns);
             total_cost += cost;
 
+            let estimated_results = self.estimate_result_size(service, &patterns);
             steps.push(PlanStep {
                 service_id: service_id.clone(),
                 patterns,
                 filters: Vec::new(),
                 estimated_cost: cost,
-                estimated_results: self.estimate_result_size(service, &patterns),
+                estimated_results,
             });
         }
 
+        let requires_join = steps.len() > 1;
         Ok(Some(ComponentPlan {
             strategy: PlanStrategy::SpecializedServices,
             steps,
             total_cost,
-            requires_join: steps.len() > 1,
+            requires_join,
         }))
     }
 
@@ -1217,10 +1219,12 @@ impl QueryDecomposer {
 
     /// Check if two patterns share any variables
     fn patterns_share_variables(&self, p1: &TriplePattern, p2: &TriplePattern) -> bool {
-        let p1_vars: HashSet<_> = [&p1.subject, &p1.predicate, &p1.object]
-            .iter().filter(|v| v.starts_with('?')).collect();
-        let p2_vars: HashSet<_> = [&p2.subject, &p2.predicate, &p2.object]
-            .iter().filter(|v| v.starts_with('?')).collect();
+        let p1_parts = vec![&p1.subject, &p1.predicate, &p1.object];
+        let p1_vars: HashSet<_> = p1_parts
+            .into_iter().filter(|v| v.starts_with('?')).collect();
+        let p2_parts = vec![&p2.subject, &p2.predicate, &p2.object];
+        let p2_vars: HashSet<_> = p2_parts
+            .into_iter().filter(|v| v.starts_with('?')).collect();
         
         !p1_vars.is_disjoint(&p2_vars)
     }
@@ -1234,7 +1238,7 @@ impl QueryDecomposer {
         Vec::new() // Simplified implementation
     }
 
-    fn find_best_service_for_group(&self, _group: &[(usize, TriplePattern)], services: &[&FederatedService]) -> Option<&FederatedService> {
+    fn find_best_service_for_group<'a>(&self, _group: &[(usize, TriplePattern)], services: &[&'a FederatedService]) -> Option<&'a FederatedService> {
         services.first().copied() // Simplified implementation
     }
 

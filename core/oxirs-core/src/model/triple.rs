@@ -32,6 +32,11 @@ impl Triple {
             object: object.into(),
         }
     }
+    
+    /// Returns a reference to this triple
+    pub fn as_ref(&self) -> TripleRef<'_> {
+        TripleRef::from(self)
+    }
 
     /// Returns the subject of this triple
     pub fn subject(&self) -> &Subject {
@@ -243,6 +248,20 @@ impl<'a> TripleRef<'a> {
             predicate: self.predicate.to_owned(),
             object: self.object.to_owned(),
         }
+    }
+    
+    /// Converts to an owned triple (alias for to_owned)
+    pub fn into_owned(self) -> Triple {
+        self.to_owned()
+    }
+    
+    /// Creates a QuadRef from this triple with the specified graph
+    pub fn in_graph(self, graph_name: Option<&'a crate::model::NamedNode>) -> crate::model::QuadRef<'a> {
+        let graph_ref = match graph_name {
+            Some(node) => crate::model::GraphNameRef::NamedNode(node),
+            None => crate::model::GraphNameRef::DefaultGraph,
+        };
+        crate::model::QuadRef::new(self.subject, self.predicate, self.object, graph_ref)
     }
 }
 

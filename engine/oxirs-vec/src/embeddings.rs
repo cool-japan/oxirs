@@ -5,6 +5,7 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
+use std::time::Duration;
 // AsAny trait will be defined locally
 
 /// Embedding model configuration
@@ -372,6 +373,20 @@ pub enum TransformerModelType {
     Custom(String),
 }
 
+/// Detailed information about a transformer model
+#[derive(Debug, Clone)]
+pub struct ModelDetails {
+    pub vocab_size: usize,
+    pub num_layers: usize,
+    pub num_attention_heads: usize,
+    pub hidden_size: usize,
+    pub intermediate_size: usize,
+    pub max_position_embeddings: usize,
+    pub supports_languages: Vec<String>,
+    pub model_size_mb: usize,
+    pub typical_inference_time_ms: u64,
+}
+
 impl Default for TransformerModelType {
     fn default() -> Self {
         TransformerModelType::BERT
@@ -390,14 +405,142 @@ impl SentenceTransformerGenerator {
         Self { config, model_type }
     }
 
+    /// Create a new RoBERTa model generator
+    pub fn roberta(config: EmbeddingConfig) -> Self {
+        Self::with_model_type(config, TransformerModelType::RoBERTa)
+    }
+
+    /// Create a new DistilBERT model generator
+    pub fn distilbert(config: EmbeddingConfig) -> Self {
+        let adjusted_config = EmbeddingConfig {
+            dimensions: 384, // DistilBERT has smaller dimensions
+            ..config
+        };
+        Self::with_model_type(adjusted_config, TransformerModelType::DistilBERT)
+    }
+
+    /// Create a new multilingual BERT model generator
+    pub fn multilingual_bert(config: EmbeddingConfig) -> Self {
+        Self::with_model_type(config, TransformerModelType::MultiBERT)
+    }
+
+    /// Get the current model type
+    pub fn model_type(&self) -> &TransformerModelType {
+        &self.model_type
+    }
+
+    /// Get detailed information about the current model
+    pub fn model_details(&self) -> ModelDetails {
+        self.get_model_details()
+    }
+
+    /// Check if the model supports a specific language
+    pub fn supports_language(&self, language_code: &str) -> bool {
+        let details = self.get_model_details();
+        details.supports_languages.contains(&language_code.to_string())
+    }
+
+    /// Get the estimated inference time for a given text length
+    pub fn estimate_inference_time(&self, text_length: usize) -> u64 {
+        let details = self.get_model_details();
+        let base_time = details.typical_inference_time_ms;
+        
+        // Rough estimation: longer texts take more time
+        let length_factor = (text_length as f64 / 100.0).sqrt().max(1.0);
+        (base_time as f64 * length_factor) as u64
+    }
+
+    /// Get the memory footprint of the model in MB
+    pub fn model_size_mb(&self) -> usize {
+        self.get_model_details().model_size_mb
+    }
+
+    /// Get efficiency rating (higher is better/faster)
+    pub fn efficiency_rating(&self) -> f32 {
+        match &self.model_type {
+            TransformerModelType::DistilBERT => 1.5, // Fastest
+            TransformerModelType::BERT => 1.0, // Baseline
+            TransformerModelType::RoBERTa => 0.95, // Slightly slower
+            TransformerModelType::MultiBERT => 0.8, // Slowest due to multilingual complexity
+            TransformerModelType::Custom(_) => 1.0, // Unknown, assume baseline
+        }
+    }
+
     /// Get model-specific configuration adjustments
     fn get_model_config(&self) -> (usize, usize, f32) {
         match &self.model_type {
             TransformerModelType::BERT => (768, 512, 1.0), // (dimensions, max_seq_len, efficiency)
-            TransformerModelType::RoBERTa => (768, 512, 0.95), // Slightly slower than BERT
-            TransformerModelType::DistilBERT => (768, 512, 1.5), // Faster, smaller
-            TransformerModelType::MultiBERT => (768, 512, 0.8), // Slower for multilingual
+            TransformerModelType::RoBERTa => (768, 514, 0.95), // RoBERTa supports slightly longer sequences
+            TransformerModelType::DistilBERT => (384, 512, 1.5), // DistilBERT is smaller and faster
+            TransformerModelType::MultiBERT => (768, 512, 0.8), // Multilingual BERT, slower but broader language support
             TransformerModelType::Custom(_) => (self.config.dimensions, self.config.max_sequence_length, 1.0),
+        }
+    }
+
+    /// Get model-specific vocabulary size and training details
+    fn get_model_details(&self) -> ModelDetails {
+        match &self.model_type {
+            TransformerModelType::BERT => ModelDetails {
+                vocab_size: 30522,
+                num_layers: 12,
+                num_attention_heads: 12,
+                hidden_size: 768,
+                intermediate_size: 3072,
+                max_position_embeddings: 512,
+                supports_languages: vec!["en".to_string()],
+                model_size_mb: 440,
+                typical_inference_time_ms: 50,
+            },
+            TransformerModelType::RoBERTa => ModelDetails {
+                vocab_size: 50265,
+                num_layers: 12,
+                num_attention_heads: 12,
+                hidden_size: 768,
+                intermediate_size: 3072,
+                max_position_embeddings: 514,
+                supports_languages: vec!["en".to_string()],
+                model_size_mb: 470,
+                typical_inference_time_ms: 55, // Slightly slower due to different training
+            },
+            TransformerModelType::DistilBERT => ModelDetails {
+                vocab_size: 30522,
+                num_layers: 6, // Half the layers of BERT
+                num_attention_heads: 12,
+                hidden_size: 384, // Smaller hidden size
+                intermediate_size: 1536,
+                max_position_embeddings: 512,
+                supports_languages: vec!["en".to_string()],
+                model_size_mb: 250, // Much smaller
+                typical_inference_time_ms: 25, // Much faster
+            },
+            TransformerModelType::MultiBERT => ModelDetails {
+                vocab_size: 120000, // Larger vocabulary for multilingual support
+                num_layers: 12,
+                num_attention_heads: 12,
+                hidden_size: 768,
+                intermediate_size: 3072,
+                max_position_embeddings: 512,
+                supports_languages: vec![
+                    "en".to_string(), "de".to_string(), "fr".to_string(), "es".to_string(),
+                    "it".to_string(), "pt".to_string(), "ru".to_string(), "zh".to_string(),
+                    "ja".to_string(), "ko".to_string(), "ar".to_string(), "hi".to_string(),
+                    "th".to_string(), "tr".to_string(), "pl".to_string(), "nl".to_string(),
+                    "sv".to_string(), "da".to_string(), "no".to_string(), "fi".to_string(),
+                ], // Top 20 languages supported
+                model_size_mb: 670, // Larger due to multilingual vocabulary
+                typical_inference_time_ms: 70, // Slower due to larger vocabulary
+            },
+            TransformerModelType::Custom(path) => ModelDetails {
+                vocab_size: 50000, // Default assumption
+                num_layers: 12,
+                num_attention_heads: 12,
+                hidden_size: self.config.dimensions,
+                intermediate_size: self.config.dimensions * 4,
+                max_position_embeddings: self.config.max_sequence_length,
+                supports_languages: vec!["unknown".to_string()],
+                model_size_mb: 500, // Estimate
+                typical_inference_time_ms: 60,
+            },
         }
     }
 
@@ -411,58 +554,302 @@ impl SentenceTransformerGenerator {
         };
 
         let (dimensions, max_len, efficiency) = self.get_model_config();
+        let model_details = self.get_model_details();
         
-        // Truncate text if too long
-        let processed_text = if text.len() > max_len {
-            &text[..max_len]
-        } else {
-            text
-        };
-
-        // Model-specific adjustments to the hash seed
-        let model_seed = match &self.model_type {
-            TransformerModelType::BERT => text_hash,
-            TransformerModelType::RoBERTa => text_hash.wrapping_mul(1234567),
-            TransformerModelType::DistilBERT => text_hash.wrapping_mul(987654321),
-            TransformerModelType::MultiBERT => text_hash.wrapping_mul(555555555),
-            TransformerModelType::Custom(path) => {
-                let mut hasher = std::collections::hash_map::DefaultHasher::new();
-                path.hash(&mut hasher);
-                text_hash.wrapping_add(hasher.finish())
-            }
-        };
-
-        // Generate deterministic "embeddings" based on model type and text
-        let mut values = Vec::with_capacity(dimensions);
-        let mut seed = model_seed;
-
-        for i in 0..dimensions {
-            seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
-            
-            // Add some model-specific variance
-            let model_variance = match &self.model_type {
-                TransformerModelType::BERT => 0.0,
-                TransformerModelType::RoBERTa => (i as f32 * 0.01).sin(),
-                TransformerModelType::DistilBERT => (i as f32 * 0.02).cos(),
-                TransformerModelType::MultiBERT => (i as f32 * 0.005).sin() * 0.5,
-                TransformerModelType::Custom(_) => (i as f32 * 0.001).tan().clamp(-0.1, 0.1),
-            };
-            
-            let normalized = (seed as f32) / (u64::MAX as f32);
-            let value = ((normalized - 0.5) * 2.0 * efficiency) + model_variance;
-            values.push(value);
-        }
+        // Apply model-specific text preprocessing
+        let processed_text = self.preprocess_text_for_model(text, max_len)?;
+        
+        // Simulate tokenization differences between models
+        let token_ids = self.simulate_tokenization(&processed_text, &model_details);
+        
+        // Generate model-specific embeddings
+        let values = self.generate_embeddings_from_tokens(&token_ids, dimensions, &model_details)?;
 
         if self.config.normalize {
             let magnitude: f32 = values.iter().map(|x| x * x).sum::<f32>().sqrt();
             if magnitude > 0.0 {
-                for value in &mut values {
+                let mut normalized_values = values;
+                for value in &mut normalized_values {
                     *value /= magnitude;
                 }
+                return Ok(Vector::new(normalized_values));
             }
         }
 
         Ok(Vector::new(values))
+    }
+
+    /// Preprocess text according to model-specific requirements
+    fn preprocess_text_for_model(&self, text: &str, max_len: usize) -> Result<String> {
+        let processed = match &self.model_type {
+            TransformerModelType::BERT => {
+                // BERT uses [CLS] and [SEP] tokens
+                let truncated = if text.len() > max_len - 20 { // Reserve space for special tokens
+                    &text[..max_len - 20]
+                } else {
+                    text
+                };
+                format!("[CLS] {} [SEP]", truncated.to_lowercase())
+            },
+            TransformerModelType::RoBERTa => {
+                // RoBERTa uses <s> and </s> tokens and preserves case better
+                let truncated = if text.len() > max_len - 10 {
+                    &text[..max_len - 10]
+                } else {
+                    text
+                };
+                format!("<s>{}</s>", truncated) // RoBERTa preserves case
+            },
+            TransformerModelType::DistilBERT => {
+                // DistilBERT is similar to BERT but more aggressive truncation due to efficiency
+                let truncated = if text.len() > max_len - 20 {
+                    &text[..max_len - 20]
+                } else {
+                    text
+                };
+                format!("[CLS] {} [SEP]", truncated.to_lowercase())
+            },
+            TransformerModelType::MultiBERT => {
+                // Multilingual BERT handles multiple languages, no case conversion for non-Latin scripts
+                let truncated = if text.len() > max_len - 20 {
+                    &text[..max_len - 20]
+                } else {
+                    text
+                };
+                // Detect if text contains non-Latin characters
+                let has_non_latin = text.chars().any(|c| !c.is_ascii());
+                if has_non_latin {
+                    format!("[CLS] {} [SEP]", truncated) // Preserve case for non-Latin
+                } else {
+                    format!("[CLS] {} [SEP]", truncated.to_lowercase()) // Lowercase for Latin
+                }
+            },
+            TransformerModelType::Custom(_) => {
+                // Basic preprocessing for custom models
+                let truncated = if text.len() > max_len {
+                    &text[..max_len]
+                } else {
+                    text
+                };
+                truncated.to_string()
+            }
+        };
+        
+        Ok(processed)
+    }
+
+    /// Simulate tokenization process for different models
+    fn simulate_tokenization(&self, text: &str, model_details: &ModelDetails) -> Vec<u32> {
+        let mut token_ids = Vec::new();
+        
+        // Simple word-based tokenization simulation
+        let words: Vec<&str> = text.split_whitespace().collect();
+        
+        for word in words {
+            // Simulate subword tokenization
+            let subwords = match &self.model_type {
+                TransformerModelType::RoBERTa => {
+                    // RoBERTa uses byte-pair encoding, tends to create more subwords
+                    self.simulate_bpe_tokenization(word, model_details.vocab_size)
+                },
+                TransformerModelType::DistilBERT | TransformerModelType::BERT => {
+                    // BERT uses WordPiece tokenization
+                    self.simulate_wordpiece_tokenization(word, model_details.vocab_size)
+                },
+                TransformerModelType::MultiBERT => {
+                    // Multilingual BERT has larger vocabulary, fewer subwords
+                    self.simulate_multilingual_tokenization(word, model_details.vocab_size)
+                },
+                TransformerModelType::Custom(_) => {
+                    // Simple tokenization for custom models
+                    vec![self.word_to_token_id(word, model_details.vocab_size)]
+                }
+            };
+            
+            token_ids.extend(subwords);
+        }
+        
+        // Truncate to max sequence length
+        token_ids.truncate(model_details.max_position_embeddings - 2); // Reserve space for special tokens
+        token_ids
+    }
+
+    /// Simulate BPE tokenization (used by RoBERTa)
+    fn simulate_bpe_tokenization(&self, word: &str, vocab_size: usize) -> Vec<u32> {
+        let mut tokens = Vec::new();
+        let mut remaining = word;
+        
+        while !remaining.is_empty() {
+            let chunk_size = if remaining.len() > 4 { 4 } else { remaining.len() };
+            let chunk = &remaining[..chunk_size];
+            tokens.push(self.word_to_token_id(chunk, vocab_size));
+            remaining = &remaining[chunk_size..];
+        }
+        
+        tokens
+    }
+
+    /// Simulate WordPiece tokenization (used by BERT)
+    fn simulate_wordpiece_tokenization(&self, word: &str, vocab_size: usize) -> Vec<u32> {
+        if word.len() <= 6 {
+            vec![self.word_to_token_id(word, vocab_size)]
+        } else {
+            let mid = word.len() / 2;
+            vec![
+                self.word_to_token_id(&word[..mid], vocab_size),
+                self.word_to_token_id(&format!("##{}", &word[mid..]), vocab_size), // ## prefix for subwords
+            ]
+        }
+    }
+
+    /// Simulate multilingual tokenization (larger vocab = fewer subwords)
+    fn simulate_multilingual_tokenization(&self, word: &str, vocab_size: usize) -> Vec<u32> {
+        // Multilingual models have larger vocabularies, so less subword splitting
+        if word.len() <= 10 {
+            vec![self.word_to_token_id(word, vocab_size)]
+        } else {
+            let mid = word.len() / 2;
+            vec![
+                self.word_to_token_id(&word[..mid], vocab_size),
+                self.word_to_token_id(&word[mid..], vocab_size),
+            ]
+        }
+    }
+
+    /// Convert word to token ID
+    fn word_to_token_id(&self, word: &str, vocab_size: usize) -> u32 {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        word.hash(&mut hasher);
+        (hasher.finish() % vocab_size as u64) as u32
+    }
+
+    /// Generate embeddings from token IDs using model-specific patterns
+    fn generate_embeddings_from_tokens(&self, token_ids: &[u32], dimensions: usize, model_details: &ModelDetails) -> Result<Vec<f32>> {
+        let mut values = vec![0.0; dimensions];
+        
+        // Model-specific embedding generation
+        match &self.model_type {
+            TransformerModelType::BERT => {
+                self.generate_bert_style_embeddings(token_ids, &mut values, model_details)
+            },
+            TransformerModelType::RoBERTa => {
+                self.generate_roberta_style_embeddings(token_ids, &mut values, model_details)
+            },
+            TransformerModelType::DistilBERT => {
+                self.generate_distilbert_style_embeddings(token_ids, &mut values, model_details)
+            },
+            TransformerModelType::MultiBERT => {
+                self.generate_multibert_style_embeddings(token_ids, &mut values, model_details)
+            },
+            TransformerModelType::Custom(_) => {
+                self.generate_custom_style_embeddings(token_ids, &mut values, model_details)
+            },
+        }
+        
+        Ok(values)
+    }
+
+    /// Generate BERT-style embeddings
+    fn generate_bert_style_embeddings(&self, token_ids: &[u32], values: &mut [f32], model_details: &ModelDetails) {
+        for (i, &token_id) in token_ids.iter().enumerate() {
+            let mut seed = token_id as u64;
+            for j in 0..values.len() {
+                seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+                let normalized = (seed as f32) / (u64::MAX as f32);
+                let position_encoding = ((i as f32 / 512.0) * 2.0 * std::f32::consts::PI).sin() * 0.1;
+                values[j] += ((normalized - 0.5) * 2.0) + position_encoding;
+            }
+        }
+        
+        // Average the contributions from all tokens
+        if !token_ids.is_empty() {
+            for value in values.iter_mut() {
+                *value /= token_ids.len() as f32;
+            }
+        }
+    }
+
+    /// Generate RoBERTa-style embeddings (no segment embeddings, different position encoding)
+    fn generate_roberta_style_embeddings(&self, token_ids: &[u32], values: &mut [f32], model_details: &ModelDetails) {
+        for (i, &token_id) in token_ids.iter().enumerate() {
+            let mut seed = token_id.wrapping_mul(31415927); // Different seed pattern
+            for j in 0..values.len() {
+                seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+                let normalized = (seed as f32) / (u64::MAX as f32);
+                // RoBERTa uses learned position embeddings starting from index 2
+                let position_encoding = ((i as f32 + 2.0) / 514.0 * 2.0 * std::f32::consts::PI).cos() * 0.1;
+                values[j] += ((normalized - 0.5) * 2.0) + position_encoding;
+            }
+        }
+        
+        if !token_ids.is_empty() {
+            for value in values.iter_mut() {
+                *value /= token_ids.len() as f32;
+            }
+        }
+    }
+
+    /// Generate DistilBERT-style embeddings (simpler, faster)
+    fn generate_distilbert_style_embeddings(&self, token_ids: &[u32], values: &mut [f32], model_details: &ModelDetails) {
+        // DistilBERT has fewer layers and smaller hidden size
+        for (i, &token_id) in token_ids.iter().enumerate() {
+            let mut seed = token_id as u64;
+            for j in 0..values.len() {
+                seed = seed.wrapping_mul(982451653).wrapping_add(12345); // Faster computation
+                let normalized = (seed as f32) / (u64::MAX as f32);
+                // Simpler position encoding
+                let position_encoding = (i as f32 / 512.0).sin() * 0.05;
+                values[j] += ((normalized - 0.5) * 1.5) + position_encoding; // Slightly different scale
+            }
+        }
+        
+        if !token_ids.is_empty() {
+            for value in values.iter_mut() {
+                *value /= token_ids.len() as f32;
+            }
+        }
+    }
+
+    /// Generate multilingual BERT-style embeddings
+    fn generate_multibert_style_embeddings(&self, token_ids: &[u32], values: &mut [f32], model_details: &ModelDetails) {
+        for (i, &token_id) in token_ids.iter().enumerate() {
+            // Multilingual models have different patterns due to cross-lingual training
+            let mut seed = token_id.wrapping_mul(2654435761); // Different multiplier for multilingual
+            for j in 0..values.len() {
+                seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+                let normalized = (seed as f32) / (u64::MAX as f32);
+                let position_encoding = ((i as f32 / 512.0) * 2.0 * std::f32::consts::PI).sin() * 0.08;
+                // Add language-agnostic patterns
+                let cross_lingual_bias = (j as f32 / values.len() as f32 * std::f32::consts::PI).cos() * 0.05;
+                values[j] += ((normalized - 0.5) * 1.8) + position_encoding + cross_lingual_bias;
+            }
+        }
+        
+        if !token_ids.is_empty() {
+            for value in values.iter_mut() {
+                *value /= token_ids.len() as f32;
+            }
+        }
+    }
+
+    /// Generate custom model embeddings
+    fn generate_custom_style_embeddings(&self, token_ids: &[u32], values: &mut [f32], model_details: &ModelDetails) {
+        // Simple approach for custom models
+        for &token_id in token_ids {
+            let mut seed = token_id as u64;
+            for value in values.iter_mut() {
+                seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+                let normalized = (seed as f32) / (u64::MAX as f32);
+                *value += (normalized - 0.5) * 2.0;
+            }
+        }
+        
+        if !token_ids.is_empty() {
+            for value in values.iter_mut() {
+                *value /= token_ids.len() as f32;
+            }
+        }
     }
 }
 
@@ -672,7 +1059,7 @@ pub struct OpenAIEmbeddingGenerator {
     openai_config: OpenAIConfig,
     client: reqwest::Client,
     rate_limiter: RateLimiter,
-    request_cache: lru::LruCache<u64, CachedEmbedding>,
+    request_cache: std::sync::Arc<std::sync::Mutex<lru::LruCache<u64, CachedEmbedding>>>,
     metrics: OpenAIMetrics,
 }
 
@@ -824,7 +1211,7 @@ impl OpenAIEmbeddingGenerator {
             openai_config: openai_config.clone(),
             client,
             rate_limiter: RateLimiter::new(openai_config.requests_per_minute),
-            request_cache: lru::LruCache::new(cache_size),
+            request_cache: std::sync::Arc::new(std::sync::Mutex::new(lru::LruCache::new(cache_size))),
             metrics: OpenAIMetrics::default(),
         })
     }
@@ -1019,20 +1406,32 @@ impl OpenAIEmbeddingGenerator {
         // Check cache first
         if self.openai_config.enable_cache {
             let hash = content.content_hash();
-            let cached_result = self.request_cache.get(&hash).map(|cached| {
-                if self.is_cache_valid(cached) {
-                    Some(cached.vector.clone())
+            
+            // Check if cached entry exists and is valid
+            let cached_vector = if let Ok(mut cache) = self.request_cache.lock() {
+                if let Some(cached) = cache.get(&hash) {
+                    let is_valid = cached.cached_at.elapsed().unwrap_or_default() 
+                        < Duration::from_secs(self.openai_config.cache_ttl_seconds);
+                    if is_valid {
+                        Some(cached.vector.clone())
+                    } else {
+                        None
+                    }
                 } else {
                     None
                 }
-            }).flatten();
+            } else {
+                None
+            };
             
-            if let Some(result) = cached_result {
+            if let Some(result) = cached_vector {
                 self.update_cache_hit();
                 return Ok(result);
             } else {
                 // Remove expired entry if it exists
-                self.request_cache.pop(&hash);
+                if let Ok(mut cache) = self.request_cache.lock() {
+                    cache.pop(&hash);
+                }
                 self.update_cache_miss();
             }
         }
@@ -1065,7 +1464,9 @@ impl OpenAIEmbeddingGenerator {
                 model: self.openai_config.model.clone(),
                 cost_usd: cost,
             };
-            self.request_cache.put(hash, cached_embedding);
+            if let Ok(mut cache) = self.request_cache.lock() {
+                cache.put(hash, cached_embedding);
+            }
         }
 
         Ok(vector)
@@ -1113,7 +1514,9 @@ impl OpenAIEmbeddingGenerator {
                         model: self.openai_config.model.clone(),
                         cost_usd: batch_cost,
                     };
-                    self.request_cache.put(hash, cached_embedding);
+                    if let Ok(mut cache) = self.request_cache.lock() {
+                cache.put(hash, cached_embedding);
+            }
                 }
                 
                 results.push(vector);
@@ -1125,20 +1528,29 @@ impl OpenAIEmbeddingGenerator {
 
     /// Clear the request cache
     pub fn clear_cache(&mut self) {
-        self.request_cache.clear();
+        if let Ok(mut cache) = self.request_cache.lock() {
+            cache.clear();
+        }
     }
 
     /// Get cache statistics
     pub fn cache_stats(&self) -> (usize, Option<usize>) {
-        (self.request_cache.len(), Some(self.request_cache.cap().into()))
+        if let Ok(cache) = self.request_cache.lock() {
+            (cache.len(), Some(cache.cap().into()))
+        } else {
+            (0, None)
+        }
     }
     
     /// Get total cache cost
     pub fn get_cache_cost(&self) -> f64 {
-        self.request_cache
-            .iter()
-            .map(|(_, cached)| cached.cost_usd)
-            .sum()
+        if let Ok(cache) = self.request_cache.lock() {
+            cache.iter()
+                .map(|(_, cached)| cached.cost_usd)
+                .sum()
+        } else {
+            0.0
+        }
     }
     
     /// Get API usage metrics
@@ -1205,8 +1617,10 @@ impl EmbeddingGenerator for OpenAIEmbeddingGenerator {
         // Check cache first (readonly access is fine)
         if self.openai_config.enable_cache {
             let hash = content.content_hash();
-            if let Some(cached) = self.request_cache.get(&hash) {
-                return Ok(cached.clone());
+            if let Ok(mut cache) = self.request_cache.lock() {
+                if let Some(cached) = cache.get(&hash) {
+                    return Ok(cached.vector.clone());
+                }
             }
         }
         
@@ -1244,5 +1658,271 @@ impl AsAny for OpenAIEmbeddingGenerator {
 
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_transformer_model_types() {
+        let config = EmbeddingConfig::default();
+        
+        // Test BERT
+        let bert = SentenceTransformerGenerator::new(config.clone());
+        assert!(matches!(bert.model_type(), TransformerModelType::BERT));
+        assert_eq!(bert.dimensions(), 384); // Default config dimensions
+        
+        // Test RoBERTa
+        let roberta = SentenceTransformerGenerator::roberta(config.clone());
+        assert!(matches!(roberta.model_type(), TransformerModelType::RoBERTa));
+        
+        // Test DistilBERT
+        let distilbert = SentenceTransformerGenerator::distilbert(config.clone());
+        assert!(matches!(distilbert.model_type(), TransformerModelType::DistilBERT));
+        assert_eq!(distilbert.dimensions(), 384); // DistilBERT uses smaller dimensions
+        
+        // Test Multilingual BERT
+        let multibert = SentenceTransformerGenerator::multilingual_bert(config.clone());
+        assert!(matches!(multibert.model_type(), TransformerModelType::MultiBERT));
+    }
+
+    #[test]
+    fn test_model_details() {
+        let config = EmbeddingConfig::default();
+        
+        // Test BERT details
+        let bert = SentenceTransformerGenerator::new(config.clone());
+        let bert_details = bert.model_details();
+        assert_eq!(bert_details.vocab_size, 30522);
+        assert_eq!(bert_details.num_layers, 12);
+        assert_eq!(bert_details.hidden_size, 768);
+        assert!(bert_details.supports_languages.contains(&"en".to_string()));
+        
+        // Test RoBERTa details
+        let roberta = SentenceTransformerGenerator::roberta(config.clone());
+        let roberta_details = roberta.model_details();
+        assert_eq!(roberta_details.vocab_size, 50265); // Larger vocab than BERT
+        assert_eq!(roberta_details.max_position_embeddings, 514); // RoBERTa supports longer sequences
+        
+        // Test DistilBERT details
+        let distilbert = SentenceTransformerGenerator::distilbert(config.clone());
+        let distilbert_details = distilbert.model_details();
+        assert_eq!(distilbert_details.num_layers, 6); // Half the layers of BERT
+        assert_eq!(distilbert_details.hidden_size, 384); // Smaller hidden size
+        assert!(distilbert_details.model_size_mb < bert_details.model_size_mb); // Smaller model
+        assert!(distilbert_details.typical_inference_time_ms < bert_details.typical_inference_time_ms); // Faster
+        
+        // Test Multilingual BERT details
+        let multibert = SentenceTransformerGenerator::multilingual_bert(config.clone());
+        let multibert_details = multibert.model_details();
+        assert_eq!(multibert_details.vocab_size, 120000); // Much larger vocabulary
+        assert!(multibert_details.supports_languages.len() > 10); // Supports many languages
+        assert!(multibert_details.supports_languages.contains(&"zh".to_string())); // Chinese
+        assert!(multibert_details.supports_languages.contains(&"de".to_string())); // German
+    }
+
+    #[test]
+    fn test_language_support() {
+        let config = EmbeddingConfig::default();
+        
+        // BERT and DistilBERT only support English
+        let bert = SentenceTransformerGenerator::new(config.clone());
+        assert!(bert.supports_language("en"));
+        assert!(!bert.supports_language("zh"));
+        assert!(!bert.supports_language("de"));
+        
+        let distilbert = SentenceTransformerGenerator::distilbert(config.clone());
+        assert!(distilbert.supports_language("en"));
+        assert!(!distilbert.supports_language("zh"));
+        
+        // Multilingual BERT supports many languages
+        let multibert = SentenceTransformerGenerator::multilingual_bert(config.clone());
+        assert!(multibert.supports_language("en"));
+        assert!(multibert.supports_language("zh"));
+        assert!(multibert.supports_language("de"));
+        assert!(multibert.supports_language("fr"));
+        assert!(multibert.supports_language("es"));
+        assert!(!multibert.supports_language("unknown_lang"));
+    }
+
+    #[test]
+    fn test_efficiency_ratings() {
+        let config = EmbeddingConfig::default();
+        
+        let bert = SentenceTransformerGenerator::new(config.clone());
+        let roberta = SentenceTransformerGenerator::roberta(config.clone());
+        let distilbert = SentenceTransformerGenerator::distilbert(config.clone());
+        let multibert = SentenceTransformerGenerator::multilingual_bert(config.clone());
+        
+        // DistilBERT should be the most efficient
+        assert!(distilbert.efficiency_rating() > bert.efficiency_rating());
+        assert!(distilbert.efficiency_rating() > roberta.efficiency_rating());
+        assert!(distilbert.efficiency_rating() > multibert.efficiency_rating());
+        
+        // RoBERTa should be slightly less efficient than BERT
+        assert!(bert.efficiency_rating() > roberta.efficiency_rating());
+        
+        // Multilingual BERT should be the least efficient
+        assert!(bert.efficiency_rating() > multibert.efficiency_rating());
+        assert!(roberta.efficiency_rating() > multibert.efficiency_rating());
+    }
+
+    #[test]
+    fn test_inference_time_estimation() {
+        let config = EmbeddingConfig::default();
+        let distilbert = SentenceTransformerGenerator::distilbert(config.clone());
+        let bert = SentenceTransformerGenerator::new(config.clone());
+        
+        // Short text
+        let short_time_distilbert = distilbert.estimate_inference_time(50);
+        let short_time_bert = bert.estimate_inference_time(50);
+        
+        // Long text
+        let long_time_distilbert = distilbert.estimate_inference_time(500);
+        let long_time_bert = bert.estimate_inference_time(500);
+        
+        // DistilBERT should be faster for both short and long texts
+        assert!(short_time_distilbert < short_time_bert);
+        assert!(long_time_distilbert < long_time_bert);
+        
+        // Longer texts should take more time
+        assert!(long_time_distilbert > short_time_distilbert);
+        assert!(long_time_bert > short_time_bert);
+    }
+
+    #[test]
+    fn test_model_specific_text_preprocessing() {
+        let config = EmbeddingConfig::default();
+        
+        let bert = SentenceTransformerGenerator::new(config.clone());
+        let roberta = SentenceTransformerGenerator::roberta(config.clone());
+        let multibert = SentenceTransformerGenerator::multilingual_bert(config.clone());
+        
+        let text = "Hello World";
+        
+        // BERT should use [CLS] and [SEP] tokens and lowercase
+        let bert_processed = bert.preprocess_text_for_model(text, 512).unwrap();
+        assert!(bert_processed.contains("[CLS]"));
+        assert!(bert_processed.contains("[SEP]"));
+        assert!(bert_processed.contains("hello world")); // Should be lowercase
+        
+        // RoBERTa should use <s> and </s> tokens and preserve case
+        let roberta_processed = roberta.preprocess_text_for_model(text, 512).unwrap();
+        assert!(roberta_processed.contains("<s>"));
+        assert!(roberta_processed.contains("</s>"));
+        assert!(roberta_processed.contains("Hello World")); // Should preserve case
+        
+        // Multilingual BERT should handle different scripts appropriately
+        let latin_text = "Hello World";
+        let chinese_text = "你好世界";
+        
+        let latin_processed = multibert.preprocess_text_for_model(latin_text, 512).unwrap();
+        let chinese_processed = multibert.preprocess_text_for_model(chinese_text, 512).unwrap();
+        
+        assert!(latin_processed.contains("hello world")); // Latin should be lowercase
+        assert!(chinese_processed.contains("你好世界")); // Chinese should preserve characters
+    }
+
+    #[test]
+    fn test_embedding_generation_differences() {
+        let config = EmbeddingConfig::default();
+        
+        let bert = SentenceTransformerGenerator::new(config.clone());
+        let roberta = SentenceTransformerGenerator::roberta(config.clone());
+        let distilbert = SentenceTransformerGenerator::distilbert(config.clone());
+        
+        let content = EmbeddableContent::Text("This is a test sentence".to_string());
+        
+        let bert_embedding = bert.generate(&content).unwrap();
+        let roberta_embedding = roberta.generate(&content).unwrap();
+        let distilbert_embedding = distilbert.generate(&content).unwrap();
+        
+        // Embeddings should be different between models
+        assert_ne!(bert_embedding.as_f32(), roberta_embedding.as_f32());
+        assert_ne!(bert_embedding.as_f32(), distilbert_embedding.as_f32());
+        assert_ne!(roberta_embedding.as_f32(), distilbert_embedding.as_f32());
+        
+        // DistilBERT should have smaller dimensions
+        assert_eq!(distilbert_embedding.dimensions, 384);
+        assert_eq!(bert_embedding.dimensions, 384); // Using default config dimensions
+        assert_eq!(roberta_embedding.dimensions, 384);
+        
+        // All embeddings should be normalized if config specifies it
+        if config.normalize {
+            let bert_magnitude: f32 = bert_embedding.as_f32().iter().map(|x| x * x).sum::<f32>().sqrt();
+            let roberta_magnitude: f32 = roberta_embedding.as_f32().iter().map(|x| x * x).sum::<f32>().sqrt();
+            let distilbert_magnitude: f32 = distilbert_embedding.as_f32().iter().map(|x| x * x).sum::<f32>().sqrt();
+            
+            assert!((bert_magnitude - 1.0).abs() < 0.1);
+            assert!((roberta_magnitude - 1.0).abs() < 0.1);
+            assert!((distilbert_magnitude - 1.0).abs() < 0.1);
+        }
+    }
+
+    #[test]
+    fn test_tokenization_differences() {
+        let config = EmbeddingConfig::default();
+        
+        let bert = SentenceTransformerGenerator::new(config.clone());
+        let roberta = SentenceTransformerGenerator::roberta(config.clone());
+        let multibert = SentenceTransformerGenerator::multilingual_bert(config.clone());
+        
+        let model_details_bert = bert.get_model_details();
+        let model_details_roberta = roberta.get_model_details();
+        let model_details_multibert = multibert.get_model_details();
+        
+        let complex_word = "preprocessing";
+        
+        // Test different tokenization approaches
+        let bert_tokens = bert.simulate_wordpiece_tokenization(complex_word, model_details_bert.vocab_size);
+        let roberta_tokens = roberta.simulate_bpe_tokenization(complex_word, model_details_roberta.vocab_size);
+        let multibert_tokens = multibert.simulate_multilingual_tokenization(complex_word, model_details_multibert.vocab_size);
+        
+        // RoBERTa BPE should create more subword tokens for complex words
+        assert!(roberta_tokens.len() >= bert_tokens.len());
+        
+        // Multilingual BERT should create fewer subwords due to larger vocabulary
+        assert!(multibert_tokens.len() <= bert_tokens.len());
+        
+        // All tokenizations should produce valid token IDs
+        for token in &bert_tokens {
+            assert!(*token < model_details_bert.vocab_size as u32);
+        }
+        for token in &roberta_tokens {
+            assert!(*token < model_details_roberta.vocab_size as u32);
+        }
+        for token in &multibert_tokens {
+            assert!(*token < model_details_multibert.vocab_size as u32);
+        }
+    }
+
+    #[test]
+    fn test_model_size_comparisons() {
+        let config = EmbeddingConfig::default();
+        
+        let bert = SentenceTransformerGenerator::new(config.clone());
+        let roberta = SentenceTransformerGenerator::roberta(config.clone());
+        let distilbert = SentenceTransformerGenerator::distilbert(config.clone());
+        let multibert = SentenceTransformerGenerator::multilingual_bert(config.clone());
+        
+        let bert_size = bert.model_size_mb();
+        let roberta_size = roberta.model_size_mb();
+        let distilbert_size = distilbert.model_size_mb();
+        let multibert_size = multibert.model_size_mb();
+        
+        // DistilBERT should be the smallest
+        assert!(distilbert_size < bert_size);
+        assert!(distilbert_size < roberta_size);
+        assert!(distilbert_size < multibert_size);
+        
+        // Multilingual BERT should be the largest
+        assert!(multibert_size > bert_size);
+        assert!(multibert_size > roberta_size);
+        assert!(multibert_size > distilbert_size);
+        
+        // RoBERTa should be slightly larger than BERT due to larger vocabulary
+        assert!(roberta_size > bert_size);
     }
 }

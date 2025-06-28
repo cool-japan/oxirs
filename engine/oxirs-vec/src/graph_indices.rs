@@ -195,34 +195,25 @@ impl NSWGraph {
     
     fn build_parallel(&mut self) -> Result<()> {
         let chunk_size = (self.data.len() / num_threads()).max(100);
-        let graph_ref = Arc::new(RwLock::new(&mut self.graph));
         
-        (0..self.data.len())
-            .collect::<Vec<_>>()
-            .par_chunks(chunk_size)
-            .try_for_each(|chunk| -> Result<()> {
-                let mut edges_to_add = Vec::new();
-                
-                for &idx in chunk {
-                    let neighbors = self.find_neighbors(idx, self.config.num_neighbors)?;
-                    let node = self.node_map[&idx];
-                    
-                    for (neighbor_idx, distance) in neighbors {
-                        let neighbor_node = self.node_map[&neighbor_idx];
-                        edges_to_add.push((node, neighbor_node, distance));
-                    }
-                }
-                
-                // Add edges with write lock
-                let mut graph = graph_ref.write().unwrap();
-                for (from, to, weight) in edges_to_add {
-                    if !graph.contains_edge(from, to) {
-                        graph.add_edge(from, to, weight);
-                    }
-                }
-                
-                Ok(())
-            })?;
+        // Pre-compute all edges that need to be added
+        let mut all_edges = Vec::new();
+        for idx in 0..self.data.len() {
+            let neighbors = self.find_neighbors(idx, self.config.num_neighbors)?;
+            let node = self.node_map[&idx];
+            
+            for (neighbor_idx, distance) in neighbors {
+                let neighbor_node = self.node_map[&neighbor_idx];
+                all_edges.push((node, neighbor_node, distance));
+            }
+        }
+        
+        // Now add all edges to the graph
+        for (from, to, weight) in all_edges {
+            if !self.graph.contains_edge(from, to) {
+                self.graph.add_edge(from, to, weight);
+            }
+        }
         
         Ok(())
     }
@@ -275,7 +266,7 @@ impl NSWGraph {
         let max_candidates = (k as f32 * self.config.search_expansion) as usize;
         
         while let Some(std::cmp::Reverse(current)) = candidates.pop() {
-            if current.distance > results.peek().map(|r| r.distance).unwrap_or(f32::INFINITY) {
+            if current.distance > results.peek().map(|r: &SearchResult| r.distance).unwrap_or(f32::INFINITY) {
                 break;
             }
             
@@ -567,7 +558,8 @@ impl PANNGGraph {
             
             // Check angle with already selected neighbors
             for &(selected_idx, _) in &pruned {
-                let selected = &self.data[selected_idx].1.as_f32();
+                let selected_data: &Vector = &self.data[selected_idx].1;
+                let selected = &selected_data.as_f32();
                 
                 // Calculate angle between neighbor and selected
                 let angle = self.calculate_angle(query, neighbor, selected);
@@ -731,7 +723,8 @@ impl DelaunayGraph {
             
             // Check if any existing neighbor violates the empty circumsphere property
             for &(neighbor_idx, _) in &neighbors {
-                let neighbor = &self.data[neighbor_idx].1.as_f32();
+                let neighbor_data = &self.data[neighbor_idx].1;
+                let neighbor = &neighbor_data.as_f32();
                 
                 // Approximate check: if candidate is closer to neighbor than to point
                 let dist_to_neighbor = self.config.distance_metric.distance(candidate, neighbor);
@@ -750,26 +743,24 @@ impl DelaunayGraph {
     }
     
     fn symmetrize_edges(&mut self) {
-        let mut symmetric_edges = vec![HashSet::new(); self.data.len()];
+        let mut symmetric_edges = vec![Vec::new(); self.data.len()];
         
         // Collect all edges
         for (idx, neighbors) in self.edges.iter().enumerate() {
             for &(neighbor_idx, distance) in neighbors {
-                symmetric_edges[idx].insert((neighbor_idx, distance));
-                symmetric_edges[neighbor_idx].insert((idx, distance));
+                symmetric_edges[idx].push((neighbor_idx, distance));
+                symmetric_edges[neighbor_idx].push((idx, distance));
             }
         }
         
-        // Convert back to vectors
-        self.edges = symmetric_edges
-            .into_iter()
-            .map(|set| {
-                let mut vec: Vec<(usize, f32)> = set.into_iter().collect();
-                vec.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal));
-                vec.truncate(self.config.num_neighbors);
-                vec
-            })
-            .collect();
+        // Remove duplicates and sort
+        for edges in &mut symmetric_edges {
+            edges.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal));
+            edges.dedup_by_key(|&mut (idx, _)| idx);
+            edges.truncate(self.config.num_neighbors);
+        }
+        
+        self.edges = symmetric_edges;
     }
     
     pub fn search(&self, query: &[f32], k: usize) -> Vec<(usize, f32)> {

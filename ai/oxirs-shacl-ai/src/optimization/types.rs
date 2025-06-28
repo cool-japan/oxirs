@@ -254,13 +254,36 @@ pub enum OptimizationRecommendationType {
     IndexOptimization,
 }
 
-/// Recommendation priority
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+/// Recommendation priority (Higher values = Higher priority)
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RecommendationPriority {
-    Critical,
-    High,
-    Medium,
     Low,
+    Medium,
+    High,
+    Critical,
+}
+
+impl PartialOrd for RecommendationPriority {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for RecommendationPriority {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match (self, other) {
+            (RecommendationPriority::Critical, RecommendationPriority::Critical) => std::cmp::Ordering::Equal,
+            (RecommendationPriority::Critical, _) => std::cmp::Ordering::Greater,
+            (_, RecommendationPriority::Critical) => std::cmp::Ordering::Less,
+            (RecommendationPriority::High, RecommendationPriority::High) => std::cmp::Ordering::Equal,
+            (RecommendationPriority::High, RecommendationPriority::Low | RecommendationPriority::Medium) => std::cmp::Ordering::Greater,
+            (RecommendationPriority::Low | RecommendationPriority::Medium, RecommendationPriority::High) => std::cmp::Ordering::Less,
+            (RecommendationPriority::Medium, RecommendationPriority::Medium) => std::cmp::Ordering::Equal,
+            (RecommendationPriority::Medium, RecommendationPriority::Low) => std::cmp::Ordering::Greater,
+            (RecommendationPriority::Low, RecommendationPriority::Medium) => std::cmp::Ordering::Less,
+            (RecommendationPriority::Low, RecommendationPriority::Low) => std::cmp::Ordering::Equal,
+        }
+    }
 }
 
 /// Implementation effort

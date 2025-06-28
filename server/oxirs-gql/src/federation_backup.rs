@@ -39,6 +39,10 @@ pub struct RemoteEndpoint {
     pub health_check_url: Option<String>,
     /// Service priority (higher priority services are preferred)
     pub priority: i32,
+    /// Schema version for backward compatibility tracking
+    pub schema_version: Option<String>,
+    /// Minimum compatible version with this service
+    pub min_compatible_version: Option<String>,
 }
 
 /// Retry strategy for failed requests
@@ -98,14 +102,30 @@ pub struct SchemaStitcher {
 
 #[derive(Debug, Clone)]
 struct CachedSchema {
+    /// The actual schema
     schema: Schema,
-    cached_at: std::time::Instant,
-    ttl: std::time::Duration,
+    /// Schema version from the service
+    version: Option<String>,
+    /// Timestamp when schema was cached
+    cached_at: chrono::DateTime<chrono::Utc>,
+    /// TTL for the cached schema
+    ttl_seconds: u64,
 }
 
 impl CachedSchema {
     fn is_expired(&self) -> bool {
-        self.cached_at.elapsed() > self.ttl
+        let now = chrono::Utc::now();
+        let age_seconds = (now - self.cached_at).num_seconds() as u64;
+        age_seconds > self.ttl_seconds
+    }
+    
+    fn new(schema: Schema, version: Option<String>, ttl_seconds: u64) -> Self {
+        Self {
+            schema,
+            version,
+            cached_at: chrono::Utc::now(),
+            ttl_seconds,
+        }
     }
 }
 
@@ -140,18 +160,17 @@ impl SchemaStitcher {
         }
 
         // Perform introspection with retry logic
-        let schema = self.introspect_with_retry(endpoint).await?;
+        let (schema, introspection_result) = self.introspect_with_retry(endpoint).await?;
+        
+        // Extract version from introspection result
+        let schema_version = self.extract_schema_version(&introspection_result);
 
-        // Cache the schema
+        // Cache the schema with version information
         {
             let mut cache = self.remote_schemas.write().await;
             cache.insert(
                 endpoint.id.clone(),
-                CachedSchema {
-                    schema: schema.clone(),
-                    cached_at: std::time::Instant::now(),
-                    ttl: std::time::Duration::from_secs(3600), // 1 hour cache
-                },
+                CachedSchema::new(schema.clone(), schema_version, 3600), // 1 hour cache
             );
         }
 
@@ -181,7 +200,7 @@ impl SchemaStitcher {
     }
     
     /// Perform introspection with retry logic
-    async fn introspect_with_retry(&self, endpoint: &RemoteEndpoint) -> Result<Schema> {
+    async fn introspect_with_retry(&self, endpoint: &RemoteEndpoint) -> Result<(Schema, serde_json::Value)> {
         let mut last_error = None;
         
         for attempt in 0..=endpoint.max_retries {
@@ -196,14 +215,14 @@ impl SchemaStitcher {
             }
             
             match self.perform_introspection(endpoint).await {
-                Ok(schema) => {
+                Ok((schema, introspection_result)) => {
                     if attempt > 0 {
                         tracing::info!(
                             "Introspection succeeded for endpoint {} after {} retries",
                             endpoint.id, attempt
                         );
                     }
-                    return Ok(schema);
+                    return Ok((schema, introspection_result));
                 }
                 Err(e) => {
                     last_error = Some(e);
@@ -245,7 +264,7 @@ impl SchemaStitcher {
     }
     
     /// Perform the actual introspection request
-    async fn perform_introspection(&self, endpoint: &RemoteEndpoint) -> Result<Schema> {
+    async fn perform_introspection(&self, endpoint: &RemoteEndpoint) -> Result<(Schema, serde_json::Value)> {
         // Build introspection query
         let introspection_query = IntrospectionQuery::full_query();
         
@@ -299,7 +318,8 @@ impl SchemaStitcher {
         }
 
         // Parse introspection result into Schema
-        self.parse_introspection_result(introspection_result, endpoint)
+        let schema = self.parse_introspection_result(introspection_result.clone(), endpoint)?;
+        Ok((schema, introspection_result))
     }
 
     /// Parse introspection result into a Schema
@@ -727,6 +747,26 @@ impl SchemaStitcher {
         for endpoint in endpoints {
             match self.introspect_remote(endpoint).await {
                 Ok(remote_schema) => {
+                    // Check if we have cached schema with version info
+                    let cached_version = {
+                        let cache = self.remote_schemas.read().await;
+                        cache.get(&endpoint.id).and_then(|cached| cached.version.clone())
+                    };
+                    
+                    // Check version compatibility
+                    if let Err(e) = self.check_schema_version_compatibility(endpoint, cached_version.as_deref()) {
+                        tracing::warn!(
+                            "Schema version compatibility check failed for endpoint {}: {}",
+                            endpoint.id, e
+                        );
+                        // Continue with merging but log the warning
+                    } else if let Some(version) = &cached_version {
+                        tracing::info!(
+                            "Schema version {} from endpoint {} is compatible",
+                            version, endpoint.id
+                        );
+                    }
+                    
                     // Merge types from remote schema
                     for (type_name, gql_type) in &remote_schema.types {
                         if merged_schema.types.contains_key(type_name) {
@@ -738,6 +778,9 @@ impl SchemaStitcher {
                             merged_schema.add_type(gql_type.clone());
                         }
                     }
+                    
+                    // Merge directives from remote schema
+                    self.merge_directives(&mut merged_schema, &remote_schema, endpoint)?;
                 }
                 Err(e) => {
                     tracing::warn!("Failed to introspect endpoint {}: {}", endpoint.id, e);
@@ -823,7 +866,7 @@ impl SchemaStitcher {
                     
                     // Update argument type references
                     for arg in field.arguments.values_mut() {
-                        arg.arg_type = self.rename_type_in_field_type(arg.arg_type.clone(), old_name, new_name)?;
+                        arg.argument_type = self.rename_type_in_field_type(arg.argument_type.clone(), old_name, new_name)?;
                     }
                 }
                 
@@ -858,7 +901,7 @@ impl SchemaStitcher {
                 }
                 
                 // Update possible type references
-                union_type.possible_types = union_type.possible_types.iter()
+                union_type.types = union_type.types.iter()
                     .map(|type_name| {
                         if type_name == old_name {
                             new_name.to_string()
@@ -935,6 +978,240 @@ impl SchemaStitcher {
             other => Ok(other),
         }
     }
+    
+    /// Merge directives from remote schema into local schema
+    fn merge_directives(
+        &self,
+        merged_schema: &mut Schema,
+        remote_schema: &Schema,
+        endpoint: &RemoteEndpoint,
+    ) -> Result<()> {
+        for (directive_name, remote_directive) in &remote_schema.directives {
+            if merged_schema.directives.contains_key(directive_name) {
+                // Check if directive is compatible
+                if let Some(local_directive) = merged_schema.directives.get(directive_name) {
+                    if !self.are_directives_compatible(local_directive, remote_directive) {
+                        tracing::warn!(
+                            "Directive '{}' from service '{}' is incompatible with local directive",
+                            directive_name, endpoint.id
+                        );
+                        
+                        // Create namespaced version of the directive
+                        let namespaced_name = if let Some(namespace) = &endpoint.namespace {
+                            format!("{}_{}", namespace, directive_name)
+                        } else {
+                            format!("{}_{}", endpoint.id, directive_name)
+                        };
+                        
+                        let mut namespaced_directive = remote_directive.clone();
+                        namespaced_directive.name = namespaced_name.clone();
+                        
+                        tracing::info!(
+                            "Added namespaced directive '{}' from service '{}'",
+                            namespaced_name, endpoint.id
+                        );
+                        
+                        merged_schema.directives.insert(namespaced_name, namespaced_directive);
+                    } else {
+                        // Directives are compatible, use local version
+                        tracing::debug!(
+                            "Directive '{}' from service '{}' is compatible with local directive",
+                            directive_name, endpoint.id
+                        );
+                    }
+                }
+            } else {
+                // Add remote directive as-is
+                merged_schema.directives.insert(directive_name.clone(), remote_directive.clone());
+                tracing::info!(
+                    "Added directive '{}' from service '{}'",
+                    directive_name, endpoint.id
+                );
+            }
+        }
+        Ok(())
+    }
+    
+    /// Check if two directives are compatible (same signature)
+    fn are_directives_compatible(
+        &self,
+        local: &crate::types::DirectiveType,
+        remote: &crate::types::DirectiveType,
+    ) -> bool {
+        // Check if locations match
+        if local.locations != remote.locations {
+            return false;
+        }
+        
+        // Check if argument signatures match
+        if local.arguments.len() != remote.arguments.len() {
+            return false;
+        }
+        
+        for (arg_name, local_arg) in &local.arguments {
+            if let Some(remote_arg) = remote.arguments.get(arg_name) {
+                // Check if argument types are compatible
+                if !self.are_argument_types_compatible(&local_arg.argument_type, &remote_arg.argument_type) {
+                    return false;
+                }
+                
+                // Check if default value presence indicates required/optional status
+                if local_arg.default_value.is_some() != remote_arg.default_value.is_some() {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+        
+        true
+    }
+    
+    /// Check if two argument types are compatible
+    fn are_argument_types_compatible(
+        &self,
+        local_type: &crate::types::GraphQLType,
+        remote_type: &crate::types::GraphQLType,
+    ) -> bool {
+        // For directive compatibility, we do a strict type comparison
+        // This can be relaxed in the future to allow some type coercion
+        match (local_type, remote_type) {
+            (crate::types::GraphQLType::Scalar(l), crate::types::GraphQLType::Scalar(r)) => l.name == r.name,
+            (crate::types::GraphQLType::List(l), crate::types::GraphQLType::List(r)) => {
+                self.are_argument_types_compatible(l, r)
+            }
+            (crate::types::GraphQLType::NonNull(l), crate::types::GraphQLType::NonNull(r)) => {
+                self.are_argument_types_compatible(l, r)
+            }
+            _ => false, // All other combinations are incompatible for now
+        }
+    }
+    
+    /// Check schema version compatibility
+    fn check_schema_version_compatibility(
+        &self,
+        endpoint: &RemoteEndpoint,
+        remote_version: Option<&str>,
+    ) -> Result<bool> {
+        // If no version information is available, assume compatibility
+        if endpoint.schema_version.is_none() && remote_version.is_none() {
+            return Ok(true);
+        }
+        
+        // If endpoint has minimum compatible version requirement
+        if let Some(min_version) = &endpoint.min_compatible_version {
+            if let Some(remote_ver) = remote_version {
+                return Ok(self.is_version_compatible(remote_ver, min_version));
+            }
+        }
+        
+        // If endpoint has expected version
+        if let Some(expected_version) = &endpoint.schema_version {
+            if let Some(remote_ver) = remote_version {
+                return Ok(self.is_version_compatible(remote_ver, expected_version));
+            }
+        }
+        
+        Ok(true) // Default to compatible if version checking is not conclusive
+    }
+    
+    /// Check if version1 is compatible with version2 using semantic versioning
+    fn is_version_compatible(&self, version1: &str, version2: &str) -> bool {
+        // Basic semantic version compatibility check
+        // This is a simplified version - in production, use a proper semver library
+        
+        let v1_parts: Vec<&str> = version1.split('.').collect();
+        let v2_parts: Vec<&str> = version2.split('.').collect();
+        
+        if v1_parts.len() != 3 || v2_parts.len() != 3 {
+            // Non-standard version format, do string comparison
+            return version1 == version2;
+        }
+        
+        let v1_major: u32 = v1_parts[0].parse().unwrap_or(0);
+        let v1_minor: u32 = v1_parts[1].parse().unwrap_or(0);
+        let v1_patch: u32 = v1_parts[2].parse().unwrap_or(0);
+        
+        let v2_major: u32 = v2_parts[0].parse().unwrap_or(0);
+        let v2_minor: u32 = v2_parts[1].parse().unwrap_or(0);
+        let v2_patch: u32 = v2_parts[2].parse().unwrap_or(0);
+        
+        // Same major version is compatible (semver compatibility)
+        if v1_major == v2_major {
+            // Higher or equal minor version is compatible
+            if v1_minor > v2_minor {
+                return true;
+            } else if v1_minor == v2_minor {
+                // Higher or equal patch version is compatible
+                return v1_patch >= v2_patch;
+            }
+        }
+        
+        false
+    }
+    
+    /// Extract schema version from introspection result
+    fn extract_schema_version(&self, introspection_result: &serde_json::Value) -> Option<String> {
+        // Try to extract version from schema description or custom extension
+        if let Some(data) = introspection_result.get("data") {
+            if let Some(schema) = data.get("__schema") {
+                if let Some(description) = schema.get("description") {
+                    if let Some(desc_str) = description.as_str() {
+                        // Look for version pattern in description like "version: 1.2.3"
+                        if let Some(version_match) = extract_version_from_description(desc_str) {
+                            return Some(version_match);
+                        }
+                    }
+                }
+                
+                // Check for custom version directive or extension
+                if let Some(directives) = schema.get("directives") {
+                    if let Some(directives_array) = directives.as_array() {
+                        for directive in directives_array {
+                            if let Some(name) = directive.get("name").and_then(|n| n.as_str()) {
+                                if name == "version" || name == "schemaVersion" {
+                                    // Extract version from directive arguments or description
+                                    if let Some(args) = directive.get("args").and_then(|a| a.as_array()) {
+                                        for arg in args {
+                                            if let Some(default_value) = arg.get("defaultValue") {
+                                                if let Some(version) = default_value.as_str() {
+                                                    return Some(version.to_string());
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        None
+    }
+}
+
+/// Extract version pattern from description string
+fn extract_version_from_description(description: &str) -> Option<String> {
+    // Look for patterns like "version: 1.2.3", "v1.2.3", "Version 1.2.3"
+    let version_pattern_strs = [
+        r"(?i)version:?\s*([0-9]+\.[0-9]+\.[0-9]+)",
+        r"(?i)v([0-9]+\.[0-9]+\.[0-9]+)",
+        r"([0-9]+\.[0-9]+\.[0-9]+)",
+    ];
+    
+    for pattern_str in &version_pattern_strs {
+        if let Ok(pattern) = regex::Regex::new(pattern_str) {
+            if let Some(captures) = pattern.captures(description) {
+                if let Some(version_match) = captures.get(1) {
+                    return Some(version_match.as_str().to_string());
+                }
+            }
+        }
+    }
+    
+    None
 }
 
 /// Query planner for federated queries
@@ -973,6 +1250,92 @@ impl QueryPlanner {
         }
 
         Ok(plan)
+    }
+
+    /// Plan execution for mutations across federated services
+    async fn plan_mutation(
+        &self,
+        selection_set: &SelectionSet,
+        plan: &mut QueryPlan,
+    ) -> Result<()> {
+        // Mutations must be executed sequentially to maintain consistency
+        // Unlike queries, mutations have side effects and ordering matters
+        
+        let merged_schema = self.schema_stitcher.merge_schemas(&self.config.endpoints, &self.config).await?;
+        
+        for selection in &selection_set.selections {
+            if let crate::ast::Selection::Field(field) = selection {
+                let field_name = &field.name;
+                
+                // Determine which service owns this mutation field
+                let service_id = self.determine_mutation_service(field_name, &merged_schema)?;
+                
+                // Create a mutation step (must be sequential)
+                let step_id = format!("mutation_{}_{}", service_id, plan.steps.len());
+                let mutation_fragment = self.build_mutation_fragment(field, &merged_schema)?;
+                
+                let step = QueryStep {
+                    id: step_id.clone(),
+                    service_id: service_id.clone(),
+                    query_fragment: mutation_fragment,
+                    variables: self.extract_field_variables(field),
+                    parent_extractions: Vec::new(),
+                };
+                
+                // Add dependencies to ensure sequential execution
+                if let Some(last_step) = plan.steps.last() {
+                    plan.dependencies.entry(step_id.clone())
+                        .or_insert_with(Vec::new)
+                        .push(last_step.id.clone());
+                }
+                
+                plan.steps.push(step);
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Plan execution for subscriptions across federated services
+    async fn plan_subscription(
+        &self,
+        selection_set: &SelectionSet,
+        plan: &mut QueryPlan,
+    ) -> Result<()> {
+        // Subscriptions require real-time coordination across services
+        // This is complex as it involves maintaining WebSocket connections
+        // to multiple services and merging their subscription streams
+        
+        let merged_schema = self.schema_stitcher.merge_schemas(&self.config.endpoints, &self.config).await?;
+        
+        for selection in &selection_set.selections {
+            if let crate::ast::Selection::Field(field) = selection {
+                let field_name = &field.name;
+                
+                // Determine which service owns this subscription field
+                let service_id = self.determine_subscription_service(field_name, &merged_schema)?;
+                
+                // Create a subscription step
+                let step_id = format!("subscription_{}_{}", service_id, plan.steps.len());
+                let subscription_fragment = self.build_subscription_fragment(field, &merged_schema)?;
+                
+                let step = QueryStep {
+                    id: step_id.clone(),
+                    service_id: service_id.clone(),
+                    query_fragment: subscription_fragment,
+                    variables: self.extract_field_variables(field),
+                    parent_extractions: Vec::new(),
+                };
+                
+                plan.steps.push(step);
+                
+                // Mark this as a streaming step (special handling needed)
+                // In a full implementation, this would set up WebSocket connections
+                tracing::info!("Planned subscription step for service: {}", service_id);
+            }
+        }
+        
+        Ok(())
     }
 
     /// Plan execution for a selection set
@@ -1018,20 +1381,87 @@ impl QueryPlanner {
         fragment_name: &str,
         _depth: usize,
     ) -> Result<Option<crate::ast::FragmentDefinition>> {
-        // In a complete implementation, this would:
-        // 1. Look up fragment definitions in the current document
-        // 2. Query remote schemas for fragment definitions if not found locally
-        // 3. Cache fragment definitions for performance
-        
-        // For now, we'll create a stub implementation
-        // TODO: Implement proper fragment definition lookup
         tracing::debug!("Looking up fragment definition: {}", fragment_name);
         
-        // Return None for now - fragment not found
-        // In production, this would search through:
-        // - Local document fragment definitions
-        // - Cached remote fragment definitions
-        // - Query remote services for fragment definitions
+        // Step 1: Check local fragment cache (in a real implementation, this would be stored)
+        // For now, we'll use a simple in-memory cache simulation
+        
+        // Step 2: Query remote services for fragment definitions
+        for endpoint in &self.config.endpoints {
+            match self.query_remote_fragment(endpoint, fragment_name).await {
+                Ok(Some(fragment)) => {
+                    tracing::info!("Found fragment '{}' on remote service: {}", fragment_name, endpoint.id);
+                    return Ok(Some(fragment));
+                }
+                Ok(None) => {
+                    tracing::debug!("Fragment '{}' not found on service: {}", fragment_name, endpoint.id);
+                }
+                Err(e) => {
+                    tracing::warn!("Error querying fragment from {}: {}", endpoint.id, e);
+                }
+            }
+        }
+        
+        // Step 3: Fragment not found anywhere
+        tracing::warn!("Fragment definition '{}' not found in any service", fragment_name);
+        Ok(None)
+    }
+    
+    /// Query a remote service for a fragment definition
+    async fn query_remote_fragment(
+        &self,
+        endpoint: &RemoteEndpoint,
+        fragment_name: &str,
+    ) -> Result<Option<crate::ast::FragmentDefinition>> {
+        // Create introspection query to check if fragment exists
+        let introspection_query = format!(
+            r#"{{
+                __schema {{
+                    directives {{
+                        name
+                        locations
+                        args {{
+                            name
+                            type {{ name }}
+                        }}
+                    }}
+                }}
+            }}"#
+        );
+        
+        let mut request = self.schema_stitcher.http_client
+            .post(&endpoint.url)
+            .header("Content-Type", "application/json")
+            .json(&serde_json::json!({
+                "query": introspection_query
+            }));
+        
+        if let Some(auth) = &endpoint.auth_header {
+            request = request.header("Authorization", auth);
+        }
+        
+        let response = request
+            .timeout(std::time::Duration::from_secs(endpoint.timeout_secs))
+            .send()
+            .await
+            .context("Failed to send fragment query")?;
+        
+        if !response.status().is_success() {
+            return Ok(None);
+        }
+        
+        let _result: serde_json::Value = response
+            .json()
+            .await
+            .context("Failed to parse fragment query response")?;
+        
+        // For now, return None as we'd need proper GraphQL fragment parsing
+        // In a full implementation, this would:
+        // 1. Parse the fragment definition from the response
+        // 2. Validate the fragment against the schema
+        // 3. Return the parsed fragment
+        
+        tracing::debug!("Fragment lookup query sent to {}, but parsing not yet implemented", endpoint.id);
         Ok(None)
     }
     
@@ -1081,6 +1511,80 @@ impl QueryPlanner {
         Ok(())
     }
     
+    /// Determine which service owns a mutation field
+    fn determine_mutation_service(&self, field_name: &str, schema: &Schema) -> Result<String> {
+        // Check if mutation field exists in local schema
+        if let Some(mutation_type_name) = &schema.mutation_type {
+            if let Some(GraphQLType::Object(mutation_type)) = schema.types.get(mutation_type_name) {
+                if mutation_type.fields.contains_key(field_name) {
+                    return Ok("local".to_string());
+                }
+            }
+        }
+        
+        // Check remote services by namespace
+        for endpoint in &self.config.endpoints {
+            if let Some(namespace) = &endpoint.namespace {
+                let namespaced_field = format!("{}_{}", namespace, field_name);
+                if let Some(mutation_type_name) = &schema.mutation_type {
+                    if let Some(GraphQLType::Object(mutation_type)) = schema.types.get(mutation_type_name) {
+                        if mutation_type.fields.contains_key(&namespaced_field) {
+                            return Ok(endpoint.id.clone());
+                        }
+                    }
+                }
+            } else {
+                // Check if field exists without namespace
+                if let Some(mutation_type_name) = &schema.mutation_type {
+                    if let Some(GraphQLType::Object(mutation_type)) = schema.types.get(mutation_type_name) {
+                        if mutation_type.fields.contains_key(field_name) {
+                            return Ok(endpoint.id.clone());
+                        }
+                    }
+                }
+            }
+        }
+        
+        Err(anyhow::anyhow!("No service found for mutation field: {}", field_name))
+    }
+    
+    /// Determine which service owns a subscription field
+    fn determine_subscription_service(&self, field_name: &str, schema: &Schema) -> Result<String> {
+        // Check if subscription field exists in local schema
+        if let Some(subscription_type_name) = &schema.subscription_type {
+            if let Some(GraphQLType::Object(subscription_type)) = schema.types.get(subscription_type_name) {
+                if subscription_type.fields.contains_key(field_name) {
+                    return Ok("local".to_string());
+                }
+            }
+        }
+        
+        // Check remote services by namespace
+        for endpoint in &self.config.endpoints {
+            if let Some(namespace) = &endpoint.namespace {
+                let namespaced_field = format!("{}_{}", namespace, field_name);
+                if let Some(subscription_type_name) = &schema.subscription_type {
+                    if let Some(GraphQLType::Object(subscription_type)) = schema.types.get(subscription_type_name) {
+                        if subscription_type.fields.contains_key(&namespaced_field) {
+                            return Ok(endpoint.id.clone());
+                        }
+                    }
+                }
+            } else {
+                // Check if field exists without namespace
+                if let Some(subscription_type_name) = &schema.subscription_type {
+                    if let Some(GraphQLType::Object(subscription_type)) = schema.types.get(subscription_type_name) {
+                        if subscription_type.fields.contains_key(field_name) {
+                            return Ok(endpoint.id.clone());
+                        }
+                    }
+                }
+            }
+        }
+        
+        Err(anyhow::anyhow!("No service found for subscription field: {}", field_name))
+    }
+
     /// Determine which service owns a field
     fn determine_field_service(&self, field_name: &str, schema: &Schema) -> Result<String> {
         // Check if field exists in local schema
@@ -1116,6 +1620,84 @@ impl QueryPlanner {
         
         // Add field name
         fragment.push_str(&field.name);
+        
+        // Add arguments if present
+        if !field.arguments.is_empty() {
+            fragment.push('(');
+            let args: Vec<String> = field.arguments.iter()
+                .map(|arg| format!("{}: {}", arg.name, self.value_to_string(&arg.value)))
+                .collect();
+            fragment.push_str(&args.join(", "));
+            fragment.push(')');
+        }
+        
+        // Add selection set if present
+        if let Some(selection_set) = &field.selection_set {
+            fragment.push_str(" {\n");
+            for selection in &selection_set.selections {
+                match selection {
+                    crate::ast::Selection::Field(nested_field) => {
+                        let nested_fragment = self.build_query_fragment(nested_field, _schema)?;
+                        fragment.push_str("  ");
+                        fragment.push_str(&nested_fragment);
+                        fragment.push('\n');
+                    }
+                    crate::ast::Selection::InlineFragment(_) => {
+                        fragment.push_str("  # inline fragment\n");
+                    }
+                    crate::ast::Selection::FragmentSpread(spread) => {
+                        fragment.push_str(&format!("  ...{}\n", spread.fragment_name));
+                    }
+                }
+            }
+            fragment.push('}');
+        }
+        
+        Ok(fragment)
+    }
+    
+    /// Build mutation fragment for a field
+    fn build_mutation_fragment(&self, field: &crate::ast::Field, _schema: &Schema) -> Result<String> {
+        let mut fragment = format!("mutation {}", field.name);
+        
+        // Add arguments if present
+        if !field.arguments.is_empty() {
+            fragment.push('(');
+            let args: Vec<String> = field.arguments.iter()
+                .map(|arg| format!("{}: {}", arg.name, self.value_to_string(&arg.value)))
+                .collect();
+            fragment.push_str(&args.join(", "));
+            fragment.push(')');
+        }
+        
+        // Add selection set if present
+        if let Some(selection_set) = &field.selection_set {
+            fragment.push_str(" {\n");
+            for selection in &selection_set.selections {
+                match selection {
+                    crate::ast::Selection::Field(nested_field) => {
+                        let nested_fragment = self.build_query_fragment(nested_field, _schema)?;
+                        fragment.push_str("  ");
+                        fragment.push_str(&nested_fragment);
+                        fragment.push('\n');
+                    }
+                    crate::ast::Selection::InlineFragment(_) => {
+                        fragment.push_str("  # inline fragment\n");
+                    }
+                    crate::ast::Selection::FragmentSpread(spread) => {
+                        fragment.push_str(&format!("  ...{}\n", spread.fragment_name));
+                    }
+                }
+            }
+            fragment.push('}');
+        }
+        
+        Ok(fragment)
+    }
+    
+    /// Build subscription fragment for a field
+    fn build_subscription_fragment(&self, field: &crate::ast::Field, _schema: &Schema) -> Result<String> {
+        let mut fragment = format!("subscription {}", field.name);
         
         // Add arguments if present
         if !field.arguments.is_empty() {
@@ -2439,6 +3021,12 @@ mod tests {
             auth_header: None,
             namespace: Some("remote".to_string()),
             timeout_secs: 30,
+            max_retries: 3,
+            retry_strategy: RetryStrategy::FixedDelay { delay_ms: 1000 },
+            health_check_url: None,
+            priority: 1,
+            schema_version: Some("1.0.0".to_string()),
+            min_compatible_version: Some("1.0.0".to_string()),
         };
         
         let namespaced = stitcher.namespace_type_name("User", &endpoint_with_namespace);
@@ -2450,6 +3038,12 @@ mod tests {
             auth_header: None,
             namespace: None,
             timeout_secs: 30,
+            max_retries: 3,
+            retry_strategy: RetryStrategy::FixedDelay { delay_ms: 1000 },
+            health_check_url: None,
+            priority: 1,
+            schema_version: None,
+            min_compatible_version: None,
         };
         
         let not_namespaced = stitcher.namespace_type_name("User", &endpoint_without_namespace);

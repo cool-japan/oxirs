@@ -1,6 +1,6 @@
 //! Utility functions and helpers for embedding operations
 
-use crate::{Triple, Vector};
+// Removed unused imports
 use anyhow::{anyhow, Result};
 use ndarray::{Array1, Array2};
 use rand::prelude::*;

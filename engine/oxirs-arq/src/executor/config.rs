@@ -94,6 +94,12 @@ impl Default for ExecutionContext {
     }
 }
 
+impl ExecutionContext {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
 impl Default for ParallelConfig {
     fn default() -> Self {
         let num_cpus = thread::available_parallelism()

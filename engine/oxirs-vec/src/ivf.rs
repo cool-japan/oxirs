@@ -794,6 +794,9 @@ impl IvfIndex {
             full_vectors: 0,
             quantized_vectors: 0,
             compression_ratio: 0.0,
+            multi_level_vectors: 0,
+            multi_codebook_vectors: 0,
+            quantization_strategy: QuantizationStrategy::None,
         };
         
         let mut cluster_stats = Vec::new();

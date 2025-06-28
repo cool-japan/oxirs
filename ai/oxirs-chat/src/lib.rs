@@ -18,11 +18,17 @@ use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 use crate::rag::QueryIntent;
 
+pub mod analytics;
+pub mod cache;
 pub mod chat;
+pub mod context;
 pub mod llm;
 pub mod nl2sparql;
+pub mod performance;
+pub mod persistence;
 pub mod rag;
 pub mod server;
+pub mod sparql_optimizer;
 
 /// Chat session configuration
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -147,6 +153,206 @@ impl Default for SessionMetrics {
             last_query_time: None,
         }
     }
+}
+
+/// Context window for managing conversation memory
+#[derive(Debug, Clone)]
+pub struct ContextWindow {
+    pub window_size: usize,
+    pub pinned_messages: Vec<String>,
+    pub context_summary: Option<String>,
+}
+
+impl ContextWindow {
+    pub fn new(window_size: usize) -> Self {
+        Self {
+            window_size,
+            pinned_messages: Vec::new(),
+            context_summary: None,
+        }
+    }
+    
+    pub fn should_summarize(&self, total_messages: usize) -> bool {
+        total_messages > self.window_size * 2
+    }
+    
+    pub fn update_summary(&mut self, summary: String) {
+        self.context_summary = Some(summary);
+    }
+    
+    pub fn pin_message(&mut self, message_id: String) {
+        if !self.pinned_messages.contains(&message_id) {
+            self.pinned_messages.push(message_id);
+        }
+    }
+    
+    pub fn unpin_message(&mut self, message_id: &str) {
+        self.pinned_messages.retain(|id| id != message_id);
+    }
+    
+    pub fn get_context_messages<'a>(&self, messages: &'a [Message]) -> Vec<&'a Message> {
+        // Return the last window_size messages plus any pinned messages
+        let mut context_messages = Vec::new();
+        
+        // Add pinned messages first
+        for message in messages {
+            if self.pinned_messages.contains(&message.id) {
+                context_messages.push(message);
+            }
+        }
+        
+        // Add recent messages up to window size
+        let recent_start = messages.len().saturating_sub(self.window_size);
+        for message in &messages[recent_start..] {
+            if !context_messages.iter().any(|m| m.id == message.id) {
+                context_messages.push(message);
+            }
+        }
+        
+        context_messages
+    }
+}
+
+/// Topic tracking for conversation analysis
+#[derive(Debug, Clone)]
+pub struct TopicTracker {
+    pub current_topics: Vec<Topic>,
+    pub topic_history: Vec<TopicTransition>,
+    pub topic_threshold: f32,
+}
+
+impl TopicTracker {
+    pub fn new() -> Self {
+        Self {
+            current_topics: Vec::new(),
+            topic_history: Vec::new(),
+            topic_threshold: 0.7,
+        }
+    }
+    
+    /// Analyze a message for topic changes
+    pub fn analyze_message(&mut self, message: &Message) -> Option<TopicTransition> {
+        let detected_topics = self.extract_topics(&message.content);
+        
+        if detected_topics.is_empty() {
+            return None;
+        }
+        
+        // Check for topic transitions
+        for new_topic in &detected_topics {
+            if !self.current_topics.iter().any(|t| t.similarity(&new_topic) > self.topic_threshold) {
+                // New topic detected
+                let transition = TopicTransition {
+                    id: Uuid::new_v4().to_string(),
+                    from_topics: self.current_topics.clone(),
+                    to_topics: detected_topics.clone(),
+                    timestamp: chrono::Utc::now(),
+                    trigger_message_id: message.id.clone(),
+                    confidence: 0.8, // Simplified for now
+                    transition_type: TransitionType::NewTopic,
+                };
+                
+                self.topic_history.push(transition.clone());
+                self.current_topics = detected_topics;
+                
+                return Some(transition);
+            }
+        }
+        
+        None
+    }
+    
+    /// Extract topics from message content (simplified implementation)
+    fn extract_topics(&self, content: &str) -> Vec<Topic> {
+        let keywords = content
+            .to_lowercase()
+            .split_whitespace()
+            .filter(|word| word.len() > 3)
+            .filter(|word| !["what", "this", "that", "have", "been", "will", "with", "from", "they", "them", "were", "said", "each", "which", "their", "time", "about"].contains(word))
+            .take(3)
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>();
+            
+        if keywords.is_empty() {
+            return Vec::new();
+        }
+        
+        vec![Topic {
+            id: Uuid::new_v4().to_string(),
+            name: keywords.join(" "),
+            keywords,
+            confidence: 0.6,
+            category: TopicCategory::General,
+            entities: Vec::new(),
+            first_mentioned: chrono::Utc::now(),
+            last_mentioned: chrono::Utc::now(),
+            mention_count: 1,
+        }]
+    }
+}
+
+/// Topic representation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Topic {
+    pub id: String,
+    pub name: String,
+    pub keywords: Vec<String>,
+    pub confidence: f32,
+    pub category: TopicCategory,
+    pub entities: Vec<String>,
+    pub first_mentioned: chrono::DateTime<chrono::Utc>,
+    pub last_mentioned: chrono::DateTime<chrono::Utc>,
+    pub mention_count: usize,
+}
+
+impl Topic {
+    /// Calculate similarity with another topic
+    pub fn similarity(&self, other: &Topic) -> f32 {
+        let self_keywords: std::collections::HashSet<_> = self.keywords.iter().collect();
+        let other_keywords: std::collections::HashSet<_> = other.keywords.iter().collect();
+        
+        let intersection = self_keywords.intersection(&other_keywords).count();
+        let union = self_keywords.union(&other_keywords).count();
+        
+        if union == 0 {
+            0.0
+        } else {
+            intersection as f32 / union as f32
+        }
+    }
+}
+
+/// Topic category
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TopicCategory {
+    General,
+    Technical,
+    Business,
+    Personal,
+    Research,
+    Education,
+}
+
+/// Topic transition
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TopicTransition {
+    pub id: String,
+    pub from_topics: Vec<Topic>,
+    pub to_topics: Vec<Topic>,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub trigger_message_id: String,
+    pub confidence: f32,
+    pub transition_type: TransitionType,
+}
+
+/// Type of topic transition
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TransitionType {
+    NewTopic,
+    TopicShift,
+    TopicReturn,
+    TopicMerge,
+    TopicSplit,
 }
 
 /// Chat session
@@ -1816,227 +2022,3 @@ pub struct ThreadInfo {
     pub participants: Vec<String>,
 }
 
-/// Context window for managing conversation context
-#[derive(Debug, Clone)]
-pub struct ContextWindow {
-    pub window_size: usize,
-    pub pinned_messages: Vec<String>,
-    pub context_summary: Option<String>,
-    pub last_summarization: Option<chrono::DateTime<chrono::Utc>>,
-}
-
-impl ContextWindow {
-    pub fn new(window_size: usize) -> Self {
-        Self {
-            window_size,
-            pinned_messages: Vec::new(),
-            context_summary: None,
-            last_summarization: None,
-        }
-    }
-
-    pub fn get_context_messages<'a>(&self, messages: &'a [Message]) -> Vec<&'a Message> {
-        let mut context_messages = Vec::new();
-        
-        // Add pinned messages first
-        for pinned_id in &self.pinned_messages {
-            if let Some(msg) = messages.iter().find(|m| &m.id == pinned_id) {
-                context_messages.push(msg);
-            }
-        }
-        
-        // Add recent messages up to window size
-        let recent_count = self.window_size.saturating_sub(context_messages.len());
-        let recent_messages: Vec<&Message> = messages
-            .iter()
-            .rev()
-            .filter(|m| !self.pinned_messages.contains(&m.id))
-            .take(recent_count)
-            .collect::<Vec<_>>()
-            .into_iter()
-            .rev()
-            .collect();
-        
-        context_messages.extend(recent_messages);
-        context_messages
-    }
-
-    pub fn pin_message(&mut self, message_id: String) {
-        if !self.pinned_messages.contains(&message_id) {
-            self.pinned_messages.push(message_id);
-        }
-    }
-
-    pub fn unpin_message(&mut self, message_id: &str) {
-        self.pinned_messages.retain(|id| id != message_id);
-    }
-
-    pub fn should_summarize(&self, message_count: usize) -> bool {
-        // Summarize when we have 2x the window size of messages
-        // and haven't summarized in the last hour
-        message_count > self.window_size * 2 &&
-            self.last_summarization
-                .map(|t| chrono::Utc::now() - t > chrono::Duration::hours(1))
-                .unwrap_or(true)
-    }
-
-    pub fn update_summary(&mut self, summary: String) {
-        self.context_summary = Some(summary);
-        self.last_summarization = Some(chrono::Utc::now());
-    }
-}
-
-/// Topic tracker for detecting topic drift
-#[derive(Debug, Clone)]
-pub struct TopicTracker {
-    pub current_topics: Vec<Topic>,
-    pub topic_history: Vec<TopicTransition>,
-    pub drift_threshold: f32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Topic {
-    pub id: String,
-    pub name: String,
-    pub keywords: Vec<String>,
-    pub confidence: f32,
-    pub first_mentioned: chrono::DateTime<chrono::Utc>,
-    pub last_mentioned: chrono::DateTime<chrono::Utc>,
-    pub message_count: usize,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TopicTransition {
-    pub from_topic: String,
-    pub to_topic: String,
-    pub timestamp: chrono::DateTime<chrono::Utc>,
-    pub transition_type: TransitionType,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TransitionType {
-    Natural,
-    Abrupt,
-    Return,
-    Clarification,
-}
-
-impl TopicTracker {
-    pub fn new() -> Self {
-        Self {
-            current_topics: Vec::new(),
-            topic_history: Vec::new(),
-            drift_threshold: 0.3,
-        }
-    }
-
-    pub fn analyze_message(&mut self, message: &Message) -> Option<TopicTransition> {
-        // Simple keyword-based topic detection
-        let detected_topics = self.detect_topics(&message.content);
-        
-        if detected_topics.is_empty() {
-            return None;
-        }
-        
-        let primary_topic_id = detected_topics[0].id.clone();
-        let primary_topic = &detected_topics[0];
-        
-        // Check if this is a new topic
-        if let Some(current) = self.current_topics.first() {
-            if current.id != primary_topic.id {
-                let transition = TopicTransition {
-                    from_topic: current.id.clone(),
-                    to_topic: primary_topic.id.clone(),
-                    timestamp: chrono::Utc::now(),
-                    transition_type: self.classify_transition(current, primary_topic),
-                };
-                
-                self.topic_history.push(transition.clone());
-                self.current_topics = detected_topics;
-                
-                return Some(transition);
-            }
-        } else {
-            self.current_topics = detected_topics;
-        }
-        
-        // Update topic stats
-        if let Some(topic) = self.current_topics.iter_mut().find(|t| t.id == primary_topic_id) {
-            topic.last_mentioned = chrono::Utc::now();
-            topic.message_count += 1;
-        }
-        
-        None
-    }
-
-    fn detect_topics(&self, content: &str) -> Vec<Topic> {
-        // Simplified topic detection based on keywords
-        let mut topics = Vec::new();
-        let content_lower = content.to_lowercase();
-        
-        // Knowledge graph related topics
-        if content_lower.contains("sparql") || content_lower.contains("query") {
-            topics.push(Topic {
-                id: "sparql_queries".to_string(),
-                name: "SPARQL Queries".to_string(),
-                keywords: vec!["sparql".to_string(), "query".to_string(), "select".to_string()],
-                confidence: 0.8,
-                first_mentioned: chrono::Utc::now(),
-                last_mentioned: chrono::Utc::now(),
-                message_count: 1,
-            });
-        }
-        
-        if content_lower.contains("graph") || content_lower.contains("triple") || content_lower.contains("rdf") {
-            topics.push(Topic {
-                id: "knowledge_graph".to_string(),
-                name: "Knowledge Graph".to_string(),
-                keywords: vec!["graph".to_string(), "triple".to_string(), "rdf".to_string()],
-                confidence: 0.7,
-                first_mentioned: chrono::Utc::now(),
-                last_mentioned: chrono::Utc::now(),
-                message_count: 1,
-            });
-        }
-        
-        if content_lower.contains("entity") || content_lower.contains("relationship") {
-            topics.push(Topic {
-                id: "entities_relations".to_string(),
-                name: "Entities and Relationships".to_string(),
-                keywords: vec!["entity".to_string(), "relationship".to_string(), "property".to_string()],
-                confidence: 0.6,
-                first_mentioned: chrono::Utc::now(),
-                last_mentioned: chrono::Utc::now(),
-                message_count: 1,
-            });
-        }
-        
-        topics
-    }
-
-    fn classify_transition(&self, from: &Topic, to: &Topic) -> TransitionType {
-        // Check if topics share keywords
-        let shared_keywords = from.keywords.iter()
-            .any(|k| to.keywords.contains(k));
-        
-        if shared_keywords {
-            TransitionType::Natural
-        } else if self.topic_history.iter().any(|t| t.to_topic == to.id) {
-            TransitionType::Return
-        } else {
-            TransitionType::Abrupt
-        }
-    }
-
-    pub fn get_topic_summary(&self) -> String {
-        if self.current_topics.is_empty() {
-            "No specific topic identified".to_string()
-        } else {
-            let topics: Vec<String> = self.current_topics
-                .iter()
-                .map(|t| t.name.clone())
-                .collect();
-            format!("Current topics: {}", topics.join(", "))
-        }
-    }
-}

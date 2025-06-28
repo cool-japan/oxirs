@@ -14,7 +14,7 @@ use tokio::{
 };
 
 use crate::{
-    error::{Error, Result},
+    error::{FusekiError, FusekiResult},
     store::Store,
     clustering::RaftConfig,
 };

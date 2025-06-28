@@ -4,17 +4,20 @@
 //! and intelligent precomputation strategies for improved performance.
 
 use crate::{EmbeddingModel, Vector};
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
-use tokio::sync::{broadcast, Mutex};
+// Removed unused imports
 use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
+
+/// Type alias for similarity cache
+type SimilarityCache = Arc<RwLock<LRUCache<String, Vec<(String, f64)>>>>;
 
 /// Multi-level caching system for embeddings and computations
 pub struct CacheManager {
@@ -23,7 +26,7 @@ pub struct CacheManager {
     /// L2 Cache: Computation results (intermediate speed)
     l2_cache: Arc<RwLock<LRUCache<ComputationKey, CachedComputation>>>,
     /// L3 Cache: Similarity cache (bulk operations)
-    l3_cache: Arc<RwLock<LRUCache<String, Vec<(String, f64)>>>>,
+    l3_cache: SimilarityCache,
     /// Cache configuration
     config: CacheConfig,
     /// Cache statistics
@@ -31,6 +34,7 @@ pub struct CacheManager {
     /// Background cleanup task
     cleanup_task: Option<JoinHandle<()>>,
     /// Cache warming strategy
+    #[allow(dead_code)]
     warming_strategy: WarmingStrategy,
 }
 
@@ -720,10 +724,8 @@ impl CachedEmbeddingModel {
         };
 
         // Try cache first
-        if let Some(cached_result) = self.cache_manager.get_computation(&key) {
-            if let ComputationResult::TripleScore(score) = cached_result {
-                return Ok(score);
-            }
+        if let Some(ComputationResult::TripleScore(score)) = self.cache_manager.get_computation(&key) {
+            return Ok(score);
         }
 
         // Cache miss - compute from model
@@ -746,10 +748,8 @@ impl CachedEmbeddingModel {
         };
 
         // Try cache first
-        if let Some(cached_result) = self.cache_manager.get_computation(&key) {
-            if let ComputationResult::PredictionResults(predictions) = cached_result {
-                return Ok(predictions);
-            }
+        if let Some(ComputationResult::PredictionResults(predictions)) = self.cache_manager.get_computation(&key) {
+            return Ok(predictions);
         }
 
         // Cache miss - compute from model

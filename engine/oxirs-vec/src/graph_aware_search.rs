@@ -494,6 +494,16 @@ impl GraphAwareSearch {
 
         0.7 // Different, unrelated graphs - apply penalty
     }
+
+    /// Set graph hierarchy configuration
+    pub fn set_graph_hierarchy(&mut self, parent_child: HashMap<String, Vec<String>>) {
+        self.config.graph_hierarchy.parent_child = parent_child;
+    }
+
+    /// Set graph weights for ranking
+    pub fn set_graph_weights(&mut self, weights: HashMap<String, f32>) {
+        self.config.graph_hierarchy.graph_weights = weights;
+    }
 }
 
 #[cfg(test)]

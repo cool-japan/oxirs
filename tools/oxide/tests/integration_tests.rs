@@ -1,6 +1,4 @@
 use oxide::{run, Cli, Commands, ConfigAction};
-use std::env;
-use std::path::PathBuf;
 use tempfile::tempdir;
 
 #[tokio::test]

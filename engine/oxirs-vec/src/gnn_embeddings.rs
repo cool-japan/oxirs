@@ -305,19 +305,15 @@ impl KGEmbeddingModel for GCN {
         }
     }
     
-    fn get_entity_embeddings(&self) -> &HashMap<String, Vector> {
+    fn get_entity_embeddings(&self) -> HashMap<String, Vector> {
         // This is a bit tricky because we store DVector but need to return HashMap<String, Vector>
-        // For now, we'll use a static empty HashMap - this should be refactored
-        use std::sync::LazyLock;
-        static EMPTY: LazyLock<std::collections::HashMap<String, Vector>> = LazyLock::new(HashMap::new);
-        &EMPTY
+        // For now, we'll return an empty HashMap - this should be refactored
+        HashMap::new()
     }
     
-    fn get_relation_embeddings(&self) -> &HashMap<String, Vector> {
+    fn get_relation_embeddings(&self) -> HashMap<String, Vector> {
         // Same issue as above
-        use std::sync::LazyLock;
-        static EMPTY: LazyLock<std::collections::HashMap<String, Vector>> = LazyLock::new(HashMap::new);
-        &EMPTY
+        HashMap::new()
     }
 }
 
@@ -746,16 +742,12 @@ impl KGEmbeddingModel for GraphSAGE {
         }
     }
     
-    fn get_entity_embeddings(&self) -> &HashMap<String, Vector> {
-        use std::sync::LazyLock;
-        static EMPTY: LazyLock<std::collections::HashMap<String, Vector>> = LazyLock::new(HashMap::new);
-        &EMPTY
+    fn get_entity_embeddings(&self) -> HashMap<String, Vector> {
+        HashMap::new()
     }
     
-    fn get_relation_embeddings(&self) -> &HashMap<String, Vector> {
-        use std::sync::LazyLock;
-        static EMPTY: LazyLock<std::collections::HashMap<String, Vector>> = LazyLock::new(HashMap::new);
-        &EMPTY
+    fn get_relation_embeddings(&self) -> HashMap<String, Vector> {
+        HashMap::new()
     }
 }
 

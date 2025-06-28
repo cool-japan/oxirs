@@ -64,6 +64,12 @@ pub enum FailoverState {
     Unavailable,
 }
 
+impl Default for FailoverState {
+    fn default() -> Self {
+        FailoverState::Primary
+    }
+}
+
 /// Failover event
 #[derive(Debug, Clone)]
 pub enum FailoverEvent {
@@ -120,19 +126,33 @@ pub struct FailoverStatistics {
     pub failed_failbacks: u64,
     pub primary_uptime: Duration,
     pub secondary_uptime: Duration,
+    #[serde(skip)]
     pub last_failover: Option<Instant>,
+    #[serde(skip)]
     pub last_failback: Option<Instant>,
     pub current_state: FailoverState,
+    #[serde(skip)]
     pub state_changes: Vec<(Instant, FailoverState)>,
 }
 
 /// Connection endpoint configuration
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ConnectionEndpoint<T: PooledConnection> {
     pub name: String,
     pub factory: Arc<dyn ConnectionFactory<T>>,
     pub priority: u32,
     pub metadata: HashMap<String, String>,
+}
+
+impl<T: PooledConnection> std::fmt::Debug for ConnectionEndpoint<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ConnectionEndpoint")
+            .field("name", &self.name)
+            .field("factory", &"<ConnectionFactory>")
+            .field("priority", &self.priority)
+            .field("metadata", &self.metadata)
+            .finish()
+    }
 }
 
 /// Failover manager for primary/secondary connections

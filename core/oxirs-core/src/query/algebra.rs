@@ -106,6 +106,20 @@ pub enum Expression {
     If(Box<Expression>, Box<Expression>, Box<Expression>),
     /// COALESCE expression
     Coalesce(Vec<Expression>),
+    /// Literal value
+    Literal(crate::model::Literal),
+    /// Test if term is IRI
+    IsIri(Box<Expression>),
+    /// Test if term is blank node
+    IsBlank(Box<Expression>),
+    /// Test if term is literal
+    IsLiteral(Box<Expression>),
+    /// Test if term is numeric
+    IsNumeric(Box<Expression>),
+    /// String value of term
+    Str(Box<Expression>),
+    /// Regular expression matching
+    Regex(Box<Expression>, Box<Expression>, Option<Box<Expression>>),
 }
 
 /// Built-in SPARQL functions

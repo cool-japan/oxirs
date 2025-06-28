@@ -60,6 +60,11 @@ impl Solution {
         }
         projected
     }
+    
+    /// Returns an iterator over the variable-term bindings
+    pub fn iter(&self) -> std::collections::hash_map::Iter<Variable, Term> {
+        self.bindings.iter()
+    }
 }
 
 /// Query results
@@ -379,9 +384,227 @@ impl<'a> QueryExecutor<'a> {
         Ok(distinct_solutions)
     }
 
-    fn evaluate_expression(&self, _expr: &Expression, _solution: &Solution) -> Option<bool> {
-        // Placeholder - would implement full expression evaluation
-        Some(true)
+    fn evaluate_expression(&self, expr: &Expression, solution: &Solution) -> Option<bool> {
+        match expr {
+            Expression::Variable(var) => {
+                if let Some(term) = solution.get(var) {
+                    // Convert term to boolean (non-empty strings and non-zero numbers are true)
+                    match term {
+                        Term::Literal(lit) => {
+                            let value = lit.as_str();
+                            match lit.datatype().as_str() {
+                                "http://www.w3.org/2001/XMLSchema#boolean" => {
+                                    value.parse::<bool>().ok()
+                                }
+                                "http://www.w3.org/2001/XMLSchema#integer" |
+                                "http://www.w3.org/2001/XMLSchema#decimal" |
+                                "http://www.w3.org/2001/XMLSchema#double" => {
+                                    value.parse::<f64>().map(|n| n != 0.0).ok()
+                                }
+                                "http://www.w3.org/2001/XMLSchema#string" => {
+                                    Some(!value.is_empty())
+                                }
+                                _ => Some(!value.is_empty())
+                            }
+                        }
+                        _ => Some(true), // Non-literal terms are considered true
+                    }
+                } else {
+                    Some(false) // Unbound variables are false
+                }
+            }
+            Expression::Literal(lit) => {
+                let value = lit.as_str();
+                match lit.datatype().as_str() {
+                    "http://www.w3.org/2001/XMLSchema#boolean" => {
+                        value.parse::<bool>().ok()
+                    }
+                    "http://www.w3.org/2001/XMLSchema#integer" |
+                    "http://www.w3.org/2001/XMLSchema#decimal" |
+                    "http://www.w3.org/2001/XMLSchema#double" => {
+                        value.parse::<f64>().map(|n| n != 0.0).ok()
+                    }
+                    _ => Some(!value.is_empty())
+                }
+            }
+            Expression::And(left, right) => {
+                let left_result = self.evaluate_expression(left, solution)?;
+                let right_result = self.evaluate_expression(right, solution)?;
+                Some(left_result && right_result)
+            }
+            Expression::Or(left, right) => {
+                let left_result = self.evaluate_expression(left, solution)?;
+                let right_result = self.evaluate_expression(right, solution)?;
+                Some(left_result || right_result)
+            }
+            Expression::Not(expr) => {
+                let result = self.evaluate_expression(expr, solution)?;
+                Some(!result)
+            }
+            Expression::Equal(left, right) => {
+                let left_term = self.evaluate_expression_to_term(left, solution)?;
+                let right_term = self.evaluate_expression_to_term(right, solution)?;
+                Some(left_term == right_term)
+            }
+            Expression::NotEqual(left, right) => {
+                let left_term = self.evaluate_expression_to_term(left, solution)?;
+                let right_term = self.evaluate_expression_to_term(right, solution)?;
+                Some(left_term != right_term)
+            }
+            Expression::Less(left, right) => {
+                self.evaluate_numeric_comparison(left, right, solution, |a, b| a < b)
+            }
+            Expression::LessOrEqual(left, right) => {
+                self.evaluate_numeric_comparison(left, right, solution, |a, b| a <= b)
+            }
+            Expression::Greater(left, right) => {
+                self.evaluate_numeric_comparison(left, right, solution, |a, b| a > b)
+            }
+            Expression::GreaterOrEqual(left, right) => {
+                self.evaluate_numeric_comparison(left, right, solution, |a, b| a >= b)
+            }
+            Expression::Bound(var) => {
+                Some(solution.get(var).is_some())
+            }
+            Expression::IsIri(expr) => {
+                if let Some(term) = self.evaluate_expression_to_term(expr, solution) {
+                    Some(matches!(term, Term::NamedNode(_)))
+                } else {
+                    Some(false)
+                }
+            }
+            Expression::IsBlank(expr) => {
+                if let Some(term) = self.evaluate_expression_to_term(expr, solution) {
+                    Some(matches!(term, Term::BlankNode(_)))
+                } else {
+                    Some(false)
+                }
+            }
+            Expression::IsLiteral(expr) => {
+                if let Some(term) = self.evaluate_expression_to_term(expr, solution) {
+                    Some(matches!(term, Term::Literal(_)))
+                } else {
+                    Some(false)
+                }
+            }
+            Expression::IsNumeric(expr) => {
+                if let Some(Term::Literal(lit)) = self.evaluate_expression_to_term(expr, solution) {
+                    let datatype_str = lit.datatype().as_str().to_string();
+                    Some(matches!(datatype_str.as_str(),
+                        "http://www.w3.org/2001/XMLSchema#integer" |
+                        "http://www.w3.org/2001/XMLSchema#decimal" |
+                        "http://www.w3.org/2001/XMLSchema#double" |
+                        "http://www.w3.org/2001/XMLSchema#float"
+                    ))
+                } else {
+                    Some(false)
+                }
+            }
+            Expression::Str(expr) => {
+                // STR() always succeeds, so it's always "true" for filtering purposes
+                Some(self.evaluate_expression_to_term(expr, solution).is_some())
+            }
+            Expression::Regex(text_expr, pattern_expr, flags_expr) => {
+                let text = self.evaluate_expression_to_string(text_expr, solution)?;
+                let pattern = self.evaluate_expression_to_string(pattern_expr, solution)?;
+                
+                let flags = if let Some(flags_expr) = flags_expr {
+                    self.evaluate_expression_to_string(flags_expr, solution).unwrap_or_default()
+                } else {
+                    String::new()
+                };
+                
+                // Basic regex implementation (would need full regex crate for production)
+                if flags.is_empty() {
+                    Some(text.contains(&pattern))
+                } else {
+                    // For now, just do case-insensitive matching if 'i' flag is present
+                    if flags.contains('i') {
+                        Some(text.to_lowercase().contains(&pattern.to_lowercase()))
+                    } else {
+                        Some(text.contains(&pattern))
+                    }
+                }
+            }
+            _ => {
+                // For unsupported expressions, default to true
+                // This is a simplified implementation
+                Some(true)
+            }
+        }
+    }
+    
+    /// Evaluate an expression to a term value
+    fn evaluate_expression_to_term(&self, expr: &Expression, solution: &Solution) -> Option<Term> {
+        match expr {
+            Expression::Variable(var) => solution.get(var).cloned(),
+            Expression::Term(term) => Some(term.clone()),
+            Expression::FunctionCall(Function::Str, args) => {
+                if let Some(arg) = args.first() {
+                    if let Some(term) = self.evaluate_expression_to_term(arg, solution) {
+                        match term {
+                            Term::NamedNode(n) => Some(Term::Literal(Literal::new(n.as_str()))),
+                            Term::Literal(l) => Some(Term::Literal(Literal::new(l.as_str()))),
+                            Term::BlankNode(b) => Some(Term::Literal(Literal::new(b.as_str()))),
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+            _ => None, // Other expressions don't directly evaluate to terms
+        }
+    }
+    
+    /// Evaluate an expression to a string value
+    fn evaluate_expression_to_string(&self, expr: &Expression, solution: &Solution) -> Option<String> {
+        if let Some(term) = self.evaluate_expression_to_term(expr, solution) {
+            match term {
+                Term::NamedNode(n) => Some(n.as_str().to_string()),
+                Term::Literal(l) => Some(l.as_str().to_string()),
+                Term::BlankNode(b) => Some(b.as_str().to_string()),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    }
+    
+    /// Evaluate a numeric comparison
+    fn evaluate_numeric_comparison<F>(
+        &self,
+        left: &Expression,
+        right: &Expression,
+        solution: &Solution,
+        comparator: F,
+    ) -> Option<bool>
+    where
+        F: Fn(f64, f64) -> bool,
+    {
+        let left_val = self.evaluate_expression_to_numeric(left, solution)?;
+        let right_val = self.evaluate_expression_to_numeric(right, solution)?;
+        Some(comparator(left_val, right_val))
+    }
+    
+    /// Evaluate an expression to a numeric value
+    fn evaluate_expression_to_numeric(&self, expr: &Expression, solution: &Solution) -> Option<f64> {
+        if let Some(Term::Literal(lit)) = self.evaluate_expression_to_term(expr, solution) {
+            let value = lit.as_str();
+            match lit.datatype().as_str() {
+                "http://www.w3.org/2001/XMLSchema#integer" |
+                "http://www.w3.org/2001/XMLSchema#decimal" |
+                "http://www.w3.org/2001/XMLSchema#double" |
+                "http://www.w3.org/2001/XMLSchema#float" => {
+                    value.parse::<f64>().ok()
+                }
+                _ => None,
+            }
+        } else {
+            None
+        }
     }
 }
 

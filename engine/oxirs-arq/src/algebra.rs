@@ -3,29 +3,27 @@
 //! This module provides the core algebraic representation of SPARQL queries,
 //! including basic graph patterns, joins, unions, filters, and other operations.
 
+use oxirs_core::model::{
+    NamedNode, Literal as CoreLiteral, BlankNode as CoreBlankNode,
+    Subject, Predicate, Object, Triple as CoreTriple, Quad as CoreQuad,
+    Variable as CoreVariable
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 
-/// Variable identifier
-pub type Variable = String;
+/// Variable identifier - reuse from core
+pub use oxirs_core::model::Variable;
 
-/// IRI (Internationalized Resource Identifier)
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct Iri(pub String);
+/// IRI (Internationalized Resource Identifier) - use NamedNode from core
+pub type Iri = NamedNode;
 
-impl fmt::Display for Iri {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "<{}>", self.0)
-    }
-}
-
-/// Literal value with optional language tag or datatype
+/// Literal value - create a bridge type that can convert to/from core literal
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Literal {
     pub value: String,
     pub language: Option<String>,
-    pub datatype: Option<Iri>,
+    pub datatype: Option<NamedNode>,
 }
 
 impl fmt::Display for Literal {
@@ -51,11 +49,35 @@ impl Literal {
     }
 }
 
-/// RDF term (subject, predicate, or object)
+impl From<CoreLiteral> for Literal {
+    fn from(core_literal: CoreLiteral) -> Self {
+        let (value, datatype, language) = core_literal.destruct();
+        Self {
+            value,
+            language,
+            datatype,
+        }
+    }
+}
+
+impl From<Literal> for CoreLiteral {
+    fn from(literal: Literal) -> Self {
+        if let Some(lang) = literal.language {
+            CoreLiteral::new_language_tagged_literal(&literal.value, lang)
+                .unwrap_or_else(|_| CoreLiteral::new_simple_literal(literal.value))
+        } else if let Some(datatype) = literal.datatype {
+            CoreLiteral::new_typed_literal(literal.value, datatype)
+        } else {
+            CoreLiteral::new_simple_literal(literal.value)
+        }
+    }
+}
+
+/// RDF term (subject, predicate, or object) - bridge with core types
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Term {
     Variable(Variable),
-    Iri(Iri),
+    Iri(NamedNode),
     Literal(Literal),
     BlankNode(String),
 }
@@ -68,6 +90,70 @@ impl fmt::Display for Term {
             Term::Literal(lit) => write!(f, "{}", lit),
             Term::BlankNode(id) => write!(f, "_:{}", id),
         }
+    }
+}
+
+impl From<Subject> for Term {
+    fn from(subject: Subject) -> Self {
+        match subject {
+            Subject::NamedNode(n) => Term::Iri(n),
+            Subject::BlankNode(b) => Term::BlankNode(b.id().to_string()),
+            Subject::Variable(v) => Term::Variable(v),
+            Subject::QuotedTriple(_) => {
+                // For now, convert quoted triples to a placeholder
+                // TODO: Implement proper quoted triple support
+                Term::Iri(NamedNode::new_unchecked("__quoted_triple__"))
+            }
+        }
+    }
+}
+
+impl From<Predicate> for Term {
+    fn from(predicate: Predicate) -> Self {
+        match predicate {
+            Predicate::NamedNode(n) => Term::Iri(n),
+            Predicate::Variable(v) => Term::Variable(v),
+        }
+    }
+}
+
+impl From<Object> for Term {
+    fn from(object: Object) -> Self {
+        match object {
+            Object::NamedNode(n) => Term::Iri(n),
+            Object::BlankNode(b) => Term::BlankNode(b.id().to_string()),
+            Object::Literal(l) => Term::Literal(l.into()),
+            Object::Variable(v) => Term::Variable(v),
+            Object::QuotedTriple(_) => {
+                // For now, convert quoted triples to a placeholder
+                // TODO: Implement proper quoted triple support
+                Term::Iri(NamedNode::new_unchecked("__quoted_triple__"))
+            }
+        }
+    }
+}
+
+impl From<NamedNode> for Term {
+    fn from(node: NamedNode) -> Self {
+        Term::Iri(node)
+    }
+}
+
+impl From<CoreBlankNode> for Term {
+    fn from(node: CoreBlankNode) -> Self {
+        Term::BlankNode(node.id().to_string())
+    }
+}
+
+impl From<CoreLiteral> for Term {
+    fn from(literal: CoreLiteral) -> Self {
+        Term::Literal(literal.into())
+    }
+}
+
+impl From<Variable> for Term {
+    fn from(variable: Variable) -> Self {
+        Term::Variable(variable)
     }
 }
 
@@ -900,7 +986,7 @@ macro_rules! var {
 #[macro_export]
 macro_rules! iri {
     ($iri:expr) => {
-        Term::Iri(Iri($iri.to_string()))
+        Term::Iri(NamedNode::new($iri).unwrap())
     };
 }
 
@@ -920,7 +1006,7 @@ macro_rules! literal {
         Term::Literal(Literal::new(
             $value.to_string(),
             None,
-            Some(Iri($dt.to_string())),
+            Some(NamedNode::new($dt).unwrap()),
         ))
     };
 }
@@ -1020,7 +1106,7 @@ impl Literal {
     pub fn integer(value: i64) -> Self {
         Literal::typed(
             value.to_string(),
-            Iri("http://www.w3.org/2001/XMLSchema#integer".to_string()),
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
         )
     }
 
@@ -1028,7 +1114,7 @@ impl Literal {
     pub fn decimal(value: f64) -> Self {
         Literal::typed(
             value.to_string(),
-            Iri("http://www.w3.org/2001/XMLSchema#decimal".to_string()),
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#decimal").unwrap(),
         )
     }
 
@@ -1036,7 +1122,7 @@ impl Literal {
     pub fn boolean(value: bool) -> Self {
         Literal::typed(
             value.to_string(),
-            Iri("http://www.w3.org/2001/XMLSchema#boolean".to_string()),
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
         )
     }
 
@@ -1044,7 +1130,7 @@ impl Literal {
     pub fn date(value: impl Into<String>) -> Self {
         Literal::typed(
             value.into(),
-            Iri("http://www.w3.org/2001/XMLSchema#date".to_string()),
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#date").unwrap(),
         )
     }
 
@@ -1052,7 +1138,7 @@ impl Literal {
     pub fn datetime(value: impl Into<String>) -> Self {
         Literal::typed(
             value.into(),
-            Iri("http://www.w3.org/2001/XMLSchema#dateTime".to_string()),
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#dateTime").unwrap(),
         )
     }
 
@@ -1061,9 +1147,9 @@ impl Literal {
         if let Some(ref dt) = self.datatype {
             dt.clone()
         } else if self.language.is_some() {
-            Iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString".to_string())
+            NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString").unwrap()
         } else {
-            Iri("http://www.w3.org/2001/XMLSchema#string".to_string())
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#string").unwrap()
         }
     }
 
@@ -1071,7 +1157,7 @@ impl Literal {
     pub fn is_numeric(&self) -> bool {
         if let Some(ref dt) = self.datatype {
             matches!(
-                dt.0.as_str(),
+                dt.as_str(),
                 "http://www.w3.org/2001/XMLSchema#integer"
                     | "http://www.w3.org/2001/XMLSchema#decimal"
                     | "http://www.w3.org/2001/XMLSchema#float"
@@ -1107,7 +1193,7 @@ impl Literal {
     /// Check if this is a boolean literal
     pub fn is_boolean(&self) -> bool {
         if let Some(ref dt) = self.datatype {
-            dt.0 == "http://www.w3.org/2001/XMLSchema#boolean"
+            dt.as_str() == "http://www.w3.org/2001/XMLSchema#boolean"
         } else {
             false
         }
@@ -1117,7 +1203,7 @@ impl Literal {
     pub fn is_datetime(&self) -> bool {
         if let Some(ref dt) = self.datatype {
             matches!(
-                dt.0.as_str(),
+                dt.as_str(),
                 "http://www.w3.org/2001/XMLSchema#date"
                     | "http://www.w3.org/2001/XMLSchema#dateTime"
                     | "http://www.w3.org/2001/XMLSchema#time"
@@ -1355,4 +1441,15 @@ fn estimate_filter_selectivity(condition: &Expression) -> f64 {
         },
         _ => 0.5, // Default selectivity
     }
+}
+
+/// Evaluation context for query execution
+#[derive(Debug, Clone, Default)]
+pub struct EvaluationContext {
+    /// Variable bindings
+    pub bindings: HashMap<Variable, Term>,
+    /// Dataset being queried
+    pub dataset: Option<String>,
+    /// Query execution options
+    pub options: HashMap<String, String>,
 }

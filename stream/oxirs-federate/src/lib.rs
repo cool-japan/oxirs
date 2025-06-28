@@ -306,7 +306,7 @@ impl FederationEngine {
                             .iter()
                             .map(|(var, term)| {
                                 let sparql_value = match term {
-                                    oxirs_core::Term::NamedNode(node) => {
+                                    &oxirs_core::Term::NamedNode(ref node) => {
                                         crate::executor::SparqlValue {
                                             value_type: "uri".to_string(),
                                             value: node.to_string(),
@@ -314,7 +314,7 @@ impl FederationEngine {
                                             lang: None,
                                         }
                                     }
-                                    oxirs_core::Term::Literal(literal) => {
+                                    &oxirs_core::Term::Literal(ref literal) => {
                                         if let Some(lang) = literal.language() {
                                             crate::executor::SparqlValue {
                                                 value_type: "literal".to_string(),
@@ -333,7 +333,7 @@ impl FederationEngine {
                                             }
                                         }
                                     }
-                                    oxirs_core::Term::BlankNode(bnode) => {
+                                    &oxirs_core::Term::BlankNode(ref bnode) => {
                                         crate::executor::SparqlValue {
                                             value_type: "bnode".to_string(),
                                             value: bnode.to_string(),
@@ -341,10 +341,21 @@ impl FederationEngine {
                                             lang: None,
                                         }
                                     }
-                                    oxirs_core::Term::Variable(var) => {
+                                    &oxirs_core::Term::Variable(ref var) => {
                                         crate::executor::SparqlValue {
                                             value_type: "variable".to_string(),
                                             value: var.to_string(),
+                                            datatype: None,
+                                            lang: None,
+                                        }
+                                    }
+                                    &oxirs_core::Term::QuotedTriple(ref triple) => {
+                                        crate::executor::SparqlValue {
+                                            value_type: "quoted_triple".to_string(),
+                                            value: format!("<<{} {} {}>>", 
+                                                triple.subject(), 
+                                                triple.predicate(), 
+                                                triple.object()),
                                             datatype: None,
                                             lang: None,
                                         }

@@ -4,6 +4,7 @@
 //! SPARQL functions, operators, and other query processing capabilities.
 
 use crate::algebra::{Algebra, BinaryOperator, Binding, Expression, Term, UnaryOperator, Variable};
+use oxirs_core::model::NamedNode;
 use anyhow::{anyhow, bail, Result};
 use std::any::Any;
 use std::collections::HashMap;
@@ -664,7 +665,7 @@ impl Value {
                 language: None,
                 datatype: None,
             })),
-            Value::Iri(iri) => Ok(Term::Iri(crate::algebra::Iri(iri.clone()))),
+            Value::Iri(iri) => Ok(Term::Iri(NamedNode::new_unchecked(iri.clone()))),
             Value::BlankNode(id) => Ok(Term::BlankNode(id.clone())),
             Value::Literal {
                 value,
@@ -673,7 +674,7 @@ impl Value {
             } => Ok(Term::Literal(crate::algebra::Literal {
                 value: value.clone(),
                 language: language.clone(),
-                datatype: datatype.as_ref().map(|dt| crate::algebra::Iri(dt.clone())),
+                datatype: datatype.as_ref().map(|dt| NamedNode::new_unchecked(dt.clone())),
             })),
             _ => bail!("Cannot convert {} to Term", self.type_name()),
         }
@@ -682,12 +683,12 @@ impl Value {
     /// Create from Term
     pub fn from_term(term: &Term) -> Self {
         match term {
-            Term::Iri(iri) => Value::Iri(iri.0.clone()),
+            Term::Iri(iri) => Value::Iri(iri.as_str().to_string()),
             Term::BlankNode(id) => Value::BlankNode(id.clone()),
             Term::Literal(lit) => Value::Literal {
                 value: lit.value.clone(),
                 language: lit.language.clone(),
-                datatype: lit.datatype.as_ref().map(|dt| dt.0.clone()),
+                datatype: lit.datatype.as_ref().map(|dt| dt.as_str().to_string()),
             },
             Term::Variable(var) => Value::String(format!("?{}", var)),
         }

@@ -11,6 +11,11 @@ use std::fmt::{self, Debug, Display};
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex, RwLock};
 
+use crate::compression::{
+    AdaptiveCompressor, AdvancedCompressionType, ColumnStoreCompressor, CompressedData,
+    CompressionMetadata, RunLengthEncoder,
+};
+
 /// Node identifier type - unique ID for each term
 pub type NodeId = u64;
 
@@ -181,6 +186,14 @@ pub enum CompressionType {
     Delta = 3,
     Huffman = 4,
     LZ4 = 5,
+    // Advanced compression types
+    RunLength = 10,
+    BitmapWAH = 11,
+    BitmapRoaring = 12,
+    FrameOfReference = 14,
+    AdaptiveDictionary = 15,
+    ColumnStore = 16,
+    Adaptive = 17,
 }
 
 impl EncodedNode {
@@ -308,6 +321,12 @@ pub struct NodeTableConfig {
     pub cache_size: usize,
     /// Enable prefix compression for IRIs
     pub enable_prefix_compression: bool,
+    /// Enable advanced compression algorithms
+    pub enable_advanced_compression: bool,
+    /// Enable column-store optimizations
+    pub enable_column_store: bool,
+    /// Adaptive compression threshold
+    pub adaptive_threshold: f64,
 }
 
 impl Default for NodeTableConfig {
@@ -315,10 +334,13 @@ impl Default for NodeTableConfig {
         Self {
             enable_compression: true,
             compression_threshold: 32,
-            default_compression: CompressionType::Dictionary,
+            default_compression: CompressionType::Adaptive,
             enable_interning: true,
             cache_size: 10000,
             enable_prefix_compression: true,
+            enable_advanced_compression: true,
+            enable_column_store: true,
+            adaptive_threshold: 0.8,
         }
     }
 }
@@ -387,6 +409,10 @@ pub struct NodeTable {
     cache: Arc<RwLock<HashMap<NodeId, Term>>>,
     /// Common IRI prefixes for compression
     iri_prefixes: Arc<RwLock<HashMap<String, u32>>>,
+    /// Advanced adaptive compressor
+    adaptive_compressor: Arc<AdaptiveCompressor>,
+    /// Column-store compressor
+    column_compressor: Arc<RwLock<ColumnStoreCompressor>>,
     /// Statistics
     stats: Arc<Mutex<NodeTableStats>>,
 }
@@ -407,6 +433,13 @@ impl NodeTable {
         iri_prefixes.insert("http://www.w3.org/2001/XMLSchema#".to_string(), 3);
         iri_prefixes.insert("http://www.w3.org/2002/07/owl#".to_string(), 4);
 
+        // Initialize advanced compressors
+        let adaptive_compressor = Arc::new(AdaptiveCompressor::new(
+            config.compression_threshold,
+            config.adaptive_threshold,
+        ));
+        let column_compressor = Arc::new(RwLock::new(ColumnStoreCompressor::new()));
+
         Self {
             config,
             nodes: Arc::new(RwLock::new(HashMap::new())),
@@ -415,6 +448,8 @@ impl NodeTable {
             dictionary: Arc::new(RwLock::new(StringDictionary::new())),
             cache: Arc::new(RwLock::new(HashMap::new())),
             iri_prefixes: Arc::new(RwLock::new(iri_prefixes)),
+            adaptive_compressor,
+            column_compressor,
             stats: Arc::new(Mutex::new(NodeTableStats::default())),
         }
     }
@@ -702,6 +737,12 @@ impl NodeTable {
     }
 
     fn compress_data(&self, data: &[u8], term: &Term) -> Result<(Vec<u8>, CompressionType)> {
+        // Use advanced compression if enabled
+        if self.config.enable_advanced_compression {
+            return self.advanced_compress_data(data, term);
+        }
+
+        // Fall back to legacy compression
         match self.config.default_compression {
             CompressionType::Dictionary => {
                 // Dictionary compression for strings
@@ -732,8 +773,105 @@ impl NodeTable {
             CompressionType::None => Ok(data.to_vec()),
             CompressionType::Dictionary => self.dictionary_decompress(data),
             CompressionType::Prefix => self.prefix_decompress(data),
+            CompressionType::RunLength => RunLengthEncoder::decode(data),
+            CompressionType::Adaptive => {
+                // For adaptive compression, we need to determine the actual algorithm used
+                // This is a simplified implementation - in practice, we'd store metadata
+                self.adaptive_decompress_data(data)
+            },
             _ => Err(anyhow!("Unsupported compression type: {:?}", compression)),
         }
+    }
+
+    fn advanced_compress_data(&self, data: &[u8], term: &Term) -> Result<(Vec<u8>, CompressionType)> {
+        // Analyze term for column-store optimization
+        if self.config.enable_column_store {
+            self.analyze_term_for_column_store(term)?;
+        }
+
+        // Use adaptive compressor to select best algorithm
+        match self.adaptive_compressor.compress(data) {
+            Ok(compressed) => {
+                let compression_type = match compressed.metadata.algorithm {
+                    AdvancedCompressionType::RunLength => CompressionType::RunLength,
+                    AdvancedCompressionType::Delta => CompressionType::Delta,
+                    AdvancedCompressionType::FrameOfReference => CompressionType::FrameOfReference,
+                    AdvancedCompressionType::AdaptiveDictionary => CompressionType::AdaptiveDictionary,
+                    AdvancedCompressionType::Adaptive => CompressionType::Adaptive,
+                    _ => CompressionType::None,
+                };
+
+                // Only use compression if it provides significant savings
+                if compressed.metadata.compression_ratio() < self.config.adaptive_threshold {
+                    Ok((compressed.data, compression_type))
+                } else {
+                    Ok((data.to_vec(), CompressionType::None))
+                }
+            }
+            Err(_) => {
+                // Fall back to legacy compression
+                self.legacy_compress_data(data, term)
+            }
+        }
+    }
+
+    fn adaptive_decompress_data(&self, data: &[u8]) -> Result<Vec<u8>> {
+        // In a real implementation, we would store compression metadata
+        // For now, try to decompress using the adaptive compressor
+        let compressed_data = CompressedData {
+            data: data.to_vec(),
+            metadata: CompressionMetadata {
+                algorithm: AdvancedCompressionType::RunLength, // Default guess
+                original_size: 0,
+                compressed_size: data.len() as u64,
+                compression_time_us: 0,
+                metadata: HashMap::new(),
+            },
+        };
+
+        self.adaptive_compressor.decompress(&compressed_data)
+    }
+
+    fn legacy_compress_data(&self, data: &[u8], term: &Term) -> Result<(Vec<u8>, CompressionType)> {
+        match self.config.default_compression {
+            CompressionType::Dictionary => {
+                if let Ok(dict_data) = self.dictionary_compress(data, term) {
+                    Ok((dict_data, CompressionType::Dictionary))
+                } else {
+                    Ok((data.to_vec(), CompressionType::None))
+                }
+            }
+            CompressionType::Prefix => {
+                if let Term::Iri(iri) = term {
+                    if let Ok(prefix_data) = self.prefix_compress(iri) {
+                        Ok((prefix_data, CompressionType::Prefix))
+                    } else {
+                        Ok((data.to_vec(), CompressionType::None))
+                    }
+                } else {
+                    Ok((data.to_vec(), CompressionType::None))
+                }
+            }
+            _ => Ok((data.to_vec(), CompressionType::None)),
+        }
+    }
+
+    fn analyze_term_for_column_store(&self, term: &Term) -> Result<()> {
+        if let Ok(mut compressor) = self.column_compressor.write() {
+            let column_name = match term {
+                Term::Iri(_) => "iri",
+                Term::Literal { datatype: Some(_), .. } => "literal_datatype",
+                Term::Literal { language: Some(_), .. } => "literal_language",
+                Term::Literal { .. } => "literal_value",
+                Term::BlankNode(_) => "blank_node",
+                Term::Variable(_) => "variable",
+            };
+
+            // In a real implementation, we would accumulate data and analyze in batches
+            let values = vec![term.as_str().to_string()];
+            compressor.analyze_column(column_name, &values);
+        }
+        Ok(())
     }
 
     fn dictionary_compress(&self, data: &[u8], term: &Term) -> Result<Vec<u8>> {

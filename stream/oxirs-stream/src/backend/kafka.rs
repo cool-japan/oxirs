@@ -1180,6 +1180,31 @@ impl KafkaProducer {
                     graph: graph.clone(),
                     metadata,
                 },
+                PatchOperation::AddPrefix { .. } => {
+                    // Skip prefix operations for now
+                    continue;
+                },
+                PatchOperation::DeletePrefix { .. } => {
+                    // Skip prefix operations for now
+                    continue;
+                },
+                PatchOperation::TransactionBegin { transaction_id } => StreamEvent::TransactionBegin {
+                    transaction_id: transaction_id.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+                    isolation_level: None,
+                    metadata,
+                },
+                PatchOperation::TransactionCommit => StreamEvent::TransactionCommit {
+                    transaction_id: uuid::Uuid::new_v4().to_string(),
+                    metadata,
+                },
+                PatchOperation::TransactionAbort => StreamEvent::TransactionAbort {
+                    transaction_id: uuid::Uuid::new_v4().to_string(),
+                    metadata,
+                },
+                PatchOperation::Header { .. } => {
+                    // Skip header operations for now
+                    continue;
+                },
             };
             events.push(event);
         }

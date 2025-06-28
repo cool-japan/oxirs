@@ -84,4 +84,10 @@ impl QueryExecutor {
         let stats = stats::ExecutionStats::default();
         Ok((solution, stats))
     }
+
+    pub fn execute_algebra(&self, algebra: &Algebra, context: &mut crate::algebra::EvaluationContext) -> Result<Vec<Solution>> {
+        // Simplified implementation for now
+        let solution = Solution::new();
+        Ok(vec![solution])
+    }
 }

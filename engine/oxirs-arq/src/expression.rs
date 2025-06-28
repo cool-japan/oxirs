@@ -41,7 +41,7 @@ impl ExpressionEvaluator {
     pub fn evaluate(&self, expr: &AlgebraExpression) -> Result<Term> {
         match expr {
             AlgebraExpression::Variable(var) => {
-                self.binding_context.get(var)
+                self.binding_context.get(var.as_str())
                     .cloned()
                     .ok_or_else(|| anyhow!("Unbound variable: ?{}", var))
             }
@@ -51,7 +51,7 @@ impl ExpressionEvaluator {
             }
             
             AlgebraExpression::Iri(iri) => {
-                Ok(Term::iri(&iri.0))
+                Ok(Term::iri(iri.as_str()))
             }
             
             AlgebraExpression::Function { name, args } => {

@@ -729,14 +729,14 @@ impl SparqlVectorService {
     /// Set up graph hierarchy for hierarchical search
     pub fn configure_graph_hierarchy(&mut self, parent_child: HashMap<String, Vec<String>>) {
         if let Some(ref mut graph_search) = self.graph_aware_search {
-            graph_search.config.graph_hierarchy.parent_child = parent_child;
+            graph_search.set_graph_hierarchy(parent_child);
         }
     }
 
     /// Set graph weights for ranking
     pub fn set_graph_weights(&mut self, weights: HashMap<String, f32>) {
         if let Some(ref mut graph_search) = self.graph_aware_search {
-            graph_search.config.graph_hierarchy.graph_weights = weights;
+            graph_search.set_graph_weights(weights);
         }
     }
 
@@ -1204,7 +1204,7 @@ impl SparqlVectorService {
             let mut detailed_results = Vec::new();
             let mut rank = 1;
             
-            for (resource, score) in results {
+            for (resource, score) in results.iter() {
                 let explanation = Some(format!(
                     "Text query '{}' in graph '{}' matched resource '{}' with score {:.3}",
                     query_text, graph_uri, resource, score
@@ -1212,7 +1212,7 @@ impl SparqlVectorService {
                 
                 detailed_results.push(SimilarityResult {
                     resource: resource.clone(),
-                    score,
+                    score: *score,
                     rank,
                     metric: self.config.default_metric,
                     explanation,

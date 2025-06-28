@@ -5,7 +5,7 @@
 
 use crate::model::*;
 use crate::query::algebra;
-use crate::query::{Expression, OrderExpression, Query, QueryForm, SelectVariables};
+use crate::query::algebra::{Expression, OrderExpression, Query, QueryForm, SelectVariables};
 use crate::OxirsError;
 
 /// Convert algebra TriplePattern to model TriplePattern

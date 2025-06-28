@@ -279,6 +279,13 @@ impl SparqlClient {
                     headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value)?);
                 }
             }
+            AuthType::Custom => {
+                if let Some(custom_headers) = &auth.credentials.custom_headers {
+                    for (key, value) in custom_headers {
+                        headers.insert(key.as_str(), HeaderValue::from_str(value)?);
+                    }
+                }
+            }
             AuthType::None => {}
         }
         Ok(())
@@ -509,6 +516,13 @@ impl GraphQLClient {
                 if let Some(token) = &auth.credentials.token {
                     let auth_value = format!("Bearer {}", token);
                     headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value)?);
+                }
+            }
+            AuthType::Custom => {
+                if let Some(custom_headers) = &auth.credentials.custom_headers {
+                    for (key, value) in custom_headers {
+                        headers.insert(key.as_str(), HeaderValue::from_str(value)?);
+                    }
                 }
             }
             AuthType::None => {}
@@ -756,6 +770,14 @@ pub fn create_client(service: FederatedService, config: ClientConfig) -> Result<
         crate::ServiceType::Hybrid => {
             // For hybrid services, default to SPARQL client
             // Could be enhanced to select based on query type
+            Ok(Box::new(SparqlClient::new(service, config)?))
+        }
+        crate::ServiceType::RestRdf => {
+            // REST-RDF services use SPARQL-like interface
+            Ok(Box::new(SparqlClient::new(service, config)?))
+        }
+        crate::ServiceType::Custom(_) => {
+            // For custom services, default to SPARQL client
             Ok(Box::new(SparqlClient::new(service, config)?))
         }
     }

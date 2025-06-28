@@ -5,8 +5,7 @@
 
 use crate::ai::AiConfig;
 use crate::model::Triple;
-use crate::OxirsError;
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -335,7 +334,7 @@ impl EntityResolver {
             
             // Process object entity if it's not a literal
             if let crate::model::Object::NamedNode(node) = triple.object() {
-                let object_uri = node.as_str().to_string();
+                let object_uri = node.to_string();
                 let object_entry = entity_map.entry(object_uri.clone()).or_insert_with(|| {
                     let id = {
                         let mut counter = entity_counter.borrow_mut();

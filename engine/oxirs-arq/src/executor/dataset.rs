@@ -114,7 +114,7 @@ impl<'a> PathDataset for DatasetPathAdapter<'a> {
         let pattern = TriplePattern::new(
             subject.clone(),
             predicate.clone(),
-            AlgebraTerm::Variable("?o".to_string()),
+            AlgebraTerm::Variable(crate::algebra::Variable::new("?o")?),
         );
         let triples = self.dataset.find_triples(&pattern)?;
         Ok(triples.into_iter().map(|(_, _, o)| o).collect())
@@ -122,7 +122,7 @@ impl<'a> PathDataset for DatasetPathAdapter<'a> {
 
     fn find_incoming(&self, predicate: &AlgebraTerm, object: &AlgebraTerm) -> Result<Vec<AlgebraTerm>> {
         let pattern = TriplePattern::new(
-            AlgebraTerm::Variable("?s".to_string()),
+            AlgebraTerm::Variable(crate::algebra::Variable::new("?s")?),
             predicate.clone(),
             object.clone(),
         );
@@ -133,7 +133,7 @@ impl<'a> PathDataset for DatasetPathAdapter<'a> {
     fn find_predicates(&self, subject: &AlgebraTerm, object: &AlgebraTerm) -> Result<Vec<AlgebraTerm>> {
         let pattern = TriplePattern::new(
             subject.clone(),
-            AlgebraTerm::Variable("?p".to_string()),
+            AlgebraTerm::Variable(crate::algebra::Variable::new("?p")?),
             object.clone(),
         );
         let triples = self.dataset.find_triples(&pattern)?;

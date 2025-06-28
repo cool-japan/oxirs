@@ -3,17 +3,17 @@
 //! This module provides a comprehensive model lifecycle management system including
 //! versioning, deployment, performance tracking, and A/B testing capabilities.
 
-use crate::{EmbeddingModel, ModelConfig, ModelStats};
+use crate::{EmbeddingModel, ModelConfig};
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
-use rand::Rng;
+// Removed unused import
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::{broadcast, RwLock};
-use tokio::task::JoinHandle;
-use tracing::{error, info, warn};
+use tokio::sync::RwLock;
+// Removed unused import
+// Removed unused import
 use uuid::Uuid;
 
 /// Model version information
@@ -115,6 +115,7 @@ pub struct ModelRegistry {
     deployments: Arc<RwLock<HashMap<Uuid, ModelDeployment>>>,
     ab_tests: Arc<RwLock<HashMap<Uuid, ABTestConfig>>>,
     performance_history: Arc<RwLock<HashMap<Uuid, Vec<PerformanceMetrics>>>>,
+    #[allow(dead_code)]
     storage_path: PathBuf,
 }
 
@@ -316,7 +317,7 @@ impl ModelRegistry {
         }
         drop(versions);
         
-        if traffic_split < 0.0 || traffic_split > 1.0 {
+        if !(0.0..=1.0).contains(&traffic_split) {
             return Err(anyhow!("Traffic split must be between 0.0 and 1.0"));
         }
         
@@ -480,6 +481,7 @@ impl ModelRegistry {
 /// Model serving infrastructure
 pub struct ModelServer {
     registry: Arc<ModelRegistry>,
+    #[allow(dead_code)]
     loaded_models: Arc<RwLock<HashMap<Uuid, Box<dyn EmbeddingModel>>>>,
     warm_up_cache: Arc<RwLock<HashMap<Uuid, Vec<String>>>>,
 }
@@ -494,7 +496,7 @@ impl ModelServer {
     }
 
     /// Load model into memory
-    pub async fn load_model(&self, version_id: Uuid) -> Result<()> {
+    pub async fn load_model(&self, _version_id: Uuid) -> Result<()> {
         // In real implementation, this would load the actual model
         // For now, we just mark it as loaded
         Ok(())
@@ -509,7 +511,7 @@ impl ModelServer {
     }
 
     /// Get model for inference
-    pub async fn get_model(&self, version_id: Uuid) -> Result<Arc<Box<dyn EmbeddingModel>>> {
+    pub async fn get_model(&self, _version_id: Uuid) -> Result<Arc<Box<dyn EmbeddingModel>>> {
         // In real implementation, return loaded model
         Err(anyhow!("Model loading not implemented"))
     }

@@ -707,7 +707,7 @@ pub struct QueryContext {
 }
 
 /// Query intent classification
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize)]
 pub enum QueryIntent {
     FactualLookup,
     Relationship,

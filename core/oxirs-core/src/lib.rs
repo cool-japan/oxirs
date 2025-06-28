@@ -26,6 +26,7 @@
 pub mod ai;
 pub mod concurrent;
 pub mod distributed;
+pub mod format; // Phase 3: Complete RDF format support with zero dependencies
 pub mod graph;
 pub mod indexing;
 pub mod interning;

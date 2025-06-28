@@ -4,9 +4,8 @@
 //! and building blocks used across different AI models.
 
 use anyhow::Result;
-use ndarray::{Array1, Array2, Array3, Axis};
+use ndarray::{Array1, Array2, Axis};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Neural network layer trait
 pub trait NeuralLayer: Send + Sync {

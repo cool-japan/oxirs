@@ -1,6 +1,6 @@
 //! Training utilities and advanced optimizers for embedding models
 
-use crate::{EmbeddingModel, ModelConfig, TrainingStats};
+use crate::{EmbeddingModel, TrainingStats};
 use anyhow::Result;
 use ndarray::Array2;
 use std::collections::VecDeque;
@@ -109,7 +109,7 @@ impl Default for LearningRateScheduler {
 }
 
 impl LearningRateScheduler {
-    pub fn get_lr(&self, epoch: usize, base_lr: f64, current_loss: Option<f64>) -> f64 {
+    pub fn get_lr(&self, epoch: usize, base_lr: f64, _current_loss: Option<f64>) -> f64 {
         match self {
             LearningRateScheduler::Constant => base_lr,
             LearningRateScheduler::ExponentialDecay {
@@ -475,6 +475,7 @@ pub enum AllReduceMethod {
 }
 
 /// Distributed trainer for multi-GPU/multi-node training
+#[allow(dead_code)]
 pub struct DistributedTrainer {
     config: TrainingConfig,
     distributed_config: DistributedConfig,
@@ -652,7 +653,7 @@ impl DistributedTrainer {
     ) -> Result<JoinHandle<Result<TrainingStats>>> {
         let config = self.config.clone();
         let distributed_config = self.distributed_config.clone();
-        let optimizer = self.optimizer.clone();
+        let _optimizer = self.optimizer.clone();
         let scheduler = self.scheduler.clone();
         let metrics = Arc::clone(&self.metrics);
         let mut sync_rx = self.sync_channel.0.subscribe();
@@ -702,11 +703,8 @@ impl DistributedTrainer {
                     // Wait for parameter updates
                     tokio::select! {
                         msg = sync_rx.recv() => {
-                            match msg {
-                                Ok(SyncMessage::ParameterSync { .. }) => {
-                                    debug!("Received parameter sync for epoch {}", epoch);
-                                }
-                                _ => {}
+                            if let Ok(SyncMessage::ParameterSync { .. }) = msg {
+                                debug!("Received parameter sync for epoch {}", epoch);
                             }
                         }
                         _ = tokio::time::sleep(tokio::time::Duration::from_millis(100)) => {
@@ -793,6 +791,7 @@ impl DistributedTrainer {
     }
 
     /// Perform all-reduce operation on gradients
+    #[allow(dead_code)]
     async fn all_reduce_gradients(
         &self,
         gradients: Vec<Array2<f64>>,
@@ -813,6 +812,7 @@ impl DistributedTrainer {
     }
 
     /// Apply gradient clipping if configured
+    #[allow(dead_code)]
     fn clip_gradients(&self, gradients: &mut [Array2<f64>]) {
         if let Some(max_norm) = self.distributed_config.gradient_clipping {
             for grad in gradients.iter_mut() {

@@ -5,6 +5,7 @@
 
 use oxirs_core::model::{Literal, NamedNode, Term, Triple};
 use oxirs_core::Store;
+use oxirs_shacl::Shape;
 use oxirs_shacl_ai::*;
 use std::collections::HashMap;
 
@@ -52,8 +53,8 @@ mod tests {
 
         let prediction = predictor.predict_validation(&store, &shapes).unwrap();
 
-        assert!(prediction.performance.estimated_duration_ms > 0);
-        assert!(prediction.performance.estimated_memory_mb >= 0.0);
+        assert!(prediction.performance.estimated_duration > std::time::Duration::from_millis(0));
+        assert!(prediction.performance.estimated_memory_mb >= 0);
     }
 
     #[test]
@@ -119,7 +120,6 @@ mod tests {
     }
 
     fn create_person_shape() -> Shape {
-        use oxirs_shacl_ai::shape::*;
 
         let mut shape = Shape::new("http://example.org/PersonShape".to_string());
         shape.set_target_class("http://example.org/Person".to_string());

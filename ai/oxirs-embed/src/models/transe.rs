@@ -46,7 +46,7 @@ pub enum DistanceMetric {
 impl TransE {
     /// Create a new TransE model
     pub fn new(config: ModelConfig) -> Self {
-        let mut base = BaseModel::new(config.clone());
+        let base = BaseModel::new(config.clone());
 
         // Get TransE-specific parameters
         let distance_metric = match config.model_params.get("distance_metric") {
@@ -125,7 +125,7 @@ impl TransE {
         let t = self.entity_embeddings.row(object_id);
 
         // Compute h + r - t
-        let diff = &h + &r - &t;
+        let diff = &h + &r - t;
 
         // Distance metric determines scoring (lower distance = higher score)
         let distance = match self.distance_metric {
@@ -159,8 +159,8 @@ impl TransE {
         let neg_t = self.entity_embeddings.row(neg_o);
 
         // Compute differences
-        let pos_diff = &pos_h + &pos_r - &pos_t;
-        let neg_diff = &neg_h + &neg_r - &neg_t;
+        let pos_diff = &pos_h + &pos_r - pos_t;
+        let neg_diff = &neg_h + &neg_r - neg_t;
 
         // Compute distances
         let pos_distance = match self.distance_metric {

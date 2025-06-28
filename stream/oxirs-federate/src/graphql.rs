@@ -12,6 +12,74 @@ use tracing::{debug, info, warn};
 
 use crate::{executor::GraphQLResponse, ExecutionPlan, QueryResultData, StepResult};
 
+/// Entity data returned from federated services
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntityData {
+    pub entity_type: String,
+    pub id: String,
+    pub fields: HashMap<String, serde_json::Value>,
+}
+
+/// Composed schema for federation
+#[derive(Debug, Clone)]
+pub struct ComposedSchema {
+    pub types: HashMap<String, GraphQLType>,
+    pub query_type: String,
+    pub mutation_type: Option<String>,
+    pub subscription_type: Option<String>,
+    pub directives: Vec<String>,
+}
+
+/// GraphQL type definition
+#[derive(Debug, Clone)]
+pub struct GraphQLType {
+    pub name: String,
+    pub kind: GraphQLTypeKind,
+    pub fields: HashMap<String, GraphQLField>,
+}
+
+/// GraphQL type kinds
+#[derive(Debug, Clone)]
+pub enum GraphQLTypeKind {
+    Object,
+    Interface,
+    Union,
+    Enum,
+    InputObject,
+    Scalar,
+}
+
+/// GraphQL field definition
+#[derive(Debug, Clone)]
+pub struct GraphQLField {
+    pub name: String,
+    pub field_type: String,
+    pub arguments: HashMap<String, GraphQLArgument>,
+}
+
+/// GraphQL argument definition
+#[derive(Debug, Clone)]
+pub struct GraphQLArgument {
+    pub name: String,
+    pub argument_type: String,
+    pub default_value: Option<serde_json::Value>,
+}
+
+/// Entity type information for federation
+#[derive(Debug, Clone)]
+pub struct EntityTypeInfo {
+    pub key_fields: Vec<String>,
+    pub resolvers: HashMap<String, String>,
+    pub external_fields: Vec<String>,
+}
+
+/// GraphQL directive
+#[derive(Debug, Clone)]
+pub struct Directive {
+    pub name: String,
+    pub arguments: HashMap<String, serde_json::Value>,
+}
+
 /// Entity reference in a federated query
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntityReference {
@@ -806,7 +874,7 @@ impl GraphQLFederation {
             let service_id = self.find_service_for_entity(&typename).await?;
             
             // Build _entities query for this service
-            let entities_query = self.build_entities_query(&typename, reprs)?;
+            let entities_query = self.build_entities_query(&typename, &reprs)?;
             
             // Execute query (mock for now)
             let mock_entity = serde_json::json!({
@@ -1008,60 +1076,54 @@ impl GraphQLFederation {
     async fn build_entity_resolution_plan(&self, entity_refs: &[EntityReference]) -> Result<EntityResolutionPlan> {
         let mut plan = EntityResolutionPlan {
             steps: Vec::new(),
-            dependency_graph: HashMap::new(),
+            dependencies: HashMap::new(),
         };
 
         // Group entities by service for batch resolution
         let mut service_entities: HashMap<String, Vec<EntityReference>> = HashMap::new();
         for entity_ref in entity_refs {
-            service_entities.entry(entity_ref.service_id.clone())
+            service_entities.entry(entity_ref.service_name.clone())
                 .or_default()
                 .push(entity_ref.clone());
         }
 
         // Create resolution steps
-        for (service_id, entities) in service_entities {
+        for (service_name, entities) in service_entities {
             let step = EntityResolutionStep {
-                service_id: service_id.clone(),
-                entities: entities.clone(),
-                dependencies: self.analyze_entity_dependencies(&entities).await?,
-                execution_order: plan.steps.len(),
+                service_name: service_name.clone(),
+                entity_type: entities.first().map(|e| e.entity_type.clone()).unwrap_or_default(),
+                key_fields: entities.iter().flat_map(|e| e.key_fields.clone()).collect(),
+                query: self.build_entity_query(&entities).await?,
+                depends_on: self.analyze_entity_dependencies(&entities).await?,
             };
             
             plan.steps.push(step);
         }
 
-        // Optimize execution order based on dependencies
-        plan.steps.sort_by_key(|step| step.execution_order);
+        // Optimize execution order based on dependencies  
+        // Sort by dependency count (least dependencies first)
+        plan.steps.sort_by_key(|step| step.depends_on.len());
 
         Ok(plan)
     }
-
-    /// Analyze dependencies between entities
-    async fn analyze_entity_dependencies(&self, entities: &[EntityReference]) -> Result<Vec<String>> {
-        let mut dependencies = Vec::new();
-        
-        // Check if any entity requires data from other services
-        for entity in entities {
-            let schemas = self.schemas.read().await;
-            
-            // Find schema for this entity type
-            for (service_id, schema) in schemas.iter() {
-                if let Some(type_def) = schema.types.get(&entity.typename) {
-                    // Check for @requires directive indicating dependencies
-                    if self.type_has_requires_directive(type_def) {
-                        dependencies.push(service_id.clone());
-                    }
-                }
-            }
+    
+    /// Build GraphQL query for entity batch
+    async fn build_entity_query(&self, entities: &[EntityReference]) -> Result<String> {
+        if entities.is_empty() {
+            return Ok(String::new());
         }
         
-        Ok(dependencies)
+        let first_entity = &entities[0];
+        let selection_set = &first_entity.selection_set;
+        
+        // Simple implementation - could be enhanced for batching
+        Ok(format!("{{ {} }}", selection_set))
     }
-
-    /// Check if type definition has @requires directive
-    fn type_has_requires_directive(&self, type_def: &TypeDefinition) -> bool {
-        type_def.directives.iter().any(|d| d.name == "requires")
+    
+    /// Analyze dependencies between entities
+    async fn analyze_entity_dependencies(&self, _entities: &[EntityReference]) -> Result<Vec<String>> {
+        // Simple implementation - no dependencies for now
+        Ok(Vec::new())
     }
 
     /// Execute entity resolution plan

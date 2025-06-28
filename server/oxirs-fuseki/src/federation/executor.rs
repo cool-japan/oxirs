@@ -17,22 +17,53 @@ use tokio::{
 use url::Url;
 
 use oxirs_core::{
-    QueryResult,
-    sparql::{Query, QueryType},
+    query::QueryResults,
 };
+use oxirs_arq::{Query, QueryType};
 
 use crate::{
     error::{Error, Result},
     federation::{
-        FederationConfig, 
-        FederatedQueryPlan, 
-        ExecutionStep, 
-        ExecutionStrategy,
-        ServiceSelection,
-        planner::QueryPlanner,
+        FederationConfig,
+        planner::{FederatedQueryPlan, ExecutionStep, ExecutionStrategy, ServiceSelection, QueryPlanner},
         health::HealthMonitor,
     },
 };
+
+/// Query execution result
+#[derive(Debug, Clone)]
+pub struct QueryResult {
+    /// Query results
+    pub results: QueryResults,
+    /// Execution metadata
+    pub metadata: QueryMetadata,
+}
+
+/// Query execution metadata
+#[derive(Debug, Clone, Default)]
+pub struct QueryMetadata {
+    /// Execution time
+    pub execution_time: Option<Duration>,
+    /// Service that executed the query
+    pub service_id: Option<String>,
+    /// Number of results
+    pub result_count: usize,
+}
+
+impl QueryResult {
+    /// Create a new empty result
+    pub fn new_empty() -> Self {
+        Self {
+            results: QueryResults::Boolean(false),
+            metadata: QueryMetadata::default(),
+        }
+    }
+    
+    /// Get size hint for result
+    pub fn size_hint(&self) -> usize {
+        self.metadata.result_count
+    }
+}
 
 /// Federated query executor
 pub struct FederatedExecutor {
@@ -143,27 +174,39 @@ impl FederatedExecutor {
 
         // Execute each group in sequence, but steps within group in parallel
         for group in step_groups {
+            let mut group_results = Vec::new();
+            
+            // Execute steps in this group concurrently
             let futures = group.into_iter().map(|step| {
                 let step = step.clone();
-                let ctx = context as *const ExecutionContext;
                 async move {
-                    unsafe {
-                        self.execute_step(&step, &mut *(ctx as *mut ExecutionContext)).await
-                    }
+                    // Create a temporary context for this step
+                    let start = std::time::Instant::now();
+                    let primary_service = step.services.iter()
+                        .find(|s| s.is_primary)
+                        .ok_or_else(|| Error::Custom("No primary service for step".to_string()))?;
+                    
+                    self.execute_on_service_standalone(primary_service, &step.sub_query).await
+                        .map(|result| (step.id.clone(), result))
                 }
             });
 
             let results = join_all(futures).await;
             
-            // Process results
-            for (i, result) in results.into_iter().enumerate() {
+            // Process results and update main context
+            for result in results {
                 match result {
-                    Ok(res) => {
-                        context.results.insert(context.plan.steps[i].id.clone(), res.clone());
-                        final_result = res;
+                    Ok((step_id, res)) => {
+                        context.results.insert(step_id, res.clone());
+                        group_results.push(res);
                     }
                     Err(e) => return Err(e),
                 }
+            }
+            
+            // Use the last result as final result (or merge if needed)
+            if let Some(last_result) = group_results.last() {
+                final_result = last_result.clone();
             }
         }
 
@@ -232,6 +275,48 @@ impl FederatedExecutor {
         result
     }
 
+    /// Execute query on a specific service (standalone version for parallel execution)
+    async fn execute_on_service_standalone(
+        &self,
+        service: &ServiceSelection,
+        query: &Query,
+    ) -> Result<QueryResult> {
+        // Acquire semaphore permit
+        let _permit = self.semaphore.acquire().await
+            .map_err(|_| Error::Custom("Failed to acquire semaphore".to_string()))?;
+
+        // Prepare request
+        let query_string = self.serialize_query(query)?;
+        
+        let response = match timeout(
+            self.config.request_timeout,
+            self.http_client
+                .post(service.service_url.as_str())
+                .header("Content-Type", "application/sparql-query")
+                .header("Accept", self.get_accept_header(&query.query_type))
+                .body(query_string)
+                .send()
+        ).await {
+            Ok(Ok(resp)) => resp,
+            Ok(Err(e)) => {
+                return Err(Error::Custom(format!("Service request failed: {}", e)));
+            }
+            Err(_) => {
+                return Err(Error::Custom("Service request timed out".to_string()));
+            }
+        };
+
+        if !response.status().is_success() {
+            return Err(Error::Custom(format!(
+                "Service returned error: {}",
+                response.status()
+            )));
+        }
+
+        // Parse response based on query type
+        self.parse_response(response, &query.query_type).await
+    }
+
     /// Execute query on a specific service
     async fn execute_on_service(
         &self,
@@ -284,11 +369,65 @@ impl FederatedExecutor {
         // Parse response based on query type
         self.parse_response(response, &query.query_type).await
     }
+    
+    /// Parse HTTP response into QueryResult
+    async fn parse_response(
+        &self,
+        response: reqwest::Response,
+        query_type: &QueryType,
+    ) -> Result<QueryResult> {
+        let response_text = response.text().await
+            .map_err(|e| Error::Custom(format!("Failed to read response: {}", e)))?;
+        
+        // Parse based on query type
+        let results = match query_type {
+            QueryType::Select { .. } => {
+                // Parse SPARQL JSON results
+                let json: serde_json::Value = serde_json::from_str(&response_text)
+                    .map_err(|e| Error::Custom(format!("Invalid JSON response: {}", e)))?;
+                
+                // Extract bindings count for metadata
+                let result_count = json.get("results")
+                    .and_then(|r| r.get("bindings"))
+                    .and_then(|b| b.as_array())
+                    .map(|arr| arr.len())
+                    .unwrap_or(0);
+                
+                QueryResults::Solutions(vec![]) // TODO: Parse actual bindings
+            }
+            QueryType::Ask { .. } => {
+                let json: serde_json::Value = serde_json::from_str(&response_text)
+                    .map_err(|e| Error::Custom(format!("Invalid JSON response: {}", e)))?;
+                
+                let boolean_result = json.get("boolean")
+                    .and_then(|b| b.as_bool())
+                    .unwrap_or(false);
+                
+                QueryResults::Boolean(boolean_result)
+            }
+            QueryType::Construct { .. } | QueryType::Describe { .. } => {
+                // Parse N-Triples or Turtle
+                QueryResults::Graph(Default::default()) // TODO: Parse actual graph
+            }
+        };
+        
+        Ok(QueryResult {
+            results,
+            metadata: QueryMetadata {
+                execution_time: None, // Will be set by caller
+                service_id: None,
+                result_count: 0, // TODO: Set actual count
+            },
+        })
+    }
 
     /// Serialize query to SPARQL string
     fn serialize_query(&self, query: &Query) -> Result<String> {
-        // TODO: Implement proper SPARQL serialization
-        Ok("SELECT * WHERE { ?s ?p ?o } LIMIT 10".to_string())
+        // Use oxirs-arq's built-in query serialization
+        match query.to_string() {
+            query_str if !query_str.is_empty() => Ok(query_str),
+            _ => Err(Error::Custom("Failed to serialize query".to_string()))
+        }
     }
 
     /// Get appropriate Accept header for query type
@@ -301,6 +440,58 @@ impl FederatedExecutor {
                 "application/n-triples"
             }
         }
+    }
+    
+    /// Group execution steps by their dependencies
+    fn group_steps_by_dependencies(&self, steps: &[ExecutionStep]) -> Vec<Vec<ExecutionStep>> {
+        let mut groups = Vec::new();
+        let mut remaining_steps: HashMap<String, ExecutionStep> = steps.iter()
+            .map(|step| (step.id.clone(), step.clone()))
+            .collect();
+        let mut processed = std::collections::HashSet::new();
+        
+        while !remaining_steps.is_empty() {
+            let mut current_group = Vec::new();
+            
+            // Find steps with no unresolved dependencies
+            let ready_steps: Vec<String> = remaining_steps.keys()
+                .filter(|step_id| {
+                    remaining_steps.get(*step_id)
+                        .map(|step| step.dependencies.iter().all(|dep| processed.contains(dep)))
+                        .unwrap_or(false)
+                })
+                .cloned()
+                .collect();
+            
+            if ready_steps.is_empty() {
+                // No more resolvable dependencies - break potential cycles
+                // by taking first remaining step
+                if let Some((first_id, _)) = remaining_steps.iter().next() {
+                    let first_id = first_id.clone();
+                    if let Some(step) = remaining_steps.remove(&first_id) {
+                        current_group.push(step);
+                        processed.insert(first_id);
+                    }
+                }
+            } else {
+                // Add all ready steps to current group
+                for step_id in ready_steps {
+                    if let Some(step) = remaining_steps.remove(&step_id) {
+                        current_group.push(step);
+                        processed.insert(step_id);
+                    }
+                }
+            }
+            
+            if !current_group.is_empty() {
+                groups.push(current_group);
+            } else {
+                // Safety break to prevent infinite loop
+                break;
+            }
+        }
+        
+        groups
     }
 
     /// Parse service response

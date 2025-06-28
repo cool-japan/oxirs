@@ -5,6 +5,7 @@
 
 use oxirs_core::model::{Literal, NamedNode, Term, Triple};
 use oxirs_core::Store;
+use oxirs_shacl::{Shape, ValidationConfig};
 use oxirs_shacl_ai::*;
 use std::collections::HashMap;
 

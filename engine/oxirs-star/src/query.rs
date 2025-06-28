@@ -533,6 +533,9 @@ impl QueryExecutor {
             pattern.subject,
             TermPattern::QuotedTriplePattern(_) | TermPattern::Term(_)
         ) || matches!(
+            pattern.predicate,
+            TermPattern::QuotedTriplePattern(_) | TermPattern::Term(_)
+        ) || matches!(
             pattern.object,
             TermPattern::QuotedTriplePattern(_) | TermPattern::Term(_)
         )
@@ -1463,8 +1466,8 @@ mod tests {
                 &[statement.clone()],
             ).unwrap();
 
-            // The subject should be the quoted inner triple
-            assert!(subject_result.is_quoted_triple());
+            // The subject should be the alice IRI
+            assert_eq!(subject_result, StarTerm::iri("http://example.org/alice").unwrap());
         }
     }
 

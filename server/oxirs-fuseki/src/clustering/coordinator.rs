@@ -15,7 +15,10 @@ use crate::{
     store::Store,
     clustering::{ConsistencyLevel, ReplicationConfig, NodeInfo},
 };
-use oxirs_core::{Triple, Quad, QueryResult};
+use oxirs_core::{Triple, Quad, query::QueryResults};
+
+/// Query result for distributed operations
+pub type QueryResult = QueryResults;
 
 /// Query request for distributed execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -337,7 +340,7 @@ impl QueryCoordinator {
     /// Execute query locally
     async fn execute_local_query(&self, query: &DistributedQuery) -> Result<QueryResult> {
         // TODO: Implement actual query execution
-        Ok(QueryResult::new_empty())
+        Ok(QueryResults::Boolean(false))
     }
 
     /// Execute write locally

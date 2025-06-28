@@ -432,9 +432,7 @@ impl EncodedTerm {
             Term::BlankNode(b) => Self::encode_blank_node(b),
             Term::Literal(l) => Self::encode_literal(l),
             Term::Variable(_) => panic!("Cannot encode variable in this context"),
-            Term::QuotedTriple(_) => panic!("RDF-star encoding not yet implemented"),
-            #[cfg(feature = "rdf-star")]
-            Term::Triple(_) => todo!("RDF-star encoding not yet implemented"),
+            Term::QuotedTriple(_) => todo!("RDF-star encoding not yet implemented"),
         }
     }
 

@@ -56,6 +56,7 @@ pub mod opq;
 pub mod similarity;
 pub mod sparse;
 pub mod sparql_integration;
+pub mod storage_optimizations;
 pub mod structured_vectors;
 pub mod tree_indices;
 pub mod word2vec;
@@ -63,13 +64,14 @@ pub mod word2vec;
 // Re-export commonly used types
 pub use advanced_caching::{
     MultiLevelCache, CacheConfig, CacheKey, CacheEntry, EvictionPolicy, 
-    CacheStats, MultiLevelCacheStats, CacheInvalidator
+    CacheStats, MultiLevelCacheStats, CacheInvalidator, BackgroundCacheWorker,
+    CacheWarmer, CacheAnalyzer, CacheAnalysisReport, InvalidationStats
 };
 pub use cache_friendly_index::{CacheFriendlyVectorIndex, IndexConfig as CacheFriendlyIndexConfig};
 pub use compression::{CompressionMethod, VectorCompressor, create_compressor};
 pub use embeddings::{
     EmbeddableContent, EmbeddingConfig, EmbeddingManager, EmbeddingStrategy, 
-    OpenAIConfig, OpenAIEmbeddingGenerator, TransformerModelType,
+    OpenAIConfig, OpenAIEmbeddingGenerator, TransformerModelType, ModelDetails,
     SentenceTransformerGenerator,
 };
 pub use embedding_pipeline::{
@@ -106,6 +108,10 @@ pub use kg_embeddings::{
     TransE, ComplEx, RotatE,
 };
 pub use gnn_embeddings::{GCN, GraphSAGE, AggregatorType};
+pub use storage_optimizations::{
+    CompressionType, StorageConfig, VectorFileHeader, VectorBlock,
+    VectorWriter, VectorReader, MmapVectorFile, StorageUtils,
+};
 
 /// Precision types for vectors
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]

@@ -15,10 +15,9 @@ use oxirs_embed::{
 use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
 use tempfile::tempdir;
 use tokio::sync::RwLock;
-use tracing::{info, Level};
+use tracing::info;
 use uuid::Uuid;
 
 #[tokio::main]
@@ -124,7 +123,7 @@ impl EmbeddingServerDemo {
 
         // 2. Create and train GNN model
         let gnn_model = self.create_gnn_model(&sample_triples).await?;
-        let gnn_id = self.register_model("GNN Social Network Model", "GNNEmbedding", gnn_model).await?;
+        let _gnn_id = self.register_model("GNN Social Network Model", "GNNEmbedding", gnn_model).await?;
 
         // 3. Promote TransE model to production
         self.registry.promote_to_production(transe_id).await?;
@@ -222,7 +221,7 @@ impl EmbeddingServerDemo {
         ).await?;
 
         // Deploy the version
-        let deployment_id = self.registry.deploy_version(
+        let _deployment_id = self.registry.deploy_version(
             version_id,
             ResourceAllocation {
                 cpu_cores: 2.0,
@@ -449,6 +448,7 @@ fn memory_usage() -> usize {
 }
 
 /// Helper function to create sample configuration
+#[allow(dead_code)]
 fn create_production_config() -> ModelConfig {
     ModelConfig::default()
         .with_dimensions(128)
@@ -458,6 +458,7 @@ fn create_production_config() -> ModelConfig {
 }
 
 /// Utility function for performance benchmarking
+#[allow(dead_code)]
 async fn benchmark_operation<F, T>(name: &str, operation: F) -> Result<T>
 where
     F: std::future::Future<Output = Result<T>>,

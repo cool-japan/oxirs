@@ -8,7 +8,7 @@
 //! - DELETE/INSERT WHERE (combined)
 //! - CLEAR, DROP, CREATE, COPY, MOVE, ADD
 
-use crate::algebra::{Algebra, Term, TriplePattern, Expression};
+use crate::algebra::{Algebra, Term, TriplePattern, Expression, EvaluationContext};
 use crate::executor::ExecutionContext;
 use oxirs_core::model::{Quad, NamedNode, BlankNode, Literal as CoreLiteral, GraphName};
 use oxirs_core::Store;
@@ -490,7 +490,7 @@ impl<'a> UpdateExecutor<'a> {
     /// Convert Term to subject
     fn term_to_subject(&self, term: &Term) -> Result<oxirs_core::model::Subject, OxirsError> {
         match term {
-            Term::Iri(iri) => Ok(NamedNode::new(&iri.0)?.into()),
+            Term::Iri(iri) => Ok(NamedNode::new(iri.as_str())?.into()),
             Term::BlankNode(id) => Ok(BlankNode::new(id)?.into()),
             _ => Err(OxirsError::Query(format!("Invalid subject term: {:?}", term))),
         }
@@ -499,7 +499,7 @@ impl<'a> UpdateExecutor<'a> {
     /// Convert Term to predicate
     fn term_to_predicate(&self, term: &Term) -> Result<NamedNode, OxirsError> {
         match term {
-            Term::Iri(iri) => NamedNode::new(&iri.0),
+            Term::Iri(iri) => NamedNode::new(iri.as_str()),
             _ => Err(OxirsError::Query(format!("Invalid predicate term: {:?}", term))),
         }
     }
@@ -507,13 +507,13 @@ impl<'a> UpdateExecutor<'a> {
     /// Convert Term to object
     fn term_to_object(&self, term: &Term) -> Result<oxirs_core::model::Object, OxirsError> {
         match term {
-            Term::Iri(iri) => Ok(NamedNode::new(&iri.0)?.into()),
+            Term::Iri(iri) => Ok(NamedNode::new(iri.as_str())?.into()),
             Term::BlankNode(id) => Ok(BlankNode::new(id)?.into()),
             Term::Literal(lit) => {
                 let literal = if let Some(lang) = &lit.language {
                     CoreLiteral::new_language_tagged_literal(&lit.value, lang)?
                 } else if let Some(dt) = &lit.datatype {
-                    CoreLiteral::new_typed(&lit.value, NamedNode::new(&dt.0)?)
+                    CoreLiteral::new_typed(&lit.value, dt.clone())
                 } else {
                     CoreLiteral::new(&lit.value)
                 };
@@ -535,25 +535,29 @@ impl<'a> UpdateExecutor<'a> {
     fn evaluate_pattern(&mut self, pattern: &Algebra) -> Result<Vec<HashMap<String, oxirs_core::model::Term>>, OxirsError> {
         use crate::executor::QueryExecutor;
         
-        // Create execution context
-        let mut context = ExecutionContext::new();
+        // Create evaluation context
+        let mut context = EvaluationContext::default();
         
         // Create query executor
-        let mut executor = QueryExecutor::new(&self.store);
+        let mut executor = QueryExecutor::new();
         
         // Execute the pattern and collect bindings
-        let results = executor.execute_algebra(pattern, &mut context)?;
+        let results = executor.execute_algebra(pattern, &mut context)
+            .map_err(|e| OxirsError::Query(e.to_string()))?;
         
         // Convert results to the expected format
         let mut bindings = Vec::new();
-        for result in results {
-            let mut binding = HashMap::new();
-            for (var, term) in result {
-                // Convert from arq::Term to oxirs_core::model::Term
-                let core_term = self.convert_term_to_core(&term)?;
-                binding.insert(var, core_term);
+        for solution in results {
+            for binding in solution {
+                let mut converted_binding = HashMap::new();
+                for (var, term) in binding {
+                    // Convert from algebra::Term to term::Term and then to oxirs_core::model::Term
+                    let arq_term = crate::term::Term::from_algebra_term(&term);
+                    let core_term = self.convert_term_to_core(&arq_term)?;
+                    converted_binding.insert(var.as_str().to_string(), core_term);
+                }
+                bindings.push(converted_binding);
             }
-            bindings.push(binding);
         }
         
         Ok(bindings)
@@ -572,9 +576,14 @@ impl<'a> UpdateExecutor<'a> {
         
         for triple_pattern in triple_patterns {
             // Instantiate each term with the binding
-            let subject = self.instantiate_algebra_term(&triple_pattern.subject, binding)?;
-            let predicate = self.instantiate_algebra_term(&triple_pattern.predicate, binding)?;
-            let object = self.instantiate_algebra_term(&triple_pattern.object, binding)?;
+            let subject_term = self.instantiate_algebra_term(&triple_pattern.subject, binding)?;
+            let predicate_term = self.instantiate_algebra_term(&triple_pattern.predicate, binding)?;
+            let object_term = self.instantiate_algebra_term(&triple_pattern.object, binding)?;
+            
+            // Convert terms to appropriate types for Quad
+            let subject = self.core_term_to_subject(subject_term)?;
+            let predicate = self.core_term_to_predicate(predicate_term)?;
+            let object = self.core_term_to_object(object_term)?;
             
             // Default graph unless specified otherwise
             let graph_name = GraphName::DefaultGraph;
@@ -629,13 +638,13 @@ impl<'a> UpdateExecutor<'a> {
     /// Convert core term to ARQ term
     fn core_term_to_arq_term(&self, term: &oxirs_core::model::Term) -> Term {
         match term {
-            oxirs_core::model::Term::NamedNode(n) => Term::Iri(crate::algebra::Iri(n.as_str().to_string())),
+            oxirs_core::model::Term::NamedNode(n) => Term::Iri(n.clone()),
             oxirs_core::model::Term::BlankNode(b) => Term::BlankNode(b.as_str().to_string()),
             oxirs_core::model::Term::Literal(l) => {
                 let lit = crate::algebra::Literal {
                     value: l.value().to_string(),
                     language: l.language().map(|s| s.to_string()),
-                    datatype: Some(crate::algebra::Iri(l.datatype().as_str().to_string())),
+                    datatype: Some(l.datatype().clone().into()),
                 };
                 Term::Literal(lit)
             }
@@ -673,7 +682,7 @@ impl<'a> UpdateExecutor<'a> {
                 let core_literal = if let Some(lang) = &lit.language_tag {
                     CoreLiteral::new_language_tagged_literal(&lit.lexical_form, lang)?
                 } else if lit.datatype != "http://www.w3.org/2001/XMLSchema#string" {
-                    CoreLiteral::new_typed_literal(&lit.lexical_form, NamedNode::new(&lit.datatype)?)?
+                    CoreLiteral::new_typed(&lit.lexical_form, NamedNode::new(&lit.datatype)?)
                 } else {
                     CoreLiteral::new_simple_literal(&lit.lexical_form)
                 };
@@ -690,7 +699,7 @@ impl<'a> UpdateExecutor<'a> {
         let mut patterns = Vec::new();
         
         match algebra {
-            Algebra::Bgp { patterns: bgp_patterns } => {
+            Algebra::Bgp(bgp_patterns) => {
                 patterns.extend(bgp_patterns.iter().cloned());
             }
             Algebra::Join { left, right } => {
@@ -705,18 +714,18 @@ impl<'a> UpdateExecutor<'a> {
                 patterns.extend(self.extract_triple_patterns(left));
                 patterns.extend(self.extract_triple_patterns(right));
             }
-            Algebra::Filter { inner, .. } => {
-                patterns.extend(self.extract_triple_patterns(inner));
+            Algebra::Filter { pattern, .. } => {
+                patterns.extend(self.extract_triple_patterns(pattern));
             }
-            Algebra::Extend { inner, .. } => {
-                patterns.extend(self.extract_triple_patterns(inner));
+            Algebra::Extend { pattern, .. } => {
+                patterns.extend(self.extract_triple_patterns(pattern));
             }
             Algebra::Minus { left, right } => {
                 patterns.extend(self.extract_triple_patterns(left));
                 patterns.extend(self.extract_triple_patterns(right));
             }
-            Algebra::Service { inner, .. } => {
-                patterns.extend(self.extract_triple_patterns(inner));
+            Algebra::Service { pattern, .. } => {
+                patterns.extend(self.extract_triple_patterns(pattern));
             }
             // For other algebra types, we don't extract patterns
             _ => {}
@@ -742,6 +751,36 @@ impl<'a> UpdateExecutor<'a> {
                 let arq_term = crate::term::Term::from_algebra_term(term);
                 self.convert_term_to_core(&arq_term)
             }
+        }
+    }
+    
+    /// Convert oxirs_core::model::Term to Subject
+    fn core_term_to_subject(&self, term: oxirs_core::model::Term) -> Result<oxirs_core::Subject, OxirsError> {
+        match term {
+            oxirs_core::model::Term::NamedNode(node) => Ok(oxirs_core::Subject::NamedNode(node)),
+            oxirs_core::model::Term::BlankNode(node) => Ok(oxirs_core::Subject::BlankNode(node)),
+            oxirs_core::model::Term::Variable(var) => Ok(oxirs_core::Subject::Variable(var)),
+            _ => Err(OxirsError::Query("Invalid subject term type".to_string())),
+        }
+    }
+    
+    /// Convert oxirs_core::model::Term to Predicate  
+    fn core_term_to_predicate(&self, term: oxirs_core::model::Term) -> Result<oxirs_core::Predicate, OxirsError> {
+        match term {
+            oxirs_core::model::Term::NamedNode(node) => Ok(oxirs_core::Predicate::NamedNode(node)),
+            oxirs_core::model::Term::Variable(var) => Ok(oxirs_core::Predicate::Variable(var)),
+            _ => Err(OxirsError::Query("Invalid predicate term type".to_string())),
+        }
+    }
+    
+    /// Convert oxirs_core::model::Term to Object
+    fn core_term_to_object(&self, term: oxirs_core::model::Term) -> Result<oxirs_core::Object, OxirsError> {
+        match term {
+            oxirs_core::model::Term::NamedNode(node) => Ok(oxirs_core::Object::NamedNode(node)),
+            oxirs_core::model::Term::BlankNode(node) => Ok(oxirs_core::Object::BlankNode(node)),
+            oxirs_core::model::Term::Literal(lit) => Ok(oxirs_core::Object::Literal(lit)),
+            oxirs_core::model::Term::Variable(var) => Ok(oxirs_core::Object::Variable(var)),
+            oxirs_core::model::Term::QuotedTriple(qt) => Ok(oxirs_core::Object::QuotedTriple(qt)),
         }
     }
 }

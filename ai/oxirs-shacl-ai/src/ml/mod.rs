@@ -240,6 +240,7 @@ pub enum ModelError {
 }
 
 /// Model ensemble for combining multiple models
+#[derive(Debug)]
 pub struct ModelEnsemble {
     models: Vec<Box<dyn ShapeLearningModel>>,
     weights: Vec<f64>,
@@ -247,7 +248,7 @@ pub struct ModelEnsemble {
 }
 
 /// Voting strategies for ensemble models
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum VotingStrategy {
     /// Simple majority voting
     Majority,
