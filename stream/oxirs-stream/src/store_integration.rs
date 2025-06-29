@@ -1404,8 +1404,8 @@ pub mod tests {
 
     // Mock RDF store for testing
     pub struct MockRdfStore {
-        log_position: Arc<RwLock<u64>>,
-        changes: Arc<RwLock<Vec<TransactionLogEntry>>>,
+        pub log_position: Arc<RwLock<u64>>,
+        pub changes: Arc<RwLock<Vec<TransactionLogEntry>>>,
     }
 
     #[async_trait::async_trait]

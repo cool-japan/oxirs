@@ -321,7 +321,32 @@ pub async fn get_mfa_status(
     let user = extract_authenticated_user(&headers, auth_service).await?;
     let mfa_status = auth_service.get_user_mfa_status(&user.username).await?;
 
-    Ok(Json(mfa_status))
+    let response = match mfa_status {
+        Some(status) => MfaStatusResponse {
+            enabled: status.enabled,
+            enrolled_methods: status
+                .methods
+                .into_iter()
+                .map(|m| MfaMethodInfo {
+                    method_type: m,
+                    identifier: "configured".to_string(), // TODO: Get actual identifier
+                    enrolled_at: Utc::now(),              // TODO: Get actual enrollment date
+                    last_used: None,                      // TODO: Get actual last used date
+                    enabled: true,
+                })
+                .collect(),
+            backup_codes_remaining: if status.backup_codes_generated { 8 } else { 0 },
+            last_used: None, // TODO: Get actual last used date
+        },
+        None => MfaStatusResponse {
+            enabled: false,
+            enrolled_methods: vec![],
+            backup_codes_remaining: 0,
+            last_used: None,
+        },
+    };
+
+    Ok(Json(response))
 }
 
 /// Disable MFA for user
@@ -569,7 +594,7 @@ async fn generate_backup_codes(
 fn generate_totp_secret() -> String {
     let mut rng = rand::thread_rng();
     let secret: Vec<u8> = (0..20).map(|_| rng.gen()).collect();
-    base32::encode(Alphabet::RFC4648 { padding: false }, &secret)
+    base32::encode(Alphabet::Rfc4648 { padding: false }, &secret)
 }
 
 fn generate_totp_uri(config: &TotpConfig) -> String {
@@ -606,7 +631,7 @@ async fn verify_totp_code(code: &str, auth_service: &AuthService) -> FusekiResul
 }
 
 fn generate_totp_code(secret: &str, time: u64) -> FusekiResult<String> {
-    let key = base32::decode(Alphabet::RFC4648 { padding: false }, secret)
+    let key = base32::decode(Alphabet::Rfc4648 { padding: false }, secret)
         .ok_or_else(|| FusekiError::internal("Invalid TOTP secret"))?;
 
     let time_bytes = (time / 30).to_be_bytes();

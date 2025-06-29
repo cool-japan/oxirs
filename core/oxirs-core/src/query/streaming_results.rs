@@ -1,6 +1,8 @@
 //! Streaming result sets for large query results with minimal memory overhead
 
-use crate::model::{Literal, NamedNode, Term, Triple, Variable};
+#[cfg(test)]
+use crate::model::{Literal, NamedNode};
+use crate::model::{Term, Triple, Variable};
 use crate::OxirsError;
 use crossbeam::channel;
 use futures::stream::{Stream, StreamExt};

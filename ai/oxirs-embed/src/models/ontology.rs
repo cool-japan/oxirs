@@ -36,6 +36,51 @@ pub enum OntologyRelation {
     TransitiveProperty,
 }
 
+/// Property characteristics for enhanced constraint handling
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PropertyCharacteristics {
+    pub is_functional: bool,
+    pub is_inverse_functional: bool,
+    pub is_symmetric: bool,
+    pub is_asymmetric: bool,
+    pub is_transitive: bool,
+    pub is_reflexive: bool,
+    pub is_irreflexive: bool,
+    pub has_inverse: Option<String>,
+    pub domain_classes: HashSet<String>,
+    pub range_classes: HashSet<String>,
+}
+
+impl PropertyCharacteristics {
+    /// Check if property has any domain constraints
+    pub fn has_domain_constraints(&self) -> bool {
+        !self.domain_classes.is_empty()
+    }
+
+    /// Check if property has any range constraints
+    pub fn has_range_constraints(&self) -> bool {
+        !self.range_classes.is_empty()
+    }
+
+    /// Check if entity satisfies domain constraints for this property
+    pub fn satisfies_domain(&self, entity_type: &str) -> bool {
+        if self.domain_classes.is_empty() {
+            true // No constraints means always satisfied
+        } else {
+            self.domain_classes.contains(entity_type)
+        }
+    }
+
+    /// Check if entity satisfies range constraints for this property
+    pub fn satisfies_range(&self, entity_type: &str) -> bool {
+        if self.range_classes.is_empty() {
+            true // No constraints means always satisfied
+        } else {
+            self.range_classes.contains(entity_type)
+        }
+    }
+}
+
 impl OntologyRelation {
     /// Convert from RDF predicate IRI to ontology relation type
     pub fn from_iri(iri: &str) -> Option<Self> {
@@ -64,6 +109,10 @@ pub struct OntologyAwareConfig {
     pub equivalence_weight: f32,
     /// Weight for disjointness constraint enforcement
     pub disjoint_weight: f32,
+    /// Weight for property domain/range constraint enforcement
+    pub property_constraint_weight: f32,
+    /// Weight for multi-modal alignment
+    pub cross_modal_weight: f32,
     /// Whether to use transitive closure for hierarchies
     pub use_transitive_closure: bool,
     /// Maximum depth for transitive closure computation
@@ -72,6 +121,16 @@ pub struct OntologyAwareConfig {
     pub normalize_for_hierarchy: bool,
     /// Margin for ranking loss in hierarchy constraints
     pub hierarchy_margin: f32,
+    /// Enable contrastive learning for cross-modal alignment
+    pub enable_contrastive_learning: bool,
+    /// Temperature parameter for contrastive learning
+    pub contrastive_temperature: f32,
+    /// Enable mutual information maximization
+    pub enable_mutual_info_max: bool,
+    /// Enable property chain inference
+    pub enable_property_chains: bool,
+    /// Maximum length for property chains
+    pub max_property_chain_length: usize,
 }
 
 impl Default for OntologyAwareConfig {
@@ -81,10 +140,17 @@ impl Default for OntologyAwareConfig {
             hierarchy_weight: 1.0,
             equivalence_weight: 2.0,
             disjoint_weight: 1.5,
+            property_constraint_weight: 1.2,
+            cross_modal_weight: 0.8,
             use_transitive_closure: true,
             max_transitive_depth: 10,
             normalize_for_hierarchy: true,
             hierarchy_margin: 1.0,
+            enable_contrastive_learning: true,
+            contrastive_temperature: 0.1,
+            enable_mutual_info_max: false,
+            enable_property_chains: true,
+            max_property_chain_length: 3,
         }
     }
 }
@@ -138,6 +204,12 @@ pub struct OntologyConstraints {
     pub transitive_properties: HashSet<String>,
     /// Transitive closure of class hierarchy
     pub transitive_hierarchy: HashMap<String, HashSet<String>>,
+    /// Property chains: property -> list of property sequences that imply it
+    pub property_chains: HashMap<String, Vec<Vec<String>>>,
+    /// Cross-modal alignments: entity -> set of aligned entities from other modalities
+    pub cross_modal_alignments: HashMap<String, HashSet<String>>,
+    /// Property characteristics cache for fast lookup
+    pub property_characteristics: HashMap<String, PropertyCharacteristics>,
 }
 
 impl OntologyConstraints {
@@ -202,6 +274,155 @@ impl OntologyConstraints {
             false
         }
     }
+
+    /// Add property chain constraint
+    pub fn add_property_chain(&mut self, target_property: &str, chain: Vec<String>) {
+        self.property_chains
+            .entry(target_property.to_string())
+            .or_default()
+            .push(chain);
+    }
+
+    /// Get property chains that imply the given property
+    pub fn get_property_chains(&self, property: &str) -> Option<&Vec<Vec<String>>> {
+        self.property_chains.get(property)
+    }
+
+    /// Add cross-modal alignment between entities
+    pub fn add_cross_modal_alignment(&mut self, entity1: &str, entity2: &str) {
+        self.cross_modal_alignments
+            .entry(entity1.to_string())
+            .or_default()
+            .insert(entity2.to_string());
+        
+        // Symmetric relationship
+        self.cross_modal_alignments
+            .entry(entity2.to_string())
+            .or_default()
+            .insert(entity1.to_string());
+    }
+
+    /// Get cross-modal alignments for an entity
+    pub fn get_cross_modal_alignments(&self, entity: &str) -> Option<&HashSet<String>> {
+        self.cross_modal_alignments.get(entity)
+    }
+
+    /// Build property characteristics cache
+    pub fn build_property_characteristics_cache(&mut self) {
+        // Build comprehensive property characteristics
+        let all_properties: HashSet<String> = self.property_domains.keys()
+            .chain(self.property_ranges.keys())
+            .chain(self.functional_properties.iter())
+            .chain(self.symmetric_properties.iter())
+            .chain(self.transitive_properties.iter())
+            .chain(self.inverse_properties.keys())
+            .cloned()
+            .collect();
+
+        for property in all_properties {
+            let mut characteristics = PropertyCharacteristics::default();
+            
+            characteristics.is_functional = self.functional_properties.contains(&property);
+            characteristics.is_symmetric = self.symmetric_properties.contains(&property);
+            characteristics.is_transitive = self.transitive_properties.contains(&property);
+            characteristics.has_inverse = self.inverse_properties.get(&property).cloned();
+            
+            if let Some(domains) = self.property_domains.get(&property) {
+                characteristics.domain_classes = domains.clone();
+            }
+            
+            if let Some(ranges) = self.property_ranges.get(&property) {
+                characteristics.range_classes = ranges.clone();
+            }
+            
+            self.property_characteristics.insert(property, characteristics);
+        }
+    }
+
+    /// Validate property usage based on domain/range constraints
+    pub fn validate_property_usage(&self, subject: &str, property: &str, object: &str, 
+                                   entity_types: &HashMap<String, String>) -> bool {
+        if let Some(characteristics) = self.property_characteristics.get(property) {
+            // Check domain constraints
+            if characteristics.has_domain_constraints() {
+                if let Some(subject_type) = entity_types.get(subject) {
+                    if !characteristics.satisfies_domain(subject_type) {
+                        return false;
+                    }
+                }
+            }
+            
+            // Check range constraints
+            if characteristics.has_range_constraints() {
+                if let Some(object_type) = entity_types.get(object) {
+                    if !characteristics.satisfies_range(object_type) {
+                        return false;
+                    }
+                }
+            }
+        }
+        
+        true
+    }
+
+    /// Infer new triples based on property chains
+    pub fn infer_from_property_chains(&self, existing_triples: &[Triple]) -> Vec<Triple> {
+        let mut inferred_triples = Vec::new();
+        
+        for (target_property, chains) in &self.property_chains {
+            for chain in chains {
+                if chain.len() >= 2 {
+                    // Find sequences of triples that match the property chain
+                    inferred_triples.extend(self.find_chain_matches(existing_triples, target_property, chain));
+                }
+            }
+        }
+        
+        inferred_triples
+    }
+
+    /// Find triple sequences that match a property chain pattern
+    fn find_chain_matches(&self, triples: &[Triple], target_property: &str, chain: &[String]) -> Vec<Triple> {
+        let mut matches = Vec::new();
+        
+        // Build index of triples by predicate for faster lookup
+        let mut triples_by_predicate: HashMap<String, Vec<&Triple>> = HashMap::new();
+        for triple in triples {
+            triples_by_predicate
+                .entry(triple.predicate.iri.clone())
+                .or_default()
+                .push(triple);
+        }
+        
+        // For simplicity, handle 2-property chains
+        if chain.len() == 2 {
+            let prop1 = &chain[0];
+            let prop2 = &chain[1];
+            
+            if let (Some(triples1), Some(triples2)) = (
+                triples_by_predicate.get(prop1),
+                triples_by_predicate.get(prop2)
+            ) {
+                for t1 in triples1 {
+                    for t2 in triples2 {
+                        // Check if t1.object == t2.subject (chain connection)
+                        if t1.object.iri == t2.subject.iri {
+                            // Create inferred triple: t1.subject target_property t2.object
+                            if let (Ok(subject), Ok(predicate), Ok(object)) = (
+                                crate::NamedNode::new(&t1.subject.iri),
+                                crate::NamedNode::new(target_property),
+                                crate::NamedNode::new(&t2.object.iri)
+                            ) {
+                                matches.push(Triple::new(subject, predicate, object));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        matches
+    }
 }
 
 impl Default for TrainingStats {
@@ -253,10 +474,17 @@ impl OntologyAwareEmbedding {
             hierarchy_weight: 2.0,
             equivalence_weight: 1.0,
             disjoint_weight: 1.0,
+            property_constraint_weight: 1.0,
+            cross_modal_weight: 0.5,
             use_transitive_closure: true,
             max_transitive_depth: 15,
             normalize_for_hierarchy: true,
             hierarchy_margin: 0.5,
+            enable_contrastive_learning: false,
+            contrastive_temperature: 0.1,
+            enable_mutual_info_max: false,
+            enable_property_chains: true,
+            max_property_chain_length: 2,
         }
     }
 
@@ -267,10 +495,17 @@ impl OntologyAwareEmbedding {
             hierarchy_weight: 1.0,
             equivalence_weight: 1.5,
             disjoint_weight: 2.0,
+            property_constraint_weight: 2.5,
+            cross_modal_weight: 1.0,
             use_transitive_closure: true,
             max_transitive_depth: 8,
             normalize_for_hierarchy: false,
             hierarchy_margin: 1.0,
+            enable_contrastive_learning: true,
+            contrastive_temperature: 0.05,
+            enable_mutual_info_max: true,
+            enable_property_chains: true,
+            max_property_chain_length: 3,
         }
     }
 
@@ -444,6 +679,163 @@ impl OntologyAwareEmbedding {
             0.0
         }
     }
+
+    /// Compute property constraint loss (domain/range constraints)
+    fn compute_property_constraint_loss(&self) -> f32 {
+        let mut total_loss = 0.0;
+        let mut count = 0;
+
+        // Check domain constraints
+        for (property, domains) in &self.ontology_constraints.property_domains {
+            if let Some(relation_emb) = self.relation_embeddings.get(property) {
+                for domain_class in domains {
+                    if let Some(domain_emb) = self.entity_embeddings.get(domain_class) {
+                        // Domain entities should be compatible with property
+                        let compatibility = relation_emb.dot(domain_emb);
+                        let loss = (1.0 - compatibility).max(0.0); // Encourage positive compatibility
+                        total_loss += loss;
+                        count += 1;
+                    }
+                }
+            }
+        }
+
+        // Check range constraints
+        for (property, ranges) in &self.ontology_constraints.property_ranges {
+            if let Some(relation_emb) = self.relation_embeddings.get(property) {
+                for range_class in ranges {
+                    if let Some(range_emb) = self.entity_embeddings.get(range_class) {
+                        // Range entities should be compatible with property
+                        let compatibility = relation_emb.dot(range_emb);
+                        let loss = (1.0 - compatibility).max(0.0);
+                        total_loss += loss;
+                        count += 1;
+                    }
+                }
+            }
+        }
+
+        if count > 0 {
+            total_loss / count as f32
+        } else {
+            0.0
+        }
+    }
+
+    /// Compute contrastive learning loss for cross-modal alignment
+    fn compute_contrastive_loss(&self) -> f32 {
+        if !self.config.enable_contrastive_learning {
+            return 0.0;
+        }
+
+        let mut total_loss = 0.0;
+        let mut count = 0;
+        let temperature = self.config.contrastive_temperature;
+
+        for (entity1, aligned_entities) in &self.ontology_constraints.cross_modal_alignments {
+            if let Some(emb1) = self.entity_embeddings.get(entity1) {
+                for entity2 in aligned_entities {
+                    if let Some(emb2) = self.entity_embeddings.get(entity2) {
+                        // Positive similarity
+                        let pos_sim = emb1.dot(emb2) / temperature;
+                        
+                        // Negative similarities (sample random entities)
+                        let mut neg_sims = Vec::new();
+                        for (neg_entity, neg_emb) in self.entity_embeddings.iter().take(10) {
+                            if neg_entity != entity1 && neg_entity != entity2 {
+                                let neg_sim = emb1.dot(neg_emb) / temperature;
+                                neg_sims.push(neg_sim);
+                            }
+                        }
+
+                        if !neg_sims.is_empty() {
+                            // InfoNCE loss
+                            let exp_pos = pos_sim.exp();
+                            let sum_exp_neg: f32 = neg_sims.iter().map(|&x| x.exp()).sum();
+                            let loss = -(exp_pos / (exp_pos + sum_exp_neg)).ln();
+                            total_loss += loss;
+                            count += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        if count > 0 {
+            total_loss / count as f32
+        } else {
+            0.0
+        }
+    }
+
+    /// Compute mutual information maximization loss
+    fn compute_mutual_info_loss(&self) -> f32 {
+        if !self.config.enable_mutual_info_max {
+            return 0.0;
+        }
+
+        let mut total_loss = 0.0;
+        let mut count = 0;
+
+        // Simplified mutual information between entity and relation embeddings
+        for (entity, entity_emb) in &self.entity_embeddings {
+            for (_relation, relation_emb) in &self.relation_embeddings {
+                // Check if this entity-relation pair appears in training data
+                let pair_exists = self.triples.iter().any(|t| 
+                    t.subject.iri == *entity || t.object.iri == *entity
+                );
+
+                if pair_exists {
+                    // Encourage high mutual information for related pairs
+                    let mi = entity_emb.dot(relation_emb);
+                    let loss = (1.0 - mi).max(0.0);
+                    total_loss += loss;
+                    count += 1;
+                }
+            }
+        }
+
+        if count > 0 {
+            total_loss / count as f32
+        } else {
+            0.0
+        }
+    }
+
+    /// Compute property chain consistency loss
+    fn compute_property_chain_loss(&self) -> f32 {
+        if !self.config.enable_property_chains {
+            return 0.0;
+        }
+
+        let mut total_loss = 0.0;
+        let mut count = 0;
+
+        for (target_property, chains) in &self.ontology_constraints.property_chains {
+            if let Some(target_emb) = self.relation_embeddings.get(target_property) {
+                for chain in chains {
+                    if chain.len() == 2 {
+                        // For 2-property chains: target ≈ prop1 + prop2
+                        if let (Some(prop1_emb), Some(prop2_emb)) = (
+                            self.relation_embeddings.get(&chain[0]),
+                            self.relation_embeddings.get(&chain[1])
+                        ) {
+                            let chain_emb = prop1_emb + prop2_emb;
+                            let distance = (target_emb - &chain_emb).mapv(|x| x * x).sum().sqrt();
+                            total_loss += distance;
+                            count += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        if count > 0 {
+            total_loss / count as f32
+        } else {
+            0.0
+        }
+    }
 }
 
 #[async_trait]
@@ -470,6 +862,9 @@ impl EmbeddingModel for OntologyAwareEmbedding {
 
         // Extract ontology constraints first
         self.extract_ontology_constraints();
+        
+        // Build property characteristics cache for enhanced constraint handling
+        self.ontology_constraints.build_property_characteristics_cache();
 
         // Build entity and relation vocabularies
         let mut entity_set = HashSet::new();
@@ -554,10 +949,18 @@ impl EmbeddingModel for OntologyAwareEmbedding {
             let hierarchy_loss = self.compute_hierarchy_loss();
             let equivalence_loss = self.compute_equivalence_loss();
             let disjoint_loss = self.compute_disjoint_loss();
+            let property_loss = self.compute_property_constraint_loss();
+            let contrastive_loss = self.compute_contrastive_loss();
+            let mutual_info_loss = self.compute_mutual_info_loss();
+            let property_chain_loss = self.compute_property_chain_loss();
 
             total_loss += hierarchy_loss * self.config.hierarchy_weight;
             total_loss += equivalence_loss * self.config.equivalence_weight;
             total_loss += disjoint_loss * self.config.disjoint_weight;
+            total_loss += property_loss * self.config.property_constraint_weight;
+            total_loss += contrastive_loss * self.config.cross_modal_weight;
+            total_loss += mutual_info_loss * self.config.cross_modal_weight * 0.5;
+            total_loss += property_chain_loss * self.config.property_constraint_weight * 0.8;
 
             loss_history.push(total_loss as f64);
 
@@ -762,6 +1165,10 @@ impl EmbeddingModel for OntologyAwareEmbedding {
 
     fn is_trained(&self) -> bool {
         self.is_trained
+    }
+
+    async fn encode(&self, _texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        Err(anyhow!("Knowledge graph embedding model does not support text encoding"))
     }
 }
 

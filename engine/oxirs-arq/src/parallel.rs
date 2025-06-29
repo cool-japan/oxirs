@@ -1321,8 +1321,8 @@ mod tests {
         queue.push(1, 2);
         queue.push(2, 3);
 
-        // Steal from queue 3 (empty)
-        assert_eq!(queue.steal(3), Some(3)); // Should steal from another queue
+        // Steal from queue 3 (empty) - should steal from queue 0 first (value 1)
+        assert_eq!(queue.steal(3), Some(1)); // Should steal from another queue
     }
 
     #[test]

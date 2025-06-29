@@ -10,6 +10,7 @@ use crate::raft::{OxirsNodeId, RdfApp};
 use crate::storage::SnapshotMetadata;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -255,7 +256,11 @@ impl EnhancedSnapshotManager {
                 .unwrap()
                 .as_secs(),
             size: serialized_data.len() as u64,
-            checksum: String::new(), // TODO: Calculate actual checksum
+            checksum: {
+                let mut hasher = Sha256::new();
+                hasher.update(&serialized_data);
+                format!("{:x}", hasher.finalize())
+            },
         };
 
         let enhanced_metadata = EnhancedSnapshotMetadata {

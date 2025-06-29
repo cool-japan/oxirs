@@ -153,6 +153,18 @@ pub enum ComputationResult {
     PredictionResults(Vec<(String, f64)>),
     AttentionWeights(Vec<f64>),
     IntermediateActivations(Vec<f64>),
+    /// Cached gradients for training optimization
+    Gradients(Vec<Vec<f64>>),
+    /// Cached model weights for quick model switching
+    ModelWeights(Vec<Vec<f64>>),
+    /// Cached feature vectors for downstream tasks
+    FeatureVectors(Vec<f64>),
+    /// Generic computation results for extensibility
+    GenericResult(Vec<f64>),
+    /// Cached embeddings matrices for batch operations
+    EmbeddingMatrices(Vec<Vec<f64>>),
+    /// Cached loss values for training monitoring
+    LossValues(Vec<f64>),
 }
 
 /// Cache statistics
@@ -705,6 +717,337 @@ impl CacheManager {
             self.config.l1_max_size = (self.config.l1_max_size as f64 * 0.8) as usize;
             info!("Decreased L1 cache size to {}", self.config.l1_max_size);
         }
+    }
+
+    // ============================================================================
+    // Advanced Computation Caching Methods
+    // ============================================================================
+
+    /// Cache attention weights for transformer models
+    pub fn cache_attention_weights(
+        &self,
+        model_id: Uuid,
+        layer: usize,
+        head: usize,
+        weights: Vec<f64>,
+    ) {
+        let key = ComputationKey {
+            operation: format!("attention_weights_layer_{}_head_{}", layer, head),
+            inputs: vec![],
+            model_id,
+        };
+        
+        let result = ComputationResult::AttentionWeights(weights);
+        self.put_computation(key, result, 0);
+        
+        debug!("Cached attention weights for layer {} head {}", layer, head);
+    }
+
+    /// Get cached attention weights
+    pub fn get_attention_weights(
+        &self,
+        model_id: Uuid,
+        layer: usize,
+        head: usize,
+    ) -> Option<Vec<f64>> {
+        let key = ComputationKey {
+            operation: format!("attention_weights_layer_{}_head_{}", layer, head),
+            inputs: vec![],
+            model_id,
+        };
+        
+        if let Some(ComputationResult::AttentionWeights(weights)) = self.get_computation(&key) {
+            debug!("Cache hit for attention weights layer {} head {}", layer, head);
+            Some(weights)
+        } else {
+            debug!("Cache miss for attention weights layer {} head {}", layer, head);
+            None
+        }
+    }
+
+    /// Cache gradients for training optimization
+    pub fn cache_gradients(
+        &self,
+        model_id: Uuid,
+        epoch: usize,
+        batch: usize,
+        gradients: Vec<Vec<f64>>,
+    ) {
+        let key = ComputationKey {
+            operation: format!("gradients_epoch_{}_batch_{}", epoch, batch),
+            inputs: vec![],
+            model_id,
+        };
+        
+        let result = ComputationResult::Gradients(gradients);
+        self.put_computation(key, result, 0);
+        
+        debug!("Cached gradients for epoch {} batch {}", epoch, batch);
+    }
+
+    /// Get cached gradients
+    pub fn get_gradients(
+        &self,
+        model_id: Uuid,
+        epoch: usize,
+        batch: usize,
+    ) -> Option<Vec<Vec<f64>>> {
+        let key = ComputationKey {
+            operation: format!("gradients_epoch_{}_batch_{}", epoch, batch),
+            inputs: vec![],
+            model_id,
+        };
+        
+        if let Some(ComputationResult::Gradients(gradients)) = self.get_computation(&key) {
+            debug!("Cache hit for gradients epoch {} batch {}", epoch, batch);
+            Some(gradients)
+        } else {
+            None
+        }
+    }
+
+    /// Cache model weights for quick model switching
+    pub fn cache_model_weights(
+        &self,
+        model_id: Uuid,
+        version: String,
+        weights: Vec<Vec<f64>>,
+    ) {
+        let key = ComputationKey {
+            operation: format!("model_weights_{}", version),
+            inputs: vec![],
+            model_id,
+        };
+        
+        let result = ComputationResult::ModelWeights(weights);
+        self.put_computation(key, result, 0);
+        
+        info!("Cached model weights for version {}", version);
+    }
+
+    /// Get cached model weights
+    pub fn get_model_weights(
+        &self,
+        model_id: Uuid,
+        version: &str,
+    ) -> Option<Vec<Vec<f64>>> {
+        let key = ComputationKey {
+            operation: format!("model_weights_{}", version),
+            inputs: vec![],
+            model_id,
+        };
+        
+        if let Some(ComputationResult::ModelWeights(weights)) = self.get_computation(&key) {
+            info!("Cache hit for model weights version {}", version);
+            Some(weights)
+        } else {
+            None
+        }
+    }
+
+    /// Cache intermediate activations for neural models
+    pub fn cache_intermediate_activations(
+        &self,
+        model_id: Uuid,
+        layer: usize,
+        input_hash: String,
+        activations: Vec<f64>,
+    ) {
+        let key = ComputationKey {
+            operation: format!("intermediate_activations_layer_{}", layer),
+            inputs: vec![input_hash],
+            model_id,
+        };
+        
+        let result = ComputationResult::IntermediateActivations(activations);
+        self.put_computation(key, result, 0);
+        
+        debug!("Cached intermediate activations for layer {}", layer);
+    }
+
+    /// Get cached intermediate activations
+    pub fn get_intermediate_activations(
+        &self,
+        model_id: Uuid,
+        layer: usize,
+        input_hash: &str,
+    ) -> Option<Vec<f64>> {
+        let key = ComputationKey {
+            operation: format!("intermediate_activations_layer_{}", layer),
+            inputs: vec![input_hash.to_string()],
+            model_id,
+        };
+        
+        if let Some(ComputationResult::IntermediateActivations(activations)) = self.get_computation(&key) {
+            debug!("Cache hit for intermediate activations layer {}", layer);
+            Some(activations)
+        } else {
+            None
+        }
+    }
+
+    /// Cache feature vectors for downstream tasks
+    pub fn cache_feature_vectors(
+        &self,
+        model_id: Uuid,
+        entity: String,
+        task: String,
+        features: Vec<f64>,
+    ) {
+        let key = ComputationKey {
+            operation: format!("feature_vectors_{}", task),
+            inputs: vec![entity],
+            model_id,
+        };
+        
+        let result = ComputationResult::FeatureVectors(features);
+        self.put_computation(key, result, 0);
+        
+        debug!("Cached feature vectors for task {}", task);
+    }
+
+    /// Get cached feature vectors
+    pub fn get_feature_vectors(
+        &self,
+        model_id: Uuid,
+        entity: &str,
+        task: &str,
+    ) -> Option<Vec<f64>> {
+        let key = ComputationKey {
+            operation: format!("feature_vectors_{}", task),
+            inputs: vec![entity.to_string()],
+            model_id,
+        };
+        
+        if let Some(ComputationResult::FeatureVectors(features)) = self.get_computation(&key) {
+            debug!("Cache hit for feature vectors task {}", task);
+            Some(features)
+        } else {
+            None
+        }
+    }
+
+    /// Cache embedding matrices for batch operations
+    pub fn cache_embedding_matrices(
+        &self,
+        model_id: Uuid,
+        operation: String,
+        matrices: Vec<Vec<f64>>,
+    ) {
+        let key = ComputationKey {
+            operation: format!("embedding_matrices_{}", operation),
+            inputs: vec![],
+            model_id,
+        };
+        
+        let result = ComputationResult::EmbeddingMatrices(matrices);
+        self.put_computation(key, result, 0);
+        
+        debug!("Cached embedding matrices for operation {}", operation);
+    }
+
+    /// Get cached embedding matrices
+    pub fn get_embedding_matrices(
+        &self,
+        model_id: Uuid,
+        operation: &str,
+    ) -> Option<Vec<Vec<f64>>> {
+        let key = ComputationKey {
+            operation: format!("embedding_matrices_{}", operation),
+            inputs: vec![],
+            model_id,
+        };
+        
+        if let Some(ComputationResult::EmbeddingMatrices(matrices)) = self.get_computation(&key) {
+            debug!("Cache hit for embedding matrices operation {}", operation);
+            Some(matrices)
+        } else {
+            None
+        }
+    }
+
+    /// Cache loss values for training monitoring
+    pub fn cache_loss_values(
+        &self,
+        model_id: Uuid,
+        epoch: usize,
+        losses: Vec<f64>,
+    ) {
+        let key = ComputationKey {
+            operation: format!("loss_values_epoch_{}", epoch),
+            inputs: vec![],
+            model_id,
+        };
+        
+        let result = ComputationResult::LossValues(losses);
+        self.put_computation(key, result, 0);
+        
+        debug!("Cached loss values for epoch {}", epoch);
+    }
+
+    /// Get cached loss values
+    pub fn get_loss_values(
+        &self,
+        model_id: Uuid,
+        epoch: usize,
+    ) -> Option<Vec<f64>> {
+        let key = ComputationKey {
+            operation: format!("loss_values_epoch_{}", epoch),
+            inputs: vec![],
+            model_id,
+        };
+        
+        if let Some(ComputationResult::LossValues(losses)) = self.get_computation(&key) {
+            debug!("Cache hit for loss values epoch {}", epoch);
+            Some(losses)
+        } else {
+            None
+        }
+    }
+
+    /// Batch cache multiple computation results efficiently
+    pub fn batch_cache_computations(&self, computations: Vec<(ComputationKey, ComputationResult)>) {
+        let count = computations.len();
+        for (key, result) in computations {
+            self.put_computation(key, result, 0);
+        }
+        
+        info!("Batch cached {} computation results", count);
+    }
+
+    /// Clear specific type of cached computations
+    pub fn clear_computation_type(&self, operation_prefix: &str) {
+        let mut cleared_count = 0;
+        
+        {
+            let mut cache = self.l2_cache.write().unwrap();
+            let keys_to_remove: Vec<_> = cache.map.keys()
+                .filter(|key| key.operation.starts_with(operation_prefix))
+                .cloned()
+                .collect();
+            
+            for key in keys_to_remove {
+                cache.remove(&key);
+                cleared_count += 1;
+            }
+        }
+        
+        info!("Cleared {} cached computations with prefix '{}'", cleared_count, operation_prefix);
+    }
+
+    /// Get cache efficiency metrics for different computation types
+    pub fn get_computation_type_stats(&self) -> HashMap<String, (u64, u64)> {
+        let mut type_stats = HashMap::new();
+        
+        // This would require tracking stats per computation type
+        // For now, return empty map - would need to enhance stats tracking
+        type_stats.insert("attention_weights".to_string(), (0, 0));
+        type_stats.insert("gradients".to_string(), (0, 0));
+        type_stats.insert("model_weights".to_string(), (0, 0));
+        type_stats.insert("intermediate_activations".to_string(), (0, 0));
+        type_stats.insert("feature_vectors".to_string(), (0, 0));
+        
+        type_stats
     }
 }
 

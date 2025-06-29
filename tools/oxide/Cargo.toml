@@ -65,7 +65,7 @@ all-features = [
     "vec"
 ]
 star = ["oxirs-star"]
-ai = ["oxirs-embed", "oxirs-chat"]
+ai = ["oxirs-chat"] # oxirs-embed temporarily disabled
 cluster = ["oxirs-cluster"]
 text = ["tantivy"]
 geo = []
@@ -75,9 +75,9 @@ vec = ["oxirs-vec"]
 path = "../../engine/oxirs-star"
 optional = true
 
-[dependencies.oxirs-embed]
-path = "../../ai/oxirs-embed"
-optional = true
+# [dependencies.oxirs-embed] # Temporarily disabled
+# path = "../../ai/oxirs-embed"
+# optional = true
 
 [dependencies.oxirs-chat]
 path = "../../ai/oxirs-chat"

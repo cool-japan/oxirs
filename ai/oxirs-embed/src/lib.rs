@@ -1,16 +1,130 @@
 //! # OxiRS Embed: Advanced Knowledge Graph Embeddings
 //!
 //! This crate provides state-of-the-art knowledge graph embedding methods
-//! including TransE, DistMult, ComplEx, and RotatE models.
+//! including TransE, DistMult, ComplEx, and RotatE models, enhanced with
+//! biomedical AI capabilities, GPU acceleration, and specialized text processing.
+//!
+//! ## Key Features
+//!
+//! ### 🧬 Biomedical AI
+//! - Specialized biomedical knowledge graph embeddings
+//! - Gene-disease association prediction
+//! - Drug-target interaction modeling
+//! - Pathway analysis and protein interactions
+//! - Domain-specific text embeddings (SciBERT, BioBERT, etc.)
+//!
+//! ### 🚀 GPU Acceleration
+//! - Advanced GPU memory pooling and management
+//! - Intelligent tensor caching
+//! - Mixed precision training and inference
+//! - Multi-stream parallel processing
+//! - Pipeline parallelism for large-scale training
+//!
+//! ### 🤖 Advanced Models
+//! - Traditional KG embeddings (TransE, DistMult, ComplEx, RotatE, etc.)
+//! - Graph Neural Networks (GCN, GraphSAGE, GAT)
+//! - Transformer-based embeddings with fine-tuning
+//! - Ontology-aware embeddings with reasoning
+//!
+//! ### 📊 Production-Ready
+//! - Comprehensive evaluation and benchmarking
+//! - Model registry and version management
+//! - Intelligent caching and optimization
+//! - API server for deployment
+//!
+//! ## Quick Start
+//!
+//! ```rust,no_run
+//! use oxirs_embed::{TransE, ModelConfig, Triple, NamedNode};
+//!
+//! # async fn example() -> anyhow::Result<()> {
+//! // Create a knowledge graph embedding model
+//! let config = ModelConfig::default().with_dimensions(128);
+//! let mut model = TransE::new(config);
+//!
+//! // Add knowledge triples
+//! let triple = Triple::new(
+//!     NamedNode::new("http://example.org/alice")?,
+//!     NamedNode::new("http://example.org/knows")?,
+//!     NamedNode::new("http://example.org/bob")?,
+//! );
+//! model.add_triple(triple)?;
+//!
+//! // Train the model
+//! let stats = model.train(Some(100)).await?;
+//! println!("Training completed: {:?}", stats);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## Biomedical Example
+//!
+//! ```rust,no_run
+//! use oxirs_embed::{BiomedicalEmbedding, BiomedicalEmbeddingConfig};
+//!
+//! # async fn example() -> anyhow::Result<()> {
+//! // Create biomedical embedding model
+//! let config = BiomedicalEmbeddingConfig::default();
+//! let mut model = BiomedicalEmbedding::new(config);
+//!
+//! // Add biomedical knowledge
+//! model.add_gene_disease_association("BRCA1", "breast_cancer", 0.95);
+//! model.add_drug_target_interaction("aspirin", "COX1", 0.92);
+//!
+//! // Train and predict
+//! model.train(Some(100)).await?;
+//! let predictions = model.predict_gene_disease_associations("BRCA1", 5)?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## GPU Acceleration Example
+//!
+//! ```rust,no_run
+//! use oxirs_embed::{GpuAccelerationConfig, GpuAccelerationManager};
+//!
+//! # async fn example() -> anyhow::Result<()> {
+//! // Configure GPU acceleration
+//! let config = GpuAccelerationConfig {
+//!     enabled: true,
+//!     mixed_precision: true,
+//!     tensor_caching: true,
+//!     multi_stream: true,
+//!     num_streams: 4,
+//!     ..Default::default()
+//! };
+//!
+//! let mut gpu_manager = GpuAccelerationManager::new(config);
+//!
+//! // Use accelerated embedding generation
+//! let entities = vec!["entity1".to_string(), "entity2".to_string()];
+//! let embeddings = gpu_manager.accelerated_embedding_generation(
+//!     entities,
+//!     |entity| { /* compute embedding */ vec![0.0; 128].into() }
+//! ).await?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## Examples
+//!
+//! See the `examples/` directory for comprehensive demonstrations:
+//! - `biomedical_embedding_demo.rs` - Biomedical AI capabilities
+//! - `gpu_acceleration_demo.rs` - GPU acceleration features  
+//! - `integrated_ai_platform_demo.rs` - Complete AI platform showcase
 
 #[cfg(feature = "api-server")]
 pub mod api;
+pub mod biomedical_embeddings;
 pub mod caching;
+pub mod compression;
 pub mod evaluation;
+pub mod gpu_acceleration;
 pub mod inference;
 pub mod integration;
 pub mod model_registry;
 pub mod models;
+pub mod multimodal;
 pub mod persistence;
 pub mod training;
 pub mod utils;
@@ -270,15 +384,36 @@ pub trait EmbeddingModel: Send + Sync {
     fn load(&mut self, path: &str) -> Result<()>;
     fn clear(&mut self);
     fn is_trained(&self) -> bool;
+    
+    /// Encode text strings into embeddings
+    async fn encode(&self, texts: &[String]) -> Result<Vec<Vec<f32>>>;
 }
 
 // Re-export main types
 #[cfg(feature = "api-server")]
 pub use api::{start_server, ApiConfig, ApiState};
+pub use biomedical_embeddings::{
+    BiomedicalEmbedding, BiomedicalEmbeddingConfig, BiomedicalEntityType, BiomedicalRelationType,
+    SpecializedTextEmbedding, SpecializedTextConfig, SpecializedTextModel, PreprocessingRule,
+    FineTuningConfig,
+};
 pub use caching::{CacheConfig, CacheManager, CachedEmbeddingModel};
+pub use compression::{
+    CompressionTarget, CompressionStats, CompressedModel, ModelCompressionManager,
+    QuantizationConfig, QuantizationMethod, PruningConfig, PruningMethod,
+    DistillationConfig, NASConfig, OptimizationTarget,
+};
+pub use gpu_acceleration::{
+    GpuAccelerationConfig, GpuAccelerationManager, GpuMemoryPool, GpuPerformanceStats,
+    MixedPrecisionProcessor, MultiStreamProcessor, TensorCache,
+};
 pub use models::{
     AggregationType, ComplEx, DistMult, GNNConfig, GNNEmbedding, GNNType, PoolingStrategy, RotatE,
     TransE, TransformerConfig, TransformerEmbedding, TransformerType,
+};
+pub use multimodal::{
+    AlignmentNetwork, AlignmentObjective, ContrastiveConfig, CrossDomainConfig, CrossModalConfig,
+    KGEncoder, MultiModalEmbedding, MultiModalStats, TextEncoder,
 };
 
 #[cfg(feature = "tucker")]

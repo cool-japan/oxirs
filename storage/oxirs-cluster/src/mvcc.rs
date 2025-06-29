@@ -590,6 +590,52 @@ impl MVCCManager {
     pub fn current_timestamp(&self) -> HLCTimestamp {
         self.clock.now()
     }
+
+    /// Scan all keys with a given prefix and return their values
+    pub async fn scan_prefix(&self, transaction_id: &TransactionId, prefix: &str) -> Result<Vec<(String, Triple)>> {
+        let mut results = Vec::new();
+
+        // Get the transaction snapshot for visibility
+        let transactions = self.transactions.read().await;
+        let snapshot = transactions.get(transaction_id)
+            .ok_or_else(|| anyhow::anyhow!("Transaction {} not found", transaction_id))?;
+
+        // Iterate through all keys and filter by prefix
+        for entry in self.versions.iter() {
+            let key = entry.key();
+            if key.starts_with(prefix) {
+                if let Some(version) = self.get_visible_version(key, &snapshot.timestamp, snapshot.isolation_level == IsolationLevel::ReadUncommitted).await {
+                    if let Some(triple) = version.data {
+                        results.push((key.clone(), triple));
+                    }
+                }
+            }
+        }
+
+        Ok(results)
+    }
+
+    /// Get the visible version of a key for a given timestamp
+    async fn get_visible_version(&self, key: &str, timestamp: &HLCTimestamp, include_uncommitted: bool) -> Option<Version> {
+        if let Some(versions) = self.versions.get(key) {
+            // Find the latest version visible to this timestamp
+            for (ts, version) in versions.iter().rev() {
+                if ts <= timestamp {
+                    // Check if this version is committed or if we include uncommitted
+                    if include_uncommitted {
+                        return Some(version.clone());
+                    } else {
+                        // Check if the transaction is committed
+                        let committed = self.committed_transactions.read().await;
+                        if committed.values().any(|tx_id| tx_id == &version.transaction_id) {
+                            return Some(version.clone());
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
 }
 
 /// MVCC statistics

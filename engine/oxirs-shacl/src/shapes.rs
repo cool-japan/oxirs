@@ -281,6 +281,12 @@ impl ShapeParser {
         // Parse metadata
         self.parse_shape_metadata_from_graph(graph, &shape_node, &mut shape)?;
 
+        // Parse order (sh:order)
+        self.parse_shape_order_from_graph(graph, &shape_node, &mut shape)?;
+
+        // Parse groups (sh:group)
+        self.parse_shape_groups_from_graph(graph, &shape_node, &mut shape)?;
+
         // Cache the parsed shape
         if self.shape_cache.len() < 1000 {
             // Limit cache size
@@ -769,7 +775,7 @@ impl ShapeParser {
                 }
 
                 let constraint = Constraint::QualifiedValueShape(QualifiedValueShapeConstraint {
-                    qualified_value_shape: ShapeId::new(shape_ref.as_str()),
+                    shape: ShapeId::new(shape_ref.as_str()),
                     qualified_min_count,
                     qualified_max_count,
                     qualified_value_shapes_disjoint: qualified_disjoint,
@@ -932,6 +938,63 @@ impl ShapeParser {
                 if let Ok(priority) = literal.value().parse::<i32>() {
                     shape.with_priority(priority);
                 }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Parse shape order (sh:order) from a graph
+    fn parse_shape_order_from_graph(
+        &self,
+        graph: &Graph,
+        shape_node: &NamedNode,
+        shape: &mut Shape,
+    ) -> Result<()> {
+        use oxirs_core::model::{Predicate, Subject};
+
+        let order_pred = NamedNode::new("http://www.w3.org/ns/shacl#order")
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid order predicate: {}", e)))?;
+
+        if let Some(triple) = graph
+            .query_triples(
+                Some(&Subject::NamedNode(shape_node.clone())),
+                Some(&Predicate::NamedNode(order_pred)),
+                None,
+            )
+            .first()
+        {
+            if let Ok(Term::Literal(literal)) = object_to_term(triple.object()) {
+                if let Ok(order_value) = literal.value().parse::<i32>() {
+                    shape.order = Some(order_value);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Parse shape groups (sh:group) from a graph
+    fn parse_shape_groups_from_graph(
+        &self,
+        graph: &Graph,
+        shape_node: &NamedNode,
+        shape: &mut Shape,
+    ) -> Result<()> {
+        use oxirs_core::model::{Predicate, Subject};
+
+        let group_pred = NamedNode::new("http://www.w3.org/ns/shacl#group")
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid group predicate: {}", e)))?;
+
+        for triple in graph.query_triples(
+            Some(&Subject::NamedNode(shape_node.clone())),
+            Some(&Predicate::NamedNode(group_pred)),
+            None,
+        ) {
+            if let Ok(Term::NamedNode(group_node)) = object_to_term(triple.object()) {
+                shape.groups.push(group_node.as_str().to_string());
+            } else if let Ok(Term::Literal(literal)) = object_to_term(triple.object()) {
+                shape.groups.push(literal.value().to_string());
             }
         }
 
@@ -2719,7 +2782,7 @@ fn format_term_for_sparql(term: &Term) -> Result<String> {
 }
 
 /// Convert an RDF Object to a Term
-fn object_to_term(object: &oxirs_core::model::Object) -> Result<Term> {
+pub fn object_to_term(object: &oxirs_core::model::Object) -> Result<Term> {
     use oxirs_core::model::Object;
 
     match object {

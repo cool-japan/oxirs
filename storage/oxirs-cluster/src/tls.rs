@@ -177,8 +177,8 @@ impl TlsManager {
         ];
 
         let cert = rcgen::generate_simple_self_signed(subject_alt_names)?;
-        let cert_der = cert.serialize_der()?;
-        let key_der = cert.serialize_private_key_der();
+        let cert_der = cert.cert.der().to_vec();
+        let key_der = cert.key_pair.serialize_der();
 
         Ok((cert_der, key_der))
     }
@@ -285,23 +285,19 @@ impl TlsManager {
         let key = rustls_pemfile::private_key(&mut key_reader)?
             .ok_or_else(|| anyhow!("No private key found"))?;
 
-        let mut config = ServerConfig::builder()
-            .with_no_client_auth()
-            .with_single_cert(certs, key)?;
-
         // Configure client authentication if required
-        if self.config.require_client_auth {
+        let config = if self.config.require_client_auth {
             let root_store = rustls::RootCertStore::empty();
-            config = ServerConfig::builder()
-                .with_client_cert_verifier(Arc::new(
-                    rustls::server::WebPkiClientVerifier::builder(Arc::new(root_store)).build()?,
-                ))
-                .with_single_cert(
-                    rustls_pemfile::certs(&mut cert_reader)
-                        .collect::<std::result::Result<Vec<_>, _>>()?,
-                    key,
-                )?;
-        }
+            let client_verifier =
+                rustls::server::WebPkiClientVerifier::builder(Arc::new(root_store)).build()?;
+            ServerConfig::builder()
+                .with_client_cert_verifier(client_verifier)
+                .with_single_cert(certs, key)?
+        } else {
+            ServerConfig::builder()
+                .with_no_client_auth()
+                .with_single_cert(certs, key)?
+        };
 
         let mut server_config = self.server_config.write().await;
         *server_config = Some(Arc::new(config));
@@ -366,16 +362,21 @@ impl TlsManager {
 
     /// Check and rotate certificates if needed
     async fn check_and_rotate_certificates(&self) -> Result<()> {
-        let certificates = self.certificates.read().await;
         let threshold = Duration::from_secs(self.config.rotation_threshold_days * 24 * 3600);
 
-        for (name, cert_info) in certificates.iter() {
-            if cert_info.expires_within(threshold) {
-                drop(certificates);
-                warn!("Certificate '{}' expires soon, rotating", name);
-                self.rotate_certificate(name).await?;
-                return Ok(());
-            }
+        // Collect certificates that need rotation
+        let certs_to_rotate: Vec<String> = {
+            let certificates = self.certificates.read().await;
+            certificates
+                .iter()
+                .filter(|(_, cert_info)| cert_info.expires_within(threshold))
+                .map(|(name, _)| name.clone())
+                .collect()
+        };
+
+        for name in certs_to_rotate {
+            warn!("Certificate '{}' expires soon, rotating", name);
+            self.rotate_certificate(&name).await?;
         }
 
         Ok(())
@@ -508,7 +509,9 @@ impl EncryptionManager {
         nonce_array[..8].copy_from_slice(&nonce_bytes);
         let nonce = Nonce::from_slice(&nonce_array);
 
-        let encrypted = cipher.encrypt(nonce, data)?;
+        let encrypted = cipher
+            .encrypt(nonce, data)
+            .map_err(|e| anyhow::anyhow!("AES-GCM encryption failed: {:?}", e))?;
 
         // Prepend nonce to encrypted data
         let mut result = Vec::with_capacity(12 + encrypted.len());
@@ -533,7 +536,9 @@ impl EncryptionManager {
         let nonce = Nonce::from_slice(&encrypted_data[..12]);
         let ciphertext = &encrypted_data[12..];
 
-        let decrypted = cipher.decrypt(nonce, ciphertext)?;
+        let decrypted = cipher
+            .decrypt(nonce, ciphertext)
+            .map_err(|e| anyhow::anyhow!("AES-GCM decryption failed: {:?}", e))?;
         Ok(decrypted)
     }
 

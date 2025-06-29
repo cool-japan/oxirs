@@ -57,15 +57,18 @@ use oxirs_shacl::{
     Severity, Shape, ShapeId, ShapeType, Target, ValidationConfig, ValidationReport, Validator,
 };
 
+pub mod advanced_neural;
 pub mod ai_orchestrator;
 pub mod analytics;
 pub mod collaborative_development;
 pub mod deployment;
 pub mod error_handling;
 pub mod evolution_strategies;
+pub mod federated_learning;
 pub mod forecasting_models;
 pub mod insights;
 pub mod learning;
+pub mod meta_learning;
 pub mod ml;
 pub mod neural_patterns;
 pub mod optimization;
@@ -76,12 +79,21 @@ pub mod prediction;
 pub mod predictive_analytics;
 pub mod production_deployment;
 pub mod quality;
+pub mod quantum_neural_patterns;
+pub mod recommendation_systems;
+pub mod self_adaptive_ai;
 pub mod shape;
 pub mod shape_management;
+pub mod system_monitoring;
 pub mod validation_performance;
 pub mod version_control;
 
 // Re-export key types for convenience with explicit imports to avoid ambiguity
+pub use advanced_neural::{
+    AdvancedNeuralArchitecture, AdvancedNeuralManager, ArchitectureConfig, ArchitectureType,
+    EarlyStoppingConfig, ManagerConfig, ODESolverType, OptimizerType, PerformanceMetrics,
+    RegularizationConfig, TrainingData, TrainingState,
+};
 pub use ai_orchestrator::*;
 pub use analytics::*;
 pub use collaborative_development::*;
@@ -97,6 +109,10 @@ pub use learning::{
     LearningConfig, LearningStatistics, ShapeExample, ShapeLearner,
     ShapeTrainingData as LearningTrainingData,
 };
+pub use meta_learning::{
+    AdaptationStrategy, AdaptedModel, LearningTask, MetaLearner, MetaLearningConfig,
+    MetaLearningResult, TaskType,
+};
 pub use ml::{
     LearnedConstraint, LearnedShape, ModelError, ModelMetrics, ModelParams, ShapeLearningModel,
     ShapeTrainingData as MlTrainingData,
@@ -108,7 +124,7 @@ pub use optimization::*;
 pub use optimization_engine::{
     AdvancedOptimizationEngine, CacheConfiguration,
     OptimizationConfig as AdvancedOptimizationConfig, OptimizationResult, OptimizedShape,
-    ParallelValidationConfig, PerformanceMetrics,
+    ParallelValidationConfig, PerformanceMetrics as OptimizationPerformanceMetrics,
 };
 pub use patterns::*;
 pub use performance_analytics::*;
@@ -116,9 +132,19 @@ pub use prediction::*;
 pub use predictive_analytics::*;
 pub use production_deployment::*;
 pub use quality::*;
+pub use quantum_neural_patterns::*;
+pub use recommendation_systems::*;
+pub use self_adaptive_ai::*;
 pub use shape::*;
+pub use system_monitoring::*;
 pub use validation_performance::*;
 pub use version_control::*;
+
+// Ultrathink Mode Exports
+pub use federated_learning::{
+    FederatedLearningCoordinator, FederatedNode, PrivacyLevel, AggregationStrategy,
+    FederationStats, ConsensusAlgorithm,
+};
 
 /// Core error type for SHACL-AI operations
 #[derive(Debug, Error)]
@@ -146,6 +172,9 @@ pub enum ShaclAiError {
 
     #[error("Model training error: {0}")]
     ModelTraining(String),
+
+    #[error("Meta-learning error: {0}")]
+    MetaLearning(String),
 
     #[error("Data processing error: {0}")]
     DataProcessing(String),

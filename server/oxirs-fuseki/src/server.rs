@@ -929,6 +929,8 @@ mod tests {
             performance_service: None,
             query_optimizer: None,
             subscription_manager: None,
+            federation_manager: None,
+            streaming_manager: None,
             #[cfg(feature = "rate-limit")]
             rate_limiter: None,
         };

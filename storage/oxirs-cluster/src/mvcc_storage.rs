@@ -530,6 +530,55 @@ impl StorageBackend for MVCCStorage {
 
         self.commit_transaction(&tx_id).await
     }
+
+    async fn get_shard_triples(&self, shard_id: ShardId) -> Result<Vec<Triple>> {
+        // Query all triples from a specific shard
+        let tx_id = format!("shard_{}_get_triples_{}", shard_id, uuid::Uuid::new_v4());
+        self.begin_transaction(tx_id.clone(), IsolationLevel::ReadCommitted)
+            .await?;
+
+        let prefix = format!("shard:{}:", shard_id);
+        let results = self.mvcc.scan_prefix(&tx_id, &prefix).await?;
+        
+        let mut triples = Vec::new();
+        for (_, triple) in results {
+            triples.push(triple);
+        }
+        
+        self.commit_transaction(&tx_id).await?;
+        Ok(triples)
+    }
+
+    async fn insert_triples_to_shard(&self, shard_id: ShardId, triples: Vec<Triple>) -> Result<()> {
+        // Insert multiple triples into a shard
+        let tx_id = format!("shard_{}_insert_bulk_{}", shard_id, uuid::Uuid::new_v4());
+        self.begin_transaction(tx_id.clone(), IsolationLevel::ReadCommitted)
+            .await?;
+
+        for triple in triples {
+            let key = format!("shard:{}:{}", shard_id, self.triple_to_key(&triple));
+            self.mvcc.write(&tx_id, &key, Some(triple)).await?;
+        }
+
+        self.commit_transaction(&tx_id).await
+    }
+
+    async fn mark_shard_for_deletion(&self, shard_id: ShardId) -> Result<()> {
+        // Mark a shard for deletion by creating a deletion marker
+        let tx_id = format!("shard_{}_mark_delete_{}", shard_id, uuid::Uuid::new_v4());
+        self.begin_transaction(tx_id.clone(), IsolationLevel::ReadCommitted)
+            .await?;
+
+        let deletion_marker_key = format!("shard:{}:__MARKED_FOR_DELETION__", shard_id);
+        let marker_triple = Triple::new(
+            Subject::NamedNode(NamedNode::new("urn:oxirs:shard:deleted").unwrap()),
+            Predicate::NamedNode(NamedNode::new("urn:oxirs:prop:deletionMarker").unwrap()),
+            Object::Literal(Literal::new_simple_literal("true"))
+        );
+        
+        self.mvcc.write(&tx_id, &deletion_marker_key, Some(marker_triple)).await?;
+        self.commit_transaction(&tx_id).await
+    }
 }
 
 // Helper functions

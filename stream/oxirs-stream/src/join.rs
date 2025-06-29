@@ -598,7 +598,17 @@ mod tests {
             predicate: "http://example.org/predicate".to_string(),
             object: "http://example.org/object".to_string(),
             graph: None,
-            metadata: EventMetadata::default(),
+            metadata: EventMetadata {
+                event_id: uuid::Uuid::new_v4().to_string(),
+                timestamp,
+                source: "test".to_string(),
+                user: None,
+                context: None,
+                caused_by: None,
+                version: "1.0".to_string(),
+                properties: std::collections::HashMap::new(),
+                checksum: None,
+            },
         }
     }
 

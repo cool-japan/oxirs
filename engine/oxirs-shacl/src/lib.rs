@@ -58,6 +58,8 @@ pub mod iri_resolver;
 pub mod optimization;
 pub mod paths;
 pub mod report;
+pub mod security;
+pub mod shape_import;
 pub mod shape_inheritance;
 pub mod shapes;
 pub mod sparql;
@@ -72,6 +74,8 @@ pub use iri_resolver::*;
 pub use optimization::*;
 pub use paths::*;
 pub use report::*;
+pub use security::*;
+pub use shape_import::*;
 pub use shape_inheritance::*;
 pub use shapes::*;
 pub use targets::*;
@@ -128,6 +132,12 @@ pub enum ShaclError {
 
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
+
+    #[error("IRI resolution error: {0}")]
+    IriResolution(#[from] crate::iri_resolver::IriResolutionError),
+
+    #[error("Security violation: {0}")]
+    SecurityViolation(String),
 }
 
 /// Result type alias for SHACL operations
@@ -1085,7 +1095,7 @@ impl Validator {
                 dependencies.push(node_constraint.shape.clone());
             }
             Constraint::QualifiedValueShape(qualified_constraint) => {
-                dependencies.push(qualified_constraint.qualified_value_shape.clone());
+                dependencies.push(qualified_constraint.shape.clone());
             }
             Constraint::Not(not_constraint) => {
                 dependencies.push(not_constraint.shape.clone());
@@ -1107,13 +1117,13 @@ impl Validator {
         dependencies
     }
 
-    /// Get optimal shape evaluation order based on dependencies
+    /// Get optimal shape evaluation order based on dependencies and sh:order property
     pub fn get_evaluation_order(&self) -> Vec<ShapeId> {
         use petgraph::algo::toposort;
         use petgraph::visit::IntoNodeReferences;
 
         // Perform topological sort on the dependency graph
-        match toposort(&self.shape_dependencies, None) {
+        let mut shape_ids: Vec<ShapeId> = match toposort(&self.shape_dependencies, None) {
             Ok(sorted_nodes) => {
                 // Map node indices back to shape IDs
                 sorted_nodes
@@ -1127,7 +1137,31 @@ impl Validator {
                 tracing::warn!("Dependency cycle detected during evaluation order calculation");
                 self.shapes.keys().cloned().collect()
             }
-        }
+        };
+
+        // Secondary sort by sh:order property for stable ordering
+        shape_ids.sort_by(|a: &ShapeId, b: &ShapeId| {
+            let shape_a = self.shapes.get(a);
+            let shape_b = self.shapes.get(b);
+
+            match (shape_a, shape_b) {
+                (Some(s_a), Some(s_b)) => {
+                    // Primary sort by order (lower values first)
+                    s_a.order
+                        .unwrap_or(0)
+                        .cmp(&s_b.order.unwrap_or(0))
+                        // Secondary sort by priority (higher values first)
+                        .then_with(|| s_b.effective_priority().cmp(&s_a.effective_priority()))
+                        // Tertiary sort by shape ID for stability
+                        .then_with(|| a.as_str().cmp(b.as_str()))
+                }
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => a.as_str().cmp(b.as_str()),
+            }
+        });
+
+        shape_ids
     }
 
     /// Clear all internal caches

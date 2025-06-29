@@ -158,6 +158,7 @@ fn create_performance_stream_config(backend: StreamBackend) -> StreamConfig {
             jitter: false, // Consistent timing for performance tests
         },
         circuit_breaker: CircuitBreakerConfig {
+            enabled: true,
             failure_threshold: 10,
             timeout: Duration::from_secs(30),
             success_threshold: 5,
@@ -165,20 +166,23 @@ fn create_performance_stream_config(backend: StreamBackend) -> StreamConfig {
         },
         security: SecurityConfig {
             enable_tls: false, // Disable TLS for max performance
-            cert_path: None,
-            key_path: None,
-            ca_path: None,
-            username: None,
-            password: None,
+            verify_certificates: true,
+            client_cert_path: None,
+            client_key_path: None,
+            ca_cert_path: None,
+            sasl_config: None,
         },
         performance: PerformanceConfig {
-            buffer_size: 8192, // Large buffers
-            io_threads: 8,
-            network_threads: 4,
             enable_batching: true,
-            max_batch_delay: Duration::from_millis(1),
+            enable_pipelining: true,
+            buffer_size: 8192, // Large buffers
+            prefetch_count: 1000,
+            enable_zero_copy: true,
+            enable_simd: true,
+            parallel_processing: true,
+            worker_threads: Some(8),
         },
-        monitoring: monitoring::MonitoringConfig {
+        monitoring: MonitoringConfig {
             enable_metrics: true,
             enable_tracing: false, // Disable tracing for performance
             metrics_interval: Duration::from_secs(1),
@@ -186,7 +190,7 @@ fn create_performance_stream_config(backend: StreamBackend) -> StreamConfig {
             enable_profiling: false,
             prometheus_endpoint: None,
             jaeger_endpoint: None,
-            log_level: "warn".to_string(), // Minimal logging
+            log_level: "info".to_string(),
         },
     }
 }
@@ -197,7 +201,10 @@ mod throughput_tests {
 
     #[tokio::test]
     async fn test_memory_backend_throughput() -> Result<()> {
-        let config = create_performance_stream_config(StreamBackend::Memory);
+        let config = create_performance_stream_config(StreamBackend::Memory {
+            max_size: Some(100000),
+            persistence: false,
+        });
         let test_config = PerformanceTestConfig {
             event_count: 50_000,
             concurrent_producers: 5,
@@ -235,12 +242,14 @@ mod throughput_tests {
         Ok(())
     }
 
+    #[cfg(feature = "kafka")]
     #[tokio::test]
     #[ignore] // Requires external services
     async fn test_kafka_backend_high_throughput() -> Result<()> {
         let config = create_performance_stream_config(StreamBackend::Kafka {
             brokers: vec!["localhost:9092".to_string()],
-            group_id: "perf-test-group".to_string(),
+            security_protocol: None,
+            sasl_config: None,
         });
 
         let test_config = PerformanceTestConfig {
@@ -275,7 +284,7 @@ mod throughput_tests {
         Ok(())
     }
 
-    async fn run_throughput_test(
+    pub async fn run_throughput_test(
         config: StreamConfig,
         test_config: PerformanceTestConfig,
     ) -> Result<PerformanceMetrics> {
@@ -338,7 +347,8 @@ mod throughput_tests {
                 let consumer_start = Instant::now();
 
                 while consumer_start.elapsed() < test_duration {
-                    if let Ok(Some(_)) = timeout(Duration::from_millis(100), stream.consume()).await
+                    if let Ok(Ok(Some(_))) =
+                        timeout(Duration::from_millis(100), stream.consume()).await
                     {
                         let mut m = metrics.lock().unwrap();
                         m.total_events_received += 1;
@@ -386,7 +396,10 @@ mod latency_tests {
 
     #[tokio::test]
     async fn test_end_to_end_latency() -> Result<()> {
-        let config = create_performance_stream_config(StreamBackend::Memory);
+        let config = create_performance_stream_config(StreamBackend::Memory {
+            max_size: Some(100000),
+            persistence: false,
+        });
         let mut producer = Stream::new(config.clone()).await?;
         let mut consumer = Stream::new(config).await?;
 
@@ -424,7 +437,7 @@ mod latency_tests {
 
             producer.publish(event).await?;
 
-            if let Ok(Some(_)) = timeout(Duration::from_secs(5), consumer.consume()).await {
+            if let Ok(Ok(Some(_))) = timeout(Duration::from_secs(5), consumer.consume()).await {
                 let latency = start.elapsed();
                 latencies.push(latency);
             }
@@ -468,12 +481,14 @@ mod latency_tests {
         Ok(())
     }
 
+    #[cfg(feature = "kafka")]
     #[tokio::test]
     #[ignore] // Requires Kafka
     async fn test_kafka_latency_under_load() -> Result<()> {
         let config = create_performance_stream_config(StreamBackend::Kafka {
             brokers: vec!["localhost:9092".to_string()],
-            group_id: "latency-test-group".to_string(),
+            security_protocol: None,
+            sasl_config: None,
         });
 
         let mut producer = Stream::new(config.clone()).await?;
@@ -482,7 +497,8 @@ mod latency_tests {
         // Background load to simulate real-world conditions
         let background_config = create_performance_stream_config(StreamBackend::Kafka {
             brokers: vec!["localhost:9092".to_string()],
-            group_id: "background-load-group".to_string(),
+            security_protocol: None,
+            sasl_config: None,
         });
 
         let load_generator = tokio::spawn(async move {
@@ -530,7 +546,7 @@ mod latency_tests {
 
             producer.publish(event).await?;
 
-            if let Ok(Some(_)) = timeout(Duration::from_secs(10), consumer.consume()).await {
+            if let Ok(Ok(Some(_))) = timeout(Duration::from_secs(10), consumer.consume()).await {
                 let latency = start.elapsed();
                 latencies.push(latency);
             }
@@ -574,10 +590,14 @@ mod latency_tests {
 #[cfg(test)]
 mod scalability_tests {
     use super::*;
+    use crate::throughput_tests::run_throughput_test;
 
     #[tokio::test]
     async fn test_concurrent_producers_scaling() -> Result<()> {
-        let base_config = create_performance_stream_config(StreamBackend::Memory);
+        let base_config = create_performance_stream_config(StreamBackend::Memory {
+            max_size: Some(100000),
+            persistence: false,
+        });
 
         // Test with increasing numbers of concurrent producers
         let producer_counts = vec![1, 2, 5, 10, 20];
@@ -624,7 +644,10 @@ mod scalability_tests {
 
     #[tokio::test]
     async fn test_message_size_scaling() -> Result<()> {
-        let config = create_performance_stream_config(StreamBackend::Memory);
+        let config = create_performance_stream_config(StreamBackend::Memory {
+            max_size: Some(100000),
+            persistence: false,
+        });
 
         // Test with different message sizes
         let message_sizes = vec![100, 1_000, 10_000, 50_000]; // bytes
@@ -662,7 +685,9 @@ mod scalability_tests {
 
             let mut received = 0;
             for _ in 0..test_count {
-                if let Ok(Some(_)) = timeout(Duration::from_millis(100), consumer.consume()).await {
+                if let Ok(Ok(Some(_))) =
+                    timeout(Duration::from_millis(100), consumer.consume()).await
+                {
                     received += 1;
                 }
             }
@@ -694,6 +719,7 @@ mod scalability_tests {
         Ok(())
     }
 
+    #[cfg(feature = "kafka")]
     #[tokio::test]
     #[ignore] // Requires external infrastructure
     async fn test_partition_scaling() -> Result<()> {
@@ -707,7 +733,8 @@ mod scalability_tests {
 
             let config = create_performance_stream_config(StreamBackend::Kafka {
                 brokers: vec!["localhost:9092".to_string()],
-                group_id: format!("partition-test-{}", partitions),
+                security_protocol: None,
+                sasl_config: None,
             });
 
             let test_config = PerformanceTestConfig {
@@ -748,7 +775,10 @@ mod reliability_tests {
 
     #[tokio::test]
     async fn test_message_delivery_reliability() -> Result<()> {
-        let config = create_performance_stream_config(StreamBackend::Memory);
+        let config = create_performance_stream_config(StreamBackend::Memory {
+            max_size: Some(100000),
+            persistence: false,
+        });
         let mut producer = Stream::new(config.clone()).await?;
         let mut consumer = Stream::new(config).await?;
 
@@ -786,8 +816,10 @@ mod reliability_tests {
         let mut duplicates = 0;
 
         for _ in 0..test_count {
-            if let Ok(Some(event)) = timeout(Duration::from_millis(10), consumer.consume()).await {
-                match event? {
+            if let Ok(Ok(Some(event))) =
+                timeout(Duration::from_millis(10), consumer.consume()).await
+            {
+                match event {
                     StreamEvent::TripleAdded { metadata, .. } => {
                         if received_events.contains_key(&metadata.event_id) {
                             duplicates += 1;
@@ -841,7 +873,10 @@ mod reliability_tests {
 
     #[tokio::test]
     async fn test_failure_recovery() -> Result<()> {
-        let config = create_performance_stream_config(StreamBackend::Memory);
+        let config = create_performance_stream_config(StreamBackend::Memory {
+            max_size: Some(100000),
+            persistence: false,
+        });
         let mut producer = Stream::new(config.clone()).await?;
         let mut consumer = Stream::new(config).await?;
 
@@ -858,7 +893,10 @@ mod reliability_tests {
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         // Recreate connections (simulating recovery)
-        let config = create_performance_stream_config(StreamBackend::Memory);
+        let config = create_performance_stream_config(StreamBackend::Memory {
+            max_size: Some(100000),
+            persistence: false,
+        });
         let mut producer = Stream::new(config.clone()).await?;
         let mut consumer = Stream::new(config).await?;
 
@@ -871,7 +909,7 @@ mod reliability_tests {
         // Verify we can still receive events
         let mut received_count = 0;
         for _ in 0..50 {
-            if let Ok(Some(_)) = timeout(Duration::from_millis(10), consumer.consume()).await {
+            if let Ok(Ok(Some(_))) = timeout(Duration::from_millis(10), consumer.consume()).await {
                 received_count += 1;
             }
         }
@@ -886,7 +924,10 @@ mod reliability_tests {
 
     #[tokio::test]
     async fn test_backpressure_handling() -> Result<()> {
-        let mut config = create_performance_stream_config(StreamBackend::Memory);
+        let mut config = create_performance_stream_config(StreamBackend::Memory {
+            max_size: Some(100000),
+            persistence: false,
+        });
         config.batch_size = 1; // Force small batches to create backpressure
         config.flush_interval_ms = 1000; // Slow flushing
 
@@ -922,7 +963,7 @@ mod reliability_tests {
         // Slowly consume to relieve backpressure
         let mut received_count = 0;
         for _ in 0..successful_sends {
-            if let Ok(Some(_)) = timeout(Duration::from_millis(100), consumer.consume()).await {
+            if let Ok(Ok(Some(_))) = timeout(Duration::from_millis(100), consumer.consume()).await {
                 received_count += 1;
             }
         }
@@ -953,7 +994,10 @@ mod resource_usage_tests {
     #[tokio::test]
     async fn test_memory_usage_under_load() -> Result<()> {
         // This test would monitor memory usage during high-load scenarios
-        let config = create_performance_stream_config(StreamBackend::Memory);
+        let config = create_performance_stream_config(StreamBackend::Memory {
+            max_size: Some(100000),
+            persistence: false,
+        });
         let mut producer = Stream::new(config.clone()).await?;
         let mut consumer = Stream::new(config).await?;
 
@@ -982,7 +1026,8 @@ mod resource_usage_tests {
 
             // Consume some events to prevent infinite buildup
             for _ in 0..events_per_batch / 2 {
-                if let Ok(Some(_)) = timeout(Duration::from_millis(1), consumer.consume()).await {
+                if let Ok(Ok(Some(_))) = timeout(Duration::from_millis(1), consumer.consume()).await
+                {
                     // Event consumed
                 }
             }

@@ -33,6 +33,12 @@ impl From<&str> for TopicName {
     }
 }
 
+impl From<String> for TopicName {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
 /// Partition identifier
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PartitionId(u32);

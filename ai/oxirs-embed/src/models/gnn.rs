@@ -6,7 +6,7 @@
 use crate::{
     EmbeddingError, EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector,
 };
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::Utc;
 use ndarray::{Array1, Array2};
@@ -872,6 +872,10 @@ impl EmbeddingModel for GNNEmbedding {
 
     fn is_trained(&self) -> bool {
         self.is_trained
+    }
+
+    async fn encode(&self, _texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        Err(anyhow!("Knowledge graph embedding model does not support text encoding"))
     }
 }
 

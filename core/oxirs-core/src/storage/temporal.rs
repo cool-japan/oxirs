@@ -3,13 +3,13 @@
 //! This module provides specialized storage for temporal RDF data,
 //! optimizing for time-based queries and temporal reasoning.
 
-use crate::model::{Literal, NamedNode, Term, Triple, TriplePattern};
+use crate::model::{Literal, Term, Triple, TriplePattern};
 use crate::OxirsError;
-use chrono::{DateTime, Duration, NaiveDateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::ops::Bound;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -666,6 +666,7 @@ pub struct TrendData {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::NamedNode;
 
     #[tokio::test]
     async fn test_temporal_storage() {

@@ -577,6 +577,12 @@ mod tests {
             error: None,
             execution_time: Duration::from_millis(100),
             service_id: Some("test-service".to_string()),
+            memory_used: 1024,
+            result_size: 100,
+            success: true,
+            error_message: None,
+            service_response_time: Duration::from_millis(50),
+            cache_hit: false,
         };
 
         let result = integrator.integrate_sparql_results(vec![step_result]).await;

@@ -5,7 +5,7 @@
 
 use crate::model::{BlankNode, Literal, NamedNode, Variable};
 use crate::query::sparql_algebra::{GraphPattern, TermPattern, TriplePattern};
-use crate::query::sparql_query::{Query, QueryDataset};
+use crate::query::sparql_query::Query;
 use crate::OxirsError;
 use std::collections::HashMap;
 

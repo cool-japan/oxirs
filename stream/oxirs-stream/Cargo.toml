@@ -60,12 +60,17 @@ crc32fast = "1.4"
 [dev-dependencies]
 criterion.workspace = true
 tempfile = "3.20"
+tracing-subscriber = "0.3"
 
 [features]
-default = ["kafka", "nats"]
+default = []
 kafka = ["rdkafka"]
 nats = ["async-nats", "time"]
 kinesis = ["aws-config", "aws-sdk-kinesis", "aws-smithy-types"]
 redis = ["dep:redis"]
 pulsar = ["dep:pulsar"]
+
+[[bench]]
+name = "performance_benchmarks"
+harness = false
 

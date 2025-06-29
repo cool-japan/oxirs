@@ -89,7 +89,7 @@ fn test_qualified_cardinality_validation() {
     person_shape.add_constraint(
         ConstraintComponentId::new("qualifiedValueShape"),
         Constraint::QualifiedValueShape(constraints::QualifiedValueShapeConstraint {
-            qualified_value_shape: ShapeId::new("http://example.org/FriendShape"),
+            shape: ShapeId::new("http://example.org/FriendShape"),
             qualified_min_count: Some(1),
             qualified_max_count: Some(1),
             qualified_value_shapes_disjoint: false,
@@ -178,7 +178,7 @@ fn test_qualified_cardinality_min_violation() {
     person_shape.add_constraint(
         ConstraintComponentId::new("qualifiedValueShape"),
         Constraint::QualifiedValueShape(constraints::QualifiedValueShapeConstraint {
-            qualified_value_shape: ShapeId::new("http://example.org/FriendShape"),
+            shape: ShapeId::new("http://example.org/FriendShape"),
             qualified_min_count: Some(1),
             qualified_max_count: None,
             qualified_value_shapes_disjoint: false,
@@ -275,7 +275,7 @@ fn test_qualified_cardinality_max_violation() {
     person_shape.add_constraint(
         ConstraintComponentId::new("qualifiedValueShape"),
         Constraint::QualifiedValueShape(constraints::QualifiedValueShapeConstraint {
-            qualified_value_shape: ShapeId::new("http://example.org/FriendShape"),
+            shape: ShapeId::new("http://example.org/FriendShape"),
             qualified_min_count: None,
             qualified_max_count: Some(1),
             qualified_value_shapes_disjoint: false,
@@ -389,7 +389,7 @@ fn test_qualified_cardinality_range_success() {
     person_shape.add_constraint(
         ConstraintComponentId::new("qualifiedValueShape"),
         Constraint::QualifiedValueShape(constraints::QualifiedValueShapeConstraint {
-            qualified_value_shape: ShapeId::new("http://example.org/FriendShape"),
+            shape: ShapeId::new("http://example.org/FriendShape"),
             qualified_min_count: Some(1),
             qualified_max_count: Some(3),
             qualified_value_shapes_disjoint: false,

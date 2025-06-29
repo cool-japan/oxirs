@@ -39,6 +39,7 @@ pub mod discovery;
 pub mod executor;
 pub mod graphql;
 pub mod integration;
+pub mod join_optimizer;
 pub mod k8s_discovery;
 pub mod materialized_views;
 pub mod metadata;
@@ -62,6 +63,7 @@ pub use discovery::*;
 pub use executor::*;
 pub use graphql::*;
 pub use integration::*;
+pub use join_optimizer::*;
 pub use k8s_discovery::*;
 pub use materialized_views::*;
 pub use metadata::*;
@@ -635,7 +637,7 @@ impl Default for FederationEngine {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FederationConfig {
     pub registry_config: ServiceRegistryConfig,
-    pub planner_config: QueryPlannerConfig,
+    pub planner_config: PlannerConfig,
     pub executor_config: FederatedExecutorConfig,
     pub integrator_config: ResultIntegratorConfig,
     pub graphql_config: GraphQLFederationConfig,
@@ -647,7 +649,7 @@ impl Default for FederationConfig {
     fn default() -> Self {
         Self {
             registry_config: ServiceRegistryConfig::default(),
-            planner_config: QueryPlannerConfig::default(),
+            planner_config: PlannerConfig::default(),
             executor_config: FederatedExecutorConfig::default(),
             integrator_config: ResultIntegratorConfig::default(),
             graphql_config: GraphQLFederationConfig::default(),

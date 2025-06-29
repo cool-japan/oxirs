@@ -564,16 +564,27 @@ impl ConfigManager {
         if let Ok(backend) = std::env::var(format!("{}_BACKEND", prefix)) {
             config.backend = match backend.as_str() {
                 "kafka" => {
-                    let brokers = std::env::var(format!("{}_KAFKA_BROKERS", prefix))
+                    let brokers: Vec<String> = std::env::var(format!("{}_KAFKA_BROKERS", prefix))
                         .unwrap_or_else(|_| "localhost:9092".to_string())
                         .split(',')
                         .map(|s| s.to_string())
                         .collect();
 
-                    StreamBackend::Kafka {
-                        brokers,
-                        security_protocol: std::env::var(format!("{}_KAFKA_SECURITY", prefix)).ok(),
-                        sasl_config: None,
+                    #[cfg(feature = "kafka")]
+                    {
+                        StreamBackend::Kafka {
+                            brokers,
+                            security_protocol: std::env::var(format!("{}_KAFKA_SECURITY", prefix))
+                                .ok(),
+                            sasl_config: None,
+                        }
+                    }
+                    #[cfg(not(feature = "kafka"))]
+                    {
+                        StreamBackend::Memory {
+                            max_size: Some(10000),
+                            persistence: false,
+                        }
                     }
                 }
                 "memory" => StreamBackend::Memory {
@@ -609,6 +620,7 @@ impl ConfigManager {
     /// Apply secrets to configuration
     async fn apply_secrets(&self, mut config: StreamConfig) -> Result<StreamConfig> {
         // Apply SASL password if using Kafka
+        #[cfg(feature = "kafka")]
         if let StreamBackend::Kafka {
             brokers,
             security_protocol,
@@ -618,15 +630,18 @@ impl ConfigManager {
             if security_protocol.as_deref() == Some("SASL_SSL") {
                 if let Ok(username) = self.secret_manager.get_secret("kafka_username").await {
                     if let Ok(password) = self.secret_manager.get_secret("kafka_password").await {
-                        config.backend = StreamBackend::Kafka {
-                            brokers: brokers.clone(),
-                            security_protocol: security_protocol.clone(),
-                            sasl_config: Some(SaslConfig {
-                                mechanism: crate::SaslMechanism::ScramSha256,
-                                username,
-                                password,
-                            }),
-                        };
+                        #[cfg(feature = "kafka")]
+                        {
+                            config.backend = StreamBackend::Kafka {
+                                brokers: brokers.clone(),
+                                security_protocol: security_protocol.clone(),
+                                sasl_config: Some(SaslConfig {
+                                    mechanism: crate::SaslMechanism::ScramSha256,
+                                    username,
+                                    password,
+                                }),
+                            };
+                        }
                     }
                 }
             }

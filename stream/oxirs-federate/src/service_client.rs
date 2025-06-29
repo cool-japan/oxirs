@@ -5,7 +5,7 @@
 
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use backoff::{backoff::Backoff, retry, ExponentialBackoff};
+use backoff::{backoff::Backoff, future::retry, ExponentialBackoff};
 use bytes::Bytes;
 use governor::{
     clock::DefaultClock,
@@ -147,7 +147,7 @@ impl SparqlClient {
 
         // Build request with OAuth2 token refresh if needed
         let mut headers = if let Some(auth) = &self.service.auth {
-            if auth.auth_type == AuthType::OAuth2 {
+            if auth.auth_type == crate::AuthType::OAuth2 {
                 // Refresh OAuth2 token if needed before building headers
                 if let Ok(Some(fresh_token)) = self.ensure_fresh_oauth2_token(auth).await {
                     let mut headers = self.build_headers(false)?;
@@ -188,9 +188,9 @@ impl SparqlClient {
                 .await
                 .map_err(|e| {
                     if e.is_timeout() {
-                        backoff::Error::transient(e)
+                        backoff::Error::transient(anyhow::Error::from(e))
                     } else {
-                        backoff::Error::permanent(e)
+                        backoff::Error::permanent(anyhow::Error::from(e))
                     }
                 })?;
 
@@ -208,10 +208,10 @@ impl SparqlClient {
                 )));
             }
 
-            response
+            Ok(response
                 .json::<SparqlResults>()
                 .await
-                .map_err(backoff::Error::permanent)
+                .map_err(|e| backoff::Error::permanent(anyhow::Error::from(e)))?)
         })
         .await;
 
@@ -368,9 +368,9 @@ impl SparqlClient {
         };
 
         // Check if we have a valid token that hasn't expired (with 60s buffer)
-        if let Some(token_info) = current_token {
+        if let Some(ref token_info) = current_token {
             if token_info.expires_at > Instant::now() + Duration::from_secs(60) {
-                return Ok(Some(token_info.access_token));
+                return Ok(Some(token_info.access_token.clone()));
             }
         }
 
@@ -385,8 +385,8 @@ impl SparqlClient {
                 Err(e) => {
                     warn!("Failed to refresh OAuth2 token: {}", e);
                     // Fall back to existing token if available
-                    if let Some(token_info) = current_token {
-                        Ok(Some(token_info.access_token))
+                    if let Some(ref token_info) = current_token {
+                        Ok(Some(token_info.access_token.clone()))
                     } else {
                         Err(e)
                     }
@@ -449,10 +449,11 @@ impl SparqlClient {
             .await?;
 
         if !response.status().is_success() {
+            let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
             return Err(anyhow!(
                 "OAuth2 token refresh failed with status {}: {}",
-                response.status(),
+                status,
                 error_text
             ));
         }
@@ -598,9 +599,9 @@ impl GraphQLClient {
                 .await
                 .map_err(|e| {
                     if e.is_timeout() {
-                        backoff::Error::transient(e)
+                        backoff::Error::transient(anyhow::Error::from(e))
                     } else {
-                        backoff::Error::permanent(e)
+                        backoff::Error::permanent(anyhow::Error::from(e))
                     }
                 })?;
 
@@ -621,7 +622,7 @@ impl GraphQLClient {
             response
                 .json::<GraphQLResponse>()
                 .await
-                .map_err(backoff::Error::permanent)
+                .map_err(|e| backoff::Error::permanent(anyhow::Error::from(e)))
         })
         .await;
 

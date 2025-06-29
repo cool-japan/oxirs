@@ -465,13 +465,13 @@ impl<'a> BGPOptimizer<'a> {
         let mut vars = HashSet::new();
 
         if let Term::Variable(v) = &pattern.subject {
-            vars.insert(v.to_string());
+            vars.insert(v.as_str().to_string());
         }
         if let Term::Variable(v) = &pattern.predicate {
-            vars.insert(v.to_string());
+            vars.insert(v.as_str().to_string());
         }
         if let Term::Variable(v) = &pattern.object {
-            vars.insert(v.to_string());
+            vars.insert(v.as_str().to_string());
         }
 
         vars
@@ -1172,6 +1172,27 @@ impl<'a> BGPOptimizer<'a> {
             IndexType::SubjectObject => {
                 self.is_bound(&pattern.subject) || self.is_bound(&pattern.object)
             }
+            // RDF triple pattern permutation indices
+            IndexType::SPO => true, // Supports all patterns
+            IndexType::PSO => self.is_bound(&pattern.predicate) || self.is_bound(&pattern.subject),
+            IndexType::OSP => self.is_bound(&pattern.object) || self.is_bound(&pattern.subject),
+            IndexType::OPS => self.is_bound(&pattern.object) || self.is_bound(&pattern.predicate),
+            IndexType::SOP => self.is_bound(&pattern.subject) || self.is_bound(&pattern.object),
+            IndexType::POS => self.is_bound(&pattern.predicate) || self.is_bound(&pattern.object),
+            // Simple index types
+            IndexType::Hash => {
+                // Hash indexes work best with bound terms
+                self.is_bound(&pattern.subject) && self.is_bound(&pattern.predicate) && self.is_bound(&pattern.object)
+            }
+            IndexType::BTree => true, // B-tree supports range queries and existence
+            IndexType::Bitmap => {
+                // Bitmap indexes work well for low-cardinality predicates
+                self.is_bound(&pattern.predicate)
+            }
+            IndexType::Bloom => {
+                // Bloom filters are good for existence checks
+                self.is_bound(&pattern.subject) || self.is_bound(&pattern.predicate) || self.is_bound(&pattern.object)
+            }
             IndexType::FullText => {
                 // Full-text indexes apply to literal values
                 matches!(pattern.object, Term::Literal(_))
@@ -1595,7 +1616,7 @@ impl<'a> BGPOptimizer<'a> {
         Ok(alternatives)
     }
 
-    /// Enhanced intersection benefit estimation
+    /// Enhanced intersection benefit estimation with sophisticated cost modeling
     fn estimate_intersection_benefit_enhanced(
         &self,
         pattern: &TriplePattern,
@@ -1604,26 +1625,81 @@ impl<'a> BGPOptimizer<'a> {
     ) -> Result<f64> {
         let base_selectivity = self.get_index_selectivity(primary_index);
         let mut combined_selectivity = base_selectivity;
+        let mut intersection_cost = 0.0;
+
+        // Calculate pattern cardinality for more accurate estimation
+        let pattern_cardinality = self.statistics
+            .pattern_cardinality
+            .get(&format!("{:?}", pattern))
+            .copied()
+            .unwrap_or(10000);
 
         for secondary in secondary_indexes {
             let secondary_selectivity = self.get_index_selectivity(secondary);
+            let intersection_overhead = self.calculate_intersection_overhead(primary_index, secondary);
 
-            // Different combination rules for different index types
+            // Advanced combination rules based on index characteristics
             combined_selectivity = match (primary_index, secondary) {
                 (IndexType::BTreeIndex(_), IndexType::HashIndex(_)) => {
-                    combined_selectivity * secondary_selectivity * 0.8 // Good combination
+                    // B-tree + Hash: Excellent for range + exact match
+                    let synergy_factor = if pattern_cardinality > 100000 { 0.7 } else { 0.8 };
+                    combined_selectivity * secondary_selectivity * synergy_factor
                 }
                 (IndexType::BitmapIndex(_), IndexType::BTreeIndex(_)) => {
-                    combined_selectivity * secondary_selectivity * 0.9 // Excellent for low cardinality
+                    // Bitmap + B-tree: Outstanding for categorical + range queries
+                    let synergy_factor = if self.is_low_cardinality_predicate(pattern) { 0.6 } else { 0.9 };
+                    combined_selectivity * secondary_selectivity * synergy_factor
                 }
                 (IndexType::BloomFilter(_), _) => {
-                    combined_selectivity * 0.1 // Bloom filters great for negative lookups
+                    // Bloom filters provide massive reduction for negative lookups
+                    let negative_ratio = 1.0 - base_selectivity;
+                    combined_selectivity * (0.05 + 0.95 * (1.0 - negative_ratio))
                 }
-                _ => combined_selectivity * secondary_selectivity, // Standard combination
+                (IndexType::SpatialRTree, IndexType::BTreeIndex(_)) => {
+                    // Spatial + B-tree: Great for geo + temporal queries
+                    combined_selectivity * secondary_selectivity * 0.75
+                }
+                (IndexType::HashIndex(_), IndexType::BitmapIndex(_)) => {
+                    // Hash + Bitmap: Good for exact match + categorical
+                    combined_selectivity * secondary_selectivity * 0.85
+                }
+                (IndexType::MultiColumnBTree(_), _) => {
+                    // Multi-column with any secondary: Diminishing returns
+                    combined_selectivity * secondary_selectivity * 0.95
+                }
+                _ => {
+                    // Standard independence assumption with correlation penalty
+                    let correlation_factor = 1.1 + (secondary_indexes.len() as f64 * 0.05);
+                    combined_selectivity * secondary_selectivity * correlation_factor
+                }
             };
+
+            intersection_cost += intersection_overhead;
         }
 
-        Ok(1.0 - combined_selectivity / base_selectivity)
+        // Account for intersection processing cost
+        let cost_benefit_ratio = if intersection_cost > 100.0 {
+            0.9 // High intersection cost reduces benefit
+        } else if intersection_cost > 50.0 {
+            0.95
+        } else {
+            1.0
+        };
+
+        let improvement = (base_selectivity - combined_selectivity) / base_selectivity;
+        Ok(improvement * cost_benefit_ratio)
+    }
+
+    /// Calculate intersection overhead for different index combinations
+    fn calculate_intersection_overhead(&self, primary: &IndexType, secondary: &IndexType) -> f64 {
+        match (primary, secondary) {
+            (IndexType::BTreeIndex(_), IndexType::HashIndex(_)) => 10.0, // Moderate overhead
+            (IndexType::BitmapIndex(_), IndexType::BitmapIndex(_)) => 5.0, // Low overhead - bitwise ops
+            (IndexType::BloomFilter(_), _) => 2.0, // Very low overhead
+            (IndexType::SpatialRTree, _) => 25.0, // Higher overhead for spatial operations
+            (IndexType::HashIndex(_), IndexType::HashIndex(_)) => 15.0, // Hash probe overhead
+            _ => 12.0, // Default overhead
+        }
     }
 
     /// Enhanced intersection algorithm recommendation
@@ -1722,6 +1798,397 @@ impl<'a> BGPOptimizer<'a> {
 
         Ok((current_selectivity - best_alternative_selectivity) / current_selectivity)
     }
+
+    /// Advanced index-aware streaming optimization for large datasets
+    pub fn optimize_for_streaming(
+        &self,
+        patterns: &[TriplePattern],
+        memory_limit: usize,
+    ) -> Result<StreamingOptimizationPlan> {
+        let pattern_selectivities = self.calculate_pattern_selectivities(patterns)?;
+        let total_estimated_memory = self.estimate_total_memory_usage(&pattern_selectivities)?;
+
+        let mut streaming_plan = StreamingOptimizationPlan {
+            use_streaming: total_estimated_memory > memory_limit,
+            streaming_patterns: Vec::new(),
+            index_streaming_recommendations: Vec::new(),
+            memory_estimation: total_estimated_memory,
+            pipeline_breakers: Vec::new(),
+            spill_candidates: Vec::new(),
+        };
+
+        if streaming_plan.use_streaming {
+            // Identify patterns that should use streaming execution
+            for (idx, pattern_sel) in pattern_selectivities.iter().enumerate() {
+                let pattern_memory = self.estimate_pattern_memory_usage(pattern_sel)?;
+                
+                if pattern_memory > memory_limit / 4 {
+                    streaming_plan.streaming_patterns.push(StreamingPattern {
+                        pattern_index: idx,
+                        pattern: pattern_sel.pattern.clone(),
+                        estimated_memory: pattern_memory,
+                        streaming_strategy: self.recommend_streaming_strategy(pattern_sel)?,
+                    });
+                }
+            }
+
+            // Generate index-specific streaming recommendations
+            streaming_plan.index_streaming_recommendations = 
+                self.generate_index_streaming_recommendations(patterns, &pattern_selectivities)?;
+
+            // Identify pipeline breaker locations
+            streaming_plan.pipeline_breakers = 
+                self.identify_pipeline_breakers(patterns, &pattern_selectivities, memory_limit)?;
+
+            // Identify spill candidates for memory-intensive operations
+            streaming_plan.spill_candidates = 
+                self.identify_spill_candidates(patterns, &pattern_selectivities, memory_limit)?;
+        }
+
+        Ok(streaming_plan)
+    }
+
+    /// Estimate total memory usage for a set of patterns
+    fn estimate_total_memory_usage(&self, pattern_selectivities: &[PatternSelectivity]) -> Result<usize> {
+        let mut total_memory = 0;
+        let mut cumulative_cardinality = 1;
+
+        for pattern_sel in pattern_selectivities {
+            // Pattern evaluation memory
+            let pattern_memory = pattern_sel.cardinality * 150; // Bytes per result
+            total_memory += pattern_memory;
+
+            // Join memory (hash table for smaller side)
+            if cumulative_cardinality > 0 {
+                let join_memory = cumulative_cardinality.min(pattern_sel.cardinality) * 200;
+                total_memory += join_memory;
+            }
+
+            // Update cumulative cardinality for next join
+            cumulative_cardinality = (cumulative_cardinality as f64 * 
+                pattern_sel.cardinality as f64 * 
+                pattern_sel.selectivity).ceil() as usize;
+        }
+
+        Ok(total_memory)
+    }
+
+    /// Estimate memory usage for a single pattern
+    fn estimate_pattern_memory_usage(&self, pattern_sel: &PatternSelectivity) -> Result<usize> {
+        let base_memory = pattern_sel.cardinality * 150; // Base result memory
+        let index_overhead = match self.recommend_best_index_for_pattern(&pattern_sel.pattern)? {
+            IndexType::HashIndex(_) => 1.2,
+            IndexType::BTreeIndex(_) => 1.1,
+            IndexType::BitmapIndex(_) => 0.8,
+            IndexType::BloomFilter(_) => 0.3,
+            _ => 1.0,
+        };
+
+        Ok((base_memory as f64 * index_overhead) as usize)
+    }
+
+    /// Recommend streaming strategy for a pattern
+    fn recommend_streaming_strategy(&self, pattern_sel: &PatternSelectivity) -> Result<StreamingStrategy> {
+        let cardinality = pattern_sel.cardinality;
+        let selectivity = pattern_sel.selectivity;
+
+        if cardinality > 1_000_000 && selectivity < 0.01 {
+            // Highly selective on large data - use index streaming
+            Ok(StreamingStrategy::IndexedStreaming)
+        } else if cardinality > 500_000 {
+            // Large intermediate results - use batched streaming
+            Ok(StreamingStrategy::BatchedStreaming { batch_size: 10_000 })
+        } else if selectivity > 0.5 {
+            // Low selectivity - use filtered streaming
+            Ok(StreamingStrategy::FilteredStreaming)
+        } else {
+            // Default streaming
+            Ok(StreamingStrategy::StandardStreaming)
+        }
+    }
+
+    /// Generate index-specific streaming recommendations
+    fn generate_index_streaming_recommendations(
+        &self,
+        patterns: &[TriplePattern],
+        pattern_selectivities: &[PatternSelectivity],
+    ) -> Result<Vec<IndexStreamingRecommendation>> {
+        let mut recommendations = Vec::new();
+
+        for (idx, pattern) in patterns.iter().enumerate() {
+            let best_index = self.recommend_best_index_for_pattern(pattern)?;
+            let pattern_sel = &pattern_selectivities[idx];
+
+            match best_index {
+                IndexType::BTreeIndex(_) => {
+                    // B-tree indexes support range scanning
+                    if pattern_sel.cardinality > 100_000 {
+                        recommendations.push(IndexStreamingRecommendation {
+                            pattern_index: idx,
+                            index_type: best_index,
+                            streaming_mode: IndexStreamingMode::RangeScan {
+                                batch_size: 10_000,
+                                prefetch_size: 50_000,
+                            },
+                            memory_limit: pattern_sel.cardinality * 100,
+                        });
+                    }
+                }
+                IndexType::HashIndex(_) => {
+                    // Hash indexes support batch lookup
+                    if pattern_sel.cardinality > 50_000 {
+                        recommendations.push(IndexStreamingRecommendation {
+                            pattern_index: idx,
+                            index_type: best_index,
+                            streaming_mode: IndexStreamingMode::BatchLookup {
+                                batch_size: 5_000,
+                            },
+                            memory_limit: pattern_sel.cardinality * 80,
+                        });
+                    }
+                }
+                IndexType::BitmapIndex(_) => {
+                    // Bitmap indexes support bit-stream processing
+                    recommendations.push(IndexStreamingRecommendation {
+                        pattern_index: idx,
+                        index_type: best_index,
+                        streaming_mode: IndexStreamingMode::BitStream {
+                            chunk_size: 1024 * 8, // 8KB chunks
+                        },
+                        memory_limit: pattern_sel.cardinality * 20,
+                    });
+                }
+                _ => {} // No specific streaming recommendation
+            }
+        }
+
+        Ok(recommendations)
+    }
+
+    /// Identify optimal pipeline breaker locations
+    fn identify_pipeline_breakers(
+        &self,
+        patterns: &[TriplePattern],
+        pattern_selectivities: &[PatternSelectivity],
+        memory_limit: usize,
+    ) -> Result<Vec<PipelineBreaker>> {
+        let mut breakers = Vec::new();
+        let mut cumulative_memory = 0;
+
+        for (idx, pattern_sel) in pattern_selectivities.iter().enumerate() {
+            let pattern_memory = self.estimate_pattern_memory_usage(pattern_sel)?;
+            cumulative_memory += pattern_memory;
+
+            // Insert pipeline breaker if memory threshold exceeded
+            if cumulative_memory > memory_limit / 2 {
+                breakers.push(PipelineBreaker {
+                    location: PipelineBreakerLocation::AfterPattern(idx.saturating_sub(1)),
+                    estimated_memory_saving: cumulative_memory / 2,
+                    spill_strategy: if pattern_sel.cardinality > 100_000 {
+                        SpillStrategy::SortSpill
+                    } else {
+                        SpillStrategy::HashSpill
+                    },
+                });
+                cumulative_memory = pattern_memory; // Reset after breaker
+            }
+
+            // Insert breaker before expensive joins
+            if idx > 0 {
+                let prev_cardinality = pattern_selectivities[idx - 1].cardinality;
+                let join_cost = prev_cardinality * pattern_sel.cardinality;
+                
+                if join_cost > 10_000_000 { // 10M tuple join threshold
+                    breakers.push(PipelineBreaker {
+                        location: PipelineBreakerLocation::BeforeJoin(idx - 1, idx),
+                        estimated_memory_saving: join_cost / 10,
+                        spill_strategy: SpillStrategy::HashSpill,
+                    });
+                }
+            }
+        }
+
+        Ok(breakers)
+    }
+
+    /// Identify candidates for spilling to disk
+    fn identify_spill_candidates(
+        &self,
+        patterns: &[TriplePattern],
+        pattern_selectivities: &[PatternSelectivity],
+        memory_limit: usize,
+    ) -> Result<Vec<SpillCandidate>> {
+        let mut candidates = Vec::new();
+
+        for (idx, pattern_sel) in pattern_selectivities.iter().enumerate() {
+            let pattern_memory = self.estimate_pattern_memory_usage(pattern_sel)?;
+
+            // Large intermediate results are good spill candidates
+            if pattern_memory > memory_limit / 8 {
+                let spill_benefit = self.calculate_spill_benefit(pattern_sel, pattern_memory, memory_limit);
+                
+                candidates.push(SpillCandidate {
+                    pattern_index: idx,
+                    operation: SpillOperation::IntermediateResults,
+                    estimated_memory: pattern_memory,
+                    spill_benefit,
+                    spill_cost: self.estimate_spill_cost(pattern_memory),
+                });
+            }
+
+            // Hash tables for joins are good spill candidates
+            if idx > 0 {
+                let join_memory = pattern_selectivities[idx - 1].cardinality * 200;
+                if join_memory > memory_limit / 10 {
+                    let spill_benefit = self.calculate_spill_benefit(pattern_sel, join_memory, memory_limit);
+                    
+                    candidates.push(SpillCandidate {
+                        pattern_index: idx,
+                        operation: SpillOperation::HashTable,
+                        estimated_memory: join_memory,
+                        spill_benefit,
+                        spill_cost: self.estimate_spill_cost(join_memory),
+                    });
+                }
+            }
+        }
+
+        // Sort by benefit/cost ratio
+        candidates.sort_by(|a, b| {
+            let ratio_a = a.spill_benefit / a.spill_cost;
+            let ratio_b = b.spill_benefit / b.spill_cost;
+            ratio_b.partial_cmp(&ratio_a).unwrap()
+        });
+
+        Ok(candidates)
+    }
+
+    /// Calculate benefit of spilling an operation
+    fn calculate_spill_benefit(&self, pattern_sel: &PatternSelectivity, memory_usage: usize, memory_limit: usize) -> f64 {
+        let memory_pressure = memory_usage as f64 / memory_limit as f64;
+        let cardinality_factor = (pattern_sel.cardinality as f64).ln() / 10.0;
+        let selectivity_factor = 1.0 - pattern_sel.selectivity;
+        
+        memory_pressure * cardinality_factor * selectivity_factor
+    }
+
+    /// Estimate cost of spilling (I/O overhead)
+    fn estimate_spill_cost(&self, memory_usage: usize) -> f64 {
+        // Assume 100 MB/s I/O throughput
+        let io_time = memory_usage as f64 / (100.0 * 1024.0 * 1024.0);
+        
+        // Cost includes write + read overhead
+        io_time * 2.0 + 0.1 // Base spill overhead
+    }
+
+    /// Recommend best index for a pattern (helper method)
+    fn recommend_best_index_for_pattern(&self, pattern: &TriplePattern) -> Result<IndexType> {
+        self.select_best_index_for_pattern(pattern)
+    }
+}
+
+/// Streaming optimization plan for large datasets
+#[derive(Debug, Clone)]
+pub struct StreamingOptimizationPlan {
+    /// Whether streaming execution is recommended
+    pub use_streaming: bool,
+    /// Patterns that should use streaming execution
+    pub streaming_patterns: Vec<StreamingPattern>,
+    /// Index-specific streaming recommendations
+    pub index_streaming_recommendations: Vec<IndexStreamingRecommendation>,
+    /// Total estimated memory usage
+    pub memory_estimation: usize,
+    /// Pipeline breaker locations
+    pub pipeline_breakers: Vec<PipelineBreaker>,
+    /// Spill candidates for memory management
+    pub spill_candidates: Vec<SpillCandidate>,
+}
+
+/// Pattern-specific streaming configuration
+#[derive(Debug, Clone)]
+pub struct StreamingPattern {
+    pub pattern_index: usize,
+    pub pattern: TriplePattern,
+    pub estimated_memory: usize,
+    pub streaming_strategy: StreamingStrategy,
+}
+
+/// Streaming strategies for different scenarios
+#[derive(Debug, Clone)]
+pub enum StreamingStrategy {
+    /// Standard streaming for moderate datasets
+    StandardStreaming,
+    /// Index-based streaming for highly selective queries
+    IndexedStreaming,
+    /// Batched streaming for large intermediate results
+    BatchedStreaming { batch_size: usize },
+    /// Filtered streaming for low selectivity queries
+    FilteredStreaming,
+}
+
+/// Index-specific streaming recommendation
+#[derive(Debug, Clone)]
+pub struct IndexStreamingRecommendation {
+    pub pattern_index: usize,
+    pub index_type: IndexType,
+    pub streaming_mode: IndexStreamingMode,
+    pub memory_limit: usize,
+}
+
+/// Index streaming modes
+#[derive(Debug, Clone)]
+pub enum IndexStreamingMode {
+    /// Range scan for B-tree indexes
+    RangeScan { batch_size: usize, prefetch_size: usize },
+    /// Batch lookup for hash indexes
+    BatchLookup { batch_size: usize },
+    /// Bit-stream processing for bitmap indexes
+    BitStream { chunk_size: usize },
+}
+
+/// Pipeline breaker for memory management
+#[derive(Debug, Clone)]
+pub struct PipelineBreaker {
+    pub location: PipelineBreakerLocation,
+    pub estimated_memory_saving: usize,
+    pub spill_strategy: SpillStrategy,
+}
+
+/// Pipeline breaker locations
+#[derive(Debug, Clone)]
+pub enum PipelineBreakerLocation {
+    /// After processing a specific pattern
+    AfterPattern(usize),
+    /// Before joining two patterns
+    BeforeJoin(usize, usize),
+}
+
+/// Spill strategies for different operations
+#[derive(Debug, Clone)]
+pub enum SpillStrategy {
+    /// Hash-based spilling for joins
+    HashSpill,
+    /// Sort-based spilling for order-by operations
+    SortSpill,
+}
+
+/// Spill candidate for memory-intensive operations
+#[derive(Debug, Clone)]
+pub struct SpillCandidate {
+    pub pattern_index: usize,
+    pub operation: SpillOperation,
+    pub estimated_memory: usize,
+    pub spill_benefit: f64,
+    pub spill_cost: f64,
+}
+
+/// Operations that can be spilled to disk
+#[derive(Debug, Clone)]
+pub enum SpillOperation {
+    /// Intermediate result sets
+    IntermediateResults,
+    /// Hash table for joins
+    HashTable,
 }
 
 #[derive(Debug, Clone, Copy)]

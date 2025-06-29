@@ -350,9 +350,8 @@ impl Store {
 
             // Keep only the last 1000 changes to prevent memory issues
             if metadata.change_log.len() > 1000 {
-                metadata
-                    .change_log
-                    .drain(0..metadata.change_log.len() - 1000);
+                let drain_end = metadata.change_log.len() - 1000;
+                metadata.change_log.drain(0..drain_end);
             }
         }
 

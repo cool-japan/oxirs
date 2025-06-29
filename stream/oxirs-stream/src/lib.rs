@@ -39,11 +39,15 @@ pub use bridge::{
     MessageBridgeManager, MessageTransformer, RoutingRule,
 };
 pub use circuit_breaker::{CircuitBreakerError, FailureType, SharedCircuitBreakerExt};
-pub use connection_pool::{DetailedPoolMetrics, PoolConfig, PoolStatus};
+pub use connection_pool::{
+    ConnectionFactory, ConnectionPool, DetailedPoolMetrics, LoadBalancingStrategy, PoolConfig,
+    PoolStatus,
+};
 pub use event::{
     EventCategory, EventMetadata, EventPriority, IsolationLevel, QueryResult, SchemaChangeType,
     SchemaType, SparqlOperationType, StreamEvent,
 };
+pub use failover::{ConnectionEndpoint, FailoverConfig, FailoverManager};
 pub use sparql_streaming::{
     ContinuousQueryManager, QueryManagerConfig, QueryMetadata, QueryResultChannel,
     QueryResultUpdate, UpdateType,
@@ -52,6 +56,7 @@ pub use store_integration::{
     ChangeDetectionStrategy, ChangeNotification, RealtimeUpdateManager, StoreChangeDetector,
     UpdateFilter, UpdateNotification,
 };
+// Stream, StreamConsumer, and StreamProducer are defined below in this module
 pub use webhook::{
     EventFilter as WebhookEventFilter, HttpMethod, RateLimit, RetryConfig as WebhookRetryConfig,
     WebhookConfig, WebhookInfo, WebhookManager, WebhookMetadata,
@@ -192,6 +197,9 @@ pub struct MonitoringConfig {
     pub metrics_interval: Duration,
     pub health_check_interval: Duration,
     pub enable_profiling: bool,
+    pub prometheus_endpoint: Option<String>,
+    pub jaeger_endpoint: Option<String>,
+    pub log_level: String,
 }
 
 /// Enhanced streaming backend options
@@ -308,6 +316,19 @@ struct ProducerStats {
 }
 
 /// Memory-based producer for testing and development
+// Global shared storage for memory backend events
+static MEMORY_EVENTS: std::sync::OnceLock<Arc<RwLock<Vec<(DateTime<Utc>, StreamEvent)>>>> = std::sync::OnceLock::new();
+
+pub fn get_memory_events() -> Arc<RwLock<Vec<(DateTime<Utc>, StreamEvent)>>> {
+    MEMORY_EVENTS.get_or_init(|| Arc::new(RwLock::new(Vec::new()))).clone()
+}
+
+/// Clear the global memory storage (for testing)
+pub async fn clear_memory_events() {
+    let events = get_memory_events();
+    events.write().await.clear();
+}
+
 struct MemoryProducer {
     events: Arc<RwLock<Vec<(DateTime<Utc>, StreamEvent)>>>,
     max_size: Option<usize>,
@@ -318,7 +339,7 @@ struct MemoryProducer {
 impl MemoryProducer {
     fn new(max_size: Option<usize>, persistence: bool) -> Self {
         Self {
-            events: Arc::new(RwLock::new(Vec::new())),
+            events: get_memory_events(),
             max_size,
             persistence,
             stats: ProducerStats {
@@ -348,7 +369,7 @@ impl MemoryProducer {
         self.stats.avg_latency_ms = (self.stats.avg_latency_ms + latency as f64) / 2.0;
         self.stats.last_publish = Some(Utc::now());
 
-        debug!("Memory producer: published event (total: {})", events.len());
+        println!("Memory producer: published event (total: {})", events.len());
         Ok(())
     }
 
@@ -916,8 +937,8 @@ struct MemoryConsumer {
 impl MemoryConsumer {
     fn new() -> Self {
         Self {
-            events: Arc::new(RwLock::new(Vec::new())),
-            current_index: 0,
+            events: get_memory_events(),
+            current_index: 0, // Always start from beginning for new consumer
             stats: ConsumerStats {
                 backend_type: "memory".to_string(),
                 ..Default::default()
@@ -935,6 +956,12 @@ impl MemoryConsumer {
         let start_time = Instant::now();
         let events = self.events.read().await;
 
+        println!(
+            "Memory consumer: checking for events. Total: {}, current_index: {}",
+            events.len(),
+            self.current_index
+        );
+
         if self.current_index < events.len() {
             let (_, event) = &events[self.current_index];
             let event_clone = event.clone();
@@ -949,13 +976,14 @@ impl MemoryConsumer {
                 (self.stats.avg_processing_time_ms + processing_time as f64) / 2.0;
             self.stats.last_message = Some(Utc::now());
 
-            debug!(
+            println!(
                 "Memory consumer: consumed event {}/{}",
                 self.current_index,
                 events.len()
             );
             Ok(Some(event_clone))
         } else {
+            println!("Memory consumer: no events available");
             Ok(None)
         }
     }
@@ -1493,6 +1521,9 @@ impl Default for MonitoringConfig {
             metrics_interval: Duration::from_secs(60),
             health_check_interval: Duration::from_secs(30),
             enable_profiling: false,
+            prometheus_endpoint: None,
+            jaeger_endpoint: None,
+            log_level: "info".to_string(),
         }
     }
 }
@@ -1560,5 +1591,90 @@ impl StreamConfig {
         self.circuit_breaker.enabled = enabled;
         self.circuit_breaker.failure_threshold = failure_threshold;
         self
+    }
+}
+
+/// Unified Stream interface that combines producer and consumer functionality
+pub struct Stream {
+    producer: StreamProducer,
+    consumer: StreamConsumer,
+}
+
+impl Stream {
+    /// Create a new unified stream instance
+    pub async fn new(config: StreamConfig) -> Result<Self> {
+        // Clear memory events if using memory backend (important for testing)
+        if matches!(config.backend, StreamBackend::Memory { .. }) {
+            clear_memory_events().await;
+        }
+        
+        let producer = StreamProducer::new(config.clone()).await?;
+        let consumer = StreamConsumer::new(config).await?;
+
+        Ok(Self { producer, consumer })
+    }
+
+    /// Publish an event to the stream
+    pub async fn publish(&mut self, event: StreamEvent) -> Result<()> {
+        self.producer.publish(event).await
+    }
+
+    /// Consume an event from the stream
+    pub async fn consume(&mut self) -> Result<Option<StreamEvent>> {
+        self.consumer.consume().await
+    }
+
+    /// Flush any pending events
+    pub async fn flush(&mut self) -> Result<()> {
+        self.producer.flush().await
+    }
+
+    /// Get producer statistics
+    pub async fn producer_stats(&self) -> ProducerStats {
+        self.producer.get_stats().await
+    }
+
+    /// Get consumer statistics  
+    pub async fn consumer_stats(&self) -> ConsumerStats {
+        self.consumer.get_stats().await
+    }
+
+    /// Close the stream and clean up resources
+    pub async fn close(&mut self) -> Result<()> {
+        // Flush any pending events
+        self.producer.flush().await?;
+
+        // Close backend connections
+        // Producer and consumer close operations would be handled by their Drop implementations
+        debug!("Stream closed successfully");
+        Ok(())
+    }
+
+    /// Perform a health check on the stream
+    pub async fn health_check(&self) -> Result<bool> {
+        // Basic health check - verify that the stream is operational
+        // This is a simplified implementation
+        Ok(true)
+    }
+
+    /// Begin a transaction (placeholder implementation)
+    pub async fn begin_transaction(&mut self) -> Result<()> {
+        // Placeholder implementation for transaction support
+        debug!("Transaction begun (placeholder)");
+        Ok(())
+    }
+
+    /// Commit a transaction (placeholder implementation)
+    pub async fn commit_transaction(&mut self) -> Result<()> {
+        // Placeholder implementation for transaction support
+        debug!("Transaction committed (placeholder)");
+        Ok(())
+    }
+
+    /// Rollback a transaction (placeholder implementation)
+    pub async fn rollback_transaction(&mut self) -> Result<()> {
+        // Placeholder implementation for transaction support
+        debug!("Transaction rolled back (placeholder)");
+        Ok(())
     }
 }

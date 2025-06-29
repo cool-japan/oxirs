@@ -5,14 +5,7 @@
 //! https://www.w3.org/TR/sparql11-query/
 
 use super::sparql_algebra::{
-    AggregateExpression,
-    BuiltInFunction,
-    Expression,
-    FunctionExpression,
     GraphPattern,
-    OrderExpression,
-    PropertyPathExpression,
-    TermPattern,
     TriplePattern, // Import the sparql_algebra TriplePattern explicitly
 };
 use crate::model::{NamedNode, Variable};

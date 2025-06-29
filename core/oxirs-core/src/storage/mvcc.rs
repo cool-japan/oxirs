@@ -3,16 +3,14 @@
 //! This module implements MVCC to enable high-concurrency read/write operations
 //! by maintaining multiple timestamped versions of RDF triples.
 
-use crate::model::{BlankNode, Literal, NamedNode, Object, Predicate, Subject, Triple};
-use crate::OxirsError;
+use crate::model::{Object, Predicate, Subject, Triple};
 use anyhow::{anyhow, Result};
 use dashmap::DashMap;
 use parking_lot::{Mutex, RwLock};
-use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 /// Transaction timestamp (logical timestamp)
 pub type Timestamp = u64;
@@ -819,6 +817,7 @@ pub struct MvccStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::{Literal, NamedNode};
 
     #[test]
     fn test_basic_mvcc_operations() {

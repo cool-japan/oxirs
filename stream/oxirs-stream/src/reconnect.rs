@@ -482,6 +482,14 @@ mod tests {
             Ok(())
         }
 
+        fn clone_connection(&self) -> Box<dyn PooledConnection> {
+            Box::new(TestConnection {
+                id: self.id,
+                healthy: Arc::new(AtomicBool::new(self.healthy.load(Ordering::Relaxed))),
+                created_at: self.created_at,
+            })
+        }
+
         fn created_at(&self) -> Instant {
             self.created_at
         }

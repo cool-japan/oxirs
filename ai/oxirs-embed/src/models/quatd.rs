@@ -756,6 +756,10 @@ impl EmbeddingModel for QuatD {
     fn is_trained(&self) -> bool {
         self.base.is_trained
     }
+
+    async fn encode(&self, _texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        Err(anyhow!("Knowledge graph embedding model does not support text encoding"))
+    }
 }
 
 #[cfg(test)]

@@ -377,19 +377,28 @@ pub struct RetryPolicy {
     pub exponential_base: f64,
 }
 
+/// Service pattern extracted from SPARQL query
+#[derive(Debug, Clone)]
+pub struct ServicePattern {
+    pub service_url: String,
+    pub pattern: String,
+    pub is_silent: bool,
+    pub is_optional: bool,
+}
+
+/// Merge strategy trait for combining results
+#[async_trait]
+pub trait MergeStrategy: Send + Sync {
+    fn name(&self) -> &str;
+    async fn merge(&self, results: Vec<QueryResults>) -> FusekiResult<QueryResults>;
+}
+
 /// Result merger for combining distributed results
 pub struct ResultMerger {
     /// Merge strategies
     strategies: HashMap<String, Arc<dyn MergeStrategy>>,
     /// Deduplication cache
     dedup_cache: Arc<RwLock<HashSet<u64>>>,
-}
-
-/// Strategy for merging results
-#[async_trait]
-pub trait MergeStrategy: Send + Sync {
-    fn name(&self) -> &str;
-    async fn merge(&self, results: Vec<QueryResults>) -> FusekiResult<QueryResults>;
 }
 
 impl FederatedQueryOptimizer {
@@ -525,14 +534,6 @@ impl FederatedQueryOptimizer {
     }
 }
 
-/// SERVICE pattern extracted from query
-#[derive(Debug, Clone)]
-pub struct ServicePattern {
-    pub service_url: String,
-    pub pattern: String,
-    pub is_silent: bool,
-    pub is_optional: bool,
-}
 
 impl EndpointRegistry {
     pub fn new() -> Self {
@@ -1228,6 +1229,7 @@ impl ExecutionStrategy for AdaptiveExecutionStrategy {
     }
 }
 
+
 impl ResultMerger {
     pub fn new() -> Self {
         Self {
@@ -1322,9 +1324,7 @@ impl MergeStrategy for JoinMergeStrategy {
 
     async fn merge(&self, results: Vec<QueryResults>) -> FusekiResult<QueryResults> {
         if results.len() != 2 {
-            return Err(FusekiError::internal(
-                "Join requires exactly 2 result sets".into(),
-            ));
+            return Err(FusekiError::internal("Join requires exactly 2 result sets"));
         }
 
         let left = &results[0];
@@ -1360,6 +1360,7 @@ impl MergeStrategy for JoinMergeStrategy {
             }
         }
 
+        let result_count = joined_bindings.len();
         Ok(QueryResults {
             bindings: joined_bindings,
             metadata: ResultMetadata {
@@ -1370,7 +1371,7 @@ impl MergeStrategy for JoinMergeStrategy {
                     times.extend(right.metadata.endpoint_times.clone());
                     times
                 },
-                result_count: joined_bindings.len(),
+                result_count,
                 partial_results: false,
             },
         })

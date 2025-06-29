@@ -851,6 +851,8 @@ impl IvfIndex {
             total_list_stats.total_vectors += stats.total_vectors;
             total_list_stats.full_vectors += stats.full_vectors;
             total_list_stats.quantized_vectors += stats.quantized_vectors;
+            total_list_stats.multi_level_vectors += stats.multi_level_vectors;
+            total_list_stats.multi_codebook_vectors += stats.multi_codebook_vectors;
 
             vectors_per_cluster.push(stats.total_vectors);
             if stats.total_vectors > 0 {

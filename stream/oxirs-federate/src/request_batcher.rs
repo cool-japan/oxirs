@@ -98,6 +98,21 @@ pub struct BatchableRequest {
     pub response_sender: Option<tokio::sync::oneshot::Sender<Result<GraphQLResponse>>>,
 }
 
+impl Clone for BatchableRequest {
+    fn clone(&self) -> Self {
+        Self {
+            id: self.id.clone(),
+            service_id: self.service_id.clone(),
+            query: self.query.clone(),
+            variables: self.variables.clone(),
+            priority: self.priority.clone(),
+            timestamp: self.timestamp,
+            timeout: self.timeout,
+            response_sender: None, // Cannot clone oneshot::Sender, so set to None
+        }
+    }
+}
+
 /// Request priority levels
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RequestPriority {
@@ -613,23 +628,22 @@ impl RequestBatcher {
         // Simple parallel execution
         let mut tasks = Vec::new();
 
-        for request in &batch.requests {
-            let request_clone = request.clone();
-            let registry_clone = service_registry.clone();
-
-            let task = tokio::spawn(async move {
-                // Simulate request execution
-                tokio::time::sleep(Duration::from_millis(10)).await;
-                Ok(GraphQLResponse {
-                    data: serde_json::json!({
-                        "batchId": request_clone.id,
-                        "serviceId": request_clone.service_id,
-                        "result": "batched execution"
-                    }),
-                    errors: Vec::new(),
-                    extensions: None,
-                })
-            });
+        let requests: Vec<_> = batch.requests.clone();
+        for request in requests {
+            let task: tokio::task::JoinHandle<Result<GraphQLResponse, anyhow::Error>> =
+                tokio::spawn(async move {
+                    // Simulate request execution
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                    Ok(GraphQLResponse {
+                        data: serde_json::json!({
+                            "batchId": request.id,
+                            "serviceId": request.service_id,
+                            "result": "batched execution"
+                        }),
+                        errors: Vec::new(),
+                        extensions: None,
+                    })
+                });
 
             tasks.push(task);
         }

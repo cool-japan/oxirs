@@ -301,24 +301,83 @@ impl ModelEnsemble {
         &self,
         predictions: Vec<(Vec<LearnedShape>, f64)>,
     ) -> Result<Vec<LearnedShape>, ModelError> {
-        // Implement majority voting logic
-        // For now, return first prediction
-        Ok(predictions
-            .first()
-            .map(|(shapes, _)| shapes.clone())
-            .unwrap_or_default())
+        if predictions.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Collect all unique shape IDs across all predictions
+        let mut shape_votes: HashMap<String, Vec<(LearnedShape, f64)>> = HashMap::new();
+        
+        for (shapes, _weight) in &predictions {
+            for shape in shapes {
+                shape_votes
+                    .entry(shape.shape_id.clone())
+                    .or_insert_with(Vec::new)
+                    .push((shape.clone(), 1.0)); // Each model gets one vote
+            }
+        }
+
+        // Apply majority voting: keep shapes that appear in majority of models
+        let majority_threshold = (predictions.len() as f64 / 2.0).ceil() as usize;
+        let mut final_shapes = Vec::new();
+
+        for (shape_id, votes) in shape_votes {
+            if votes.len() >= majority_threshold {
+                // Aggregate the shape from majority votes
+                let aggregated_shape = self.aggregate_shapes_majority(&votes)?;
+                final_shapes.push(aggregated_shape);
+            }
+        }
+
+        // Sort by aggregated confidence
+        final_shapes.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
+        
+        Ok(final_shapes)
     }
 
     fn weighted_vote(
         &self,
         predictions: Vec<(Vec<LearnedShape>, f64)>,
     ) -> Result<Vec<LearnedShape>, ModelError> {
-        // Implement weighted voting logic
-        // For now, return first prediction
-        Ok(predictions
-            .first()
-            .map(|(shapes, _)| shapes.clone())
-            .unwrap_or_default())
+        if predictions.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Normalize weights to sum to 1.0
+        let total_weight: f64 = predictions.iter().map(|(_, w)| w).sum();
+        if total_weight == 0.0 {
+            return self.majority_vote(predictions);
+        }
+
+        // Collect weighted votes for each shape
+        let mut shape_votes: HashMap<String, Vec<(LearnedShape, f64)>> = HashMap::new();
+        
+        for (shapes, weight) in &predictions {
+            let normalized_weight = weight / total_weight;
+            for shape in shapes {
+                shape_votes
+                    .entry(shape.shape_id.clone())
+                    .or_insert_with(Vec::new)
+                    .push((shape.clone(), normalized_weight));
+            }
+        }
+
+        // Aggregate shapes using weighted averaging
+        let mut final_shapes = Vec::new();
+        for (shape_id, votes) in shape_votes {
+            let aggregated_shape = self.aggregate_shapes_weighted(&votes)?;
+            
+            // Only include shapes with sufficient weighted support
+            let total_vote_weight: f64 = votes.iter().map(|(_, w)| w).sum();
+            if total_vote_weight >= 0.3 { // Require at least 30% total weight support
+                final_shapes.push(aggregated_shape);
+            }
+        }
+
+        // Sort by weighted confidence
+        final_shapes.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
+        
+        Ok(final_shapes)
     }
 
     fn stacking_vote(
@@ -330,6 +389,162 @@ impl ModelEnsemble {
         // Implement stacking logic with meta-learner
         // For now, use meta-learner directly
         meta_learner.predict(graph_data)
+    }
+
+    /// Aggregate shapes from majority voting
+    fn aggregate_shapes_majority(
+        &self,
+        votes: &[(LearnedShape, f64)],
+    ) -> Result<LearnedShape, ModelError> {
+        if votes.is_empty() {
+            return Err(ModelError::InvalidParams("No votes to aggregate".to_string()));
+        }
+
+        let first_shape = &votes[0].0;
+        let mut aggregated_shape = LearnedShape {
+            shape_id: first_shape.shape_id.clone(),
+            constraints: Vec::new(),
+            confidence: 0.0,
+            feature_importance: HashMap::new(),
+        };
+
+        // Aggregate confidence as simple average
+        aggregated_shape.confidence = votes.iter().map(|(shape, _)| shape.confidence).sum::<f64>() 
+            / votes.len() as f64;
+
+        // Aggregate constraints by finding most common ones
+        let mut constraint_counts: HashMap<String, Vec<LearnedConstraint>> = HashMap::new();
+        for (shape, _) in votes {
+            for constraint in &shape.constraints {
+                constraint_counts
+                    .entry(constraint.constraint_type.clone())
+                    .or_insert_with(Vec::new)
+                    .push(constraint.clone());
+            }
+        }
+
+        // Include constraints that appear in majority of votes
+        let majority_threshold = (votes.len() as f64 / 2.0).ceil() as usize;
+        for (constraint_type, constraints) in constraint_counts {
+            if constraints.len() >= majority_threshold {
+                // Create aggregated constraint
+                let avg_confidence = constraints.iter().map(|c| c.confidence).sum::<f64>() 
+                    / constraints.len() as f64;
+                let avg_support = constraints.iter().map(|c| c.support).sum::<f64>() 
+                    / constraints.len() as f64;
+
+                // Use parameters from first constraint (could be improved with averaging)
+                let parameters = constraints[0].parameters.clone();
+
+                aggregated_shape.constraints.push(LearnedConstraint {
+                    constraint_type,
+                    parameters,
+                    confidence: avg_confidence,
+                    support: avg_support,
+                });
+            }
+        }
+
+        // Aggregate feature importance
+        for (shape, _) in votes {
+            for (feature, importance) in &shape.feature_importance {
+                let current = aggregated_shape.feature_importance.get(feature).unwrap_or(&0.0);
+                aggregated_shape.feature_importance.insert(
+                    feature.clone(),
+                    current + importance / votes.len() as f64,
+                );
+            }
+        }
+
+        Ok(aggregated_shape)
+    }
+
+    /// Aggregate shapes from weighted voting
+    fn aggregate_shapes_weighted(
+        &self,
+        votes: &[(LearnedShape, f64)],
+    ) -> Result<LearnedShape, ModelError> {
+        if votes.is_empty() {
+            return Err(ModelError::InvalidParams("No votes to aggregate".to_string()));
+        }
+
+        let first_shape = &votes[0].0;
+        let mut aggregated_shape = LearnedShape {
+            shape_id: first_shape.shape_id.clone(),
+            constraints: Vec::new(),
+            confidence: 0.0,
+            feature_importance: HashMap::new(),
+        };
+
+        let total_weight: f64 = votes.iter().map(|(_, w)| w).sum();
+        if total_weight == 0.0 {
+            return self.aggregate_shapes_majority(votes);
+        }
+
+        // Weighted average of confidence
+        aggregated_shape.confidence = votes
+            .iter()
+            .map(|(shape, weight)| shape.confidence * weight)
+            .sum::<f64>() / total_weight;
+
+        // Aggregate constraints with weighted voting
+        let mut constraint_weights: HashMap<String, (Vec<LearnedConstraint>, f64)> = HashMap::new();
+        for (shape, weight) in votes {
+            for constraint in &shape.constraints {
+                let entry = constraint_weights
+                    .entry(constraint.constraint_type.clone())
+                    .or_insert_with(|| (Vec::new(), 0.0));
+                entry.0.push(constraint.clone());
+                entry.1 += weight;
+            }
+        }
+
+        // Include constraints with sufficient weighted support (>= 50% of total weight)
+        let weight_threshold = total_weight * 0.5;
+        for (constraint_type, (constraints, constraint_weight)) in constraint_weights {
+            if constraint_weight >= weight_threshold {
+                // Weighted average of constraint properties
+                let weighted_confidence = constraints
+                    .iter()
+                    .zip(votes.iter().map(|(_, w)| w))
+                    .map(|(constraint, weight)| constraint.confidence * weight)
+                    .sum::<f64>() / constraint_weight;
+
+                let weighted_support = constraints
+                    .iter()
+                    .zip(votes.iter().map(|(_, w)| w))
+                    .map(|(constraint, weight)| constraint.support * weight)
+                    .sum::<f64>() / constraint_weight;
+
+                // Use parameters from highest-weighted constraint
+                let best_constraint = constraints
+                    .iter()
+                    .zip(votes.iter().map(|(_, w)| w))
+                    .max_by(|(_, w1), (_, w2)| w1.partial_cmp(w2).unwrap())
+                    .map(|(c, _)| c)
+                    .unwrap();
+
+                aggregated_shape.constraints.push(LearnedConstraint {
+                    constraint_type,
+                    parameters: best_constraint.parameters.clone(),
+                    confidence: weighted_confidence,
+                    support: weighted_support,
+                });
+            }
+        }
+
+        // Weighted average of feature importance
+        for (shape, weight) in votes {
+            for (feature, importance) in &shape.feature_importance {
+                let current = aggregated_shape.feature_importance.get(feature).unwrap_or(&0.0);
+                aggregated_shape.feature_importance.insert(
+                    feature.clone(),
+                    current + (importance * weight) / total_weight,
+                );
+            }
+        }
+
+        Ok(aggregated_shape)
     }
 }
 

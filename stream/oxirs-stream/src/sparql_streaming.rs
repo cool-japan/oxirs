@@ -115,7 +115,7 @@ enum QueryState {
 }
 
 /// Query result channel
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum QueryResultChannel {
     /// Direct channel to subscriber
     Direct(mpsc::Sender<QueryResultUpdate>),
@@ -558,11 +558,12 @@ impl ContinuousQueryManager {
         let stats = self.stats.clone();
         let event_notifier = self.event_notifier.clone();
         let query_id = query_id.to_string();
+        let query_id_clone = query_id.clone();
 
         tokio::spawn(async move {
             let query_data = {
                 let queries_guard = queries.read().await;
-                queries_guard.get(&query_id).map(|q| {
+                queries_guard.get(&query_id_clone).map(|q| {
                     (
                         q.query.clone(),
                         q.metadata.clone(),
@@ -581,7 +582,7 @@ impl ContinuousQueryManager {
                     // Check if query is still active
                     let state = {
                         let queries_guard = queries.read().await;
-                        queries_guard.get(&query_id).map(|q| q.state.clone())
+                        queries_guard.get(&query_id_clone).map(|q| q.state.clone())
                     };
 
                     match state {
@@ -604,7 +605,7 @@ impl ContinuousQueryManager {
                                     // Update query statistics
                                     {
                                         let mut queries_guard = queries.write().await;
-                                        if let Some(q) = queries_guard.get_mut(&query_id) {
+                                        if let Some(q) = queries_guard.get_mut(&query_id_clone) {
                                             q.stats.execution_count += 1;
                                             q.stats.success_count += 1;
                                             q.stats.total_results += result.bindings.len() as u64;
@@ -624,7 +625,7 @@ impl ContinuousQueryManager {
                                     if Some(&hash) != last_result_hash.as_ref() {
                                         // Create update
                                         let update = QueryResultUpdate {
-                                            query_id: query_id.clone(),
+                                            query_id: query_id_clone.clone(),
                                             timestamp: chrono::Utc::now(),
                                             update_type: if last_result_hash.is_none() {
                                                 UpdateType::Initial
@@ -640,19 +641,19 @@ impl ContinuousQueryManager {
                                         if let Err(e) = Self::dispatch_results(
                                             &queries,
                                             &dispatcher,
-                                            &query_id,
+                                            &query_id_clone,
                                             update,
                                         )
                                         .await
                                         {
                                             error!(
                                                 "Failed to dispatch results for query {}: {}",
-                                                query_id, e
+                                                query_id_clone, e
                                             );
                                         } else {
                                             let _ =
                                                 event_notifier.send(QueryEvent::ResultsDelivered {
-                                                    id: query_id.clone(),
+                                                    id: query_id_clone.clone(),
                                                     count: result.bindings.len(),
                                                 });
                                         }
@@ -664,12 +665,12 @@ impl ContinuousQueryManager {
                                     stats.write().await.total_executions += 1;
                                 }
                                 Err(e) => {
-                                    error!("Query execution failed for {}: {}", query_id, e);
+                                    error!("Query execution failed for {}: {}", query_id_clone, e);
 
                                     // Update query statistics
                                     {
                                         let mut queries_guard = queries.write().await;
-                                        if let Some(q) = queries_guard.get_mut(&query_id) {
+                                        if let Some(q) = queries_guard.get_mut(&query_id_clone) {
                                             q.stats.execution_count += 1;
                                             q.stats.failure_count += 1;
                                         }
@@ -680,7 +681,7 @@ impl ContinuousQueryManager {
 
                                     // Send error update
                                     let update = QueryResultUpdate {
-                                        query_id: query_id.clone(),
+                                        query_id: query_id_clone.clone(),
                                         timestamp: chrono::Utc::now(),
                                         update_type: UpdateType::Error {
                                             message: e.to_string(),
@@ -693,13 +694,13 @@ impl ContinuousQueryManager {
                                     let _ = Self::dispatch_results(
                                         &queries,
                                         &dispatcher,
-                                        &query_id,
+                                        &query_id_clone,
                                         update,
                                     )
                                     .await;
 
                                     let _ = event_notifier.send(QueryEvent::QueryFailed {
-                                        id: query_id.clone(),
+                                        id: query_id_clone.clone(),
                                         reason: e.to_string(),
                                     });
                                 }
@@ -800,7 +801,7 @@ impl ContinuousQueryManager {
             let queries_guard = queries.read().await;
             queries_guard
                 .get(query_id)
-                .map(|q| &q.result_channel)
+                .map(|q| q.result_channel.clone())
                 .ok_or_else(|| anyhow!("Query not found"))?
         };
 
@@ -816,11 +817,11 @@ impl ContinuousQueryManager {
                 Ok(())
             }
             QueryResultChannel::Webhook { url, headers } => {
-                dispatcher.send_webhook(url, headers, update).await
+                dispatcher.send_webhook(&url, &headers, update).await
             }
             QueryResultChannel::Stream { topic } => {
                 // Publish to stream topic (using internal stream producer)
-                dispatcher.send_stream(topic, update).await
+                dispatcher.send_stream(&topic, update).await
             }
         }
     }

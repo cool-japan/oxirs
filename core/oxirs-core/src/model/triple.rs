@@ -413,7 +413,7 @@ impl<'a> From<TripleRef<'a>> for Triple {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{BlankNode, Literal, NamedNode};
+    use crate::model::{Literal, NamedNode};
 
     #[test]
     fn test_triple_creation() {

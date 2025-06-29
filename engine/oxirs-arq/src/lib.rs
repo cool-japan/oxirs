@@ -16,6 +16,7 @@ pub mod cost_model;
 pub mod distributed;
 // pub mod executor;  // Temporarily commented to avoid module conflict
 pub mod extensions;
+pub mod integrated_query_planner;
 pub mod optimizer;
 pub mod query_analysis;
 pub mod streaming;
@@ -47,6 +48,7 @@ pub use distributed::*;
 pub use executor::*;
 pub use expression::*;
 pub use extensions::*;
+pub use integrated_query_planner::*;
 pub use optimizer::*;
 pub use path::*;
 pub use query::*;
@@ -61,6 +63,7 @@ pub struct SparqlEngine {
     optimizer: QueryOptimizer,
     extensions: ExtensionRegistry,
     parser: query::QueryParser,
+    integrated_planner: Option<integrated_query_planner::IntegratedQueryPlanner>,
 }
 
 impl SparqlEngine {
@@ -74,6 +77,7 @@ impl SparqlEngine {
             optimizer: QueryOptimizer::new(),
             extensions,
             parser: query::QueryParser::new(),
+            integrated_planner: None,
         })
     }
 
@@ -90,6 +94,7 @@ impl SparqlEngine {
             optimizer: QueryOptimizer::with_config(optimizer_config),
             extensions,
             parser: query::QueryParser::new(),
+            integrated_planner: None,
         })
     }
 
@@ -106,7 +111,14 @@ impl SparqlEngine {
         let algebra = self.convert_query_to_algebra(query)?;
 
         // Optimize algebra
-        let optimized_algebra = self.optimizer.optimize(algebra)?;
+        let optimized_algebra = if let Some(ref mut planner) = self.integrated_planner {
+            // Use advanced integrated planner if available
+            let plan = planner.create_plan(&algebra)?;
+            plan.optimized_algebra
+        } else {
+            // Use standard optimizer
+            self.optimizer.optimize(algebra)?
+        };
 
         // Execute
         self.executor.execute(&optimized_algebra, dataset)
@@ -126,6 +138,59 @@ impl SparqlEngine {
         A: extensions::CustomAggregate + 'static,
     {
         self.extensions.register_aggregate(aggregate)
+    }
+
+    /// Enable advanced integrated query planning
+    pub fn enable_integrated_planning(&mut self) -> Result<()> {
+        let config = integrated_query_planner::IntegratedPlannerConfig::default();
+        self.integrated_planner = Some(integrated_query_planner::IntegratedQueryPlanner::new(config)?);
+        Ok(())
+    }
+
+    /// Enable advanced integrated query planning with custom configuration
+    pub fn enable_integrated_planning_with_config(
+        &mut self,
+        config: integrated_query_planner::IntegratedPlannerConfig,
+    ) -> Result<()> {
+        self.integrated_planner = Some(integrated_query_planner::IntegratedQueryPlanner::new(config)?);
+        Ok(())
+    }
+
+    /// Check if integrated planning is enabled
+    pub fn is_integrated_planning_enabled(&self) -> bool {
+        self.integrated_planner.is_some()
+    }
+
+    /// Update execution feedback for the integrated planner
+    pub fn update_execution_feedback(
+        &mut self,
+        plan_hash: u64,
+        actual_duration: std::time::Duration,
+        actual_cardinality: usize,
+        memory_used: usize,
+        success: bool,
+        error_info: Option<String>,
+    ) -> Result<()> {
+        if let Some(ref mut planner) = self.integrated_planner {
+            planner.update_execution_feedback(
+                plan_hash,
+                actual_duration,
+                actual_cardinality,
+                memory_used,
+                success,
+                error_info,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Get index recommendations from the integrated planner
+    pub fn get_index_recommendations(&self) -> Result<Vec<integrated_query_planner::IndexRecommendation>> {
+        if let Some(ref planner) = self.integrated_planner {
+            planner.get_index_recommendations()
+        } else {
+            Ok(vec![])
+        }
     }
 
     /// Convert parsed query to algebra expression

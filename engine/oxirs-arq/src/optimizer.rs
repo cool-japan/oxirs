@@ -90,7 +90,18 @@ pub enum IndexType {
     FullText,
     Spatial,
     Temporal,
-    Custom(String),
+    // RDF Triple pattern indices (SPO permutations)
+    SPO,  // Subject-Predicate-Object
+    PSO,  // Predicate-Subject-Object
+    OSP,  // Object-Subject-Predicate
+    OPS,  // Object-Predicate-Subject
+    SOP,  // Subject-Object-Predicate
+    POS,  // Predicate-Object-Subject
+    // Additional index types
+    Hash,
+    BTree,
+    Bitmap,
+    Bloom,
     // Advanced index types for enhanced optimization
     BTreeIndex(IndexPosition),
     HashIndex(IndexPosition),
@@ -99,10 +110,11 @@ pub enum IndexType {
     TemporalBTree,
     MultiColumnBTree(Vec<IndexPosition>),
     BloomFilter(IndexPosition),
+    Custom(String),
 }
 
 /// Index position specification
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum IndexPosition {
     Subject,
     Predicate,
@@ -1004,6 +1016,212 @@ impl QueryOptimizer {
         };
 
         base_cost * index_factor
+    }
+
+    /// Enhanced index selection considering multiple factors
+    fn select_optimal_index(&self, pattern: &TriplePattern) -> Option<IndexType> {
+        let mut best_index = None;
+        let mut best_cost = f64::INFINITY;
+
+        for index_type in &self.statistics.index_stats.available_indexes {
+            if let Some(selectivity) = self.statistics.index_stats.index_selectivity.get(index_type) {
+                let access_cost = self.statistics.index_stats.index_access_cost
+                    .get(index_type)
+                    .copied()
+                    .unwrap_or(1.0);
+
+                // Calculate total cost: access_cost * selectivity * base_cardinality
+                let base_cardinality = self.statistics.estimate_pattern_cardinality(pattern) as f64;
+                let total_cost = access_cost * selectivity * base_cardinality;
+
+                if total_cost < best_cost && self.index_supports_pattern(index_type, pattern) {
+                    best_cost = total_cost;
+                    best_index = Some(index_type.clone());
+                }
+            }
+        }
+
+        best_index
+    }
+
+    /// Check if an index supports a given pattern
+    fn index_supports_pattern(&self, index_type: &IndexType, pattern: &TriplePattern) -> bool {
+        match index_type {
+            IndexType::SPO => true, // Supports all patterns
+            IndexType::PSO => !matches!(pattern.predicate, Term::Variable(_)),
+            IndexType::OSP => !matches!(pattern.object, Term::Variable(_)),
+            IndexType::OPS => !matches!(pattern.object, Term::Variable(_)),
+            IndexType::SOP => !matches!(pattern.subject, Term::Variable(_)),
+            IndexType::POS => !matches!(pattern.predicate, Term::Variable(_)),
+            IndexType::Bloom => {
+                // Bloom filters are good for existence checks with concrete values
+                !matches!(pattern.subject, Term::Variable(_)) ||
+                !matches!(pattern.predicate, Term::Variable(_)) ||
+                !matches!(pattern.object, Term::Variable(_))
+            }
+            IndexType::Hash => {
+                // Hash indexes are good for equality lookups
+                !matches!(pattern.subject, Term::Variable(_)) &&
+                !matches!(pattern.predicate, Term::Variable(_)) &&
+                !matches!(pattern.object, Term::Variable(_))
+            }
+            IndexType::BTree => true, // B-tree supports range queries and existence
+            IndexType::Bitmap => {
+                // Bitmap indexes are efficient for low-cardinality predicates
+                !matches!(pattern.predicate, Term::Variable(_))
+            }
+            // Basic index types
+            IndexType::SubjectPredicate => {
+                !matches!(pattern.subject, Term::Variable(_)) &&
+                !matches!(pattern.predicate, Term::Variable(_))
+            }
+            IndexType::PredicateObject => {
+                !matches!(pattern.predicate, Term::Variable(_)) &&
+                !matches!(pattern.object, Term::Variable(_))
+            }
+            IndexType::SubjectObject => {
+                !matches!(pattern.subject, Term::Variable(_)) &&
+                !matches!(pattern.object, Term::Variable(_))
+            }
+            IndexType::FullText => {
+                // Full-text search typically works with literals
+                matches!(pattern.object, Term::Literal(_))
+            }
+            IndexType::Spatial => {
+                // Spatial indexes work with geometric data
+                matches!(pattern.object, Term::Literal(_))
+            }
+            IndexType::Temporal => {
+                // Temporal indexes work with date/time data
+                matches!(pattern.object, Term::Literal(_))
+            }
+            // Advanced index types
+            IndexType::BTreeIndex(pos) => match pos {
+                IndexPosition::Subject => !matches!(pattern.subject, Term::Variable(_)),
+                IndexPosition::Predicate => !matches!(pattern.predicate, Term::Variable(_)),
+                IndexPosition::Object => !matches!(pattern.object, Term::Variable(_)),
+                IndexPosition::SubjectPredicate => {
+                    !matches!(pattern.subject, Term::Variable(_)) &&
+                    !matches!(pattern.predicate, Term::Variable(_))
+                }
+                IndexPosition::PredicateObject => {
+                    !matches!(pattern.predicate, Term::Variable(_)) &&
+                    !matches!(pattern.object, Term::Variable(_))
+                }
+                IndexPosition::SubjectObject => {
+                    !matches!(pattern.subject, Term::Variable(_)) &&
+                    !matches!(pattern.object, Term::Variable(_))
+                }
+                IndexPosition::FullTriple => true,
+            }
+            IndexType::HashIndex(pos) => match pos {
+                IndexPosition::Subject => !matches!(pattern.subject, Term::Variable(_)),
+                IndexPosition::Predicate => !matches!(pattern.predicate, Term::Variable(_)),
+                IndexPosition::Object => !matches!(pattern.object, Term::Variable(_)),
+                IndexPosition::SubjectPredicate => {
+                    !matches!(pattern.subject, Term::Variable(_)) &&
+                    !matches!(pattern.predicate, Term::Variable(_))
+                }
+                IndexPosition::PredicateObject => {
+                    !matches!(pattern.predicate, Term::Variable(_)) &&
+                    !matches!(pattern.object, Term::Variable(_))
+                }
+                IndexPosition::SubjectObject => {
+                    !matches!(pattern.subject, Term::Variable(_)) &&
+                    !matches!(pattern.object, Term::Variable(_))
+                }
+                IndexPosition::FullTriple => {
+                    !matches!(pattern.subject, Term::Variable(_)) &&
+                    !matches!(pattern.predicate, Term::Variable(_)) &&
+                    !matches!(pattern.object, Term::Variable(_))
+                }
+            }
+            IndexType::BitmapIndex(pos) => match pos {
+                IndexPosition::Subject => !matches!(pattern.subject, Term::Variable(_)),
+                IndexPosition::Predicate => !matches!(pattern.predicate, Term::Variable(_)),
+                IndexPosition::Object => !matches!(pattern.object, Term::Variable(_)),
+                _ => false, // Bitmap indexes typically work best with single positions
+            }
+            IndexType::BloomFilter(pos) => match pos {
+                IndexPosition::Subject => !matches!(pattern.subject, Term::Variable(_)),
+                IndexPosition::Predicate => !matches!(pattern.predicate, Term::Variable(_)),
+                IndexPosition::Object => !matches!(pattern.object, Term::Variable(_)),
+                _ => true, // Bloom filters can work with compound keys
+            }
+            IndexType::SpatialRTree => {
+                // Spatial R-tree for geometric queries
+                matches!(pattern.object, Term::Literal(_))
+            }
+            IndexType::TemporalBTree => {
+                // Temporal B-tree for time-based queries
+                matches!(pattern.object, Term::Literal(_))
+            }
+            IndexType::MultiColumnBTree(_positions) => {
+                // Multi-column B-tree supports complex patterns
+                true
+            }
+            IndexType::Custom(_name) => {
+                // Custom indexes may have specialized support
+                true
+            }
+        }
+    }
+
+    /// Optimize for streaming execution
+    fn optimize_for_streaming(&self, algebra: Algebra) -> Result<Algebra> {
+        match algebra {
+            Algebra::Join { left, right } => {
+                // Reorder joins to minimize intermediate result size
+                let left_card = self.estimate_algebra_cardinality(&left);
+                let right_card = self.estimate_algebra_cardinality(&right);
+
+                // Put smaller relation first for hash joins
+                if left_card > right_card {
+                    Ok(Algebra::Join {
+                        left: Box::new(self.optimize_for_streaming(*right)?),
+                        right: Box::new(self.optimize_for_streaming(*left)?),
+                    })
+                } else {
+                    Ok(Algebra::Join {
+                        left: Box::new(self.optimize_for_streaming(*left)?),
+                        right: Box::new(self.optimize_for_streaming(*right)?),
+                    })
+                }
+            }
+            Algebra::Union { left, right } => {
+                // For unions, we can potentially stream results
+                Ok(Algebra::Union {
+                    left: Box::new(self.optimize_for_streaming(*left)?),
+                    right: Box::new(self.optimize_for_streaming(*right)?),
+                })
+            }
+            _ => self.apply_to_children(algebra, |child| self.optimize_for_streaming(child)),
+        }
+    }
+
+    /// Estimate cardinality of an algebra expression
+    fn estimate_algebra_cardinality(&self, algebra: &Algebra) -> f64 {
+        match algebra {
+            Algebra::Bgp(patterns) => {
+                patterns.iter()
+                    .map(|p| self.statistics.estimate_pattern_cardinality(p) as f64)
+                    .product()
+            }
+            Algebra::Join { left, right } => {
+                let left_card = self.estimate_algebra_cardinality(left);
+                let right_card = self.estimate_algebra_cardinality(right);
+                // Simplified join cardinality estimation
+                left_card * right_card * 0.1 // Assume 10% selectivity
+            }
+            Algebra::Union { left, right } => {
+                self.estimate_algebra_cardinality(left) + self.estimate_algebra_cardinality(right)
+            }
+            Algebra::Filter { pattern, .. } => {
+                // Filters typically reduce cardinality
+                self.estimate_algebra_cardinality(pattern) * 0.3
+            }
+            _ => 1000.0, // Default estimate
+        }
     }
 
     /// Materialization point optimization

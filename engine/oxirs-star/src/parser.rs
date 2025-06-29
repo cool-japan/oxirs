@@ -14,7 +14,7 @@ use std::str::FromStr;
 use anyhow::{Context, Result};
 use tracing::{debug, error, span, Level};
 
-use crate::model::{NamedNode, StarGraph, StarQuad, StarTerm, StarTriple};
+use crate::model::{BlankNode, Literal, NamedNode, StarGraph, StarQuad, StarTerm, StarTriple};
 use crate::{StarConfig, StarError, StarResult};
 
 /// RDF-star format types
@@ -28,6 +28,8 @@ pub enum StarFormat {
     TrigStar,
     /// N-Quads-star format
     NQuadsStar,
+    /// JSON-LD-star format
+    JsonLdStar,
 }
 
 /// Enhanced state tracking for TriG-star parsing
@@ -87,6 +89,7 @@ impl FromStr for StarFormat {
             "ntriples-star" | "nts" => Ok(StarFormat::NTriplesStar),
             "trig-star" | "trigs" => Ok(StarFormat::TrigStar),
             "nquads-star" | "nqs" => Ok(StarFormat::NQuadsStar),
+            "json-ld-star" | "jsonld-star" | "jlds" => Ok(StarFormat::JsonLdStar),
             _ => Err(StarError::parse_error(format!("Unknown format: {}", s))),
         }
     }
@@ -310,6 +313,7 @@ impl StarParser {
             StarFormat::NTriplesStar => self.parse_ntriples_star(reader),
             StarFormat::TrigStar => self.parse_trig_star(reader),
             StarFormat::NQuadsStar => self.parse_nquads_star(reader),
+            StarFormat::JsonLdStar => self.parse_jsonld_star(reader),
         }
     }
 
@@ -1558,6 +1562,288 @@ impl StarParser {
     }
 
     /// Get parsing errors (placeholder implementation)
+    /// Parse JSON-LD-star format with RDF-star extension
+    pub fn parse_jsonld_star<R: Read>(&self, reader: R) -> StarResult<StarGraph> {
+        let span = span!(Level::DEBUG, "parse_jsonld_star");
+        let _enter = span.enter();
+
+        let mut graph = StarGraph::new();
+        let mut context = self.create_parse_context();
+
+        // Read the entire JSON content
+        let mut content = String::new();
+        let mut buf_reader = BufReader::new(reader);
+        buf_reader.read_to_string(&mut content)
+            .map_err(|e| StarError::parse_error(format!("Failed to read JSON-LD-star content: {}", e)))?;
+
+        // Parse JSON
+        let json_value: serde_json::Value = serde_json::from_str(&content)
+            .map_err(|e| StarError::parse_error(format!("Invalid JSON: {}", e)))?;
+
+        // Process JSON-LD-star document
+        self.process_jsonld_star_value(&json_value, &mut graph, &mut context)?;
+
+        debug!(
+            "Parsed JSON-LD-star: {} quads, {} errors",
+            graph.quad_len(),
+            context.parsing_errors.len()
+        );
+
+        if !context.parsing_errors.is_empty() && context.strict_mode {
+            return Err(StarError::parse_error(format!(
+                "JSON-LD-star parsing failed with {} errors",
+                context.parsing_errors.len()
+            )));
+        }
+
+        Ok(graph)
+    }
+
+    /// Process a JSON-LD-star value recursively
+    fn process_jsonld_star_value(
+        &self,
+        value: &serde_json::Value,
+        graph: &mut StarGraph,
+        context: &mut ParseContext,
+    ) -> StarResult<()> {
+        match value {
+            serde_json::Value::Object(obj) => {
+                self.process_jsonld_star_object(obj, graph, context)?;
+            }
+            serde_json::Value::Array(arr) => {
+                for item in arr {
+                    self.process_jsonld_star_value(item, graph, context)?;
+                }
+            }
+            _ => {
+                // Skip primitive values at top level
+            }
+        }
+        Ok(())
+    }
+
+    /// Process a JSON-LD-star object
+    fn process_jsonld_star_object(
+        &self,
+        obj: &serde_json::Map<String, serde_json::Value>,
+        graph: &mut StarGraph,
+        context: &mut ParseContext,
+    ) -> StarResult<()> {
+        // Check for quoted triple annotation (RDF-star extension)
+        if obj.contains_key("@annotation") {
+            return self.process_quoted_triple_annotation(obj, graph, context);
+        }
+
+        // Extract subject (either @id or generate blank node)
+        let subject = if let Some(id_value) = obj.get("@id") {
+            match id_value {
+                serde_json::Value::String(id) => StarTerm::iri(id)?,
+                _ => return Err(StarError::parse_error("@id must be a string".to_string())),
+            }
+        } else {
+            StarTerm::BlankNode(BlankNode { id: context.next_blank_node() })
+        };
+
+        // Process properties
+        for (key, value) in obj {
+            if key.starts_with('@') {
+                // Skip JSON-LD keywords for now
+                continue;
+            }
+
+            let predicate = StarTerm::iri(key)?;
+
+            // Process property values
+            self.process_property_values(&subject, &predicate, value, graph, context)?;
+        }
+
+        Ok(())
+    }
+
+    /// Process property values (which may be arrays or single values)
+    fn process_property_values(
+        &self,
+        subject: &StarTerm,
+        predicate: &StarTerm,
+        value: &serde_json::Value,
+        graph: &mut StarGraph,
+        context: &mut ParseContext,
+    ) -> StarResult<()> {
+        match value {
+            serde_json::Value::Array(arr) => {
+                for item in arr {
+                    self.create_triple_from_value(subject, predicate, item, graph, context)?;
+                }
+            }
+            _ => {
+                self.create_triple_from_value(subject, predicate, value, graph, context)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Create a triple from a JSON-LD value
+    fn create_triple_from_value(
+        &self,
+        subject: &StarTerm,
+        predicate: &StarTerm,
+        value: &serde_json::Value,
+        graph: &mut StarGraph,
+        context: &mut ParseContext,
+    ) -> StarResult<()> {
+        let object = match value {
+            serde_json::Value::String(s) => {
+                if s.starts_with("http://") || s.starts_with("https://") || s.contains(':') {
+                    StarTerm::iri(s)?
+                } else {
+                    StarTerm::Literal(Literal {
+                        value: s.clone(),
+                        datatype: None,
+                        language: None,
+                    })
+                }
+            }
+            serde_json::Value::Object(obj) => {
+                if let Some(id_value) = obj.get("@id") {
+                    // Reference to another resource
+                    if let serde_json::Value::String(id) = id_value {
+                        StarTerm::iri(id)?
+                    } else {
+                        return Err(StarError::parse_error("@id must be a string".to_string()));
+                    }
+                } else if let Some(value_str) = obj.get("@value") {
+                    // Typed literal
+                    let value_str = match value_str {
+                        serde_json::Value::String(s) => s.clone(),
+                        serde_json::Value::Number(n) => n.to_string(),
+                        serde_json::Value::Bool(b) => b.to_string(),
+                        _ => return Err(StarError::parse_error("Invalid @value".to_string())),
+                    };
+
+                    let datatype = obj.get("@type")
+                        .and_then(|v| v.as_str())
+                        .map(|s| NamedNode { iri: s.to_string() });
+
+                    let language = obj.get("@language")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+
+                    StarTerm::Literal(Literal {
+                        value: value_str,
+                        language,
+                        datatype,
+                    })
+                } else {
+                    // Nested object - process recursively and return blank node
+                    let blank_node = StarTerm::BlankNode(BlankNode { id: context.next_blank_node() });
+                    self.process_jsonld_star_object(obj, graph, context)?;
+                    blank_node
+                }
+            }
+            serde_json::Value::Number(n) => StarTerm::Literal(Literal {
+                value: n.to_string(),
+                datatype: Some(NamedNode { iri: "http://www.w3.org/2001/XMLSchema#decimal".to_string() }),
+                language: None,
+            }),
+            serde_json::Value::Bool(b) => StarTerm::Literal(Literal {
+                value: b.to_string(),
+                datatype: Some(NamedNode { iri: "http://www.w3.org/2001/XMLSchema#boolean".to_string() }),
+                language: None,
+            }),
+            _ => {
+                return Err(StarError::parse_error("Unsupported JSON value type".to_string()));
+            }
+        };
+
+        // Create and insert triple
+        let triple = StarTriple::new(subject.clone(), predicate.clone(), object.clone());
+        let quad = StarQuad::new(subject.clone(), predicate.clone(), object, None);
+        graph.insert_quad(quad)?;
+
+        Ok(())
+    }
+
+    /// Process quoted triple annotation (RDF-star extension for JSON-LD)
+    fn process_quoted_triple_annotation(
+        &self,
+        obj: &serde_json::Map<String, serde_json::Value>,
+        graph: &mut StarGraph,
+        context: &mut ParseContext,
+    ) -> StarResult<()> {
+        let annotation = obj.get("@annotation")
+            .ok_or_else(|| StarError::parse_error("Missing @annotation".to_string()))?;
+
+        match annotation {
+            serde_json::Value::Object(ann_obj) => {
+                // Extract the quoted triple
+                let subject_val = ann_obj.get("subject")
+                    .ok_or_else(|| StarError::parse_error("Missing subject in annotation".to_string()))?;
+                let predicate_val = ann_obj.get("predicate")
+                    .ok_or_else(|| StarError::parse_error("Missing predicate in annotation".to_string()))?;
+                let object_val = ann_obj.get("object")
+                    .ok_or_else(|| StarError::parse_error("Missing object in annotation".to_string()))?;
+
+                let subject = self.json_value_to_star_term(subject_val)?;
+                let predicate = self.json_value_to_star_term(predicate_val)?;
+                let object = self.json_value_to_star_term(object_val)?;
+
+                // Create quoted triple
+                let quoted_triple = StarTerm::QuotedTriple(Box::new(StarTriple::new(subject, predicate, object)));
+
+                // Process annotation properties
+                for (prop_key, prop_value) in obj {
+                    if prop_key == "@annotation" {
+                        continue;
+                    }
+
+                    let annotation_predicate = StarTerm::iri(prop_key)?;
+                    self.process_property_values(
+                        &quoted_triple,
+                        &annotation_predicate,
+                        prop_value,
+                        graph,
+                        context,
+                    )?;
+                }
+            }
+            _ => {
+                return Err(StarError::parse_error("@annotation must be an object".to_string()));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Convert JSON value to StarTerm
+    fn json_value_to_star_term(&self, value: &serde_json::Value) -> StarResult<StarTerm> {
+        match value {
+            serde_json::Value::String(s) => {
+                if s.starts_with("_:") {
+                    Ok(StarTerm::BlankNode(BlankNode { id: s.clone() }))
+                } else {
+                    StarTerm::iri(s)
+                }
+            }
+            serde_json::Value::Object(obj) => {
+                if let Some(id) = obj.get("@id").and_then(|v| v.as_str()) {
+                    StarTerm::iri(id)
+                } else if let Some(value) = obj.get("@value").and_then(|v| v.as_str()) {
+                    let datatype = obj.get("@type").and_then(|v| v.as_str()).map(|s| NamedNode { iri: s.to_string() });
+                    let language = obj.get("@language").and_then(|v| v.as_str()).map(|s| s.to_string());
+                    
+                    Ok(StarTerm::Literal(Literal {
+                        value: value.to_string(),
+                        datatype,
+                        language,
+                    }))
+                } else {
+                    Err(StarError::parse_error("Invalid object term".to_string()))
+                }
+            }
+            _ => Err(StarError::parse_error("Invalid term value".to_string())),
+        }
+    }
+
     pub fn get_errors(&self) -> Vec<StarError> {
         // For now, return empty list. In a complete implementation,
         // this would return accumulated parsing errors

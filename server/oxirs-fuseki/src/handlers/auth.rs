@@ -132,7 +132,7 @@ pub async fn login_handler(
 
             let response = LoginResponse {
                 success: true,
-                token,
+                token: token.clone(),
                 user: Some(user.clone()),
                 expires_at,
                 message: "Login successful".to_string(),
@@ -142,7 +142,7 @@ pub async fn login_handler(
 
             // Set session cookie if using session-based auth
             if state.config.security.jwt.is_none() {
-                if let Some(session_id) = response.token {
+                if let Some(session_id) = token {
                     let cookie_value = format!(
                         "session_id={}; HttpOnly; Secure; SameSite=Strict; Max-Age={}",
                         session_id, state.config.security.session.timeout_secs

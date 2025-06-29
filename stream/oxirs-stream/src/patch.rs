@@ -119,14 +119,14 @@ impl PatchParser {
 
         // Transaction and header operations are now handled in the main match below
 
-        // Parse operation lines
-        let parts: Vec<&str> = line.split_whitespace().collect();
+        // Parse operation lines with proper tokenization that respects quoted strings
+        let parts = self.tokenize_line(line);
         if parts.is_empty() {
             return Err(anyhow!("Empty operation line"));
         }
 
-        let operation = parts[0];
-        match operation {
+        let operation = &parts[0];
+        match operation.as_str() {
             "A" => self.parse_add_operation(&parts[1..]),
             "D" => self.parse_delete_operation(&parts[1..]),
             "PA" => self.parse_prefix_add(&parts[1..]),
@@ -157,16 +157,16 @@ impl PatchParser {
         Ok(())
     }
 
-    fn parse_add_operation(&self, parts: &[&str]) -> Result<Option<PatchOperation>> {
+    fn parse_add_operation(&self, parts: &[String]) -> Result<Option<PatchOperation>> {
         if parts.len() < 3 {
             return Err(anyhow!(
                 "Add operation requires subject, predicate, and object"
             ));
         }
 
-        let subject = self.expand_term(parts[0])?;
-        let predicate = self.expand_term(parts[1])?;
-        let object = self.expand_term(parts[2])?;
+        let subject = self.expand_term(&parts[0])?;
+        let predicate = self.expand_term(&parts[1])?;
+        let object = self.expand_term(&parts[2])?;
 
         Ok(Some(PatchOperation::Add {
             subject,
@@ -175,16 +175,16 @@ impl PatchParser {
         }))
     }
 
-    fn parse_delete_operation(&self, parts: &[&str]) -> Result<Option<PatchOperation>> {
+    fn parse_delete_operation(&self, parts: &[String]) -> Result<Option<PatchOperation>> {
         if parts.len() < 3 {
             return Err(anyhow!(
                 "Delete operation requires subject, predicate, and object"
             ));
         }
 
-        let subject = self.expand_term(parts[0])?;
-        let predicate = self.expand_term(parts[1])?;
-        let object = self.expand_term(parts[2])?;
+        let subject = self.expand_term(&parts[0])?;
+        let predicate = self.expand_term(&parts[1])?;
+        let object = self.expand_term(&parts[2])?;
 
         Ok(Some(PatchOperation::Delete {
             subject,
@@ -193,7 +193,7 @@ impl PatchParser {
         }))
     }
 
-    fn parse_prefix_add(&self, parts: &[&str]) -> Result<Option<PatchOperation>> {
+    fn parse_prefix_add(&self, parts: &[String]) -> Result<Option<PatchOperation>> {
         if parts.len() < 2 {
             return Err(anyhow!("Prefix add requires prefix and namespace"));
         }
@@ -204,7 +204,7 @@ impl PatchParser {
         Ok(Some(PatchOperation::AddPrefix { prefix, namespace }))
     }
 
-    fn parse_prefix_delete(&self, parts: &[&str]) -> Result<Option<PatchOperation>> {
+    fn parse_prefix_delete(&self, parts: &[String]) -> Result<Option<PatchOperation>> {
         if parts.is_empty() {
             return Err(anyhow!("Prefix delete requires prefix name"));
         }
@@ -214,27 +214,27 @@ impl PatchParser {
         Ok(Some(PatchOperation::DeletePrefix { prefix }))
     }
 
-    fn parse_graph_add(&self, parts: &[&str]) -> Result<Option<PatchOperation>> {
+    fn parse_graph_add(&self, parts: &[String]) -> Result<Option<PatchOperation>> {
         if parts.is_empty() {
             return Err(anyhow!("Graph add operation requires graph URI"));
         }
 
-        let graph = self.expand_term(parts[0])?;
+        let graph = self.expand_term(&parts[0])?;
         Ok(Some(PatchOperation::AddGraph { graph }))
     }
 
-    fn parse_graph_delete(&self, parts: &[&str]) -> Result<Option<PatchOperation>> {
+    fn parse_graph_delete(&self, parts: &[String]) -> Result<Option<PatchOperation>> {
         if parts.is_empty() {
             return Err(anyhow!("Graph delete operation requires graph URI"));
         }
 
-        let graph = self.expand_term(parts[0])?;
+        let graph = self.expand_term(&parts[0])?;
         Ok(Some(PatchOperation::DeleteGraph { graph }))
     }
 
-    fn parse_transaction_begin(&self, parts: &[&str]) -> Result<Option<PatchOperation>> {
+    fn parse_transaction_begin(&self, parts: &[String]) -> Result<Option<PatchOperation>> {
         let transaction_id = if !parts.is_empty() {
-            Some(parts[0].to_string())
+            Some(parts[0].clone())
         } else {
             None
         };
@@ -242,15 +242,97 @@ impl PatchParser {
         Ok(Some(PatchOperation::TransactionBegin { transaction_id }))
     }
 
-    fn parse_header(&self, parts: &[&str]) -> Result<Option<PatchOperation>> {
+    fn parse_header(&self, parts: &[String]) -> Result<Option<PatchOperation>> {
         if parts.len() < 2 {
             return Err(anyhow!("Header requires key and value"));
         }
 
-        let key = parts[0].to_string();
-        let value = parts[1..].join(" ");
+        let key = parts[0].clone();
+
+        // Handle RDF Patch line terminator - exclude trailing "." from value
+        let value_parts = if parts.len() > 2 && parts[parts.len() - 1] == "." {
+            &parts[1..parts.len() - 1]
+        } else {
+            &parts[1..]
+        };
+        let value = value_parts.join(" ");
 
         Ok(Some(PatchOperation::Header { key, value }))
+    }
+
+    /// Tokenize a line while respecting quoted strings and RDF Patch terminators
+    fn tokenize_line(&self, line: &str) -> Vec<String> {
+        let mut tokens = Vec::new();
+        let mut current_token = String::new();
+        let mut in_quotes = false;
+        let mut in_uri = false;
+        let mut chars = line.chars().peekable();
+
+        while let Some(ch) = chars.next() {
+            match ch {
+                // Handle quoted strings
+                '"' => {
+                    current_token.push(ch);
+                    in_quotes = !in_quotes;
+                }
+                // Handle URI brackets
+                '<' if !in_quotes => {
+                    if !current_token.is_empty() {
+                        tokens.push(current_token.clone());
+                        current_token.clear();
+                    }
+                    current_token.push(ch);
+                    in_uri = true;
+                }
+                '>' if !in_quotes && in_uri => {
+                    current_token.push(ch);
+                    tokens.push(current_token.clone());
+                    current_token.clear();
+                    in_uri = false;
+                }
+                // Handle whitespace
+                c if c.is_whitespace() && !in_quotes && !in_uri => {
+                    if !current_token.is_empty() {
+                        tokens.push(current_token.clone());
+                        current_token.clear();
+                    }
+                }
+                // Handle RDF Patch line terminator
+                '.' if !in_quotes && !in_uri => {
+                    // Check if this is a standalone terminator (followed by whitespace or end)
+                    if let Some(&next_ch) = chars.peek() {
+                        if next_ch.is_whitespace() || current_token.is_empty() {
+                            if !current_token.is_empty() {
+                                tokens.push(current_token.clone());
+                                current_token.clear();
+                            }
+                            tokens.push(".".to_string());
+                            continue;
+                        }
+                    } else {
+                        // End of line
+                        if !current_token.is_empty() {
+                            tokens.push(current_token.clone());
+                            current_token.clear();
+                        }
+                        tokens.push(".".to_string());
+                        continue;
+                    }
+                    current_token.push(ch);
+                }
+                // Regular characters
+                _ => {
+                    current_token.push(ch);
+                }
+            }
+        }
+
+        // Add any remaining token
+        if !current_token.is_empty() {
+            tokens.push(current_token);
+        }
+
+        tokens
     }
 
     fn expand_term(&self, term: &str) -> Result<String> {

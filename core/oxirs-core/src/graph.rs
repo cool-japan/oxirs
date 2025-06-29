@@ -86,6 +86,21 @@ impl Graph {
         self.triples.iter()
     }
 
+    /// Alias for add_triple for compatibility
+    pub fn insert(&mut self, triple: Triple) -> bool {
+        self.add_triple(triple)
+    }
+
+    /// Iterate over all triples (alias for iter_triples)
+    pub fn iter(&self) -> impl Iterator<Item = &Triple> {
+        self.triples.iter()
+    }
+
+    /// Check if a triple exists in the graph (alias for contains_triple)
+    pub fn contains(&self, triple: &Triple) -> bool {
+        self.contains_triple(triple)
+    }
+
     /// Get all subjects in the graph
     pub fn subjects(&self) -> BTreeSet<Subject> {
         self.triples.iter().map(|t| t.subject().clone()).collect()

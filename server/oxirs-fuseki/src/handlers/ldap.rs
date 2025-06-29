@@ -65,7 +65,7 @@ pub struct LdapGroupResponse {
 }
 
 /// LDAP group information
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct LdapGroupInfo {
     pub dn: String,
     pub name: String,
@@ -125,13 +125,11 @@ pub async fn ldap_login(
                 })?;
 
             // Generate JWT token if enabled
-            let (access_token, token_type, expires_in) = if auth_service.config.jwt.is_some() {
+            let (access_token, token_type, expires_in) = if auth_service.jwt_config().is_some() {
                 match auth_service.generate_jwt_token(&user) {
                     Ok(token) => {
                         let expires_in = auth_service
-                            .config
-                            .jwt
-                            .as_ref()
+                            .jwt_config()
                             .map(|jwt| jwt.expiration_secs)
                             .unwrap_or(3600);
                         (Some(token), Some("Bearer".to_string()), Some(expires_in))
@@ -247,7 +245,7 @@ pub async fn test_ldap_connection(
                 message: "LDAP connection successful".to_string(),
                 details: Some(format!(
                     "Connected to LDAP server at {}",
-                    auth_service.config.ldap.as_ref().unwrap().server
+                    auth_service.ldap_config().unwrap().server
                 )),
             };
             Ok((StatusCode::OK, Json(response)).into_response())
@@ -354,7 +352,7 @@ pub async fn get_ldap_config(State(state): State<Arc<AppState>>) -> Result<Respo
         }
     };
 
-    if let Some(ldap_config) = &auth_service.config.ldap {
+    if let Some(ldap_config) = auth_service.ldap_config() {
         let config_info = serde_json::json!({
             "success": true,
             "configured": true,

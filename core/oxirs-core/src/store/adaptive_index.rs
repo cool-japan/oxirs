@@ -3,8 +3,8 @@
 //! This module provides indexes that learn from query patterns and automatically
 //! create, update, or remove indexes to optimize query performance.
 
-use crate::model::{Object, Predicate, Subject, Term, Triple};
-use crate::store::{IndexStats, IndexType, IndexedGraph};
+use crate::model::{Object, Predicate, Subject, Triple};
+use crate::store::{IndexType, IndexedGraph};
 use crate::OxirsError;
 use dashmap::DashMap;
 use parking_lot::{Mutex, RwLock};

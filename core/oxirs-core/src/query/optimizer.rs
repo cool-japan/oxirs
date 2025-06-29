@@ -9,7 +9,6 @@ use crate::query::algebra::{
     GraphPattern, Query as AlgebraQuery, QueryForm, TermPattern, TriplePattern,
 };
 use crate::query::plan::{ExecutionPlan, QueryPlanner};
-use crate::query::sparql_query::Query;
 use crate::OxirsError;
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, RwLock};

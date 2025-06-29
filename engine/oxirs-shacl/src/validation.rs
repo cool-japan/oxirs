@@ -5,7 +5,7 @@
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::rc::Rc;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use oxirs_core::{
@@ -274,7 +274,7 @@ impl<'a> ValidationEngine<'a> {
             let context = ConstraintContext::new(focus_node.clone(), shape.id.clone())
                 .with_values(values.to_vec())
                 .with_allowed_properties(allowed_properties)
-                .with_shapes_registry(std::rc::Rc::new(self.shapes.clone()));
+                .with_shapes_registry(std::sync::Arc::new(self.shapes.clone()));
 
             let constraint_result =
                 self.validate_constraint(store, constraint, &context, path, graph_name)?;
@@ -981,10 +981,17 @@ impl<'a> ValidationEngine<'a> {
 
         // Get values from the disjoint property path
         let mut path_evaluator = PropertyPathEvaluator::new();
+        
+        // Convert Term to PropertyPath (assuming it's a simple predicate)
+        let property_path = match &constraint.property {
+            Term::NamedNode(named_node) => PropertyPath::Predicate(named_node.clone()),
+            _ => return Err(ShaclError::ValidationEngine("Disjoint constraint property must be a named node".to_string())),
+        };
+        
         let disjoint_values = path_evaluator.evaluate_path(
             store,
             &context.focus_node,
-            &constraint.property,
+            &property_path,
             graph_name,
         )?;
 
@@ -1012,10 +1019,17 @@ impl<'a> ValidationEngine<'a> {
 
         // Get values from the comparison property path
         let mut path_evaluator = PropertyPathEvaluator::new();
+        
+        // Convert Term to PropertyPath (assuming it's a simple predicate)
+        let property_path = match &constraint.property {
+            Term::NamedNode(named_node) => PropertyPath::Predicate(named_node.clone()),
+            _ => return Err(ShaclError::ValidationEngine("Less than constraint property must be a named node".to_string())),
+        };
+        
         let comparison_values = path_evaluator.evaluate_path(
             store,
             &context.focus_node,
-            &constraint.property,
+            &property_path,
             graph_name,
         )?;
 
@@ -1068,10 +1082,17 @@ impl<'a> ValidationEngine<'a> {
 
         // Get values from the comparison property path
         let mut path_evaluator = PropertyPathEvaluator::new();
+        
+        // Convert Term to PropertyPath (assuming it's a simple predicate)
+        let property_path = match &constraint.property {
+            Term::NamedNode(named_node) => PropertyPath::Predicate(named_node.clone()),
+            _ => return Err(ShaclError::ValidationEngine("Less than or equals constraint property must be a named node".to_string())),
+        };
+        
         let comparison_values = path_evaluator.evaluate_path(
             store,
             &context.focus_node,
-            &constraint.property,
+            &property_path,
             graph_name,
         )?;
 
@@ -1389,80 +1410,336 @@ impl<'a> ValidationEngine<'a> {
         context: &ConstraintContext,
         graph_name: Option<&str>,
     ) -> Result<ConstraintEvaluationResult> {
+        let start_time = std::time::Instant::now();
+        
         // Get the shape to validate against
         let shape = self
             .shapes
-            .get(&constraint.qualified_value_shape)
+            .get(&constraint.shape)
             .ok_or_else(|| {
                 ShaclError::ValidationEngine(format!(
                     "Shape not found for qualified value shape constraint: {}",
-                    constraint.qualified_value_shape.as_str()
+                    constraint.shape.as_str()
                 ))
             })?;
 
+        // Enhanced validation with detailed tracking
         let mut conforming_count = 0;
         let mut non_conforming_values = Vec::new();
+        let mut conforming_values = Vec::new();
+        let mut validation_details = HashMap::new();
+        let mut performance_stats = QualifiedValidationStats::new();
+        
+        // Optimization: If we have a lot of values and only need to check min/max counts,
+        // we can use early termination strategies
+        let has_min_count = constraint.qualified_min_count.is_some();
+        let has_max_count = constraint.qualified_max_count.is_some();
+        let min_count = constraint.qualified_min_count.unwrap_or(0);
+        let max_count = constraint.qualified_max_count.unwrap_or(u32::MAX);
+        
+        // Early termination optimization
+        let can_terminate_early = !constraint.qualified_value_shapes_disjoint 
+            && (has_max_count || has_min_count);
 
         // Count how many values conform to the qualified value shape
-        for value in &context.values {
+        for (index, value) in context.values.iter().enumerate() {
+            let validation_start = std::time::Instant::now();
+            
+            // Check if we can terminate early for max count violations
+            if can_terminate_early && has_max_count && conforming_count > max_count {
+                tracing::debug!(
+                    "Early termination: max count ({}) exceeded at value index {}",
+                    max_count, index
+                );
+                break;
+            }
+
             let validation_result =
                 self.validate_node_against_shape(store, shape, value, graph_name)?;
 
+            let validation_time = validation_start.elapsed();
+            performance_stats.record_validation(validation_time, validation_result.conforms());
+
             if validation_result.conforms() {
                 conforming_count += 1;
+                conforming_values.push(value.clone());
+                
+                // Store conformance details
+                validation_details.insert(
+                    format!("conforming_value_{}", index),
+                    self.format_term_for_message(value)
+                );
+                
+                // Early termination for exact max count check
+                if can_terminate_early && has_max_count && conforming_count > max_count {
+                    break;
+                }
             } else {
                 non_conforming_values.push(value.clone());
+                
+                // Store non-conformance details with validation errors
+                if let Some(failure_reason) = self.extract_validation_failure_reason(&validation_result) {
+                    validation_details.insert(
+                        format!("non_conforming_value_{}", index),
+                        format!("{}: {}", self.format_term_for_message(value), failure_reason)
+                    );
+                }
             }
         }
 
-        // Check qualifiedMinCount constraint
+        // Performance tracking
+        let total_validation_time = start_time.elapsed();
+        validation_details.insert("validation_time_ms".to_string(), total_validation_time.as_millis().to_string());
+        validation_details.insert("conforming_count".to_string(), conforming_count.to_string());
+        validation_details.insert("total_values".to_string(), context.values.len().to_string());
+        validation_details.insert("shape_id".to_string(), constraint.shape.as_str().to_string());
+
+        // Enhanced error reporting for min count violation
         if let Some(min_count) = constraint.qualified_min_count {
             if conforming_count < min_count {
-                return Ok(ConstraintEvaluationResult::violated(
+                let mut details = validation_details.clone();
+                details.insert("violation_type".to_string(), "qualified_min_count".to_string());
+                details.insert("required_min_count".to_string(), min_count.to_string());
+                details.insert("actual_conforming_count".to_string(), conforming_count.to_string());
+                
+                // Add specific non-conforming value details
+                if !non_conforming_values.is_empty() {
+                    details.insert("sample_non_conforming_values".to_string(), 
+                        non_conforming_values.iter()
+                            .take(5) // Limit to first 5 for readability
+                            .map(|v| self.format_term_for_message(v))
+                            .collect::<Vec<_>>()
+                            .join(", "));
+                }
+                
+                return Ok(ConstraintEvaluationResult::violated_with_details(
                     None,
-                    Some(format!("Qualified value shape constraint violated: only {} values conform to shape {} (minimum required: {})", 
-                               conforming_count, constraint.qualified_value_shape.as_str(), min_count))
+                    Some(format!(
+                        "Qualified minimum count constraint violated: only {} of {} values conform to qualified value shape '{}' (minimum required: {}). {} values failed validation.",
+                        conforming_count, 
+                        context.values.len(),
+                        constraint.shape.as_str(), 
+                        min_count,
+                        non_conforming_values.len()
+                    )),
+                    details
                 ));
             }
         }
 
-        // Check qualifiedMaxCount constraint
+        // Enhanced error reporting for max count violation
         if let Some(max_count) = constraint.qualified_max_count {
             if conforming_count > max_count {
-                return Ok(ConstraintEvaluationResult::violated(
+                let mut details = validation_details.clone();
+                details.insert("violation_type".to_string(), "qualified_max_count".to_string());
+                details.insert("allowed_max_count".to_string(), max_count.to_string());
+                details.insert("actual_conforming_count".to_string(), conforming_count.to_string());
+                
+                // Add specific conforming value details that exceed the limit
+                if !conforming_values.is_empty() {
+                    let excess_values: Vec<_> = conforming_values.iter()
+                        .skip(max_count as usize)
+                        .take(5) // Limit to first 5 excess values
+                        .map(|v| self.format_term_for_message(v))
+                        .collect();
+                    
+                    if !excess_values.is_empty() {
+                        details.insert("excess_conforming_values".to_string(), excess_values.join(", "));
+                    }
+                }
+                
+                return Ok(ConstraintEvaluationResult::violated_with_details(
                     None,
-                    Some(format!("Qualified value shape constraint violated: {} values conform to shape {} (maximum allowed: {})", 
-                               conforming_count, constraint.qualified_value_shape.as_str(), max_count))
+                    Some(format!(
+                        "Qualified maximum count constraint violated: {} of {} values conform to qualified value shape '{}' (maximum allowed: {}). {} excess conforming values detected.",
+                        conforming_count, 
+                        context.values.len(),
+                        constraint.shape.as_str(), 
+                        max_count,
+                        conforming_count.saturating_sub(max_count)
+                    )),
+                    details
                 ));
             }
         }
 
-        // If qualified_value_shapes_disjoint is true, we need additional validation
-        // This means that each value can conform to at most one qualified value shape
+        // Enhanced disjoint validation with performance optimization
         if constraint.qualified_value_shapes_disjoint {
-            // Validate disjoint constraint by checking against other qualified value shapes
-            // in the same property shape context
-            let disjoint_violation = self.validate_qualified_value_shapes_disjoint(
+            let disjoint_start = std::time::Instant::now();
+            
+            let disjoint_result = self.validate_qualified_value_shapes_disjoint_enhanced(
                 store,
                 context,
-                &constraint.qualified_value_shape,
+                &constraint.shape,
+                &conforming_values, // Only check values that conformed to this shape
                 graph_name,
             )?;
 
-            if let Some(violation_message) = disjoint_violation {
-                return Ok(ConstraintEvaluationResult::violated(
+            let disjoint_time = disjoint_start.elapsed();
+            validation_details.insert("disjoint_validation_time_ms".to_string(), disjoint_time.as_millis().to_string());
+
+            if let Some((violation_message, disjoint_details)) = disjoint_result {
+                let mut combined_details = validation_details;
+                combined_details.extend(disjoint_details);
+                combined_details.insert("violation_type".to_string(), "qualified_disjoint".to_string());
+                
+                return Ok(ConstraintEvaluationResult::violated_with_details(
                     None,
                     Some(violation_message),
+                    combined_details
                 ));
             }
         }
 
+        // Success with detailed reporting
+        let mut success_details = validation_details;
+        success_details.insert("validation_result".to_string(), "satisfied".to_string());
+        success_details.insert("performance_avg_validation_time_ms".to_string(), 
+            performance_stats.average_validation_time_ms().to_string());
+
         tracing::debug!(
-            "Qualified value shape constraint passed: {} values conform to shape {}",
+            "Qualified value shape constraint satisfied: {} of {} values conform to shape '{}' (range: {}-{})",
             conforming_count,
-            constraint.qualified_value_shape.as_str()
+            context.values.len(),
+            constraint.shape.as_str(),
+            constraint.qualified_min_count.unwrap_or(0),
+            constraint.qualified_max_count.unwrap_or(u32::MAX)
         );
+        
         Ok(ConstraintEvaluationResult::satisfied())
+    }
+    
+    /// Enhanced disjoint validation with performance optimizations
+    fn validate_qualified_value_shapes_disjoint_enhanced(
+        &mut self,
+        store: &Store,
+        context: &ConstraintContext,
+        current_qualified_shape: &ShapeId,
+        conforming_values: &[Term], // Only check values that conformed to current shape
+        graph_name: Option<&str>,
+    ) -> Result<Option<(String, HashMap<String, String>)>> {
+        // Find the property shape that contains this qualified value shape constraint
+        let property_shape = self.shapes.get(&context.shape_id).ok_or_else(|| {
+            ShaclError::ValidationEngine(format!("Shape not found: {}", context.shape_id))
+        })?;
+
+        // Get all qualified value shape constraints from this property shape with disjoint flag
+        let mut qualified_constraints = Vec::new();
+        for (_, constraint) in &property_shape.constraints {
+            if let Constraint::QualifiedValueShape(qvs_constraint) = constraint {
+                if qvs_constraint.qualified_value_shapes_disjoint {
+                    qualified_constraints.push(qvs_constraint);
+                }
+            }
+        }
+
+        // If there's only one qualified value shape constraint, no disjoint validation needed
+        if qualified_constraints.len() <= 1 {
+            return Ok(None);
+        }
+
+        let mut violation_details = HashMap::new();
+        violation_details.insert("total_disjoint_shapes".to_string(), qualified_constraints.len().to_string());
+        violation_details.insert("values_to_check".to_string(), conforming_values.len().to_string());
+
+        // Optimization: Only check values that already conform to the current shape
+        for (value_index, value) in conforming_values.iter().enumerate() {
+            let mut conforming_shapes = Vec::new();
+            let mut shape_validation_details = HashMap::new();
+
+            // Check conformance against all disjoint qualified value shapes
+            for (shape_index, qvs_constraint) in qualified_constraints.iter().enumerate() {
+                let shape = self
+                    .shapes
+                    .get(&qvs_constraint.shape)
+                    .ok_or_else(|| {
+                        ShaclError::ValidationEngine(format!(
+                            "Shape not found for qualified value shape constraint: {}",
+                            qvs_constraint.shape.as_str()
+                        ))
+                    })?;
+
+                let validation_start = std::time::Instant::now();
+                let validation_result =
+                    self.validate_node_against_shape(store, shape, value, graph_name)?;
+                let validation_time = validation_start.elapsed();
+                
+                shape_validation_details.insert(
+                    format!("shape_{}_validation_time_ms", shape_index),
+                    validation_time.as_millis().to_string()
+                );
+
+                if validation_result.conforms() {
+                    conforming_shapes.push(&qvs_constraint.shape);
+                    shape_validation_details.insert(
+                        format!("shape_{}_result", shape_index),
+                        "conforms".to_string()
+                    );
+                } else {
+                    shape_validation_details.insert(
+                        format!("shape_{}_result", shape_index),
+                        "does_not_conform".to_string()
+                    );
+                }
+            }
+
+            // Check if the value conforms to more than one qualified value shape
+            if conforming_shapes.len() > 1 {
+                let shape_names: Vec<String> = conforming_shapes
+                    .iter()
+                    .map(|s| s.as_str().to_string())
+                    .collect();
+
+                let mut combined_details = violation_details;
+                combined_details.extend(shape_validation_details);
+                combined_details.insert("violating_value".to_string(), 
+                    self.format_term_for_message(value));
+                combined_details.insert("conforming_shapes_count".to_string(), 
+                    conforming_shapes.len().to_string());
+                combined_details.insert("conforming_shapes".to_string(), 
+                    shape_names.join("; "));
+
+                let violation_message = format!(
+                    "Qualified value shapes disjoint constraint violated: value '{}' conforms to {} qualified value shapes, but disjoint constraint requires each value to conform to at most one. Conforming shapes: [{}]",
+                    self.format_term_for_message(value),
+                    conforming_shapes.len(),
+                    shape_names.join(", ")
+                );
+
+                return Ok(Some((violation_message, combined_details)));
+            }
+        }
+
+        Ok(None)
+    }
+    
+    /// Extract failure reason from validation result for detailed error reporting
+    fn extract_validation_failure_reason(&self, validation_result: &crate::ValidationReport) -> Option<String> {
+        if validation_result.conforms() {
+            return None;
+        }
+        
+        // Get the first few validation results as a summary
+        let results: Vec<_> = validation_result.violations.iter()
+            .take(3) // Limit to first 3 errors for brevity
+            .map(|result| {
+                let component_str = result.source_constraint_component.to_string();
+                if !component_str.is_empty() {
+                    format!("{}: {}", 
+                        component_str.split('#').last().unwrap_or(&component_str),
+                        result.result_message.as_ref().unwrap_or(&"validation failed".to_string())
+                    )
+                } else {
+                    result.result_message.as_ref().unwrap_or(&"validation failed".to_string()).to_string()
+                }
+            })
+            .collect();
+            
+        if results.is_empty() {
+            Some("unknown validation failure".to_string())
+        } else {
+            Some(results.join("; "))
+        }
     }
 
     /// Validate qualified value shapes disjoint constraint
@@ -1501,18 +1778,18 @@ impl<'a> ValidationEngine<'a> {
             for qvs_constraint in &qualified_constraints {
                 let shape = self
                     .shapes
-                    .get(&qvs_constraint.qualified_value_shape)
+                    .get(&qvs_constraint.shape)
                     .ok_or_else(|| {
                         ShaclError::ValidationEngine(format!(
                             "Shape not found for qualified value shape constraint: {}",
-                            qvs_constraint.qualified_value_shape.as_str()
+                            qvs_constraint.shape.as_str()
                         ))
                     })?;
 
                 let validation_result =
                     self.validate_node_against_shape(store, shape, value, graph_name)?;
                 if validation_result.conforms() {
-                    conforming_shapes.push(&qvs_constraint.qualified_value_shape);
+                    conforming_shapes.push(&qvs_constraint.shape);
                 }
             }
 
@@ -1561,8 +1838,9 @@ impl<'a> ValidationEngine<'a> {
         context: &ConstraintContext,
         graph_name: Option<&str>,
     ) -> Result<ConstraintEvaluationResult> {
-        if !constraint.closed {
-            // If closed=false, the constraint is always satisfied
+        // Check if this constraint is actually enforcing closure
+        // (if there are no allowed properties specified, treat as open)
+        if constraint.allowed_properties.is_empty() {
             return Ok(ConstraintEvaluationResult::satisfied());
         }
 
@@ -1587,8 +1865,8 @@ impl<'a> ValidationEngine<'a> {
             }
 
             // Add ignored properties from the constraint
-            for ignored_path in &constraint.ignored_properties {
-                if let PropertyPath::Predicate(predicate) = ignored_path {
+            for ignored_path in &constraint.ignore_properties {
+                if let Term::NamedNode(predicate) = ignored_path {
                     allowed_properties.insert(predicate.clone());
                 }
                 // TODO: Handle complex property paths in ignored properties
@@ -2067,6 +2345,105 @@ impl ValidationStats {
         self.constraint_evaluation_times
             .get(constraint_type)
             .map(|total| *total / self.total_constraint_evaluations as u32)
+    }
+}
+
+/// Performance statistics for qualified value shape constraint validation
+#[derive(Debug, Clone, Default)]
+pub struct QualifiedValidationStats {
+    /// Total number of value validations performed
+    total_validations: usize,
+    
+    /// Total time spent on validations
+    total_validation_time: Duration,
+    
+    /// Number of conforming validations
+    conforming_validations: usize,
+    
+    /// Number of non-conforming validations
+    non_conforming_validations: usize,
+    
+    /// Individual validation times for performance analysis
+    validation_times: Vec<Duration>,
+}
+
+impl QualifiedValidationStats {
+    /// Create new statistics tracker
+    pub fn new() -> Self {
+        Self::default()
+    }
+    
+    /// Record a validation result and its timing
+    pub fn record_validation(&mut self, validation_time: Duration, conforms: bool) {
+        self.total_validations += 1;
+        self.total_validation_time += validation_time;
+        self.validation_times.push(validation_time);
+        
+        if conforms {
+            self.conforming_validations += 1;
+        } else {
+            self.non_conforming_validations += 1;
+        }
+    }
+    
+    /// Get average validation time in milliseconds
+    pub fn average_validation_time_ms(&self) -> f64 {
+        if self.total_validations == 0 {
+            0.0
+        } else {
+            self.total_validation_time.as_secs_f64() * 1000.0 / self.total_validations as f64
+        }
+    }
+    
+    /// Get conformance rate (0.0 to 1.0)
+    pub fn conformance_rate(&self) -> f64 {
+        if self.total_validations == 0 {
+            0.0
+        } else {
+            self.conforming_validations as f64 / self.total_validations as f64
+        }
+    }
+    
+    /// Get total validation count
+    pub fn total_validations(&self) -> usize {
+        self.total_validations
+    }
+    
+    /// Get total validation time
+    pub fn total_validation_time(&self) -> Duration {
+        self.total_validation_time
+    }
+    
+    /// Get median validation time (requires sorting, so can be expensive)
+    pub fn median_validation_time_ms(&self) -> f64 {
+        if self.validation_times.is_empty() {
+            return 0.0;
+        }
+        
+        let mut times = self.validation_times.clone();
+        times.sort();
+        
+        let len = times.len();
+        if len % 2 == 0 {
+            let mid1 = times[len / 2 - 1].as_secs_f64() * 1000.0;
+            let mid2 = times[len / 2].as_secs_f64() * 1000.0;
+            (mid1 + mid2) / 2.0
+        } else {
+            times[len / 2].as_secs_f64() * 1000.0
+        }
+    }
+    
+    /// Get percentile validation time (p should be between 0.0 and 1.0)
+    pub fn percentile_validation_time_ms(&self, p: f64) -> f64 {
+        if self.validation_times.is_empty() || p < 0.0 || p > 1.0 {
+            return 0.0;
+        }
+        
+        let mut times = self.validation_times.clone();
+        times.sort();
+        
+        let index = ((times.len() - 1) as f64 * p).round() as usize;
+        times[index].as_secs_f64() * 1000.0
     }
 }
 

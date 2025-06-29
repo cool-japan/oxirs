@@ -14,7 +14,7 @@ rust-version.workspace = true
 [dependencies]
 oxirs-core = { path = "../../core/oxirs-core" }
 oxirs-vec = { path = "../../engine/oxirs-vec" }
-oxirs-embed = { path = "../oxirs-embed" }
+# oxirs-embed = { path = "../oxirs-embed" } # Workspace conflict - temporarily disabled
 tokio = { workspace = true, features = ["full"] }
 hyper = { workspace = true, features = ["full"] }
 serde = { workspace = true, features = ["derive"] }

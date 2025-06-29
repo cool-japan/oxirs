@@ -6,7 +6,7 @@ use futures::{
 };
 use reqwest::Client;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -31,7 +31,7 @@ use crate::{
 };
 
 /// Query execution result
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct QueryResult {
     /// Query results
     pub results: QueryResults,
@@ -81,6 +81,8 @@ struct ExecutionContext {
     plan: FederatedQueryPlan,
     /// Intermediate results
     results: HashMap<String, QueryResult>,
+    /// Completed steps
+    completed_steps: HashSet<String>,
     /// Execution metrics
     metrics: ExecutionMetrics,
 }
@@ -129,6 +131,7 @@ impl FederatedExecutor {
         let mut context = ExecutionContext {
             plan: plan.clone(),
             results: HashMap::new(),
+            completed_steps: HashSet::new(),
             metrics: ExecutionMetrics::default(),
         };
 
@@ -157,7 +160,8 @@ impl FederatedExecutor {
         let steps = context.plan.steps.clone();
         for step in &steps {
             let result = self.execute_step(step, context).await?;
-            context.results.insert(step.id.clone(), result.clone());
+            // Store step completion status instead of cloning results
+            context.completed_steps.insert(step.id.clone());
             final_result = result;
         }
 
@@ -200,7 +204,7 @@ impl FederatedExecutor {
             for result in results {
                 match result {
                     Ok((step_id, res)) => {
-                        context.results.insert(step_id, res.clone());
+                        context.completed_steps.insert(step_id);
                         group_results.push(res);
                     }
                     Err(e) => return Err(e),
@@ -208,8 +212,8 @@ impl FederatedExecutor {
             }
 
             // Use the last result as final result (or merge if needed)
-            if let Some(last_result) = group_results.last() {
-                final_result = last_result.clone();
+            if let Some(last_result) = group_results.pop() {
+                final_result = last_result;
             }
         }
 
@@ -570,12 +574,12 @@ impl FederatedExecutor {
 }
 
 /// Parallel result merger for combining results from multiple services
-pub struct ResultMerger {
-    merge_strategy: MergeStrategy,
+pub struct FederatedResultMerger {
+    merge_strategy: FederatedMergeStrategy,
 }
 
 #[derive(Debug, Clone)]
-pub enum MergeStrategy {
+pub enum FederatedMergeStrategy {
     /// Union all results (default)
     Union,
     /// Intersection of results
@@ -586,9 +590,9 @@ pub enum MergeStrategy {
     Custom,
 }
 
-impl ResultMerger {
+impl FederatedResultMerger {
     /// Create a new result merger
-    pub fn new(strategy: MergeStrategy) -> Self {
+    pub fn new(strategy: FederatedMergeStrategy) -> Self {
         Self {
             merge_strategy: strategy,
         }
@@ -605,10 +609,10 @@ impl ResultMerger {
         }
 
         match &self.merge_strategy {
-            MergeStrategy::Union => self.merge_union(results).await,
-            MergeStrategy::Intersection => self.merge_intersection(results).await,
-            MergeStrategy::Join(vars) => self.merge_join(results, vars).await,
-            MergeStrategy::Custom => Err(FusekiError::QueryExecution {
+            FederatedMergeStrategy::Union => self.merge_union(results).await,
+            FederatedMergeStrategy::Intersection => self.merge_intersection(results).await,
+            FederatedMergeStrategy::Join(vars) => self.merge_join(results, vars).await,
+            FederatedMergeStrategy::Custom => Err(FusekiError::QueryExecution {
                 message: "Custom merge not implemented".to_string(),
             }),
         }
@@ -643,7 +647,7 @@ mod tests {
 
     #[test]
     fn test_result_merger() {
-        let merger = ResultMerger::new(MergeStrategy::Union);
+        let merger = FederatedResultMerger::new(FederatedMergeStrategy::Union);
         // Test would go here with proper QueryResult implementation
     }
 }

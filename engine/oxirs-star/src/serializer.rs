@@ -5,6 +5,7 @@
 //! - N-Triples-star (*.nts)  
 //! - TriG-star (*.trigs)
 //! - N-Quads-star (*.nqs)
+//! - JSON-LD-star (*.jlds)
 
 use std::collections::HashMap;
 use std::io::{BufWriter, Write};
@@ -138,6 +139,7 @@ impl StarSerializer {
             StarFormat::NTriplesStar => self.serialize_ntriples_star(graph, writer),
             StarFormat::TrigStar => self.serialize_trig_star(graph, writer),
             StarFormat::NQuadsStar => self.serialize_nquads_star(graph, writer),
+            StarFormat::JsonLdStar => self.serialize_jsonld_star(graph, writer),
         }
     }
 
@@ -400,6 +402,184 @@ impl StarSerializer {
         Ok(())
     }
 
+    /// Serialize to JSON-LD-star format
+    pub fn serialize_jsonld_star<W: Write>(&self, graph: &StarGraph, writer: W) -> StarResult<()> {
+        let span = span!(Level::DEBUG, "serialize_jsonld_star");
+        let _enter = span.enter();
+
+        let mut buf_writer = BufWriter::new(writer);
+        let mut context = SerializationContext::new();
+
+        // Create JSON-LD context
+        let mut jsonld_document = serde_json::Map::new();
+        
+        // Add JSON-LD context
+        let mut context_obj = serde_json::Map::new();
+        context_obj.insert("@vocab".to_string(), serde_json::Value::String("http://example.org/".to_string()));
+        
+        // Add common prefixes
+        context_obj.insert("rdf".to_string(), serde_json::Value::String("http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string()));
+        context_obj.insert("rdfs".to_string(), serde_json::Value::String("http://www.w3.org/2000/01/rdf-schema#".to_string()));
+        context_obj.insert("xsd".to_string(), serde_json::Value::String("http://www.w3.org/2001/XMLSchema#".to_string()));
+        
+        jsonld_document.insert("@context".to_string(), serde_json::Value::Object(context_obj));
+
+        // Group quads by subject
+        let mut subjects = std::collections::HashMap::new();
+        
+        // Process all quads
+        for quad in graph.quads() {
+            self.add_quad_to_jsonld(&mut subjects, quad)?;
+        }
+
+        // Convert subjects to JSON-LD array
+        let mut graph_array = Vec::new();
+        for (subject_str, properties) in subjects {
+            let mut subject_obj = serde_json::Map::new();
+            
+            // Add @id for non-blank nodes
+            if !subject_str.starts_with("_:") {
+                subject_obj.insert("@id".to_string(), serde_json::Value::String(subject_str));
+            }
+            
+            // Add properties
+            for (predicate, values) in properties {
+                subject_obj.insert(predicate, serde_json::Value::Array(values));
+            }
+            
+            graph_array.push(serde_json::Value::Object(subject_obj));
+        }
+
+        jsonld_document.insert("@graph".to_string(), serde_json::Value::Array(graph_array));
+
+        // Write JSON with pretty printing
+        let json_output = if context.pretty_print {
+            serde_json::to_string_pretty(&jsonld_document)
+        } else {
+            serde_json::to_string(&jsonld_document)
+        }.map_err(|e| StarError::serialization_error(format!("JSON serialization error: {}", e)))?;
+
+        buf_writer.write_all(json_output.as_bytes())
+            .map_err(|e| StarError::serialization_error(e.to_string()))?;
+        
+        buf_writer.flush()
+            .map_err(|e| StarError::serialization_error(e.to_string()))?;
+            
+        debug!("Serialized {} quads in JSON-LD-star format", graph.quad_len());
+        Ok(())
+    }
+
+    /// Add a quad to the JSON-LD structure
+    fn add_quad_to_jsonld(
+        &self,
+        subjects: &mut std::collections::HashMap<String, std::collections::HashMap<String, Vec<serde_json::Value>>>,
+        quad: &StarQuad,
+    ) -> StarResult<()> {
+        let subject_str = self.term_to_jsonld_id(&quad.subject)?;
+        let predicate_str = self.term_to_jsonld_predicate(&quad.predicate)?;
+        let object_value = self.term_to_jsonld_value(&quad.object)?;
+
+        let subject_props = subjects.entry(subject_str).or_insert_with(std::collections::HashMap::new);
+        let prop_values = subject_props.entry(predicate_str).or_insert_with(Vec::new);
+        prop_values.push(object_value);
+
+        Ok(())
+    }
+
+    /// Convert a StarTerm to JSON-LD @id format
+    fn term_to_jsonld_id(&self, term: &StarTerm) -> StarResult<String> {
+        match term {
+            StarTerm::NamedNode(node) => Ok(node.iri.clone()),
+            StarTerm::BlankNode(node) => Ok(format!("_:{}", node.id)),
+            StarTerm::QuotedTriple(triple) => {
+                // For quoted triples as subjects, create a special identifier
+                Ok(format!("_:qt_{}", self.hash_triple(triple)))
+            }
+            _ => Err(StarError::serialization_error("Invalid subject term".to_string())),
+        }
+    }
+
+    /// Convert a StarTerm to JSON-LD predicate format
+    fn term_to_jsonld_predicate(&self, term: &StarTerm) -> StarResult<String> {
+        match term {
+            StarTerm::NamedNode(node) => Ok(node.iri.clone()),
+            _ => Err(StarError::serialization_error("Invalid predicate term".to_string())),
+        }
+    }
+
+    /// Convert a StarTerm to JSON-LD value format
+    fn term_to_jsonld_value(&self, term: &StarTerm) -> StarResult<serde_json::Value> {
+        match term {
+            StarTerm::NamedNode(node) => {
+                let mut obj = serde_json::Map::new();
+                obj.insert("@id".to_string(), serde_json::Value::String(node.iri.clone()));
+                Ok(serde_json::Value::Object(obj))
+            }
+            StarTerm::BlankNode(node) => {
+                let mut obj = serde_json::Map::new();
+                obj.insert("@id".to_string(), serde_json::Value::String(format!("_:{}", node.id)));
+                Ok(serde_json::Value::Object(obj))
+            }
+            StarTerm::Literal(literal) => {
+                let mut obj = serde_json::Map::new();
+                
+                // Add the value
+                if let Ok(num) = literal.value.parse::<f64>() {
+                    // Numeric literal
+                    obj.insert("@value".to_string(), serde_json::Value::Number(
+                        serde_json::Number::from_f64(num).unwrap_or(serde_json::Number::from(0))
+                    ));
+                } else if literal.value == "true" || literal.value == "false" {
+                    // Boolean literal
+                    obj.insert("@value".to_string(), serde_json::Value::Bool(literal.value == "true"));
+                } else {
+                    // String literal
+                    obj.insert("@value".to_string(), serde_json::Value::String(literal.value.clone()));
+                }
+
+                // Add datatype if present
+                if let Some(ref datatype) = literal.datatype {
+                    obj.insert("@type".to_string(), serde_json::Value::String(datatype.iri.clone()));
+                }
+
+                // Add language if present
+                if let Some(ref lang) = literal.language {
+                    obj.insert("@language".to_string(), serde_json::Value::String(lang.clone()));
+                }
+
+                Ok(serde_json::Value::Object(obj))
+            }
+            StarTerm::QuotedTriple(triple) => {
+                // RDF-star extension: represent quoted triple as annotation
+                let mut annotation_obj = serde_json::Map::new();
+                annotation_obj.insert("subject".to_string(), self.term_to_jsonld_value(&triple.subject)?);
+                annotation_obj.insert("predicate".to_string(), self.term_to_jsonld_value(&triple.predicate)?);
+                annotation_obj.insert("object".to_string(), self.term_to_jsonld_value(&triple.object)?);
+
+                let mut obj = serde_json::Map::new();
+                obj.insert("@annotation".to_string(), serde_json::Value::Object(annotation_obj));
+                Ok(serde_json::Value::Object(obj))
+            }
+            StarTerm::Variable(var) => {
+                // Variables are typically used in SPARQL queries, not in serialized data
+                // For JSON-LD, we'll represent them as special objects
+                let mut obj = serde_json::Map::new();
+                obj.insert("@variable".to_string(), serde_json::Value::String(var.name.clone()));
+                Ok(serde_json::Value::Object(obj))
+            }
+        }
+    }
+
+    /// Generate a hash for a triple (simple implementation)
+    fn hash_triple(&self, triple: &StarTriple) -> u64 {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let mut hasher = DefaultHasher::new();
+        format!("{:?}", triple).hash(&mut hasher);
+        hasher.finish()
+    }
+
     /// Format a StarTerm for Turtle-star (with prefix compression)
     fn format_term(&self, term: &StarTerm, context: &SerializationContext) -> StarResult<String> {
         match term {
@@ -509,6 +689,7 @@ impl StarSerializer {
             StarFormat::NTriplesStar => 80, // N-Triples uses full IRIs
             StarFormat::TrigStar => 60,     // TriG has graph context
             StarFormat::NQuadsStar => 90,   // N-Quads uses full IRIs + graph
+            StarFormat::JsonLdStar => 120,  // JSON-LD has overhead from JSON structure
         };
 
         let quoted_triple_multiplier = 1.5; // Quoted triples add overhead
@@ -542,6 +723,10 @@ impl StarSerializer {
             }
             StarFormat::TrigStar | StarFormat::NQuadsStar => {
                 // TODO: Add quad-specific validation when implemented
+                Ok(())
+            }
+            StarFormat::JsonLdStar => {
+                // JSON-LD-star supports quoted triples as annotations
                 Ok(())
             }
         }

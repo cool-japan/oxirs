@@ -75,6 +75,18 @@ impl CompressionMetadata {
     }
 }
 
+impl Default for CompressionMetadata {
+    fn default() -> Self {
+        Self {
+            algorithm: AdvancedCompressionType::RunLength,
+            original_size: 0,
+            compressed_size: 0,
+            compression_time_us: 0,
+            metadata: HashMap::new(),
+        }
+    }
+}
+
 /// Compressed data with metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompressedData {

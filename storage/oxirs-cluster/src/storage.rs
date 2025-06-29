@@ -103,7 +103,10 @@ pub struct ChecksummedData<T> {
     pub timestamp: u64,
 }
 
-impl<T: Serialize> ChecksummedData<T> {
+impl<T> ChecksummedData<T>
+where
+    T: Serialize,
+{
     pub fn new(data: T) -> Result<Self> {
         let data_bytes = bincode::serialize(&data)?;
         let mut hasher = Sha256::new();
@@ -122,10 +125,7 @@ impl<T: Serialize> ChecksummedData<T> {
         })
     }
 
-    pub fn verify(&self) -> Result<bool>
-    where
-        T: Serialize,
-    {
+    pub fn verify(&self) -> Result<bool> {
         let data_bytes = bincode::serialize(&self.data)?;
         let mut hasher = Sha256::new();
         hasher.update(&data_bytes);
@@ -289,7 +289,7 @@ impl PersistentStorage {
 
         let file = File::open(&wal_path)?;
         let mut reader = BufReader::new(file);
-        let mut uncommitted_ops = Vec::new();
+        let mut uncommitted_ops: Vec<WalEntry> = Vec::new();
         let mut last_commit_sequence = 0;
 
         // Read all WAL entries
@@ -497,6 +497,16 @@ impl PersistentStorage {
         let app_state = self.app_state.read().await;
 
         let last_log_entry = raft_state.log.last();
+        // Save snapshot
+        let snapshot_path = self.data_dir.join("snapshot.json");
+        let snapshot_data = serde_json::to_vec(&*app_state)?;
+        fs::write(&snapshot_path, &snapshot_data)?;
+
+        // Calculate checksum
+        let mut hasher = Sha256::new();
+        hasher.update(&snapshot_data);
+        let checksum = format!("{:x}", hasher.finalize());
+
         let metadata = SnapshotMetadata {
             last_included_index: last_log_entry.map(|e| e.index).unwrap_or(0),
             last_included_term: last_log_entry.map(|e| e.term).unwrap_or(0),
@@ -505,17 +515,11 @@ impl PersistentStorage {
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_secs(),
-            size: 0, // Will be set after serialization
+            size: snapshot_data.len() as u64,
+            checksum,
         };
 
-        // Save snapshot
-        let snapshot_path = self.data_dir.join("snapshot.json");
-        let snapshot_data = serde_json::to_vec(&*app_state)?;
-        fs::write(&snapshot_path, &snapshot_data)?;
-
         // Save metadata
-        let mut metadata = metadata;
-        metadata.size = snapshot_data.len() as u64;
         let metadata_path = self.data_dir.join("snapshot_metadata.json");
         let metadata_data = serde_json::to_vec(&metadata)?;
         fs::write(&metadata_path, &metadata_data)?;
@@ -747,7 +751,7 @@ impl PersistentStorage {
     /// Load data with checksum verification
     async fn load_with_checksum<T>(&self, path: &Path) -> Result<T>
     where
-        T: for<'de> Deserialize<'de>,
+        T: for<'de> Deserialize<'de> + Serialize,
     {
         let data = std::fs::read(path)?;
         let checksummed_data: ChecksummedData<T> = bincode::deserialize(&data)?;
@@ -924,6 +928,7 @@ impl PersistentStorage {
         }
 
         // Keep only uncommitted entries
+        let total_entries = entries.len();
         let uncommitted: Vec<_> = entries
             .into_iter()
             .filter(|entry| entry.sequence > last_commit_sequence)
@@ -963,7 +968,7 @@ impl PersistentStorage {
         tracing::info!(
             "Compacted WAL for node {}, removed {} committed entries, kept {} uncommitted",
             self.node_id,
-            entries.len() - uncommitted.len(),
+            total_entries - uncommitted.len(),
             uncommitted.len()
         );
 
@@ -1618,6 +1623,15 @@ pub trait StorageBackend: Send + Sync {
 
     /// Import shard data during migration
     async fn import_shard(&self, shard_id: ShardId, triples: Vec<Triple>) -> Result<()>;
+
+    /// Get all triples from a specific shard
+    async fn get_shard_triples(&self, shard_id: ShardId) -> Result<Vec<Triple>>;
+
+    /// Insert multiple triples into a specific shard
+    async fn insert_triples_to_shard(&self, shard_id: ShardId, triples: Vec<Triple>) -> Result<()>;
+
+    /// Mark a shard for deletion (logical deletion before physical cleanup)
+    async fn mark_shard_for_deletion(&self, shard_id: ShardId) -> Result<()>;
 }
 
 /// Mock storage backend for testing
@@ -1712,6 +1726,117 @@ pub mod mock {
             self.shards.write().await.insert(shard_id, triples);
             Ok(())
         }
+
+        async fn get_shard_triples(&self, shard_id: ShardId) -> Result<Vec<Triple>> {
+            let shards = self.shards.read().await;
+            Ok(shards.get(&shard_id).cloned().unwrap_or_default())
+        }
+
+        async fn insert_triples_to_shard(&self, shard_id: ShardId, triples: Vec<Triple>) -> Result<()> {
+            let mut shards = self.shards.write().await;
+            if let Some(shard) = shards.get_mut(&shard_id) {
+                shard.extend(triples);
+            } else {
+                shards.insert(shard_id, triples);
+            }
+            Ok(())
+        }
+
+        async fn mark_shard_for_deletion(&self, shard_id: ShardId) -> Result<()> {
+            // In the mock implementation, we can just remove the shard immediately
+            self.shards.write().await.remove(&shard_id);
+            Ok(())
+        }
+    }
+}
+
+/// StorageBackend implementation for PersistentStorage
+#[async_trait]
+impl StorageBackend for PersistentStorage {
+    async fn create_shard(&self, shard_id: ShardId) -> Result<()> {
+        // For PersistentStorage, shards are logical partitions
+        // We create a marker in the application state
+        let mut app_state = self.app_state.write().await;
+        app_state.create_shard(shard_id);
+        self.save_app_state().await
+    }
+
+    async fn delete_shard(&self, shard_id: ShardId) -> Result<()> {
+        // Mark shard as deleted in application state
+        let mut app_state = self.app_state.write().await;
+        app_state.delete_shard(shard_id);
+        self.save_app_state().await
+    }
+
+    async fn insert_triple_to_shard(&self, shard_id: ShardId, triple: Triple) -> Result<()> {
+        // Insert triple to specific shard in application state
+        let mut app_state = self.app_state.write().await;
+        app_state.insert_triple_to_shard(shard_id, triple);
+        self.save_app_state().await
+    }
+
+    async fn delete_triple_from_shard(&self, shard_id: ShardId, triple: &Triple) -> Result<()> {
+        // Delete triple from specific shard in application state
+        let mut app_state = self.app_state.write().await;
+        app_state.delete_triple_from_shard(shard_id, triple);
+        self.save_app_state().await
+    }
+
+    async fn query_shard(
+        &self,
+        shard_id: ShardId,
+        subject: Option<&str>,
+        predicate: Option<&str>,
+        object: Option<&str>,
+    ) -> Result<Vec<Triple>> {
+        // Query specific shard in application state
+        let app_state = self.app_state.read().await;
+        Ok(app_state.query_shard(shard_id, subject, predicate, object))
+    }
+
+    async fn get_shard_size(&self, shard_id: ShardId) -> Result<u64> {
+        // Get shard size from application state
+        let app_state = self.app_state.read().await;
+        Ok(app_state.get_shard_size(shard_id))
+    }
+
+    async fn get_shard_triple_count(&self, shard_id: ShardId) -> Result<usize> {
+        // Get shard triple count from application state
+        let app_state = self.app_state.read().await;
+        Ok(app_state.get_shard_triple_count(shard_id))
+    }
+
+    async fn export_shard(&self, shard_id: ShardId) -> Result<Vec<Triple>> {
+        // Export all triples from a shard
+        let app_state = self.app_state.read().await;
+        Ok(app_state.export_shard(shard_id))
+    }
+
+    async fn import_shard(&self, shard_id: ShardId, triples: Vec<Triple>) -> Result<()> {
+        // Import triples into a shard
+        let mut app_state = self.app_state.write().await;
+        app_state.import_shard(shard_id, triples);
+        self.save_app_state().await
+    }
+
+    async fn get_shard_triples(&self, shard_id: ShardId) -> Result<Vec<Triple>> {
+        // Get all triples from a shard
+        let app_state = self.app_state.read().await;
+        Ok(app_state.get_shard_triples(shard_id))
+    }
+
+    async fn insert_triples_to_shard(&self, shard_id: ShardId, triples: Vec<Triple>) -> Result<()> {
+        // Insert multiple triples to a shard
+        let mut app_state = self.app_state.write().await;
+        app_state.insert_triples_to_shard(shard_id, triples);
+        self.save_app_state().await
+    }
+
+    async fn mark_shard_for_deletion(&self, shard_id: ShardId) -> Result<()> {
+        // Mark shard for deletion in application state
+        let mut app_state = self.app_state.write().await;
+        app_state.mark_shard_for_deletion(shard_id);
+        self.save_app_state().await
     }
 }
 

@@ -5,7 +5,7 @@
 
 use super::error::SerializeResult;
 use super::error::{ParseResult, RdfParseError};
-use super::format::{JsonLdProfile, JsonLdProfileSet};
+use super::format::JsonLdProfileSet;
 use super::serializer::QuadSerializer;
 use crate::model::{Quad, QuadRef};
 use std::io::{Read, Write};
@@ -334,6 +334,7 @@ pub mod context {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::format::format::{JsonLdProfile, JsonLdProfileSet};
 
     #[test]
     fn test_jsonld_parser_creation() {

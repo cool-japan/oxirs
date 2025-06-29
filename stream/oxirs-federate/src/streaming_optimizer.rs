@@ -223,7 +223,7 @@ impl Default for StreamingStatistics {
 }
 
 /// Memory-bounded streaming controller
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MemoryBoundedController {
     /// Current memory usage
     memory_usage: Arc<RwLock<usize>>,
@@ -274,6 +274,7 @@ impl Drop for MemoryAllocation {
 }
 
 /// Streaming optimizer for federated query results
+#[derive(Clone)]
 pub struct StreamingOptimizer {
     config: StreamingConfig,
     statistics: Arc<RwLock<StreamingStatistics>>,
@@ -354,21 +355,21 @@ impl StreamingOptimizer {
 
     /// Stream results with cursor-based pagination
     pub async fn stream_paginated_results(
-        &self,
-        service_id: &str,
+        self: Arc<Self>,
+        service_id: String,
         cursor: PaginationCursor,
-        service_registry: &ServiceRegistry,
+        service_registry: Arc<ServiceRegistry>,
     ) -> Result<impl Stream<Item = Result<StreamChunk>>> {
         let stream_id = Uuid::new_v4().to_string();
         let (sender, receiver) = mpsc::channel(self.config.prefetch_buffer_size);
 
         // Initialize adaptive paging strategy
-        let strategy = self.get_or_create_adaptive_strategy(service_id).await;
+        let strategy = self.get_or_create_adaptive_strategy(&service_id).await;
 
         // Create active stream record
         let active_stream = ActiveStream {
             stream_id: stream_id.clone(),
-            service_id: service_id.to_string(),
+            service_id: service_id.clone(),
             created_at: Instant::now(),
             last_activity: Instant::now(),
             chunks_sent: 0,
@@ -383,11 +384,12 @@ impl StreamingOptimizer {
             .insert(stream_id.clone(), active_stream);
 
         // Start streaming task
-        let optimizer = Arc::new(self);
+        let optimizer = Arc::clone(&self);
         let stream_id_clone = stream_id.clone();
-        let service_id_clone = service_id.to_string();
-        let service_registry_clone = service_registry.clone();
+        let service_id_clone = service_id.clone();
+        let service_registry_clone = Arc::clone(&service_registry);
         let mut current_cursor = cursor;
+        let sender_clone = sender;
 
         tokio::spawn(async move {
             let mut chunk_sequence = 0u64;
@@ -408,7 +410,7 @@ impl StreamingOptimizer {
                     Ok(allocation) => allocation,
                     Err(e) => {
                         warn!("Failed to allocate memory for stream chunk: {}", e);
-                        let _ = sender.send(Err(e)).await;
+                        let _ = sender_clone.send(Err(e)).await;
                         break;
                     }
                 };
@@ -419,7 +421,7 @@ impl StreamingOptimizer {
                         &service_id_clone,
                         &current_cursor,
                         chunk_sequence,
-                        &service_registry_clone,
+                        Arc::clone(&service_registry_clone),
                     )
                     .await;
 
@@ -438,7 +440,7 @@ impl StreamingOptimizer {
                             .await;
 
                         // Send chunk
-                        if sender.send(Ok(chunk)).await.is_err() {
+                        if sender_clone.send(Ok(chunk)).await.is_err() {
                             debug!("Stream receiver dropped for stream {}", stream_id_clone);
                             break;
                         }
@@ -457,7 +459,7 @@ impl StreamingOptimizer {
                     }
                     Err(e) => {
                         warn!("Error fetching stream chunk: {}", e);
-                        let _ = sender.send(Err(e)).await;
+                        let _ = sender_clone.send(Err(e)).await;
                         break;
                     }
                 }
@@ -496,7 +498,12 @@ impl StreamingOptimizer {
             self.set_adaptive_page_size(service_id, page_size).await;
         }
 
-        self.stream_paginated_results(service_id, cursor, service_registry)
+        Arc::new((*self).clone())
+            .stream_paginated_results(
+                service_id.to_string(),
+                cursor,
+                Arc::new(service_registry.clone()),
+            )
             .await
     }
 
@@ -505,7 +512,7 @@ impl StreamingOptimizer {
         &self,
         service_id: &str,
         cursor: &PaginationCursor,
-        service_registry: &ServiceRegistry,
+        service_registry: Arc<ServiceRegistry>,
     ) -> Result<()> {
         if !self.config.enable_prefetching {
             return Ok(());
@@ -522,10 +529,10 @@ impl StreamingOptimizer {
         }
 
         // Start prefetch task
-        let optimizer = Arc::new(self);
+        let optimizer = Arc::new(self.clone());
         let service_id_clone = service_id.to_string();
         let cursor_clone = cursor.clone();
-        let service_registry_clone = service_registry.clone();
+        let service_registry_clone = Arc::clone(&service_registry);
         let prefetch_key_clone = prefetch_key.clone();
 
         tokio::spawn(async move {
@@ -544,7 +551,7 @@ impl StreamingOptimizer {
                         &service_id_clone,
                         &current_cursor,
                         i as u64,
-                        &service_registry_clone,
+                        Arc::clone(&service_registry_clone),
                     )
                     .await
                 {
@@ -570,6 +577,7 @@ impl StreamingOptimizer {
             }
 
             if !prefetched_chunks.is_empty() {
+                let chunk_count = prefetched_chunks.len();
                 let prefetched_data = PrefetchedData {
                     chunks: prefetched_chunks,
                     cursor: Some(current_cursor),
@@ -584,11 +592,7 @@ impl StreamingOptimizer {
                     .await
                     .insert(prefetch_key_clone, prefetched_data);
 
-                debug!(
-                    "Prefetched {} chunks for {}",
-                    prefetched_chunks.len(),
-                    service_id_clone
-                );
+                debug!("Prefetched {} chunks for {}", chunk_count, service_id_clone);
             }
         });
 
@@ -648,7 +652,7 @@ impl StreamingOptimizer {
         service_id: &str,
         cursor: &PaginationCursor,
         sequence: u64,
-        service_registry: &ServiceRegistry,
+        service_registry: Arc<ServiceRegistry>,
     ) -> Result<StreamChunk> {
         let strategy = self.get_or_create_adaptive_strategy(service_id).await;
 
@@ -666,7 +670,7 @@ impl StreamingOptimizer {
                 service_id,
                 cursor,
                 strategy.current_page_size,
-                service_registry,
+                &service_registry,
             )
             .await?;
 
@@ -951,7 +955,7 @@ impl MemoryBoundedController {
                 return Ok(MemoryAllocation {
                     allocation_id: Uuid::new_v4().to_string(),
                     size_bytes,
-                    controller: Arc::new(self),
+                    controller: Arc::new(self.clone()),
                 });
             }
         }

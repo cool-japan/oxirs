@@ -15,10 +15,10 @@ rust-version.workspace = true
 # oxigraph.workspace = true    # REMOVED: Replaced with native implementations
 # oxrdf.workspace = true       # REMOVED: Replaced with native implementations
 # oxjsonld.workspace = true    # REMOVED: Replaced with native implementations
+# rio_api.workspace = true     # REMOVED: Using native parsing implementations
+# rio_turtle.workspace = true  # REMOVED: Using native parsing implementations  
+# rio_xml.workspace = true     # REMOVED: Using native parsing implementations
 json-event-parser = { version = "0.2", features = ["async-tokio"] }
-rio_api.workspace = true
-rio_turtle.workspace = true
-rio_xml.workspace = true
 # oxiri = "0.2"              # REMOVED: Using native IRI validation
 quick-xml = "0.36"
 # oxilangtag = "0.1"         # REMOVED: Using native language tag validation
@@ -30,6 +30,7 @@ tracing.workspace = true
 url = "2.5.4"
 regex = "1.10"
 lazy_static = "1.5"
+once_cell = "1.21"
 
 # Ultra performance dependencies
 rayon = { version = "1.10", optional = true }

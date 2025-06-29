@@ -106,7 +106,7 @@ flate2 = "1.0"
 # OAuth2 and HTTP client
 reqwest = { version = "0.12", features = ["json"] }
 percent-encoding = "2.3"
-url = "2.5"
+url = { version = "2.5", features = ["serde"] }
 
 # SAML security (optional)
 xmlsec = { version = "0.2", optional = true }

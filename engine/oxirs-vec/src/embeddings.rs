@@ -471,10 +471,10 @@ impl SentenceTransformerGenerator {
     /// Get model-specific configuration adjustments
     fn get_model_config(&self) -> (usize, usize, f32) {
         match &self.model_type {
-            TransformerModelType::BERT => (768, 512, 1.0), // (dimensions, max_seq_len, efficiency)
-            TransformerModelType::RoBERTa => (768, 514, 0.95), // RoBERTa supports slightly longer sequences
-            TransformerModelType::DistilBERT => (384, 512, 1.5), // DistilBERT is smaller and faster
-            TransformerModelType::MultiBERT => (768, 512, 0.8), // Multilingual BERT, slower but broader language support
+            TransformerModelType::BERT => (self.config.dimensions, 512, 1.0), // Use config dimensions
+            TransformerModelType::RoBERTa => (self.config.dimensions, 514, 0.95), // Use config dimensions
+            TransformerModelType::DistilBERT => (self.config.dimensions, 512, 1.5), // Use config dimensions
+            TransformerModelType::MultiBERT => (self.config.dimensions, 512, 0.8), // Use config dimensions
             TransformerModelType::Custom(_) => {
                 (self.config.dimensions, self.config.max_sequence_length, 1.0)
             }

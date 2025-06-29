@@ -902,11 +902,21 @@ impl ServiceDelegator {
             circuit_breaker: crate::federation::CircuitBreakerConfig::default(),
         };
 
-        let endpoints =
-            std::sync::Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new()));
+        let endpoints = std::sync::Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::<
+            String,
+            crate::federation::ServiceEndpoint,
+        >::new()));
+
+        let discovery_service =
+            Arc::new(crate::federation::planner::DefaultServiceDiscovery::new());
+        let cost_estimator = Arc::new(crate::federation::planner::DefaultCostEstimator::new());
 
         Self {
-            federation_planner: crate::federation::planner::QueryPlanner::new(config, endpoints),
+            federation_planner: crate::federation::planner::QueryPlanner::new(
+                config,
+                discovery_service,
+                cost_estimator,
+            ),
             parallel_executor: ParallelServiceExecutor::new(),
             result_merger: ServiceResultMerger::new(),
             endpoint_discovery: EndpointDiscovery::new(),

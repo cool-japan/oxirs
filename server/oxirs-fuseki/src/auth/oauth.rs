@@ -108,7 +108,7 @@ pub struct OAuth2TokenResponse {
 }
 
 /// OIDC discovery document
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct OIDCDiscovery {
     pub issuer: String,
     pub authorization_endpoint: String,

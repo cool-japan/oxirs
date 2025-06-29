@@ -144,7 +144,7 @@ impl StreamBackend for MemoryBackend {
                 .unwrap_or(0);
 
             match position {
-                StreamPosition::Beginning => 0,
+                StreamPosition::Beginning => current_offset, // Use consumer group's current offset
                 StreamPosition::End => topic_data.next_offset,
                 StreamPosition::Offset(offset) => offset,
             }
@@ -287,12 +287,13 @@ mod tests {
         assert_eq!(topics[0].as_str(), "test-topic");
 
         // Send event
-        let event = StreamEvent::new(StreamEventType::TripleAdded {
+        let event = StreamEvent::TripleAdded {
             subject: "http://example.org/s".to_string(),
             predicate: "http://example.org/p".to_string(),
             object: "http://example.org/o".to_string(),
             graph: None,
-        });
+            metadata: crate::event::EventMetadata::default(),
+        };
 
         let offset = backend.send_event(&topic, event.clone()).await.unwrap();
         assert_eq!(offset.value(), 0);
@@ -320,9 +321,10 @@ mod tests {
 
         // Send some events
         for i in 0..5 {
-            let event = StreamEvent::new(StreamEventType::GraphCreated {
+            let event = StreamEvent::GraphCreated {
                 graph: format!("http://example.org/graph{}", i),
-            });
+                metadata: crate::event::EventMetadata::default(),
+            };
             backend.send_event(&topic, event).await.unwrap();
         }
 

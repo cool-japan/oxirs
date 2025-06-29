@@ -48,101 +48,94 @@
 //! ## Architecture Overview
 //!
 //! The OxiRS TDB implementation consists of several key components:
-//!
-//! ### Storage Layer
-//! - **[`page`]**: Memory-mapped page management with LRU buffer pools
-//! - **[`btree`]**: B+ tree implementation for efficient indexing
-//! - **[`nodes`]**: RDF term encoding and storage with compression
-//! - **[`storage`]**: Low-level file system abstraction
-//!
-//! ### Transaction Layer  
-//! - **[`mvcc`]**: Multi-version concurrency control implementation
-//! - **[`transactions`]**: Transaction lifecycle management
-//! - **[`wal`]**: Write-ahead logging for durability and recovery
-//!
-//! ### RDF Layer
-//! - **[`triple_store`]**: High-level RDF triple/quad storage and querying
-//! - **[`assembler`]**: Low-level storage operation assembly/disassembly
-//!
-//! ### Advanced Features
-//! - **[`compression`]**: Advanced compression algorithms and column-store optimizations
-//!
-//! ## Performance Characteristics
-//!
-//! - **Load Performance**: 10M+ triples/minute bulk loading
-//! - **Query Performance**: Sub-second response for complex queries on 100M+ triples
-//! - **Transaction Throughput**: 10K+ transactions/second
-//! - **Memory Efficiency**: <8GB memory for 100M triple databases
-//! - **Concurrent Readers**: 1000+ simultaneous read operations
-//!
-//! ## Configuration
-//!
-//! The storage engine can be configured via [`TdbConfig`]:
-//!
-//! ```rust
-//! use oxirs_tdb::TdbConfig;
-//!
-//! let config = TdbConfig {
-//!     location: "./my-database".to_string(),
-//!     cache_size: 1024 * 1024 * 512, // 512MB cache
-//!     enable_transactions: true,
-//!     enable_mvcc: true,
-//! };
-//! ```
-//!
-//! ## Error Handling
-//!
-//! All operations return `anyhow::Result<T>` for comprehensive error handling.
-//! Common error scenarios include:
-//! - I/O errors during persistence operations
-//! - Transaction conflicts in concurrent environments
-//! - Serialization/deserialization failures
-//! - Index corruption or validation failures
 
-use anyhow::{anyhow, Result};
-use std::path::Path;
-
+// Core modules
 pub mod assembler;
+pub mod backup_restore;
+pub mod bitmap_index;
+pub mod block_manager;
 pub mod btree;
+pub mod checkpoint;
 pub mod compression;
+pub mod config;
+pub mod dictionary;
 pub mod filesystem;
+pub mod hash_index;
+pub mod lock_manager;
 pub mod mvcc;
 pub mod nodes;
 pub mod page;
 pub mod production_hardening;
 pub mod storage;
+pub mod timestamp_ordering;
 pub mod transactions;
 pub mod triple_store;
 pub mod wal;
 
+// Re-export key types for convenience
+pub use config::{TdbConfig as TdbAdvancedConfig, WorkloadType};
+
+use anyhow::{anyhow, Result};
+use std::path::Path;
+
 // Re-export main types for convenience
+pub use backup_restore::{
+    BackupConfig, BackupMetadata, BackupProgress, BackupRestoreManager, BackupRestoreStats,
+    BackupType, CompressionLevel, RecoveryOptions, RecoveryPhase, RecoveryProgress, RecoveryTarget,
+};
+pub use bitmap_index::{
+    BitmapCompression, BitmapIndex, BitmapIndexConfig, BitmapIndexStats, CompressedBitmap,
+};
+pub use block_manager::{
+    AllocationStrategy, BlockId, BlockManager, BlockManagerConfig, BlockManagerStats,
+    BlockMetadata, BlockStatus,
+};
+pub use checkpoint::{
+    CheckpointConfig, CheckpointManagerStats, CheckpointMetadata, CheckpointType,
+    DirtyPageStats, DirtyPageTracker, OnlineCheckpointManager, PageModificationInfo,
+};
 pub use compression::{
     AdaptiveCompressor, AdvancedCompressionType, ColumnStoreCompressor, CompressedData,
     CompressionMetadata,
 };
+pub use dictionary::{
+    DictionaryConfig, DictionaryStats, InternedString, StringDictionary, StringId,
+};
 pub use filesystem::{DatabaseMetadata, FileSystemConfig, FileType, TdbFileSystem};
+pub use hash_index::{HashIndex, HashIndexConfig, HashIndexStats};
+pub use lock_manager::{
+    LockGrant, LockManager, LockManagerConfig, LockManagerError, LockManagerStats, LockMode,
+    LockRequest,
+};
 pub use mvcc::{TransactionId, Version};
 pub use nodes::{NodeId, NodeTable, Term};
 pub use production_hardening::{
     CircuitBreaker, EdgeCaseValidator, HealthMetrics, HealthMonitor, ResourceLimits,
 };
+pub use timestamp_ordering::{
+    CausalRelation, ClockSyncManager, HybridLogicalClock, LamportTimestamp, NodeId as TimestampNodeId,
+    TimestampBundle, TimestampManager, TimestampStats, VectorClock,
+};
 pub use triple_store::{Quad, Triple, TripleStore, TripleStoreConfig, TripleStoreStats};
 
-/// Configuration for TDB storage engine
+// Export both simple and advanced configs
+// Removed TdbConfig alias to avoid conflict with config::TdbConfig
+
+/// Simple configuration for TDB storage engine
 ///
-/// This structure controls all aspects of the TDB storage engine behavior,
-/// including persistence location, memory usage, and feature enablement.
+/// This structure controls basic TDB storage engine behavior.
+/// For advanced configuration, use `TdbAdvancedConfig`.
 ///
 /// # Examples
 ///
 /// ```rust
-/// use oxirs_tdb::TdbConfig;
+/// use oxirs_tdb::SimpleTdbConfig;
 ///
 /// // Default configuration
-/// let config = TdbConfig::default();
+/// let config = SimpleTdbConfig::default();
 ///
 /// // Custom configuration for production
-/// let prod_config = TdbConfig {
+/// let prod_config = SimpleTdbConfig {
 ///     location: "/var/lib/oxirs/data".to_string(),
 ///     cache_size: 1024 * 1024 * 1024, // 1GB cache
 ///     enable_transactions: true,
@@ -150,7 +143,7 @@ pub use triple_store::{Quad, Triple, TripleStore, TripleStoreConfig, TripleStore
 /// };
 /// ```
 #[derive(Debug, Clone)]
-pub struct TdbConfig {
+pub struct SimpleTdbConfig {
     /// Database location on disk
     ///
     /// This directory will contain all database files including:
@@ -180,7 +173,7 @@ pub struct TdbConfig {
     pub enable_mvcc: bool,
 }
 
-impl Default for TdbConfig {
+impl Default for SimpleTdbConfig {
     fn default() -> Self {
         Self {
             location: "./tdb".to_string(),
@@ -256,7 +249,7 @@ impl Default for TdbConfig {
 /// - **Compression**: Enable advanced compression for space-constrained environments
 /// - **File Layout**: TDB2-compatible file organization for optimal I/O patterns
 pub struct TdbStore {
-    config: TdbConfig,
+    config: SimpleTdbConfig,
     filesystem: TdbFileSystem,
     triple_store: TripleStore,
     health_monitor: HealthMonitor,
@@ -296,7 +289,7 @@ impl TdbStore {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn new(config: TdbConfig) -> Result<Self> {
+    pub fn new(config: SimpleTdbConfig) -> Result<Self> {
         // Initialize TDB2-compatible file system
         let filesystem_config = FileSystemConfig {
             create_if_missing: true,
@@ -343,7 +336,7 @@ impl TdbStore {
 
     /// Open an existing TDB store
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let config = TdbConfig {
+        let config = SimpleTdbConfig {
             location: path.as_ref().to_string_lossy().to_string(),
             ..Default::default()
         };

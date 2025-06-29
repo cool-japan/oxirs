@@ -89,6 +89,7 @@ pub enum ExecutionStrategy {
 }
 
 /// Query planner for federated execution
+#[derive(Debug, Clone)]
 pub struct QueryPlanner {
     config: FederationConfig,
     endpoints: Arc<RwLock<HashMap<String, ServiceEndpoint>>>,
@@ -113,7 +114,7 @@ pub trait ServiceDiscovery: Send + Sync {
 
 /// Cost estimation interface for query planning
 #[async_trait::async_trait]
-pub trait CostEstimator: Send + Sync {
+pub trait CostEstimator: Send + Sync + std::fmt::Debug {
     /// Estimate query execution cost for a specific endpoint
     async fn estimate_cost(&self, query: &Query, endpoint: &ServiceEndpoint) -> Result<QueryCost>;
 
@@ -129,6 +130,7 @@ pub trait CostEstimator: Send + Sync {
 }
 
 /// Parallel service execution coordinator
+#[derive(Debug)]
 pub struct ParallelServiceExecutor {
     max_concurrent: usize,
     timeout: Duration,
@@ -192,6 +194,7 @@ pub struct DefaultServiceDiscovery {
 }
 
 /// Default cost estimator using historical statistics
+#[derive(Debug)]
 pub struct DefaultCostEstimator {
     statistics: Arc<RwLock<QueryStatistics>>,
     default_estimates: DefaultEstimates,
@@ -321,7 +324,7 @@ impl CostEstimator for DefaultCostEstimator {
         let stats = self.statistics.read().await;
 
         // Generate a simplified pattern key for the query
-        let pattern_key = format!("{:?}", query.query_type());
+        let pattern_key = format!("{:?}", query.query_type);
 
         let cost = if let Some(pattern_stats) = stats.pattern_stats.get(&pattern_key) {
             // Use historical data
@@ -369,7 +372,7 @@ impl CostEstimator for DefaultCostEstimator {
 
         Ok(stats
             .service_stats
-            .get(&endpoint.url)
+            .get(&endpoint.url.to_string())
             .cloned()
             .unwrap_or_default())
     }
@@ -380,7 +383,7 @@ impl DefaultCostEstimator {
     fn calculate_complexity(&self, query: &Query) -> f64 {
         // Simple complexity calculation based on query type
         // In a real implementation, this would analyze the query structure
-        match query.query_type() {
+        match query.query_type {
             QueryType::Select => 1.0,
             QueryType::Construct => 2.0,
             QueryType::Ask => 0.5,
@@ -1008,7 +1011,7 @@ impl QueryPlanner {
         let query_string = format!("{:?}", step.sub_query);
 
         // Execute with retry logic
-        let result = self
+        let json_result = self
             .parallel_executor
             .execute_with_retry(|| {
                 let client = http_client.clone();
@@ -1042,16 +1045,15 @@ impl QueryPlanner {
                         });
                     }
 
-                    let json_result: serde_json::Value =
-                        response.json().await.map_err(|e| Error::Parse {
-                            message: format!("Failed to parse JSON response: {}", e),
-                        })?;
-
-                    // Parse SPARQL JSON results
-                    self.parse_sparql_results(json_result)
+                    response.json().await.map_err(|e| Error::Parse {
+                        message: format!("Failed to parse JSON response: {}", e),
+                    })
                 })
             })
             .await?;
+
+        // Parse SPARQL JSON results
+        let result = self.parse_sparql_results(json_result)?;
 
         // Update statistics
         let execution_time = start_time.elapsed();

@@ -3,6 +3,7 @@
 use crate::{Vector, VectorIndex};
 use anyhow::{anyhow, Result};
 use oxirs_core::parallel::*;
+use oxirs_core::Triple;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
@@ -93,6 +94,7 @@ impl DistanceMetric {
 pub struct SearchResult {
     pub uri: String,
     pub distance: f32,
+    pub score: f32,
     pub metadata: Option<HashMap<String, String>>,
 }
 
@@ -231,6 +233,7 @@ impl AdvancedVectorIndex {
                 .map(|result| SearchResult {
                     uri: self.vectors[result.d_id].0.clone(),
                     distance: result.distance,
+                    score: 1.0 - result.distance, // Convert distance to similarity score
                     metadata: None,
                 })
                 .collect())
@@ -279,6 +282,7 @@ impl AdvancedVectorIndex {
                 heap.push(std::cmp::Reverse(SearchResult {
                     uri: uri.clone(),
                     distance,
+                    score: 1.0 - distance, // Convert distance to similarity score
                     metadata: None,
                 }));
             } else if let Some(std::cmp::Reverse(worst)) = heap.peek() {
@@ -287,6 +291,7 @@ impl AdvancedVectorIndex {
                     heap.push(std::cmp::Reverse(SearchResult {
                         uri: uri.clone(),
                         distance,
+                        score: 1.0 - distance, // Convert distance to similarity score
                         metadata: None,
                     }));
                 }
@@ -332,6 +337,7 @@ impl AdvancedVectorIndex {
                         local_heap.push(std::cmp::Reverse(SearchResult {
                             uri: uri.clone(),
                             distance,
+                            score: 1.0 - distance, // Convert distance to similarity score
                             metadata: None,
                         }));
                     } else if let Some(std::cmp::Reverse(worst)) = local_heap.peek() {
@@ -340,6 +346,7 @@ impl AdvancedVectorIndex {
                             local_heap.push(std::cmp::Reverse(SearchResult {
                                 uri: uri.clone(),
                                 distance,
+                                score: 1.0 - distance, // Convert distance to similarity score
                                 metadata: None,
                             }));
                         }
@@ -394,6 +401,35 @@ impl AdvancedVectorIndex {
             self.uri_to_id.len() * (std::mem::size_of::<String>() + std::mem::size_of::<usize>());
 
         vector_memory + uri_map_memory
+    }
+
+    /// Get the number of vectors in the index
+    pub fn len(&self) -> usize {
+        self.vectors.len()
+    }
+
+    /// Check if the index is empty
+    pub fn is_empty(&self) -> bool {
+        self.vectors.is_empty()
+    }
+
+    /// Add a vector with RDF triple and metadata (for compatibility with tests)
+    pub fn add(
+        &mut self,
+        id: String,
+        vector: Vec<f32>,
+        _triple: Triple,
+        _metadata: HashMap<String, String>,
+    ) -> Result<()> {
+        let vector_obj = Vector::new(vector);
+        self.insert(id, vector_obj)
+    }
+
+    /// Search for nearest neighbors (for compatibility with tests)
+    pub fn search(&self, query: &[f32], k: usize) -> Result<Vec<SearchResult>> {
+        let query_vector = Vector::new(query.to_vec());
+        let results = self.search_advanced(&query_vector, k, None, None)?;
+        Ok(results)
     }
 }
 

@@ -62,7 +62,7 @@ fn debug_qualified_cardinality_min_violation() {
     person_shape.add_constraint(
         ConstraintComponentId::new("qualifiedValueShape"),
         Constraint::QualifiedValueShape(constraints::QualifiedValueShapeConstraint {
-            qualified_value_shape: ShapeId::new("http://example.org/FriendShape"),
+            shape: ShapeId::new("http://example.org/FriendShape"),
             qualified_min_count: Some(1),
             qualified_max_count: None,
             qualified_value_shapes_disjoint: false,

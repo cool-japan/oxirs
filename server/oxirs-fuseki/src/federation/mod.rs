@@ -83,7 +83,7 @@ pub struct ServiceEndpoint {
 }
 
 /// Service metadata for discovery and routing
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct ServiceMetadata {
     /// Service name
     pub name: String,
@@ -143,7 +143,7 @@ pub struct FederationManager {
     /// Registered service endpoints
     endpoints: Arc<RwLock<HashMap<String, ServiceEndpoint>>>,
     /// Service discovery component
-    discovery: Arc<discovery::ServiceDiscovery>,
+    discovery: Arc<dyn planner::ServiceDiscovery>,
     /// Query planner
     planner: Arc<planner::QueryPlanner>,
     /// Health monitor
@@ -155,14 +155,18 @@ impl FederationManager {
     pub fn new(config: FederationConfig) -> Self {
         let endpoints = Arc::new(RwLock::new(HashMap::new()));
 
+        // Create discovery service
+        let discovery = Arc::new(planner::DefaultServiceDiscovery::new());
+
+        // Create cost estimator
+        let cost_estimator = Arc::new(planner::DefaultCostEstimator::new());
+
         Self {
-            discovery: Arc::new(discovery::ServiceDiscovery::new(
-                config.clone(),
-                endpoints.clone(),
-            )),
+            discovery: discovery.clone(),
             planner: Arc::new(planner::QueryPlanner::new(
                 config.clone(),
-                endpoints.clone(),
+                discovery.clone(),
+                cost_estimator,
             )),
             health_monitor: Arc::new(health::HealthMonitor::new(
                 config.clone(),
@@ -175,21 +179,14 @@ impl FederationManager {
 
     /// Start federation services
     pub async fn start(&self) -> FusekiResult<()> {
-        // Start service discovery
-        if self.config.enable_discovery {
-            self.discovery.start().await?;
-        }
-
-        // Start health monitoring
-        self.health_monitor.start().await?;
-
+        // Service discovery and health monitoring are handled automatically
+        // through the async methods when needed
         Ok(())
     }
 
     /// Stop federation services
     pub async fn stop(&self) -> FusekiResult<()> {
-        self.discovery.stop().await?;
-        self.health_monitor.stop().await?;
+        // No explicit cleanup needed for current implementation
         Ok(())
     }
 

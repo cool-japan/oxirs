@@ -4,10 +4,7 @@
 //! route requests to different storage backends and migrate data between them.
 
 use crate::model::{Triple, TriplePattern};
-use crate::storage::{
-    columnar::ColumnarStorage, immutable::ImmutableStorage, temporal::TemporalStorage,
-    tiered::TieredStorageEngine, StorageEngine,
-};
+use crate::storage::{tiered::TieredStorageEngine, StorageEngine};
 use crate::OxirsError;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};

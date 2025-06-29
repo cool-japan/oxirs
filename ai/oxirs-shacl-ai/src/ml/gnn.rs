@@ -59,6 +59,10 @@ pub enum GNNArchitecture {
     EntityCompletion,
     /// Relation Completion Network  
     RelationCompletion,
+    /// Graph Transformer for advanced pattern recognition
+    GraphTransformer,
+    /// Hierarchical Graph Transformer
+    HierarchicalGraphTransformer,
 }
 
 /// Activation functions
@@ -93,6 +97,8 @@ enum GNNLayer {
     GraphCompletionLayer(GraphCompletionLayerState),
     EntityCompletionLayer(EntityCompletionLayerState),
     RelationCompletionLayer(RelationCompletionLayerState),
+    GraphTransformerLayer(GraphTransformerLayerState),
+    HierarchicalGraphTransformerLayer(HierarchicalGraphTransformerLayerState),
 }
 
 /// GCN layer state
@@ -172,6 +178,20 @@ struct RelationCompletionLayerState {
     completion_head: Array2<f64>,
     input_dim: usize,
     output_dim: usize,
+}
+
+/// Graph Transformer layer state
+#[derive(Debug, Clone)]
+struct GraphTransformerLayerState {
+    attention_weights: Array2<f64>,
+    feed_forward: Array2<f64>,
+}
+
+/// Hierarchical Graph Transformer layer state
+#[derive(Debug, Clone)]
+struct HierarchicalGraphTransformerLayerState {
+    hierarchical_attention: Array3<f64>,
+    level_encoders: Vec<Array2<f64>>,
 }
 
 /// Scoring functions for graph completion
@@ -273,6 +293,12 @@ impl GraphNeuralNetwork {
                 ),
                 GNNArchitecture::RelationCompletion => GNNLayer::RelationCompletionLayer(
                     Self::init_relation_completion_layer(current_dim, output_dim),
+                ),
+                GNNArchitecture::GraphTransformer => GNNLayer::GraphTransformerLayer(
+                    Self::init_graph_transformer_layer(current_dim, output_dim),
+                ),
+                GNNArchitecture::HierarchicalGraphTransformer => GNNLayer::HierarchicalGraphTransformerLayer(
+                    Self::init_hierarchical_graph_transformer_layer(current_dim, output_dim),
                 ),
             };
 
@@ -534,6 +560,12 @@ impl GraphNeuralNetwork {
                 }
                 GNNLayer::RelationCompletionLayer(rc) => {
                     self.relation_completion_forward(rc, &hidden, &adj_matrix, graph_data)?
+                }
+                GNNLayer::GraphTransformerLayer(gt) => {
+                    self.graph_transformer_forward(gt, &hidden, &adj_matrix)?
+                }
+                GNNLayer::HierarchicalGraphTransformerLayer(hgt) => {
+                    self.hierarchical_graph_transformer_forward(hgt, &hidden, &adj_matrix)?
                 }
             };
 
@@ -1129,6 +1161,16 @@ impl GraphNeuralNetwork {
                         layer.pattern_encoder = &layer.pattern_encoder - &update;
                         layer.relation_embedding = &layer.relation_embedding - &update;
                     }
+                    GNNLayer::GraphTransformerLayer(ref mut layer) => {
+                        let update = &grad.weight_gradients * learning_rate;
+                        layer.attention_weights = &layer.attention_weights - &update;
+                        layer.feed_forward = &layer.feed_forward - &update;
+                    }
+                    GNNLayer::HierarchicalGraphTransformerLayer(ref mut layer) => {
+                        let update = &grad.weight_gradients * learning_rate;
+                        layer.hierarchical_attention = &layer.hierarchical_attention - &update;
+                        layer.level_encoders = layer.level_encoders.iter().map(|encoder| encoder - &update).collect();
+                    }
                 }
             }
         }
@@ -1312,6 +1354,52 @@ impl GraphNeuralNetwork {
         let sum_exp: f64 = exp_logits.iter().sum();
 
         exp_logits.iter().map(|&x| x / sum_exp).collect()
+    }
+
+    /// Initialize Graph Transformer layer
+    fn init_graph_transformer_layer(input_dim: usize, output_dim: usize) -> GraphTransformerLayerState {
+        GraphTransformerLayerState {
+            attention_weights: Array2::from_elem((input_dim, output_dim), 0.1),
+            feed_forward: Array2::from_elem((output_dim, output_dim), 0.1),
+        }
+    }
+
+    /// Initialize Hierarchical Graph Transformer layer
+    fn init_hierarchical_graph_transformer_layer(input_dim: usize, output_dim: usize) -> HierarchicalGraphTransformerLayerState {
+        HierarchicalGraphTransformerLayerState {
+            hierarchical_attention: Array3::from_elem((2, input_dim, output_dim), 0.1),
+            level_encoders: vec![
+                Array2::from_elem((input_dim, output_dim), 0.1);
+                3
+            ],
+        }
+    }
+
+    /// Graph Transformer forward pass
+    fn graph_transformer_forward(
+        &self,
+        layer: &GraphTransformerLayerState,
+        input: &Array2<f64>,
+        adj_matrix: &Array2<f64>,
+    ) -> Result<Array2<f64>, ModelError> {
+        // Simplified transformer implementation
+        let attended = input.dot(&layer.attention_weights);
+        let output = attended.dot(&layer.feed_forward);
+        Ok(output)
+    }
+
+    /// Hierarchical Graph Transformer forward pass
+    fn hierarchical_graph_transformer_forward(
+        &self,
+        layer: &HierarchicalGraphTransformerLayerState,
+        input: &Array2<f64>,
+        adj_matrix: &Array2<f64>,
+    ) -> Result<Array2<f64>, ModelError> {
+        // Simplified hierarchical transformer implementation
+        let level0 = input.dot(&layer.level_encoders[0]);
+        let level1 = level0.dot(&layer.level_encoders[1]);
+        let output = level1.dot(&layer.level_encoders[2]);
+        Ok(output)
     }
 }
 

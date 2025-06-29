@@ -439,7 +439,7 @@ async fn retrieve_graph_from_store(
                     Ok(format!("# Graph: {}\n<http://example.org/subject> <http://example.org/predicate> \"object\" .", uri))
                 }
                 ct if ct == rdf_content_types::N_TRIPLES => {
-                    Ok("<http://example.org/subject> <http://example.org/predicate> \"object\" .")
+                    Ok("<http://example.org/subject> <http://example.org/predicate> \"object\" .".to_string())
                 }
                 _ => Ok("".to_string())
             }

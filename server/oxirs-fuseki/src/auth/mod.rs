@@ -69,7 +69,7 @@ pub struct MfaChallenge {
 }
 
 /// MFA authentication types
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum MfaType {
     Totp,     // Time-based One-Time Password
@@ -123,6 +123,14 @@ pub enum Permission {
     UserManagement,
     SystemConfig,
     SystemMetrics,
+}
+
+/// MFA status for a user
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MfaStatus {
+    pub enabled: bool,
+    pub methods: Vec<MfaType>,
+    pub backup_codes_generated: bool,
 }
 
 /// JWT claims structure
@@ -731,6 +739,16 @@ impl AuthService {
         self.ldap_service.is_some()
     }
 
+    /// Get JWT configuration if available
+    pub fn jwt_config(&self) -> Option<&crate::config::JwtConfig> {
+        self.config.jwt.as_ref()
+    }
+
+    /// Get LDAP configuration if available
+    pub fn ldap_config(&self) -> Option<&crate::config::LdapConfig> {
+        self.config.ldap.as_ref()
+    }
+
     // Certificate-based Authentication Methods
 
     /// Authenticate user using X.509 client certificate
@@ -1089,6 +1107,44 @@ impl AuthService {
         Ok(challenge)
     }
 
+    /// Store MFA challenge (for temporary storage)
+    pub async fn store_mfa_challenge(&self, challenge: &MfaChallenge) -> FusekiResult<()> {
+        // TODO: Implement proper challenge storage
+        // For now, this is a stub that would store challenges in a temporary cache
+        debug!("Storing MFA challenge: {}", challenge.challenge_id);
+        Ok(())
+    }
+
+    /// Get MFA challenge from storage
+    pub async fn get_mfa_challenge(
+        &self,
+        challenge_id: &str,
+    ) -> FusekiResult<Option<MfaChallenge>> {
+        // TODO: Implement proper challenge retrieval
+        // For now, this is a stub that would retrieve challenges from a temporary cache
+        debug!("Retrieving MFA challenge: {}", challenge_id);
+
+        // Return a mock challenge for demonstration
+        if !challenge_id.is_empty() {
+            Ok(Some(MfaChallenge {
+                challenge_id: challenge_id.to_string(),
+                challenge_type: MfaType::Totp,
+                expires_at: Utc::now() + chrono::Duration::minutes(5),
+                attempts_remaining: 3,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Remove MFA challenge from storage
+    pub async fn remove_mfa_challenge(&self, challenge_id: &str) -> FusekiResult<()> {
+        // TODO: Implement proper challenge removal
+        // For now, this is a stub that would remove challenges from a temporary cache
+        debug!("Removing MFA challenge: {}", challenge_id);
+        Ok(())
+    }
+
     /// Verify MFA challenge response
     pub async fn verify_mfa_challenge(
         &self,
@@ -1278,6 +1334,180 @@ impl AuthService {
         permissions.dedup();
 
         permissions
+    }
+
+    /// Update MFA challenge in storage
+    pub async fn update_mfa_challenge(&self, challenge: &MfaChallenge) -> FusekiResult<()> {
+        // TODO: Implement proper challenge update storage
+        // For now, this is a stub that would update challenges in a temporary cache
+        debug!("Updating MFA challenge: {}", challenge.challenge_id);
+        Ok(())
+    }
+
+    /// Get user MFA status
+    pub async fn get_user_mfa_status(&self, username: &str) -> FusekiResult<Option<MfaStatus>> {
+        // TODO: Implement proper MFA status retrieval from user storage
+        // For now, this is a stub that would retrieve MFA status from user configuration
+        debug!("Getting MFA status for user: {}", username);
+
+        // Return mock MFA status for demonstration
+        Ok(Some(MfaStatus {
+            enabled: false,
+            methods: vec![],
+            backup_codes_generated: false,
+        }))
+    }
+
+    /// Disable a specific MFA method for a user
+    pub async fn disable_mfa_method(
+        &self,
+        username: &str,
+        mfa_type: &MfaType,
+    ) -> FusekiResult<bool> {
+        // TODO: Implement proper MFA method disabling in user storage
+        // For now, this is a stub that would disable MFA methods in user configuration
+        debug!("Disabling MFA method {:?} for user: {}", mfa_type, username);
+
+        // Return mock success for demonstration
+        Ok(true)
+    }
+
+    /// Store backup codes for a user
+    pub async fn store_backup_codes(&self, username: &str, codes: &[String]) -> FusekiResult<()> {
+        // TODO: Implement proper backup codes storage
+        debug!(
+            "Storing {} backup codes for user: {}",
+            codes.len(),
+            username
+        );
+        Ok(())
+    }
+
+    /// Store TOTP secret for a user
+    pub async fn store_totp_secret(&self, username: &str, secret: &str) -> FusekiResult<()> {
+        // TODO: Implement proper TOTP secret storage
+        debug!("Storing TOTP secret for user: {}", username);
+        Ok(())
+    }
+
+    /// Store SMS phone number for a user
+    pub async fn store_sms_phone(&self, username: &str, phone: &str) -> FusekiResult<()> {
+        // TODO: Implement proper SMS phone storage
+        debug!("Storing SMS phone for user: {}", username);
+        Ok(())
+    }
+
+    /// Store MFA email address for a user
+    pub async fn store_mfa_email(&self, username: &str, email: &str) -> FusekiResult<()> {
+        // TODO: Implement proper MFA email storage
+        debug!("Storing MFA email for user: {}", username);
+        Ok(())
+    }
+
+    /// Store WebAuthn challenge for a user
+    pub async fn store_webauthn_challenge(
+        &self,
+        username: &str,
+        challenge: &str,
+    ) -> FusekiResult<()> {
+        // TODO: Implement proper WebAuthn challenge storage
+        debug!("Storing WebAuthn challenge for user: {}", username);
+        Ok(())
+    }
+
+    /// Get user SMS phone number
+    pub async fn get_user_sms_phone(&self, username: &str) -> FusekiResult<Option<String>> {
+        // TODO: Implement proper SMS phone retrieval
+        debug!("Getting SMS phone for user: {}", username);
+        Ok(None)
+    }
+
+    /// Get user MFA email address
+    pub async fn get_user_mfa_email(&self, username: &str) -> FusekiResult<Option<String>> {
+        // TODO: Implement proper MFA email retrieval
+        debug!("Getting MFA email for user: {}", username);
+        Ok(None)
+    }
+
+    /// Check if SAML authentication is enabled
+    pub fn is_saml_enabled(&self) -> bool {
+        self.config.saml.is_some()
+    }
+
+    /// Generate SAML authentication request
+    #[cfg(feature = "saml")]
+    pub async fn generate_saml_auth_request(
+        &self,
+        target_url: &str,
+        force_authn: bool,
+        relay_state: &str,
+    ) -> FusekiResult<(String, String)> {
+        if let Some(ref saml_provider) = self.saml_provider {
+            saml_provider.generate_auth_request(target_url, force_authn, relay_state).await
+        } else {
+            Err(FusekiError::configuration("SAML not configured"))
+        }
+    }
+
+    /// Complete SAML authentication
+    #[cfg(feature = "saml")]
+    pub async fn complete_saml_authentication(&self, user: User) -> FusekiResult<AuthResult> {
+        // Store SAML user session information if needed
+        debug!("Completing SAML authentication for user: {}", user.username);
+        Ok(AuthResult::Authenticated(user))
+    }
+
+    /// Logout user by SAML session index
+    #[cfg(feature = "saml")]
+    pub async fn logout_by_session_index(&self, session_index: &str) -> FusekiResult<bool> {
+        debug!("Logging out SAML session: {}", session_index);
+        
+        // Find and invalidate sessions by SAML session index
+        let mut sessions = self.sessions.write().await;
+        let mut removed_count = 0;
+        
+        sessions.retain(|_, session| {
+            // In a real implementation, you'd store SAML session index with the session
+            // For now, we'll remove all sessions (simplified)
+            removed_count += 1;
+            false
+        });
+        
+        Ok(removed_count > 0)
+    }
+
+    /// Get SAML service provider configuration
+    #[cfg(feature = "saml")]
+    pub fn get_saml_sp_config(&self) -> FusekiResult<&crate::auth::saml::SamlConfig> {
+        self.config.saml.as_ref().ok_or_else(|| {
+            FusekiError::configuration("SAML not configured")
+        })
+    }
+
+    /// Non-feature version of SAML methods for compilation compatibility
+    #[cfg(not(feature = "saml"))]
+    pub async fn generate_saml_auth_request(
+        &self,
+        _target_url: &str,
+        _force_authn: bool,
+        _relay_state: &str,
+    ) -> FusekiResult<(String, String)> {
+        Err(FusekiError::configuration("SAML feature not enabled"))
+    }
+
+    #[cfg(not(feature = "saml"))]
+    pub async fn complete_saml_authentication(&self, _user: User) -> FusekiResult<AuthResult> {
+        Err(FusekiError::configuration("SAML feature not enabled"))
+    }
+
+    #[cfg(not(feature = "saml"))]
+    pub async fn logout_by_session_index(&self, _session_index: &str) -> FusekiResult<bool> {
+        Err(FusekiError::configuration("SAML feature not enabled"))
+    }
+
+    #[cfg(not(feature = "saml"))]
+    pub fn get_saml_sp_config(&self) -> FusekiResult<()> {
+        Err(FusekiError::configuration("SAML feature not enabled"))
     }
 }
 

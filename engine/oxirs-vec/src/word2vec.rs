@@ -734,6 +734,7 @@ mod tests {
     fn test_aggregation_methods() {
         let mut config = Word2VecConfig::default();
         config.dimensions = 3;
+        config.normalize = false;
 
         let embedding_config = EmbeddingConfig {
             model_name: "test".to_string(),

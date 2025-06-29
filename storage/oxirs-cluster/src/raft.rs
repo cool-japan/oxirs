@@ -81,6 +81,10 @@ pub struct RdfApp {
     pub triples: BTreeSet<(String, String, String)>,
     /// Active transactions
     pub transactions: BTreeMap<String, BTreeSet<(String, String, String)>>,
+    /// Shard-based storage for distributed operations
+    pub shards: BTreeMap<crate::shard::ShardId, BTreeSet<(String, String, String)>>,
+    /// Shards marked for deletion
+    pub deleted_shards: BTreeSet<crate::shard::ShardId>,
 }
 
 impl Default for RdfApp {
@@ -88,6 +92,8 @@ impl Default for RdfApp {
         Self {
             triples: BTreeSet::new(),
             transactions: BTreeMap::new(),
+            shards: BTreeMap::new(),
+            deleted_shards: BTreeSet::new(),
         }
     }
 }
@@ -192,6 +198,136 @@ impl RdfApp {
             })
             .cloned()
             .collect()
+    }
+
+    /// Create a new shard
+    pub fn create_shard(&mut self, shard_id: crate::shard::ShardId) {
+        self.shards.insert(shard_id, BTreeSet::new());
+    }
+
+    /// Delete a shard
+    pub fn delete_shard(&mut self, shard_id: crate::shard::ShardId) {
+        self.shards.remove(&shard_id);
+        self.deleted_shards.remove(&shard_id);
+    }
+
+    /// Insert a triple into a specific shard
+    pub fn insert_triple_to_shard(&mut self, shard_id: crate::shard::ShardId, triple: oxirs_core::model::Triple) {
+        let triple_tuple = (
+            triple.subject().to_string(),
+            triple.predicate().to_string(),
+            triple.object().to_string(),
+        );
+        
+        let shard = self.shards.entry(shard_id).or_insert_with(BTreeSet::new);
+        shard.insert(triple_tuple);
+    }
+
+    /// Delete a triple from a specific shard
+    pub fn delete_triple_from_shard(&mut self, shard_id: crate::shard::ShardId, triple: &oxirs_core::model::Triple) {
+        let triple_tuple = (
+            triple.subject().to_string(),
+            triple.predicate().to_string(),
+            triple.object().to_string(),
+        );
+        
+        if let Some(shard) = self.shards.get_mut(&shard_id) {
+            shard.remove(&triple_tuple);
+        }
+    }
+
+    /// Query triples from a specific shard
+    pub fn query_shard(
+        &self,
+        shard_id: crate::shard::ShardId,
+        subject: Option<&str>,
+        predicate: Option<&str>,
+        object: Option<&str>,
+    ) -> Vec<oxirs_core::model::Triple> {
+        if let Some(shard) = self.shards.get(&shard_id) {
+            shard
+                .iter()
+                .filter(|(s, p, o)| {
+                    subject.map_or(true, |subj| s == subj)
+                        && predicate.map_or(true, |pred| p == pred)
+                        && object.map_or(true, |obj| o == obj)
+                })
+                .filter_map(|(s, p, o)| {
+                    // Convert string tuple back to Triple
+                    // This is a simplified conversion; in practice you'd want proper parsing
+                    use oxirs_core::model::{NamedNode, Literal, Triple};
+                    if let (Ok(subj), Ok(pred)) = (NamedNode::new(s), NamedNode::new(p)) {
+                        // Try to parse object as NamedNode first, then as Literal
+                        if let Ok(obj_node) = NamedNode::new(o) {
+                            Some(Triple::new(subj, pred, obj_node))
+                        } else {
+                            // Treat as literal
+                            Some(Triple::new(subj, pred, Literal::new_simple_literal(o)))
+                        }
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Get shard size in bytes (estimated)
+    pub fn get_shard_size(&self, shard_id: crate::shard::ShardId) -> u64 {
+        if let Some(shard) = self.shards.get(&shard_id) {
+            // Estimate 100 bytes per triple
+            (shard.len() * 100) as u64
+        } else {
+            0
+        }
+    }
+
+    /// Get shard triple count
+    pub fn get_shard_triple_count(&self, shard_id: crate::shard::ShardId) -> usize {
+        self.shards.get(&shard_id).map_or(0, |shard| shard.len())
+    }
+
+    /// Export all triples from a shard
+    pub fn export_shard(&self, shard_id: crate::shard::ShardId) -> Vec<oxirs_core::model::Triple> {
+        self.query_shard(shard_id, None, None, None)
+    }
+
+    /// Import triples into a shard
+    pub fn import_shard(&mut self, shard_id: crate::shard::ShardId, triples: Vec<oxirs_core::model::Triple>) {
+        let shard = self.shards.entry(shard_id).or_insert_with(BTreeSet::new);
+        for triple in triples {
+            let triple_tuple = (
+                triple.subject().to_string(),
+                triple.predicate().to_string(),
+                triple.object().to_string(),
+            );
+            shard.insert(triple_tuple);
+        }
+    }
+
+    /// Get all triples from a shard
+    pub fn get_shard_triples(&self, shard_id: crate::shard::ShardId) -> Vec<oxirs_core::model::Triple> {
+        self.export_shard(shard_id)
+    }
+
+    /// Insert multiple triples into a shard
+    pub fn insert_triples_to_shard(&mut self, shard_id: crate::shard::ShardId, triples: Vec<oxirs_core::model::Triple>) {
+        let shard = self.shards.entry(shard_id).or_insert_with(BTreeSet::new);
+        for triple in triples {
+            let triple_tuple = (
+                triple.subject().to_string(),
+                triple.predicate().to_string(),
+                triple.object().to_string(),
+            );
+            shard.insert(triple_tuple);
+        }
+    }
+
+    /// Mark a shard for deletion
+    pub fn mark_shard_for_deletion(&mut self, shard_id: crate::shard::ShardId) {
+        self.deleted_shards.insert(shard_id);
     }
 }
 

@@ -689,24 +689,403 @@ impl NeuralPatternRecognizer {
     fn cluster_pattern_embeddings(&self, embeddings: &[Array1<f64>]) -> Result<Vec<Vec<usize>>> {
         tracing::debug!("Clustering {} pattern embeddings", embeddings.len());
 
-        // Simplified k-means clustering for pattern discovery
-        let num_clusters = (embeddings.len() / 3).max(1).min(10);
-        let mut clusters = vec![Vec::new(); num_clusters];
+        if embeddings.is_empty() {
+            return Ok(Vec::new());
+        }
 
-        // Simple assignment based on first dimension (in production, use proper k-means)
-        for (i, embedding) in embeddings.iter().enumerate() {
-            let cluster_id = if !embedding.is_empty() {
-                ((embedding[0] * num_clusters as f64).abs() as usize) % num_clusters
-            } else {
-                i % num_clusters
-            };
-            clusters[cluster_id].push(i);
+        // Choose clustering algorithm based on data characteristics
+        let clusters = if embeddings.len() < 10 {
+            // For small datasets, use hierarchical clustering
+            self.hierarchical_clustering(embeddings)?
+        } else if embeddings.len() < 100 {
+            // For medium datasets, use K-means with automatic K selection
+            self.adaptive_kmeans_clustering(embeddings)?
+        } else {
+            // For large datasets, use DBSCAN for density-based clustering
+            self.dbscan_clustering(embeddings)?
+        };
+
+        // Filter out singleton clusters if we have enough data
+        let min_cluster_size = if embeddings.len() > 20 { 2 } else { 1 };
+        let filtered_clusters: Vec<Vec<usize>> = clusters
+            .into_iter()
+            .filter(|cluster| cluster.len() >= min_cluster_size)
+            .collect();
+
+        Ok(filtered_clusters)
+    }
+
+    /// K-means clustering with adaptive K selection using elbow method
+    fn adaptive_kmeans_clustering(&self, embeddings: &[Array1<f64>]) -> Result<Vec<Vec<usize>>> {
+        let max_k = (embeddings.len() / 3).max(2).min(8);
+        let mut best_k = 2;
+        let mut best_inertia = f64::INFINITY;
+        let mut inertias = Vec::new();
+
+        // Try different K values and find optimal using elbow method
+        for k in 2..=max_k {
+            let clusters = self.kmeans_clustering(embeddings, k)?;
+            let inertia = self.calculate_inertia(embeddings, &clusters)?;
+            inertias.push(inertia);
+
+            if k == 2 || inertia < best_inertia {
+                best_inertia = inertia;
+                best_k = k;
+            }
+        }
+
+        // Apply elbow method to find optimal K
+        if inertias.len() >= 2 {
+            let optimal_k = self.find_elbow_point(&inertias) + 2; // +2 because we start from k=2
+            best_k = optimal_k.min(max_k);
+        }
+
+        tracing::debug!("Selected optimal K={} for clustering", best_k);
+        self.kmeans_clustering(embeddings, best_k)
+    }
+
+    /// Standard K-means clustering algorithm
+    fn kmeans_clustering(&self, embeddings: &[Array1<f64>], k: usize) -> Result<Vec<Vec<usize>>> {
+        if embeddings.is_empty() || k == 0 {
+            return Ok(Vec::new());
+        }
+
+        let max_iterations = 100;
+        let tolerance = 1e-4;
+        let embedding_dim = embeddings[0].len();
+
+        // Initialize centroids randomly
+        let mut centroids = self.initialize_centroids(embeddings, k)?;
+        let mut assignments = vec![0; embeddings.len()];
+        let mut clusters = vec![Vec::new(); k];
+
+        for iteration in 0..max_iterations {
+            // Assignment step
+            let mut changed = false;
+            for (i, embedding) in embeddings.iter().enumerate() {
+                let mut best_centroid = 0;
+                let mut best_distance = f64::INFINITY;
+
+                for (j, centroid) in centroids.iter().enumerate() {
+                    let distance = self.euclidean_distance(embedding, centroid);
+                    if distance < best_distance {
+                        best_distance = distance;
+                        best_centroid = j;
+                    }
+                }
+
+                if assignments[i] != best_centroid {
+                    assignments[i] = best_centroid;
+                    changed = true;
+                }
+            }
+
+            // Clear clusters and reassign
+            for cluster in &mut clusters {
+                cluster.clear();
+            }
+            for (i, &assignment) in assignments.iter().enumerate() {
+                clusters[assignment].push(i);
+            }
+
+            // Update step
+            let mut centroid_movement = 0.0;
+            for (j, cluster) in clusters.iter().enumerate() {
+                if !cluster.is_empty() {
+                    let old_centroid = centroids[j].clone();
+                    
+                    // Calculate new centroid as mean of assigned points
+                    let mut new_centroid = Array1::zeros(embedding_dim);
+                    for &idx in cluster {
+                        new_centroid = new_centroid + &embeddings[idx];
+                    }
+                    new_centroid = new_centroid / cluster.len() as f64;
+                    
+                    centroid_movement += self.euclidean_distance(&old_centroid, &new_centroid);
+                    centroids[j] = new_centroid;
+                }
+            }
+
+            // Check for convergence
+            if !changed || centroid_movement < tolerance {
+                tracing::debug!("K-means converged after {} iterations", iteration + 1);
+                break;
+            }
         }
 
         // Filter out empty clusters
-        clusters.retain(|cluster| !cluster.is_empty());
+        let filtered_clusters: Vec<Vec<usize>> = clusters
+            .into_iter()
+            .filter(|cluster| !cluster.is_empty())
+            .collect();
+
+        Ok(filtered_clusters)
+    }
+
+    /// DBSCAN clustering for density-based pattern discovery
+    fn dbscan_clustering(&self, embeddings: &[Array1<f64>]) -> Result<Vec<Vec<usize>>> {
+        let eps = self.estimate_eps(embeddings)?;
+        let min_pts = 3.max(embeddings.len() / 50); // Adaptive min_pts
+
+        tracing::debug!("DBSCAN clustering with eps={:.3}, min_pts={}", eps, min_pts);
+
+        let mut clusters = Vec::new();
+        let mut visited = vec![false; embeddings.len()];
+        let mut clustered = vec![false; embeddings.len()];
+
+        for i in 0..embeddings.len() {
+            if visited[i] {
+                continue;
+            }
+            visited[i] = true;
+
+            let neighbors = self.find_neighbors(embeddings, i, eps);
+            
+            if neighbors.len() < min_pts {
+                // Point is noise
+                continue;
+            }
+
+            // Start new cluster
+            let mut cluster = Vec::new();
+            let mut seeds = neighbors;
+            seeds.retain(|&idx| !clustered[idx]);
+
+            while let Some(current) = seeds.pop() {
+                if !visited[current] {
+                    visited[current] = true;
+                    let current_neighbors = self.find_neighbors(embeddings, current, eps);
+                    
+                    if current_neighbors.len() >= min_pts {
+                        for &neighbor in &current_neighbors {
+                            if !clustered[neighbor] && !seeds.contains(&neighbor) {
+                                seeds.push(neighbor);
+                            }
+                        }
+                    }
+                }
+
+                if !clustered[current] {
+                    clustered[current] = true;
+                    cluster.push(current);
+                }
+            }
+
+            if !cluster.is_empty() {
+                clusters.push(cluster);
+            }
+        }
 
         Ok(clusters)
+    }
+
+    /// Hierarchical clustering using average linkage
+    fn hierarchical_clustering(&self, embeddings: &[Array1<f64>]) -> Result<Vec<Vec<usize>>> {
+        if embeddings.len() <= 1 {
+            return Ok(vec![vec![0; embeddings.len()]]);
+        }
+
+        // Start with each point as its own cluster
+        let mut clusters: Vec<Vec<usize>> = (0..embeddings.len()).map(|i| vec![i]).collect();
+
+        // Calculate initial distance matrix
+        let mut distances = Vec::new();
+        for i in 0..embeddings.len() {
+            for j in i + 1..embeddings.len() {
+                let dist = self.euclidean_distance(&embeddings[i], &embeddings[j]);
+                distances.push((dist, i, j));
+            }
+        }
+        distances.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+
+        // Merge clusters until we have optimal number
+        let target_clusters = (embeddings.len() / 3).max(2).min(5);
+        
+        while clusters.len() > target_clusters && !distances.is_empty() {
+            let (_, mut i, mut j) = distances.remove(0);
+            
+            // Find current cluster indices
+            let mut cluster_i = None;
+            let mut cluster_j = None;
+            
+            for (idx, cluster) in clusters.iter().enumerate() {
+                if cluster.contains(&i) {
+                    cluster_i = Some(idx);
+                }
+                if cluster.contains(&j) {
+                    cluster_j = Some(idx);
+                }
+            }
+
+            if let (Some(ci), Some(cj)) = (cluster_i, cluster_j) {
+                if ci != cj {
+                    // Merge clusters
+                    let cluster_j_data = clusters.remove(cj.max(ci));
+                    let cluster_i_idx = if cj > ci { ci } else { ci - 1 };
+                    clusters[cluster_i_idx].extend(cluster_j_data);
+                }
+            }
+        }
+
+        Ok(clusters)
+    }
+
+    /// Find the elbow point in the inertia curve
+    fn find_elbow_point(&self, inertias: &[f64]) -> usize {
+        if inertias.len() < 3 {
+            return 0;
+        }
+
+        let mut max_curvature = 0.0;
+        let mut elbow_idx = 0;
+
+        for i in 1..inertias.len() - 1 {
+            // Calculate curvature using second derivative approximation
+            let d1 = inertias[i] - inertias[i - 1];
+            let d2 = inertias[i + 1] - inertias[i];
+            let curvature = (d2 - d1).abs();
+
+            if curvature > max_curvature {
+                max_curvature = curvature;
+                elbow_idx = i;
+            }
+        }
+
+        elbow_idx
+    }
+
+    /// Calculate clustering inertia (within-cluster sum of squares)
+    fn calculate_inertia(&self, embeddings: &[Array1<f64>], clusters: &[Vec<usize>]) -> Result<f64> {
+        let mut total_inertia = 0.0;
+
+        for cluster in clusters {
+            if cluster.is_empty() {
+                continue;
+            }
+
+            // Calculate centroid
+            let mut centroid = Array1::zeros(embeddings[0].len());
+            for &idx in cluster {
+                centroid = centroid + &embeddings[idx];
+            }
+            centroid = centroid / cluster.len() as f64;
+
+            // Calculate within-cluster sum of squares
+            for &idx in cluster {
+                let distance = self.euclidean_distance(&embeddings[idx], &centroid);
+                total_inertia += distance * distance;
+            }
+        }
+
+        Ok(total_inertia)
+    }
+
+    /// Initialize K-means centroids using K-means++ algorithm
+    fn initialize_centroids(&self, embeddings: &[Array1<f64>], k: usize) -> Result<Vec<Array1<f64>>> {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        let mut centroids = Vec::new();
+
+        if embeddings.is_empty() || k == 0 {
+            return Ok(centroids);
+        }
+
+        // Choose first centroid randomly
+        let first_idx = rng.gen_range(0..embeddings.len());
+        centroids.push(embeddings[first_idx].clone());
+
+        // Choose remaining centroids with probability proportional to squared distance
+        for _ in 1..k {
+            let mut distances = Vec::new();
+            let mut total_distance = 0.0;
+
+            for embedding in embeddings {
+                let min_dist = centroids
+                    .iter()
+                    .map(|centroid| self.euclidean_distance(embedding, centroid))
+                    .min_by(|a, b| a.partial_cmp(b).unwrap())
+                    .unwrap_or(0.0);
+                
+                let squared_dist = min_dist * min_dist;
+                distances.push(squared_dist);
+                total_distance += squared_dist;
+            }
+
+            if total_distance == 0.0 {
+                break;
+            }
+
+            // Weighted random selection
+            let target = rng.gen::<f64>() * total_distance;
+            let mut cumulative = 0.0;
+            
+            for (i, &dist) in distances.iter().enumerate() {
+                cumulative += dist;
+                if cumulative >= target {
+                    centroids.push(embeddings[i].clone());
+                    break;
+                }
+            }
+        }
+
+        Ok(centroids)
+    }
+
+    /// Estimate optimal epsilon for DBSCAN using k-distance graph
+    fn estimate_eps(&self, embeddings: &[Array1<f64>]) -> Result<f64> {
+        let k = 4; // Typically use k=4 for DBSCAN
+        let mut k_distances = Vec::new();
+
+        for (i, embedding) in embeddings.iter().enumerate() {
+            let mut distances: Vec<f64> = embeddings
+                .iter()
+                .enumerate()
+                .filter(|(j, _)| *j != i)
+                .map(|(_, other)| self.euclidean_distance(embedding, other))
+                .collect();
+            
+            distances.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            
+            if distances.len() >= k {
+                k_distances.push(distances[k - 1]);
+            }
+        }
+
+        k_distances.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        
+        // Use elbow method on k-distance graph
+        if k_distances.len() > 3 {
+            let elbow_idx = self.find_elbow_point(&k_distances);
+            Ok(k_distances[elbow_idx])
+        } else {
+            // Fallback to median
+            Ok(k_distances.get(k_distances.len() / 2).copied().unwrap_or(0.1))
+        }
+    }
+
+    /// Find neighbors within epsilon distance
+    fn find_neighbors(&self, embeddings: &[Array1<f64>], point_idx: usize, eps: f64) -> Vec<usize> {
+        embeddings
+            .iter()
+            .enumerate()
+            .filter(|(i, embedding)| {
+                *i != point_idx && self.euclidean_distance(&embeddings[point_idx], embedding) <= eps
+            })
+            .map(|(i, _)| i)
+            .collect()
+    }
+
+    /// Calculate Euclidean distance between two embeddings
+    fn euclidean_distance(&self, a: &Array1<f64>, b: &Array1<f64>) -> f64 {
+        if a.len() != b.len() {
+            return f64::INFINITY;
+        }
+        
+        a.iter()
+            .zip(b.iter())
+            .map(|(x, y)| (x - y).powi(2))
+            .sum::<f64>()
+            .sqrt()
     }
 
     /// Generate semantic interpretations for discovered patterns

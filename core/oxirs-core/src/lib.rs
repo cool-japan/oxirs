@@ -32,9 +32,11 @@ pub mod indexing;
 pub mod interning;
 pub mod io;
 pub mod model;
+pub mod molecular; // Molecular-level memory management inspired by biological systems
 pub mod optimization;
 pub mod parser;
 pub mod query;
+pub mod quantum; // Quantum-inspired computing for next-generation RDF processing
 pub mod rdf_store;
 pub mod serializer;
 pub mod storage;
@@ -70,6 +72,12 @@ pub enum OxirsError {
     Serialize(String),
     #[error("IO error: {0}")]
     Io(String),
+    #[error("Quantum computing error: {0}")]
+    QuantumError(String),
+    #[error("Molecular optimization error: {0}")]
+    MolecularError(String),
+    #[error("Neural-symbolic fusion error: {0}")]
+    NeuralSymbolicError(String),
 }
 
 impl From<std::io::Error> for OxirsError {

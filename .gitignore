@@ -89,3 +89,10 @@ kube-config
 *.pprof
 flamegraph.svg
 perf.data*
+
+# other target directories
+*/target/
+*/*/target/
+ai/oxirs-embed/target/*
+# Rust specific
+*.rlib

@@ -69,10 +69,10 @@ pub struct ServerSettings {
 /// TLS configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct TlsConfig {
-    #[validate(length(min = 1))]
+    #[validate(custom(function = "validate_path"))]
     pub cert_path: PathBuf,
 
-    #[validate(length(min = 1))]
+    #[validate(custom(function = "validate_path"))]
     pub key_path: PathBuf,
 
     pub require_client_cert: bool,
@@ -622,6 +622,7 @@ impl Default for ServerConfig {
                     same_site: SameSitePolicy::Lax,
                 },
                 authentication: AuthenticationConfig { enabled: false },
+                api_keys: None,
             },
             monitoring: MonitoringConfig {
                 metrics: MetricsConfig {
@@ -1267,4 +1268,12 @@ mod tests {
         assert!(!errors.is_empty());
         assert!(errors.iter().any(|e| e.contains("empty location")));
     }
+}
+
+/// Custom validation function for PathBuf
+fn validate_path(path: &PathBuf) -> Result<(), ValidationError> {
+    if path.as_os_str().is_empty() {
+        return Err(ValidationError::new("path_empty"));
+    }
+    Ok(())
 }

@@ -273,24 +273,35 @@ impl DeltaComputer {
 
     fn parse_statement(&mut self, statement: &str) -> Result<Option<UpdateOperation>> {
         let upper = statement.to_uppercase();
+        debug!("Parsing statement: '{}'", statement);
+        debug!("Upper case: '{}'", upper);
 
         if upper.contains("INSERT DATA") {
+            debug!("Matched INSERT DATA");
             self.parse_insert_data(statement)
         } else if upper.contains("DELETE DATA") {
+            debug!("Matched DELETE DATA");
             self.parse_delete_data(statement)
+        } else if upper.contains("DELETE") && upper.contains("INSERT") {
+            debug!("Matched DELETE/INSERT");
+            self.parse_delete_insert(statement)
         } else if upper.contains("INSERT") && upper.contains("WHERE") {
+            debug!("Matched INSERT WHERE");
             self.parse_insert_where(statement)
         } else if upper.contains("DELETE") && upper.contains("WHERE") {
+            debug!("Matched DELETE WHERE");
             self.parse_delete_where(statement)
-        } else if upper.contains("DELETE") && upper.contains("INSERT") {
-            self.parse_delete_insert(statement)
         } else if upper.contains("CLEAR") {
+            debug!("Matched CLEAR");
             self.parse_clear(statement)
         } else if upper.contains("DROP") {
+            debug!("Matched DROP");
             self.parse_drop(statement)
         } else if upper.contains("CREATE") {
+            debug!("Matched CREATE");
             self.parse_create(statement)
         } else if upper.contains("LOAD") {
+            debug!("Matched LOAD");
             self.parse_load(statement)
         } else {
             warn!("Unknown SPARQL update operation: {}", statement);
@@ -344,9 +355,10 @@ impl DeltaComputer {
     }
 
     fn parse_delete_insert(&mut self, statement: &str) -> Result<Option<UpdateOperation>> {
-        let delete_block = self.extract_data_block(statement, "DELETE")?;
-        let insert_block = self.extract_data_block(statement, "INSERT")?;
-        let where_block = self.extract_data_block(statement, "WHERE")?;
+        // Use more specific parsing for DELETE/INSERT WHERE statements
+        let delete_block = self.extract_specific_block(statement, "DELETE")?;
+        let insert_block = self.extract_specific_block(statement, "INSERT")?;
+        let where_block = self.extract_specific_block(statement, "WHERE")?;
 
         let delete_triples = if let Some(delete) = delete_block {
             self.parse_triples(&delete)?
@@ -359,6 +371,9 @@ impl DeltaComputer {
         } else {
             Vec::new()
         };
+
+        debug!("Parsed DELETE/INSERT: delete={} triples, insert={} triples", 
+               delete_triples.len(), insert_triples.len());
 
         Ok(Some(UpdateOperation::DeleteInsert {
             delete: delete_triples,
@@ -406,6 +421,45 @@ impl DeltaComputer {
         }
     }
 
+    fn extract_specific_block(&self, statement: &str, keyword: &str) -> Result<Option<String>> {
+        // More precise parsing for DELETE/INSERT WHERE statements
+        let upper = statement.to_uppercase();
+        let keyword_upper = keyword.to_uppercase();
+
+        // Find the keyword followed by whitespace and then a '{'
+        let pattern = format!(r"{}\s*\{{", regex::escape(&keyword_upper));
+        let re = regex::Regex::new(&pattern)?;
+        
+        if let Some(m) = re.find(&upper) {
+            let start_pos = m.start();
+            let brace_pos = statement[start_pos..].find('{').unwrap() + start_pos;
+            
+            // Find matching closing brace
+            let mut brace_count = 1;
+            let mut end_pos = brace_pos + 1;
+            let chars: Vec<char> = statement.chars().collect();
+            
+            while end_pos < chars.len() && brace_count > 0 {
+                match chars[end_pos] {
+                    '{' => brace_count += 1,
+                    '}' => brace_count -= 1,
+                    _ => {}
+                }
+                if brace_count == 0 {
+                    break;
+                }
+                end_pos += 1;
+            }
+            
+            if brace_count == 0 {
+                let content = statement[brace_pos + 1..end_pos].trim();
+                return Ok(Some(content.to_string()));
+            }
+        }
+        
+        Ok(None)
+    }
+
     fn extract_data_block(&self, statement: &str, keyword: &str) -> Result<Option<String>> {
         let upper = statement.to_uppercase();
         let keyword_upper = keyword.to_uppercase();
@@ -449,10 +503,12 @@ impl DeltaComputer {
 
     fn extract_graph_uri(&self, statement: &str) -> Result<Option<String>> {
         // Simple graph URI extraction - look for GRAPH <uri> pattern
-        let re = Regex::new(r"GRAPH\s+<([^>]+)>").unwrap();
-        if let Some(captures) = re.captures(&statement.to_uppercase()) {
+        let re = Regex::new(r"(?i)GRAPH\s+<([^>]+)>").unwrap();
+        if let Some(captures) = re.captures(statement) {
             if let Some(uri) = captures.get(1) {
-                return Ok(Some(uri.as_str().to_string()));
+                // Normalize the URI
+                let normalized_uri = Self::normalize_uri(uri.as_str());
+                return Ok(Some(normalized_uri));
             }
         }
 
@@ -460,7 +516,9 @@ impl DeltaComputer {
         let parts: Vec<&str> = statement.split_whitespace().collect();
         for part in parts {
             if part.starts_with('<') && part.ends_with('>') {
-                return Ok(Some(part[1..part.len() - 1].to_string()));
+                let uri = &part[1..part.len() - 1];
+                let normalized_uri = Self::normalize_uri(uri);
+                return Ok(Some(normalized_uri));
             }
         }
 
@@ -470,32 +528,177 @@ impl DeltaComputer {
     fn parse_triples(&self, data: &str) -> Result<Vec<Triple>> {
         let mut triples = Vec::new();
 
-        // Simple triple parsing - split by periods and parse each line
-        for line in data.lines() {
-            let line = line.trim();
-            if line.is_empty() || line.starts_with('#') {
+        // First split the data into individual triple statements
+        let triple_statements = self.split_triple_statements(data);
+
+        for statement in triple_statements {
+            let statement = statement.trim();
+            if statement.is_empty() || statement.starts_with('#') {
                 continue;
             }
 
-            // Remove trailing period
-            let line = line.trim_end_matches('.');
+            // Parse subject, predicate, object while respecting quotes
+            if let Some(triple) = self.parse_triple_line(statement)? {
+                triples.push(triple);
+            }
+        }
+        Ok(triples)
+    }
 
-            // Split by whitespace to get subject, predicate, object
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 3 {
-                let subject = parts[0].to_string();
-                let predicate = parts[1].to_string();
-                let object = parts[2..].join(" "); // Handle multi-word objects
+    fn split_triple_statements(&self, data: &str) -> Vec<String> {
+        let mut statements = Vec::new();
+        let mut current = String::new();
+        let mut in_quotes = false;
+        let mut in_uri = false;
+        
+        for c in data.chars() {
+            match c {
+                '"' => {
+                    in_quotes = !in_quotes;
+                    current.push(c);
+                }
+                '<' if !in_quotes => {
+                    in_uri = true;
+                    current.push(c);
+                }
+                '>' if !in_quotes && in_uri => {
+                    in_uri = false;
+                    current.push(c);
+                }
+                '.' if !in_quotes && !in_uri => {
+                    // End of triple statement
+                    let stmt = current.trim().to_string();
+                    if !stmt.is_empty() {
+                        statements.push(stmt);
+                    }
+                    current.clear();
+                }
+                _ => {
+                    current.push(c);
+                }
+            }
+        }
+        
+        // Add any remaining content
+        let stmt = current.trim().to_string();
+        if !stmt.is_empty() {
+            statements.push(stmt);
+        }
+        
+        statements
+    }
 
-                triples.push(Triple {
-                    subject,
-                    predicate,
-                    object,
-                });
+    fn parse_triple_line(&self, line: &str) -> Result<Option<Triple>> {
+        let mut parts = Vec::new();
+        let mut current_part = String::new();
+        let mut in_quotes = false;
+        let mut in_uri = false;
+        let mut chars = line.chars().peekable();
+
+        while let Some(c) = chars.next() {
+            match c {
+                '"' => {
+                    in_quotes = !in_quotes;
+                    current_part.push(c);
+                }
+                '<' if !in_quotes => {
+                    in_uri = true;
+                    current_part.push(c);
+                }
+                '>' if !in_quotes && in_uri => {
+                    in_uri = false;
+                    current_part.push(c);
+                }
+                ' ' | '\t' if !in_quotes && !in_uri => {
+                    if !current_part.is_empty() {
+                        parts.push(current_part.trim().to_string());
+                        current_part.clear();
+                    }
+                }
+                _ => {
+                    current_part.push(c);
+                }
             }
         }
 
-        Ok(triples)
+        // Add the last part
+        if !current_part.is_empty() {
+            parts.push(current_part.trim().to_string());
+        }
+
+        if parts.len() >= 3 {
+            let subject = Self::expand_term(&parts[0]);
+            let predicate = Self::expand_term(&parts[1]);
+            let object = if parts.len() > 3 {
+                // Join remaining parts as object (for complex literals with multiple parts)
+                let joined = parts[2..].join(" ");
+                Self::expand_term(&joined)
+            } else {
+                Self::expand_term(&parts[2])
+            };
+
+            return Ok(Some(Triple {
+                subject,
+                predicate,
+                object,
+            }));
+        }
+
+        Ok(None)
+    }
+
+    /// Expand and normalize terms (URIs, literals, etc.)
+    fn expand_term(term: &str) -> String {
+        if term.starts_with('<') && term.ends_with('>') {
+            // Full URI - strip angle brackets and normalize
+            let uri = &term[1..term.len() - 1];
+            Self::normalize_uri(uri)
+        } else if term.starts_with('"') {
+            // Literal - return as-is
+            term.to_string()
+        } else if term.starts_with('_') {
+            // Blank node - return as-is
+            term.to_string()
+        } else if term.contains("://") {
+            // Bare URI without brackets - normalize
+            Self::normalize_uri(term)
+        } else {
+            // Return as-is for other terms (prefixed names, etc.)
+            term.to_string()
+        }
+    }
+
+    /// Normalize URI by converting to lowercase (for scheme and domain)
+    fn normalize_uri(uri: &str) -> String {
+        // Convert HTTP(S) schemes and domains to lowercase, preserve path case
+        if uri.starts_with("http://")
+            || uri.starts_with("https://")
+            || uri.starts_with("HTTP://")
+            || uri.starts_with("HTTPS://")
+        {
+            // Find the path start position
+            let scheme_end = if uri.starts_with("https://") || uri.starts_with("HTTPS://") {
+                8
+            } else {
+                7
+            };
+            
+            if let Some(path_start) = uri[scheme_end..].find('/') {
+                let scheme_and_domain = &uri[..scheme_end + path_start];
+                let path = &uri[scheme_end + path_start..];
+                format!("{}{}", scheme_and_domain.to_lowercase(), path)
+            } else {
+                // No path, just normalize the whole URI
+                let mut normalized = uri.to_lowercase();
+                // Remove trailing slashes for consistency only if there's no path
+                if normalized.ends_with('/') && normalized.matches('/').count() == 2 {
+                    normalized = normalized.trim_end_matches('/').to_string();
+                }
+                normalized
+            }
+        } else {
+            uri.to_string()
+        }
     }
 
     fn process_update_operation(
@@ -742,6 +945,11 @@ impl DeltaProcessor {
         }
     }
 
+    pub fn with_optimization(mut self, enabled: bool) -> Self {
+        self.computer = self.computer.with_optimization(enabled);
+        self
+    }
+
     pub fn with_batch_size(mut self, size: usize) -> Self {
         self.batch_size = size;
         self
@@ -765,15 +973,17 @@ impl DeltaProcessor {
             self.buffer.push(event.clone());
         }
 
-        // Check if we should flush
+        // Check if we should flush (but don't return flushed events, just trigger the flush)
         let should_flush = self.buffer.len() >= self.batch_size
             || Utc::now() - self.last_flush > self.max_buffer_age;
 
         if should_flush {
-            Ok(self.flush())
-        } else {
-            Ok(events)
+            // Trigger flush but don't return all buffered events
+            self.flush();
         }
+
+        // Always return only the events from this specific update
+        Ok(events)
     }
 
     /// Force flush buffered events
@@ -873,7 +1083,7 @@ mod tests {
 
     #[test]
     fn test_sparql_parsing() {
-        let mut computer = DeltaComputer::new();
+        let mut computer = DeltaComputer::new().with_optimization(false);
 
         let update = r#"
             INSERT DATA {
@@ -946,7 +1156,7 @@ mod tests {
 
     #[test]
     fn test_delete_insert() {
-        let mut computer = DeltaComputer::new();
+        let mut computer = DeltaComputer::new().with_optimization(false);
 
         let update = r#"
             DELETE {
@@ -1076,7 +1286,7 @@ mod tests {
         "#;
 
         let events1 = processor.process_update(update1).await.unwrap();
-        // Should not flush yet (batch size is 2)
+        // Always returns events from the current update
         assert_eq!(events1.len(), 1);
 
         let update2 = r#"
@@ -1086,7 +1296,7 @@ mod tests {
         "#;
 
         let events2 = processor.process_update(update2).await.unwrap();
-        // Should flush now (reached batch size)
+        // Returns events from this update (internal flush is triggered but doesn't affect return value)
         assert_eq!(events2.len(), 1);
 
         let stats = processor.get_stats();

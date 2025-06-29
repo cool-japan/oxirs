@@ -312,7 +312,11 @@ impl From<StreamEvent> for KinesisStreamEvent {
                     partition_key,
                 )
             }
-            StreamEvent::Heartbeat { timestamp, source } => {
+            StreamEvent::Heartbeat {
+                timestamp,
+                source,
+                metadata,
+            } => {
                 let partition_key = format!("{}:heartbeat", source);
                 (
                     "heartbeat".to_string(),
@@ -330,6 +334,16 @@ impl From<StreamEvent> for KinesisStreamEvent {
                         properties: HashMap::new(),
                         checksum: None,
                     },
+                    partition_key,
+                )
+            }
+            _ => {
+                // Default for all other event types
+                let partition_key = format!("{}:other", metadata.source);
+                (
+                    "other".to_string(),
+                    serde_json::json!({}),
+                    metadata,
                     partition_key,
                 )
             }
@@ -1198,7 +1212,21 @@ impl KinesisConsumer {
                     .to_string();
                 Ok(StreamEvent::Heartbeat {
                     timestamp: kinesis_event.timestamp,
-                    source,
+                    source: source.clone(),
+                    metadata: crate::types::EventMetadata {
+                        source,
+                        user: None,
+                        session_id: None,
+                        correlation_id: None,
+                        transaction_id: None,
+                        timestamp: kinesis_event.timestamp,
+                        tags: Default::default(),
+                        trace_id: None,
+                        span_id: None,
+                        parent_span_id: None,
+                        sampling_priority: None,
+                        custom_fields: Default::default(),
+                    },
                 })
             }
             _ => Err(anyhow!("Unknown event type: {}", kinesis_event.event_type)),

@@ -3,12 +3,12 @@
 //! This module provides an immutable, content-addressable storage system
 //! inspired by Git and IPFS, optimized for RDF data integrity and versioning.
 
-use crate::model::{NamedNode, Triple, TriplePattern};
+use crate::model::{Triple, TriplePattern};
 use crate::OxirsError;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -664,6 +664,7 @@ pub struct GCReport {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::{Literal, NamedNode};
 
     #[tokio::test]
     async fn test_immutable_storage() {

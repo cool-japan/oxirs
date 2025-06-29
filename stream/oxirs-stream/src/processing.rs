@@ -568,11 +568,39 @@ impl EventWindow {
                     | StreamEvent::GraphCreated { metadata, .. }
                     | StreamEvent::GraphCleared { metadata, .. }
                     | StreamEvent::GraphDeleted { metadata, .. }
+                    | StreamEvent::GraphMetadataUpdated { metadata, .. }
+                    | StreamEvent::GraphPermissionsChanged { metadata, .. }
+                    | StreamEvent::GraphStatisticsUpdated { metadata, .. }
+                    | StreamEvent::GraphRenamed { metadata, .. }
+                    | StreamEvent::GraphMerged { metadata, .. }
+                    | StreamEvent::GraphSplit { metadata, .. }
                     | StreamEvent::SparqlUpdate { metadata, .. }
                     | StreamEvent::TransactionBegin { metadata, .. }
                     | StreamEvent::TransactionCommit { metadata, .. }
                     | StreamEvent::TransactionAbort { metadata, .. }
-                    | StreamEvent::SchemaChanged { metadata, .. } => {
+                    | StreamEvent::SchemaChanged { metadata, .. }
+                    | StreamEvent::SchemaDefinitionAdded { metadata, .. }
+                    | StreamEvent::SchemaDefinitionRemoved { metadata, .. }
+                    | StreamEvent::SchemaDefinitionModified { metadata, .. }
+                    | StreamEvent::OntologyImported { metadata, .. }
+                    | StreamEvent::OntologyRemoved { metadata, .. }
+                    | StreamEvent::ConstraintAdded { metadata, .. }
+                    | StreamEvent::ConstraintRemoved { metadata, .. }
+                    | StreamEvent::ConstraintViolated { metadata, .. }
+                    | StreamEvent::IndexCreated { metadata, .. }
+                    | StreamEvent::IndexDropped { metadata, .. }
+                    | StreamEvent::IndexRebuilt { metadata, .. }
+                    | StreamEvent::ShapeAdded { metadata, .. }
+                    | StreamEvent::ShapeRemoved { metadata, .. }
+                    | StreamEvent::ShapeModified { metadata, .. }
+                    | StreamEvent::ShapeValidationStarted { metadata, .. }
+                    | StreamEvent::ShapeValidationCompleted { metadata, .. }
+                    | StreamEvent::ShapeViolationDetected { metadata, .. }
+                    | StreamEvent::QueryResultAdded { metadata, .. }
+                    | StreamEvent::QueryResultRemoved { metadata, .. }
+                    | StreamEvent::QueryCompleted { metadata, .. }
+                    | StreamEvent::SchemaUpdated { metadata, .. }
+                    | StreamEvent::ShapeUpdated { metadata, .. } => {
                         metadata.properties.get(field)?.parse().ok()
                     }
                     _ => None,
@@ -595,11 +623,39 @@ impl EventWindow {
                     | StreamEvent::GraphCreated { metadata, .. }
                     | StreamEvent::GraphCleared { metadata, .. }
                     | StreamEvent::GraphDeleted { metadata, .. }
+                    | StreamEvent::GraphMetadataUpdated { metadata, .. }
+                    | StreamEvent::GraphPermissionsChanged { metadata, .. }
+                    | StreamEvent::GraphStatisticsUpdated { metadata, .. }
+                    | StreamEvent::GraphRenamed { metadata, .. }
+                    | StreamEvent::GraphMerged { metadata, .. }
+                    | StreamEvent::GraphSplit { metadata, .. }
                     | StreamEvent::SparqlUpdate { metadata, .. }
                     | StreamEvent::TransactionBegin { metadata, .. }
                     | StreamEvent::TransactionCommit { metadata, .. }
                     | StreamEvent::TransactionAbort { metadata, .. }
-                    | StreamEvent::SchemaChanged { metadata, .. } => {
+                    | StreamEvent::SchemaChanged { metadata, .. }
+                    | StreamEvent::SchemaDefinitionAdded { metadata, .. }
+                    | StreamEvent::SchemaDefinitionRemoved { metadata, .. }
+                    | StreamEvent::SchemaDefinitionModified { metadata, .. }
+                    | StreamEvent::OntologyImported { metadata, .. }
+                    | StreamEvent::OntologyRemoved { metadata, .. }
+                    | StreamEvent::ConstraintAdded { metadata, .. }
+                    | StreamEvent::ConstraintRemoved { metadata, .. }
+                    | StreamEvent::ConstraintViolated { metadata, .. }
+                    | StreamEvent::IndexCreated { metadata, .. }
+                    | StreamEvent::IndexDropped { metadata, .. }
+                    | StreamEvent::IndexRebuilt { metadata, .. }
+                    | StreamEvent::ShapeAdded { metadata, .. }
+                    | StreamEvent::ShapeRemoved { metadata, .. }
+                    | StreamEvent::ShapeModified { metadata, .. }
+                    | StreamEvent::ShapeValidationStarted { metadata, .. }
+                    | StreamEvent::ShapeValidationCompleted { metadata, .. }
+                    | StreamEvent::ShapeViolationDetected { metadata, .. }
+                    | StreamEvent::QueryResultAdded { metadata, .. }
+                    | StreamEvent::QueryResultRemoved { metadata, .. }
+                    | StreamEvent::QueryCompleted { metadata, .. }
+                    | StreamEvent::SchemaUpdated { metadata, .. }
+                    | StreamEvent::ShapeUpdated { metadata, .. } => {
                         metadata.properties.get(field).cloned()
                     }
                     _ => None,
@@ -763,12 +819,24 @@ impl EventWindow {
                         serde_json::Number::from_f64(avg).unwrap_or_else(|| 0.into()),
                     )
                 }
-                AggregationState::Min(min) => serde_json::Value::Number(
-                    serde_json::Number::from_f64(*min).unwrap_or_else(|| 0.into()),
-                ),
-                AggregationState::Max(max) => serde_json::Value::Number(
-                    serde_json::Number::from_f64(*max).unwrap_or_else(|| 0.into()),
-                ),
+                AggregationState::Min(min) => {
+                    if min.is_infinite() {
+                        serde_json::Value::Null // No values seen yet
+                    } else {
+                        serde_json::Value::Number(
+                            serde_json::Number::from_f64(*min).unwrap_or_else(|| 0.into()),
+                        )
+                    }
+                }
+                AggregationState::Max(max) => {
+                    if max.is_infinite() {
+                        serde_json::Value::Null // No values seen yet
+                    } else {
+                        serde_json::Value::Number(
+                            serde_json::Number::from_f64(*max).unwrap_or_else(|| 0.into()),
+                        )
+                    }
+                }
                 AggregationState::First(_) => serde_json::Value::String("first_event".to_string()),
                 AggregationState::Last(_) => serde_json::Value::String("last_event".to_string()),
                 AggregationState::Distinct(set) => serde_json::Value::Number(set.len().into()),
@@ -1495,18 +1563,20 @@ mod tests {
         let _window_id = processor.create_window(window_config);
 
         let now = Utc::now();
+        let mut all_results = Vec::new();
         for i in 0..5 {
             let event = create_test_event(
                 &format!("source{}", i % 3),
                 now + ChronoDuration::seconds(i),
             );
-            processor.process_event(event).await.unwrap();
+            let mut event_results = processor.process_event(event).await.unwrap();
+            all_results.append(&mut event_results);
         }
 
-        let results = processor.trigger_all_windows().await.unwrap();
-        assert_eq!(results.len(), 1);
+        // The window should have auto-triggered on the 5th event
+        assert_eq!(all_results.len(), 1);
 
-        let result = &results[0];
+        let result = &all_results[0];
         assert_eq!(result.event_count, 5);
 
         // Check aggregations

@@ -1158,6 +1158,18 @@ impl AdvancedPropertyPathOptimizer {
         }
     }
 
+    /// Convert local TraversalDirection to sparql::TraversalDirection
+    fn convert_direction(
+        &self,
+        direction: TraversalDirection,
+    ) -> crate::handlers::sparql::TraversalDirection {
+        match direction {
+            TraversalDirection::Forward => crate::handlers::sparql::TraversalDirection::Forward,
+            TraversalDirection::Backward => crate::handlers::sparql::TraversalDirection::Backward,
+            TraversalDirection::Both => crate::handlers::sparql::TraversalDirection::Both,
+        }
+    }
+
     fn convert_to_legacy_steps(&self, steps: &[EnhancedPathStep]) -> Vec<PathStep> {
         steps
             .iter()
@@ -1166,16 +1178,26 @@ impl AdvancedPropertyPathOptimizer {
                     PathOperation::Traverse {
                         predicate,
                         direction,
-                    } => ("traverse".to_string(), Some(predicate.clone()), *direction),
+                    } => (
+                        "traverse".to_string(),
+                        Some(predicate.clone()),
+                        self.convert_direction(*direction),
+                    ),
                     PathOperation::TransitiveClosure { predicate, .. } => (
                         "transitive_closure".to_string(),
                         Some(predicate.clone()),
-                        TraversalDirection::Forward,
+                        crate::handlers::sparql::TraversalDirection::Forward,
                     ),
-                    PathOperation::Union(_) => {
-                        ("union".to_string(), None, TraversalDirection::Forward)
-                    }
-                    _ => ("unknown".to_string(), None, TraversalDirection::Forward),
+                    PathOperation::Union(_) => (
+                        "union".to_string(),
+                        None,
+                        crate::handlers::sparql::TraversalDirection::Forward,
+                    ),
+                    _ => (
+                        "unknown".to_string(),
+                        None,
+                        crate::handlers::sparql::TraversalDirection::Forward,
+                    ),
                 };
 
                 PathStep {

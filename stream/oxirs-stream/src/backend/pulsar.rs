@@ -21,14 +21,15 @@ use uuid::Uuid;
 
 #[cfg(feature = "pulsar")]
 use pulsar::{
-    authentication::{Authentication, Oauth2Authentication},
+    authentication::Authentication,
     compression::Compression,
-    consumer::{Consumer, ConsumerBuilder, ConsumerOptions, DeadLetterPolicy, InitialPosition},
+    consumer::{
+        Consumer, ConsumerBuilder, ConsumerOptions, DeadLetterPolicy, InitialPosition, SubType,
+    },
     error::Error as PulsarError,
     message::{Message as PulsarMessageTrait, Payload},
     producer::{Producer, ProducerBuilder, ProducerOptions},
     proto::Schema,
-    sub_type::SubType,
     Executor, Pulsar, TokioExecutor,
 };
 
@@ -157,7 +158,7 @@ pub struct PulsarProducer {
     send_semaphore: Arc<Semaphore>,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 struct ProducerStats {
     messages_sent: u64,
     messages_failed: u64,
@@ -165,7 +166,7 @@ struct ProducerStats {
     batch_count: u64,
     avg_latency_ms: f64,
     max_latency_ms: u64,
-    #[serde(skip)]
+    #[serde(skip_serializing, skip_deserializing)]
     last_send: Option<Instant>,
     connection_retries: u64,
     schema_validation_errors: u64,
@@ -218,6 +219,7 @@ impl From<StreamEvent> for PulsarMessage {
                 (Some("schema".to_string()), Some("schema".to_string()))
             }
             StreamEvent::Heartbeat { source, .. } => (Some(source.clone()), Some(source.clone())),
+            _ => (None, None), // Default for all other event types
         };
 
         Self {
@@ -648,7 +650,7 @@ pub struct PulsarConsumer {
     #[cfg(feature = "pulsar")]
     client: Option<Arc<Pulsar<TokioExecutor>>>,
     #[cfg(feature = "pulsar")]
-    consumer: Option<Consumer<TokioExecutor>>,
+    consumer: Option<Consumer<PulsarMessage, TokioExecutor>>,
     stats: Arc<RwLock<ConsumerStats>>,
     subscription_name: String,
     consumer_name: String,
@@ -713,7 +715,7 @@ pub enum PulsarSubscriptionInitialPosition {
     Earliest,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 struct ConsumerStats {
     messages_received: u64,
     messages_acknowledged: u64,
@@ -721,7 +723,7 @@ struct ConsumerStats {
     bytes_received: u64,
     receive_queue_size: u32,
     avg_processing_time_ms: f64,
-    #[serde(skip)]
+    #[serde(skip_serializing, skip_deserializing)]
     last_message: Option<Instant>,
     redelivery_count: u64,
     connection_errors: u64,

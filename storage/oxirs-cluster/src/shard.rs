@@ -386,6 +386,7 @@ impl ShardRouter {
                 } else {
                     0.0
                 },
+                primary_node: shard.primary_node,
             });
         }
 
@@ -425,6 +426,8 @@ pub struct ShardDistribution {
     pub size_bytes: u64,
     /// Load factor (0.0 to 1.0)
     pub load_factor: f64,
+    /// Primary node responsible for this shard
+    pub primary_node: u64,
 }
 
 /// Default concept similarity calculator using simple string matching

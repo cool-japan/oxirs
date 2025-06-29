@@ -1625,6 +1625,7 @@ mod tests {
             },
             extended_metadata: None,
             performance: crate::ServicePerformance::default(),
+            status: None,
         }
     }
 

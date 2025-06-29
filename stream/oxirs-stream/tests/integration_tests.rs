@@ -77,6 +77,7 @@ fn create_test_stream_config(backend: StreamBackend) -> StreamConfig {
             jitter: true,
         },
         circuit_breaker: CircuitBreakerConfig {
+            enabled: true,
             failure_threshold: 5,
             timeout: Duration::from_secs(60),
             success_threshold: 3,
@@ -84,20 +85,23 @@ fn create_test_stream_config(backend: StreamBackend) -> StreamConfig {
         },
         security: SecurityConfig {
             enable_tls: false,
-            cert_path: None,
-            key_path: None,
-            ca_path: None,
-            username: None,
-            password: None,
+            verify_certificates: true,
+            client_cert_path: None,
+            client_key_path: None,
+            ca_cert_path: None,
+            sasl_config: None,
         },
         performance: PerformanceConfig {
-            buffer_size: 1024,
-            io_threads: 2,
-            network_threads: 2,
             enable_batching: true,
-            max_batch_delay: Duration::from_millis(10),
+            enable_pipelining: false,
+            buffer_size: 1024,
+            prefetch_count: 100,
+            enable_zero_copy: false,
+            enable_simd: false,
+            parallel_processing: true,
+            worker_threads: Some(2),
         },
-        monitoring: monitoring::MonitoringConfig {
+        monitoring: MonitoringConfig {
             enable_metrics: true,
             enable_tracing: false,
             metrics_interval: Duration::from_secs(5),
@@ -116,23 +120,57 @@ mod memory_backend_tests {
 
     #[tokio::test]
     async fn test_memory_backend_basic_operations() -> Result<()> {
-        let config = create_test_stream_config(StreamBackend::Memory);
+        // Clear memory storage before test
+        oxirs_stream::clear_memory_events().await;
+        
+        let config = create_test_stream_config(StreamBackend::Memory {
+            max_size: None,
+            persistence: false,
+        });
         let mut stream = Stream::new(config).await?;
 
         // Test publishing events
         let events = create_test_events(5);
-        for event in &events {
+        for (i, event) in events.iter().enumerate() {
+            println!("Publishing event {}: {:?}", i, event);
             stream.publish(event.clone()).await?;
         }
+        
+        // Flush to ensure events are published (important when batching is enabled)
+        stream.flush().await?;
+        
+        // Check how many events are in global storage
+        let global_events = oxirs_stream::get_memory_events();
+        let event_count = global_events.read().await.len();
+        println!("Events in global storage: {}", event_count);
+        
+        // Add small delay to ensure events are available
+        tokio::time::sleep(Duration::from_millis(10)).await;
 
         // Test consuming events
         let mut received_events = Vec::new();
-        for _ in 0..5 {
-            if let Ok(Some(event)) = timeout(Duration::from_secs(5), stream.consume()).await {
-                received_events.push(event?);
+        for i in 0..5 {
+            match timeout(Duration::from_secs(1), stream.consume()).await {
+                Ok(Ok(Some(event))) => {
+                    println!("Consumed event {}: {:?}", i, event);
+                    received_events.push(event);
+                }
+                Ok(Ok(None)) => {
+                    println!("No event received at iteration {}", i);
+                    break;
+                }
+                Ok(Err(e)) => {
+                    println!("Error consuming event at iteration {}: {}", i, e);
+                    break;
+                }
+                Err(_) => {
+                    println!("Timeout at iteration {}", i);
+                    break;
+                }
             }
         }
 
+        println!("Total events received: {}", received_events.len());
         assert_eq!(received_events.len(), 5);
 
         // Verify event content
@@ -166,7 +204,10 @@ mod memory_backend_tests {
 
     #[tokio::test]
     async fn test_memory_backend_high_throughput() -> Result<()> {
-        let config = create_test_stream_config(StreamBackend::Memory);
+        let config = create_test_stream_config(StreamBackend::Memory {
+            max_size: None,
+            persistence: false,
+        });
         let mut stream = Stream::new(config).await?;
 
         let event_count = 1000;
@@ -185,7 +226,7 @@ mod memory_backend_tests {
         let start = std::time::Instant::now();
         let mut received_count = 0;
         for _ in 0..event_count {
-            if let Ok(Some(_)) = timeout(Duration::from_millis(100), stream.consume()).await {
+            if let Ok(Ok(Some(_))) = timeout(Duration::from_millis(100), stream.consume()).await {
                 received_count += 1;
             } else {
                 break;
@@ -205,6 +246,7 @@ mod memory_backend_tests {
 }
 
 #[cfg(test)]
+#[cfg(feature = "kafka")]
 mod kafka_backend_tests {
     use super::*;
 
@@ -214,7 +256,8 @@ mod kafka_backend_tests {
         let test_config = TestConfig::default();
         let config = create_test_stream_config(StreamBackend::Kafka {
             brokers: vec![test_config.kafka_url],
-            group_id: "test-group".to_string(),
+            security_protocol: None,
+            sasl_config: None,
         });
 
         let mut producer = Stream::new(config.clone()).await?;
@@ -231,8 +274,9 @@ mod kafka_backend_tests {
 
         let mut received_events = Vec::new();
         for _ in 0..3 {
-            if let Ok(Some(event)) = timeout(Duration::from_secs(10), consumer.consume()).await {
-                received_events.push(event?);
+            if let Ok(Ok(Some(event))) = timeout(Duration::from_secs(10), consumer.consume()).await
+            {
+                received_events.push(event);
             }
         }
 
@@ -249,7 +293,8 @@ mod kafka_backend_tests {
         let test_config = TestConfig::default();
         let config = create_test_stream_config(StreamBackend::Kafka {
             brokers: vec![test_config.kafka_url],
-            group_id: "test-transaction-group".to_string(),
+            security_protocol: None,
+            sasl_config: None,
         });
 
         let mut stream = Stream::new(config).await?;
@@ -278,6 +323,7 @@ mod kafka_backend_tests {
 }
 
 #[cfg(test)]
+#[cfg(feature = "nats")]
 mod nats_backend_tests {
     use super::*;
 
@@ -287,8 +333,12 @@ mod nats_backend_tests {
         let test_config = TestConfig::default();
         let config = create_test_stream_config(StreamBackend::Nats {
             url: test_config.nats_url,
-            stream_name: "test-stream".to_string(),
-            subject: "test.subject".to_string(),
+            cluster_urls: None,
+            jetstream_config: Some(NatsJetStreamConfig {
+                domain: None,
+                api_prefix: None,
+                timeout: Duration::from_secs(30),
+            }),
         });
 
         let mut stream = Stream::new(config).await?;
@@ -302,8 +352,8 @@ mod nats_backend_tests {
         // Test stream replay
         let mut received_events = Vec::new();
         for _ in 0..5 {
-            if let Ok(Some(event)) = timeout(Duration::from_secs(5), stream.consume()).await {
-                received_events.push(event?);
+            if let Ok(Ok(Some(event))) = timeout(Duration::from_secs(5), stream.consume()).await {
+                received_events.push(event);
             }
         }
 
@@ -319,8 +369,12 @@ mod nats_backend_tests {
         let test_config = TestConfig::default();
         let config1 = create_test_stream_config(StreamBackend::Nats {
             url: test_config.nats_url.clone(),
-            stream_name: "test-consumer-group".to_string(),
-            subject: "test.consumer.group".to_string(),
+            cluster_urls: None,
+            jetstream_config: Some(NatsJetStreamConfig {
+                domain: None,
+                api_prefix: None,
+                timeout: Duration::from_secs(30),
+            }),
         });
         let config2 = config1.clone();
 
@@ -339,14 +393,16 @@ mod nats_backend_tests {
 
         // Consumer 1
         for _ in 0..2 {
-            if let Ok(Some(_)) = timeout(Duration::from_millis(500), consumer1.consume()).await {
+            if let Ok(Ok(Some(_))) = timeout(Duration::from_millis(500), consumer1.consume()).await
+            {
                 total_received += 1;
             }
         }
 
         // Consumer 2
         for _ in 0..2 {
-            if let Ok(Some(_)) = timeout(Duration::from_millis(500), consumer2.consume()).await {
+            if let Ok(Ok(Some(_))) = timeout(Duration::from_millis(500), consumer2.consume()).await
+            {
                 total_received += 1;
             }
         }
@@ -361,6 +417,7 @@ mod nats_backend_tests {
 }
 
 #[cfg(test)]
+#[cfg(feature = "redis")]
 mod redis_backend_tests {
     use super::*;
 
@@ -370,7 +427,8 @@ mod redis_backend_tests {
         let test_config = TestConfig::default();
         let config = create_test_stream_config(StreamBackend::Redis {
             url: test_config.redis_url,
-            stream_name: "test-redis-stream".to_string(),
+            cluster_urls: None,
+            pool_size: Some(5),
         });
 
         let mut stream = Stream::new(config).await?;
@@ -383,8 +441,8 @@ mod redis_backend_tests {
 
         let mut received_events = Vec::new();
         for _ in 0..3 {
-            if let Ok(Some(event)) = timeout(Duration::from_secs(5), stream.consume()).await {
-                received_events.push(event?);
+            if let Ok(Ok(Some(event))) = timeout(Duration::from_secs(5), stream.consume()).await {
+                received_events.push(event);
             }
         }
 
@@ -403,9 +461,10 @@ mod redis_backend_tests {
             "redis://localhost:7002".to_string(),
         ];
 
-        let config = create_test_stream_config(StreamBackend::RedisCluster {
-            urls: cluster_urls,
-            stream_name: "test-cluster-stream".to_string(),
+        let config = create_test_stream_config(StreamBackend::Redis {
+            url: "redis://localhost:7000".to_string(),
+            cluster_urls: Some(cluster_urls),
+            pool_size: Some(10),
         });
 
         let mut stream = Stream::new(config).await?;
@@ -418,7 +477,7 @@ mod redis_backend_tests {
 
         let mut received_count = 0;
         for _ in 0..10 {
-            if let Ok(Some(_)) = timeout(Duration::from_secs(2), stream.consume()).await {
+            if let Ok(Ok(Some(_))) = timeout(Duration::from_secs(2), stream.consume()).await {
                 received_count += 1;
             }
         }
@@ -431,6 +490,7 @@ mod redis_backend_tests {
 }
 
 #[cfg(test)]
+#[cfg(feature = "pulsar")]
 mod pulsar_backend_tests {
     use super::*;
 
@@ -439,9 +499,8 @@ mod pulsar_backend_tests {
     async fn test_pulsar_integration() -> Result<()> {
         let test_config = TestConfig::default();
         let config = create_test_stream_config(StreamBackend::Pulsar {
-            url: test_config.pulsar_url,
-            topic: "test-pulsar-topic".to_string(),
-            subscription: "test-subscription".to_string(),
+            service_url: test_config.pulsar_url,
+            auth_config: None,
         });
 
         let mut stream = Stream::new(config).await?;
@@ -454,8 +513,8 @@ mod pulsar_backend_tests {
 
         let mut received_events = Vec::new();
         for _ in 0..4 {
-            if let Ok(Some(event)) = timeout(Duration::from_secs(5), stream.consume()).await {
-                received_events.push(event?);
+            if let Ok(Ok(Some(event))) = timeout(Duration::from_secs(5), stream.consume()).await {
+                received_events.push(event);
             }
         }
 
@@ -470,22 +529,24 @@ mod pulsar_backend_tests {
     async fn test_pulsar_authentication() -> Result<()> {
         let test_config = TestConfig::default();
         let mut config = create_test_stream_config(StreamBackend::Pulsar {
-            url: test_config.pulsar_url,
-            topic: "secure-topic".to_string(),
-            subscription: "secure-subscription".to_string(),
+            service_url: test_config.pulsar_url,
+            auth_config: None,
         });
 
         // Enable TLS and authentication
         config.security.enable_tls = true;
-        config.security.username = Some("test_user".to_string());
-        config.security.password = Some("test_password".to_string());
+        config.security.sasl_config = Some(SaslConfig {
+            mechanism: SaslMechanism::Plain,
+            username: "test_user".to_string(),
+            password: "test_password".to_string(),
+        });
 
         let mut stream = Stream::new(config).await?;
 
         let event = create_test_events(1);
         stream.publish(event[0].clone()).await?;
 
-        if let Ok(Some(_)) = timeout(Duration::from_secs(5), stream.consume()).await {
+        if let Ok(Ok(Some(_))) = timeout(Duration::from_secs(5), stream.consume()).await {
             // Authentication successful
         }
 
@@ -495,6 +556,7 @@ mod pulsar_backend_tests {
 }
 
 #[cfg(test)]
+#[cfg(feature = "kinesis")]
 mod kinesis_backend_tests {
     use super::*;
 
@@ -505,6 +567,7 @@ mod kinesis_backend_tests {
         let config = create_test_stream_config(StreamBackend::Kinesis {
             region: test_config.kinesis_region,
             stream_name: "test-kinesis-stream".to_string(),
+            credentials: None,
         });
 
         let mut stream = Stream::new(config).await?;
@@ -520,8 +583,8 @@ mod kinesis_backend_tests {
 
         let mut received_events = Vec::new();
         for _ in 0..6 {
-            if let Ok(Some(event)) = timeout(Duration::from_secs(10), stream.consume()).await {
-                received_events.push(event?);
+            if let Ok(Ok(Some(event))) = timeout(Duration::from_secs(10), stream.consume()).await {
+                received_events.push(event);
             }
         }
 
@@ -538,6 +601,7 @@ mod kinesis_backend_tests {
         let config = create_test_stream_config(StreamBackend::Kinesis {
             region: test_config.kinesis_region,
             stream_name: "test-enhanced-fanout".to_string(),
+            credentials: None,
         });
 
         let mut producer = Stream::new(config.clone()).await?;
@@ -556,13 +620,13 @@ mod kinesis_backend_tests {
         let mut consumer2_count = 0;
 
         for _ in 0..5 {
-            if let Ok(Some(_)) = timeout(Duration::from_secs(2), consumer1.consume()).await {
+            if let Ok(Ok(Some(_))) = timeout(Duration::from_secs(2), consumer1.consume()).await {
                 consumer1_count += 1;
             }
         }
 
         for _ in 0..5 {
-            if let Ok(Some(_)) = timeout(Duration::from_secs(2), consumer2.consume()).await {
+            if let Ok(Ok(Some(_))) = timeout(Duration::from_secs(2), consumer2.consume()).await {
                 consumer2_count += 1;
             }
         }
@@ -586,7 +650,10 @@ mod rdf_patch_integration_tests {
 
     #[tokio::test]
     async fn test_rdf_patch_streaming() -> Result<()> {
-        let config = create_test_stream_config(StreamBackend::Memory);
+        let config = create_test_stream_config(StreamBackend::Memory {
+            max_size: None,
+            persistence: false,
+        });
         let mut stream = Stream::new(config).await?;
 
         // Create RDF Patch
@@ -600,7 +667,7 @@ mod rdf_patch_integration_tests {
         // Convert to stream event
         let patch_event = StreamEvent::SparqlUpdate {
             query: patch.to_rdf_patch_format()?,
-            graph: None,
+            operation_type: SparqlOperationType::Insert,
             metadata: EventMetadata {
                 event_id: Uuid::new_v4().to_string(),
                 timestamp: Utc::now(),
@@ -618,8 +685,8 @@ mod rdf_patch_integration_tests {
         stream.publish(patch_event).await?;
 
         // Consume and verify
-        if let Ok(Some(received)) = timeout(Duration::from_secs(5), stream.consume()).await {
-            let event = received?;
+        if let Ok(Ok(Some(received))) = timeout(Duration::from_secs(5), stream.consume()).await {
+            let event = received;
             match event {
                 StreamEvent::SparqlUpdate { query, .. } => {
                     let parsed_patch = RdfPatch::from_rdf_patch_format(&query)?;
@@ -635,7 +702,10 @@ mod rdf_patch_integration_tests {
 
     #[tokio::test]
     async fn test_sparql_delta_streaming() -> Result<()> {
-        let config = create_test_stream_config(StreamBackend::Memory);
+        let config = create_test_stream_config(StreamBackend::Memory {
+            max_size: None,
+            persistence: false,
+        });
         let mut stream = Stream::new(config).await?;
 
         // Test SPARQL Update delta computation
@@ -658,8 +728,8 @@ mod rdf_patch_integration_tests {
         // Consume and verify
         let mut received_events = Vec::new();
         for _ in 0..2 {
-            if let Ok(Some(event)) = timeout(Duration::from_secs(5), stream.consume()).await {
-                received_events.push(event?);
+            if let Ok(Ok(Some(event))) = timeout(Duration::from_secs(5), stream.consume()).await {
+                received_events.push(event);
             }
         }
 
@@ -690,7 +760,10 @@ mod rdf_patch_integration_tests {
 #[cfg(test)]
 mod monitoring_integration_tests {
     use super::*;
-    use oxirs_stream::monitoring::*;
+    use oxirs_stream::monitoring::{
+        ConsumerMetricsUpdate, HealthStatus, MetricsCollector, MonitoringConfig, ProducerMetricsUpdate,
+        StreamingMetrics,
+    };
 
     #[tokio::test]
     async fn test_metrics_collection_integration() -> Result<()> {
@@ -784,7 +857,10 @@ mod performance_tests {
 
     #[tokio::test]
     async fn test_throughput_benchmark() -> Result<()> {
-        let config = create_test_stream_config(StreamBackend::Memory);
+        let config = create_test_stream_config(StreamBackend::Memory {
+            max_size: None,
+            persistence: false,
+        });
         let mut stream = Stream::new(config).await?;
 
         let event_count = 10_000;
@@ -807,7 +883,7 @@ mod performance_tests {
         let start = std::time::Instant::now();
         let mut consumed_count = 0;
         for _ in 0..event_count {
-            if let Ok(Some(_)) = timeout(Duration::from_millis(1), stream.consume()).await {
+            if let Ok(Ok(Some(_))) = timeout(Duration::from_millis(1), stream.consume()).await {
                 consumed_count += 1;
             } else {
                 break;
@@ -837,7 +913,10 @@ mod performance_tests {
 
     #[tokio::test]
     async fn test_latency_benchmark() -> Result<()> {
-        let config = create_test_stream_config(StreamBackend::Memory);
+        let config = create_test_stream_config(StreamBackend::Memory {
+            max_size: None,
+            persistence: false,
+        });
         let mut producer = Stream::new(config.clone()).await?;
         let mut consumer = Stream::new(config).await?;
 
@@ -849,7 +928,7 @@ mod performance_tests {
             let event = create_test_events(1)[0].clone();
             producer.publish(event).await?;
 
-            if let Ok(Some(_)) = timeout(Duration::from_secs(1), consumer.consume()).await {
+            if let Ok(Ok(Some(_))) = timeout(Duration::from_secs(1), consumer.consume()).await {
                 let latency = start.elapsed();
                 latencies.push(latency);
             }
@@ -881,7 +960,10 @@ mod circuit_breaker_tests {
 
     #[tokio::test]
     async fn test_circuit_breaker_integration() -> Result<()> {
-        let mut config = create_test_stream_config(StreamBackend::Memory);
+        let mut config = create_test_stream_config(StreamBackend::Memory {
+            max_size: None,
+            persistence: false,
+        });
         config.circuit_breaker.failure_threshold = 3;
         config.circuit_breaker.timeout = Duration::from_millis(100);
 
@@ -906,7 +988,10 @@ mod error_handling_tests {
 
     #[tokio::test]
     async fn test_connection_recovery() -> Result<()> {
-        let config = create_test_stream_config(StreamBackend::Memory);
+        let config = create_test_stream_config(StreamBackend::Memory {
+            max_size: None,
+            persistence: false,
+        });
         let mut stream = Stream::new(config).await?;
 
         // Test graceful degradation
@@ -927,7 +1012,10 @@ mod error_handling_tests {
 
     #[tokio::test]
     async fn test_invalid_event_handling() -> Result<()> {
-        let config = create_test_stream_config(StreamBackend::Memory);
+        let config = create_test_stream_config(StreamBackend::Memory {
+            max_size: None,
+            persistence: false,
+        });
         let mut stream = Stream::new(config).await?;
 
         // Test with various invalid events

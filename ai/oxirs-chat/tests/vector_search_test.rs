@@ -1,15 +1,25 @@
-use oxirs_chat::rag::{
-    EmbeddingModel, QueryContext, QueryIntent, RAGConfig, RAGSystem, SimpleEmbeddingModel,
+use oxirs_chat::rag::{QueryContext, QueryIntent, RAGConfig, RAGSystem, SimpleEmbeddingModel, EmbeddingModel};
+use oxirs_core::{Literal, NamedNode, Store, Triple};
+use oxirs_vec::{
+    index::AdvancedVectorIndex,
+    index::{DistanceMetric, IndexConfig, IndexType},
     VectorIndex,
 };
-use oxirs_core::{Literal, NamedNode, Store, Triple};
 use std::collections::HashMap;
 use std::sync::Arc;
 
 #[tokio::test]
 async fn test_vector_index_creation() {
     let dimension = 128;
-    let mut vector_index = VectorIndex::new(dimension);
+    let config = IndexConfig {
+        index_type: IndexType::Hnsw,
+        max_connections: 16,
+        ef_construction: 200,
+        ef_search: 100,
+        distance_metric: DistanceMetric::Cosine,
+        ..Default::default()
+    };
+    let mut vector_index = AdvancedVectorIndex::new(config);
 
     assert_eq!(vector_index.len(), 0);
     assert!(vector_index.is_empty());
@@ -50,7 +60,11 @@ async fn test_embedding_model() {
         "The quick brown fox jumps over the lazy dog".to_string(),
     ];
 
-    let embeddings = embedding_model.encode(&texts).await.unwrap();
+    let mut embeddings = Vec::new();
+    for text in &texts {
+        let embedding = embedding_model.embed(text).unwrap();
+        embeddings.push(embedding);
+    }
 
     assert_eq!(embeddings.len(), 3);
     for embedding in &embeddings {
@@ -75,7 +89,15 @@ async fn test_embedding_model() {
 #[tokio::test]
 async fn test_vector_search_similarity() {
     let dimension = 128;
-    let mut vector_index = VectorIndex::new(dimension);
+    let config = IndexConfig {
+        index_type: IndexType::Hnsw,
+        max_connections: 16,
+        ef_construction: 200,
+        ef_search: 100,
+        distance_metric: DistanceMetric::Cosine,
+        ..Default::default()
+    };
+    let mut vector_index = AdvancedVectorIndex::new(config);
 
     // Create test triples with related content
     let triples_and_texts = vec![
@@ -101,7 +123,7 @@ async fn test_vector_search_similarity() {
 
     // Add triples to the index
     for (i, (text, triple)) in triples_and_texts.iter().enumerate() {
-        let embedding = embedding_model.encode(&[text.to_string()]).await.unwrap();
+        let embedding = embedding_model.embed(text).unwrap();
         let metadata = HashMap::new();
         vector_index
             .add(
@@ -115,8 +137,8 @@ async fn test_vector_search_similarity() {
 
     // Test search for work-related content
     let query = "employment job work";
-    let query_embedding = embedding_model.encode(&[query.to_string()]).await.unwrap();
-    let results = vector_index.search(&query_embedding[0], 3).unwrap();
+    let query_embedding = embedding_model.embed(query).unwrap();
+    let results = vector_index.search(&query_embedding, 3).unwrap();
 
     assert!(!results.is_empty());
     assert!(results.len() <= 3);
@@ -196,10 +218,18 @@ async fn test_rag_system_with_vector_index() {
 
 #[tokio::test]
 async fn test_cosine_similarity() {
-    use oxirs_chat::rag::VectorIndex;
+    use oxirs_vec::VectorIndex;
 
     let dimension = 4;
-    let mut index = VectorIndex::new(dimension);
+    let config = IndexConfig {
+        index_type: IndexType::Hnsw,
+        max_connections: 16,
+        ef_construction: 200,
+        ef_search: 100,
+        distance_metric: DistanceMetric::Cosine,
+        ..Default::default()
+    };
+    let mut index = AdvancedVectorIndex::new(config);
 
     // Test vectors
     let vec1 = vec![1.0, 0.0, 0.0, 0.0];

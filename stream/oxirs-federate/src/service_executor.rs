@@ -144,7 +144,9 @@ impl ServiceExecutor {
 
         for chunk in bindings.chunks(batch_size) {
             let values_clause = self.build_values_clause(chunk);
-            let enhanced_query = format!("{}\n{}", service_clause.query, values_clause);
+            let base_query =
+                self.build_query_from_patterns(&service_clause.patterns, &service_clause.filters);
+            let enhanced_query = format!("{}\n{}", base_query, values_clause);
 
             let batch_result = self
                 .execute_single_query(&service.endpoint, &enhanced_query)
@@ -260,6 +262,31 @@ impl ServiceExecutor {
                 }
             }
         }
+    }
+
+    /// Build a SPARQL query string from patterns and filters
+    fn build_query_from_patterns(
+        &self,
+        patterns: &[crate::planner::TriplePattern],
+        filters: &[crate::planner::FilterExpression],
+    ) -> String {
+        let mut query = String::from("SELECT * WHERE {\n");
+
+        // Add patterns
+        for pattern in patterns {
+            query.push_str(&format!(
+                "  {} {} {} .\n",
+                pattern.subject, pattern.predicate, pattern.object
+            ));
+        }
+
+        // Add filters
+        for filter in filters {
+            query.push_str(&format!("  FILTER ({})\n", filter.expression));
+        }
+
+        query.push('}');
+        query
     }
 
     /// Inject variable bindings into a SPARQL query using VALUES clause
@@ -1081,10 +1108,35 @@ impl JoinExecutor {
             QueryResultData::GraphQL(_) => 1, // Simplified for GraphQL
         }
     }
+
+    /// Build a SPARQL query string from patterns and filters
+    fn build_query_from_patterns(
+        &self,
+        patterns: &[crate::planner::TriplePattern],
+        filters: &[crate::planner::FilterExpression],
+    ) -> String {
+        let mut query = String::from("SELECT * WHERE {\n");
+
+        // Add patterns
+        for pattern in patterns {
+            query.push_str(&format!(
+                "  {} {} {} .\n",
+                pattern.subject, pattern.predicate, pattern.object
+            ));
+        }
+
+        // Add filters
+        for filter in filters {
+            query.push_str(&format!("  FILTER ({})\n", filter.expression));
+        }
+
+        query.push('}');
+        query
+    }
 }
 
 /// Configuration for service executor
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ServiceExecutorConfig {
     pub default_timeout_secs: u64,
     pub connection_pool_size: usize,

@@ -23,21 +23,22 @@ rand = "0.8"
 rayon = "1.10"
 nalgebra = "0.33"
 uuid = { version = "1.10", features = ["v4", "serde"] }
-tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "sync", "time"] }
+tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "time", "sync"] }
 async-trait = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
 rand_distr = "0.4"
-tracing-subscriber = "0.3"
-tempfile = "3.0"
 
-# API dependencies (optional)
-axum = { version = "0.7", features = ["json"], optional = true }
+# API dependencies
+axum = { version = "0.7", optional = true }
 tower = { version = "0.4", optional = true }
-tower-http = { version = "0.5", features = ["cors", "trace", "timeout"], optional = true }
+tower-http = { version = "0.5", optional = true, features = ["cors", "timeout", "trace"] }
+async-graphql = { version = "7.0", optional = true }
+async-graphql-axum = { version = "7.0", optional = true }
 
 [dev-dependencies]
 criterion = "0.5"
 tempfile = "3.0"
+tracing-subscriber = "0.3"
 
 [features]
 default = ["basic-models"]
@@ -56,3 +57,4 @@ ontology-aware = []
 multi-modal = []
 gpu-acceleration = []
 api-server = ["axum", "tower", "tower-http"]
+graphql = ["async-graphql", "async-graphql-axum"]

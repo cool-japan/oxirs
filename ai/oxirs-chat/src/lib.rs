@@ -5,7 +5,7 @@
 //! This crate provides a conversational interface for knowledge graphs,
 //! combining retrieval-augmented generation (RAG) with SPARQL querying.
 
-use crate::rag::QueryIntent;
+use crate::rag::{AssembledContext, QueryContext, QueryIntent, RAGConfig, RAGSystem};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -22,11 +22,16 @@ pub mod analytics;
 pub mod cache;
 pub mod chat;
 pub mod context;
+pub mod explanation;
+pub mod graph_exploration;
+pub mod health_monitoring;
 pub mod llm;
+pub mod message_analytics;
 pub mod nl2sparql;
 pub mod performance;
 pub mod persistence;
 pub mod rag;
+pub mod rich_content;
 pub mod server;
 pub mod session;
 pub mod sparql_optimizer;
@@ -1408,7 +1413,7 @@ impl ChatSession {
                     knowledge
                         .triples
                         .iter()
-                        .map(|t| format!("{} {} {}", t.subject(), t.predicate(), t.object()))
+                        .map(|t| format!("{} {} {}", t.subject, t.predicate, t.object))
                         .collect(),
                 );
                 Some(knowledge)

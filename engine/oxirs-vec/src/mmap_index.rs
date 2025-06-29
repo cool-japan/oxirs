@@ -388,6 +388,7 @@ impl MemoryMappedVectorIndex {
                             .cloned()
                             .unwrap_or_else(|| format!("vector_{}", id)),
                         distance,
+                        score: 1.0 - distance, // Convert distance to similarity score
                         metadata: None,
                     }));
                 } else if let Some(std::cmp::Reverse(worst)) = heap.peek() {
@@ -399,6 +400,7 @@ impl MemoryMappedVectorIndex {
                                 .cloned()
                                 .unwrap_or_else(|| format!("vector_{}", id)),
                             distance,
+                            score: 1.0 - distance, // Convert distance to similarity score
                             metadata: None,
                         }));
                     }
@@ -443,6 +445,7 @@ impl MemoryMappedVectorIndex {
                                     .cloned()
                                     .unwrap_or_else(|| format!("vector_{}", id)),
                                 distance,
+                                score: 1.0 - distance, // Convert distance to similarity score
                                 metadata: None,
                             }));
                         } else if let Some(std::cmp::Reverse(worst)) = local_heap.peek() {
@@ -454,6 +457,7 @@ impl MemoryMappedVectorIndex {
                                         .cloned()
                                         .unwrap_or_else(|| format!("vector_{}", id)),
                                     distance,
+                                    score: 1.0 - distance, // Convert distance to similarity score
                                     metadata: None,
                                 }));
                             }

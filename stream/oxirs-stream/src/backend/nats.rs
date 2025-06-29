@@ -7,11 +7,11 @@
 
 // Note: KafkaEvent would be imported from backend::kafka if needed
 // For now, using custom NatsEventMessage
-use crate::backend::{StreamBackend, StreamBackendConfig};
+use crate::backend::{StreamBackend as StreamBackendTrait, StreamBackendConfig};
 use crate::consumer::ConsumerGroup;
 use crate::error::{StreamError, StreamResult};
 use crate::types::{Offset, PartitionId, StreamPosition, TopicName};
-use crate::{EventMetadata, PatchOperation, RdfPatch, StreamConfig, StreamEvent};
+use crate::{EventMetadata, PatchOperation, RdfPatch, StreamBackend, StreamConfig, StreamEvent};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -193,6 +193,7 @@ pub enum LoadBalancingStrategy {
     LeastConnections,
     Random,
     WeightedRoundRobin(Vec<u32>),
+    Consistent,
 }
 
 /// Request-reply pattern configuration
@@ -637,7 +638,7 @@ impl NatsProducer {
 
     /// Apply authentication configuration
     #[cfg(feature = "nats")]
-    fn apply_auth_config(
+    async fn apply_auth_config(
         &self,
         mut options: ConnectOptions,
         auth: &NatsAuthConfig,
@@ -649,10 +650,10 @@ impl NatsProducer {
             options = options.user_and_password(username.clone(), password.clone());
         }
         if let Some(ref nkey) = auth.nkey {
-            options = options.nkey(nkey.clone())?;
+            options = options.nkey(nkey.clone());
         }
         if let Some(ref creds_file) = auth.credentials_file {
-            options = options.credentials_file(creds_file)?;
+            options = options.credentials_file(creds_file).await?;
         }
         Ok(options)
     }
@@ -665,7 +666,7 @@ impl NatsProducer {
         tls: &NatsTlsConfig,
     ) -> Result<ConnectOptions> {
         if tls.verify {
-            options = options.require_tls();
+            options = options.require_tls(true);
         }
         // Additional TLS configuration would go here
         Ok(options)
@@ -684,7 +685,7 @@ impl NatsProducer {
 
         // Add authentication if configured
         if let Some(ref auth) = self.nats_config.auth_config {
-            connect_options = self.apply_auth_config(connect_options, auth)?;
+            connect_options = self.apply_auth_config(connect_options, auth).await?;
         }
 
         // Add TLS if configured
@@ -990,8 +991,8 @@ impl NatsProducer {
         Ok(())
     }
 
-    pub fn get_stats(&self) -> &ProducerStats {
-        &self.stats
+    pub async fn get_stats(&self) -> ProducerStats {
+        self.stats.read().await.clone()
     }
 
     /// Advanced subject-based routing with full pattern matching
@@ -1426,12 +1427,12 @@ impl NatsProducer {
         // oxirs.rdf.graph.created.dataset.large
         // oxirs.rdf.transaction.commit.session456
 
-        let base_parts = vec![&self.nats_config.subject_prefix, &event.event_type];
+        let mut all_parts = vec![
+            self.nats_config.subject_prefix.clone(),
+            event.event_type.clone(),
+        ];
 
-        let routing_parts: Vec<&str> = routing_key.split('.').collect();
-
-        let mut all_parts = base_parts;
-        all_parts.extend(routing_parts);
+        all_parts.extend(routing_key.split('.').map(|s| s.to_string()));
 
         Ok(all_parts.join("."))
     }
@@ -1604,6 +1605,14 @@ impl NatsProducer {
                 // Simple hash-based consistent processing
                 let hash = subject.chars().map(|c| c as u64).sum::<u64>();
                 hash % 2 == 0
+            }
+            LoadBalancingStrategy::LeastConnections => {
+                // Simple implementation - alternate based on message count
+                message_count % 2 == 0
+            }
+            LoadBalancingStrategy::WeightedRoundRobin(_weights) => {
+                // Simple implementation - use round robin for now
+                message_count % 2 == 0
             }
         }
     }
@@ -2008,8 +2017,8 @@ impl NatsConsumer {
         Ok(events)
     }
 
-    pub fn get_stats(&self) -> &ConsumerStats {
-        &self.stats
+    pub async fn get_stats(&self) -> ConsumerStats {
+        self.stats.read().await.clone()
     }
 
     /// Consume with windowed processing
@@ -2619,7 +2628,7 @@ impl NatsBackend {
 }
 
 #[async_trait]
-impl StreamBackend for NatsBackend {
+impl StreamBackendTrait for NatsBackend {
     fn name(&self) -> &'static str {
         "nats"
     }
@@ -2642,17 +2651,25 @@ impl StreamBackend for NatsBackend {
 
         #[cfg(feature = "nats")]
         {
-            let producer = NatsProducer::new(conn.client.clone(), &self.nats_config)
-                .await
+            // Create minimal StreamConfig for producer initialization
+            let stream_config = crate::StreamConfig {
+                backend: crate::StreamBackend::Nats {
+                    url: self.nats_config.url.clone(),
+                    cluster_urls: self.nats_config.cluster_urls.clone(),
+                    jetstream_config: None,
+                },
+                topic: "default".to_string(),
+                ..Default::default()
+            };
+            let producer = NatsProducer::new(stream_config.clone())
                 .map_err(|e| StreamError::Connection(e.to_string()))?;
             self.producer = Some(Arc::new(RwLock::new(producer)));
 
-            let consumer = NatsConsumer::new(conn.client.clone(), &self.nats_config)
-                .await
+            let consumer = NatsConsumer::new(stream_config)
                 .map_err(|e| StreamError::Connection(e.to_string()))?;
             self.consumer = Some(Arc::new(RwLock::new(consumer)));
 
-            let admin = NatsAdmin::new(conn.client.clone())
+            let admin = NatsAdmin::new(&self.nats_config.url)
                 .await
                 .map_err(|e| StreamError::Connection(e.to_string()))?;
             self.admin = Some(Arc::new(RwLock::new(admin)));
@@ -2677,18 +2694,8 @@ impl StreamBackend for NatsBackend {
         let mut tasks = self.background_tasks.write().await;
         tasks.shutdown().await;
 
-        // Disconnect components
-        if let Some(producer) = &self.producer {
-            if let Ok(mut p) = producer.write().await {
-                let _ = p.disconnect().await;
-            }
-        }
-
-        if let Some(consumer) = &self.consumer {
-            if let Ok(mut c) = consumer.write().await {
-                let _ = c.disconnect().await;
-            }
-        }
+        // Clear components (no explicit disconnect needed)
+        // Producer and Consumer will be dropped when we set them to None
 
         self.producer = None;
         self.consumer = None;
@@ -2708,7 +2715,7 @@ impl StreamBackend for NatsBackend {
         #[cfg(feature = "nats")]
         {
             let config = jetstream::stream::Config {
-                name: topic.clone(),
+                name: topic.as_str().to_string(),
                 subjects: vec![format!("{}.*", topic)],
                 max_messages: self.nats_config.max_msgs,
                 max_bytes: self.nats_config.max_bytes as i64,
@@ -2751,7 +2758,7 @@ impl StreamBackend for NatsBackend {
         admin
             .read()
             .await
-            .delete_stream(topic)
+            .delete_stream(topic.as_str())
             .await
             .map_err(|e| StreamError::TopicDeletion(e.to_string()))?;
 
@@ -2769,7 +2776,10 @@ impl StreamBackend for NatsBackend {
             .await
             .list_streams()
             .await
-            .map_err(|e| StreamError::TopicList(e.to_string()))?;
+            .map_err(|e| StreamError::TopicList(e.to_string()))?
+            .into_iter()
+            .map(TopicName::from)
+            .collect();
 
         Ok(streams)
     }
@@ -2787,13 +2797,16 @@ impl StreamBackend for NatsBackend {
             topic,
             event
                 .metadata()
-                .as_ref()
-                .and_then(|m| m.partition.as_ref())
-                .map(|p| p.to_string())
+                .properties
+                .get("partition")
+                .cloned()
                 .unwrap_or_else(|| "default".to_string())
         );
 
-        let offset = producer
+        // Estimate message size from the event before moving it
+        let estimated_size = std::mem::size_of_val(&event);
+
+        producer
             .write()
             .await
             .publish(event)
@@ -2802,10 +2815,10 @@ impl StreamBackend for NatsBackend {
 
         // Record metrics
         let latency = start_time.elapsed().as_millis() as f64;
-        // Estimate message size from the event
-        let estimated_size = std::mem::size_of_val(&event);
         self.record_metrics("send", estimated_size, latency).await;
 
+        // Generate a simple offset based on current timestamp
+        let offset = Offset::new(chrono::Utc::now().timestamp_millis() as u64);
         Ok(offset)
     }
 
@@ -2877,7 +2890,7 @@ impl StreamBackend for NatsBackend {
                 .to_stream_event()
                 .map_err(|e| StreamError::Deserialization(e.to_string()))?;
 
-            result.push((stream_event, offset));
+            result.push((stream_event, Offset::new(offset)));
         }
 
         // Record metrics

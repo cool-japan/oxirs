@@ -4,10 +4,8 @@
 //! in contiguous memory blocks, reducing memory fragmentation and improving
 //! cache locality.
 
-use crate::model::{BlankNode, Literal, NamedNode, Term, Triple, Variable};
-use crate::OxirsError;
+use crate::model::{NamedNode, Term, Triple, Variable};
 use bumpalo::Bump;
-use crossbeam_utils::thread;
 use parking_lot::{Mutex, RwLock};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -309,6 +307,8 @@ impl<'parent> Drop for ScopedArena<'parent> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Literal;
+    use std::thread;
 
     #[test]
     fn test_local_arena() {
@@ -362,7 +362,7 @@ mod tests {
             let handles: Vec<_> = (0..4)
                 .map(|i| {
                     let arena_clone = Arc::clone(&arena);
-                    s.spawn(move |_| {
+                    s.spawn(move || {
                         for j in 0..100 {
                             let string = format!("thread_{}_item_{}", i, j);
                             let allocated = arena_clone.alloc_str(&string);
@@ -375,8 +375,7 @@ mod tests {
             for handle in handles {
                 handle.join().unwrap();
             }
-        })
-        .unwrap();
+        });
 
         // Ensure the main thread also initializes its thread-local arena
         let _main_alloc = arena.alloc_str("main_thread_test");

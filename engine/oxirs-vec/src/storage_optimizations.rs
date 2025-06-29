@@ -175,10 +175,13 @@ impl VectorWriter {
             ..Default::default()
         };
 
-        // Reserve space for header (estimate max size)
-        // 4 bytes for size + up to 256 bytes for header data should be enough
-        let header_space = vec![0u8; 260];
-        writer.write_all(&header_space)?;
+        // Write a placeholder header first to reserve space
+        let placeholder_header_bytes = bincode::serialize(&header)?;
+        let header_size = (4 + placeholder_header_bytes.len()) as u64;
+
+        // Write placeholder header size and header
+        writer.write_all(&(placeholder_header_bytes.len() as u32).to_le_bytes())?;
+        writer.write_all(&placeholder_header_bytes)?;
         writer.flush()?;
 
         Ok(Self {
@@ -227,6 +230,18 @@ impl VectorWriter {
     /// Flush current block to disk
     fn flush_block(&mut self) -> Result<()> {
         if self.current_block.is_empty() {
+            return Ok(());
+        }
+
+        // For uncompressed mode, write raw vector data
+        if self.config.compression == CompressionType::None {
+            for vector in &self.current_block {
+                let vector_bytes = vector.as_f32();
+                for value in vector_bytes {
+                    self.writer.write_all(&value.to_le_bytes())?;
+                }
+            }
+            self.current_block.clear();
             return Ok(());
         }
 
@@ -321,36 +336,34 @@ impl VectorWriter {
 
         // Update header with final counts
         self.header.vector_count = self.total_vectors;
-        self.header.data_offset = 260; // Header space reserved at beginning
+
+        // The data offset is fixed at the position after the placeholder header
+        // We need to calculate this the same way it was calculated in new()
+        let placeholder_header = VectorFileHeader {
+            compression: self.config.compression,
+            compression_level: self.config.compression_level,
+            block_size: self.config.block_size,
+            ..Default::default()
+        };
+        let placeholder_header_bytes = bincode::serialize(&placeholder_header)?;
+        self.header.data_offset = 4 + placeholder_header_bytes.len() as u64;
         self.header.calculate_checksum();
 
         // Flush before seeking to ensure all data is written
         self.writer.flush()?;
 
         // Seek to beginning and write header
-        let pos_before = self.writer.get_mut().stream_position()?;
-        println!("Position before seek: {}", pos_before);
         self.writer.get_mut().seek(SeekFrom::Start(0))?;
-        let pos_after = self.writer.get_mut().stream_position()?;
-        println!("Position after seek to 0: {}", pos_after);
 
         let header_bytes = bincode::serialize(&self.header)?;
 
         // Write header size first, then header data
         let header_size = header_bytes.len() as u32;
-        println!(
-            "Writing header size: {}, header bytes: {}",
-            header_size,
-            header_bytes.len()
-        );
         self.writer.write_all(&header_size.to_le_bytes())?;
         self.writer.write_all(&header_bytes)?;
 
         // Flush to ensure data is written to file
         self.writer.flush()?;
-
-        let pos_final = self.writer.get_mut().stream_position()?;
-        println!("Position after writing and flushing header: {}", pos_final);
 
         // Explicitly drop the writer to close the file
         drop(self.writer);
@@ -375,11 +388,15 @@ impl VectorReader {
 
         // Read and verify header
         let header = Self::read_header(&mut reader)?;
+        let data_offset = header.data_offset;
+
+        // Seek to data offset to position for reading vectors
+        reader.get_mut().seek(SeekFrom::Start(data_offset))?;
 
         Ok(Self {
             reader,
             header,
-            current_position: 0,
+            current_position: data_offset,
             vectors_read: 0,
         })
     }
@@ -390,18 +407,12 @@ impl VectorReader {
         let mut size_bytes = [0u8; 4];
         reader.read_exact(&mut size_bytes)?;
         let header_size = u32::from_le_bytes(size_bytes) as usize;
-        println!(
-            "Reading header of size: {} (bytes: {:?})",
-            header_size, size_bytes
-        );
 
         // Read header data of exact size
         let mut header_data = vec![0u8; header_size];
         reader.read_exact(&mut header_data)?;
-        println!("Read {} bytes of header data", header_data.len());
 
         let header: VectorFileHeader = bincode::deserialize(&header_data)?;
-        println!("Successfully deserialized header");
 
         // Verify magic number
         if &header.magic != b"OXIRSVEC" {
@@ -438,6 +449,7 @@ impl VectorReader {
         }
 
         self.vectors_read += 1;
+        self.current_position += (self.header.dimensions * 4) as u64;
         Ok(Some(Vector::new(vector_data)))
     }
 
@@ -701,7 +713,10 @@ mod tests {
 
         // Write vectors
         {
-            let config = StorageConfig::default();
+            let config = StorageConfig {
+                compression: CompressionType::None,
+                ..Default::default()
+            };
             let mut writer = VectorWriter::new(file_path, config)?;
 
             let vectors = vec![

@@ -1305,9 +1305,11 @@ impl KafkaProducer {
                 // Extract relevant metrics from Kafka statistics
                 if let Some(brokers) = stats.brokers.values().next() {
                     // Use available broker metrics
-                    metrics.producer_request_latency_avg = brokers.rtt.avg as f64 / 1000.0; // Convert to ms
-                    metrics.producer_request_latency_max = brokers.rtt.max as f64 / 1000.0;
-                    // Convert to ms
+                    if let Some(rtt) = &brokers.rtt {
+                        metrics.producer_request_latency_avg = rtt.avg as f64 / 1000.0; // Convert to ms
+                        metrics.producer_request_latency_max = rtt.max as f64 / 1000.0;
+                        // Convert to ms
+                    }
                 }
 
                 // Update connection metrics

@@ -721,9 +721,15 @@ impl StarCli {
         if path_lower.ends_with(".nqs") || path_lower.ends_with(".nquads-star") {
             return Ok(StarFormat::NQuadsStar);
         }
+        if path_lower.ends_with(".jlds") || path_lower.ends_with(".jsonld-star") || path_lower.ends_with(".json") {
+            return Ok(StarFormat::JsonLdStar);
+        }
 
         // Try to detect from content
-        if content.contains("<<") && content.contains(">>") {
+        if content.trim_start().starts_with("{") || content.trim_start().starts_with("[") {
+            // Looks like JSON - assume JSON-LD-star
+            Ok(StarFormat::JsonLdStar)
+        } else if content.contains("<<") && content.contains(">>") {
             if content.contains("GRAPH") || content.contains("{") {
                 Ok(StarFormat::TrigStar)
             } else {

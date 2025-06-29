@@ -591,8 +591,27 @@ mod tests {
     fn test_field_metrics() {
         let tracker = PerformanceTracker::new();
 
-        tracker.record_field_resolution("test_field", Duration::from_millis(50), false);
-        tracker.record_field_resolution("test_field", Duration::from_millis(100), true);
+        // Record an operation metric to ensure recent_metrics is not empty
+        let operation_metrics = OperationMetrics {
+            operation_name: Some("test_operation".to_string()),
+            operation_type: OperationType::Query,
+            query_hash: 12345,
+            execution_time: Duration::from_millis(100),
+            parsing_time: Duration::from_millis(10),
+            validation_time: Duration::from_millis(5),
+            planning_time: Duration::from_millis(5),
+            field_count: 1,
+            depth: 1,
+            complexity_score: 10,
+            cache_hit: false,
+            error_count: 0,
+            timestamp: SystemTime::now(),
+            client_info: ClientInfo::default(),
+        };
+        tracker.record_operation(operation_metrics);
+
+        tracker.record_field_resolution("test_field", Duration::from_millis(150), false);
+        tracker.record_field_resolution("test_field", Duration::from_millis(200), true);
 
         let stats = tracker.get_stats().unwrap();
         assert_eq!(stats.slowest_fields.len(), 1);

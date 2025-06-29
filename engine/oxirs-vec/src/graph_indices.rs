@@ -255,7 +255,7 @@ impl NSWGraph {
 
         let mut visited = HashSet::new();
         let mut candidates = BinaryHeap::new();
-        let mut results = BinaryHeap::new();
+        let mut results: BinaryHeap<SearchResult> = BinaryHeap::new();
 
         // Initialize with entry points
         for &entry in &self.entry_points {
@@ -275,12 +275,8 @@ impl NSWGraph {
         let max_candidates = (k as f32 * self.config.search_expansion) as usize;
 
         while let Some(std::cmp::Reverse(current)) = candidates.pop() {
-            if current.distance
-                > results
-                    .peek()
-                    .map(|r: &SearchResult| r.distance)
-                    .unwrap_or(f32::INFINITY)
-            {
+            // Only apply early termination if we have k results
+            if results.len() >= k && current.distance > results.peek().unwrap().distance {
                 break;
             }
 

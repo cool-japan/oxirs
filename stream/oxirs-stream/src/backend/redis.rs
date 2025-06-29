@@ -24,7 +24,7 @@ use redis::{
     cluster::ClusterClient,
     cluster_async::ClusterConnection,
     streams::{StreamReadOptions, StreamReadReply},
-    AsyncCommands, Client, RedisResult,
+    AsyncCommands, Client, RedisResult, Value,
 };
 
 /// Redis Streams configuration with clustering and performance tuning
@@ -74,7 +74,7 @@ impl Default for RedisStreamConfig {
 /// Redis connection manager supporting both standalone and cluster modes
 pub enum RedisConnectionManager {
     #[cfg(feature = "redis")]
-    Standalone(AsyncConnectionManager),
+    Standalone(ConnectionManager),
     #[cfg(feature = "redis")]
     Cluster(ClusterConnection),
     #[cfg(not(feature = "redis"))]
@@ -93,7 +93,7 @@ pub struct RedisProducer {
     sequence_number: u64,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 struct ProducerStats {
     events_published: u64,
     events_failed: u64,
@@ -264,7 +264,11 @@ impl From<StreamEvent> for RedisStreamEvent {
                 }),
                 metadata,
             ),
-            StreamEvent::Heartbeat { timestamp, source } => (
+            StreamEvent::Heartbeat {
+                timestamp,
+                source,
+                metadata,
+            } => (
                 "heartbeat".to_string(),
                 serde_json::json!({
                     "source": source
@@ -281,6 +285,14 @@ impl From<StreamEvent> for RedisStreamEvent {
                     checksum: None,
                 },
             ),
+            _ => {
+                // Default case for all other event types not explicitly handled
+                (
+                    "other".to_string(),
+                    serde_json::json!({}),
+                    EventMetadata::default(),
+                )
+            }
         };
 
         Self {
@@ -465,12 +477,14 @@ impl RedisProducer {
         let serialized = serde_json::to_string(event)
             .map_err(|e| anyhow!("Failed to serialize event: {}", e))?;
 
+        let timestamp_str = event.timestamp.to_rfc3339();
+        let sequence_str = event.sequence.to_string();
         let fields = vec![
             ("data", serialized.as_str()),
             ("event_type", &event.event_type),
             ("event_id", &event.event_id),
-            ("timestamp", &event.timestamp.to_rfc3339()),
-            ("sequence", &event.sequence.to_string()),
+            ("timestamp", &timestamp_str),
+            ("sequence", &sequence_str),
         ];
 
         match &mut self.connection {
@@ -616,6 +630,32 @@ impl RedisProducer {
                     graph: graph.clone(),
                     metadata,
                 },
+                PatchOperation::AddPrefix {
+                    prefix: _,
+                    namespace: _,
+                } => {
+                    continue; // Skip prefix operations for now
+                }
+                PatchOperation::DeletePrefix { prefix: _ } => {
+                    continue; // Skip prefix operations for now
+                }
+                PatchOperation::TransactionBegin { transaction_id } => {
+                    StreamEvent::TransactionBegin {
+                        transaction_id: transaction_id
+                            .clone()
+                            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+                        isolation_level: Some(crate::IsolationLevel::ReadCommitted),
+                        metadata,
+                    }
+                }
+                PatchOperation::TransactionCommit => StreamEvent::TransactionCommit {
+                    transaction_id: "unknown".to_string(),
+                    metadata,
+                },
+                PatchOperation::TransactionAbort => StreamEvent::TransactionAbort {
+                    transaction_id: "unknown".to_string(),
+                    metadata,
+                },
             };
 
             self.publish(event).await?;
@@ -652,7 +692,7 @@ impl RedisProducer {
     }
 
     pub async fn get_stats(&self) -> ProducerStats {
-        self.stats.read().await.clone()
+        (*self.stats.read().await).clone()
     }
 }
 
@@ -748,6 +788,8 @@ impl RedisConsumer {
             RedisStreamConfig::default()
         };
 
+        let dead_letter_stream = format!("{}-dlq", redis_config.stream_name);
+
         Ok(Self {
             config,
             redis_config,
@@ -759,7 +801,7 @@ impl RedisConsumer {
             pending_messages: Arc::new(RwLock::new(HashMap::new())),
             consumer_group_manager: Arc::new(RwLock::new(ConsumerGroupManager::default())),
             dead_letter_handler: Arc::new(RwLock::new(DeadLetterHandler {
-                dead_letter_stream: format!("{}-dlq", redis_config.stream_name),
+                dead_letter_stream,
                 max_retries: 3,
                 failed_messages: HashMap::new(),
             })),
@@ -914,7 +956,7 @@ impl RedisConsumer {
                             &self.redis_config.consumer_name,
                         )
                         .count(1)
-                        .block(self.block_time_ms);
+                        .block(self.block_time_ms as usize);
 
                     let result: RedisResult<StreamReadReply> = manager
                         .xread_options(&[&self.redis_config.stream_name], &[&self.last_id], &opts)
@@ -965,7 +1007,7 @@ impl RedisConsumer {
                             &self.redis_config.consumer_name,
                         )
                         .count(1)
-                        .block(self.block_time_ms);
+                        .block(self.block_time_ms as usize);
 
                     let result: RedisResult<StreamReadReply> = connection
                         .xread_options(&[&self.redis_config.stream_name], &[&self.last_id], &opts)
@@ -982,7 +1024,8 @@ impl RedisConsumer {
                             Ok(None)
                         }
                         Err(e) => {
-                            self.stats.connection_errors += 1;
+                            let mut stats = self.stats.write().await;
+                            stats.connection_errors += 1;
                             error!("Redis cluster read error: {}", e);
                             Err(anyhow!("Redis cluster read error: {}", e))
                         }
@@ -1000,16 +1043,19 @@ impl RedisConsumer {
 
     async fn parse_redis_message(
         &mut self,
-        fields: &HashMap<String, String>,
+        fields: &HashMap<String, redis::Value>,
     ) -> Result<Option<StreamEvent>> {
         let start_time = Instant::now();
 
-        if let Some(data) = fields.get("data") {
-            match serde_json::from_str::<RedisStreamEvent>(data) {
+        if let Some(redis::Value::Data(data_bytes)) = fields.get("data") {
+            let data = String::from_utf8(data_bytes.clone())
+                .map_err(|e| anyhow!("Failed to convert data to string: {}", e))?;
+
+            match serde_json::from_str::<RedisStreamEvent>(&data) {
                 Ok(redis_event) => {
                     let mut stats = self.stats.write().await;
                     stats.events_consumed += 1;
-                    stats.bytes_received += data.len() as u64;
+                    stats.bytes_received += data_bytes.len() as u64;
                     stats.last_message = Some(Utc::now());
 
                     let processing_time = start_time.elapsed().as_millis() as f64;
@@ -1102,6 +1148,7 @@ impl RedisConsumer {
                 Ok(StreamEvent::Heartbeat {
                     timestamp: redis_event.timestamp,
                     source,
+                    metadata,
                 })
             }
             _ => Err(anyhow!("Unknown event type: {}", redis_event.event_type)),
@@ -1129,7 +1176,7 @@ impl RedisConsumer {
     }
 
     pub async fn get_stats(&self) -> ConsumerStats {
-        self.stats.read().await.clone()
+        (*self.stats.read().await).clone()
     }
 
     /// Get consumer group information and lag

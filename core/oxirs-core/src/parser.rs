@@ -1,12 +1,11 @@
 //! RDF parsing utilities for various formats with ultra-performance streaming
 
-use rio_api::model::Triple as RioTriple;
-use rio_api::parser::{QuadsParser, TriplesParser};
-// Parsers available but currently unused
 use std::collections::HashMap;
 use std::io::BufRead;
-// use oxrdf::{Quad as OxrdfQuad, Subject as OxrdfSubject, Term as OxrdfTerm}; // REMOVED: Native implementation
-use crate::model::*;
+// Native implementation - no external dependencies needed
+use crate::model::{
+    BlankNode, GraphName, Literal, NamedNode, Object, Predicate, Quad, Subject, Triple,
+};
 use crate::{OxirsError, Result};
 
 /// RDF format enumeration
@@ -609,61 +608,7 @@ impl Parser {
         ))
     }
 
-    /// Convert Rio triple to our Quad type
-    fn convert_rio_triple_to_quad(rio_triple: &RioTriple) -> Result<Quad> {
-        let subject = Self::convert_rio_subject(&rio_triple.subject)?;
-        let predicate = Self::convert_rio_predicate(&rio_triple.predicate)?;
-        let object = Self::convert_rio_object(&rio_triple.object)?;
-
-        let triple = Triple::new(subject, predicate, object);
-        Ok(Quad::from_triple(triple))
-    }
-
-    fn convert_rio_subject(rio_subject: &rio_api::model::Subject) -> Result<Subject> {
-        match rio_subject {
-            rio_api::model::Subject::NamedNode(nn) => {
-                let named_node = NamedNode::new(nn.iri)?;
-                Ok(Subject::NamedNode(named_node))
-            }
-            rio_api::model::Subject::BlankNode(bn) => {
-                let blank_node = BlankNode::new(format!("_:{}", bn.id))?;
-                Ok(Subject::BlankNode(blank_node))
-            }
-            rio_api::model::Subject::Triple(_) => Err(OxirsError::Parse(
-                "Nested triples not supported yet".to_string(),
-            )),
-        }
-    }
-
-    fn convert_rio_predicate(rio_predicate: &rio_api::model::NamedNode) -> Result<Predicate> {
-        let named_node = NamedNode::new(rio_predicate.iri)?;
-        Ok(Predicate::NamedNode(named_node))
-    }
-
-    fn convert_rio_object(rio_object: &rio_api::model::Term) -> Result<Object> {
-        match rio_object {
-            rio_api::model::Term::NamedNode(nn) => {
-                let named_node = NamedNode::new(nn.iri)?;
-                Ok(Object::NamedNode(named_node))
-            }
-            rio_api::model::Term::BlankNode(bn) => {
-                let blank_node = BlankNode::new(format!("_:{}", bn.id))?;
-                Ok(Object::BlankNode(blank_node))
-            }
-            rio_api::model::Term::Literal(_lit) => {
-                // Simplified implementation for now - convert to plain string literal
-                // TODO: Implement proper Rio literal conversion when API is stable
-                let literal = Literal::new("placeholder");
-                Ok(Object::Literal(literal))
-            }
-            rio_api::model::Term::Triple(_) => Err(OxirsError::Parse(
-                "Nested triples not supported yet".to_string(),
-            )),
-        }
-    }
-
-    // TODO: Phase 2 - OxiGraph conversion methods will be replaced with native parsing
-    // These methods were for converting from OxiGraph types to OxiRS types
+    // Native parsing implementation complete - no external dependencies needed
 }
 
 /// Turtle parser state for handling multi-line statements and abbreviations
@@ -1397,7 +1342,7 @@ impl AsyncRdfSink for MemoryAsyncSink {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::*;
+    use crate::model::graph::Graph;
 
     #[test]
     fn test_format_detection_from_extension() {

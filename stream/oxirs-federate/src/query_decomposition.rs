@@ -978,10 +978,9 @@ impl QueryDecomposer {
                     .estimate_single_pattern_cost(service, pattern);
                 let selectivity = self.estimate_pattern_selectivity(&[(0, pattern.clone())]);
                 let component = QueryComponent {
-                    patterns: vec![pattern.clone()],
+                    patterns: vec![(0, pattern.clone())],
                     filters: Vec::new(),
-                    variables: Vec::new(),
-                    joins: Vec::new(),
+                    variables: HashSet::new(),
                 };
                 let network_cost = self
                     .cost_estimator
@@ -1005,12 +1004,13 @@ impl QueryDecomposer {
         let service_groups = self.group_patterns_by_service(pattern_assignments);
         let steps = self.create_steps_from_service_groups(service_groups, services)?;
         let total_cost = steps.iter().map(|s| s.estimated_cost).sum();
+        let step_count = steps.len();
 
         Ok(ComponentPlan {
             strategy: PlanStrategy::CostBased,
             steps,
             total_cost,
-            requires_join: steps.len() > 1,
+            requires_join: step_count > 1,
         })
     }
 
@@ -1448,7 +1448,7 @@ impl QueryDecomposer {
             .collect()
     }
 
-    fn estimate_pattern_selectivity(
+    fn estimate_single_pattern_selectivity(
         &self,
         service: &FederatedService,
         pattern: &TriplePattern,
@@ -2267,7 +2267,7 @@ impl CostEstimator {
     }
 
     /// Estimate network cost for service
-    fn estimate_network_cost(&self, service: &FederatedService) -> f64 {
+    fn estimate_service_network_cost(&self, service: &FederatedService) -> f64 {
         let base_latency = self.network_model.base_latency.as_millis() as f64;
         let connection_overhead = self.network_model.connection_overhead.as_millis() as f64;
 

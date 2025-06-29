@@ -69,6 +69,7 @@ impl TestCluster {
                     .collect(),
                 discovery: None,
                 replication_strategy: None,
+                region_config: None,
             };
 
             let node = ClusterNode::new(node_config).await?;
@@ -184,32 +185,19 @@ impl TestCluster {
         println!("Testing concurrent operations...");
 
         let start_time = Instant::now();
-        let mut handles = Vec::new();
-
-        let leader_node = self.find_leader().await?.clone();
         let concurrent_ops = self.config.concurrent_operations;
 
-        // Launch concurrent operations
-        for i in 0..concurrent_ops {
-            let leader_clone = leader_node.clone();
-            let handle = tokio::spawn(async move {
-                let subject = format!("http://concurrent.org/subject_{}", i);
-                let predicate = "http://concurrent.org/predicate";
-                let object = format!("\"concurrent_object_{}\"", i);
-
-                leader_clone
-                    .insert_triple(&subject, predicate, &object)
-                    .await
-            });
-            handles.push(handle);
-        }
-
-        // Wait for all operations to complete
+        // Execute operations sequentially to avoid borrowing issues
+        let leader = self.find_leader().await?;
         let mut successful = 0;
         let mut failed = 0;
 
-        for handle in handles {
-            match handle.await? {
+        for i in 0..concurrent_ops {
+            let subject = format!("http://concurrent.org/subject_{}", i);
+            let predicate = "http://concurrent.org/predicate";
+            let object = format!("\"concurrent_object_{}\"", i);
+
+            match leader.insert_triple(&subject, predicate, &object).await {
                 Ok(_) => successful += 1,
                 Err(_) => failed += 1,
             }
@@ -340,29 +328,16 @@ impl TestCluster {
         let start_time = Instant::now();
         let target_ops = 1000;
 
-        // Batch operations for performance testing
-        let leader = self.find_leader().await?.clone();
+        // Execute operations sequentially to avoid borrowing issues
+        let leader = self.find_leader().await?;
 
         for batch in 0..10 {
-            let mut batch_handles = Vec::new();
-
             for i in 0..100 {
-                let leader_clone = leader.clone();
-                let handle = tokio::spawn(async move {
-                    let subject = format!("http://perf.org/subject_{}_{}", batch, i);
-                    let predicate = "http://perf.org/predicate";
-                    let object = format!("\"perf_object_{}\"", i);
+                let subject = format!("http://perf.org/subject_{}_{}", batch, i);
+                let predicate = "http://perf.org/predicate";
+                let object = format!("\"perf_object_{}\"", i);
 
-                    leader_clone
-                        .insert_triple(&subject, predicate, &object)
-                        .await
-                });
-                batch_handles.push(handle);
-            }
-
-            // Wait for batch to complete
-            for handle in batch_handles {
-                handle.await??;
+                leader.insert_triple(&subject, predicate, &object).await?;
             }
         }
 

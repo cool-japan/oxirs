@@ -314,7 +314,7 @@ pub struct BaselineModel {
 pub struct AnomalyEvent {
     pub event_id: String,
     pub timestamp: chrono::DateTime<chrono::Utc>,
-    pub anomaly_type: AnomalyType,
+    pub anomaly_type: PerformanceAnomalyType,
     pub severity: AnomalySeverity,
     pub affected_metrics: Vec<String>,
     pub description: String,
@@ -325,7 +325,7 @@ pub struct AnomalyEvent {
 
 /// Types of performance anomalies
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum AnomalyType {
+pub enum PerformanceAnomalyType {
     PerformanceDegradation,
     MemoryLeak,
     CpuSpike,
@@ -404,13 +404,13 @@ struct ForecastingEngine {
 /// Seasonal pattern analyzer
 #[derive(Debug)]
 struct SeasonalAnalyzer {
-    seasonal_patterns: HashMap<String, SeasonalPattern>,
+    seasonal_patterns: HashMap<String, PerformanceSeasonalPattern>,
     pattern_detection_enabled: bool,
 }
 
-/// Seasonal pattern
+/// Performance seasonal pattern
 #[derive(Debug, Clone)]
-struct SeasonalPattern {
+struct PerformanceSeasonalPattern {
     pattern_type: SeasonalPatternType,
     cycle_duration: Duration,
     amplitude: f64,
@@ -1427,7 +1427,7 @@ mod tests {
         let event = AnomalyEvent {
             event_id: "anomaly_001".to_string(),
             timestamp: chrono::Utc::now(),
-            anomaly_type: AnomalyType::LatencyIncrease,
+            anomaly_type: PerformanceAnomalyType::LatencyIncrease,
             severity: AnomalySeverity::Warning,
             affected_metrics: vec!["validation_latency".to_string()],
             description: "Validation latency increased by 50%".to_string(),
@@ -1443,7 +1443,7 @@ mod tests {
             resolution_status: ResolutionStatus::Open,
         };
         
-        assert!(matches!(event.anomaly_type, AnomalyType::LatencyIncrease));
+        assert!(matches!(event.anomaly_type, PerformanceAnomalyType::LatencyIncrease));
         assert!(matches!(event.severity, AnomalySeverity::Warning));
     }
 }

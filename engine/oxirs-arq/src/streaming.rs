@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use tempfile::{NamedTempFile, TempDir};
 use tracing::{debug, info, span, warn, Level};
 
-use crate::algebra::{Algebra, BinaryOperator, Binding, Solution, Term, Variable};
+use crate::algebra::{Algebra, BinaryOperator, Binding, Expression, Solution, Term, Variable};
 use crate::executor::{ExecutionContext, ExecutionStats};
 
 /// Streaming execution engine for large datasets
@@ -65,6 +65,11 @@ impl Default for StreamingConfig {
 
 /// Memory monitoring and management
 pub struct MemoryMonitor {
+    inner: Arc<Mutex<MemoryMonitorInner>>,
+}
+
+/// Internal state for memory monitor
+struct MemoryMonitorInner {
     current_usage: usize,
     peak_usage: usize,
     max_allowed: usize,
@@ -162,6 +167,8 @@ pub struct StreamingHashJoin {
     config: StreamingConfig,
     left_exhausted: bool,
     current_batch: Option<Vec<Solution>>,
+    spilled_partitions: Vec<String>, // Spill IDs for partitioned hash tables
+    current_spill_index: usize,
 }
 
 /// Streaming sort-merge join implementation
@@ -200,52 +207,78 @@ impl StreamingSortMergeJoin {
 
 impl DataStream for StreamingSortMergeJoin {
     fn next_batch(&mut self) -> Result<Option<Vec<Solution>>> {
-        // Simple implementation of sort-merge join
-        if self.left_buffer.is_empty() {
-            if let Some(left_batch) = self.left_stream.next_batch()? {
-                self.left_buffer.extend(left_batch);
-            }
-        }
-
-        if self.right_buffer.is_empty() {
-            if let Some(right_batch) = self.right_stream.next_batch()? {
-                self.right_buffer.extend(right_batch);
-            }
-        }
-
-        if self.left_buffer.is_empty() || self.right_buffer.is_empty() {
-            return Ok(None);
-        }
-
+        // Proper sort-merge join implementation
         let mut result_batch = Vec::new();
-
-        // Simple nested loop join for demonstration
-        // In practice, this would implement proper sort-merge logic
-        while let Some(left_solution) = self.left_buffer.pop_front() {
-            for right_solution in &self.right_buffer {
-                // Iterate over each binding in the solutions
-                for left_binding in &left_solution {
-                    for right_binding in right_solution {
-                        if self.solutions_match(left_binding, right_binding) {
-                            let mut merged = left_binding.clone();
-                            for (var, term) in right_binding {
-                                if !merged.contains_key(var) {
-                                    merged.insert(var.clone(), term.clone());
-                                }
-                            }
-                            result_batch.push(vec![merged]);
+        
+        // Ensure both buffers have sorted data
+        self.refill_sorted_buffers()?;
+        
+        // Perform sort-merge join
+        while !self.left_buffer.is_empty() && !self.right_buffer.is_empty() {
+            let left_solution = &self.left_buffer[0];
+            let right_solution = &self.right_buffer[0];
+            
+            // Compare join keys
+            let comparison = self.compare_join_keys(left_solution, right_solution);
+            
+            match comparison {
+                std::cmp::Ordering::Less => {
+                    // Left key is smaller, advance left
+                    self.left_buffer.pop_front();
+                }
+                std::cmp::Ordering::Greater => {
+                    // Right key is smaller, advance right
+                    self.right_buffer.pop_front();
+                }
+                std::cmp::Ordering::Equal => {
+                    // Keys match, find all matching solutions
+                    let left_key = self.extract_join_key(left_solution);
+                    
+                    // Collect all left solutions with this key
+                    let mut matching_left = Vec::new();
+                    while !self.left_buffer.is_empty() {
+                        let current_left = &self.left_buffer[0];
+                        if self.extract_join_key(current_left) == left_key {
+                            matching_left.push(self.left_buffer.pop_front().unwrap());
+                        } else {
+                            break;
                         }
+                    }
+                    
+                    // Collect all right solutions with this key
+                    let mut matching_right = Vec::new();
+                    while !self.right_buffer.is_empty() {
+                        let current_right = &self.right_buffer[0];
+                        if self.extract_join_key(current_right) == left_key {
+                            matching_right.push(self.right_buffer.pop_front().unwrap());
+                        } else {
+                            break;
+                        }
+                    }
+                    
+                    // Join all matching solutions
+                    for left_sol in &matching_left {
+                        for right_sol in &matching_right {
+                            if let Some(joined) = self.join_solutions(left_sol, right_sol) {
+                                result_batch.push(joined);
+                            }
+                        }
+                    }
+                    
+                    // Check batch size limit
+                    if result_batch.len() >= self.config.batch_size {
+                        break;
                     }
                 }
             }
-
-            if result_batch.len() >= 1000 {
-                // Batch size limit
-                break;
+            
+            // Refill buffers if needed
+            if self.left_buffer.len() < 10 || self.right_buffer.len() < 10 {
+                self.refill_sorted_buffers()?;
             }
         }
 
-        if result_batch.is_empty() {
+        if result_batch.is_empty() && !self.has_more() {
             Ok(None)
         } else {
             Ok(Some(result_batch))
@@ -278,19 +311,104 @@ impl DataStream for StreamingSortMergeJoin {
 }
 
 impl StreamingSortMergeJoin {
-    fn solutions_match(&self, left: &Binding, right: &Binding) -> bool {
-        for var in &self.join_variables {
-            match (left.get(var), right.get(var)) {
-                (Some(left_term), Some(right_term)) => {
-                    if left_term != right_term {
-                        return false;
-                    }
-                }
-                (None, None) => continue,
-                _ => return false,
+    /// Refill buffers with sorted data from input streams
+    fn refill_sorted_buffers(&mut self) -> Result<()> {
+        // Fill left buffer if needed
+        if self.left_buffer.is_empty() {
+            if let Some(mut batch) = self.left_stream.next_batch()? {
+                // Sort the batch by join variables
+                batch.sort_by(|a, b| self.compare_solution_keys(a, b));
+                self.left_buffer.extend(batch);
             }
         }
-        true
+        
+        // Fill right buffer if needed
+        if self.right_buffer.is_empty() {
+            if let Some(mut batch) = self.right_stream.next_batch()? {
+                // Sort the batch by join variables
+                batch.sort_by(|a, b| self.compare_solution_keys(a, b));
+                self.right_buffer.extend(batch);
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Compare join keys of two solutions
+    fn compare_join_keys(&self, left: &Solution, right: &Solution) -> std::cmp::Ordering {
+        self.compare_solution_keys(left, right)
+    }
+    
+    /// Compare solutions by their join variable values
+    fn compare_solution_keys(&self, left: &Solution, right: &Solution) -> std::cmp::Ordering {
+        for var in &self.join_variables {
+            let left_val = Self::get_solution_value(left, var);
+            let right_val = Self::get_solution_value(right, var);
+            
+            match (left_val, right_val) {
+                (Some(left_term), Some(right_term)) => {
+                    let cmp = format!("{:?}", left_term).cmp(&format!("{:?}", right_term));
+                    if cmp != std::cmp::Ordering::Equal {
+                        return cmp;
+                    }
+                }
+                (Some(_), None) => return std::cmp::Ordering::Greater,
+                (None, Some(_)) => return std::cmp::Ordering::Less,
+                (None, None) => continue,
+            }
+        }
+        std::cmp::Ordering::Equal
+    }
+    
+    /// Extract join key from solution
+    fn extract_join_key(&self, solution: &Solution) -> String {
+        self.join_variables
+            .iter()
+            .map(|var| {
+                Self::get_solution_value(solution, var)
+                    .map(|term| format!("{:?}", term))
+                    .unwrap_or_else(|| "NULL".to_string())
+            })
+            .collect::<Vec<_>>()
+            .join("|")
+    }
+    
+    /// Helper function to get a value from a solution
+    fn get_solution_value<'a>(solution: &'a Solution, var: &Variable) -> Option<&'a Term> {
+        solution.first().and_then(|binding| binding.get(var))
+    }
+    
+    /// Join two compatible solutions
+    fn join_solutions(&self, left: &Solution, right: &Solution) -> Option<Solution> {
+        // Check that join variables have compatible values
+        for var in &self.join_variables {
+            let left_val = Self::get_solution_value(left, var);
+            let right_val = Self::get_solution_value(right, var);
+
+            match (left_val, right_val) {
+                (Some(l), Some(r)) if l != r => return None,
+                _ => {}
+            }
+        }
+
+        // Merge the solutions by combining the first bindings from each
+        let mut result_binding = Binding::new();
+
+        // Add variables from left solution
+        if let Some(left_binding) = left.first() {
+            for (var, term) in left_binding.iter() {
+                result_binding.insert(var.clone(), term.clone());
+            }
+        }
+
+        // Add variables from right solution (overwriting if conflicts)
+        if let Some(right_binding) = right.first() {
+            for (var, term) in right_binding.iter() {
+                result_binding.insert(var.clone(), term.clone());
+            }
+        }
+
+        Some(vec![result_binding])
     }
 }
 
@@ -380,7 +498,8 @@ impl StreamingExecutor {
             Algebra::Join { left, right } => {
                 let left_stream = self.execute_algebra_streaming(left)?;
                 let right_stream = self.execute_algebra_streaming(right)?;
-                self.create_streaming_join(left_stream, right_stream, vec![]) // TODO: extract join variables
+                let join_variables = self.extract_join_variables(left, right);
+                self.create_streaming_join(left_stream, right_stream, join_variables)
             }
             Algebra::Union { left, right } => {
                 let left_stream = self.execute_algebra_streaming(left)?;
@@ -525,6 +644,104 @@ impl StreamingExecutor {
     }
     */
 
+    /// Extract variables that are shared between left and right algebra expressions
+    fn extract_join_variables(&self, left: &Algebra, right: &Algebra) -> Vec<Variable> {
+        let left_vars = self.extract_variables_from_algebra(left);
+        let right_vars = self.extract_variables_from_algebra(right);
+        
+        // Find intersection of variables
+        left_vars.into_iter()
+            .filter(|var| right_vars.contains(var))
+            .collect()
+    }
+    
+    /// Extract all variables from an algebra expression
+    fn extract_variables_from_algebra(&self, algebra: &Algebra) -> Vec<Variable> {
+        let mut variables = Vec::new();
+        
+        match algebra {
+            Algebra::Join { left, right } => {
+                variables.extend(self.extract_variables_from_algebra(left));
+                variables.extend(self.extract_variables_from_algebra(right));
+            }
+            Algebra::Union { left, right } => {
+                variables.extend(self.extract_variables_from_algebra(left));
+                variables.extend(self.extract_variables_from_algebra(right));
+            }
+            Algebra::Bgp(patterns) => {
+                // Extract variables from BGP patterns
+                for pattern in patterns {
+                    if let Term::Variable(var) = &pattern.subject {
+                        variables.push(var.clone());
+                    }
+                    if let Term::Variable(var) = &pattern.predicate {
+                        variables.push(var.clone());
+                    }
+                    if let Term::Variable(var) = &pattern.object {
+                        variables.push(var.clone());
+                    }
+                }
+            }
+            Algebra::Filter { pattern, condition } => {
+                variables.extend(self.extract_variables_from_algebra(pattern));
+                variables.extend(self.extract_variables_from_expression(condition));
+            }
+            Algebra::Project { pattern, variables: proj_vars } => {
+                variables.extend(self.extract_variables_from_algebra(pattern));
+                variables.extend(proj_vars.clone());
+            }
+            _ => {
+                // For other algebra types, we'd need to implement variable extraction
+                debug!("Variable extraction not implemented for algebra type");
+            }
+        }
+        
+        // Remove duplicates
+        variables.sort();
+        variables.dedup();
+        variables
+    }
+    
+    /// Extract variables from a SPARQL expression
+    fn extract_variables_from_expression(&self, expr: &crate::algebra::Expression) -> Vec<Variable> {
+        use crate::algebra::{Expression, BinaryOperator, UnaryOperator};
+        let mut variables = Vec::new();
+        
+        match expr {
+            Expression::Variable(var) => {
+                variables.push(var.clone());
+            }
+            Expression::Binary { left, right, .. } => {
+                variables.extend(self.extract_variables_from_expression(left));
+                variables.extend(self.extract_variables_from_expression(right));
+            }
+            Expression::Unary { expr, .. } => {
+                variables.extend(self.extract_variables_from_expression(expr));
+            }
+            Expression::Conditional { condition, then_expr, else_expr } => {
+                variables.extend(self.extract_variables_from_expression(condition));
+                variables.extend(self.extract_variables_from_expression(then_expr));
+                variables.extend(self.extract_variables_from_expression(else_expr));
+            }
+            Expression::Bound(var) => {
+                variables.push(var.clone());
+            }
+            Expression::Function { args, .. } => {
+                for arg in args {
+                    variables.extend(self.extract_variables_from_expression(arg));
+                }
+            }
+            Expression::Exists(algebra) | Expression::NotExists(algebra) => {
+                variables.extend(self.extract_variables_from_algebra(algebra));
+            }
+            _ => {
+                // For other expression types (Literal, Iri), no variables to extract
+            }
+        }
+        
+        variables
+    }
+
     /// Get streaming execution statistics
     pub fn get_stats(&self) -> &StreamingStats {
         &self.execution_stats
@@ -542,22 +759,25 @@ impl StreamingExecutor {
 impl MemoryMonitor {
     fn new(max_allowed: usize) -> Self {
         Self {
-            current_usage: 0,
-            peak_usage: 0,
-            max_allowed,
-            allocation_history: VecDeque::new(),
+            inner: Arc::new(Mutex::new(MemoryMonitorInner {
+                current_usage: 0,
+                peak_usage: 0,
+                max_allowed,
+                allocation_history: VecDeque::new(),
+            })),
         }
     }
 
-    fn allocate(&mut self, size: usize, operation: &str) -> bool {
-        if self.current_usage + size > self.max_allowed {
+    fn allocate(&self, size: usize, operation: &str) -> bool {
+        let mut inner = self.inner.lock().unwrap();
+        if inner.current_usage + size > inner.max_allowed {
             return false;
         }
 
-        self.current_usage += size;
-        self.peak_usage = self.peak_usage.max(self.current_usage);
+        inner.current_usage += size;
+        inner.peak_usage = inner.peak_usage.max(inner.current_usage);
 
-        self.allocation_history.push_back(MemoryAllocation {
+        inner.allocation_history.push_back(MemoryAllocation {
             timestamp: Instant::now(),
             size,
             operation: operation.to_string(),
@@ -565,33 +785,38 @@ impl MemoryMonitor {
         });
 
         // Keep history bounded
-        if self.allocation_history.len() > 10000 {
-            self.allocation_history.pop_front();
+        if inner.allocation_history.len() > 10000 {
+            inner.allocation_history.pop_front();
         }
 
         true
     }
 
-    fn deallocate(&mut self, size: usize) {
-        self.current_usage = self.current_usage.saturating_sub(size);
+    fn deallocate(&self, size: usize) {
+        let mut inner = self.inner.lock().unwrap();
+        inner.current_usage = inner.current_usage.saturating_sub(size);
     }
 
     fn should_spill(&self, threshold: f64) -> bool {
-        self.current_usage as f64 > self.max_allowed as f64 * threshold
+        let inner = self.inner.lock().unwrap();
+        inner.current_usage as f64 > inner.max_allowed as f64 * threshold
     }
 
     fn get_usage_percentage(&self) -> f64 {
-        self.current_usage as f64 / self.max_allowed as f64
+        let inner = self.inner.lock().unwrap();
+        inner.current_usage as f64 / inner.max_allowed as f64
+    }
+
+    fn get_current_usage(&self) -> usize {
+        let inner = self.inner.lock().unwrap();
+        inner.current_usage
     }
 }
 
 impl Clone for MemoryMonitor {
     fn clone(&self) -> Self {
         Self {
-            current_usage: self.current_usage,
-            peak_usage: self.peak_usage,
-            max_allowed: self.max_allowed,
-            allocation_history: self.allocation_history.clone(),
+            inner: Arc::clone(&self.inner),
         }
     }
 }
@@ -727,18 +952,33 @@ impl StreamingHashJoin {
             config,
             left_exhausted: false,
             current_batch: None,
+            spilled_partitions: Vec::new(),
+            current_spill_index: 0,
         })
     }
 }
 
 impl DataStream for StreamingHashJoin {
     fn next_batch(&mut self) -> Result<Option<Vec<Solution>>> {
-        // Implementation of streaming hash join logic
+        // Implementation of streaming hash join logic with memory monitoring
         if !self.left_exhausted {
-            // Build phase: read from left stream and build hash table
+            // Build phase: read from left stream and build hash table with spill management
             while let Some(batch) = self.left_stream.next_batch()? {
                 for solution in batch {
                     let key = self.extract_join_key(&solution);
+                    let estimated_size = std::mem::size_of_val(&solution) + key.len();
+                    
+                    // Check if we need to spill before adding to hash table
+                    if !self.memory_monitor.allocate(estimated_size, "hash_join_build") {
+                        // Spill current hash table to disk
+                        self.spill_hash_table()?;
+                        
+                        // Try allocation again after spilling
+                        if !self.memory_monitor.allocate(estimated_size, "hash_join_build") {
+                            return Err(anyhow!("Cannot allocate memory even after spilling"));
+                        }
+                    }
+                    
                     self.hash_table
                         .entry(key)
                         .or_insert_with(Vec::new)
@@ -845,6 +1085,45 @@ impl StreamingHashJoin {
 
         Some(vec![result_binding])
     }
+    
+    /// Spill current hash table to disk to free memory
+    fn spill_hash_table(&mut self) -> Result<()> {
+        if self.hash_table.is_empty() {
+            return Ok(());
+        }
+        
+        // Spill the current hash table
+        let spill_id = self.spill_manager
+            .lock()
+            .unwrap()
+            .spill_data(&self.hash_table, SpillDataType::HashTable)?;
+        
+        self.spilled_partitions.push(spill_id);
+        
+        // Calculate memory to deallocate
+        let total_size: usize = self.hash_table
+            .iter()
+            .map(|(key, solutions)| {
+                key.len() + solutions.len() * std::mem::size_of::<Solution>()
+            })
+            .sum();
+        
+        // Clear hash table and deallocate memory
+        self.hash_table.clear();
+        self.memory_monitor.deallocate(total_size);
+        
+        debug!("Spilled hash table partition with {} entries", total_size);
+        Ok(())
+    }
+    
+    /// Load spilled hash table partition back into memory
+    fn load_spilled_partition(&mut self, spill_id: &str) -> Result<HashMap<String, Vec<Solution>>> {
+        let partition: HashMap<String, Vec<Solution>> = self.spill_manager
+            .lock()
+            .unwrap()
+            .read_spill(spill_id)?;
+        Ok(partition)
+    }
 }
 
 // Placeholder implementations for other streaming operators
@@ -922,8 +1201,38 @@ impl StreamingMinus {
 
 impl DataStream for StreamingMinus {
     fn next_batch(&mut self) -> Result<Option<Vec<Solution>>> {
-        // Placeholder implementation
-        self.left.next_batch()
+        // Proper SPARQL MINUS implementation
+        if let Some(left_batch) = self.left.next_batch()? {
+            let mut filtered_batch = Vec::new();
+            
+            // For each solution in the left batch, check if it should be excluded by the right
+            for left_solution in left_batch {
+                let mut exclude = false;
+                
+                // Reset right stream to check all right solutions against this left solution
+                self.right.reset()?;
+                
+                // Check if any right solution makes this left solution incompatible
+                while let Some(right_batch) = self.right.next_batch()? {
+                    for right_solution in &right_batch {
+                        if self.solutions_compatible(&left_solution, right_solution) {
+                            exclude = true;
+                            break;
+                        }
+                    }
+                    if exclude { break; }
+                }
+                
+                // If no compatible right solution found, include the left solution
+                if !exclude {
+                    filtered_batch.push(left_solution);
+                }
+            }
+            
+            Ok(if filtered_batch.is_empty() { None } else { Some(filtered_batch) })
+        } else {
+            Ok(None)
+        }
     }
 
     fn has_more(&self) -> bool {
@@ -935,11 +1244,48 @@ impl DataStream for StreamingMinus {
     }
 
     fn reset(&mut self) -> Result<()> {
-        self.left.reset()
+        self.left.reset()?;
+        self.right.reset()?;
+        Ok(())
     }
 
     fn get_stats(&self) -> StreamStats {
-        self.left.get_stats()
+        let mut stats = self.left.get_stats();
+        let right_stats = self.right.get_stats();
+        stats.rows_processed += right_stats.rows_processed;
+        stats.bytes_processed += right_stats.bytes_processed;
+        stats.processing_time += right_stats.processing_time;
+        stats
+    }
+}
+
+impl StreamingMinus {
+    /// Check if two solutions are compatible according to SPARQL MINUS semantics
+    /// Two solutions are compatible if they don't disagree on any shared variables
+    fn solutions_compatible(&self, left: &Solution, right: &Solution) -> bool {
+        // Get the first binding from each solution (primary binding)
+        let left_binding = match left.first() {
+            Some(binding) => binding,
+            None => return false,
+        };
+        
+        let right_binding = match right.first() {
+            Some(binding) => binding,
+            None => return false,
+        };
+        
+        // Check all shared variables
+        for (var, left_term) in left_binding.iter() {
+            if let Some(right_term) = right_binding.get(var) {
+                // If they have different values for the same variable, they're incompatible
+                if left_term != right_term {
+                    return false;
+                }
+            }
+        }
+        
+        // If no disagreements found, they are compatible
+        true
     }
 }
 
@@ -1009,8 +1355,8 @@ impl DataStream for StreamingSelection {
             let filtered: Vec<Solution> = batch
                 .into_iter()
                 .filter(|solution| {
-                    // Evaluate condition - placeholder implementation
-                    true
+                    // Evaluate condition with proper expression evaluation
+                    self.evaluate_condition(solution).unwrap_or(false)
                 })
                 .collect();
 
@@ -1039,6 +1385,113 @@ impl DataStream for StreamingSelection {
 
     fn get_stats(&self) -> StreamStats {
         self.input.get_stats()
+    }
+}
+
+impl StreamingSelection {
+    /// Evaluate the filter condition against a solution
+    fn evaluate_condition(&self, solution: &Solution) -> Result<bool> {
+        use crate::algebra::{Expression, BinaryOperator, UnaryOperator};
+        
+        // Get the primary binding from the solution
+        let binding = match solution.first() {
+            Some(binding) => binding,
+            None => return Ok(false),
+        };
+        
+        // Basic expression evaluation
+        match &self.condition {
+            Expression::Variable(var) => {
+                // Variable exists and is bound
+                Ok(binding.contains_key(var))
+            }
+            Expression::Literal(_literal) => {
+                // For simplicity, treat all literals as truthy
+                // TODO: Implement proper boolean literal evaluation
+                Ok(true)
+            }
+            Expression::Binary { op, left, right } => {
+                match op {
+                    BinaryOperator::Equal => {
+                        let left_val = self.evaluate_expression(left, binding)?;
+                        let right_val = self.evaluate_expression(right, binding)?;
+                        Ok(left_val == right_val)
+                    }
+                    BinaryOperator::NotEqual => {
+                        let left_val = self.evaluate_expression(left, binding)?;
+                        let right_val = self.evaluate_expression(right, binding)?;
+                        Ok(left_val != right_val)
+                    }
+                    BinaryOperator::And => {
+                        let left_result = self.evaluate_condition_expr(left, binding)?;
+                        let right_result = self.evaluate_condition_expr(right, binding)?;
+                        Ok(left_result && right_result)
+                    }
+                    BinaryOperator::Or => {
+                        let left_result = self.evaluate_condition_expr(left, binding)?;
+                        let right_result = self.evaluate_condition_expr(right, binding)?;
+                        Ok(left_result || right_result)
+                    }
+                    _ => {
+                        // For other binary operators, default to true
+                        warn!("Unsupported binary operator in filter: {:?}", op);
+                        Ok(true)
+                    }
+                }
+            }
+            Expression::Unary { op, expr } => {
+                match op {
+                    UnaryOperator::Not => {
+                        let result = self.evaluate_condition_expr(expr, binding)?;
+                        Ok(!result)
+                    }
+                    _ => {
+                        // For other unary operators, default to true
+                        warn!("Unsupported unary operator in filter: {:?}", op);
+                        Ok(true)
+                    }
+                }
+            }
+            Expression::Bound(var) => {
+                Ok(binding.contains_key(var))
+            }
+            _ => {
+                // For other expression types, default to true
+                warn!("Unsupported expression type in filter, defaulting to true");
+                Ok(true)
+            }
+        }
+    }
+    
+    /// Helper to evaluate sub-expressions that return boolean values
+    fn evaluate_condition_expr(&self, expr: &Expression, binding: &Binding) -> Result<bool> {
+        // Create a temporary solution with just this binding
+        let temp_solution = vec![binding.clone()];
+        
+        // Use a temporary StreamingSelection to evaluate recursively
+        let temp_filter = StreamingSelection {
+            input: Box::new(EmptyStream::new()),
+            condition: expr.clone(),
+        };
+        
+        temp_filter.evaluate_condition(&temp_solution)
+    }
+    
+    /// Helper to evaluate expressions that return Term values
+    fn evaluate_expression(&self, expr: &Expression, binding: &Binding) -> Result<Option<Term>> {
+        match expr {
+            Expression::Variable(var) => {
+                Ok(binding.get(var).cloned())
+            }
+            Expression::Literal(literal) => {
+                // Convert literal to Term
+                Ok(Some(Term::Literal(literal.clone())))
+            }
+            _ => {
+                // For complex expressions, we'd need a full expression evaluator
+                Ok(None)
+            }
+        }
     }
 }
 
@@ -1229,15 +1682,15 @@ mod tests {
         let mut monitor = MemoryMonitor::new(1000);
 
         assert!(monitor.allocate(500, "test"));
-        assert_eq!(monitor.current_usage, 500);
+        assert_eq!(monitor.get_current_usage(), 500);
 
         assert!(monitor.allocate(400, "test2"));
-        assert_eq!(monitor.current_usage, 900);
+        assert_eq!(monitor.get_current_usage(), 900);
 
         assert!(!monitor.allocate(200, "test3")); // Should fail
 
         monitor.deallocate(400);
-        assert_eq!(monitor.current_usage, 500);
+        assert_eq!(monitor.get_current_usage(), 500);
     }
 
     #[test]

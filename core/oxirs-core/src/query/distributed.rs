@@ -9,8 +9,6 @@ use crate::query::algebra::{self, *};
 use crate::OxirsError;
 use async_trait::async_trait;
 use std::collections::{HashMap, HashSet};
-#[cfg(not(feature = "async"))]
-use std::sync::mpsc; // For future message passing
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 #[cfg(feature = "async")]

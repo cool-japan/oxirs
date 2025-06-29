@@ -30,6 +30,7 @@ pub struct FederationCache {
     /// L2: Async cache with TTL for warm data
     l2_cache: AsyncCache<String, CacheEntry>,
     /// L3: Optional Redis cache for distributed caching
+    #[cfg(feature = "redis-cache")]
     l3_cache: Option<Arc<RedisCache>>,
     /// Bloom filter for cache existence checks
     bloom_filter: Arc<RwLock<BloomFilter>>,
@@ -94,6 +95,7 @@ impl FederationCache {
         Self {
             l1_cache,
             l2_cache,
+            #[cfg(feature = "redis-cache")]
             l3_cache,
             bloom_filter,
             config,
@@ -139,6 +141,7 @@ impl FederationCache {
         }
 
         // Try L3 cache (Redis)
+        #[cfg(feature = "redis-cache")]
         if let Some(redis) = &self.l3_cache {
             if let Ok(Some(entry)) = redis.get(&cache_key).await {
                 if !entry.is_expired() {
@@ -180,6 +183,7 @@ impl FederationCache {
         self.put_in_l1(cache_key.clone(), entry.clone()).await;
         self.l2_cache.insert(cache_key.clone(), entry.clone()).await;
 
+        #[cfg(feature = "redis-cache")]
         if let Some(redis) = &self.l3_cache {
             let _ = redis.put(&cache_key, &entry, ttl).await;
         }
@@ -312,6 +316,7 @@ impl FederationCache {
         // L2 cache doesn't support prefix-based invalidation, so it will expire naturally
 
         // Clear Redis query entries if available
+        #[cfg(feature = "redis-cache")]
         if let Some(redis) = &self.l3_cache {
             let _ = redis.invalidate_prefix("query:").await;
         }
@@ -357,6 +362,7 @@ impl FederationCache {
         // L2 cache handles expiry automatically
 
         // Clean Redis cache
+        #[cfg(feature = "redis-cache")]
         if let Some(redis) = &self.l3_cache {
             // Redis TTL handles expiry automatically
         }
@@ -427,6 +433,7 @@ impl FederationCache {
             }
         }
 
+        #[cfg(feature = "redis-cache")]
         if let Some(redis) = &self.l3_cache {
             if let Ok(Some(entry)) = redis.get(cache_key).await {
                 if !entry.is_expired() {
@@ -450,6 +457,7 @@ impl FederationCache {
         self.put_in_l1(key.to_string(), entry.clone()).await;
         self.l2_cache.insert(key.to_string(), entry.clone()).await;
 
+        #[cfg(feature = "redis-cache")]
         if let Some(redis) = &self.l3_cache {
             let ttl = entry.expires_at.duration_since(SystemTime::now()).ok();
             let _ = redis.put(key, &entry, ttl).await;
@@ -469,6 +477,7 @@ impl FederationCache {
 
         self.l2_cache.invalidate(key).await;
 
+        #[cfg(feature = "redis-cache")]
         if let Some(redis) = &self.l3_cache {
             let _ = redis.remove(key).await;
         }
@@ -817,14 +826,13 @@ mod tests {
     async fn test_query_key_generation() {
         let cache = FederationCache::new();
         let query_info = QueryInfo {
-            query_type: crate::planner::QueryType::SparqlSelect,
+            query_type: crate::planner::QueryType::Select,
             original_query: "SELECT * WHERE { ?s ?p ?o }".to_string(),
             patterns: vec![],
-            service_clauses: vec![],
-            filters: vec![],
             variables: std::collections::HashSet::new(),
-            complexity: crate::planner::QueryComplexity::Low,
+            complexity: 1,
             estimated_cost: 100,
+            filters: Vec::new(),
         };
 
         let key1 = cache.generate_query_key(&query_info);

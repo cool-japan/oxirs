@@ -1,7 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use oxirs_core::{
     model::{Literal, NamedNode, Term},
-    store::Store,
+    Store,
 };
 use oxirs_shacl::{
     constraints::*, shapes::ShapeFactory, Constraint, ConstraintComponentId, PropertyPath,
@@ -275,9 +275,9 @@ fn bench_property_path_evaluation(c: &mut Criterion) {
         ),
         (
             "inverse",
-            PropertyPath::inverse(Box::new(PropertyPath::predicate(
+            PropertyPath::inverse(PropertyPath::predicate(
                 NamedNode::new("http://example.org/knows").unwrap(),
-            ))),
+            )),
         ),
         (
             "sequence",

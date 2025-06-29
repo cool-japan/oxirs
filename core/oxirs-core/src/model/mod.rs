@@ -26,6 +26,10 @@ pub use star::*;
 pub use term::*;
 pub use triple::*;
 
+// Explicit re-exports of union types for external modules
+pub use quad::GraphName;
+pub use term::{Object, Predicate, Subject, Term, Variable};
+
 /// A trait for all RDF terms
 pub trait RdfTerm {
     /// Returns the string representation of this term

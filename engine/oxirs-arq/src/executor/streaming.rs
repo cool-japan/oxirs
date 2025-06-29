@@ -398,9 +398,6 @@ impl StreamingSolution {
             NamedTempFile::new()?
         };
 
-        let (file, path) = temp_file.into_parts();
-        let mut writer = BufWriter::new(file);
-
         // Serialize solutions to temporary file
         let serialized_solutions: Vec<SerializableSolution> = self
             .solutions
@@ -414,12 +411,21 @@ impl StreamingSolution {
             bincode::serialize(&serialized_solutions)?
         };
 
-        writer.write_all(&data)?;
-        writer.flush()?;
+        {
+            let mut writer = BufWriter::new(&temp_file);
+            writer.write_all(&data)?;
+            writer.flush()?;
+        }
+
+        // Persist the temp file to prevent automatic deletion
+        let original_path = temp_file.path().to_path_buf();
+        let new_path = original_path.with_extension("spill");
+        temp_file.persist(&new_path)?;
+        let path = new_path;
 
         // Track spill file
         let spill_file = SpillFile {
-            path: path.to_path_buf(),
+            path,
             size: data.len(),
             compressed: self.config.compress_spills,
         };
@@ -551,8 +557,8 @@ impl Iterator for StreamingSolution {
             return Some(Ok(solution));
         }
 
-        // If no in-memory solutions, try to load from spill files
-        if !self.finished || self.current_spill_idx < self.spill_files.len() {
+        // If no in-memory solutions, try to load from spill files only if they exist
+        if self.current_spill_idx < self.spill_files.len() {
             match self.load_from_spill() {
                 Ok(true) => {
                     // Successfully loaded from spill, try again

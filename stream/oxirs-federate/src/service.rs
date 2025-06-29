@@ -116,7 +116,7 @@ pub enum ServiceCapability {
 }
 
 /// Authentication type enumeration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AuthType {
     /// No authentication required
     None,
@@ -145,6 +145,8 @@ pub struct AuthCredentials {
     pub token_url: Option<String>,
     pub scope: Option<String>,
     pub custom_headers: Option<HashMap<String, String>>,
+    pub refresh_token: Option<String>,
+    pub token_endpoint: Option<String>,
 }
 
 impl Default for AuthCredentials {
@@ -160,6 +162,8 @@ impl Default for AuthCredentials {
             token_url: None,
             scope: None,
             custom_headers: None,
+            refresh_token: None,
+            token_endpoint: None,
         }
     }
 }
@@ -231,7 +235,7 @@ impl Default for ServiceStatusInfo {
 }
 
 /// Registry for managing federated services
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ServiceRegistry {
     pub(crate) services: HashMap<String, FederatedService>,
     config: ServiceRegistryConfig,
@@ -389,9 +393,25 @@ impl ServiceRegistry {
             ServiceStatus::Unavailable
         };
 
-        Ok(HealthStatus {
-            overall_status,
-            service_statuses,
+        Ok(crate::HealthStatus {
+            overall_status: match overall_status {
+                ServiceStatus::Healthy => crate::ServiceStatus::Healthy,
+                ServiceStatus::Degraded => crate::ServiceStatus::Degraded,
+                ServiceStatus::Unavailable => crate::ServiceStatus::Unavailable,
+                ServiceStatus::Unknown => crate::ServiceStatus::Unknown,
+            },
+            service_statuses: service_statuses
+                .into_iter()
+                .map(|(k, v)| {
+                    let status = match v {
+                        ServiceStatus::Healthy => crate::ServiceStatus::Healthy,
+                        ServiceStatus::Degraded => crate::ServiceStatus::Degraded,
+                        ServiceStatus::Unavailable => crate::ServiceStatus::Unavailable,
+                        ServiceStatus::Unknown => crate::ServiceStatus::Unknown,
+                    };
+                    (k, status)
+                })
+                .collect(),
             total_services,
             healthy_services: healthy_count,
             timestamp: chrono::Utc::now(),
@@ -400,13 +420,16 @@ impl ServiceRegistry {
 
     /// Get registry statistics
     pub async fn get_stats(&self) -> ServiceRegistryStats {
-        let health_check = self.health_check().await.unwrap_or_else(|_| HealthStatus {
-            overall_status: ServiceStatus::Unknown,
-            service_statuses: HashMap::new(),
-            total_services: self.services.len(),
-            healthy_services: 0,
-            timestamp: chrono::Utc::now(),
-        });
+        let health_check = self
+            .health_check()
+            .await
+            .unwrap_or_else(|_| crate::HealthStatus {
+                overall_status: crate::ServiceStatus::Unknown,
+                service_statuses: HashMap::new(),
+                total_services: self.services.len(),
+                healthy_services: 0,
+                timestamp: chrono::Utc::now(),
+            });
 
         let mut capabilities_count = HashMap::new();
         for service in self.services.values() {
@@ -478,7 +501,7 @@ impl ServiceRegistry {
         let response = self
             .http_client
             .post(&service.endpoint)
-            .headers(headers)
+            .headers(headers.clone())
             .body(stats_query)
             .send()
             .await?;
@@ -1541,6 +1564,8 @@ mod tests {
                 token_url: None,
                 scope: None,
                 custom_headers: None,
+                refresh_token: None,
+                token_endpoint: None,
             },
         };
 

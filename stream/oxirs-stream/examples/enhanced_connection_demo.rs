@@ -8,12 +8,12 @@
 
 use anyhow::Result;
 use oxirs_stream::connection_pool::{
-    ConnectionFactory, ConnectionPool, FailoverConfig, LoadBalancingStrategy, PoolConfig,
-    PooledConnection,
+    ConnectionFactory, ConnectionPool, LoadBalancingStrategy, PoolConfig, PooledConnection,
 };
 use oxirs_stream::failover::FailoverEvent;
 use oxirs_stream::health_monitor::{HealthCheckConfig, HealthEvent};
 use oxirs_stream::reconnect::{ReconnectConfig, ReconnectEvent};
+use oxirs_stream::FailoverConfig;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -21,7 +21,7 @@ use tokio::time::sleep;
 use tracing::{error, info, warn};
 
 /// Demo connection that can simulate failures
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct DemoConnection {
     id: u32,
     created_at: Instant,
@@ -80,6 +80,10 @@ impl PooledConnection for DemoConnection {
 
     fn created_at(&self) -> Instant {
         self.created_at
+    }
+
+    fn clone_connection(&self) -> Box<dyn PooledConnection> {
+        Box::new(self.clone())
     }
 
     fn last_activity(&self) -> Instant {

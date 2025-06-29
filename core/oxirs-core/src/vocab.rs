@@ -1,6 +1,7 @@
 //! Common RDF vocabularies and namespaces
 
 use crate::model::NamedNode;
+use lazy_static::lazy_static;
 use std::sync::LazyLock;
 
 /// RDF vocabulary namespace

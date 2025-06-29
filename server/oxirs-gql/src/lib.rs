@@ -252,6 +252,7 @@ pub mod execution;
 pub mod federation;
 pub mod introspection;
 pub mod mapping;
+pub mod ml_optimizer;
 pub mod optimizer;
 pub mod parser;
 pub mod rdf_scalars;

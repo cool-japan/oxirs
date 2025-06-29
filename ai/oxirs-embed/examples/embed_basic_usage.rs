@@ -365,6 +365,10 @@ impl EmbeddingModel for SimpleTransE {
         // Simplified load implementation
         Ok(())
     }
+
+    async fn encode(&self, _texts: &[String]) -> anyhow::Result<Vec<Vec<f32>>> {
+        Err(anyhow::anyhow!("Knowledge graph embedding model does not support text encoding"))
+    }
 }
 
 #[tokio::main]

@@ -10,7 +10,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
-use crate::{executor::GraphQLResponse, ExecutionPlan, QueryResultData, StepResult};
+use crate::{executor::GraphQLResponse, planner::ExecutionPlan, QueryResultData, StepResult};
 
 /// Entity data returned from federated services
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -373,6 +373,9 @@ impl GraphQLFederation {
 
         let result_size = data.as_ref().map(|d| d.estimated_size()).unwrap_or(0);
 
+        // Calculate memory usage before moving data
+        let memory_used = data.as_ref().map(|d| self.estimate_memory_usage(d, result_size)).unwrap_or(0);
+
         Ok(StepResult {
             step_id: step.step_id.clone(),
             step_type: step.step_type,
@@ -381,7 +384,7 @@ impl GraphQLFederation {
             error: error.clone(),
             execution_time,
             service_id: step.service_id.clone(),
-            memory_used: 0, // TODO: Implement actual memory tracking
+            memory_used,
             result_size,
             success: matches!(status, crate::executor::ExecutionStatus::Success),
             error_message: error,
@@ -619,7 +622,7 @@ impl GraphQLFederation {
                     kind: TypeKind::Object {
                         fields: merged_fields,
                     },
-                    directives: existing.directives.clone(), // TODO: Merge directives
+                    directives: self.merge_directives(&existing.directives, &new.directives),
                 })
             }
             (
@@ -753,7 +756,7 @@ impl GraphQLFederation {
             operation_type,
             operation_name,
             selection_set,
-            variables: HashMap::new(), // TODO: Parse variables
+            variables: self.parse_variables(query)?,
         })
     }
 
@@ -1202,7 +1205,7 @@ impl GraphQLFederation {
         // Simplified parsing - would be more sophisticated in real implementation
         if line.contains("User") && line.contains("id") {
             return Ok(Some(EntityReference {
-                typename: "User".to_string(),
+                entity_type: "User".to_string(),
                 key_fields: vec!["id".to_string()],
                 required_fields: vec!["username".to_string(), "email".to_string()],
                 service_id: "user-service".to_string(), // Would be determined by schema analysis
@@ -1211,7 +1214,7 @@ impl GraphQLFederation {
 
         if line.contains("Product") && line.contains("sku") {
             return Ok(Some(EntityReference {
-                typename: "Product".to_string(),
+                entity_type: "Product".to_string(),
                 key_fields: vec!["sku".to_string()],
                 required_fields: vec!["name".to_string(), "price".to_string()],
                 service_id: "product-service".to_string(),
@@ -1434,16 +1437,15 @@ impl GraphQLFederation {
     ) -> Result<Vec<EntityData>> {
         let mut entities = Vec::new();
 
-        if let Some(data) = &response.data {
-            if let Some(entities_array) = data.get("_entities").and_then(|v| v.as_array()) {
-                for entity_value in entities_array {
-                    if let Some(entity_obj) = entity_value.as_object() {
-                        if entity_obj.get("__typename").and_then(|v| v.as_str()) == Some(typename) {
-                            entities.push(EntityData {
-                                typename: typename.to_string(),
-                                fields: entity_obj.clone(),
-                            });
-                        }
+        let data = &response.data;
+        if let Some(entities_array) = data.get("_entities").and_then(|v| v.as_array()) {
+            for entity_value in entities_array {
+                if let Some(entity_obj) = entity_value.as_object() {
+                    if entity_obj.get("__typename").and_then(|v| v.as_str()) == Some(typename) {
+                        entities.push(EntityData {
+                            typename: typename.to_string(),
+                            fields: entity_obj.clone(),
+                        });
                     }
                 }
             }
@@ -1853,8 +1855,8 @@ impl GraphQLFederation {
         // Check for field changes in existing types
         for (type_name, new_type) in &new_schema.types {
             if let Some(old_type) = old_schema.types.get(type_name) {
-                breaking_changes
-                    .extend(self.detect_type_breaking_changes(type_name, old_type, new_type)?);
+                let type_changes = self.detect_type_breaking_changes(type_name, old_type, new_type)?;
+                breaking_changes.extend(type_changes);
             }
         }
 
@@ -1865,49 +1867,62 @@ impl GraphQLFederation {
     fn detect_type_breaking_changes(
         &self,
         type_name: &str,
-        old_type: &GraphQLTypeDefinition,
-        new_type: &GraphQLTypeDefinition,
+        old_type: &TypeDefinition,
+        new_type: &TypeDefinition,
     ) -> Result<Vec<BreakingChange>> {
         let mut changes = Vec::new();
 
-        // Check for removed fields
-        for field_name in old_type.fields.keys() {
-            if !new_type.fields.contains_key(field_name) {
-                changes.push(BreakingChange {
-                    change_type: BreakingChangeType::FieldRemoved,
-                    description: format!("Field '{}.{}' was removed", type_name, field_name),
-                    severity: BreakingChangeSeverity::High,
-                });
-            }
-        }
+        // Extract fields from TypeKind for comparison
+        let old_fields = match &old_type.kind {
+            TypeKind::Object { fields } | TypeKind::Interface { fields } => Some(fields),
+            _ => None,
+        };
 
-        // Check for argument changes in existing fields
-        for (field_name, new_field) in &new_type.fields {
-            if let Some(old_field) = old_type.fields.get(field_name) {
-                // Check for required arguments added
-                for (arg_name, new_arg) in &new_field.arguments {
-                    if let Some(old_arg) = old_field.arguments.get(arg_name) {
-                        // Check if argument became required
-                        if old_arg.default_value.is_some() && new_arg.default_value.is_none() {
+        let new_fields = match &new_type.kind {
+            TypeKind::Object { fields } | TypeKind::Interface { fields } => Some(fields),
+            _ => None,
+        };
+
+        if let (Some(old_fields), Some(new_fields)) = (old_fields, new_fields) {
+            // Check for removed fields
+            for field_name in old_fields.keys() {
+                if !new_fields.contains_key(field_name) {
+                    changes.push(BreakingChange {
+                        change_type: BreakingChangeType::FieldRemoved,
+                        description: format!("Field '{}.{}' was removed", type_name, field_name),
+                        severity: BreakingChangeSeverity::High,
+                    });
+                }
+            }
+
+            // Check for argument changes in existing fields
+            for (field_name, new_field) in new_fields {
+                if let Some(old_field) = old_fields.get(field_name) {
+                    // Check for required arguments added
+                    for (arg_name, new_arg) in &new_field.arguments {
+                        if let Some(old_arg) = old_field.arguments.get(arg_name) {
+                            // Check if argument became required
+                            if old_arg.default_value.is_some() && new_arg.default_value.is_none() {
+                                changes.push(BreakingChange {
+                                    change_type: BreakingChangeType::ArgumentMadeRequired,
+                                    description: format!(
+                                        "Argument '{}.{}.{}' is now required",
+                                        type_name, field_name, arg_name
+                                    ),
+                                    severity: BreakingChangeSeverity::Medium,
+                                });
+                            }
+                        } else if new_arg.default_value.is_none() {
+                            // New required argument
                             changes.push(BreakingChange {
-                                change_type: BreakingChangeType::ArgumentMadeRequired,
+                                change_type: BreakingChangeType::RequiredArgumentAdded,
                                 description: format!(
-                                    "Argument '{}.{}.{}' is now required",
+                                    "Required argument '{}.{}.{}' was added",
                                     type_name, field_name, arg_name
                                 ),
-                                severity: BreakingChangeSeverity::Medium,
+                                severity: BreakingChangeSeverity::High,
                             });
                         }
-                    } else if new_arg.default_value.is_none() {
-                        // New required argument
-                        changes.push(BreakingChange {
-                            change_type: BreakingChangeType::RequiredArgumentAdded,
-                            description: format!(
-                                "Required argument '{}.{}.{}' was added",
-                                type_name, field_name, arg_name
-                            ),
-                            severity: BreakingChangeSeverity::High,
-                        });
                     }
                 }
             }
@@ -2095,9 +2110,7 @@ impl GraphQLFederation {
         let query = self.build_entity_batch_query(entities)?;
 
         // Execute query against service
-        let response = self
-            .execute_service_query(service_id, &query, &HashMap::new())
-            .await?;
+        let response = self.execute_service_query(service_id, &query).await?;
 
         // Parse response and match to entity references
         self.parse_entity_batch_response(entities, response)
@@ -2135,20 +2148,19 @@ impl GraphQLFederation {
     ) -> Result<Vec<(EntityReference, EntityData)>> {
         let mut results = Vec::new();
 
-        if let Some(data) = response.data {
-            for (idx, entity) in entities.iter().enumerate() {
-                let alias = format!("entity_{}", idx);
+        let data = &response.data;
+        for (idx, entity) in entities.iter().enumerate() {
+            let alias = format!("entity_{}", idx);
 
-                if let Some(entity_data) = data.get(&alias) {
-                    if let Some(obj) = entity_data.as_object() {
-                        results.push((
-                            (*entity).clone(),
-                            EntityData {
-                                typename: entity.entity_type.clone(),
-                                fields: obj.clone(),
-                            },
-                        ));
-                    }
+            if let Some(entity_data) = data.get(&alias) {
+                if let Some(obj) = entity_data.as_object() {
+                    results.push((
+                        (*entity).clone(),
+                        EntityData {
+                            typename: entity.entity_type.clone(),
+                            fields: obj.clone(),
+                        },
+                    ));
                 }
             }
         }
@@ -2358,7 +2370,7 @@ impl GraphQLFederation {
 
         // Check that all required fields are satisfied
         for (field_key, ownership) in &composed.field_ownership {
-            if let FieldOwnership::Requires(required_fields) = ownership {
+            if let FieldOwnershipType::Requires(required_fields) = ownership {
                 for required_field in required_fields {
                     let required_key = format!(
                         "{}.{}",
@@ -2393,6 +2405,22 @@ impl GraphQLFederation {
         info!("Federated schema composition validation successful");
         Ok(())
     }
+
+    /// Merge directives from multiple type definitions
+    fn merge_directives(&self, existing: &[DirectiveUsage], new: &[DirectiveUsage]) -> Vec<DirectiveUsage> {
+        let mut merged = existing.to_vec();
+        
+        // Add new directives that don't already exist
+        for directive in new {
+            if !merged.iter().any(|d| d.name == directive.name) {
+                merged.push(directive.clone());
+            }
+        }
+        
+        // Sort for consistency
+        merged.sort_by(|a, b| a.name.cmp(&b.name));
+        merged
+    }
 }
 
 impl Default for GraphQLFederation {
@@ -2410,6 +2438,7 @@ pub struct GraphQLFederationConfig {
     pub field_merge_strategy: FieldMergeStrategy,
     pub enable_query_planning: bool,
     pub enable_entity_resolution: bool,
+    pub allow_breaking_changes: bool,
 }
 
 impl Default for GraphQLFederationConfig {
@@ -2421,6 +2450,7 @@ impl Default for GraphQLFederationConfig {
             field_merge_strategy: FieldMergeStrategy::Union,
             enable_query_planning: true,
             enable_entity_resolution: true,
+            allow_breaking_changes: false,
         }
     }
 }
@@ -2663,6 +2693,113 @@ pub struct FederationCapabilities {
     pub supports_entities: bool,
     pub supports_entity_interfaces: bool,
     pub supports_progressive_override: bool,
+}
+
+impl GraphQLFederation {
+    /// Merge directives from multiple type definitions
+    fn merge_directives(&self, existing: &[DirectiveUsage], new: &[DirectiveUsage]) -> Vec<DirectiveUsage> {
+        let mut merged = existing.to_vec();
+        
+        // Add new directives that don't already exist
+        for directive in new {
+            if !merged.iter().any(|d| d.name == directive.name) {
+                merged.push(directive.clone());
+            }
+        }
+        
+        // Sort for consistency
+        merged.sort_by(|a, b| a.name.cmp(&b.name));
+        merged
+    }
+
+    /// Estimate memory usage for GraphQL response data
+    fn estimate_memory_usage(&self, data: &QueryResultData, result_size: usize) -> u64 {
+        // Basic heuristic: result size + overhead for JSON objects and arrays
+        let base_size = result_size as u64;
+        
+        // Add overhead based on the complexity of the data structure
+        let overhead_multiplier = match data {
+            QueryResultData::ServiceResult(ref json_value) => {
+                self.calculate_json_complexity_multiplier(json_value)
+            }
+            QueryResultData::AggregateResult(_) => 1.2, // Minimal overhead for aggregates
+            QueryResultData::TripleResult(_) => 1.1,    // Minimal overhead for triples
+        };
+        
+        (base_size as f64 * overhead_multiplier) as u64
+    }
+
+    /// Calculate complexity multiplier for JSON data
+    fn calculate_json_complexity_multiplier(&self, value: &serde_json::Value) -> f64 {
+        match value {
+            serde_json::Value::Object(obj) => {
+                1.3 + (obj.len() as f64 * 0.1) // Base overhead + field overhead
+            }
+            serde_json::Value::Array(arr) => {
+                1.2 + (arr.len() as f64 * 0.05) // Base overhead + element overhead
+            }
+            _ => 1.0, // No overhead for primitives
+        }
+    }
+
+    /// Parse variables from GraphQL query
+    fn parse_variables(&self, query: &str) -> Result<HashMap<String, serde_json::Value>> {
+        let mut variables = HashMap::new();
+        
+        // Look for variable definitions in the operation signature
+        // Example: query GetUser($id: ID!, $includeProfile: Boolean = false)
+        if let Some(start) = query.find('(') {
+            if let Some(end) = query.find(')') {
+                let var_section = &query[start + 1..end];
+                
+                // Split by commas and parse each variable
+                for var_def in var_section.split(',') {
+                    let var_def = var_def.trim();
+                    if var_def.starts_with('$') {
+                        if let Some(colon_pos) = var_def.find(':') {
+                            let var_name = var_def[1..colon_pos].trim().to_string();
+                            
+                            // Check for default value
+                            let type_and_default = &var_def[colon_pos + 1..];
+                            if let Some(eq_pos) = type_and_default.find('=') {
+                                let default_value = type_and_default[eq_pos + 1..].trim();
+                                // Parse default value (simplified)
+                                let parsed_value = self.parse_variable_value(default_value)?;
+                                variables.insert(var_name, parsed_value);
+                            } else {
+                                // No default value, set to null
+                                variables.insert(var_name, serde_json::Value::Null);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(variables)
+    }
+
+    /// Parse a variable value from string
+    fn parse_variable_value(&self, value: &str) -> Result<serde_json::Value> {
+        let value = value.trim();
+        
+        if value == "true" {
+            Ok(serde_json::Value::Bool(true))
+        } else if value == "false" {
+            Ok(serde_json::Value::Bool(false))
+        } else if value == "null" {
+            Ok(serde_json::Value::Null)
+        } else if value.starts_with('"') && value.ends_with('"') {
+            Ok(serde_json::Value::String(value[1..value.len()-1].to_string()))
+        } else if let Ok(num) = value.parse::<i64>() {
+            Ok(serde_json::Value::Number(serde_json::Number::from(num)))
+        } else if let Ok(num) = value.parse::<f64>() {
+            Ok(serde_json::Value::Number(serde_json::Number::from_f64(num).unwrap_or_else(|| serde_json::Number::from(0))))
+        } else {
+            // Assume it's a string without quotes
+            Ok(serde_json::Value::String(value.to_string()))
+        }
+    }
 }
 
 #[cfg(test)]

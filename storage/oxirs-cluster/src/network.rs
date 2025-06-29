@@ -112,6 +112,12 @@ pub enum RpcMessage {
         migration_id: String,
         batch: crate::shard_migration::MigrationBatch,
     },
+    /// Shard data transfer during migration
+    ShardTransfer {
+        shard_id: crate::shard::ShardId,
+        triples: Vec<oxirs_core::model::Triple>,
+        source_node: crate::raft::OxirsNodeId,
+    },
 }
 
 /// Log entry for Raft protocol
