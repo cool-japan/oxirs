@@ -11,8 +11,12 @@
 //! - Serialization to all major RDF-star formats
 //! - Storage backend integration with oxirs-core
 //! - Performance-optimized handling of nested quoted triples
+//! - Comprehensive CLI tools for validation and debugging
+//! - Advanced error handling with context and recovery suggestions
 //!
-//! ## Examples
+//! ## Quick Start
+//!
+//! ### Basic Quoted Triple Creation
 //!
 //! ```rust
 //! use oxirs_star::{StarStore, StarTriple, StarTerm};
@@ -35,9 +39,154 @@
 //! );
 //!
 //! store.insert(&meta_triple)?;
+//! println!("Stored {} triples", store.len());
 //! # Ok(())
 //! # }
 //! ```
+//!
+//! ### Parsing RDF-star Data
+//!
+//! ```rust
+//! use oxirs_star::parser::{StarParser, StarFormat};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let turtle_star = r#"
+//!     @prefix ex: <http://example.org/> .
+//!     
+//!     << ex:alice ex:age 30 >> ex:certainty 0.9 .
+//!     << ex:alice ex:name "Alice" >> ex:source ex:census2020 .
+//! "#;
+//!
+//! let mut parser = StarParser::new();
+//! let graph = parser.parse_str(turtle_star, StarFormat::TurtleStar)?;
+//!
+//! println!("Parsed {} quoted triples", graph.len());
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Using the CLI Tools
+//!
+//! ```bash
+//! # Validate an RDF-star file
+//! oxirs-star validate data.ttls --strict
+//!
+//! # Convert between formats
+//! oxirs-star convert input.ttls output.nts --to ntriples-star --pretty
+//!
+//! # Analyze data structure
+//! oxirs-star analyze large_dataset.ttls --json --output report.json
+//!
+//! # Debug parsing issues
+//! oxirs-star debug problematic.ttls --line 42 --context 5
+//! ```
+//!
+//! ## Advanced Usage
+//!
+//! ### Nested Quoted Triples
+//!
+//! ```rust
+//! use oxirs_star::{StarStore, StarTriple, StarTerm, StarConfig};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! // Configure for deep nesting
+//! let config = StarConfig {
+//!     max_nesting_depth: 20,
+//!     ..Default::default()
+//! };
+//!
+//! let mut store = StarStore::with_config(config);
+//!
+//! // Create deeply nested structure
+//! let base = StarTriple::new(
+//!     StarTerm::iri("http://example.org/alice")?,
+//!     StarTerm::iri("http://example.org/age")?,
+//!     StarTerm::literal("30")?,
+//! );
+//!
+//! let meta = StarTriple::new(
+//!     StarTerm::quoted_triple(base),
+//!     StarTerm::iri("http://example.org/certainty")?,
+//!     StarTerm::literal("0.9")?,
+//! );
+//!
+//! let meta_meta = StarTriple::new(
+//!     StarTerm::quoted_triple(meta),
+//!     StarTerm::iri("http://example.org/source")?,
+//!     StarTerm::iri("http://example.org/study2023")?,
+//! );
+//!
+//! store.insert(&meta_meta)?;
+//! println!("Max nesting depth: {}", store.max_nesting_depth());
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Performance Optimization
+//!
+//! ```rust
+//! use oxirs_star::{StarStore, StarConfig};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! // Configure for high-performance scenarios
+//! let config = StarConfig {
+//!     max_nesting_depth: 10,
+//!     enable_reification_fallback: true,
+//!     buffer_size: 16384,  // Larger buffer for streaming
+//!     strict_mode: false,  // Allow recovery from minor issues
+//!     ..Default::default()
+//! };
+//!
+//! let store = StarStore::with_config(config);
+//! println!("Store configured for high performance");
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## Error Handling
+//!
+//! The crate provides detailed error types with context and recovery suggestions:
+//!
+//! ```rust
+//! use oxirs_star::{StarError, StarResult};
+//!
+//! fn handle_errors() -> StarResult<()> {
+//!     // ... some operation that might fail
+//!     Err(StarError::NestingDepthExceeded {
+//!         max_depth: 10,
+//!         current_depth: 15,
+//!         context: Some("While parsing complex quoted triple".to_string()),
+//!     })
+//! }
+//!
+//! # fn main() {
+//! match handle_errors() {
+//!     Err(e) => {
+//!         eprintln!("Error: {}", e);
+//!         for suggestion in e.recovery_suggestions() {
+//!             eprintln!("Suggestion: {}", suggestion);
+//!         }
+//!     }
+//!     Ok(_) => println!("Success"),
+//! }
+//! # }
+//! ```
+//!
+//! ## Troubleshooting
+//!
+//! ### Common Issues
+//!
+//! 1. **Parsing Errors**: Use `oxirs-star debug` to identify syntax issues
+//! 2. **Performance Issues**: Enable indexing and adjust buffer sizes
+//! 3. **Memory Usage**: Reduce nesting depth or enable reification fallback
+//! 4. **Format Detection**: Explicitly specify format if auto-detection fails
+//!
+//! ### Getting Help
+//!
+//! - Use the `dev_tools` module for validation and diagnostics
+//! - Check the comprehensive documentation in the `docs` module
+//! - Run `oxirs-star --help` for CLI usage information
+//! - See the examples directory for real-world usage patterns
 
 use oxirs_core::OxirsError;
 use serde::{Deserialize, Serialize};
@@ -54,10 +203,12 @@ pub mod query;
 pub mod reification;
 pub mod serializer;
 pub mod store;
+pub mod troubleshooting;
 
 // Re-export main types
 pub use model::*;
 pub use store::StarStore;
+pub use troubleshooting::{DiagnosticAnalyzer, MigrationAssistant, TroubleshootingGuide};
 
 /// RDF-star specific error types
 #[derive(Debug, Error)]
@@ -357,6 +508,39 @@ pub fn validate_nesting_depth(term: &StarTerm, max_depth: usize) -> StarResult<(
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Developer tooling and debugging utilities
+///
+/// This module provides comprehensive tools for validating, debugging, and analyzing
+/// RDF-star data. It's designed to help developers identify issues, optimize performance,
+/// and ensure data quality.
+///
+/// # Examples
+///
+/// ```rust
+/// use oxirs_star::dev_tools::{detect_format, validate_content, StarProfiler};
+/// use oxirs_star::StarConfig;
+///
+/// // Detect format from content
+/// let content = "<< :s :p :o >> :meta :value .";
+/// let format = detect_format(content);
+/// println!("Detected format: {:?}", format);
+///
+/// // Validate content with detailed diagnostics
+/// let config = StarConfig::default();
+/// let result = validate_content(content, &config);
+/// if !result.is_valid() {
+///     for error in &result.errors {
+///         println!("Error: {}", error);
+///     }
+/// }
+///
+/// // Profile performance
+/// let mut profiler = StarProfiler::new();
+/// let result = profiler.time_operation("parsing", || {
+///     // ... parsing operation
+///     42
+/// });
+/// println!("Operation took: {:?}", profiler.total_time());
+/// ```
 pub mod dev_tools {
     use super::*;
     use std::collections::HashMap;

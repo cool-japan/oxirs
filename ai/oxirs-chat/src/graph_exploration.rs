@@ -500,7 +500,9 @@ impl GraphExplorer {
         // Check if entities share common types
         let entity1_types = self.get_entity_types(entity1).await?;
         let entity2_types = self.get_entity_types(entity2).await?;
-        let common_types_count = entity1_types.iter().collect::<HashSet<_>>()
+        let common_types_count = entity1_types
+            .iter()
+            .collect::<HashSet<_>>()
             .intersection(&entity2_types.iter().collect())
             .count();
 
@@ -523,10 +525,13 @@ impl GraphExplorer {
             ranking_score += path.relevance_score * 0.4;
 
             // Factor 3: Paths with preferred relationships are better
-            let preferred_relationship_count = path.relationships.iter()
+            let preferred_relationship_count = path
+                .relationships
+                .iter()
                 .filter(|rel| self.config.preferred_relationships.contains(rel))
                 .count();
-            ranking_score += (preferred_relationship_count as f32 / path.relationships.len() as f32) * 0.2;
+            ranking_score +=
+                (preferred_relationship_count as f32 / path.relationships.len() as f32) * 0.2;
 
             // Factor 4: Paths through hub entities (high connectivity) are better
             ranking_score += self.calculate_hub_connectivity_bonus(path).await? * 0.1;
@@ -556,7 +561,10 @@ impl GraphExplorer {
             suggestions.push(ExplorationSuggestion {
                 suggestion_type: SuggestionType::ExploreNeighbor,
                 title: format!("Explore {}", self.simplify_uri(&neighbor.entity)),
-                description: format!("Follow {} relationship", self.simplify_uri(&neighbor.relationship)),
+                description: format!(
+                    "Follow {} relationship",
+                    self.simplify_uri(&neighbor.relationship)
+                ),
                 action: ExplorationAction::NavigateToEntity(neighbor.entity.clone()),
                 confidence: neighbor.strength,
             });
@@ -605,7 +613,9 @@ impl GraphExplorer {
             let similar_by_type = self.find_entities_by_type(entity_type).await?;
             for similar_entity in similar_by_type {
                 if similar_entity != entity {
-                    let similarity = self.calculate_entity_similarity(entity, &similar_entity).await?;
+                    let similarity = self
+                        .calculate_entity_similarity(entity, &similar_entity)
+                        .await?;
                     if similarity >= similarity_threshold {
                         related_entities.push(RelatedEntity {
                             entity: similar_entity,
@@ -623,7 +633,9 @@ impl GraphExplorer {
             let similar_by_property = self.find_entities_with_property(property).await?;
             for similar_entity in similar_by_property {
                 if similar_entity != entity {
-                    let similarity = self.calculate_property_similarity(entity, &similar_entity, property).await?;
+                    let similarity = self
+                        .calculate_property_similarity(entity, &similar_entity, property)
+                        .await?;
                     if similarity >= similarity_threshold {
                         related_entities.push(RelatedEntity {
                             entity: similar_entity,
@@ -637,7 +649,8 @@ impl GraphExplorer {
         }
 
         // Remove duplicates and sort by similarity
-        related_entities.sort_by(|a, b| b.similarity_score.partial_cmp(&a.similarity_score).unwrap());
+        related_entities
+            .sort_by(|a, b| b.similarity_score.partial_cmp(&a.similarity_score).unwrap());
         related_entities.dedup_by(|a, b| a.entity == b.entity);
 
         Ok(related_entities.into_iter().take(20).collect())
@@ -656,19 +669,34 @@ impl GraphExplorer {
             let schema_info = self.get_schema_info(entity).await?;
 
             // Generate valid property path suggestions
-            guidance.extend(self.generate_property_path_guidance(entity, &schema_info).await?);
+            guidance.extend(
+                self.generate_property_path_guidance(entity, &schema_info)
+                    .await?,
+            );
 
             // Generate type constraint guidance
-            guidance.extend(self.generate_type_constraint_guidance(entity, &schema_info).await?);
+            guidance.extend(
+                self.generate_type_constraint_guidance(entity, &schema_info)
+                    .await?,
+            );
 
             // Generate cardinality awareness guidance
-            guidance.extend(self.generate_cardinality_guidance(entity, &schema_info).await?);
+            guidance.extend(
+                self.generate_cardinality_guidance(entity, &schema_info)
+                    .await?,
+            );
 
             // Generate best practice guidance
-            guidance.extend(self.generate_best_practice_guidance(entity, &schema_info, intent).await?);
+            guidance.extend(
+                self.generate_best_practice_guidance(entity, &schema_info, intent)
+                    .await?,
+            );
 
             // Generate consistency check guidance
-            guidance.extend(self.generate_consistency_guidance(entity, &schema_info).await?);
+            guidance.extend(
+                self.generate_consistency_guidance(entity, &schema_info)
+                    .await?,
+            );
         }
 
         // Sort by confidence and deduplicate
@@ -679,7 +707,10 @@ impl GraphExplorer {
     }
 
     /// Validate query against schema constraints
-    pub async fn validate_query_against_schema(&self, query: &str) -> Result<SchemaValidationResult> {
+    pub async fn validate_query_against_schema(
+        &self,
+        query: &str,
+    ) -> Result<SchemaValidationResult> {
         let mut validation_result = SchemaValidationResult {
             is_valid: true,
             errors: Vec::new(),
@@ -694,22 +725,31 @@ impl GraphExplorer {
         // Validate entities against known classes
         for entity in &entities {
             if !self.is_valid_entity(entity).await? {
-                validation_result.errors.push(format!("Unknown entity: {}", entity));
+                validation_result
+                    .errors
+                    .push(format!("Unknown entity: {}", entity));
                 validation_result.is_valid = false;
             }
         }
 
         // Validate properties against domain/range constraints
         for property in &properties {
-            let domain_range_valid = self.validate_property_domain_range(property, &entities).await?;
+            let domain_range_valid = self
+                .validate_property_domain_range(property, &entities)
+                .await?;
             if !domain_range_valid {
-                validation_result.warnings.push(format!("Property {} may have domain/range mismatch", property));
+                validation_result.warnings.push(format!(
+                    "Property {} may have domain/range mismatch",
+                    property
+                ));
             }
         }
 
         // Check cardinality constraints
         for entity in &entities {
-            let cardinality_issues = self.check_cardinality_constraints(entity, &properties).await?;
+            let cardinality_issues = self
+                .check_cardinality_constraints(entity, &properties)
+                .await?;
             validation_result.warnings.extend(cardinality_issues);
         }
 
@@ -735,7 +775,10 @@ impl GraphExplorer {
     }
 
     /// Check consistency of entity against SHACL shapes
-    pub async fn validate_entity_against_shapes(&self, entity: &str) -> Result<ShapeValidationResult> {
+    pub async fn validate_entity_against_shapes(
+        &self,
+        entity: &str,
+    ) -> Result<ShapeValidationResult> {
         let mut validation_result = ShapeValidationResult {
             is_valid: true,
             violations: Vec::new(),
@@ -748,15 +791,19 @@ impl GraphExplorer {
         // Find applicable SHACL shapes
         for entity_type in &entity_types {
             let shapes = self.get_shapes_for_class(entity_type).await?;
-            
+
             for shape in shapes {
-                let shape_validation = self.validate_against_single_shape(entity, &shape, &entity_properties).await?;
-                
+                let shape_validation = self
+                    .validate_against_single_shape(entity, &shape, &entity_properties)
+                    .await?;
+
                 if shape_validation.is_valid {
                     validation_result.satisfied_shapes.push(shape.shape_id);
                 } else {
                     validation_result.is_valid = false;
-                    validation_result.violations.extend(shape_validation.violations);
+                    validation_result
+                        .violations
+                        .extend(shape_validation.violations);
                 }
             }
         }
@@ -860,7 +907,10 @@ impl GraphExplorer {
                 suggestion_type: GuidanceType::BestPractice,
                 title: "Use functional properties for efficiency".to_string(),
                 description: "Functional properties are more efficient for lookups".to_string(),
-                sparql_template: format!("?entity <{}> ?value", schema_info.functional_properties[0]),
+                sparql_template: format!(
+                    "?entity <{}> ?value",
+                    schema_info.functional_properties[0]
+                ),
                 confidence: 0.75,
                 schema_rationale: "Functional properties have unique values".to_string(),
             });
@@ -908,7 +958,8 @@ impl GraphExplorer {
         // Extract property URIs from SPARQL query
         let properties = self.extract_entities_from_query(query).await?;
         // Filter to only include properties (this is simplified)
-        Ok(properties.into_iter()
+        Ok(properties
+            .into_iter()
             .filter(|uri| uri.contains("property") || uri.contains("#"))
             .collect())
     }
@@ -940,16 +991,22 @@ impl GraphExplorer {
         for property in properties {
             if let Some((min_card, max_card)) = schema_info.cardinality_constraints.get(property) {
                 let actual_count = self.count_property_values(entity, property).await?;
-                
+
                 if let Some(min) = min_card {
                     if actual_count < *min {
-                        issues.push(format!("Property {} has {} values, minimum required: {}", property, actual_count, min));
+                        issues.push(format!(
+                            "Property {} has {} values, minimum required: {}",
+                            property, actual_count, min
+                        ));
                     }
                 }
-                
+
                 if let Some(max) = max_card {
                     if actual_count > *max {
-                        issues.push(format!("Property {} has {} values, maximum allowed: {}", property, actual_count, max));
+                        issues.push(format!(
+                            "Property {} has {} values, maximum allowed: {}",
+                            property, actual_count, max
+                        ));
                     }
                 }
             }
@@ -982,7 +1039,7 @@ impl GraphExplorer {
         // Calculate depth from owl:Thing
         let mut depth = 0;
         let mut current_class = class.to_string();
-        
+
         while current_class != "http://www.w3.org/2002/07/owl#Thing" {
             let superclasses = self.get_superclasses(&current_class).await?;
             if superclasses.is_empty() {
@@ -990,11 +1047,12 @@ impl GraphExplorer {
             }
             current_class = superclasses[0].clone();
             depth += 1;
-            if depth > 20 { // Prevent infinite loops
+            if depth > 20 {
+                // Prevent infinite loops
                 break;
             }
         }
-        
+
         Ok(depth)
     }
 
@@ -1036,7 +1094,12 @@ impl GraphExplorer {
                             shape_id: shape.shape_id.clone(),
                             property_path: prop_shape.path.clone(),
                             violation_type: "MinCountConstraint".to_string(),
-                            message: format!("Property {} has {} values, minimum required: {}", prop_shape.path, values.len(), min_count),
+                            message: format!(
+                                "Property {} has {} values, minimum required: {}",
+                                prop_shape.path,
+                                values.len(),
+                                min_count
+                            ),
                             severity: ViolationSeverity::Violation,
                         });
                     }
@@ -1050,7 +1113,12 @@ impl GraphExplorer {
                             shape_id: shape.shape_id.clone(),
                             property_path: prop_shape.path.clone(),
                             violation_type: "MaxCountConstraint".to_string(),
-                            message: format!("Property {} has {} values, maximum allowed: {}", prop_shape.path, values.len(), max_count),
+                            message: format!(
+                                "Property {} has {} values, maximum allowed: {}",
+                                prop_shape.path,
+                                values.len(),
+                                max_count
+                            ),
                             severity: ViolationSeverity::Violation,
                         });
                     }
@@ -1089,11 +1157,11 @@ impl GraphExplorer {
 
     async fn calculate_hub_connectivity_bonus(&self, path: &GraphPath) -> Result<f32> {
         let mut total_bonus = 0.0;
-        
+
         for entity in &path.entities {
             let neighbors = self.get_entity_neighbors(entity).await?;
             let connectivity = neighbors.len() as f32;
-            
+
             // Entities with more connections get higher bonus
             if connectivity > 10.0 {
                 total_bonus += 0.1;
@@ -1101,7 +1169,7 @@ impl GraphExplorer {
                 total_bonus += 0.05;
             }
         }
-        
+
         Ok(total_bonus / path.entities.len() as f32)
     }
 
@@ -1109,9 +1177,18 @@ impl GraphExplorer {
         // This would execute: SELECT ?entity WHERE { ?entity rdf:type <entity_type> }
         // For now, returning mock entities
         Ok(vec![
-            format!("http://example.org/entity1_of_{}", self.simplify_uri(entity_type)),
-            format!("http://example.org/entity2_of_{}", self.simplify_uri(entity_type)),
-            format!("http://example.org/entity3_of_{}", self.simplify_uri(entity_type)),
+            format!(
+                "http://example.org/entity1_of_{}",
+                self.simplify_uri(entity_type)
+            ),
+            format!(
+                "http://example.org/entity2_of_{}",
+                self.simplify_uri(entity_type)
+            ),
+            format!(
+                "http://example.org/entity3_of_{}",
+                self.simplify_uri(entity_type)
+            ),
         ])
     }
 
@@ -1119,8 +1196,14 @@ impl GraphExplorer {
         // This would execute: SELECT DISTINCT ?entity WHERE { ?entity <property> ?value }
         // For now, returning mock entities
         Ok(vec![
-            format!("http://example.org/entity_with_{}", self.simplify_uri(property)),
-            format!("http://example.org/another_entity_with_{}", self.simplify_uri(property)),
+            format!(
+                "http://example.org/entity_with_{}",
+                self.simplify_uri(property)
+            ),
+            format!(
+                "http://example.org/another_entity_with_{}",
+                self.simplify_uri(property)
+            ),
         ])
     }
 
@@ -1131,34 +1214,45 @@ impl GraphExplorer {
         // Compare types
         let types1 = self.get_entity_types(entity1).await?;
         let types2 = self.get_entity_types(entity2).await?;
-        let common_types_count = types1.iter().collect::<HashSet<_>>()
+        let common_types_count = types1
+            .iter()
+            .collect::<HashSet<_>>()
             .intersection(&types2.iter().collect())
             .count();
-        
+
         if !types1.is_empty() && !types2.is_empty() {
-            similarity += (common_types_count as f32) / (types1.len().max(types2.len()) as f32) * 0.4;
+            similarity +=
+                (common_types_count as f32) / (types1.len().max(types2.len()) as f32) * 0.4;
         }
 
         // Compare properties
         let props1 = self.get_entity_properties(entity1).await?;
         let props2 = self.get_entity_properties(entity2).await?;
-        let common_props_count = props1.keys().collect::<HashSet<_>>()
+        let common_props_count = props1
+            .keys()
+            .collect::<HashSet<_>>()
             .intersection(&props2.keys().collect())
             .count();
-        
+
         if !props1.is_empty() && !props2.is_empty() {
-            similarity += (common_props_count as f32) / (props1.len().max(props2.len()) as f32) * 0.4;
+            similarity +=
+                (common_props_count as f32) / (props1.len().max(props2.len()) as f32) * 0.4;
         }
 
         // Compare neighbors (structural similarity)
         let neighbors1 = self.get_entity_neighbors(entity1).await?;
         let neighbors2 = self.get_entity_neighbors(entity2).await?;
-        let common_neighbors_count = neighbors1.iter().map(|n| &n.entity).collect::<HashSet<_>>()
+        let common_neighbors_count = neighbors1
+            .iter()
+            .map(|n| &n.entity)
+            .collect::<HashSet<_>>()
             .intersection(&neighbors2.iter().map(|n| &n.entity).collect())
             .count();
-        
+
         if !neighbors1.is_empty() && !neighbors2.is_empty() {
-            similarity += (common_neighbors_count as f32) / (neighbors1.len().max(neighbors2.len()) as f32) * 0.2;
+            similarity += (common_neighbors_count as f32)
+                / (neighbors1.len().max(neighbors2.len()) as f32)
+                * 0.2;
         }
 
         Ok(similarity.min(1.0))
@@ -1175,10 +1269,12 @@ impl GraphExplorer {
 
         if let (Some(values1), Some(values2)) = (props1.get(property), props2.get(property)) {
             // Calculate overlap between property values
-            let common_values_count = values1.iter().collect::<HashSet<_>>()
+            let common_values_count = values1
+                .iter()
+                .collect::<HashSet<_>>()
                 .intersection(&values2.iter().collect())
                 .count();
-            
+
             let total_values = values1.len().max(values2.len());
             if total_values > 0 {
                 Ok(common_values_count as f32 / total_values as f32)
@@ -1345,7 +1441,10 @@ impl PartialOrd for PathStateOrdered {
 
 impl Ord for PathStateOrdered {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.state.score.partial_cmp(&other.state.score).unwrap_or(std::cmp::Ordering::Equal)
+        self.state
+            .score
+            .partial_cmp(&other.state.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
     }
 }
 

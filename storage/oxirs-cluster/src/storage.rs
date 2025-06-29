@@ -1732,7 +1732,11 @@ pub mod mock {
             Ok(shards.get(&shard_id).cloned().unwrap_or_default())
         }
 
-        async fn insert_triples_to_shard(&self, shard_id: ShardId, triples: Vec<Triple>) -> Result<()> {
+        async fn insert_triples_to_shard(
+            &self,
+            shard_id: ShardId,
+            triples: Vec<Triple>,
+        ) -> Result<()> {
             let mut shards = self.shards.write().await;
             if let Some(shard) = shards.get_mut(&shard_id) {
                 shard.extend(triples);

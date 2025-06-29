@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use crate::{
-    planner::planning::{FilterExpression, TriplePattern, QueryComplexity},
+    planner::planning::{FilterExpression, QueryComplexity, TriplePattern},
     FederatedService, ServiceCapability,
 };
 
@@ -72,9 +72,9 @@ impl ViewDefinition {
     /// Check if the view can support the given query patterns
     pub fn supports_patterns(&self, query_patterns: &[TriplePattern]) -> bool {
         let view_patterns = self.query_patterns();
-        query_patterns.iter().all(|qp| {
-            view_patterns.iter().any(|vp| patterns_match(qp, vp))
-        })
+        query_patterns
+            .iter()
+            .all(|qp| view_patterns.iter().any(|vp| patterns_match(qp, vp)))
     }
 
     /// Estimate the freshness requirement for this view
@@ -87,7 +87,7 @@ impl ViewDefinition {
         let pattern_count = self.query_patterns().len();
         let filter_count = self.filters().len();
         let dependency_count = self.dependencies.len();
-        
+
         (pattern_count * 2 + filter_count * 3 + dependency_count * 4) as f64
     }
 }
@@ -95,9 +95,9 @@ impl ViewDefinition {
 /// Pattern matching helper function
 fn patterns_match(query_pattern: &TriplePattern, view_pattern: &TriplePattern) -> bool {
     // Simple pattern matching - in practice this would be more sophisticated
-    (query_pattern.subject.is_none() || query_pattern.subject == view_pattern.subject) &&
-    (query_pattern.predicate.is_none() || query_pattern.predicate == view_pattern.predicate) &&
-    (query_pattern.object.is_none() || query_pattern.object == view_pattern.object)
+    (query_pattern.subject.is_none() || query_pattern.subject == view_pattern.subject)
+        && (query_pattern.predicate.is_none() || query_pattern.predicate == view_pattern.predicate)
+        && (query_pattern.object.is_none() || query_pattern.object == view_pattern.object)
 }
 
 /// Service pattern for materialized views
@@ -193,15 +193,16 @@ impl ViewStatistics {
     /// Record a refresh operation
     pub fn record_refresh(&mut self, duration: Duration) {
         self.refresh_count += 1;
-        
+
         // Update rolling average
         if self.refresh_count == 1 {
             self.avg_refresh_time = duration;
         } else {
-            let total_time = self.avg_refresh_time.as_secs_f64() * (self.refresh_count - 1) as f64 + duration.as_secs_f64();
+            let total_time = self.avg_refresh_time.as_secs_f64() * (self.refresh_count - 1) as f64
+                + duration.as_secs_f64();
             self.avg_refresh_time = Duration::from_secs_f64(total_time / self.refresh_count as f64);
         }
-        
+
         self.last_updated = Utc::now();
     }
 }

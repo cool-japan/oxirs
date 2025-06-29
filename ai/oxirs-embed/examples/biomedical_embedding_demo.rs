@@ -7,7 +7,7 @@
 use anyhow::Result;
 use oxirs_embed::{
     BiomedicalEmbedding, BiomedicalEmbeddingConfig, BiomedicalEntityType, BiomedicalRelationType,
-    SpecializedTextEmbedding, SpecializedTextModel, EmbeddingModel, NamedNode, Triple,
+    EmbeddingModel, NamedNode, SpecializedTextEmbedding, SpecializedTextModel, Triple,
 };
 
 #[tokio::main]
@@ -51,72 +51,167 @@ async fn demo_biomedical_kg_embeddings() -> Result<()> {
 
     // Gene-disease associations
     let gene_disease_triples = vec![
-        ("http://bio.org/gene/BRCA1", "http://bio.org/causes", "http://bio.org/disease/breast_cancer"),
-        ("http://bio.org/gene/TP53", "http://bio.org/associated_with", "http://bio.org/disease/cancer"),
-        ("http://bio.org/gene/APOE", "http://bio.org/predisposes_to", "http://bio.org/disease/alzheimer"),
-        ("http://bio.org/gene/HTT", "http://bio.org/causes", "http://bio.org/disease/huntington"),
+        (
+            "http://bio.org/gene/BRCA1",
+            "http://bio.org/causes",
+            "http://bio.org/disease/breast_cancer",
+        ),
+        (
+            "http://bio.org/gene/TP53",
+            "http://bio.org/associated_with",
+            "http://bio.org/disease/cancer",
+        ),
+        (
+            "http://bio.org/gene/APOE",
+            "http://bio.org/predisposes_to",
+            "http://bio.org/disease/alzheimer",
+        ),
+        (
+            "http://bio.org/gene/HTT",
+            "http://bio.org/causes",
+            "http://bio.org/disease/huntington",
+        ),
     ];
 
     // Drug-target interactions
     let drug_target_triples = vec![
-        ("http://bio.org/drug/aspirin", "http://bio.org/targets", "http://bio.org/protein/COX1"),
-        ("http://bio.org/drug/ibuprofen", "http://bio.org/inhibits", "http://bio.org/protein/COX2"),
-        ("http://bio.org/drug/metformin", "http://bio.org/activates", "http://bio.org/protein/AMPK"),
-        ("http://bio.org/drug/warfarin", "http://bio.org/binds_to", "http://bio.org/protein/CYP2C9"),
+        (
+            "http://bio.org/drug/aspirin",
+            "http://bio.org/targets",
+            "http://bio.org/protein/COX1",
+        ),
+        (
+            "http://bio.org/drug/ibuprofen",
+            "http://bio.org/inhibits",
+            "http://bio.org/protein/COX2",
+        ),
+        (
+            "http://bio.org/drug/metformin",
+            "http://bio.org/activates",
+            "http://bio.org/protein/AMPK",
+        ),
+        (
+            "http://bio.org/drug/warfarin",
+            "http://bio.org/binds_to",
+            "http://bio.org/protein/CYP2C9",
+        ),
     ];
 
     // Pathway memberships
     let pathway_triples = vec![
-        ("http://bio.org/gene/BRCA1", "http://bio.org/participates_in", "http://bio.org/pathway/dna_repair"),
-        ("http://bio.org/protein/COX1", "http://bio.org/participates_in", "http://bio.org/pathway/inflammation"),
-        ("http://bio.org/gene/APOE", "http://bio.org/participates_in", "http://bio.org/pathway/lipid_metabolism"),
+        (
+            "http://bio.org/gene/BRCA1",
+            "http://bio.org/participates_in",
+            "http://bio.org/pathway/dna_repair",
+        ),
+        (
+            "http://bio.org/protein/COX1",
+            "http://bio.org/participates_in",
+            "http://bio.org/pathway/inflammation",
+        ),
+        (
+            "http://bio.org/gene/APOE",
+            "http://bio.org/participates_in",
+            "http://bio.org/pathway/lipid_metabolism",
+        ),
     ];
 
     // Add all triples to the model
-    for (s, p, o) in gene_disease_triples.iter().chain(&drug_target_triples).chain(&pathway_triples) {
-        let triple = Triple::new(
-            NamedNode::new(s)?,
-            NamedNode::new(p)?,
-            NamedNode::new(o)?,
-        );
+    for (s, p, o) in gene_disease_triples
+        .iter()
+        .chain(&drug_target_triples)
+        .chain(&pathway_triples)
+    {
+        let triple = Triple::new(NamedNode::new(s)?, NamedNode::new(p)?, NamedNode::new(o)?);
         model.add_triple(triple)?;
     }
 
     // Add quantitative biomedical features
     println!("📈 Adding quantitative biomedical features...");
-    
+
     // Gene-disease association scores (from literature/databases)
-    model.add_gene_disease_association("http://bio.org/gene/BRCA1", "http://bio.org/disease/breast_cancer", 0.95);
-    model.add_gene_disease_association("http://bio.org/gene/TP53", "http://bio.org/disease/cancer", 0.88);
-    model.add_gene_disease_association("http://bio.org/gene/APOE", "http://bio.org/disease/alzheimer", 0.72);
+    model.add_gene_disease_association(
+        "http://bio.org/gene/BRCA1",
+        "http://bio.org/disease/breast_cancer",
+        0.95,
+    );
+    model.add_gene_disease_association(
+        "http://bio.org/gene/TP53",
+        "http://bio.org/disease/cancer",
+        0.88,
+    );
+    model.add_gene_disease_association(
+        "http://bio.org/gene/APOE",
+        "http://bio.org/disease/alzheimer",
+        0.72,
+    );
 
     // Drug-target binding affinities (in nM)
-    model.add_drug_target_interaction("http://bio.org/drug/aspirin", "http://bio.org/protein/COX1", 0.92);
-    model.add_drug_target_interaction("http://bio.org/drug/ibuprofen", "http://bio.org/protein/COX2", 0.85);
-    model.add_drug_target_interaction("http://bio.org/drug/metformin", "http://bio.org/protein/AMPK", 0.78);
+    model.add_drug_target_interaction(
+        "http://bio.org/drug/aspirin",
+        "http://bio.org/protein/COX1",
+        0.92,
+    );
+    model.add_drug_target_interaction(
+        "http://bio.org/drug/ibuprofen",
+        "http://bio.org/protein/COX2",
+        0.85,
+    );
+    model.add_drug_target_interaction(
+        "http://bio.org/drug/metformin",
+        "http://bio.org/protein/AMPK",
+        0.78,
+    );
 
     // Pathway membership scores
-    model.add_pathway_membership("http://bio.org/gene/BRCA1", "http://bio.org/pathway/dna_repair", 0.94);
-    model.add_pathway_membership("http://bio.org/protein/COX1", "http://bio.org/pathway/inflammation", 0.89);
+    model.add_pathway_membership(
+        "http://bio.org/gene/BRCA1",
+        "http://bio.org/pathway/dna_repair",
+        0.94,
+    );
+    model.add_pathway_membership(
+        "http://bio.org/protein/COX1",
+        "http://bio.org/pathway/inflammation",
+        0.89,
+    );
 
     // Protein-protein interactions
-    model.add_protein_interaction("http://bio.org/protein/COX1", "http://bio.org/protein/COX2", 0.65);
+    model.add_protein_interaction(
+        "http://bio.org/protein/COX1",
+        "http://bio.org/protein/COX2",
+        0.65,
+    );
 
     // Train the model
     println!("🎯 Training biomedical embedding model...");
     let training_stats = model.train(Some(100)).await?;
-    println!("✅ Training completed in {:.2}s", training_stats.training_time_seconds);
+    println!(
+        "✅ Training completed in {:.2}s",
+        training_stats.training_time_seconds
+    );
     println!("   Final loss: {:.6}", training_stats.final_loss);
-    println!("   Convergence: {}", if training_stats.convergence_achieved { "✅" } else { "❌" });
+    println!(
+        "   Convergence: {}",
+        if training_stats.convergence_achieved {
+            "✅"
+        } else {
+            "❌"
+        }
+    );
 
     // Demonstrate predictions
     println!("\n🔮 Making biomedical predictions...");
 
     // Predict diseases for BRCA1 gene
-    if let Ok(predictions) = model.predict_gene_disease_associations("http://bio.org/gene/BRCA1", 3) {
+    if let Ok(predictions) = model.predict_gene_disease_associations("http://bio.org/gene/BRCA1", 3)
+    {
         println!("\n🧬 Top diseases associated with BRCA1:");
         for (disease, score) in predictions {
-            println!("   {} → {:.3}", disease.split('/').last().unwrap_or(&disease), score);
+            println!(
+                "   {} → {:.3}",
+                disease.split('/').last().unwrap_or(&disease),
+                score
+            );
         }
     }
 
@@ -124,7 +219,11 @@ async fn demo_biomedical_kg_embeddings() -> Result<()> {
     if let Ok(predictions) = model.predict_drug_targets("http://bio.org/drug/aspirin", 3) {
         println!("\n💊 Top targets for aspirin:");
         for (target, score) in predictions {
-            println!("   {} → {:.3}", target.split('/').last().unwrap_or(&target), score);
+            println!(
+                "   {} → {:.3}",
+                target.split('/').last().unwrap_or(&target),
+                score
+            );
         }
     }
 
@@ -132,7 +231,11 @@ async fn demo_biomedical_kg_embeddings() -> Result<()> {
     if let Ok(predictions) = model.find_pathway_entities("http://bio.org/pathway/dna_repair", 3) {
         println!("\n🔗 Entities related to DNA repair pathway:");
         for (entity, score) in predictions {
-            println!("   {} → {:.3}", entity.split('/').last().unwrap_or(&entity), score);
+            println!(
+                "   {} → {:.3}",
+                entity.split('/').last().unwrap_or(&entity),
+                score
+            );
         }
     }
 
@@ -147,9 +250,18 @@ async fn demo_specialized_text_embeddings() -> Result<()> {
 
     // Create different specialized text models
     let models = vec![
-        ("SciBERT", SpecializedTextEmbedding::new(SpecializedTextEmbedding::scibert_config())),
-        ("BioBERT", SpecializedTextEmbedding::new(SpecializedTextEmbedding::biobert_config())),
-        ("CodeBERT", SpecializedTextEmbedding::new(SpecializedTextEmbedding::codebert_config())),
+        (
+            "SciBERT",
+            SpecializedTextEmbedding::new(SpecializedTextEmbedding::scibert_config()),
+        ),
+        (
+            "BioBERT",
+            SpecializedTextEmbedding::new(SpecializedTextEmbedding::biobert_config()),
+        ),
+        (
+            "CodeBERT",
+            SpecializedTextEmbedding::new(SpecializedTextEmbedding::codebert_config()),
+        ),
     ];
 
     let test_texts = vec![
@@ -161,13 +273,14 @@ async fn demo_specialized_text_embeddings() -> Result<()> {
 
     for (model_name, mut model) in models {
         println!("🤖 Testing {} Model:", model_name);
-        
+
         for text in &test_texts {
             // Generate embedding for the text
             let embedding = model.encode_text(text).await?;
             println!("   Text: \"{}...\"", &text[..50.min(text.len())]);
-            println!("   Embedding dim: {}, norm: {:.3}", 
-                embedding.len(), 
+            println!(
+                "   Embedding dim: {}, norm: {:.3}",
+                embedding.len(),
                 embedding.iter().map(|x| x * x).sum::<f32>().sqrt()
             );
         }
@@ -177,7 +290,7 @@ async fn demo_specialized_text_embeddings() -> Result<()> {
     // Demonstrate fine-tuning on biomedical texts
     println!("🎯 Fine-tuning BioBERT on domain-specific texts...");
     let mut biobert = SpecializedTextEmbedding::new(SpecializedTextEmbedding::biobert_config());
-    
+
     let biomedical_training_texts = vec![
         "Gene expression analysis reveals differential patterns in cancer cells".to_string(),
         "Protein-protein interactions regulate cellular signaling pathways".to_string(),
@@ -187,7 +300,10 @@ async fn demo_specialized_text_embeddings() -> Result<()> {
     ];
 
     let fine_tune_stats = biobert.fine_tune(biomedical_training_texts).await?;
-    println!("✅ Fine-tuning completed in {:.2}s", fine_tune_stats.training_time_seconds);
+    println!(
+        "✅ Fine-tuning completed in {:.2}s",
+        fine_tune_stats.training_time_seconds
+    );
     println!("   Final loss: {:.6}", fine_tune_stats.final_loss);
     println!("   Epochs: {}", fine_tune_stats.epochs_completed);
 
@@ -217,44 +333,100 @@ async fn demo_drug_discovery() -> Result<()> {
     // Add comprehensive drug-target-disease network
     let knowledge_triples = vec![
         // Cardiovascular drugs
-        ("http://drugs.org/atorvastatin", "http://bio.org/targets", "http://proteins.org/HMGCR"),
-        ("http://proteins.org/HMGCR", "http://bio.org/regulates", "http://pathways.org/cholesterol_synthesis"),
-        ("http://pathways.org/cholesterol_synthesis", "http://bio.org/affects", "http://diseases.org/hypercholesterolemia"),
-        
+        (
+            "http://drugs.org/atorvastatin",
+            "http://bio.org/targets",
+            "http://proteins.org/HMGCR",
+        ),
+        (
+            "http://proteins.org/HMGCR",
+            "http://bio.org/regulates",
+            "http://pathways.org/cholesterol_synthesis",
+        ),
+        (
+            "http://pathways.org/cholesterol_synthesis",
+            "http://bio.org/affects",
+            "http://diseases.org/hypercholesterolemia",
+        ),
         // Cancer drugs
-        ("http://drugs.org/trastuzumab", "http://bio.org/targets", "http://proteins.org/HER2"),
-        ("http://proteins.org/HER2", "http://bio.org/overexpressed_in", "http://diseases.org/breast_cancer"),
-        ("http://drugs.org/imatinib", "http://bio.org/inhibits", "http://proteins.org/BCR_ABL"),
-        
+        (
+            "http://drugs.org/trastuzumab",
+            "http://bio.org/targets",
+            "http://proteins.org/HER2",
+        ),
+        (
+            "http://proteins.org/HER2",
+            "http://bio.org/overexpressed_in",
+            "http://diseases.org/breast_cancer",
+        ),
+        (
+            "http://drugs.org/imatinib",
+            "http://bio.org/inhibits",
+            "http://proteins.org/BCR_ABL",
+        ),
         // Neurological drugs
-        ("http://drugs.org/donepezil", "http://bio.org/inhibits", "http://proteins.org/AChE"),
-        ("http://proteins.org/AChE", "http://bio.org/depleted_in", "http://diseases.org/alzheimer"),
+        (
+            "http://drugs.org/donepezil",
+            "http://bio.org/inhibits",
+            "http://proteins.org/AChE",
+        ),
+        (
+            "http://proteins.org/AChE",
+            "http://bio.org/depleted_in",
+            "http://diseases.org/alzheimer",
+        ),
     ];
 
     for (s, p, o) in knowledge_triples {
-        let triple = Triple::new(
-            NamedNode::new(s)?,
-            NamedNode::new(p)?,
-            NamedNode::new(o)?,
-        );
+        let triple = Triple::new(NamedNode::new(s)?, NamedNode::new(p)?, NamedNode::new(o)?);
         discovery_model.add_triple(triple)?;
     }
 
     // Add quantitative drug discovery data
-    discovery_model.add_drug_target_interaction("http://drugs.org/atorvastatin", "http://proteins.org/HMGCR", 0.95);
-    discovery_model.add_drug_target_interaction("http://drugs.org/trastuzumab", "http://proteins.org/HER2", 0.98);
-    discovery_model.add_drug_target_interaction("http://drugs.org/imatinib", "http://proteins.org/BCR_ABL", 0.92);
-    discovery_model.add_drug_target_interaction("http://drugs.org/donepezil", "http://proteins.org/AChE", 0.87);
+    discovery_model.add_drug_target_interaction(
+        "http://drugs.org/atorvastatin",
+        "http://proteins.org/HMGCR",
+        0.95,
+    );
+    discovery_model.add_drug_target_interaction(
+        "http://drugs.org/trastuzumab",
+        "http://proteins.org/HER2",
+        0.98,
+    );
+    discovery_model.add_drug_target_interaction(
+        "http://drugs.org/imatinib",
+        "http://proteins.org/BCR_ABL",
+        0.92,
+    );
+    discovery_model.add_drug_target_interaction(
+        "http://drugs.org/donepezil",
+        "http://proteins.org/AChE",
+        0.87,
+    );
 
-    discovery_model.add_gene_disease_association("http://proteins.org/HER2", "http://diseases.org/breast_cancer", 0.94);
-    discovery_model.add_gene_disease_association("http://proteins.org/BCR_ABL", "http://diseases.org/cml", 0.98);
-    discovery_model.add_gene_disease_association("http://proteins.org/AChE", "http://diseases.org/alzheimer", 0.85);
+    discovery_model.add_gene_disease_association(
+        "http://proteins.org/HER2",
+        "http://diseases.org/breast_cancer",
+        0.94,
+    );
+    discovery_model.add_gene_disease_association(
+        "http://proteins.org/BCR_ABL",
+        "http://diseases.org/cml",
+        0.98,
+    );
+    discovery_model.add_gene_disease_association(
+        "http://proteins.org/AChE",
+        "http://diseases.org/alzheimer",
+        0.85,
+    );
 
     // Train the discovery model
     println!("🎯 Training drug discovery model...");
     let stats = discovery_model.train(Some(150)).await?;
-    println!("✅ Training completed in {:.2}s with loss {:.6}", 
-        stats.training_time_seconds, stats.final_loss);
+    println!(
+        "✅ Training completed in {:.2}s with loss {:.6}",
+        stats.training_time_seconds, stats.final_loss
+    );
 
     // Demonstrate drug discovery predictions
     println!("\n🔮 Drug Discovery Predictions:");
@@ -270,7 +442,9 @@ async fn demo_drug_discovery() -> Result<()> {
 
     // Find potential drugs for cancer treatment
     println!("\n🎯 Cancer Treatment Options:");
-    if let Ok(drugs) = discovery_model.predict_subjects("http://bio.org/targets", "http://proteins.org/HER2", 3) {
+    if let Ok(drugs) =
+        discovery_model.predict_subjects("http://bio.org/targets", "http://proteins.org/HER2", 3)
+    {
         for (drug, score) in drugs {
             let drug_name = drug.split('/').last().unwrap_or(&drug);
             println!("   {} → {:.3}", drug_name, score);
@@ -293,11 +467,12 @@ async fn demo_drug_discovery() -> Result<()> {
 /// Helper function to display entity type information
 fn display_entity_info(entity_iri: &str) -> String {
     if let Some(entity_type) = BiomedicalEntityType::from_iri(entity_iri) {
-        format!("{} ({})", 
+        format!(
+            "{} ({})",
             entity_iri.split('/').last().unwrap_or(entity_iri),
             match entity_type {
                 BiomedicalEntityType::Gene => "Gene",
-                BiomedicalEntityType::Protein => "Protein", 
+                BiomedicalEntityType::Protein => "Protein",
                 BiomedicalEntityType::Disease => "Disease",
                 BiomedicalEntityType::Drug => "Drug",
                 BiomedicalEntityType::Compound => "Compound",
@@ -306,14 +481,19 @@ fn display_entity_info(entity_iri: &str) -> String {
             }
         )
     } else {
-        entity_iri.split('/').last().unwrap_or(entity_iri).to_string()
+        entity_iri
+            .split('/')
+            .last()
+            .unwrap_or(entity_iri)
+            .to_string()
     }
 }
 
 /// Helper function to display relation type information
 fn display_relation_info(relation_iri: &str) -> String {
     if let Some(relation_type) = BiomedicalRelationType::from_iri(relation_iri) {
-        format!("{} ({})", 
+        format!(
+            "{} ({})",
             relation_iri.split('/').last().unwrap_or(relation_iri),
             match relation_type {
                 BiomedicalRelationType::CausesDisease => "Causes Disease",
@@ -324,6 +504,10 @@ fn display_relation_info(relation_iri: &str) -> String {
             }
         )
     } else {
-        relation_iri.split('/').last().unwrap_or(relation_iri).to_string()
+        relation_iri
+            .split('/')
+            .last()
+            .unwrap_or(relation_iri)
+            .to_string()
     }
 }

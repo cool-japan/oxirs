@@ -40,19 +40,13 @@ impl VectorClock {
     pub fn new(local_node: NodeId) -> Self {
         let mut clocks = BTreeMap::new();
         clocks.insert(local_node, 0);
-        
-        Self {
-            clocks,
-            local_node,
-        }
+
+        Self { clocks, local_node }
     }
 
     /// Create from existing clock values
     pub fn from_clocks(clocks: BTreeMap<NodeId, LogicalTime>, local_node: NodeId) -> Self {
-        Self {
-            clocks,
-            local_node,
-        }
+        Self { clocks, local_node }
     }
 
     /// Increment the local clock
@@ -96,8 +90,8 @@ impl VectorClock {
         }
 
         match (self_greater, other_greater) {
-            (true, false) => CausalRelation::HappensBefore,  // self -> other
-            (false, true) => CausalRelation::HappensAfter,   // other -> self  
+            (true, false) => CausalRelation::HappensBefore, // self -> other
+            (false, true) => CausalRelation::HappensAfter,  // other -> self
             (false, false) => CausalRelation::Identical,
             (true, true) => CausalRelation::Concurrent,
         }
@@ -138,8 +132,7 @@ impl VectorClock {
 
     /// Restore from compact representation
     pub fn from_compact_bytes(data: &[u8]) -> Result<Self> {
-        bincode::deserialize(data)
-            .map_err(|e| anyhow!("Failed to deserialize vector clock: {}", e))
+        bincode::deserialize(data).map_err(|e| anyhow!("Failed to deserialize vector clock: {}", e))
     }
 
     /// Get the maximum time across all nodes
@@ -267,7 +260,7 @@ impl HybridLogicalClock {
     /// Advance the clock (local event)
     pub fn tick(&mut self) {
         let current_physical = Self::current_physical_time();
-        
+
         if current_physical > self.physical_time {
             self.physical_time = current_physical;
             self.logical_time = 0;
@@ -336,7 +329,11 @@ impl Ord for HybridLogicalClock {
 
 impl fmt::Display for HybridLogicalClock {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "HLC({}:{}:{})", self.physical_time, self.logical_time, self.node)
+        write!(
+            f,
+            "HLC({}:{}:{})",
+            self.physical_time, self.logical_time, self.node
+        )
     }
 }
 
@@ -418,7 +415,7 @@ impl ClockSyncManager {
     /// Check if a timestamp is within acceptable bounds considering clock skew
     pub fn is_timestamp_valid(&self, timestamp: PhysicalTime, from_node: NodeId) -> bool {
         let local_time = HybridLogicalClock::current_physical_time();
-        
+
         if from_node == self.local_node {
             // Local timestamp - check against current time with small tolerance
             let diff = if timestamp > local_time {
@@ -673,13 +670,13 @@ impl TimestampBundle {
 
     /// Check if this bundle happens before another
     pub fn happens_before(&self, other: &TimestampBundle) -> bool {
-        self.hybrid_logical_clock.happens_before(&other.hybrid_logical_clock)
+        self.hybrid_logical_clock
+            .happens_before(&other.hybrid_logical_clock)
     }
 
     /// Serialize bundle for storage
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
-        bincode::serialize(self)
-            .map_err(|e| anyhow!("Failed to serialize timestamp bundle: {}", e))
+        bincode::serialize(self).map_err(|e| anyhow!("Failed to serialize timestamp bundle: {}", e))
     }
 
     /// Deserialize bundle from storage
@@ -817,7 +814,7 @@ mod tests {
         // Check causal ordering
         assert!(bundle1.happens_before(&bundle2));
         assert!(bundle2.happens_before(&bundle3));
-        
+
         // Check transitive causality
         assert_eq!(
             bundle1.causal_relation(&bundle3),

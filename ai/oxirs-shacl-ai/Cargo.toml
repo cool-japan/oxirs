@@ -19,21 +19,25 @@ serde_json.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-chrono.workspace = true
+chrono = "0.4.35"
 tokio.workspace = true
-num_cpus = "1.16"
+num_cpus = "1.17"
 ndarray = "0.16"
-rand = "0.8"
+rand = "0.9"
 regex = "1.11"
-indexmap = "2.6"
-uuid = { version = "1.11", features = ["v4", "serde"] }
+indexmap = "2.10"
+uuid = { version = "1.17", features = ["v4", "serde"] }
 threadpool = "1.8"
 nalgebra = { version = "0.33", features = ["serde-serialize"] }
 num-complex = { version = "0.4", features = ["serde"] }
 async-trait = "0.1"
 futures = "0.3"
 dashmap = "6.1"
-datafusion = "43.0"
+datafusion = "48.0"  # Re-enabled with compatible version
+fastrand = "2.3"
+base64 = "0.22"
+url = "2.5"
+tokio-stream = "0.1"
 
 [dev-dependencies]
 criterion.workspace = true

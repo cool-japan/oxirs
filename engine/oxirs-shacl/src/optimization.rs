@@ -452,7 +452,11 @@ impl ConstraintDependencyAnalyzer {
             Constraint::MaxCount(_) => self.cost_estimates.get("maxCount").copied().unwrap_or(1.0),
             Constraint::Pattern(_) => self.cost_estimates.get("pattern").copied().unwrap_or(3.0),
             Constraint::Sparql(_) => self.cost_estimates.get("sparql").copied().unwrap_or(10.0),
-            Constraint::QualifiedValueShape(_) => self.cost_estimates.get("qualifiedValueShape").copied().unwrap_or(8.0),
+            Constraint::QualifiedValueShape(_) => self
+                .cost_estimates
+                .get("qualifiedValueShape")
+                .copied()
+                .unwrap_or(8.0),
             Constraint::Closed(_) => self.cost_estimates.get("closed").copied().unwrap_or(6.0),
             Constraint::And(_) | Constraint::Or(_) | Constraint::Xone(_) => {
                 // Logical constraints have variable cost based on sub-constraints
@@ -460,7 +464,7 @@ impl ConstraintDependencyAnalyzer {
             }
             _ => 3.0, // Default cost for other constraints
         };
-        
+
         base_cost
     }
 
@@ -473,27 +477,27 @@ impl ConstraintDependencyAnalyzer {
             Constraint::NodeKind(_) => 0.3,
             Constraint::HasValue(_) => 0.05,
             Constraint::In(_) => 0.15,
-            
+
             // Moderately selective constraints - MinCount is often very cheap to check
             Constraint::MinCount(_) | Constraint::MaxCount(_) => 0.1,
             Constraint::Pattern(_) => 0.5,
             Constraint::MinLength(_) | Constraint::MaxLength(_) => 0.6,
-            
+
             // Less selective constraints
             Constraint::MinInclusive(_) | Constraint::MaxInclusive(_) => 0.7,
             Constraint::MinExclusive(_) | Constraint::MaxExclusive(_) => 0.7,
-            
+
             // Variable selectivity (depends on implementation)
             Constraint::Sparql(_) => 0.8,
             Constraint::QualifiedValueShape(_) => 0.6,
             Constraint::Closed(_) => 0.4,
-            
+
             // Logical constraints depend on sub-constraints
-            Constraint::And(_) => 0.3, // AND is generally selective
-            Constraint::Or(_) => 0.8,  // OR is generally less selective
+            Constraint::And(_) => 0.3,  // AND is generally selective
+            Constraint::Or(_) => 0.8,   // OR is generally less selective
             Constraint::Xone(_) => 0.5, // XOR is moderately selective
             Constraint::Not(_) => 0.9,  // NOT is generally less selective
-            
+
             _ => 0.5, // Default moderate selectivity
         }
     }
@@ -502,9 +506,14 @@ impl ConstraintDependencyAnalyzer {
     pub fn update_cost_estimate(&mut self, constraint_type: &str, actual_cost: f64) {
         // Use exponential moving average to update cost estimates
         let alpha = 0.1; // Learning rate
-        let current_estimate = self.cost_estimates.get(constraint_type).copied().unwrap_or(3.0);
+        let current_estimate = self
+            .cost_estimates
+            .get(constraint_type)
+            .copied()
+            .unwrap_or(3.0);
         let new_estimate = alpha * actual_cost + (1.0 - alpha) * current_estimate;
-        self.cost_estimates.insert(constraint_type.to_string(), new_estimate);
+        self.cost_estimates
+            .insert(constraint_type.to_string(), new_estimate);
     }
 }
 
@@ -578,12 +587,9 @@ impl ValidationOptimizationEngine {
             Duration::from_secs(config.cache_ttl_secs),
         );
         let dependency_analyzer = ConstraintDependencyAnalyzer::default();
-        let batch_evaluator = BatchConstraintEvaluator::new(
-            cache.clone(),
-            config.enable_parallel,
-            config.batch_size,
-        );
-        
+        let batch_evaluator =
+            BatchConstraintEvaluator::new(cache.clone(), config.enable_parallel, config.batch_size);
+
         Self {
             cache,
             dependency_analyzer,
@@ -600,26 +606,27 @@ impl ValidationOptimizationEngine {
         constraints_with_contexts: Vec<(Constraint, ConstraintContext)>,
     ) -> Result<Vec<ConstraintEvaluationResult>> {
         let start_time = Instant::now();
-        
+
         // Step 1: Reorder constraints for optimal evaluation if enabled
         let optimized_constraints = if self.config.enable_reordering {
             self.reorder_constraints_for_optimization(constraints_with_contexts)
         } else {
             constraints_with_contexts
         };
-        
+
         // Step 2: Evaluate using batch processing
         let results = if self.config.enable_caching {
-            self.batch_evaluator.evaluate_batch(store, optimized_constraints)?
+            self.batch_evaluator
+                .evaluate_batch(store, optimized_constraints)?
         } else {
             // Direct evaluation without caching
             self.evaluate_without_cache(store, optimized_constraints)?
         };
-        
+
         // Step 3: Update metrics
         let total_time = start_time.elapsed();
         self.update_metrics(results.len(), total_time);
-        
+
         Ok(results)
     }
 
@@ -629,15 +636,19 @@ impl ValidationOptimizationEngine {
         mut constraints_with_contexts: Vec<(Constraint, ConstraintContext)>,
     ) -> Vec<(Constraint, ConstraintContext)> {
         // Group by context to maintain constraint evaluation order within same context
-        let mut context_groups: HashMap<String, Vec<(Constraint, ConstraintContext)>> = HashMap::new();
-        
+        let mut context_groups: HashMap<String, Vec<(Constraint, ConstraintContext)>> =
+            HashMap::new();
+
         for (constraint, context) in constraints_with_contexts {
             let context_key = format!("{:?}_{:?}", context.focus_node, context.shape_id);
-            context_groups.entry(context_key).or_default().push((constraint, context));
+            context_groups
+                .entry(context_key)
+                .or_default()
+                .push((constraint, context));
         }
-        
+
         let mut optimized = Vec::new();
-        
+
         for (_, mut group) in context_groups {
             // Sort constraints within each context group
             group.sort_by(|(a, _), (b, _)| {
@@ -645,22 +656,27 @@ impl ValidationOptimizationEngine {
                 let cost_b = self.dependency_analyzer.estimate_constraint_cost(b);
                 let selectivity_a = self.dependency_analyzer.estimate_constraint_selectivity(a);
                 let selectivity_b = self.dependency_analyzer.estimate_constraint_selectivity(b);
-                
+
                 // Primary: selectivity (more selective first)
                 // Secondary: cost (lower cost first)
-                selectivity_a.partial_cmp(&selectivity_b)
+                selectivity_a
+                    .partial_cmp(&selectivity_b)
                     .unwrap_or(std::cmp::Ordering::Equal)
-                    .then_with(|| cost_a.partial_cmp(&cost_b).unwrap_or(std::cmp::Ordering::Equal))
+                    .then_with(|| {
+                        cost_a
+                            .partial_cmp(&cost_b)
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    })
             });
-            
+
             optimized.extend(group);
         }
-        
+
         // Update metrics
         if let Ok(mut metrics) = self.metrics.write() {
             metrics.constraints_reordered += optimized.len();
         }
-        
+
         optimized
     }
 
@@ -671,12 +687,12 @@ impl ValidationOptimizationEngine {
         constraints_with_contexts: Vec<(Constraint, ConstraintContext)>,
     ) -> Result<Vec<ConstraintEvaluationResult>> {
         let mut results = Vec::new();
-        
+
         for (constraint, context) in constraints_with_contexts {
             let result = constraint.evaluate(store, &context)?;
             results.push(result);
         }
-        
+
         Ok(results)
     }
 
@@ -684,14 +700,14 @@ impl ValidationOptimizationEngine {
     fn update_metrics(&self, evaluation_count: usize, total_time: Duration) {
         if let Ok(mut metrics) = self.metrics.write() {
             metrics.total_evaluations += evaluation_count;
-            
+
             let cache_stats = self.cache.stats();
             metrics.cache_hit_rate = cache_stats.hit_rate();
             metrics.avg_evaluation_time_us = cache_stats.avg_evaluation_time_us;
-            
+
             // Estimate time saved through optimization
             let time_per_evaluation = total_time.as_micros() as f64 / evaluation_count as f64;
-            metrics.optimization_time_saved_us += 
+            metrics.optimization_time_saved_us +=
                 cache_stats.hits as f64 * time_per_evaluation * 0.8; // Assume 80% time saving from cache hits
         }
     }
@@ -720,7 +736,6 @@ impl ValidationOptimizationEngine {
         self.cache.stats()
     }
 }
-
 
 /// Advanced constraint evaluation orchestrator
 #[derive(Debug)]

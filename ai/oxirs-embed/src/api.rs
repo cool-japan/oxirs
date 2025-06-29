@@ -9,6 +9,13 @@ use crate::{
     ModelVersion, TrainingStats, Vector,
 };
 use anyhow::{anyhow, Result};
+#[cfg(feature = "graphql")]
+use async_graphql::{
+    http::GraphiQLSource, Context, EmptySubscription, Enum, Error as GraphQLError, InputObject,
+    Object, Result as GraphQLResult, Schema, SimpleObject,
+};
+#[cfg(feature = "graphql")]
+use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 #[cfg(feature = "api-server")]
 use axum::{
     extract::{Path, Query, State},
@@ -26,13 +33,6 @@ use tokio::sync::RwLock;
 use tower::ServiceBuilder;
 #[cfg(feature = "api-server")]
 use tower_http::{cors::CorsLayer, timeout::TimeoutLayer, trace::TraceLayer};
-#[cfg(feature = "graphql")]
-use async_graphql::{
-    http::GraphiQLSource, Context, EmptySubscription, Error as GraphQLError, Object, Result as GraphQLResult,
-    Schema, SimpleObject, InputObject, Enum
-};
-#[cfg(feature = "graphql")]
-use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
@@ -420,6 +420,1235 @@ pub struct QueryParams {
 }
 
 // ============================================================================
+// GraphQL Schema and Types
+// ============================================================================
+
+#[cfg(feature = "graphql")]
+use async_graphql::{subscription, MaybeUndefined, Subscription, Union};
+use futures_util::stream::Stream;
+use std::pin::Pin;
+use tokio::sync::broadcast;
+use tokio_stream::{wrappers::BroadcastStream, StreamExt};
+
+/// GraphQL Query root
+#[cfg(feature = "graphql")]
+#[derive(Default)]
+pub struct Query;
+
+/// GraphQL Mutation root
+#[cfg(feature = "graphql")]
+#[derive(Default)]
+pub struct Mutation;
+
+/// GraphQL Subscription root
+#[cfg(feature = "graphql")]
+#[derive(Default)]
+pub struct SubscriptionRoot;
+
+/// Embedding entity with full GraphQL support
+#[cfg(feature = "graphql")]
+#[derive(SimpleObject, Clone)]
+pub struct EmbeddingEntity {
+    /// Entity identifier
+    pub id: String,
+    /// Entity type (e.g., "gene", "drug", "disease")
+    pub entity_type: Option<String>,
+    /// Entity label/name
+    pub label: Option<String>,
+    /// Embedding vector
+    pub embedding: Vec<f32>,
+    /// Embedding dimensions
+    pub dimensions: usize,
+    /// Similarity scores to other entities (computed on demand)
+    #[graphql(skip)]
+    pub similarity_scores: Option<HashMap<String, f64>>,
+    /// Related entities (nested)
+    #[graphql(skip)]
+    pub related_entities: Option<Vec<EmbeddingEntity>>,
+    /// Model version used for this embedding
+    pub model_version: String,
+    /// Creation timestamp
+    pub created_at: DateTime<Utc>,
+    /// Last updated timestamp
+    pub updated_at: Option<DateTime<Utc>>,
+    /// Metadata
+    pub metadata: Option<HashMap<String, String>>,
+}
+
+/// Triple with embedded entities
+#[cfg(feature = "graphql")]
+#[derive(SimpleObject, Clone)]
+pub struct EmbeddingTriple {
+    /// Triple identifier
+    pub id: String,
+    /// Subject entity with embedding
+    pub subject: EmbeddingEntity,
+    /// Predicate/relation
+    pub predicate: String,
+    /// Object entity with embedding
+    pub object: EmbeddingEntity,
+    /// Triple score/confidence
+    pub score: f64,
+    /// Model version used
+    pub model_version: String,
+    /// Creation timestamp
+    pub created_at: DateTime<Utc>,
+    /// Metadata
+    pub metadata: Option<HashMap<String, String>>,
+}
+
+/// Model information for GraphQL
+#[cfg(feature = "graphql")]
+#[derive(SimpleObject, Clone)]
+pub struct GraphQLModelInfo {
+    /// Model ID
+    pub id: String,
+    /// Model name
+    pub name: String,
+    /// Model type
+    pub model_type: String,
+    /// Model version
+    pub version: String,
+    /// Number of entities
+    pub num_entities: i32,
+    /// Number of relations
+    pub num_relations: i32,
+    /// Number of triples
+    pub num_triples: i32,
+    /// Embedding dimensions
+    pub dimensions: i32,
+    /// Is model trained
+    pub is_trained: bool,
+    /// Creation time
+    pub created_at: DateTime<Utc>,
+    /// Last training time
+    pub last_training_time: Option<DateTime<Utc>>,
+    /// Model health status
+    pub health_status: String,
+    /// Performance metrics
+    pub performance_metrics: Option<ModelPerformanceMetrics>,
+}
+
+/// Model performance metrics
+#[cfg(feature = "graphql")]
+#[derive(SimpleObject, Clone)]
+pub struct ModelPerformanceMetrics {
+    /// Mean reciprocal rank
+    pub mean_reciprocal_rank: f64,
+    /// Hits at 1
+    pub hits_at_1: f64,
+    /// Hits at 10
+    pub hits_at_10: f64,
+    /// Average response time in ms
+    pub avg_response_time_ms: f64,
+    /// Throughput (requests per second)
+    pub throughput_rps: f64,
+}
+
+/// Entity filtering options
+#[cfg(feature = "graphql")]
+#[derive(InputObject, Clone)]
+pub struct EntityFilter {
+    /// Entity type filter
+    pub entity_type: Option<String>,
+    /// Label pattern (supports wildcards)
+    pub label_pattern: Option<String>,
+    /// Minimum similarity score (when querying similar entities)
+    pub min_similarity: Option<f64>,
+    /// Maximum similarity score
+    pub max_similarity: Option<f64>,
+    /// Entity IDs to include
+    pub include_ids: Option<Vec<String>>,
+    /// Entity IDs to exclude
+    pub exclude_ids: Option<Vec<String>>,
+    /// Created after timestamp
+    pub created_after: Option<DateTime<Utc>>,
+    /// Created before timestamp
+    pub created_before: Option<DateTime<Utc>>,
+    /// Model version filter
+    pub model_version: Option<String>,
+    /// Metadata filters
+    pub metadata_filters: Option<HashMap<String, String>>,
+}
+
+/// Triple filtering options
+#[cfg(feature = "graphql")]
+#[derive(InputObject, Clone)]
+pub struct TripleFilter {
+    /// Subject entity ID
+    pub subject_id: Option<String>,
+    /// Subject entity type
+    pub subject_type: Option<String>,
+    /// Predicate/relation
+    pub predicate: Option<String>,
+    /// Object entity ID
+    pub object_id: Option<String>,
+    /// Object entity type
+    pub object_type: Option<String>,
+    /// Minimum score
+    pub min_score: Option<f64>,
+    /// Maximum score
+    pub max_score: Option<f64>,
+    /// Created after timestamp
+    pub created_after: Option<DateTime<Utc>>,
+    /// Created before timestamp
+    pub created_before: Option<DateTime<Utc>>,
+    /// Model version filter
+    pub model_version: Option<String>,
+}
+
+/// Sorting options
+#[cfg(feature = "graphql")]
+#[derive(InputObject, Clone)]
+pub struct SortOptions {
+    /// Field to sort by
+    pub field: String,
+    /// Sort direction
+    pub direction: SortDirection,
+}
+
+/// Sort direction
+#[cfg(feature = "graphql")]
+#[derive(Enum, Copy, Clone, Eq, PartialEq)]
+pub enum SortDirection {
+    /// Ascending order
+    Asc,
+    /// Descending order
+    Desc,
+}
+
+/// Pagination options
+#[cfg(feature = "graphql")]
+#[derive(InputObject, Clone)]
+pub struct PaginationOptions {
+    /// Offset (number of items to skip)
+    pub offset: Option<i32>,
+    /// Limit (maximum number of items to return)
+    pub limit: Option<i32>,
+    /// Cursor for cursor-based pagination
+    pub cursor: Option<String>,
+}
+
+/// Connection type for paginated results
+#[cfg(feature = "graphql")]
+#[derive(SimpleObject, Clone)]
+pub struct EntityConnection {
+    /// List of entities
+    pub entities: Vec<EmbeddingEntity>,
+    /// Pagination info
+    pub page_info: PageInfo,
+    /// Total count
+    pub total_count: i32,
+}
+
+/// Triple connection for paginated results
+#[cfg(feature = "graphql")]
+#[derive(SimpleObject, Clone)]
+pub struct TripleConnection {
+    /// List of triples
+    pub triples: Vec<EmbeddingTriple>,
+    /// Pagination info
+    pub page_info: PageInfo,
+    /// Total count
+    pub total_count: i32,
+}
+
+/// Pagination information
+#[cfg(feature = "graphql")]
+#[derive(SimpleObject, Clone)]
+pub struct PageInfo {
+    /// Has next page
+    pub has_next_page: bool,
+    /// Has previous page
+    pub has_previous_page: bool,
+    /// Start cursor
+    pub start_cursor: Option<String>,
+    /// End cursor
+    pub end_cursor: Option<String>,
+}
+
+/// Real-time subscription events
+#[cfg(feature = "graphql")]
+#[derive(Union, Clone)]
+pub enum SubscriptionEvent {
+    /// New entity embedding created
+    EntityCreated(EmbeddingEntity),
+    /// Entity embedding updated
+    EntityUpdated(EmbeddingEntity),
+    /// Entity embedding deleted
+    EntityDeleted(EntityDeletedEvent),
+    /// New triple created
+    TripleCreated(EmbeddingTriple),
+    /// Triple updated
+    TripleUpdated(EmbeddingTriple),
+    /// Triple deleted
+    TripleDeleted(TripleDeletedEvent),
+    /// Model training started
+    ModelTrainingStarted(ModelTrainingEvent),
+    /// Model training completed
+    ModelTrainingCompleted(ModelTrainingEvent),
+    /// Model quality alert
+    QualityAlert(QualityAlertEvent),
+}
+
+/// Entity deleted event
+#[cfg(feature = "graphql")]
+#[derive(SimpleObject, Clone)]
+pub struct EntityDeletedEvent {
+    /// Deleted entity ID
+    pub entity_id: String,
+    /// Deletion timestamp
+    pub deleted_at: DateTime<Utc>,
+    /// Model version
+    pub model_version: String,
+}
+
+/// Triple deleted event
+#[cfg(feature = "graphql")]
+#[derive(SimpleObject, Clone)]
+pub struct TripleDeletedEvent {
+    /// Deleted triple ID
+    pub triple_id: String,
+    /// Deletion timestamp
+    pub deleted_at: DateTime<Utc>,
+    /// Model version
+    pub model_version: String,
+}
+
+/// Model training event
+#[cfg(feature = "graphql")]
+#[derive(SimpleObject, Clone)]
+pub struct ModelTrainingEvent {
+    /// Model ID
+    pub model_id: String,
+    /// Event type
+    pub event_type: String,
+    /// Training progress (0.0 to 1.0)
+    pub progress: f64,
+    /// Current epoch
+    pub current_epoch: Option<i32>,
+    /// Total epochs
+    pub total_epochs: Option<i32>,
+    /// Current loss
+    pub current_loss: Option<f64>,
+    /// Event timestamp
+    pub timestamp: DateTime<Utc>,
+    /// Additional metadata
+    pub metadata: Option<HashMap<String, String>>,
+}
+
+/// Quality alert event
+#[cfg(feature = "graphql")]
+#[derive(SimpleObject, Clone)]
+pub struct QualityAlertEvent {
+    /// Alert ID
+    pub alert_id: String,
+    /// Alert type
+    pub alert_type: String,
+    /// Alert severity
+    pub severity: String,
+    /// Alert message
+    pub message: String,
+    /// Affected model ID
+    pub model_id: String,
+    /// Metric name that triggered the alert
+    pub metric_name: Option<String>,
+    /// Metric value
+    pub metric_value: Option<f64>,
+    /// Alert timestamp
+    pub timestamp: DateTime<Utc>,
+}
+
+/// GraphQL context containing API state
+#[cfg(feature = "graphql")]
+pub struct GraphQLContext {
+    /// API state
+    pub api_state: ApiState,
+    /// Event broadcaster for subscriptions
+    pub event_broadcaster: broadcast::Sender<SubscriptionEvent>,
+}
+
+/// GraphQL Query implementations
+#[cfg(feature = "graphql")]
+#[Object]
+impl Query {
+    /// Get entity by ID with optional related entities
+    async fn entity(
+        &self,
+        ctx: &Context<'_>,
+        id: String,
+        #[graphql(desc = "Include related entities")] include_related: Option<bool>,
+        #[graphql(desc = "Number of related entities to include")] related_limit: Option<i32>,
+        #[graphql(desc = "Minimum similarity for related entities")] min_similarity: Option<f64>,
+    ) -> GraphQLResult<Option<EmbeddingEntity>> {
+        let context = ctx.data::<GraphQLContext>()?;
+        let state = &context.api_state;
+
+        // Get entity embedding
+        let models = state.models.read().await;
+        let production_model = get_production_model(&models).await?;
+
+        match production_model.get_entity_embedding(&id) {
+            Ok(embedding) => {
+                let mut entity = EmbeddingEntity {
+                    id: id.clone(),
+                    entity_type: extract_entity_type(&id),
+                    label: Some(id.clone()),
+                    embedding: embedding.values,
+                    dimensions: embedding.dimensions,
+                    similarity_scores: None,
+                    related_entities: None,
+                    model_version: production_model.model_id().to_string(),
+                    created_at: Utc::now(),
+                    updated_at: None,
+                    metadata: None,
+                };
+
+                // Include related entities if requested
+                if include_related.unwrap_or(false) {
+                    let limit = related_limit.unwrap_or(10) as usize;
+                    let min_sim = min_similarity.unwrap_or(0.5);
+
+                    entity.related_entities =
+                        Some(find_similar_entities(production_model, &id, limit, min_sim).await?);
+                }
+
+                Ok(Some(entity))
+            }
+            Err(_) => Ok(None),
+        }
+    }
+
+    /// Search entities with filtering and pagination
+    async fn entities(
+        &self,
+        ctx: &Context<'_>,
+        #[graphql(desc = "Entity filters")] filter: Option<EntityFilter>,
+        #[graphql(desc = "Sorting options")] sort: Option<SortOptions>,
+        #[graphql(desc = "Pagination options")] pagination: Option<PaginationOptions>,
+    ) -> GraphQLResult<EntityConnection> {
+        let context = ctx.data::<GraphQLContext>()?;
+        let state = &context.api_state;
+
+        let models = state.models.read().await;
+        let production_model = get_production_model(&models).await?;
+
+        // Get all entities
+        let all_entities = production_model.get_entities();
+
+        // Apply filters
+        let filtered_entities = apply_entity_filters(all_entities, filter.as_ref()).await?;
+
+        // Apply sorting
+        let sorted_entities = apply_entity_sorting(filtered_entities, sort.as_ref()).await?;
+
+        // Apply pagination
+        let (entities, page_info) =
+            apply_pagination(sorted_entities, pagination.as_ref(), production_model).await?;
+
+        Ok(EntityConnection {
+            entities,
+            page_info,
+            total_count: filtered_entities.len() as i32,
+        })
+    }
+
+    /// Get similar entities to a given entity
+    async fn similar_entities(
+        &self,
+        ctx: &Context<'_>,
+        entity_id: String,
+        #[graphql(desc = "Number of similar entities to return")] limit: Option<i32>,
+        #[graphql(desc = "Minimum similarity threshold")] min_similarity: Option<f64>,
+        #[graphql(desc = "Entity type filter")] entity_type: Option<String>,
+    ) -> GraphQLResult<Vec<EmbeddingEntity>> {
+        let context = ctx.data::<GraphQLContext>()?;
+        let state = &context.api_state;
+
+        let models = state.models.read().await;
+        let production_model = get_production_model(&models).await?;
+
+        let limit = limit.unwrap_or(10) as usize;
+        let min_sim = min_similarity.unwrap_or(0.5);
+
+        let similar = find_similar_entities(production_model, &entity_id, limit, min_sim).await?;
+
+        // Apply entity type filter if specified
+        let filtered = if let Some(etype) = entity_type {
+            similar
+                .into_iter()
+                .filter(|e| e.entity_type.as_ref() == Some(&etype))
+                .collect()
+        } else {
+            similar
+        };
+
+        Ok(filtered)
+    }
+
+    /// Get triple by subject, predicate, and object
+    async fn triple(
+        &self,
+        ctx: &Context<'_>,
+        subject: String,
+        predicate: String,
+        object: String,
+    ) -> GraphQLResult<Option<EmbeddingTriple>> {
+        let context = ctx.data::<GraphQLContext>()?;
+        let state = &context.api_state;
+
+        let models = state.models.read().await;
+        let production_model = get_production_model(&models).await?;
+
+        // Get embeddings for subject and object
+        let subject_embedding = production_model.get_entity_embedding(&subject)?;
+        let object_embedding = production_model.get_entity_embedding(&object)?;
+
+        // Score the triple
+        let score = production_model.score_triple(&subject, &predicate, &object)?;
+
+        let triple = EmbeddingTriple {
+            id: format!("{}|{}|{}", subject, predicate, object),
+            subject: EmbeddingEntity {
+                id: subject.clone(),
+                entity_type: extract_entity_type(&subject),
+                label: Some(subject),
+                embedding: subject_embedding.values,
+                dimensions: subject_embedding.dimensions,
+                similarity_scores: None,
+                related_entities: None,
+                model_version: production_model.model_id().to_string(),
+                created_at: Utc::now(),
+                updated_at: None,
+                metadata: None,
+            },
+            predicate: predicate.clone(),
+            object: EmbeddingEntity {
+                id: object.clone(),
+                entity_type: extract_entity_type(&object),
+                label: Some(object),
+                embedding: object_embedding.values,
+                dimensions: object_embedding.dimensions,
+                similarity_scores: None,
+                related_entities: None,
+                model_version: production_model.model_id().to_string(),
+                created_at: Utc::now(),
+                updated_at: None,
+                metadata: None,
+            },
+            score,
+            model_version: production_model.model_id().to_string(),
+            created_at: Utc::now(),
+            metadata: None,
+        };
+
+        Ok(Some(triple))
+    }
+
+    /// Search triples with filtering and pagination
+    async fn triples(
+        &self,
+        ctx: &Context<'_>,
+        #[graphql(desc = "Triple filters")] filter: Option<TripleFilter>,
+        #[graphql(desc = "Sorting options")] sort: Option<SortOptions>,
+        #[graphql(desc = "Pagination options")] pagination: Option<PaginationOptions>,
+    ) -> GraphQLResult<TripleConnection> {
+        let context = ctx.data::<GraphQLContext>()?;
+        let state = &context.api_state;
+
+        let models = state.models.read().await;
+        let production_model = get_production_model(&models).await?;
+
+        // Get filtered triples (simplified implementation)
+        let triples = find_triples_with_filter(production_model, filter.as_ref()).await?;
+
+        // Apply sorting and pagination
+        let sorted_triples = apply_triple_sorting(triples, sort.as_ref()).await?;
+        let (paginated_triples, page_info) =
+            apply_triple_pagination(sorted_triples, pagination.as_ref()).await?;
+
+        Ok(TripleConnection {
+            triples: paginated_triples,
+            page_info,
+            total_count: triples.len() as i32,
+        })
+    }
+
+    /// Get model information
+    async fn model(
+        &self,
+        ctx: &Context<'_>,
+        #[graphql(desc = "Model ID")] model_id: Option<String>,
+    ) -> GraphQLResult<Option<GraphQLModelInfo>> {
+        let context = ctx.data::<GraphQLContext>()?;
+        let state = &context.api_state;
+
+        let models = state.models.read().await;
+        let model = if let Some(id) = model_id {
+            let uuid = Uuid::parse_str(&id)?;
+            models.get(&uuid)
+        } else {
+            get_production_model(&models).await.ok()
+        };
+
+        if let Some(model) = model {
+            let stats = model.get_stats();
+            let model_info = GraphQLModelInfo {
+                id: model.model_id().to_string(),
+                name: format!("{}-{}", stats.model_type, model.model_id()),
+                model_type: stats.model_type.clone(),
+                version: "1.0.0".to_string(), // Simplified
+                num_entities: stats.num_entities as i32,
+                num_relations: stats.num_relations as i32,
+                num_triples: stats.num_triples as i32,
+                dimensions: stats.dimensions as i32,
+                is_trained: stats.is_trained,
+                created_at: stats.creation_time,
+                last_training_time: stats.last_training_time,
+                health_status: "healthy".to_string(), // Simplified
+                performance_metrics: Some(ModelPerformanceMetrics {
+                    mean_reciprocal_rank: 0.75, // Mock data
+                    hits_at_1: 0.65,
+                    hits_at_10: 0.89,
+                    avg_response_time_ms: 25.0,
+                    throughput_rps: 150.0,
+                }),
+            };
+            Ok(Some(model_info))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Get all available models
+    async fn models(&self, ctx: &Context<'_>) -> GraphQLResult<Vec<GraphQLModelInfo>> {
+        let context = ctx.data::<GraphQLContext>()?;
+        let state = &context.api_state;
+
+        let models = state.models.read().await;
+        let mut model_infos = Vec::new();
+
+        for (_, model) in models.iter() {
+            let stats = model.get_stats();
+            model_infos.push(GraphQLModelInfo {
+                id: model.model_id().to_string(),
+                name: format!("{}-{}", stats.model_type, model.model_id()),
+                model_type: stats.model_type.clone(),
+                version: "1.0.0".to_string(),
+                num_entities: stats.num_entities as i32,
+                num_relations: stats.num_relations as i32,
+                num_triples: stats.num_triples as i32,
+                dimensions: stats.dimensions as i32,
+                is_trained: stats.is_trained,
+                created_at: stats.creation_time,
+                last_training_time: stats.last_training_time,
+                health_status: "healthy".to_string(),
+                performance_metrics: Some(ModelPerformanceMetrics {
+                    mean_reciprocal_rank: 0.75,
+                    hits_at_1: 0.65,
+                    hits_at_10: 0.89,
+                    avg_response_time_ms: 25.0,
+                    throughput_rps: 150.0,
+                }),
+            });
+        }
+
+        Ok(model_infos)
+    }
+}
+
+/// GraphQL Mutation implementations
+#[cfg(feature = "graphql")]
+#[Object]
+impl Mutation {
+    /// Add a new entity (creates embedding)
+    async fn add_entity(
+        &self,
+        ctx: &Context<'_>,
+        entity_id: String,
+        entity_type: Option<String>,
+        label: Option<String>,
+        metadata: Option<HashMap<String, String>>,
+    ) -> GraphQLResult<EmbeddingEntity> {
+        let context = ctx.data::<GraphQLContext>()?;
+        let state = &context.api_state;
+
+        let models = state.models.read().await;
+        let production_model = get_production_model(&models).await?;
+
+        // Generate embedding for the new entity
+        let embedding = production_model.get_entity_embedding(&entity_id)?;
+
+        let entity = EmbeddingEntity {
+            id: entity_id.clone(),
+            entity_type,
+            label,
+            embedding: embedding.values,
+            dimensions: embedding.dimensions,
+            similarity_scores: None,
+            related_entities: None,
+            model_version: production_model.model_id().to_string(),
+            created_at: Utc::now(),
+            updated_at: None,
+            metadata,
+        };
+
+        // Broadcast entity creation event
+        let _ = context
+            .event_broadcaster
+            .send(SubscriptionEvent::EntityCreated(entity.clone()));
+
+        Ok(entity)
+    }
+
+    /// Update entity metadata
+    async fn update_entity(
+        &self,
+        ctx: &Context<'_>,
+        entity_id: String,
+        label: Option<String>,
+        metadata: Option<HashMap<String, String>>,
+    ) -> GraphQLResult<EmbeddingEntity> {
+        let context = ctx.data::<GraphQLContext>()?;
+        let state = &context.api_state;
+
+        let models = state.models.read().await;
+        let production_model = get_production_model(&models).await?;
+
+        let embedding = production_model.get_entity_embedding(&entity_id)?;
+
+        let entity = EmbeddingEntity {
+            id: entity_id,
+            entity_type: extract_entity_type(&entity_id),
+            label,
+            embedding: embedding.values,
+            dimensions: embedding.dimensions,
+            similarity_scores: None,
+            related_entities: None,
+            model_version: production_model.model_id().to_string(),
+            created_at: Utc::now(), // In real implementation, would preserve original
+            updated_at: Some(Utc::now()),
+            metadata,
+        };
+
+        // Broadcast entity update event
+        let _ = context
+            .event_broadcaster
+            .send(SubscriptionEvent::EntityUpdated(entity.clone()));
+
+        Ok(entity)
+    }
+
+    /// Delete an entity
+    async fn delete_entity(&self, ctx: &Context<'_>, entity_id: String) -> GraphQLResult<bool> {
+        let context = ctx.data::<GraphQLContext>()?;
+
+        // In a real implementation, would remove from model
+        // For now, just broadcast the deletion event
+        let deletion_event = EntityDeletedEvent {
+            entity_id,
+            deleted_at: Utc::now(),
+            model_version: "current".to_string(),
+        };
+
+        let _ = context
+            .event_broadcaster
+            .send(SubscriptionEvent::EntityDeleted(deletion_event));
+
+        Ok(true)
+    }
+
+    /// Start model training
+    async fn start_training(
+        &self,
+        ctx: &Context<'_>,
+        model_id: String,
+        epochs: Option<i32>,
+    ) -> GraphQLResult<bool> {
+        let context = ctx.data::<GraphQLContext>()?;
+
+        // Broadcast training started event
+        let training_event = ModelTrainingEvent {
+            model_id,
+            event_type: "training_started".to_string(),
+            progress: 0.0,
+            current_epoch: Some(0),
+            total_epochs: epochs,
+            current_loss: None,
+            timestamp: Utc::now(),
+            metadata: None,
+        };
+
+        let _ = context
+            .event_broadcaster
+            .send(SubscriptionEvent::ModelTrainingStarted(training_event));
+
+        Ok(true)
+    }
+}
+
+/// GraphQL Subscription implementations
+#[cfg(feature = "graphql")]
+#[Subscription]
+impl SubscriptionRoot {
+    /// Subscribe to all events
+    async fn events(&self, ctx: &Context<'_>) -> impl Stream<Item = SubscriptionEvent> {
+        let context = ctx.data::<GraphQLContext>().unwrap();
+        let receiver = context.event_broadcaster.subscribe();
+        BroadcastStream::new(receiver).filter_map(|event| async { event.ok() })
+    }
+
+    /// Subscribe to entity events only
+    async fn entity_events(
+        &self,
+        ctx: &Context<'_>,
+        #[graphql(desc = "Entity type filter")] entity_type: Option<String>,
+    ) -> impl Stream<Item = SubscriptionEvent> {
+        let context = ctx.data::<GraphQLContext>().unwrap();
+        let receiver = context.event_broadcaster.subscribe();
+
+        BroadcastStream::new(receiver).filter_map(move |event| {
+            let entity_type = entity_type.clone();
+            async move {
+                if let Ok(event) = event {
+                    match &event {
+                        SubscriptionEvent::EntityCreated(entity)
+                        | SubscriptionEvent::EntityUpdated(entity) => {
+                            if let Some(filter_type) = &entity_type {
+                                if entity.entity_type.as_ref() == Some(filter_type) {
+                                    Some(event)
+                                } else {
+                                    None
+                                }
+                            } else {
+                                Some(event)
+                            }
+                        }
+                        SubscriptionEvent::EntityDeleted(_) => Some(event),
+                        _ => None,
+                    }
+                } else {
+                    None
+                }
+            }
+        })
+    }
+
+    /// Subscribe to training events
+    async fn training_events(
+        &self,
+        ctx: &Context<'_>,
+        #[graphql(desc = "Model ID filter")] model_id: Option<String>,
+    ) -> impl Stream<Item = SubscriptionEvent> {
+        let context = ctx.data::<GraphQLContext>().unwrap();
+        let receiver = context.event_broadcaster.subscribe();
+
+        BroadcastStream::new(receiver).filter_map(move |event| {
+            let model_id = model_id.clone();
+            async move {
+                if let Ok(event) = event {
+                    match &event {
+                        SubscriptionEvent::ModelTrainingStarted(training_event)
+                        | SubscriptionEvent::ModelTrainingCompleted(training_event) => {
+                            if let Some(filter_id) = &model_id {
+                                if &training_event.model_id == filter_id {
+                                    Some(event)
+                                } else {
+                                    None
+                                }
+                            } else {
+                                Some(event)
+                            }
+                        }
+                        _ => None,
+                    }
+                } else {
+                    None
+                }
+            }
+        })
+    }
+
+    /// Subscribe to quality alerts
+    async fn quality_alerts(
+        &self,
+        ctx: &Context<'_>,
+        #[graphql(desc = "Minimum severity filter")] min_severity: Option<String>,
+    ) -> impl Stream<Item = QualityAlertEvent> {
+        let context = ctx.data::<GraphQLContext>().unwrap();
+        let receiver = context.event_broadcaster.subscribe();
+
+        BroadcastStream::new(receiver).filter_map(move |event| {
+            let min_severity = min_severity.clone();
+            async move {
+                if let Ok(SubscriptionEvent::QualityAlert(alert)) = event {
+                    if let Some(min_sev) = &min_severity {
+                        // Simple severity comparison (would implement proper severity levels)
+                        if alert.severity >= *min_sev {
+                            Some(alert)
+                        } else {
+                            None
+                        }
+                    } else {
+                        Some(alert)
+                    }
+                } else {
+                    None
+                }
+            }
+        })
+    }
+}
+
+// Helper functions for GraphQL operations
+
+#[cfg(feature = "graphql")]
+async fn get_production_model(
+    models: &HashMap<Uuid, Arc<dyn EmbeddingModel + Send + Sync>>,
+) -> GraphQLResult<&Arc<dyn EmbeddingModel + Send + Sync>> {
+    // For simplicity, return the first model
+    models
+        .values()
+        .next()
+        .ok_or_else(|| GraphQLError::new("No models available"))
+}
+
+#[cfg(feature = "graphql")]
+fn extract_entity_type(entity_id: &str) -> Option<String> {
+    // Simple entity type extraction based on prefix
+    if entity_id.starts_with("gene:") {
+        Some("gene".to_string())
+    } else if entity_id.starts_with("drug:") {
+        Some("drug".to_string())
+    } else if entity_id.starts_with("disease:") {
+        Some("disease".to_string())
+    } else if entity_id.starts_with("protein:") {
+        Some("protein".to_string())
+    } else {
+        None
+    }
+}
+
+#[cfg(feature = "graphql")]
+async fn find_similar_entities(
+    model: &Arc<dyn EmbeddingModel + Send + Sync>,
+    entity_id: &str,
+    limit: usize,
+    min_similarity: f64,
+) -> GraphQLResult<Vec<EmbeddingEntity>> {
+    let target_embedding = model.get_entity_embedding(entity_id)?;
+    let all_entities = model.get_entities();
+
+    let mut similarities = Vec::new();
+
+    for other_entity in &all_entities {
+        if other_entity != entity_id {
+            if let Ok(other_embedding) = model.get_entity_embedding(other_entity) {
+                let similarity =
+                    cosine_similarity(&target_embedding.values, &other_embedding.values);
+                if similarity >= min_similarity {
+                    similarities.push((other_entity.clone(), similarity, other_embedding));
+                }
+            }
+        }
+    }
+
+    // Sort by similarity (descending) and take top k
+    similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    similarities.truncate(limit);
+
+    let mut entities = Vec::new();
+    for (entity_id, similarity, embedding) in similarities {
+        entities.push(EmbeddingEntity {
+            id: entity_id.clone(),
+            entity_type: extract_entity_type(&entity_id),
+            label: Some(entity_id),
+            embedding: embedding.values,
+            dimensions: embedding.dimensions,
+            similarity_scores: Some([(entity_id.clone(), similarity)].iter().cloned().collect()),
+            related_entities: None,
+            model_version: model.model_id().to_string(),
+            created_at: Utc::now(),
+            updated_at: None,
+            metadata: None,
+        });
+    }
+
+    Ok(entities)
+}
+
+#[cfg(feature = "graphql")]
+fn cosine_similarity(a: &[f32], b: &[f32]) -> f64 {
+    let dot_product: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+    let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+    let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+
+    if norm_a == 0.0 || norm_b == 0.0 {
+        0.0
+    } else {
+        (dot_product / (norm_a * norm_b)) as f64
+    }
+}
+
+#[cfg(feature = "graphql")]
+async fn apply_entity_filters(
+    entities: Vec<String>,
+    filter: Option<&EntityFilter>,
+) -> GraphQLResult<Vec<String>> {
+    if let Some(filter) = filter {
+        let filtered = entities
+            .into_iter()
+            .filter(|entity| {
+                // Apply entity type filter
+                if let Some(ref entity_type) = filter.entity_type {
+                    if extract_entity_type(entity).as_ref() != Some(entity_type) {
+                        return false;
+                    }
+                }
+
+                // Apply label pattern filter
+                if let Some(ref pattern) = filter.label_pattern {
+                    if !entity.contains(pattern) {
+                        return false;
+                    }
+                }
+
+                // Apply include/exclude filters
+                if let Some(ref include_ids) = filter.include_ids {
+                    if !include_ids.contains(entity) {
+                        return false;
+                    }
+                }
+
+                if let Some(ref exclude_ids) = filter.exclude_ids {
+                    if exclude_ids.contains(entity) {
+                        return false;
+                    }
+                }
+
+                true
+            })
+            .collect();
+
+        Ok(filtered)
+    } else {
+        Ok(entities)
+    }
+}
+
+#[cfg(feature = "graphql")]
+async fn apply_entity_sorting(
+    entities: Vec<String>,
+    _sort: Option<&SortOptions>,
+) -> GraphQLResult<Vec<String>> {
+    // For simplicity, just return entities as-is
+    // In a real implementation, would sort based on the specified field
+    Ok(entities)
+}
+
+#[cfg(feature = "graphql")]
+async fn apply_pagination(
+    entities: Vec<String>,
+    pagination: Option<&PaginationOptions>,
+    model: &Arc<dyn EmbeddingModel + Send + Sync>,
+) -> GraphQLResult<(Vec<EmbeddingEntity>, PageInfo)> {
+    let (offset, limit) = if let Some(pagination) = pagination {
+        (
+            pagination.offset.unwrap_or(0) as usize,
+            pagination.limit.unwrap_or(10) as usize,
+        )
+    } else {
+        (0, 10)
+    };
+
+    let total_count = entities.len();
+    let end_idx = (offset + limit).min(total_count);
+    let paginated_entities = if offset < total_count {
+        entities[offset..end_idx].to_vec()
+    } else {
+        vec![]
+    };
+
+    let mut embedding_entities = Vec::new();
+    for entity_id in paginated_entities {
+        if let Ok(embedding) = model.get_entity_embedding(&entity_id) {
+            embedding_entities.push(EmbeddingEntity {
+                id: entity_id.clone(),
+                entity_type: extract_entity_type(&entity_id),
+                label: Some(entity_id),
+                embedding: embedding.values,
+                dimensions: embedding.dimensions,
+                similarity_scores: None,
+                related_entities: None,
+                model_version: model.model_id().to_string(),
+                created_at: Utc::now(),
+                updated_at: None,
+                metadata: None,
+            });
+        }
+    }
+
+    let page_info = PageInfo {
+        has_next_page: end_idx < total_count,
+        has_previous_page: offset > 0,
+        start_cursor: if embedding_entities.is_empty() {
+            None
+        } else {
+            Some(offset.to_string())
+        },
+        end_cursor: if embedding_entities.is_empty() {
+            None
+        } else {
+            Some(end_idx.to_string())
+        },
+    };
+
+    Ok((embedding_entities, page_info))
+}
+
+#[cfg(feature = "graphql")]
+async fn find_triples_with_filter(
+    model: &Arc<dyn EmbeddingModel + Send + Sync>,
+    _filter: Option<&TripleFilter>,
+) -> GraphQLResult<Vec<EmbeddingTriple>> {
+    // Simplified implementation - in reality would query actual triples
+    let entities = model.get_entities();
+    let relations = model.get_relations();
+
+    let mut triples = Vec::new();
+
+    // Create some sample triples (limited for demo)
+    for (i, entity) in entities.iter().take(5).enumerate() {
+        if let Some(relation) = relations.get(i % relations.len()) {
+            if let Some(object) = entities.get((i + 1) % entities.len()) {
+                if let (Ok(subj_emb), Ok(obj_emb)) = (
+                    model.get_entity_embedding(entity),
+                    model.get_entity_embedding(object),
+                ) {
+                    let score = model.score_triple(entity, relation, object).unwrap_or(0.0);
+
+                    triples.push(EmbeddingTriple {
+                        id: format!("{}|{}|{}", entity, relation, object),
+                        subject: EmbeddingEntity {
+                            id: entity.clone(),
+                            entity_type: extract_entity_type(entity),
+                            label: Some(entity.clone()),
+                            embedding: subj_emb.values,
+                            dimensions: subj_emb.dimensions,
+                            similarity_scores: None,
+                            related_entities: None,
+                            model_version: model.model_id().to_string(),
+                            created_at: Utc::now(),
+                            updated_at: None,
+                            metadata: None,
+                        },
+                        predicate: relation.clone(),
+                        object: EmbeddingEntity {
+                            id: object.clone(),
+                            entity_type: extract_entity_type(object),
+                            label: Some(object.clone()),
+                            embedding: obj_emb.values,
+                            dimensions: obj_emb.dimensions,
+                            similarity_scores: None,
+                            related_entities: None,
+                            model_version: model.model_id().to_string(),
+                            created_at: Utc::now(),
+                            updated_at: None,
+                            metadata: None,
+                        },
+                        score,
+                        model_version: model.model_id().to_string(),
+                        created_at: Utc::now(),
+                        metadata: None,
+                    });
+                }
+            }
+        }
+    }
+
+    Ok(triples)
+}
+
+#[cfg(feature = "graphql")]
+async fn apply_triple_sorting(
+    triples: Vec<EmbeddingTriple>,
+    _sort: Option<&SortOptions>,
+) -> GraphQLResult<Vec<EmbeddingTriple>> {
+    // For simplicity, just return triples as-is
+    Ok(triples)
+}
+
+#[cfg(feature = "graphql")]
+async fn apply_triple_pagination(
+    triples: Vec<EmbeddingTriple>,
+    pagination: Option<&PaginationOptions>,
+) -> GraphQLResult<(Vec<EmbeddingTriple>, PageInfo)> {
+    let (offset, limit) = if let Some(pagination) = pagination {
+        (
+            pagination.offset.unwrap_or(0) as usize,
+            pagination.limit.unwrap_or(10) as usize,
+        )
+    } else {
+        (0, 10)
+    };
+
+    let total_count = triples.len();
+    let end_idx = (offset + limit).min(total_count);
+    let paginated_triples = if offset < total_count {
+        triples[offset..end_idx].to_vec()
+    } else {
+        vec![]
+    };
+
+    let page_info = PageInfo {
+        has_next_page: end_idx < total_count,
+        has_previous_page: offset > 0,
+        start_cursor: if paginated_triples.is_empty() {
+            None
+        } else {
+            Some(offset.to_string())
+        },
+        end_cursor: if paginated_triples.is_empty() {
+            None
+        } else {
+            Some(end_idx.to_string())
+        },
+    };
+
+    Ok((paginated_triples, page_info))
+}
+
+/// Create GraphQL schema
+#[cfg(feature = "graphql")]
+pub fn create_graphql_schema() -> Schema<Query, Mutation, SubscriptionRoot> {
+    Schema::build(
+        Query::default(),
+        Mutation::default(),
+        SubscriptionRoot::default(),
+    )
+    .finish()
+}
+
+/// GraphQL endpoint handler
+#[cfg(all(feature = "api-server", feature = "graphql"))]
+async fn graphql_handler(State(state): State<ApiState>, req: GraphQLRequest) -> GraphQLResponse {
+    let (sender, _) = broadcast::channel(1000);
+    let context = GraphQLContext {
+        api_state: state,
+        event_broadcaster: sender,
+    };
+
+    let schema = create_graphql_schema();
+    schema.execute(req.into_inner().data(context)).await.into()
+}
+
+/// GraphiQL playground handler
+#[cfg(all(feature = "api-server", feature = "graphql"))]
+async fn graphiql() -> impl axum::response::IntoResponse {
+    axum::response::Html(GraphiQLSource::build().endpoint("/graphql").finish())
+}
+
+// ============================================================================
 // API Router and Handlers
 // ============================================================================
 
@@ -449,6 +1678,15 @@ pub fn create_router(state: ApiState) -> Router {
         .route("/api/v1/cache/stats", get(cache_stats))
         .route("/api/v1/cache/clear", post(clear_cache))
         .with_state(state);
+
+    // Add GraphQL endpoints if feature is enabled
+    #[cfg(feature = "graphql")]
+    {
+        router = router
+            .route("/graphql", post(graphql_handler))
+            .route("/graphql", get(graphql_handler))
+            .route("/graphiql", get(graphiql));
+    }
 
     // Add middleware layers
     let service = ServiceBuilder::new()
@@ -934,18 +2172,18 @@ async fn embed_text(
 
     // For this demo, we'll simulate specialized text embedding generation
     // In a real implementation, this would use the SpecializedTextEmbedding model
-    
+
     let model_type = request.model_type.unwrap_or_else(|| "BioBERT".to_string());
     let preprocess = request.preprocess.unwrap_or(true);
-    
+
     // Simulate processing time based on text length
     let processing_delay = std::cmp::min(request.text.len() / 100, 50) as u64;
     tokio::time::sleep(tokio::time::Duration::from_millis(processing_delay)).await;
-    
+
     // Generate a simple embedding based on text content (in real implementation would use actual model)
     let dimensions = 768; // Standard for BERT-like models
     let mut embedding = vec![0.0f32; dimensions];
-    
+
     // Simple text-based features
     let text_bytes = request.text.as_bytes();
     for (i, &byte) in text_bytes.iter().enumerate() {
@@ -953,27 +2191,41 @@ async fn embed_text(
             embedding[i] = (byte as f32 / 255.0 - 0.5) * 2.0;
         }
     }
-    
+
     // Domain-specific features based on model type
     match model_type.as_str() {
         "SciBERT" => {
-            if request.text.contains("et al.") { embedding[0] += 1.0; }
-            if request.text.contains("figure") { embedding[1] += 1.0; }
+            if request.text.contains("et al.") {
+                embedding[0] += 1.0;
+            }
+            if request.text.contains("figure") {
+                embedding[1] += 1.0;
+            }
         }
         "BioBERT" => {
-            if request.text.contains("protein") { embedding[0] += 1.0; }
-            if request.text.contains("gene") { embedding[1] += 1.0; }
-            if request.text.contains("disease") { embedding[2] += 1.0; }
+            if request.text.contains("protein") {
+                embedding[0] += 1.0;
+            }
+            if request.text.contains("gene") {
+                embedding[1] += 1.0;
+            }
+            if request.text.contains("disease") {
+                embedding[2] += 1.0;
+            }
         }
         "CodeBERT" => {
-            if request.text.contains("function") { embedding[0] += 1.0; }
-            if request.text.contains("class") { embedding[1] += 1.0; }
+            if request.text.contains("function") {
+                embedding[0] += 1.0;
+            }
+            if request.text.contains("class") {
+                embedding[1] += 1.0;
+            }
         }
         _ => {}
     }
-    
+
     let generation_time = start_time.elapsed().as_millis() as f64;
-    
+
     let response = TextEmbeddingResponse {
         text: request.text,
         embedding,
@@ -983,7 +2235,7 @@ async fn embed_text(
         generation_time_ms: generation_time,
         preprocessed: preprocess,
     };
-    
+
     Ok(Json(response))
 }
 
@@ -994,17 +2246,17 @@ async fn embed_multimodal(
     Json(request): Json<MultiModalRequest>,
 ) -> Result<Json<MultiModalResponse>, StatusCode> {
     let start_time = std::time::Instant::now();
-    
+
     let mut text_embedding = None;
     let mut entity_embedding = None;
     let mut alignment_scores = None;
     let mut unified_embedding = None;
-    
+
     // Process text if provided
     if let Some(text) = &request.text {
         let dimensions = 768;
         let mut embedding = vec![0.0f32; dimensions];
-        
+
         // Simple text-based embedding
         let text_bytes = text.as_bytes();
         for (i, &byte) in text_bytes.iter().enumerate() {
@@ -1012,10 +2264,10 @@ async fn embed_multimodal(
                 embedding[i] = (byte as f32 / 255.0 - 0.5) * 2.0;
             }
         }
-        
+
         text_embedding = Some(embedding);
     }
-    
+
     // Process entity if provided
     if let Some(entity) = &request.entity {
         // Get production model for entity embedding
@@ -1023,7 +2275,7 @@ async fn embed_multimodal(
             Ok(version) => version,
             Err(_) => return Err(StatusCode::NOT_FOUND),
         };
-        
+
         let models = state.models.read().await;
         if let Some(model) = models.get(&model_version) {
             if let Ok(embedding) = model.get_entity_embedding(entity) {
@@ -1031,11 +2283,11 @@ async fn embed_multimodal(
             }
         }
     }
-    
+
     // Compute cross-modal alignment scores if requested
     if let Some(aligned_entities) = &request.aligned_entities {
         let mut scores = HashMap::new();
-        
+
         // Simple similarity computation (would use contrastive learning in real implementation)
         if let (Some(ref text_emb), Some(ref entity_emb)) = (&text_embedding, &entity_embedding) {
             for aligned_entity in aligned_entities {
@@ -1044,25 +2296,25 @@ async fn embed_multimodal(
                 scores.insert(aligned_entity.clone(), score as f64);
             }
         }
-        
+
         alignment_scores = Some(scores);
     }
-    
+
     // Create unified embedding if both text and entity provided
     if let (Some(ref text_emb), Some(ref entity_emb)) = (&text_embedding, &entity_embedding) {
         let min_len = text_emb.len().min(entity_emb.len());
         let mut unified = Vec::with_capacity(min_len);
-        
+
         for i in 0..min_len {
             // Simple fusion: weighted average
             unified.push((text_emb[i] * 0.6 + entity_emb[i] * 0.4));
         }
-        
+
         unified_embedding = Some(unified);
     }
-    
+
     let generation_time = start_time.elapsed().as_millis() as f64;
-    
+
     let response = MultiModalResponse {
         text_embedding,
         entity_embedding,
@@ -1071,7 +2323,7 @@ async fn embed_multimodal(
         model_version: request.model_version.unwrap_or_else(Uuid::new_v4),
         generation_time_ms: generation_time,
     };
-    
+
     Ok(Json(response))
 }
 
@@ -1083,9 +2335,9 @@ async fn embed_stream(
 ) -> Result<impl axum::response::IntoResponse, StatusCode> {
     use axum::response::sse::{Event, Sse};
     use tokio_stream::{wrappers::ReceiverStream, StreamExt};
-    
+
     let (tx, rx) = tokio::sync::mpsc::channel(100);
-    
+
     // Get model version
     let model_version = if let Some(version) = request.model_version {
         version
@@ -1095,12 +2347,12 @@ async fn embed_stream(
             Err(_) => return Err(StatusCode::NOT_FOUND),
         }
     };
-    
+
     // Clone necessary data for the spawned task
     let entities = request.entities.clone();
     let batch_size = request.batch_size.unwrap_or(10);
     let models = Arc::clone(&state.models);
-    
+
     // Spawn task to process entities in batches
     tokio::spawn(async move {
         let models = models.read().await;
@@ -1111,14 +2363,14 @@ async fn embed_stream(
                 return;
             }
         };
-        
+
         let total_entities = entities.len();
-        
+
         for (batch_idx, chunk) in entities.chunks(batch_size).enumerate() {
             for (idx_in_batch, entity) in chunk.iter().enumerate() {
                 let sequence = batch_idx * batch_size + idx_in_batch;
                 let is_last = sequence == total_entities - 1;
-                
+
                 match model.get_entity_embedding(entity) {
                     Ok(embedding) => {
                         let item = StreamEmbeddingItem {
@@ -1127,10 +2379,10 @@ async fn embed_stream(
                             sequence,
                             is_last,
                         };
-                        
-                        let event = Event::default()
-                            .data(serde_json::to_string(&item).unwrap_or_default());
-                        
+
+                        let event =
+                            Event::default().data(serde_json::to_string(&item).unwrap_or_default());
+
                         if tx.send(Ok(event)).await.is_err() {
                             break;
                         }
@@ -1140,16 +2392,16 @@ async fn embed_stream(
                         continue;
                     }
                 }
-                
+
                 // Small delay to prevent overwhelming the client
                 tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
             }
         }
     });
-    
+
     let stream = ReceiverStream::new(rx);
     let sse = Sse::new(stream);
-    
+
     Ok(sse)
 }
 
@@ -1528,10 +2780,8 @@ impl QueryRoot {
             .ok_or_else(|| GraphQLError::new("Model not found"))?;
 
         let use_cache = input.use_cache.unwrap_or(true);
-        let cached_model = CachedEmbeddingModel::new(
-            Box::new(model.as_ref()),
-            Arc::clone(&state.cache_manager),
-        );
+        let cached_model =
+            CachedEmbeddingModel::new(Box::new(model.as_ref()), Arc::clone(&state.cache_manager));
 
         let mut embeddings = Vec::new();
         let mut cache_hits = 0;
@@ -1675,7 +2925,9 @@ impl QueryRoot {
         let predictions = match input.prediction_type {
             PredictionTypeGQL::Objects => {
                 if input.entities.len() != 2 {
-                    return Err(GraphQLError::new("Object prediction requires subject and predicate"));
+                    return Err(GraphQLError::new(
+                        "Object prediction requires subject and predicate",
+                    ));
                 }
                 model
                     .predict_objects(&input.entities[0], &input.entities[1], input.k as usize)
@@ -1683,7 +2935,9 @@ impl QueryRoot {
             }
             PredictionTypeGQL::Subjects => {
                 if input.entities.len() != 2 {
-                    return Err(GraphQLError::new("Subject prediction requires predicate and object"));
+                    return Err(GraphQLError::new(
+                        "Subject prediction requires predicate and object",
+                    ));
                 }
                 model
                     .predict_subjects(&input.entities[0], &input.entities[1], input.k as usize)
@@ -1691,7 +2945,9 @@ impl QueryRoot {
             }
             PredictionTypeGQL::Relations => {
                 if input.entities.len() != 2 {
-                    return Err(GraphQLError::new("Relation prediction requires subject and object"));
+                    return Err(GraphQLError::new(
+                        "Relation prediction requires subject and object",
+                    ));
                 }
                 model
                     .predict_relations(&input.entities[0], &input.entities[1], input.k as usize)
@@ -1758,10 +3014,10 @@ impl QueryRoot {
             version: version.to_string(),
             is_loaded,
             health_status: "Healthy".to_string(), // Simplified
-            avg_response_time_ms: 50.0,            // Mock data
-            requests_last_hour: 100,               // Mock data
-            error_rate_percent: 0.1,               // Mock data
-            memory_usage_mb: 256.0,                // Mock data
+            avg_response_time_ms: 50.0,           // Mock data
+            requests_last_hour: 100,              // Mock data
+            error_rate_percent: 0.1,              // Mock data
+            memory_usage_mb: 256.0,               // Mock data
         })
     }
 
@@ -1829,7 +3085,11 @@ impl MutationRoot {
     }
 
     /// Unload a model
-    async fn unload_model(&self, ctx: &Context<'_>, model_version: String) -> GraphQLResult<String> {
+    async fn unload_model(
+        &self,
+        ctx: &Context<'_>,
+        model_version: String,
+    ) -> GraphQLResult<String> {
         let state = ctx.data::<ApiState>()?;
         let version = Uuid::parse_str(&model_version)
             .map_err(|_| GraphQLError::new("Invalid model version format"))?;
@@ -1852,10 +3112,7 @@ pub fn create_graphql_schema() -> EmbeddingSchema {
 
 #[cfg(feature = "graphql")]
 /// GraphQL endpoint handler
-async fn graphql_handler(
-    State(state): State<ApiState>,
-    req: GraphQLRequest,
-) -> GraphQLResponse {
+async fn graphql_handler(State(state): State<ApiState>, req: GraphQLRequest) -> GraphQLResponse {
     let schema = create_graphql_schema();
     let request = req.into_inner().data(state);
     schema.execute(request).await.into()

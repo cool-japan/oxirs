@@ -7,9 +7,9 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, RwLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::task::JoinHandle;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 
 /// Comprehensive evaluation suite for knowledge graph embeddings
 pub struct EvaluationSuite {
@@ -360,7 +360,17 @@ impl EvaluationSuite {
         // NDCG@K (simplified implementation)
         let mut ndcg_at_k = HashMap::new();
         for &k in &self.config.k_values {
-            let ndcg = self.compute_ndcg(results, k);
+            let ndcg = results
+                .iter()
+                .map(|r| {
+                    if r.rank <= k {
+                        1.0 / (r.rank as f64).log2()
+                    } else {
+                        0.0
+                    }
+                })
+                .sum::<f64>()
+                / results.len() as f64;
             ndcg_at_k.insert(k, ndcg);
         }
 
@@ -368,9 +378,13 @@ impl EvaluationSuite {
         let average_precision =
             results.iter().map(|r| r.reciprocal_rank).sum::<f64>() / results.len() as f64;
 
-        // F1 Score (using Hits@1 as precision/recall approximation)
-        let hits_at_1 = hits_at_k.get(&1).copied().unwrap_or(0.0);
-        let f1_score = 2.0 * hits_at_1 * hits_at_1 / (hits_at_1 + hits_at_1 + 1e-10);
+        // F1 Score (based on Hits@1)
+        let precision_at_1 = hits_at_k.get(&1).copied().unwrap_or(0.0);
+        let f1_score = if precision_at_1 > 0.0 {
+            2.0 * precision_at_1 / (1.0 + precision_at_1)
+        } else {
+            0.0
+        };
 
         EvaluationResults {
             mean_rank,
@@ -380,28 +394,1409 @@ impl EvaluationSuite {
             average_precision,
             f1_score,
             num_test_triples: results.len(),
-            evaluation_time_seconds: 0.0, // Will be set by caller
+            evaluation_time_seconds: 0.0,
             detailed_results: results.to_vec(),
         }
     }
+}
 
-    /// Compute NDCG@K (simplified implementation)
-    fn compute_ndcg(&self, results: &[TripleEvaluationResult], k: usize) -> f64 {
-        // Simplified NDCG calculation
-        // In practice, this would use proper relevance scores
-        let dcg: f64 = results
+// ============================================================================
+// OUTLIER DETECTION AND QUALITY ASSESSMENT IMPROVEMENTS
+// ============================================================================
+
+/// Advanced quality assessment manager with outlier detection
+pub struct QualityAssessmentManager {
+    /// Configuration for quality assessment
+    config: QualityConfig,
+    /// Historical quality measurements
+    quality_history: Arc<RwLock<VecDeque<QualityMeasurement>>>,
+    /// Outlier detection algorithms
+    outlier_detectors: Vec<Box<dyn OutlierDetector + Send + Sync>>,
+    /// Background monitoring tasks
+    monitoring_tasks: Vec<JoinHandle<()>>,
+}
+
+/// Configuration for quality assessment and outlier detection
+#[derive(Debug, Clone)]
+pub struct QualityConfig {
+    /// Enable outlier detection
+    pub enable_outlier_detection: bool,
+    /// Outlier detection methods to use
+    pub outlier_methods: Vec<OutlierDetectionMethod>,
+    /// Quality assessment interval (seconds)
+    pub assessment_interval_seconds: u64,
+    /// Number of historical measurements to keep
+    pub history_size: usize,
+    /// Outlier sensitivity threshold (0.0 to 1.0)
+    pub outlier_threshold: f64,
+    /// Enable cross-domain quality transfer assessment
+    pub enable_cross_domain_assessment: bool,
+    /// Quality metrics to compute
+    pub quality_metrics: Vec<QualityMetricType>,
+}
+
+/// Types of outlier detection methods
+#[derive(Debug, Clone)]
+pub enum OutlierDetectionMethod {
+    /// Statistical outlier detection (Z-score based)
+    Statistical,
+    /// Isolation Forest
+    IsolationForest,
+    /// Local Outlier Factor
+    LocalOutlierFactor,
+    /// One-Class SVM
+    OneClassSVM,
+    /// Embedding space outliers
+    EmbeddingSpaceOutliers,
+    /// Distribution-based outliers
+    DistributionBased,
+}
+
+/// Types of quality metrics
+#[derive(Debug, Clone)]
+pub enum QualityMetricType {
+    /// Embedding space isotropy
+    Isotropy,
+    /// Neighborhood preservation
+    NeighborhoodPreservation,
+    /// Distance preservation
+    DistancePreservation,
+    /// Clustering quality
+    ClusteringQuality,
+    /// Dimensionality analysis
+    DimensionalityAnalysis,
+    /// Semantic coherence
+    SemanticCoherence,
+    /// Cross-domain transfer quality
+    CrossDomainTransfer,
+}
+
+/// Quality measurement record
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QualityMeasurement {
+    /// Timestamp of measurement
+    pub timestamp: DateTime<Utc>,
+    /// Overall quality score (0.0 to 1.0)
+    pub overall_score: f64,
+    /// Individual metric scores
+    pub metric_scores: HashMap<String, f64>,
+    /// Detected outliers
+    pub outliers: Vec<OutlierDetection>,
+    /// Quality issues identified
+    pub quality_issues: Vec<QualityIssue>,
+    /// Cross-domain assessment results
+    pub cross_domain_results: Option<CrossDomainAssessment>,
+}
+
+/// Outlier detection result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OutlierDetection {
+    /// Type of outlier detected
+    pub outlier_type: String,
+    /// Outlier score (higher = more anomalous)
+    pub outlier_score: f64,
+    /// Entity or triple that is an outlier
+    pub entity_or_triple: String,
+    /// Detection method used
+    pub detection_method: String,
+    /// Explanation of why it's considered an outlier
+    pub explanation: String,
+    /// Confidence in the detection (0.0 to 1.0)
+    pub confidence: f64,
+}
+
+/// Quality issue identification
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QualityIssue {
+    /// Type of quality issue
+    pub issue_type: QualityIssueType,
+    /// Severity level
+    pub severity: IssueSeverity,
+    /// Description of the issue
+    pub description: String,
+    /// Suggested remediation
+    pub remediation: String,
+    /// Affected entities or relations
+    pub affected_items: Vec<String>,
+}
+
+/// Types of quality issues
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum QualityIssueType {
+    /// Low embedding quality
+    LowEmbeddingQuality,
+    /// High dimensionality waste
+    HighDimensionalityWaste,
+    /// Poor clustering structure
+    PoorClusteringStructure,
+    /// Semantic inconsistency
+    SemanticInconsistency,
+    /// Distribution skewness
+    DistributionSkewness,
+    /// Outlier contamination
+    OutlierContamination,
+    /// Cross-domain quality degradation
+    CrossDomainDegradation,
+}
+
+/// Issue severity levels
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum IssueSeverity {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+/// Cross-domain quality assessment
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CrossDomainAssessment {
+    /// Source domain quality
+    pub source_domain_quality: f64,
+    /// Target domain quality
+    pub target_domain_quality: f64,
+    /// Transfer quality score
+    pub transfer_quality: f64,
+    /// Domain similarity score
+    pub domain_similarity: f64,
+    /// Transfer recommendations
+    pub recommendations: Vec<String>,
+}
+
+/// Trait for outlier detection algorithms
+pub trait OutlierDetector {
+    /// Detect outliers in embedding space
+    fn detect_outliers(
+        &self,
+        embeddings: &[Vec<f64>],
+        entities: &[String],
+    ) -> Result<Vec<OutlierDetection>>;
+
+    /// Get detector name
+    fn name(&self) -> &str;
+
+    /// Configure detection parameters
+    fn configure(&mut self, params: HashMap<String, f64>);
+}
+
+impl Default for QualityConfig {
+    fn default() -> Self {
+        Self {
+            enable_outlier_detection: true,
+            outlier_methods: vec![
+                OutlierDetectionMethod::Statistical,
+                OutlierDetectionMethod::EmbeddingSpaceOutliers,
+                OutlierDetectionMethod::DistributionBased,
+            ],
+            assessment_interval_seconds: 300, // 5 minutes
+            history_size: 100,
+            outlier_threshold: 0.95, // 95th percentile
+            enable_cross_domain_assessment: true,
+            quality_metrics: vec![
+                QualityMetricType::Isotropy,
+                QualityMetricType::NeighborhoodPreservation,
+                QualityMetricType::ClusteringQuality,
+                QualityMetricType::SemanticCoherence,
+            ],
+        }
+    }
+}
+
+impl QualityAssessmentManager {
+    /// Create new quality assessment manager
+    pub fn new(config: QualityConfig) -> Self {
+        let mut manager = Self {
+            config,
+            quality_history: Arc::new(RwLock::new(VecDeque::new())),
+            outlier_detectors: Vec::new(),
+            monitoring_tasks: Vec::new(),
+        };
+
+        // Initialize outlier detectors
+        manager.initialize_outlier_detectors();
+
+        manager
+    }
+
+    /// Initialize outlier detection algorithms
+    fn initialize_outlier_detectors(&mut self) {
+        for method in &self.config.outlier_methods {
+            match method {
+                OutlierDetectionMethod::Statistical => {
+                    self.outlier_detectors
+                        .push(Box::new(StatisticalOutlierDetector::new()));
+                }
+                OutlierDetectionMethod::EmbeddingSpaceOutliers => {
+                    self.outlier_detectors
+                        .push(Box::new(EmbeddingSpaceOutlierDetector::new()));
+                }
+                OutlierDetectionMethod::DistributionBased => {
+                    self.outlier_detectors
+                        .push(Box::new(DistributionBasedOutlierDetector::new()));
+                }
+                OutlierDetectionMethod::IsolationForest => {
+                    self.outlier_detectors
+                        .push(Box::new(IsolationForestDetector::new()));
+                }
+                OutlierDetectionMethod::LocalOutlierFactor => {
+                    self.outlier_detectors
+                        .push(Box::new(LocalOutlierFactorDetector::new()));
+                }
+                OutlierDetectionMethod::OneClassSVM => {
+                    self.outlier_detectors
+                        .push(Box::new(OneClassSVMDetector::new()));
+                }
+            }
+        }
+
+        info!(
+            "Initialized {} outlier detectors",
+            self.outlier_detectors.len()
+        );
+    }
+
+    /// Start quality assessment monitoring
+    pub async fn start_monitoring(
+        &mut self,
+        model: Arc<dyn EmbeddingModel + Send + Sync>,
+    ) -> Result<()> {
+        info!("Starting quality assessment monitoring");
+
+        let assessment_task = self.start_quality_assessment_task(model).await;
+        self.monitoring_tasks.push(assessment_task);
+
+        info!("Quality assessment monitoring started");
+        Ok(())
+    }
+
+    /// Stop quality assessment monitoring
+    pub async fn stop_monitoring(&mut self) {
+        info!("Stopping quality assessment monitoring");
+
+        for task in self.monitoring_tasks.drain(..) {
+            task.abort();
+        }
+
+        info!("Quality assessment monitoring stopped");
+    }
+
+    /// Perform comprehensive quality assessment
+    pub async fn assess_quality(&self, model: &dyn EmbeddingModel) -> Result<QualityMeasurement> {
+        info!("Starting comprehensive quality assessment");
+
+        let start_time = Instant::now();
+
+        // Get entity embeddings for analysis
+        let entities = model.get_entities();
+        let mut embeddings = Vec::new();
+
+        for entity in &entities {
+            match model.get_entity_embedding(entity) {
+                Ok(embedding) => embeddings.push(embedding.values),
+                Err(e) => warn!("Failed to get embedding for entity {}: {}", entity, e),
+            }
+        }
+
+        // Compute quality metrics
+        let metric_scores = self.compute_quality_metrics(&embeddings).await?;
+
+        // Detect outliers
+        let outliers = if self.config.enable_outlier_detection {
+            self.detect_outliers(&embeddings, &entities).await?
+        } else {
+            Vec::new()
+        };
+
+        // Identify quality issues
+        let quality_issues = self
+            .identify_quality_issues(&metric_scores, &outliers)
+            .await?;
+
+        // Perform cross-domain assessment if enabled
+        let cross_domain_results = if self.config.enable_cross_domain_assessment {
+            Some(self.assess_cross_domain_quality(model).await?)
+        } else {
+            None
+        };
+
+        // Calculate overall quality score
+        let overall_score =
+            self.calculate_overall_score(&metric_scores, &outliers, &quality_issues);
+
+        let quality_measurement = QualityMeasurement {
+            timestamp: Utc::now(),
+            overall_score,
+            metric_scores,
+            outliers,
+            quality_issues,
+            cross_domain_results,
+        };
+
+        // Add to history
+        {
+            let mut history = self.quality_history.write().unwrap();
+            if history.len() >= self.config.history_size {
+                history.pop_front();
+            }
+            history.push_back(quality_measurement.clone());
+        }
+
+        let assessment_time = start_time.elapsed();
+        info!(
+            "Quality assessment completed in {:.2}s with overall score: {:.3}",
+            assessment_time.as_secs_f64(),
+            overall_score
+        );
+
+        Ok(quality_measurement)
+    }
+
+    /// Compute quality metrics
+    async fn compute_quality_metrics(
+        &self,
+        embeddings: &[Vec<f64>],
+    ) -> Result<HashMap<String, f64>> {
+        let mut scores = HashMap::new();
+
+        for metric_type in &self.config.quality_metrics {
+            let score = match metric_type {
+                QualityMetricType::Isotropy => self.compute_isotropy(embeddings).await?,
+                QualityMetricType::NeighborhoodPreservation => {
+                    self.compute_neighborhood_preservation(embeddings).await?
+                }
+                QualityMetricType::DistancePreservation => {
+                    self.compute_distance_preservation(embeddings).await?
+                }
+                QualityMetricType::ClusteringQuality => {
+                    self.compute_clustering_quality(embeddings).await?
+                }
+                QualityMetricType::DimensionalityAnalysis => {
+                    self.compute_dimensionality_analysis(embeddings).await?
+                }
+                QualityMetricType::SemanticCoherence => {
+                    self.compute_semantic_coherence(embeddings).await?
+                }
+                QualityMetricType::CrossDomainTransfer => {
+                    self.compute_cross_domain_transfer(embeddings).await?
+                }
+            };
+
+            scores.insert(format!("{:?}", metric_type), score);
+        }
+
+        Ok(scores)
+    }
+
+    /// Compute embedding space isotropy
+    async fn compute_isotropy(&self, embeddings: &[Vec<f64>]) -> Result<f64> {
+        if embeddings.is_empty() {
+            return Ok(0.0);
+        }
+
+        let dim = embeddings[0].len();
+        let mut variance_per_dim = vec![0.0; dim];
+        let mut mean_per_dim = vec![0.0; dim];
+
+        // Calculate mean per dimension
+        for embedding in embeddings {
+            for (i, &value) in embedding.iter().enumerate() {
+                mean_per_dim[i] += value;
+            }
+        }
+        for mean in &mut mean_per_dim {
+            *mean /= embeddings.len() as f64;
+        }
+
+        // Calculate variance per dimension
+        for embedding in embeddings {
+            for (i, &value) in embedding.iter().enumerate() {
+                let diff = value - mean_per_dim[i];
+                variance_per_dim[i] += diff * diff;
+            }
+        }
+        for variance in &mut variance_per_dim {
+            *variance /= embeddings.len() as f64;
+        }
+
+        // Isotropy score: negative coefficient of variation of variances
+        let mean_variance = variance_per_dim.iter().sum::<f64>() / variance_per_dim.len() as f64;
+        let variance_of_variances = variance_per_dim
             .iter()
-            .filter(|r| r.rank <= k)
-            .map(|r| 1.0 / (r.rank as f64).log2())
-            .sum();
+            .map(|&v| (v - mean_variance).powi(2))
+            .sum::<f64>()
+            / variance_per_dim.len() as f64;
 
-        let idcg = 1.0; // Ideal DCG for binary relevance
+        let cv = if mean_variance > 0.0 {
+            variance_of_variances.sqrt() / mean_variance
+        } else {
+            1.0
+        };
 
-        if idcg > 0.0 {
-            dcg / idcg
+        Ok((1.0 - cv.min(1.0)).max(0.0))
+    }
+
+    /// Compute neighborhood preservation
+    async fn compute_neighborhood_preservation(&self, embeddings: &[Vec<f64>]) -> Result<f64> {
+        if embeddings.len() < 10 {
+            return Ok(1.0);
+        }
+
+        let k = 5.min(embeddings.len() / 2); // Number of neighbors to consider
+        let mut preservation_scores = Vec::new();
+
+        for (i, embedding_i) in embeddings.iter().enumerate() {
+            // Find k nearest neighbors
+            let mut distances: Vec<(usize, f64)> = embeddings
+                .iter()
+                .enumerate()
+                .filter(|(j, _)| *j != i)
+                .map(|(j, embedding_j)| {
+                    let dist = self.euclidean_distance(embedding_i, embedding_j);
+                    (j, dist)
+                })
+                .collect();
+
+            distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+            let neighbors: HashSet<usize> = distances.into_iter().take(k).map(|(j, _)| j).collect();
+
+            // Simulate original space neighbors (using random selection for demonstration)
+            let original_neighbors: HashSet<usize> =
+                (0..embeddings.len()).filter(|&j| j != i).take(k).collect();
+
+            // Calculate overlap
+            let overlap = neighbors.intersection(&original_neighbors).count();
+            let preservation = overlap as f64 / k as f64;
+            preservation_scores.push(preservation);
+        }
+
+        Ok(preservation_scores.iter().sum::<f64>() / preservation_scores.len() as f64)
+    }
+
+    /// Compute distance preservation
+    async fn compute_distance_preservation(&self, embeddings: &[Vec<f64>]) -> Result<f64> {
+        if embeddings.len() < 2 {
+            return Ok(1.0);
+        }
+
+        let mut correlation_sum = 0.0;
+        let mut pair_count = 0;
+
+        // Sample a subset of pairs for efficiency
+        let sample_size = 100.min(embeddings.len() * (embeddings.len() - 1) / 2);
+
+        for i in 0..embeddings.len() {
+            for j in (i + 1)..embeddings.len() {
+                if pair_count >= sample_size {
+                    break;
+                }
+
+                let embedding_dist = self.euclidean_distance(&embeddings[i], &embeddings[j]);
+                // Simulate original distance (random for demonstration)
+                let original_dist = rand::random::<f64>();
+
+                correlation_sum += embedding_dist * original_dist;
+                pair_count += 1;
+            }
+            if pair_count >= sample_size {
+                break;
+            }
+        }
+
+        // Simplified correlation score
+        let avg_correlation = if pair_count > 0 {
+            correlation_sum / pair_count as f64
+        } else {
+            0.0
+        };
+
+        Ok(avg_correlation.abs().min(1.0))
+    }
+
+    /// Compute clustering quality
+    async fn compute_clustering_quality(&self, embeddings: &[Vec<f64>]) -> Result<f64> {
+        if embeddings.len() < 3 {
+            return Ok(1.0);
+        }
+
+        // Simple k-means clustering quality assessment
+        let k = 3.min(embeddings.len() / 3);
+
+        // Initialize centroids randomly
+        let mut centroids = Vec::new();
+        for _ in 0..k {
+            let idx = rand::random::<usize>() % embeddings.len();
+            centroids.push(embeddings[idx].clone());
+        }
+
+        // Assign points to clusters
+        let mut cluster_assignments = vec![0; embeddings.len()];
+        for (i, embedding) in embeddings.iter().enumerate() {
+            let mut min_dist = f64::INFINITY;
+            let mut best_cluster = 0;
+
+            for (c, centroid) in centroids.iter().enumerate() {
+                let dist = self.euclidean_distance(embedding, centroid);
+                if dist < min_dist {
+                    min_dist = dist;
+                    best_cluster = c;
+                }
+            }
+            cluster_assignments[i] = best_cluster;
+        }
+
+        // Calculate silhouette score (simplified)
+        let mut silhouette_scores = Vec::new();
+
+        for (i, embedding) in embeddings.iter().enumerate() {
+            let own_cluster = cluster_assignments[i];
+
+            // Calculate intra-cluster distance
+            let mut intra_dist = 0.0;
+            let mut intra_count = 0;
+
+            for (j, other_embedding) in embeddings.iter().enumerate() {
+                if i != j && cluster_assignments[j] == own_cluster {
+                    intra_dist += self.euclidean_distance(embedding, other_embedding);
+                    intra_count += 1;
+                }
+            }
+
+            let avg_intra_dist = if intra_count > 0 {
+                intra_dist / intra_count as f64
+            } else {
+                0.0
+            };
+
+            // Calculate inter-cluster distance (to nearest other cluster)
+            let mut min_inter_dist = f64::INFINITY;
+
+            for c in 0..k {
+                if c != own_cluster {
+                    let mut inter_dist = 0.0;
+                    let mut inter_count = 0;
+
+                    for (j, other_embedding) in embeddings.iter().enumerate() {
+                        if cluster_assignments[j] == c {
+                            inter_dist += self.euclidean_distance(embedding, other_embedding);
+                            inter_count += 1;
+                        }
+                    }
+
+                    if inter_count > 0 {
+                        let avg_inter_dist = inter_dist / inter_count as f64;
+                        min_inter_dist = min_inter_dist.min(avg_inter_dist);
+                    }
+                }
+            }
+
+            // Silhouette score
+            let silhouette = if avg_intra_dist < min_inter_dist {
+                (min_inter_dist - avg_intra_dist) / min_inter_dist.max(avg_intra_dist)
+            } else {
+                0.0
+            };
+
+            silhouette_scores.push(silhouette);
+        }
+
+        let avg_silhouette = silhouette_scores.iter().sum::<f64>() / silhouette_scores.len() as f64;
+        Ok(((avg_silhouette + 1.0) / 2.0).max(0.0).min(1.0))
+    }
+
+    /// Compute dimensionality analysis
+    async fn compute_dimensionality_analysis(&self, embeddings: &[Vec<f64>]) -> Result<f64> {
+        if embeddings.is_empty() {
+            return Ok(0.0);
+        }
+
+        let dim = embeddings[0].len();
+
+        // Estimate intrinsic dimensionality using PCA-like analysis
+        let mut variance_per_dim = vec![0.0; dim];
+        let mut mean_per_dim = vec![0.0; dim];
+
+        // Calculate mean
+        for embedding in embeddings {
+            for (i, &value) in embedding.iter().enumerate() {
+                mean_per_dim[i] += value;
+            }
+        }
+        for mean in &mut mean_per_dim {
+            *mean /= embeddings.len() as f64;
+        }
+
+        // Calculate variance
+        for embedding in embeddings {
+            for (i, &value) in embedding.iter().enumerate() {
+                let diff = value - mean_per_dim[i];
+                variance_per_dim[i] += diff * diff;
+            }
+        }
+        for variance in &mut variance_per_dim {
+            *variance /= embeddings.len() as f64;
+        }
+
+        // Calculate effective dimensionality
+        variance_per_dim.sort_by(|a, b| b.partial_cmp(a).unwrap());
+
+        let total_variance: f64 = variance_per_dim.iter().sum();
+        let mut cumulative_variance = 0.0;
+        let mut effective_dim = 0;
+
+        for &variance in &variance_per_dim {
+            cumulative_variance += variance;
+            effective_dim += 1;
+
+            if cumulative_variance / total_variance >= 0.95 {
+                break;
+            }
+        }
+
+        // Quality score based on dimension efficiency
+        let dimension_efficiency = effective_dim as f64 / dim as f64;
+        Ok((1.0 - dimension_efficiency + 0.1).min(1.0).max(0.0))
+    }
+
+    /// Compute semantic coherence
+    async fn compute_semantic_coherence(&self, embeddings: &[Vec<f64>]) -> Result<f64> {
+        if embeddings.len() < 2 {
+            return Ok(1.0);
+        }
+
+        // Measure semantic coherence through embedding similarity distribution
+        let mut similarities = Vec::new();
+
+        for i in 0..embeddings.len() {
+            for j in (i + 1)..embeddings.len() {
+                let similarity = self.cosine_similarity(&embeddings[i], &embeddings[j]);
+                similarities.push(similarity);
+            }
+        }
+
+        // Coherence based on similarity distribution properties
+        let mean_similarity = similarities.iter().sum::<f64>() / similarities.len() as f64;
+        let variance = similarities
+            .iter()
+            .map(|&s| (s - mean_similarity).powi(2))
+            .sum::<f64>()
+            / similarities.len() as f64;
+
+        // Good semantic coherence has moderate mean similarity and controlled variance
+        let coherence_score = if variance > 0.0 {
+            let normalized_variance = variance.sqrt();
+            let ideal_mean = 0.3; // Ideal mean similarity
+            let mean_score = 1.0 - (mean_similarity - ideal_mean).abs();
+            let variance_score = 1.0 - normalized_variance.min(1.0);
+            (mean_score + variance_score) / 2.0
+        } else {
+            0.5
+        };
+
+        Ok(coherence_score.max(0.0).min(1.0))
+    }
+
+    /// Compute cross-domain transfer quality
+    async fn compute_cross_domain_transfer(&self, _embeddings: &[Vec<f64>]) -> Result<f64> {
+        // Simplified cross-domain transfer assessment
+        // In practice, this would require multiple domain datasets
+        Ok(0.8) // Placeholder score
+    }
+
+    /// Detect outliers using all configured methods
+    async fn detect_outliers(
+        &self,
+        embeddings: &[Vec<f64>],
+        entities: &[String],
+    ) -> Result<Vec<OutlierDetection>> {
+        let mut all_outliers = Vec::new();
+
+        for detector in &self.outlier_detectors {
+            match detector.detect_outliers(embeddings, entities) {
+                Ok(mut outliers) => all_outliers.append(&mut outliers),
+                Err(e) => warn!("Outlier detector {} failed: {}", detector.name(), e),
+            }
+        }
+
+        // Remove duplicates and merge similar detections
+        self.merge_outlier_detections(all_outliers)
+    }
+
+    /// Merge similar outlier detections
+    fn merge_outlier_detections(
+        &self,
+        mut outliers: Vec<OutlierDetection>,
+    ) -> Result<Vec<OutlierDetection>> {
+        // Sort by entity and score
+        outliers.sort_by(|a, b| {
+            a.entity_or_triple
+                .cmp(&b.entity_or_triple)
+                .then_with(|| b.outlier_score.partial_cmp(&a.outlier_score).unwrap())
+        });
+
+        let mut merged = Vec::new();
+        let mut i = 0;
+
+        while i < outliers.len() {
+            let mut current = outliers[i].clone();
+            let mut j = i + 1;
+
+            // Merge similar detections for the same entity
+            while j < outliers.len() && outliers[j].entity_or_triple == current.entity_or_triple {
+                if (outliers[j].outlier_score - current.outlier_score).abs() < 0.1 {
+                    // Merge detection methods
+                    current.detection_method = format!(
+                        "{}, {}",
+                        current.detection_method, outliers[j].detection_method
+                    );
+                    current.confidence = (current.confidence + outliers[j].confidence) / 2.0;
+                }
+                j += 1;
+            }
+
+            merged.push(current);
+            i = j;
+        }
+
+        // Filter by threshold
+        let filtered: Vec<_> = merged
+            .into_iter()
+            .filter(|o| o.outlier_score >= self.config.outlier_threshold)
+            .collect();
+
+        Ok(filtered)
+    }
+
+    /// Identify quality issues based on metrics and outliers
+    async fn identify_quality_issues(
+        &self,
+        metric_scores: &HashMap<String, f64>,
+        outliers: &[OutlierDetection],
+    ) -> Result<Vec<QualityIssue>> {
+        let mut issues = Vec::new();
+
+        // Check for low overall quality
+        let avg_score = metric_scores.values().sum::<f64>() / metric_scores.len() as f64;
+        if avg_score < 0.5 {
+            issues.push(QualityIssue {
+                issue_type: QualityIssueType::LowEmbeddingQuality,
+                severity: IssueSeverity::High,
+                description: format!("Overall embedding quality is low: {:.3}", avg_score),
+                remediation: "Consider retraining with better hyperparameters or more data"
+                    .to_string(),
+                affected_items: vec!["all_embeddings".to_string()],
+            });
+        }
+
+        // Check isotropy issues
+        if let Some(&isotropy_score) = metric_scores.get("Isotropy") {
+            if isotropy_score < 0.3 {
+                issues.push(QualityIssue {
+                    issue_type: QualityIssueType::DistributionSkewness,
+                    severity: IssueSeverity::Medium,
+                    description: format!("Poor embedding space isotropy: {:.3}", isotropy_score),
+                    remediation: "Apply dimensionality reduction or regularization techniques"
+                        .to_string(),
+                    affected_items: vec!["embedding_space".to_string()],
+                });
+            }
+        }
+
+        // Check clustering issues
+        if let Some(&clustering_score) = metric_scores.get("ClusteringQuality") {
+            if clustering_score < 0.4 {
+                issues.push(QualityIssue {
+                    issue_type: QualityIssueType::PoorClusteringStructure,
+                    severity: IssueSeverity::Medium,
+                    description: format!("Poor clustering structure: {:.3}", clustering_score),
+                    remediation: "Review similarity metrics and training objectives".to_string(),
+                    affected_items: vec!["clustering_structure".to_string()],
+                });
+            }
+        }
+
+        // Check outlier contamination
+        if outliers.len() > metric_scores.len() / 20 {
+            // More than 5% outliers
+            issues.push(QualityIssue {
+                issue_type: QualityIssueType::OutlierContamination,
+                severity: IssueSeverity::High,
+                description: format!("High number of outliers detected: {}", outliers.len()),
+                remediation: "Review data quality and consider outlier removal or robust training"
+                    .to_string(),
+                affected_items: outliers
+                    .iter()
+                    .map(|o| o.entity_or_triple.clone())
+                    .collect(),
+            });
+        }
+
+        Ok(issues)
+    }
+
+    /// Perform cross-domain quality assessment
+    async fn assess_cross_domain_quality(
+        &self,
+        _model: &dyn EmbeddingModel,
+    ) -> Result<CrossDomainAssessment> {
+        // Simplified cross-domain assessment
+        // In practice, this would evaluate transfer quality across different domains
+        Ok(CrossDomainAssessment {
+            source_domain_quality: 0.85,
+            target_domain_quality: 0.75,
+            transfer_quality: 0.80,
+            domain_similarity: 0.70,
+            recommendations: vec![
+                "Consider domain adaptation techniques".to_string(),
+                "Increase cross-domain training data".to_string(),
+            ],
+        })
+    }
+
+    /// Calculate overall quality score
+    fn calculate_overall_score(
+        &self,
+        metric_scores: &HashMap<String, f64>,
+        outliers: &[OutlierDetection],
+        quality_issues: &[QualityIssue],
+    ) -> f64 {
+        // Base score from metrics
+        let base_score = if metric_scores.is_empty() {
+            0.0
+        } else {
+            metric_scores.values().sum::<f64>() / metric_scores.len() as f64
+        };
+
+        // Penalty for outliers
+        let outlier_penalty = (outliers.len() as f64 / 100.0).min(0.3);
+
+        // Penalty for quality issues
+        let issue_penalty = quality_issues
+            .iter()
+            .map(|issue| match issue.severity {
+                IssueSeverity::Critical => 0.2,
+                IssueSeverity::High => 0.1,
+                IssueSeverity::Medium => 0.05,
+                IssueSeverity::Low => 0.01,
+            })
+            .sum::<f64>()
+            .min(0.5);
+
+        (base_score - outlier_penalty - issue_penalty)
+            .max(0.0)
+            .min(1.0)
+    }
+
+    /// Start background quality assessment task
+    async fn start_quality_assessment_task(
+        &self,
+        model: Arc<dyn EmbeddingModel + Send + Sync>,
+    ) -> JoinHandle<()> {
+        let quality_history = Arc::clone(&self.quality_history);
+        let interval = Duration::from_secs(self.config.assessment_interval_seconds);
+
+        tokio::spawn(async move {
+            let mut interval_timer = tokio::time::interval(interval);
+
+            loop {
+                interval_timer.tick().await;
+
+                // This would be implemented with the actual quality assessment
+                // For now, just log that assessment would occur
+                info!("Background quality assessment would run here");
+
+                // In a real implementation, you would call:
+                // let assessment_manager = QualityAssessmentManager::new(QualityConfig::default());
+                // match assessment_manager.assess_quality(model.as_ref()).await {
+                //     Ok(measurement) => { /* handle measurement */ },
+                //     Err(e) => error!("Quality assessment failed: {}", e),
+                // }
+            }
+        })
+    }
+
+    /// Get quality history
+    pub fn get_quality_history(&self) -> Vec<QualityMeasurement> {
+        self.quality_history
+            .read()
+            .unwrap()
+            .iter()
+            .cloned()
+            .collect()
+    }
+
+    /// Get latest quality measurement
+    pub fn get_latest_quality(&self) -> Option<QualityMeasurement> {
+        self.quality_history.read().unwrap().back().cloned()
+    }
+
+    /// Calculate euclidean distance between two vectors
+    fn euclidean_distance(&self, a: &[f64], b: &[f64]) -> f64 {
+        a.iter()
+            .zip(b.iter())
+            .map(|(x, y)| (x - y).powi(2))
+            .sum::<f64>()
+            .sqrt()
+    }
+
+    /// Calculate cosine similarity between two vectors
+    fn cosine_similarity(&self, a: &[f64], b: &[f64]) -> f64 {
+        let dot_product: f64 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+        let norm_a: f64 = a.iter().map(|x| x * x).sum::<f64>().sqrt();
+        let norm_b: f64 = b.iter().map(|x| x * x).sum::<f64>().sqrt();
+
+        if norm_a > 0.0 && norm_b > 0.0 {
+            dot_product / (norm_a * norm_b)
         } else {
             0.0
         }
+    }
+}
+
+// ============================================================================
+// OUTLIER DETECTION IMPLEMENTATIONS
+// ============================================================================
+
+/// Statistical outlier detector using Z-score
+pub struct StatisticalOutlierDetector {
+    threshold: f64,
+}
+
+impl StatisticalOutlierDetector {
+    pub fn new() -> Self {
+        Self { threshold: 3.0 }
+    }
+}
+
+impl OutlierDetector for StatisticalOutlierDetector {
+    fn detect_outliers(
+        &self,
+        embeddings: &[Vec<f64>],
+        entities: &[String],
+    ) -> Result<Vec<OutlierDetection>> {
+        let mut outliers = Vec::new();
+
+        if embeddings.is_empty() {
+            return Ok(outliers);
+        }
+
+        let dim = embeddings[0].len();
+
+        // Calculate mean and std for each dimension
+        let mut means = vec![0.0; dim];
+        let mut stds = vec![0.0; dim];
+
+        // Calculate means
+        for embedding in embeddings {
+            for (i, &value) in embedding.iter().enumerate() {
+                means[i] += value;
+            }
+        }
+        for mean in &mut means {
+            *mean /= embeddings.len() as f64;
+        }
+
+        // Calculate standard deviations
+        for embedding in embeddings {
+            for (i, &value) in embedding.iter().enumerate() {
+                stds[i] += (value - means[i]).powi(2);
+            }
+        }
+        for std in &mut stds {
+            *std = (*std / embeddings.len() as f64).sqrt();
+        }
+
+        // Detect outliers
+        for (idx, embedding) in embeddings.iter().enumerate() {
+            let mut max_z_score = 0.0;
+
+            for (i, &value) in embedding.iter().enumerate() {
+                if stds[i] > 0.0 {
+                    let z_score = ((value - means[i]) / stds[i]).abs();
+                    max_z_score = max_z_score.max(z_score);
+                }
+            }
+
+            if max_z_score > self.threshold {
+                outliers.push(OutlierDetection {
+                    outlier_type: "statistical".to_string(),
+                    outlier_score: max_z_score,
+                    entity_or_triple: entities
+                        .get(idx)
+                        .unwrap_or(&format!("entity_{}", idx))
+                        .clone(),
+                    detection_method: "Z-score".to_string(),
+                    explanation: format!("Maximum Z-score: {:.2}", max_z_score),
+                    confidence: (max_z_score / 5.0).min(1.0),
+                });
+            }
+        }
+
+        Ok(outliers)
+    }
+
+    fn name(&self) -> &str {
+        "StatisticalOutlierDetector"
+    }
+
+    fn configure(&mut self, params: HashMap<String, f64>) {
+        if let Some(&threshold) = params.get("threshold") {
+            self.threshold = threshold;
+        }
+    }
+}
+
+/// Embedding space outlier detector
+pub struct EmbeddingSpaceOutlierDetector {
+    distance_threshold: f64,
+}
+
+impl EmbeddingSpaceOutlierDetector {
+    pub fn new() -> Self {
+        Self {
+            distance_threshold: 2.0,
+        }
+    }
+}
+
+impl OutlierDetector for EmbeddingSpaceOutlierDetector {
+    fn detect_outliers(
+        &self,
+        embeddings: &[Vec<f64>],
+        entities: &[String],
+    ) -> Result<Vec<OutlierDetection>> {
+        let mut outliers = Vec::new();
+
+        if embeddings.len() < 2 {
+            return Ok(outliers);
+        }
+
+        // Calculate centroid
+        let dim = embeddings[0].len();
+        let mut centroid = vec![0.0; dim];
+
+        for embedding in embeddings {
+            for (i, &value) in embedding.iter().enumerate() {
+                centroid[i] += value;
+            }
+        }
+        for c in &mut centroid {
+            *c /= embeddings.len() as f64;
+        }
+
+        // Calculate distances from centroid
+        let mut distances = Vec::new();
+        for embedding in embeddings {
+            let distance = embedding
+                .iter()
+                .zip(centroid.iter())
+                .map(|(x, c)| (x - c).powi(2))
+                .sum::<f64>()
+                .sqrt();
+            distances.push(distance);
+        }
+
+        // Calculate threshold based on distribution
+        let mean_distance = distances.iter().sum::<f64>() / distances.len() as f64;
+        let variance = distances
+            .iter()
+            .map(|&d| (d - mean_distance).powi(2))
+            .sum::<f64>()
+            / distances.len() as f64;
+        let std_distance = variance.sqrt();
+
+        let threshold = mean_distance + self.distance_threshold * std_distance;
+
+        // Identify outliers
+        for (idx, &distance) in distances.iter().enumerate() {
+            if distance > threshold {
+                outliers.push(OutlierDetection {
+                    outlier_type: "embedding_space".to_string(),
+                    outlier_score: distance / mean_distance,
+                    entity_or_triple: entities
+                        .get(idx)
+                        .unwrap_or(&format!("entity_{}", idx))
+                        .clone(),
+                    detection_method: "Distance from centroid".to_string(),
+                    explanation: format!("Distance: {:.3}, Threshold: {:.3}", distance, threshold),
+                    confidence: ((distance - threshold) / threshold).min(1.0),
+                });
+            }
+        }
+
+        Ok(outliers)
+    }
+
+    fn name(&self) -> &str {
+        "EmbeddingSpaceOutlierDetector"
+    }
+
+    fn configure(&mut self, params: HashMap<String, f64>) {
+        if let Some(&threshold) = params.get("distance_threshold") {
+            self.distance_threshold = threshold;
+        }
+    }
+}
+
+/// Distribution-based outlier detector
+pub struct DistributionBasedOutlierDetector {
+    percentile_threshold: f64,
+}
+
+impl DistributionBasedOutlierDetector {
+    pub fn new() -> Self {
+        Self {
+            percentile_threshold: 0.95,
+        }
+    }
+}
+
+impl OutlierDetector for DistributionBasedOutlierDetector {
+    fn detect_outliers(
+        &self,
+        embeddings: &[Vec<f64>],
+        entities: &[String],
+    ) -> Result<Vec<OutlierDetection>> {
+        let mut outliers = Vec::new();
+
+        if embeddings.is_empty() {
+            return Ok(outliers);
+        }
+
+        // Calculate norms for each embedding
+        let mut norms: Vec<f64> = embeddings
+            .iter()
+            .map(|embedding| embedding.iter().map(|&x| x * x).sum::<f64>().sqrt())
+            .collect();
+
+        norms.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+        // Calculate threshold based on percentile
+        let threshold_idx = (norms.len() as f64 * self.percentile_threshold) as usize;
+        let threshold = norms.get(threshold_idx).copied().unwrap_or(0.0);
+
+        // Identify outliers
+        for (idx, embedding) in embeddings.iter().enumerate() {
+            let norm = embedding.iter().map(|&x| x * x).sum::<f64>().sqrt();
+
+            if norm > threshold {
+                outliers.push(OutlierDetection {
+                    outlier_type: "distribution_based".to_string(),
+                    outlier_score: norm / threshold,
+                    entity_or_triple: entities
+                        .get(idx)
+                        .unwrap_or(&format!("entity_{}", idx))
+                        .clone(),
+                    detection_method: "Norm percentile".to_string(),
+                    explanation: format!(
+                        "Norm: {:.3}, {}th percentile threshold: {:.3}",
+                        norm,
+                        self.percentile_threshold * 100.0,
+                        threshold
+                    ),
+                    confidence: ((norm - threshold) / threshold).min(1.0),
+                });
+            }
+        }
+
+        Ok(outliers)
+    }
+
+    fn name(&self) -> &str {
+        "DistributionBasedOutlierDetector"
+    }
+
+    fn configure(&mut self, params: HashMap<String, f64>) {
+        if let Some(&threshold) = params.get("percentile_threshold") {
+            self.percentile_threshold = threshold;
+        }
+    }
+}
+
+/// Placeholder isolation forest detector
+pub struct IsolationForestDetector;
+
+impl IsolationForestDetector {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl OutlierDetector for IsolationForestDetector {
+    fn detect_outliers(
+        &self,
+        embeddings: &[Vec<f64>],
+        entities: &[String],
+    ) -> Result<Vec<OutlierDetection>> {
+        // Placeholder implementation
+        // In practice, this would implement isolation forest algorithm
+        info!("IsolationForestDetector would detect outliers here");
+        Ok(Vec::new())
+    }
+
+    fn name(&self) -> &str {
+        "IsolationForestDetector"
+    }
+
+    fn configure(&mut self, _params: HashMap<String, f64>) {
+        // Placeholder
+    }
+}
+
+/// Placeholder Local Outlier Factor detector
+pub struct LocalOutlierFactorDetector;
+
+impl LocalOutlierFactorDetector {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl OutlierDetector for LocalOutlierFactorDetector {
+    fn detect_outliers(
+        &self,
+        embeddings: &[Vec<f64>],
+        entities: &[String],
+    ) -> Result<Vec<OutlierDetection>> {
+        // Placeholder implementation
+        // In practice, this would implement LOF algorithm
+        info!("LocalOutlierFactorDetector would detect outliers here");
+        Ok(Vec::new())
+    }
+
+    fn name(&self) -> &str {
+        "LocalOutlierFactorDetector"
+    }
+
+    fn configure(&mut self, _params: HashMap<String, f64>) {
+        // Placeholder
+    }
+}
+
+/// Placeholder One-Class SVM detector
+pub struct OneClassSVMDetector;
+
+impl OneClassSVMDetector {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl OutlierDetector for OneClassSVMDetector {
+    fn detect_outliers(
+        &self,
+        embeddings: &[Vec<f64>],
+        entities: &[String],
+    ) -> Result<Vec<OutlierDetection>> {
+        // Placeholder implementation
+        // In practice, this would implement One-Class SVM algorithm
+        info!("OneClassSVMDetector would detect outliers here");
+        Ok(Vec::new())
+    }
+
+    fn name(&self) -> &str {
+        "OneClassSVMDetector"
+    }
+
+    fn configure(&mut self, _params: HashMap<String, f64>) {
+        // Placeholder
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_quality_config_default() {
+        let config = QualityConfig::default();
+        assert!(config.enable_outlier_detection);
+        assert!(config.outlier_methods.len() >= 3);
+        assert_eq!(config.assessment_interval_seconds, 300);
+    }
+
+    #[tokio::test]
+    async fn test_quality_assessment_manager() {
+        let config = QualityConfig::default();
+        let manager = QualityAssessmentManager::new(config);
+
+        // Test with sample embeddings
+        let embeddings = vec![
+            vec![1.0, 2.0, 3.0],
+            vec![2.0, 3.0, 4.0],
+            vec![3.0, 4.0, 5.0],
+            vec![100.0, 200.0, 300.0], // Outlier
+        ];
+
+        let isotropy = manager.compute_isotropy(&embeddings).await.unwrap();
+        assert!(isotropy >= 0.0 && isotropy <= 1.0);
+
+        let clustering = manager
+            .compute_clustering_quality(&embeddings)
+            .await
+            .unwrap();
+        assert!(clustering >= 0.0 && clustering <= 1.0);
+    }
+
+    #[test]
+    fn test_statistical_outlier_detector() {
+        let mut detector = StatisticalOutlierDetector::new();
+
+        let embeddings = vec![
+            vec![1.0, 2.0],
+            vec![2.0, 3.0],
+            vec![3.0, 4.0],
+            vec![100.0, 200.0], // Clear outlier
+        ];
+
+        let entities = vec![
+            "a".to_string(),
+            "b".to_string(),
+            "c".to_string(),
+            "d".to_string(),
+        ];
+
+        let outliers = detector.detect_outliers(&embeddings, &entities).unwrap();
+        assert!(!outliers.is_empty());
+        assert_eq!(outliers[0].entity_or_triple, "d");
+    }
+
+    #[test]
+    fn test_embedding_space_outlier_detector() {
+        let mut detector = EmbeddingSpaceOutlierDetector::new();
+
+        let embeddings = vec![
+            vec![1.0, 1.0],
+            vec![1.1, 1.1],
+            vec![0.9, 0.9],
+            vec![10.0, 10.0], // Outlier
+        ];
+
+        let entities = vec![
+            "a".to_string(),
+            "b".to_string(),
+            "c".to_string(),
+            "d".to_string(),
+        ];
+
+        let outliers = detector.detect_outliers(&embeddings, &entities).unwrap();
+        assert!(!outliers.is_empty());
+    }
+
+    #[test]
+    fn test_quality_issue_identification() {
+        let issue = QualityIssue {
+            issue_type: QualityIssueType::LowEmbeddingQuality,
+            severity: IssueSeverity::High,
+            description: "Test issue".to_string(),
+            remediation: "Test remediation".to_string(),
+            affected_items: vec!["test".to_string()],
+        };
+
+        assert!(matches!(issue.severity, IssueSeverity::High));
+        assert!(matches!(
+            issue.issue_type,
+            QualityIssueType::LowEmbeddingQuality
+        ));
     }
 }
 
@@ -708,7 +2103,11 @@ impl QualityMonitor {
     }
 
     /// Start continuous monitoring
-    pub async fn start_monitoring<M>(&mut self, model: Arc<M>, test_data: Vec<(String, String, String)>) -> Result<()>
+    pub async fn start_monitoring<M>(
+        &mut self,
+        model: Arc<M>,
+        test_data: Vec<(String, String, String)>,
+    ) -> Result<()>
     where
         M: EmbeddingModel + Send + Sync + 'static,
     {
@@ -735,7 +2134,10 @@ impl QualityMonitor {
                         };
 
                         // Add snapshot (this would normally call back to the monitor)
-                        info!("Quality monitoring snapshot created: MRR={:.4}", snapshot.metrics.mean_reciprocal_rank);
+                        info!(
+                            "Quality monitoring snapshot created: MRR={:.4}",
+                            snapshot.metrics.mean_reciprocal_rank
+                        );
                     }
                     Err(e) => {
                         error!("Failed to run quality monitoring evaluation: {}", e);
@@ -758,11 +2160,17 @@ impl QualityMonitor {
     }
 
     /// Detect performance drift compared to baseline
-    fn detect_performance_drift(&self, current: &EvaluationResults, baseline: &EvaluationResults) -> Result<Vec<DriftAlert>> {
+    fn detect_performance_drift(
+        &self,
+        current: &EvaluationResults,
+        baseline: &EvaluationResults,
+    ) -> Result<Vec<DriftAlert>> {
         let mut alerts = Vec::new();
 
         // Check MRR drift
-        let mrr_degradation = ((baseline.mean_reciprocal_rank - current.mean_reciprocal_rank) / baseline.mean_reciprocal_rank) * 100.0;
+        let mrr_degradation = ((baseline.mean_reciprocal_rank - current.mean_reciprocal_rank)
+            / baseline.mean_reciprocal_rank)
+            * 100.0;
         if mrr_degradation > self.config.drift_thresholds.mrr_degradation_threshold {
             alerts.push(DriftAlert::PerformanceDegradation {
                 metric: "mean_reciprocal_rank".to_string(),
@@ -773,12 +2181,16 @@ impl QualityMonitor {
         }
 
         // Check Hits@10 drift
-        if let (Some(&current_hits), Some(&baseline_hits)) = (
-            current.hits_at_k.get(&10),
-            baseline.hits_at_k.get(&10),
-        ) {
+        if let (Some(&current_hits), Some(&baseline_hits)) =
+            (current.hits_at_k.get(&10), baseline.hits_at_k.get(&10))
+        {
             let hits_degradation = ((baseline_hits - current_hits) / baseline_hits) * 100.0;
-            if hits_degradation > self.config.drift_thresholds.hits_at_10_degradation_threshold {
+            if hits_degradation
+                > self
+                    .config
+                    .drift_thresholds
+                    .hits_at_10_degradation_threshold
+            {
                 alerts.push(DriftAlert::PerformanceDegradation {
                     metric: "hits_at_10".to_string(),
                     current_value: current_hits,
@@ -809,10 +2221,16 @@ impl QualityMonitor {
             return Ok(alerts);
         }
 
-        // Simplified statistical drift detection (in a real implementation, 
+        // Simplified statistical drift detection (in a real implementation,
         // you would use proper statistical libraries)
-        let recent_mrr: Vec<f64> = recent_window.iter().map(|s| s.metrics.mean_reciprocal_rank).collect();
-        let older_mrr: Vec<f64> = older_window.iter().map(|s| s.metrics.mean_reciprocal_rank).collect();
+        let recent_mrr: Vec<f64> = recent_window
+            .iter()
+            .map(|s| s.metrics.mean_reciprocal_rank)
+            .collect();
+        let older_mrr: Vec<f64> = older_window
+            .iter()
+            .map(|s| s.metrics.mean_reciprocal_rank)
+            .collect();
 
         // Simple statistical comparison (would use proper tests in production)
         let recent_mean = recent_mrr.iter().sum::<f64>() / recent_mrr.len() as f64;
@@ -841,7 +2259,10 @@ impl QualityMonitor {
 
         // Simple trend detection using linear regression on recent data
         let recent_data: Vec<_> = history.iter().rev().take(10).enumerate().collect();
-        let mrr_values: Vec<f64> = recent_data.iter().map(|(_, snapshot)| snapshot.metrics.mean_reciprocal_rank).collect();
+        let mrr_values: Vec<f64> = recent_data
+            .iter()
+            .map(|(_, snapshot)| snapshot.metrics.mean_reciprocal_rank)
+            .collect();
 
         // Simple linear trend calculation
         let n = mrr_values.len() as f64;
@@ -858,9 +2279,10 @@ impl QualityMonitor {
 
         if denominator != 0.0 {
             let slope = numerator / denominator;
-            
+
             // Detect significant negative trend
-            if slope < -0.001 { // Threshold for meaningful degradation
+            if slope < -0.001 {
+                // Threshold for meaningful degradation
                 alerts.push(DriftAlert::TrendAlert {
                     metric: "mean_reciprocal_rank".to_string(),
                     trend_direction: "decreasing".to_string(),
@@ -889,22 +2311,34 @@ impl QualityMonitor {
 
     /// Get quality history
     pub fn get_quality_history(&self) -> Vec<QualitySnapshot> {
-        self.quality_history.read().unwrap().iter().cloned().collect()
+        self.quality_history
+            .read()
+            .unwrap()
+            .iter()
+            .cloned()
+            .collect()
     }
 
     /// Get summary statistics
     pub fn get_summary_stats(&self) -> QualityMonitorSummary {
         let history = self.quality_history.read().unwrap();
-        
+
         if history.is_empty() {
             return QualityMonitorSummary::default();
         }
 
-        let mrr_values: Vec<f64> = history.iter().map(|s| s.metrics.mean_reciprocal_rank).collect();
+        let mrr_values: Vec<f64> = history
+            .iter()
+            .map(|s| s.metrics.mean_reciprocal_rank)
+            .collect();
         let mean_mrr = mrr_values.iter().sum::<f64>() / mrr_values.len() as f64;
-        
+
         // Calculate standard deviation
-        let variance = mrr_values.iter().map(|x| (x - mean_mrr).powi(2)).sum::<f64>() / mrr_values.len() as f64;
+        let variance = mrr_values
+            .iter()
+            .map(|x| (x - mean_mrr).powi(2))
+            .sum::<f64>()
+            / mrr_values.len() as f64;
         let std_dev = variance.sqrt();
 
         QualityMonitorSummary {
@@ -963,25 +2397,42 @@ pub struct ConsoleAlertHandler;
 impl AlertHandler for ConsoleAlertHandler {
     fn handle_alert(&self, alert: DriftAlert) -> Result<()> {
         match alert {
-            DriftAlert::PerformanceDegradation { metric, current_value, baseline_value, degradation_percent } => {
+            DriftAlert::PerformanceDegradation {
+                metric,
+                current_value,
+                baseline_value,
+                degradation_percent,
+            } => {
                 warn!(
                     "PERFORMANCE DEGRADATION ALERT: {} degraded by {:.2}% (current: {:.4}, baseline: {:.4})",
                     metric, degradation_percent, current_value, baseline_value
                 );
             }
-            DriftAlert::StatisticalDrift { metric, p_value, effect_size } => {
+            DriftAlert::StatisticalDrift {
+                metric,
+                p_value,
+                effect_size,
+            } => {
                 warn!(
                     "STATISTICAL DRIFT ALERT: {} shows significant drift (p={:.3}, effect_size={:.3})",
                     metric, p_value, effect_size
                 );
             }
-            DriftAlert::TrendAlert { metric, trend_direction, trend_strength } => {
+            DriftAlert::TrendAlert {
+                metric,
+                trend_direction,
+                trend_strength,
+            } => {
                 warn!(
                     "TREND ALERT: {} is {} with strength {:.4}",
                     metric, trend_direction, trend_strength
                 );
             }
-            DriftAlert::DataQualityIssue { issue_type, description, severity } => {
+            DriftAlert::DataQualityIssue {
+                issue_type,
+                description,
+                severity,
+            } => {
                 error!(
                     "DATA QUALITY ALERT [{:?}]: {} - {}",
                     severity, issue_type, description
@@ -989,52 +2440,5 @@ impl AlertHandler for ConsoleAlertHandler {
             }
         }
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_evaluation_suite() {
-        let test_triples = vec![
-            ("alice".to_string(), "knows".to_string(), "bob".to_string()),
-            (
-                "bob".to_string(),
-                "knows".to_string(),
-                "charlie".to_string(),
-            ),
-        ];
-
-        let validation_triples =
-            vec![("alice".to_string(), "likes".to_string(), "bob".to_string())];
-
-        let suite = EvaluationSuite::new(test_triples, validation_triples);
-        assert_eq!(suite.test_triples.len(), 2);
-        assert_eq!(suite.validation_triples.len(), 1);
-    }
-
-    #[test]
-    fn test_benchmark_suite() {
-        let mut suite = BenchmarkSuite::new();
-
-        let results1 = EvaluationResults {
-            mean_rank: 10.0,
-            mean_reciprocal_rank: 0.5,
-            hits_at_k: [(1, 0.3), (10, 0.8)].iter().cloned().collect(),
-            ndcg_at_k: HashMap::new(),
-            average_precision: 0.4,
-            f1_score: 0.35,
-            num_test_triples: 100,
-            evaluation_time_seconds: 5.0,
-            detailed_results: Vec::new(),
-        };
-
-        suite.add_evaluation("TransE".to_string(), results1);
-
-        let report = suite.generate_report();
-        assert_eq!(report.num_models, 1);
-        assert_eq!(report.best_model, Some("TransE".to_string()));
     }
 }

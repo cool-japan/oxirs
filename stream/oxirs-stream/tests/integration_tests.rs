@@ -122,7 +122,7 @@ mod memory_backend_tests {
     async fn test_memory_backend_basic_operations() -> Result<()> {
         // Clear memory storage before test
         oxirs_stream::clear_memory_events().await;
-        
+
         let config = create_test_stream_config(StreamBackend::Memory {
             max_size: None,
             persistence: false,
@@ -135,15 +135,15 @@ mod memory_backend_tests {
             println!("Publishing event {}: {:?}", i, event);
             stream.publish(event.clone()).await?;
         }
-        
+
         // Flush to ensure events are published (important when batching is enabled)
         stream.flush().await?;
-        
+
         // Check how many events are in global storage
         let global_events = oxirs_stream::get_memory_events();
         let event_count = global_events.read().await.len();
         println!("Events in global storage: {}", event_count);
-        
+
         // Add small delay to ensure events are available
         tokio::time::sleep(Duration::from_millis(10)).await;
 
@@ -684,6 +684,9 @@ mod rdf_patch_integration_tests {
         // Stream the patch
         stream.publish(patch_event).await?;
 
+        // Flush to ensure events are published
+        stream.flush().await?;
+
         // Consume and verify
         if let Ok(Ok(Some(received))) = timeout(Duration::from_secs(5), stream.consume()).await {
             let event = received;
@@ -725,6 +728,9 @@ mod rdf_patch_integration_tests {
             stream.publish(event.clone()).await?;
         }
 
+        // Flush to ensure events are published
+        stream.flush().await?;
+
         // Consume and verify
         let mut received_events = Vec::new();
         for _ in 0..2 {
@@ -761,8 +767,8 @@ mod rdf_patch_integration_tests {
 mod monitoring_integration_tests {
     use super::*;
     use oxirs_stream::monitoring::{
-        ConsumerMetricsUpdate, HealthStatus, MetricsCollector, MonitoringConfig, ProducerMetricsUpdate,
-        StreamingMetrics,
+        ConsumerMetricsUpdate, HealthStatus, MetricsCollector, MonitoringConfig,
+        ProducerMetricsUpdate, StreamingMetrics,
     };
 
     #[tokio::test]

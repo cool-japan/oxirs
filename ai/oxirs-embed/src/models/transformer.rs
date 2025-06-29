@@ -355,7 +355,10 @@ impl TransformerEmbedding {
         };
 
         // For basic URI processing, only clean up if it's not a simple fragment
-        if processed_text.chars().all(|c| c.is_alphanumeric() || c == '_') {
+        if processed_text
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_')
+        {
             // Simple case: just return the extracted fragment as-is
             processed_text
         } else {
@@ -378,7 +381,7 @@ impl TransformerEmbedding {
         result = result.replace("RNA", "ribonucleic acid");
         result = result.replace("ATP", "adenosine triphosphate");
         result = result.replace("pH", "potential hydrogen");
-        
+
         // Expand underscores and then apply substitutions again
         result = result.replace("_", " ");
         result = result.replace("DNA", "deoxyribonucleic acid");
@@ -526,16 +529,16 @@ impl TransformerEmbedding {
 
         let mut result = String::new();
         let chars: Vec<char> = text.chars().collect();
-        
+
         for (i, &ch) in chars.iter().enumerate() {
             // Add space before every uppercase letter (except the first character)
             if i > 0 && ch.is_uppercase() {
                 result.push(' ');
             }
-            
+
             result.push(ch.to_lowercase().next().unwrap_or(ch));
         }
-        
+
         result
     }
 
@@ -1019,7 +1022,7 @@ impl TransformerEmbedding {
                 let s_norm = s_emb.mapv(|x| x * x).sum().sqrt();
                 let o_norm = o_emb.mapv(|x| x * x).sum().sqrt();
                 let norm_factor = s_norm * o_norm;
-                
+
                 // Positive sample score (cosine similarity)
                 let positive_score = if norm_factor > 0.0 {
                     (&s_emb * &o_emb).sum() / (norm_factor * temperature)
@@ -1036,7 +1039,7 @@ impl TransformerEmbedding {
                         if let Some(neg_emb) = self.entity_embeddings.get(*neg_entity) {
                             let neg_norm = neg_emb.mapv(|x| x * x).sum().sqrt();
                             let neg_norm_factor = s_norm * neg_norm;
-                            
+
                             let neg_score = if neg_norm_factor > 0.0 {
                                 (&s_emb * neg_emb).sum() / (neg_norm_factor * temperature)
                             } else {
@@ -1915,12 +1918,12 @@ impl TransformerEmbedding {
             0.0
         })
     }
-    
+
     /// Simple text embedding using character-based features (fallback)
     fn simple_text_embedding(&self, text: &str) -> Result<Vector> {
         let dimensions = self.config.base_config.dimensions;
         let mut embedding = vec![0.0; dimensions];
-        
+
         // Simple character-based embedding
         let chars: Vec<char> = text.chars().collect();
         if !chars.is_empty() {
@@ -1929,7 +1932,7 @@ impl TransformerEmbedding {
                 embedding[char_idx as usize] += 1.0 / chars.len() as f32;
             }
         }
-        
+
         // Normalize
         let norm: f32 = embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
         if norm > 0.0 {
@@ -1937,7 +1940,7 @@ impl TransformerEmbedding {
                 *x /= norm;
             }
         }
-        
+
         Ok(Vector::new(embedding))
     }
 
@@ -1956,133 +1959,133 @@ impl TransformerEmbedding {
             _ => self.encode_general_text(texts).await,
         }
     }
-    
+
     #[cfg(feature = "transformer-models")]
     /// Encode scientific text with domain-specific preprocessing
     async fn encode_scientific_text(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         let mut embeddings = Vec::new();
-        
+
         for text in texts {
             // Scientific text preprocessing
             let processed_text = self.preprocess_scientific_text(text);
             let embedding = self.bert_encode(&processed_text)?;
             embeddings.push(embedding);
         }
-        
+
         Ok(embeddings)
     }
-    
+
     #[cfg(feature = "transformer-models")]
     /// Encode biomedical text with medical entity recognition
     async fn encode_biomedical_text(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         let mut embeddings = Vec::new();
-        
+
         for text in texts {
             // Biomedical preprocessing (gene names, drug names, etc.)
             let processed_text = self.preprocess_biomedical_text(text);
             let embedding = self.bert_encode(&processed_text)?;
             embeddings.push(embedding);
         }
-        
+
         Ok(embeddings)
     }
-    
+
     #[cfg(feature = "transformer-models")]
     /// Encode code with syntax-aware processing
     async fn encode_code_text(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         let mut embeddings = Vec::new();
-        
+
         for text in texts {
             // Code preprocessing (identifier normalization, etc.)
             let processed_text = self.preprocess_code_text(text);
             let embedding = self.bert_encode(&processed_text)?;
             embeddings.push(embedding);
         }
-        
+
         Ok(embeddings)
     }
-    
+
     #[cfg(feature = "transformer-models")]
     /// Encode legal text with legal entity recognition
     async fn encode_legal_text(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         let mut embeddings = Vec::new();
-        
+
         for text in texts {
             // Legal text preprocessing
             let processed_text = self.preprocess_legal_text(text);
             let embedding = self.bert_encode(&processed_text)?;
             embeddings.push(embedding);
         }
-        
+
         Ok(embeddings)
     }
-    
+
     #[cfg(feature = "transformer-models")]
     /// Encode news text with temporal and topic awareness
     async fn encode_news_text(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         let mut embeddings = Vec::new();
-        
+
         for text in texts {
             // News text preprocessing
             let processed_text = self.preprocess_news_text(text);
             let embedding = self.bert_encode(&processed_text)?;
             embeddings.push(embedding);
         }
-        
+
         Ok(embeddings)
     }
-    
+
     #[cfg(feature = "transformer-models")]
     /// Encode social media text with hashtag and mention processing
     async fn encode_social_text(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         let mut embeddings = Vec::new();
-        
+
         for text in texts {
             // Social media preprocessing (hashtags, mentions, emojis)
             let processed_text = self.preprocess_social_text(text);
             let embedding = self.bert_encode(&processed_text)?;
             embeddings.push(embedding);
         }
-        
+
         Ok(embeddings)
     }
-    
+
     #[cfg(feature = "transformer-models")]
     /// Encode general text with standard BERT processing
     async fn encode_general_text(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         let mut embeddings = Vec::new();
-        
+
         for text in texts {
             let embedding = self.bert_encode(text)?;
             embeddings.push(embedding);
         }
-        
+
         Ok(embeddings)
     }
-    
+
     #[cfg(feature = "transformer-models")]
     /// Core BERT encoding logic (simplified for now)
     fn bert_encode(&self, text: &str) -> Result<Vec<f32>> {
         // This is a simplified implementation
         // In production, this would use actual transformer models
-        
+
         let dimensions = self.config.base_config.dimensions;
         let mut embedding = vec![0.0; dimensions];
-        
+
         // Simulate BERT-like encoding with better features than simple embedding
         let words: Vec<&str> = text.split_whitespace().collect();
         let mut word_count = HashMap::new();
-        
+
         for word in &words {
             *word_count.entry(word.to_lowercase()).or_insert(0) += 1;
         }
-        
+
         // Create features based on word frequency and position
         for (word, count) in word_count {
             let word_hash = self.hash_word(&word) % dimensions;
             embedding[word_hash] += count as f32 / words.len() as f32;
         }
-        
+
         // Apply pooling strategy
         match self.config.pooling_strategy {
             PoolingStrategy::Mean => {
@@ -2103,7 +2106,7 @@ impl TransformerEmbedding {
             }
             _ => {} // Other strategies use default
         }
-        
+
         // Normalize if configured
         if self.config.normalize_embeddings {
             let norm: f32 = embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
@@ -2113,10 +2116,10 @@ impl TransformerEmbedding {
                 }
             }
         }
-        
+
         Ok(embedding)
     }
-    
+
     /// Hash function for words
     fn hash_word(&self, word: &str) -> usize {
         let mut hash = 0usize;
@@ -2125,7 +2128,7 @@ impl TransformerEmbedding {
         }
         hash
     }
-    
+
     // Domain-specific preprocessing methods
     #[cfg(feature = "transformer-models")]
     fn preprocess_scientific_text(&self, text: &str) -> String {
@@ -2134,7 +2137,7 @@ impl TransformerEmbedding {
             .replace("et al.", "")
             .replace(char::is_numeric, " ")
     }
-    
+
     #[cfg(feature = "transformer-models")]
     fn preprocess_biomedical_text(&self, text: &str) -> String {
         // Normalize gene names, drug names, medical terms
@@ -2142,14 +2145,13 @@ impl TransformerEmbedding {
             .replace("gene", "GENE")
             .replace("protein", "PROTEIN")
     }
-    
+
     #[cfg(feature = "transformer-models")]
     fn preprocess_code_text(&self, text: &str) -> String {
         // Normalize identifiers, handle syntax
-        text.replace("_", " ")
-            .replace("CamelCase", "camel case")
+        text.replace("_", " ").replace("CamelCase", "camel case")
     }
-    
+
     #[cfg(feature = "transformer-models")]
     fn preprocess_legal_text(&self, text: &str) -> String {
         // Handle legal citations, normalize terms
@@ -2157,14 +2159,13 @@ impl TransformerEmbedding {
             .replace("v.", "versus")
             .replace("§", "section")
     }
-    
+
     #[cfg(feature = "transformer-models")]
     fn preprocess_news_text(&self, text: &str) -> String {
         // Remove bylines, normalize quotes
-        text.replace("\"", "")
-            .replace("'", "")
+        text.replace("\"", "").replace("'", "")
     }
-    
+
     #[cfg(feature = "transformer-models")]
     fn preprocess_social_text(&self, text: &str) -> String {
         // Handle hashtags, mentions, emojis

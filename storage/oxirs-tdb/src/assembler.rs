@@ -346,14 +346,248 @@ impl Assembler {
                 }
             }
 
-            OperationType::Checkpoint => Operation::Checkpoint,
+            OperationType::Index => {
+                let key_len = u32::from_le_bytes([
+                    bytecode[offset],
+                    bytecode[offset + 1],
+                    bytecode[offset + 2],
+                    bytecode[offset + 3],
+                ]) as usize;
+                offset += 4;
+                let key = String::from_utf8(bytecode[offset..offset + key_len].to_vec())
+                    .map_err(|e| anyhow!("Invalid UTF-8 in index key: {}", e))?;
+                offset += key_len;
 
-            _ => {
-                return Err(anyhow!(
-                    "Disassembly not implemented for opcode: {}",
-                    opcode
-                ));
+                let value_len = u32::from_le_bytes([
+                    bytecode[offset],
+                    bytecode[offset + 1],
+                    bytecode[offset + 2],
+                    bytecode[offset + 3],
+                ]) as usize;
+                offset += 4;
+                let value = String::from_utf8(bytecode[offset..offset + value_len].to_vec())
+                    .map_err(|e| anyhow!("Invalid UTF-8 in index value: {}", e))?;
+                offset += value_len;
+
+                Operation::Index { key, value }
             }
+
+            OperationType::Query => {
+                let pattern_len = u32::from_le_bytes([
+                    bytecode[offset],
+                    bytecode[offset + 1],
+                    bytecode[offset + 2],
+                    bytecode[offset + 3],
+                ]) as usize;
+                offset += 4;
+                let pattern = String::from_utf8(bytecode[offset..offset + pattern_len].to_vec())
+                    .map_err(|e| anyhow!("Invalid UTF-8 in query pattern: {}", e))?;
+                offset += pattern_len;
+
+                Operation::Query { pattern }
+            }
+
+            OperationType::TripleDelete => {
+                let subject = u64::from_le_bytes([
+                    bytecode[offset],
+                    bytecode[offset + 1],
+                    bytecode[offset + 2],
+                    bytecode[offset + 3],
+                    bytecode[offset + 4],
+                    bytecode[offset + 5],
+                    bytecode[offset + 6],
+                    bytecode[offset + 7],
+                ]);
+                offset += 8;
+                let predicate = u64::from_le_bytes([
+                    bytecode[offset],
+                    bytecode[offset + 1],
+                    bytecode[offset + 2],
+                    bytecode[offset + 3],
+                    bytecode[offset + 4],
+                    bytecode[offset + 5],
+                    bytecode[offset + 6],
+                    bytecode[offset + 7],
+                ]);
+                offset += 8;
+                let object = u64::from_le_bytes([
+                    bytecode[offset],
+                    bytecode[offset + 1],
+                    bytecode[offset + 2],
+                    bytecode[offset + 3],
+                    bytecode[offset + 4],
+                    bytecode[offset + 5],
+                    bytecode[offset + 6],
+                    bytecode[offset + 7],
+                ]);
+                offset += 8;
+                Operation::TripleDelete {
+                    subject,
+                    predicate,
+                    object,
+                }
+            }
+
+            OperationType::TripleQuery => {
+                let subject_raw = u64::from_le_bytes([
+                    bytecode[offset],
+                    bytecode[offset + 1],
+                    bytecode[offset + 2],
+                    bytecode[offset + 3],
+                    bytecode[offset + 4],
+                    bytecode[offset + 5],
+                    bytecode[offset + 6],
+                    bytecode[offset + 7],
+                ]);
+                offset += 8;
+                let predicate_raw = u64::from_le_bytes([
+                    bytecode[offset],
+                    bytecode[offset + 1],
+                    bytecode[offset + 2],
+                    bytecode[offset + 3],
+                    bytecode[offset + 4],
+                    bytecode[offset + 5],
+                    bytecode[offset + 6],
+                    bytecode[offset + 7],
+                ]);
+                offset += 8;
+                let object_raw = u64::from_le_bytes([
+                    bytecode[offset],
+                    bytecode[offset + 1],
+                    bytecode[offset + 2],
+                    bytecode[offset + 3],
+                    bytecode[offset + 4],
+                    bytecode[offset + 5],
+                    bytecode[offset + 6],
+                    bytecode[offset + 7],
+                ]);
+                offset += 8;
+
+                let subject = if subject_raw == 0 {
+                    None
+                } else {
+                    Some(subject_raw)
+                };
+                let predicate = if predicate_raw == 0 {
+                    None
+                } else {
+                    Some(predicate_raw)
+                };
+                let object = if object_raw == 0 {
+                    None
+                } else {
+                    Some(object_raw)
+                };
+
+                Operation::TripleQuery {
+                    subject,
+                    predicate,
+                    object,
+                }
+            }
+
+            OperationType::IndexScan => {
+                let index_type = match bytecode[offset] {
+                    0 => IndexScanType::SPO,
+                    1 => IndexScanType::POS,
+                    2 => IndexScanType::OSP,
+                    3 => IndexScanType::SOP,
+                    4 => IndexScanType::PSO,
+                    5 => IndexScanType::OPS,
+                    _ => return Err(anyhow!("Invalid index scan type: {}", bytecode[offset])),
+                };
+                offset += 1;
+
+                // Extract start_key (24 bytes for TripleKey)
+                let start_key_bytes = &bytecode[offset..offset + 24];
+                let start_key = TripleKey::from_bytes(start_key_bytes)?;
+                offset += 24;
+
+                // Extract end_key (24 bytes for TripleKey)
+                let end_key_bytes = &bytecode[offset..offset + 24];
+                let end_key = TripleKey::from_bytes(end_key_bytes)?;
+                offset += 24;
+
+                Operation::IndexScan {
+                    index_type,
+                    start_key,
+                    end_key,
+                }
+            }
+
+            OperationType::PageRead => {
+                let page_id = u64::from_le_bytes([
+                    bytecode[offset],
+                    bytecode[offset + 1],
+                    bytecode[offset + 2],
+                    bytecode[offset + 3],
+                    bytecode[offset + 4],
+                    bytecode[offset + 5],
+                    bytecode[offset + 6],
+                    bytecode[offset + 7],
+                ]);
+                offset += 8;
+                Operation::PageRead { page_id }
+            }
+
+            OperationType::PageWrite => {
+                let page_id = u64::from_le_bytes([
+                    bytecode[offset],
+                    bytecode[offset + 1],
+                    bytecode[offset + 2],
+                    bytecode[offset + 3],
+                    bytecode[offset + 4],
+                    bytecode[offset + 5],
+                    bytecode[offset + 6],
+                    bytecode[offset + 7],
+                ]);
+                offset += 8;
+                let data_len = u32::from_le_bytes([
+                    bytecode[offset],
+                    bytecode[offset + 1],
+                    bytecode[offset + 2],
+                    bytecode[offset + 3],
+                ]) as usize;
+                offset += 4;
+                let data = bytecode[offset..offset + data_len].to_vec();
+                offset += data_len;
+
+                Operation::PageWrite { page_id, data }
+            }
+
+            OperationType::Transaction => {
+                let transaction_id = u64::from_le_bytes([
+                    bytecode[offset],
+                    bytecode[offset + 1],
+                    bytecode[offset + 2],
+                    bytecode[offset + 3],
+                    bytecode[offset + 4],
+                    bytecode[offset + 5],
+                    bytecode[offset + 6],
+                    bytecode[offset + 7],
+                ]);
+                offset += 8;
+
+                let operation_type = match bytecode[offset] {
+                    0 => TransactionOperationType::Begin,
+                    1 => TransactionOperationType::Commit,
+                    2 => TransactionOperationType::Abort,
+                    _ => {
+                        return Err(anyhow!(
+                            "Invalid transaction operation type: {}",
+                            bytecode[offset]
+                        ))
+                    }
+                };
+                offset += 1;
+
+                Operation::Transaction {
+                    transaction_id,
+                    operation_type,
+                }
+            }
+
+            OperationType::Checkpoint => Operation::Checkpoint,
         };
 
         Ok((operation, offset))

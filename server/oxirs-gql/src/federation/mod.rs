@@ -13,6 +13,7 @@ pub mod dataset_federation;
 pub mod enhanced_manager;
 pub mod manager;
 pub mod query_planner;
+pub mod real_time_sync;
 pub mod schema_stitcher;
 pub mod service_discovery;
 
@@ -21,5 +22,6 @@ pub use dataset_federation::*;
 pub use enhanced_manager::*;
 pub use manager::*;
 pub use query_planner::*;
+pub use real_time_sync::*;
 pub use schema_stitcher::*;
 pub use service_discovery::*;

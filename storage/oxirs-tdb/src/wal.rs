@@ -17,6 +17,28 @@ use tracing::{debug, error, info, warn};
 use crate::mvcc::TransactionId;
 use crate::triple_store::TripleKey;
 
+/// Trait for storage operations needed by WAL recovery
+pub trait StorageInterface {
+    /// Apply an insert operation to the storage
+    fn apply_insert(
+        &self,
+        transaction_id: TransactionId,
+        key: TripleKey,
+        value: bool,
+    ) -> Result<()>;
+
+    /// Apply an update operation to the storage  
+    fn apply_update(
+        &self,
+        transaction_id: TransactionId,
+        key: TripleKey,
+        value: bool,
+    ) -> Result<()>;
+
+    /// Apply a delete operation to the storage
+    fn apply_delete(&self, transaction_id: TransactionId, key: TripleKey) -> Result<()>;
+}
+
 /// Log Sequence Number (LSN) type
 pub type LSN = u64;
 
@@ -242,6 +264,8 @@ pub struct WalManager {
     stats: Arc<Mutex<WalStats>>,
     /// Checkpoint in progress flag
     checkpoint_in_progress: Arc<Mutex<bool>>,
+    /// Storage interface for redo/undo operations
+    storage_interface: Option<Arc<dyn StorageInterface + Send + Sync>>,
 }
 
 impl WalManager {
@@ -287,6 +311,7 @@ impl WalManager {
             transaction_lsns: Arc::new(RwLock::new(HashMap::new())),
             stats: Arc::new(Mutex::new(WalStats::default())),
             checkpoint_in_progress: Arc::new(Mutex::new(false)),
+            storage_interface: None,
         })
     }
 
@@ -618,6 +643,11 @@ impl WalManager {
             .read()
             .map_err(|_| anyhow!("Failed to acquire current LSN lock"))?;
         Ok(*lsn)
+    }
+
+    /// Set the storage interface for redo/undo operations
+    pub fn set_storage_interface(&mut self, storage: Arc<dyn StorageInterface + Send + Sync>) {
+        self.storage_interface = Some(storage);
     }
 
     // Private helper methods
@@ -1065,29 +1095,41 @@ impl WalManager {
 
     fn redo_insert(
         &self,
-        _transaction_id: TransactionId,
-        _key: TripleKey,
-        _value: bool,
+        transaction_id: TransactionId,
+        key: TripleKey,
+        value: bool,
     ) -> Result<()> {
-        // In a full implementation, this would apply the insert to the storage engine
-        // For now, we'll just simulate success
+        if let Some(storage) = &self.storage_interface {
+            storage.apply_insert(transaction_id, key, value)?;
+            debug!("Applied redo insert for transaction {}", transaction_id);
+        } else {
+            warn!("No storage interface available for redo insert - operation skipped");
+        }
         Ok(())
     }
 
     fn redo_update(
         &self,
-        _transaction_id: TransactionId,
-        _key: TripleKey,
-        _value: bool,
+        transaction_id: TransactionId,
+        key: TripleKey,
+        value: bool,
     ) -> Result<()> {
-        // In a full implementation, this would apply the update to the storage engine
-        // For now, we'll just simulate success
+        if let Some(storage) = &self.storage_interface {
+            storage.apply_update(transaction_id, key, value)?;
+            debug!("Applied redo update for transaction {}", transaction_id);
+        } else {
+            warn!("No storage interface available for redo update - operation skipped");
+        }
         Ok(())
     }
 
-    fn redo_delete(&self, _transaction_id: TransactionId, _key: TripleKey) -> Result<()> {
-        // In a full implementation, this would apply the delete to the storage engine
-        // For now, we'll just simulate success
+    fn redo_delete(&self, transaction_id: TransactionId, key: TripleKey) -> Result<()> {
+        if let Some(storage) = &self.storage_interface {
+            storage.apply_delete(transaction_id, key)?;
+            debug!("Applied redo delete for transaction {}", transaction_id);
+        } else {
+            warn!("No storage interface available for redo delete - operation skipped");
+        }
         Ok(())
     }
 

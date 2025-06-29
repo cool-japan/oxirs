@@ -29,6 +29,8 @@ use tokio::sync::{mpsc, RwLock, Semaphore};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
+use crate::backend::StreamBackend;
+
 /// Re-export commonly used types for convenience
 pub use backend_optimizer::{
     BackendOptimizer, BackendPerformance, BackendRecommendation, ConsistencyLevel, CostModel,
@@ -43,11 +45,13 @@ pub use connection_pool::{
     ConnectionFactory, ConnectionPool, DetailedPoolMetrics, LoadBalancingStrategy, PoolConfig,
     PoolStatus,
 };
+pub use delta::{BatchDeltaProcessor, DeltaComputer, DeltaProcessor};
 pub use event::{
     EventCategory, EventMetadata, EventPriority, IsolationLevel, QueryResult, SchemaChangeType,
     SchemaType, SparqlOperationType, StreamEvent,
 };
 pub use failover::{ConnectionEndpoint, FailoverConfig, FailoverManager};
+pub use patch::{PatchParser, PatchSerializer};
 pub use sparql_streaming::{
     ContinuousQueryManager, QueryManagerConfig, QueryMetadata, QueryResultChannel,
     QueryResultUpdate, UpdateType,
@@ -94,7 +98,7 @@ pub mod webhook;
 /// Enhanced stream configuration with advanced features
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamConfig {
-    pub backend: StreamBackend,
+    pub backend: StreamBackendType,
     pub topic: String,
     pub batch_size: usize,
     pub flush_interval_ms: u64,
@@ -204,7 +208,7 @@ pub struct MonitoringConfig {
 
 /// Enhanced streaming backend options
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum StreamBackend {
+pub enum StreamBackendType {
     #[cfg(feature = "kafka")]
     Kafka {
         brokers: Vec<String>,
@@ -317,10 +321,13 @@ struct ProducerStats {
 
 /// Memory-based producer for testing and development
 // Global shared storage for memory backend events
-static MEMORY_EVENTS: std::sync::OnceLock<Arc<RwLock<Vec<(DateTime<Utc>, StreamEvent)>>>> = std::sync::OnceLock::new();
+static MEMORY_EVENTS: std::sync::OnceLock<Arc<RwLock<Vec<(DateTime<Utc>, StreamEvent)>>>> =
+    std::sync::OnceLock::new();
 
 pub fn get_memory_events() -> Arc<RwLock<Vec<(DateTime<Utc>, StreamEvent)>>> {
-    MEMORY_EVENTS.get_or_init(|| Arc::new(RwLock::new(Vec::new()))).clone()
+    MEMORY_EVENTS
+        .get_or_init(|| Arc::new(RwLock::new(Vec::new())))
+        .clone()
 }
 
 /// Clear the global memory storage (for testing)
@@ -330,18 +337,27 @@ pub async fn clear_memory_events() {
 }
 
 struct MemoryProducer {
-    events: Arc<RwLock<Vec<(DateTime<Utc>, StreamEvent)>>>,
-    max_size: Option<usize>,
-    persistence: bool,
+    backend: Box<dyn StreamBackend + Send + Sync>,
+    topic: String,
     stats: ProducerStats,
 }
 
 impl MemoryProducer {
-    fn new(max_size: Option<usize>, persistence: bool) -> Self {
+    fn new(_max_size: Option<usize>, _persistence: bool) -> Self {
         Self {
-            events: get_memory_events(),
-            max_size,
-            persistence,
+            backend: Box::new(backend::memory::MemoryBackend::new()),
+            topic: "oxirs-stream".to_string(), // Default topic
+            stats: ProducerStats {
+                backend_type: "memory".to_string(),
+                ..Default::default()
+            },
+        }
+    }
+
+    fn with_topic(topic: String) -> Self {
+        Self {
+            backend: Box::new(backend::memory::MemoryBackend::new()),
+            topic,
             stats: ProducerStats {
                 backend_type: "memory".to_string(),
                 ..Default::default()
@@ -351,16 +367,26 @@ impl MemoryProducer {
 
     async fn publish(&mut self, event: StreamEvent) -> Result<()> {
         let start_time = Instant::now();
-        let mut events = self.events.write().await;
 
-        // Enforce max size if specified
-        if let Some(max_size) = self.max_size {
-            while events.len() >= max_size {
-                events.remove(0);
-            }
-        }
+        // Use the backend implementation
+        self.backend
+            .as_mut()
+            .connect()
+            .await
+            .map_err(|e| anyhow!("Backend connect failed: {}", e))?;
 
-        events.push((Utc::now(), event));
+        // Create topic if it doesn't exist
+        let topic_name = crate::types::TopicName::new(self.topic.clone());
+        self.backend
+            .create_topic(&topic_name, 1)
+            .await
+            .map_err(|e| anyhow!("Topic creation failed: {}", e))?;
+
+        // Send event through backend
+        self.backend
+            .send_event(&topic_name, event)
+            .await
+            .map_err(|e| anyhow!("Send event failed: {}", e))?;
 
         // Update stats
         self.stats.events_published += 1;
@@ -369,19 +395,14 @@ impl MemoryProducer {
         self.stats.avg_latency_ms = (self.stats.avg_latency_ms + latency as f64) / 2.0;
         self.stats.last_publish = Some(Utc::now());
 
-        println!("Memory producer: published event (total: {})", events.len());
+        debug!("Memory producer: published event via backend");
         Ok(())
     }
 
     async fn flush(&mut self) -> Result<()> {
-        if self.persistence {
-            // In a real implementation, this would persist to disk
-            debug!(
-                "Memory producer: persisted {} events",
-                self.events.read().await.len()
-            );
-        }
+        // Backend handles flushing internally
         self.stats.flush_count += 1;
+        debug!("Memory producer: flush completed");
         Ok(())
     }
 
@@ -412,13 +433,13 @@ impl StreamProducer {
         // Initialize backend-specific producer
         let backend_producer = match &config.backend {
             #[cfg(feature = "kafka")]
-            StreamBackend::Kafka {
+            StreamBackendType::Kafka {
                 brokers,
                 security_protocol,
                 sasl_config,
             } => {
                 let stream_config = crate::StreamConfig {
-                    backend: crate::StreamBackend::Kafka {
+                    backend: crate::StreamBackendType::Kafka {
                         brokers: brokers.clone(),
                         security_protocol: security_protocol.clone(),
                         sasl_config: sasl_config.clone(),
@@ -442,13 +463,13 @@ impl StreamProducer {
                 BackendProducer::Kafka(producer)
             }
             #[cfg(feature = "nats")]
-            StreamBackend::Nats {
+            StreamBackendType::Nats {
                 url,
                 cluster_urls,
                 jetstream_config,
             } => {
                 let stream_config = crate::StreamConfig {
-                    backend: crate::StreamBackend::Nats {
+                    backend: crate::StreamBackendType::Nats {
                         url: url.clone(),
                         cluster_urls: cluster_urls.clone(),
                         jetstream_config: jetstream_config.clone(),
@@ -472,13 +493,13 @@ impl StreamProducer {
                 BackendProducer::Nats(producer)
             }
             #[cfg(feature = "redis")]
-            StreamBackend::Redis {
+            StreamBackendType::Redis {
                 url,
                 cluster_urls,
                 pool_size,
             } => {
                 let stream_config = crate::StreamConfig {
-                    backend: crate::StreamBackend::Redis {
+                    backend: crate::StreamBackendType::Redis {
                         url: url.clone(),
                         cluster_urls: cluster_urls.clone(),
                         pool_size: *pool_size,
@@ -502,13 +523,13 @@ impl StreamProducer {
                 BackendProducer::Redis(producer)
             }
             #[cfg(feature = "kinesis")]
-            StreamBackend::Kinesis {
+            StreamBackendType::Kinesis {
                 region,
                 stream_name,
                 credentials,
             } => {
                 let stream_config = crate::StreamConfig {
-                    backend: crate::StreamBackend::Kinesis {
+                    backend: crate::StreamBackendType::Kinesis {
                         region: region.clone(),
                         stream_name: stream_name.clone(),
                         credentials: credentials.clone(),
@@ -532,12 +553,12 @@ impl StreamProducer {
                 BackendProducer::Kinesis(producer)
             }
             #[cfg(feature = "pulsar")]
-            StreamBackend::Pulsar {
+            StreamBackendType::Pulsar {
                 service_url,
                 auth_config,
             } => {
                 let stream_config = crate::StreamConfig {
-                    backend: crate::StreamBackend::Pulsar {
+                    backend: crate::StreamBackendType::Pulsar {
                         service_url: service_url.clone(),
                         auth_config: auth_config.clone(),
                     },
@@ -559,10 +580,10 @@ impl StreamProducer {
                 producer.connect().await?;
                 BackendProducer::Pulsar(producer)
             }
-            StreamBackend::Memory {
+            StreamBackendType::Memory {
                 max_size,
                 persistence,
-            } => BackendProducer::Memory(MemoryProducer::new(*max_size, *persistence)),
+            } => BackendProducer::Memory(MemoryProducer::with_topic(config.topic.clone())),
             _ => {
                 return Err(anyhow!("Backend not supported or feature not enabled"));
             }
@@ -929,16 +950,18 @@ struct ConsumerStats {
 
 /// Memory-based consumer for testing and development
 struct MemoryConsumer {
-    events: Arc<RwLock<Vec<(DateTime<Utc>, StreamEvent)>>>,
-    current_index: usize,
+    backend: Box<dyn StreamBackend + Send + Sync>,
+    topic: String,
+    current_offset: u64,
     stats: ConsumerStats,
 }
 
 impl MemoryConsumer {
     fn new() -> Self {
         Self {
-            events: get_memory_events(),
-            current_index: 0, // Always start from beginning for new consumer
+            backend: Box::new(backend::memory::MemoryBackend::new()),
+            topic: "oxirs-stream".to_string(),
+            current_offset: 0,
             stats: ConsumerStats {
                 backend_type: "memory".to_string(),
                 ..Default::default()
@@ -946,26 +969,43 @@ impl MemoryConsumer {
         }
     }
 
-    /// Set events for testing (simulates published events)
-    async fn set_events(&mut self, events: Vec<(DateTime<Utc>, StreamEvent)>) {
-        *self.events.write().await = events;
-        self.current_index = 0;
+    fn with_topic(topic: String) -> Self {
+        Self {
+            backend: Box::new(backend::memory::MemoryBackend::new()),
+            topic,
+            current_offset: 0,
+            stats: ConsumerStats {
+                backend_type: "memory".to_string(),
+                ..Default::default()
+            },
+        }
     }
 
     async fn consume(&mut self) -> Result<Option<StreamEvent>> {
         let start_time = Instant::now();
-        let events = self.events.read().await;
 
-        println!(
-            "Memory consumer: checking for events. Total: {}, current_index: {}",
-            events.len(),
-            self.current_index
-        );
+        // Use the backend implementation
+        self.backend
+            .as_mut()
+            .connect()
+            .await
+            .map_err(|e| anyhow!("Backend connect failed: {}", e))?;
 
-        if self.current_index < events.len() {
-            let (_, event) = &events[self.current_index];
-            let event_clone = event.clone();
-            self.current_index += 1;
+        // Try to receive events from the backend
+        let topic_name = crate::types::TopicName::new(self.topic.clone());
+        let events = self
+            .backend
+            .receive_events(
+                &topic_name,
+                None, // No consumer group for now
+                crate::types::StreamPosition::Offset(self.current_offset),
+                1, // Get one event at a time
+            )
+            .await
+            .map_err(|e| anyhow!("Receive events failed: {}", e))?;
+
+        if let Some((event, offset)) = events.first() {
+            self.current_offset = offset.value() + 1;
 
             // Update stats
             self.stats.events_consumed += 1;
@@ -976,14 +1016,10 @@ impl MemoryConsumer {
                 (self.stats.avg_processing_time_ms + processing_time as f64) / 2.0;
             self.stats.last_message = Some(Utc::now());
 
-            println!(
-                "Memory consumer: consumed event {}/{}",
-                self.current_index,
-                events.len()
-            );
-            Ok(Some(event_clone))
+            debug!("Memory consumer: consumed event via backend");
+            Ok(Some(event.clone()))
         } else {
-            println!("Memory consumer: no events available");
+            debug!("Memory consumer: no events available");
             Ok(None)
         }
     }
@@ -994,7 +1030,7 @@ impl MemoryConsumer {
 
     /// Reset consumer position for testing
     fn reset(&mut self) {
-        self.current_index = 0;
+        self.current_offset = 0;
     }
 }
 
@@ -1028,13 +1064,13 @@ impl StreamConsumer {
         // Initialize backend-specific consumer
         let backend_consumer = match &config.backend {
             #[cfg(feature = "redis")]
-            StreamBackend::Redis {
+            StreamBackendType::Redis {
                 url,
                 cluster_urls,
                 pool_size,
             } => {
                 let stream_config = crate::StreamConfig {
-                    backend: crate::StreamBackend::Redis {
+                    backend: crate::StreamBackendType::Redis {
                         url: url.clone(),
                         cluster_urls: cluster_urls.clone(),
                         pool_size: *pool_size,
@@ -1058,13 +1094,13 @@ impl StreamConsumer {
                 BackendConsumer::Redis(consumer)
             }
             #[cfg(feature = "kinesis")]
-            StreamBackend::Kinesis {
+            StreamBackendType::Kinesis {
                 region,
                 stream_name,
                 credentials,
             } => {
                 let stream_config = crate::StreamConfig {
-                    backend: crate::StreamBackend::Kinesis {
+                    backend: crate::StreamBackendType::Kinesis {
                         region: region.clone(),
                         stream_name: stream_name.clone(),
                         credentials: credentials.clone(),
@@ -1088,12 +1124,12 @@ impl StreamConsumer {
                 BackendConsumer::Kinesis(consumer)
             }
             #[cfg(feature = "pulsar")]
-            StreamBackend::Pulsar {
+            StreamBackendType::Pulsar {
                 service_url,
                 auth_config,
             } => {
                 let stream_config = crate::StreamConfig {
-                    backend: crate::StreamBackend::Pulsar {
+                    backend: crate::StreamBackendType::Pulsar {
                         service_url: service_url.clone(),
                         auth_config: auth_config.clone(),
                     },
@@ -1115,10 +1151,10 @@ impl StreamConsumer {
                 consumer.connect().await?;
                 BackendConsumer::Pulsar(consumer)
             }
-            StreamBackend::Memory {
+            StreamBackendType::Memory {
                 max_size: _,
                 persistence: _,
-            } => BackendConsumer::Memory(MemoryConsumer::new()),
+            } => BackendConsumer::Memory(MemoryConsumer::with_topic(config.topic.clone())),
             _ => {
                 return Err(anyhow!("Backend not supported or feature not enabled"));
             }
@@ -1335,19 +1371,11 @@ impl StreamConsumer {
         }
     }
 
-    /// Set test events for memory backend (for testing)
-    pub async fn set_test_events(&mut self, events: Vec<StreamEvent>) -> Result<()> {
-        match &mut self.backend_consumer {
-            BackendConsumer::Memory(consumer) => {
-                let timestamped_events: Vec<(DateTime<Utc>, StreamEvent)> = events
-                    .into_iter()
-                    .map(|event| (Utc::now(), event))
-                    .collect();
-                consumer.set_events(timestamped_events).await;
-                Ok(())
-            }
-            _ => Err(anyhow!("Set test events only supported for memory backend")),
-        }
+    /// Set test events for memory backend (for testing) - deprecated with backend implementation
+    pub async fn set_test_events(&mut self, _events: Vec<StreamEvent>) -> Result<()> {
+        // This method is deprecated with the new backend implementation
+        // Events should be published through the producer instead
+        Err(anyhow!("set_test_events is deprecated with backend implementation - use producer to publish events"))
     }
 }
 
@@ -1441,7 +1469,7 @@ impl Default for RdfPatch {
 impl Default for StreamConfig {
     fn default() -> Self {
         Self {
-            backend: StreamBackend::Memory {
+            backend: StreamBackendType::Memory {
                 max_size: Some(10000),
                 persistence: false,
             },
@@ -1534,7 +1562,7 @@ impl StreamConfig {
     #[cfg(feature = "redis")]
     pub fn redis(url: String) -> Self {
         Self {
-            backend: StreamBackend::Redis {
+            backend: StreamBackendType::Redis {
                 url,
                 cluster_urls: None,
                 pool_size: Some(10),
@@ -1547,7 +1575,7 @@ impl StreamConfig {
     #[cfg(feature = "kinesis")]
     pub fn kinesis(region: String, stream_name: String) -> Self {
         Self {
-            backend: StreamBackend::Kinesis {
+            backend: StreamBackendType::Kinesis {
                 region,
                 stream_name,
                 credentials: None,
@@ -1559,7 +1587,7 @@ impl StreamConfig {
     /// Create a memory configuration for testing
     pub fn memory() -> Self {
         Self {
-            backend: StreamBackend::Memory {
+            backend: StreamBackendType::Memory {
                 max_size: Some(1000),
                 persistence: false,
             },
@@ -1603,11 +1631,12 @@ pub struct Stream {
 impl Stream {
     /// Create a new unified stream instance
     pub async fn new(config: StreamConfig) -> Result<Self> {
+        // Note: Commented out automatic clearing for performance tests
         // Clear memory events if using memory backend (important for testing)
-        if matches!(config.backend, StreamBackend::Memory { .. }) {
-            clear_memory_events().await;
-        }
-        
+        // if matches!(config.backend, StreamBackendType::Memory { .. }) {
+        //     clear_memory_events().await;
+        // }
+
         let producer = StreamProducer::new(config.clone()).await?;
         let consumer = StreamConsumer::new(config).await?;
 

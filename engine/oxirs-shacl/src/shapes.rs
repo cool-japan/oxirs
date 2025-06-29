@@ -2765,6 +2765,727 @@ impl ShapeFactory {
     }
 }
 
+/// Shape validator for validating that shapes graphs are well-formed
+#[derive(Debug)]
+pub struct ShapeValidator {
+    /// Enable strict validation mode
+    strict_mode: bool,
+    /// Maximum recursion depth for shape reference validation
+    max_depth: usize,
+}
+
+impl ShapeValidator {
+    /// Create a new shape validator
+    pub fn new() -> Self {
+        Self {
+            strict_mode: false,
+            max_depth: 20,
+        }
+    }
+
+    /// Create a new validator in strict mode
+    pub fn new_strict() -> Self {
+        Self {
+            strict_mode: true,
+            max_depth: 20,
+        }
+    }
+
+    /// Set maximum recursion depth
+    pub fn with_max_depth(mut self, max_depth: usize) -> Self {
+        self.max_depth = max_depth;
+        self
+    }
+
+    /// Validate a collection of shapes
+    pub fn validate_shapes(&self, shapes: &[Shape]) -> Result<ShapeValidationReport> {
+        let mut report = ShapeValidationReport::new();
+        let mut shape_map = HashMap::new();
+
+        // Build shape map for reference validation
+        for shape in shapes {
+            shape_map.insert(shape.id.clone(), shape);
+        }
+
+        // Validate each shape
+        for shape in shapes {
+            match self.validate_single_shape(shape, &shape_map, 0) {
+                Ok(shape_report) => {
+                    report.add_shape_result(shape_report);
+                }
+                Err(e) => {
+                    let mut shape_report = SingleShapeValidationReport::new(shape.id.clone());
+                    shape_report.add_error(format!("Critical validation error: {}", e));
+                    report.add_shape_result(shape_report);
+                }
+            }
+        }
+
+        // Validate shape dependencies and circular references
+        self.validate_shape_dependencies(&shape_map, &mut report)?;
+
+        Ok(report)
+    }
+
+    /// Validate a single shape
+    fn validate_single_shape(
+        &self,
+        shape: &Shape,
+        shape_map: &HashMap<ShapeId, &Shape>,
+        depth: usize,
+    ) -> Result<SingleShapeValidationReport> {
+        if depth > self.max_depth {
+            return Err(ShaclError::ShapeValidation(format!(
+                "Maximum validation depth {} exceeded for shape {}",
+                self.max_depth, shape.id
+            )));
+        }
+
+        let mut report = SingleShapeValidationReport::new(shape.id.clone());
+
+        // Validate shape structure
+        self.validate_shape_structure(shape, &mut report);
+
+        // Validate targets
+        self.validate_shape_targets(shape, &mut report);
+
+        // Validate property path (for property shapes)
+        if shape.is_property_shape() {
+            self.validate_property_path(shape, &mut report);
+        }
+
+        // Validate constraints
+        self.validate_shape_constraints(shape, shape_map, &mut report, depth);
+
+        // Validate metadata consistency
+        self.validate_shape_metadata(shape, &mut report);
+
+        Ok(report)
+    }
+
+    /// Validate basic shape structure
+    fn validate_shape_structure(&self, shape: &Shape, report: &mut SingleShapeValidationReport) {
+        // Check shape ID validity
+        if shape.id.as_str().is_empty() {
+            report.add_error("Shape ID cannot be empty".to_string());
+        }
+
+        // Validate IRI format
+        if let Err(_) = url::Url::parse(shape.id.as_str()) {
+            report.add_error(format!("Invalid shape IRI: {}", shape.id));
+        }
+
+        // Property shapes must have a path
+        if shape.is_property_shape() && shape.path.is_none() {
+            report.add_error("Property shape must have a path (sh:path)".to_string());
+        }
+
+        // Node shapes should not have a path
+        if shape.is_node_shape() && shape.path.is_some() {
+            report.add_warning("Node shape should not have a path property".to_string());
+        }
+
+        // Check for conflicting shape types
+        if shape.shape_type == ShapeType::NodeShape && shape.path.is_some() {
+            report.add_error("Node shape cannot have a property path".to_string());
+        }
+    }
+
+    /// Validate shape targets
+    fn validate_shape_targets(&self, shape: &Shape, report: &mut SingleShapeValidationReport) {
+        if shape.targets.is_empty() && shape.is_node_shape() {
+            report.add_warning("Node shape has no targets defined".to_string());
+        }
+
+        // Validate each target
+        for target in &shape.targets {
+            self.validate_target(target, report);
+        }
+
+        // Check for conflicting targets
+        let has_class_targets = shape.targets.iter().any(|t| matches!(t, Target::Class(_)));
+        let has_node_targets = shape.targets.iter().any(|t| matches!(t, Target::Node(_)));
+
+        if has_class_targets && has_node_targets {
+            report.add_warning(
+                "Shape has both class and node targets, which may be inefficient".to_string(),
+            );
+        }
+    }
+
+    /// Validate a single target
+    fn validate_target(&self, target: &Target, report: &mut SingleShapeValidationReport) {
+        match target {
+            Target::Class(class_iri) => {
+                if let Err(_) = url::Url::parse(class_iri.as_str()) {
+                    report.add_error(format!("Invalid class IRI in target: {}", class_iri));
+                }
+            }
+            Target::Node(node_term) => {
+                if let Term::NamedNode(node_iri) = node_term {
+                    if let Err(_) = url::Url::parse(node_iri.as_str()) {
+                        report.add_error(format!("Invalid node IRI in target: {}", node_iri));
+                    }
+                }
+            }
+            Target::ObjectsOf(prop_iri) => {
+                if let Err(_) = url::Url::parse(prop_iri.as_str()) {
+                    report.add_error(format!(
+                        "Invalid property IRI in objectsOf target: {}",
+                        prop_iri
+                    ));
+                }
+            }
+            Target::SubjectsOf(prop_iri) => {
+                if let Err(_) = url::Url::parse(prop_iri.as_str()) {
+                    report.add_error(format!(
+                        "Invalid property IRI in subjectsOf target: {}",
+                        prop_iri
+                    ));
+                }
+            }
+            Target::Sparql(sparql_target) => {
+                self.validate_sparql_target(sparql_target, report);
+            }
+        }
+    }
+
+    /// Validate SPARQL target
+    fn validate_sparql_target(
+        &self,
+        _sparql_target: &crate::targets::SparqlTarget,
+        report: &mut SingleShapeValidationReport,
+    ) {
+        // Basic SPARQL target validation
+        // TODO: Implement SPARQL query syntax validation
+        report.add_info("SPARQL target validation not fully implemented".to_string());
+    }
+
+    /// Validate property path
+    fn validate_property_path(&self, shape: &Shape, report: &mut SingleShapeValidationReport) {
+        if let Some(ref path) = shape.path {
+            self.validate_path_structure(path, report, 0);
+        }
+    }
+
+    /// Validate property path structure recursively
+    fn validate_path_structure(
+        &self,
+        path: &PropertyPath,
+        report: &mut SingleShapeValidationReport,
+        depth: usize,
+    ) {
+        if depth > 10 {
+            report.add_error("Property path nesting too deep".to_string());
+            return;
+        }
+
+        match path {
+            PropertyPath::Predicate(predicate) => {
+                if let Err(_) = url::Url::parse(predicate.as_str()) {
+                    report.add_error(format!("Invalid predicate IRI in path: {}", predicate));
+                }
+            }
+            PropertyPath::Inverse(inner_path) => {
+                self.validate_path_structure(inner_path, report, depth + 1);
+            }
+            PropertyPath::Sequence(paths) => {
+                if paths.is_empty() {
+                    report.add_error("Sequence path cannot be empty".to_string());
+                } else if paths.len() == 1 {
+                    report
+                        .add_warning("Sequence path with single element is redundant".to_string());
+                }
+                for inner_path in paths {
+                    self.validate_path_structure(inner_path, report, depth + 1);
+                }
+            }
+            PropertyPath::Alternative(paths) => {
+                if paths.is_empty() {
+                    report.add_error("Alternative path cannot be empty".to_string());
+                } else if paths.len() == 1 {
+                    report.add_warning(
+                        "Alternative path with single element is redundant".to_string(),
+                    );
+                }
+                for inner_path in paths {
+                    self.validate_path_structure(inner_path, report, depth + 1);
+                }
+            }
+            PropertyPath::ZeroOrMore(inner_path)
+            | PropertyPath::OneOrMore(inner_path)
+            | PropertyPath::ZeroOrOne(inner_path) => {
+                self.validate_path_structure(inner_path, report, depth + 1);
+            }
+        }
+    }
+
+    /// Validate shape constraints
+    fn validate_shape_constraints(
+        &self,
+        shape: &Shape,
+        shape_map: &HashMap<ShapeId, &Shape>,
+        report: &mut SingleShapeValidationReport,
+        depth: usize,
+    ) {
+        // Validate constraint compatibility
+        self.validate_constraint_compatibility(shape, report);
+
+        // Validate individual constraints
+        for (component_id, constraint) in &shape.constraints {
+            self.validate_single_constraint(constraint, component_id, shape_map, report, depth);
+        }
+
+        // Validate constraint combinations
+        self.validate_constraint_combinations(shape, report);
+    }
+
+    /// Validate constraint compatibility with shape type
+    fn validate_constraint_compatibility(
+        &self,
+        shape: &Shape,
+        report: &mut SingleShapeValidationReport,
+    ) {
+        for (component_id, constraint) in &shape.constraints {
+            match constraint {
+                Constraint::MinCount(_) | Constraint::MaxCount(_) => {
+                    if shape.is_node_shape() && shape.path.is_none() {
+                        report.add_error(format!(
+                            "Cardinality constraint {} is only valid for property shapes",
+                            component_id
+                        ));
+                    }
+                }
+                Constraint::MinLength(_) | Constraint::MaxLength(_) | Constraint::Pattern(_) => {
+                    // These are valid for both node and property shapes
+                }
+                Constraint::Class(_) | Constraint::Datatype(_) | Constraint::NodeKind(_) => {
+                    // These are valid for both node and property shapes
+                }
+                _ => {
+                    // Other constraints are generally valid for both types
+                }
+            }
+        }
+    }
+
+    /// Validate a single constraint
+    fn validate_single_constraint(
+        &self,
+        constraint: &Constraint,
+        component_id: &ConstraintComponentId,
+        shape_map: &HashMap<ShapeId, &Shape>,
+        report: &mut SingleShapeValidationReport,
+        depth: usize,
+    ) {
+        use crate::constraints::Constraint;
+
+        match constraint {
+            Constraint::Class(class_constraint) => {
+                if let Err(_) = url::Url::parse(class_constraint.class_iri.as_str()) {
+                    report.add_error(format!("Invalid class IRI: {}", class_constraint.class_iri));
+                }
+            }
+            Constraint::Datatype(datatype_constraint) => {
+                if let Err(_) = url::Url::parse(datatype_constraint.datatype_iri.as_str()) {
+                    report.add_error(format!(
+                        "Invalid datatype IRI: {}",
+                        datatype_constraint.datatype_iri
+                    ));
+                }
+            }
+            Constraint::MinCount(min_count_constraint) => {
+                if min_count_constraint.min_count > 1000000 {
+                    report.add_warning(
+                        "Very large minCount value may impact performance".to_string(),
+                    );
+                }
+            }
+            Constraint::MaxCount(max_count_constraint) => {
+                if max_count_constraint.max_count > 1000000 {
+                    report.add_warning(
+                        "Very large maxCount value may impact performance".to_string(),
+                    );
+                }
+            }
+            Constraint::Pattern(pattern_constraint) => {
+                match regex::Regex::new(&pattern_constraint.pattern) {
+                    Err(e) => {
+                        report.add_error(format!("Invalid regex pattern: {}", e));
+                    }
+                    Ok(_) => {
+                        if pattern_constraint.pattern.len() > 1000 {
+                            report.add_warning(
+                                "Very long regex pattern may impact performance".to_string(),
+                            );
+                        }
+                    }
+                }
+            }
+            Constraint::Node(node_constraint) => {
+                self.validate_shape_reference(&node_constraint.shape, shape_map, report, depth + 1);
+            }
+            Constraint::QualifiedValueShape(qvs_constraint) => {
+                self.validate_shape_reference(&qvs_constraint.shape, shape_map, report, depth + 1);
+
+                if let (Some(min), Some(max)) = (
+                    qvs_constraint.qualified_min_count,
+                    qvs_constraint.qualified_max_count,
+                ) {
+                    if min > max {
+                        report.add_error(
+                            "qualifiedMinCount cannot be greater than qualifiedMaxCount"
+                                .to_string(),
+                        );
+                    }
+                }
+            }
+            Constraint::And(and_constraint) => {
+                if and_constraint.shapes.is_empty() {
+                    report.add_error("AND constraint cannot have empty shape list".to_string());
+                } else if and_constraint.shapes.len() == 1 {
+                    report.add_warning("AND constraint with single shape is redundant".to_string());
+                }
+                for shape_ref in &and_constraint.shapes {
+                    self.validate_shape_reference(shape_ref, shape_map, report, depth + 1);
+                }
+            }
+            Constraint::Or(or_constraint) => {
+                if or_constraint.shapes.is_empty() {
+                    report.add_error("OR constraint cannot have empty shape list".to_string());
+                } else if or_constraint.shapes.len() == 1 {
+                    report.add_warning("OR constraint with single shape is redundant".to_string());
+                }
+                for shape_ref in &or_constraint.shapes {
+                    self.validate_shape_reference(shape_ref, shape_map, report, depth + 1);
+                }
+            }
+            Constraint::Xone(xone_constraint) => {
+                if xone_constraint.shapes.len() < 2 {
+                    report.add_error("XONE constraint must have at least 2 shapes".to_string());
+                }
+                for shape_ref in &xone_constraint.shapes {
+                    self.validate_shape_reference(shape_ref, shape_map, report, depth + 1);
+                }
+            }
+            Constraint::Not(not_constraint) => {
+                self.validate_shape_reference(&not_constraint.shape, shape_map, report, depth + 1);
+            }
+            Constraint::Sparql(sparql_constraint) => {
+                self.validate_sparql_constraint(sparql_constraint, report);
+            }
+            _ => {
+                // Other constraints have basic validation
+            }
+        }
+    }
+
+    /// Validate shape reference
+    fn validate_shape_reference(
+        &self,
+        shape_ref: &ShapeId,
+        shape_map: &HashMap<ShapeId, &Shape>,
+        report: &mut SingleShapeValidationReport,
+        depth: usize,
+    ) {
+        if depth > self.max_depth {
+            report.add_error(format!(
+                "Maximum reference depth exceeded for shape {}",
+                shape_ref
+            ));
+            return;
+        }
+
+        if !shape_map.contains_key(shape_ref) {
+            report.add_error(format!("Referenced shape not found: {}", shape_ref));
+        } else if let Some(referenced_shape) = shape_map.get(shape_ref) {
+            // Basic validation of referenced shape
+            if referenced_shape.deactivated {
+                report.add_warning(format!("Referenced shape is deactivated: {}", shape_ref));
+            }
+        }
+    }
+
+    /// Validate SPARQL constraint
+    fn validate_sparql_constraint(
+        &self,
+        _sparql_constraint: &crate::sparql::SparqlConstraint,
+        report: &mut SingleShapeValidationReport,
+    ) {
+        // Basic SPARQL constraint validation
+        // TODO: Implement SPARQL query syntax validation
+        report.add_info("SPARQL constraint validation not fully implemented".to_string());
+    }
+
+    /// Validate constraint combinations
+    fn validate_constraint_combinations(
+        &self,
+        shape: &Shape,
+        report: &mut SingleShapeValidationReport,
+    ) {
+        let mut has_min_count = false;
+        let mut has_max_count = false;
+        let mut min_count_value = 0;
+        let mut max_count_value = u32::MAX;
+
+        let mut has_min_length = false;
+        let mut has_max_length = false;
+        let mut min_length_value = 0;
+        let mut max_length_value = u32::MAX;
+
+        // Check for conflicting constraints
+        for (_, constraint) in &shape.constraints {
+            match constraint {
+                Constraint::MinCount(min_count) => {
+                    has_min_count = true;
+                    min_count_value = min_count.min_count;
+                }
+                Constraint::MaxCount(max_count) => {
+                    has_max_count = true;
+                    max_count_value = max_count.max_count;
+                }
+                Constraint::MinLength(min_length) => {
+                    has_min_length = true;
+                    min_length_value = min_length.min_length;
+                }
+                Constraint::MaxLength(max_length) => {
+                    has_max_length = true;
+                    max_length_value = max_length.max_length;
+                }
+                _ => {}
+            }
+        }
+
+        // Validate count constraints
+        if has_min_count && has_max_count && min_count_value > max_count_value {
+            report.add_error("minCount cannot be greater than maxCount".to_string());
+        }
+
+        // Validate length constraints
+        if has_min_length && has_max_length && min_length_value > max_length_value {
+            report.add_error("minLength cannot be greater than maxLength".to_string());
+        }
+
+        // Check for redundant constraints
+        if has_min_count && min_count_value == 0 {
+            report.add_warning("minCount of 0 is redundant".to_string());
+        }
+
+        if has_min_length && min_length_value == 0 {
+            report.add_warning("minLength of 0 is redundant".to_string());
+        }
+    }
+
+    /// Validate shape metadata
+    fn validate_shape_metadata(&self, shape: &Shape, report: &mut SingleShapeValidationReport) {
+        // Check for reasonable label and description lengths
+        if let Some(ref label) = shape.label {
+            if label.len() > 200 {
+                report.add_warning("Shape label is very long".to_string());
+            }
+            if label.is_empty() {
+                report.add_warning("Shape label is empty".to_string());
+            }
+        }
+
+        if let Some(ref description) = shape.description {
+            if description.len() > 2000 {
+                report.add_warning("Shape description is very long".to_string());
+            }
+        }
+
+        // Validate priority if set
+        if let Some(priority) = shape.priority {
+            if priority < -1000 || priority > 1000 {
+                report.add_warning("Shape priority is outside reasonable range".to_string());
+            }
+        }
+    }
+
+    /// Validate shape dependencies and circular references
+    fn validate_shape_dependencies(
+        &self,
+        shape_map: &HashMap<ShapeId, &Shape>,
+        report: &mut ShapeValidationReport,
+    ) -> Result<()> {
+        // Build dependency graph
+        let mut dependencies: HashMap<ShapeId, Vec<ShapeId>> = HashMap::new();
+
+        for (shape_id, shape) in shape_map {
+            let mut deps = Vec::new();
+
+            // Extract dependencies from constraints
+            for (_, constraint) in &shape.constraints {
+                self.extract_shape_dependencies(constraint, &mut deps);
+            }
+
+            // Extract dependencies from inheritance
+            deps.extend(shape.extends.clone());
+
+            dependencies.insert(shape_id.clone(), deps);
+        }
+
+        // Check for circular dependencies
+        for shape_id in shape_map.keys() {
+            if self.has_circular_dependency(shape_id, &dependencies, &mut HashSet::new()) {
+                report.add_global_error(format!(
+                    "Circular dependency detected involving shape: {}",
+                    shape_id
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Extract shape dependencies from a constraint
+    fn extract_shape_dependencies(&self, constraint: &Constraint, deps: &mut Vec<ShapeId>) {
+        match constraint {
+            Constraint::Node(node_constraint) => {
+                deps.push(node_constraint.shape.clone());
+            }
+            Constraint::QualifiedValueShape(qvs_constraint) => {
+                deps.push(qvs_constraint.shape.clone());
+            }
+            Constraint::And(and_constraint) => {
+                deps.extend(and_constraint.shapes.clone());
+            }
+            Constraint::Or(or_constraint) => {
+                deps.extend(or_constraint.shapes.clone());
+            }
+            Constraint::Xone(xone_constraint) => {
+                deps.extend(xone_constraint.shapes.clone());
+            }
+            Constraint::Not(not_constraint) => {
+                deps.push(not_constraint.shape.clone());
+            }
+            _ => {
+                // Other constraints don't reference shapes
+            }
+        }
+    }
+
+    /// Check for circular dependencies using DFS
+    fn has_circular_dependency(
+        &self,
+        shape_id: &ShapeId,
+        dependencies: &HashMap<ShapeId, Vec<ShapeId>>,
+        visited: &mut HashSet<ShapeId>,
+    ) -> bool {
+        if visited.contains(shape_id) {
+            return true;
+        }
+
+        visited.insert(shape_id.clone());
+
+        if let Some(deps) = dependencies.get(shape_id) {
+            for dep in deps {
+                if self.has_circular_dependency(dep, dependencies, visited) {
+                    return true;
+                }
+            }
+        }
+
+        visited.remove(shape_id);
+        false
+    }
+}
+
+impl Default for ShapeValidator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Shape validation report
+#[derive(Debug, Clone)]
+pub struct ShapeValidationReport {
+    /// Validation results for individual shapes
+    pub shape_results: Vec<SingleShapeValidationReport>,
+    /// Global validation errors
+    pub global_errors: Vec<String>,
+    /// Overall validation status
+    pub is_valid: bool,
+}
+
+impl ShapeValidationReport {
+    pub fn new() -> Self {
+        Self {
+            shape_results: Vec::new(),
+            global_errors: Vec::new(),
+            is_valid: true,
+        }
+    }
+
+    pub fn add_shape_result(&mut self, result: SingleShapeValidationReport) {
+        if !result.is_valid() {
+            self.is_valid = false;
+        }
+        self.shape_results.push(result);
+    }
+
+    pub fn add_global_error(&mut self, error: String) {
+        self.global_errors.push(error);
+        self.is_valid = false;
+    }
+
+    pub fn total_errors(&self) -> usize {
+        self.global_errors.len()
+            + self
+                .shape_results
+                .iter()
+                .map(|r| r.errors.len())
+                .sum::<usize>()
+    }
+
+    pub fn total_warnings(&self) -> usize {
+        self.shape_results
+            .iter()
+            .map(|r| r.warnings.len())
+            .sum::<usize>()
+    }
+}
+
+/// Validation report for a single shape
+#[derive(Debug, Clone)]
+pub struct SingleShapeValidationReport {
+    /// Shape ID
+    pub shape_id: ShapeId,
+    /// Validation errors
+    pub errors: Vec<String>,
+    /// Validation warnings
+    pub warnings: Vec<String>,
+    /// Informational messages
+    pub info: Vec<String>,
+}
+
+impl SingleShapeValidationReport {
+    pub fn new(shape_id: ShapeId) -> Self {
+        Self {
+            shape_id,
+            errors: Vec::new(),
+            warnings: Vec::new(),
+            info: Vec::new(),
+        }
+    }
+
+    pub fn add_error(&mut self, error: String) {
+        self.errors.push(error);
+    }
+
+    pub fn add_warning(&mut self, warning: String) {
+        self.warnings.push(warning);
+    }
+
+    pub fn add_info(&mut self, info: String) {
+        self.info.push(info);
+    }
+
+    pub fn is_valid(&self) -> bool {
+        self.errors.is_empty()
+    }
+}
+
 /// Format a term for use in SPARQL queries
 fn format_term_for_sparql(term: &Term) -> Result<String> {
     match term {

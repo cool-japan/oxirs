@@ -57,7 +57,9 @@ pub mod distributed_query;
 pub mod edge_computing;
 pub mod enhanced_snapshotting;
 pub mod error;
+pub mod failover;
 pub mod federation;
+pub mod health_monitor;
 pub mod mvcc;
 pub mod mvcc_storage;
 pub mod network;
@@ -86,6 +88,8 @@ pub mod bft_consensus;
 pub mod bft_network;
 
 pub use error::{ClusterError, Result};
+pub use failover::{FailoverConfig, FailoverManager, FailoverStrategy, RecoveryAction};
+pub use health_monitor::{HealthMonitor, HealthMonitorConfig, NodeHealth, SystemMetrics};
 
 use conflict_resolution::{
     ConflictResolver, ResolutionStrategy, TimestampedOperation, VectorClock,

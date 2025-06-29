@@ -10,8 +10,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 // External dependencies
-extern crate toml;
 extern crate num_cpus;
+extern crate toml;
 
 /// Main TDB configuration structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,7 +65,7 @@ impl Default for StorageConfig {
     fn default() -> Self {
         Self {
             database_path: PathBuf::from("./tdb-data"),
-            page_size: 8192, // 8KB
+            page_size: 8192,              // 8KB
             max_file_size: 2_147_483_648, // 2GB
             enable_compression: true,
             compression_algorithm: CompressionAlgorithm::LZ4,
@@ -472,7 +472,8 @@ impl TdbConfig {
 
         // Check for conflicting settings
         if !self.storage.enable_memory_mapping && self.performance.buffer_pool.size_mb > 1024 {
-            warnings.push("Large buffer pool without memory mapping may be inefficient".to_string());
+            warnings
+                .push("Large buffer pool without memory mapping may be inefficient".to_string());
         }
 
         Ok(warnings)
@@ -488,7 +489,10 @@ impl TdbConfig {
                 config.performance.buffer_pool.size_mb = 512;
                 config.performance.index_config.enable_bitmap_indexes = true;
                 config.storage.enable_compression = true;
-                config.performance.query_optimization.enable_cost_based_optimization = true;
+                config
+                    .performance
+                    .query_optimization
+                    .enable_cost_based_optimization = true;
                 config.performance.cache_config.result_cache_size_mb = 128;
             }
             WorkloadType::TransactionalWorkload => {
@@ -596,18 +600,28 @@ mod tests {
     #[test]
     fn test_optimized_configurations() {
         let analytical_config = TdbConfig::optimized_for(WorkloadType::AnalyticalQueries);
-        assert!(analytical_config.performance.index_config.enable_bitmap_indexes);
+        assert!(
+            analytical_config
+                .performance
+                .index_config
+                .enable_bitmap_indexes
+        );
         assert_eq!(analytical_config.performance.buffer_pool.size_mb, 512);
 
         let transactional_config = TdbConfig::optimized_for(WorkloadType::TransactionalWorkload);
-        assert_eq!(transactional_config.transactions.max_concurrent_transactions, 200);
+        assert_eq!(
+            transactional_config
+                .transactions
+                .max_concurrent_transactions,
+            200
+        );
     }
 
     #[test]
     fn test_auto_tune() {
         let mut config = TdbConfig::default();
         config.auto_tune().unwrap();
-        
+
         // Should have set reasonable values
         assert!(config.performance.buffer_pool.size_mb > 0);
         assert!(config.performance.thread_pool.worker_threads > 0);
@@ -616,11 +630,11 @@ mod tests {
     #[test]
     fn test_serialization() {
         let config = TdbConfig::default();
-        
+
         // Test JSON serialization
         let json = serde_json::to_string(&config).unwrap();
         let deserialized: TdbConfig = serde_json::from_str(&json).unwrap();
-        
+
         // Basic sanity check
         assert_eq!(config.storage.page_size, deserialized.storage.page_size);
     }

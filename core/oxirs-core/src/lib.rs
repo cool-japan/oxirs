@@ -35,8 +35,8 @@ pub mod model;
 pub mod molecular; // Molecular-level memory management inspired by biological systems
 pub mod optimization;
 pub mod parser;
-pub mod query;
 pub mod quantum; // Quantum-inspired computing for next-generation RDF processing
+pub mod query;
 pub mod rdf_store;
 pub mod serializer;
 pub mod storage;

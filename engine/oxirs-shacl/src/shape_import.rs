@@ -14,7 +14,7 @@ use oxirs_core::{model::NamedNode, Store};
 
 use crate::{
     iri_resolver::{IriResolutionError, IriResolver},
-    shapes::{ShapeParser, object_to_term},
+    shapes::{object_to_term, ShapeParser},
     Result, ShaclError, Shape, ShapeId,
 };
 
@@ -375,24 +375,25 @@ impl ShapeImportManager {
     fn fetch_http_content(&self, url: &str) -> Result<(String, String, usize)> {
         let parsed_url = Url::parse(url)
             .map_err(|e| ShaclError::Configuration(format!("Invalid URL {}: {}", url, e)))?;
-        
+
         // Validate scheme
         match parsed_url.scheme() {
             "http" => {
                 if !self.config.allow_http {
                     return Err(ShaclError::Configuration(
-                        "HTTP imports are disabled for security".to_string()
+                        "HTTP imports are disabled for security".to_string(),
                     ));
                 }
             }
             "https" => {}
             _ => {
                 return Err(ShaclError::Configuration(format!(
-                    "Unsupported URL scheme: {}", parsed_url.scheme()
+                    "Unsupported URL scheme: {}",
+                    parsed_url.scheme()
                 )));
             }
         }
-        
+
         // Build HTTP client with proper configuration
         let client = reqwest::blocking::ClientBuilder::new()
             .timeout(self.config.fetch_timeout)
@@ -400,32 +401,39 @@ impl ShapeImportManager {
             .danger_accept_invalid_certs(false) // Always validate SSL certificates
             .redirect(reqwest::redirect::Policy::limited(5)) // Limit redirects for security
             .build()
-            .map_err(|e| ShaclError::Configuration(format!("Failed to create HTTP client: {}", e)))?;
-        
+            .map_err(|e| {
+                ShaclError::Configuration(format!("Failed to create HTTP client: {}", e))
+            })?;
+
         // Build request with custom headers
         let mut request = client.get(url);
         for (key, value) in &self.config.http_headers {
             request = request.header(key, value);
         }
-        
+
         // Add standard headers for RDF content
         request = request.header("Accept", "text/turtle, application/rdf+xml, application/ld+json, application/n-triples, text/plain, */*;q=0.1");
-        
+
         // Send request
-        let response = request.send()
+        let response = request
+            .send()
             .map_err(|e| ShaclError::Configuration(format!("HTTP request failed: {}", e)))?;
-        
+
         // Check response status
         if !response.status().is_success() {
             return Err(ShaclError::Configuration(format!(
                 "HTTP request failed with status {}: {}",
                 response.status(),
-                response.status().canonical_reason().unwrap_or("Unknown error")
+                response
+                    .status()
+                    .canonical_reason()
+                    .unwrap_or("Unknown error")
             )));
         }
-        
+
         // Extract content type from response headers
-        let content_type = response.headers()
+        let content_type = response
+            .headers()
             .get("content-type")
             .and_then(|v| v.to_str().ok())
             .map(|ct| {
@@ -433,7 +441,7 @@ impl ShapeImportManager {
                 ct.split(';').next().unwrap_or(ct).trim().to_string()
             })
             .unwrap_or_else(|| "application/octet-stream".to_string());
-        
+
         // Check content length before downloading if provided
         if let Some(content_length) = response.headers().get("content-length") {
             if let Ok(length_str) = content_length.to_str() {
@@ -447,11 +455,12 @@ impl ShapeImportManager {
                 }
             }
         }
-        
+
         // Download content
-        let content = response.text()
-            .map_err(|e| ShaclError::Configuration(format!("Failed to read response body: {}", e)))?;
-        
+        let content = response.text().map_err(|e| {
+            ShaclError::Configuration(format!("Failed to read response body: {}", e))
+        })?;
+
         // Check actual content size
         let content_size = content.len();
         if content_size > self.config.max_resource_size {
@@ -460,14 +469,14 @@ impl ShapeImportManager {
                 content_size, self.config.max_resource_size
             )));
         }
-        
+
         // Validate content is not empty
         if content.is_empty() {
             return Err(ShaclError::Configuration(
-                "Retrieved empty content from HTTP resource".to_string()
+                "Retrieved empty content from HTTP resource".to_string(),
             ));
         }
-        
+
         Ok((content, content_type, content_size))
     }
 
@@ -554,24 +563,43 @@ impl ShapeImportManager {
                 }
             }
             ImportType::Dependency => Ok(shapes), // Dependencies are loaded but marked differently
-            ImportType::NamespaceMapping(_) => {
-                // TODO: Implement namespace remapping
-                Ok(shapes)
+            ImportType::NamespaceMapping(target_namespace) => {
+                // Implement namespace remapping
+                let mut remapped_shapes = Vec::new();
+                for mut shape in shapes {
+                    // Remap shape ID if needed
+                    if let Some(new_id) = self.remap_shape_id(&shape.id, target_namespace) {
+                        shape.id = new_id;
+                    }
+
+                    // Remap target IRIs in targets
+                    for target in &mut shape.targets {
+                        self.remap_target_iris(target, target_namespace);
+                    }
+
+                    // Remap constraint references
+                    for (_, constraint) in &mut shape.constraints {
+                        self.remap_constraint_iris(constraint, target_namespace);
+                    }
+
+                    remapped_shapes.push(shape);
+                }
+                Ok(remapped_shapes)
             }
         }
     }
 
     /// Extract import directives from RDF content
     fn extract_import_directives(&self, content: &str) -> Result<Vec<ImportDirective>> {
-        use oxirs_core::parser::{Parser, ParserConfig, RdfFormat};
         use oxirs_core::model::{Object, Predicate, Subject};
-        
+        use oxirs_core::parser::{Parser, ParserConfig, RdfFormat};
+
         let mut directives = Vec::new();
-        
+
         // Parse the content as RDF to extract import statements
         let parser_config = ParserConfig::default();
         let parser = Parser::with_config(RdfFormat::Turtle, parser_config);
-        
+
         match parser.parse_str_to_quads(content) {
             Ok(quads) => {
                 // Create a temporary graph for querying
@@ -581,18 +609,16 @@ impl ShapeImportManager {
                         graph.add_triple(quad.to_triple());
                     }
                 }
-                
+
                 // Look for owl:imports statements
                 if let Ok(owl_imports) = NamedNode::new("http://www.w3.org/2002/07/owl#imports") {
-                    let triples = graph.query_triples(
-                        None,
-                        Some(&Predicate::NamedNode(owl_imports)),
-                        None,
-                    );
-                    
+                    let triples =
+                        graph.query_triples(None, Some(&Predicate::NamedNode(owl_imports)), None);
+
                     for triple in triples {
-                        if let Ok(oxirs_core::model::Term::NamedNode(import_iri)) = 
-                            object_to_term(triple.object()) {
+                        if let Ok(oxirs_core::model::Term::NamedNode(import_iri)) =
+                            object_to_term(triple.object())
+                        {
                             directives.push(ImportDirective {
                                 source_iri: import_iri.as_str().to_string(),
                                 target_namespace: None,
@@ -603,19 +629,17 @@ impl ShapeImportManager {
                         }
                     }
                 }
-                
+
                 // Look for custom SHACL import properties
                 // sh:include - include all shapes from target
                 if let Ok(sh_include) = NamedNode::new("http://www.w3.org/ns/shacl#include") {
-                    let triples = graph.query_triples(
-                        None,
-                        Some(&Predicate::NamedNode(sh_include)),
-                        None,
-                    );
-                    
+                    let triples =
+                        graph.query_triples(None, Some(&Predicate::NamedNode(sh_include)), None);
+
                     for triple in triples {
-                        if let Ok(oxirs_core::model::Term::NamedNode(import_iri)) = 
-                            object_to_term(triple.object()) {
+                        if let Ok(oxirs_core::model::Term::NamedNode(import_iri)) =
+                            object_to_term(triple.object())
+                        {
                             directives.push(ImportDirective {
                                 source_iri: import_iri.as_str().to_string(),
                                 target_namespace: None,
@@ -626,18 +650,16 @@ impl ShapeImportManager {
                         }
                     }
                 }
-                
+
                 // Look for sh:imports with selective import
                 if let Ok(sh_imports) = NamedNode::new("http://www.w3.org/ns/shacl#imports") {
-                    let triples = graph.query_triples(
-                        None,
-                        Some(&Predicate::NamedNode(sh_imports)),
-                        None,
-                    );
-                    
+                    let triples =
+                        graph.query_triples(None, Some(&Predicate::NamedNode(sh_imports)), None);
+
                     for triple in triples {
-                        if let Ok(oxirs_core::model::Term::NamedNode(import_iri)) = 
-                            object_to_term(triple.object()) {
+                        if let Ok(oxirs_core::model::Term::NamedNode(import_iri)) =
+                            object_to_term(triple.object())
+                        {
                             // Look for optional selective shape specification
                             // This could be extended to parse sh:includeShapes property
                             directives.push(ImportDirective {
@@ -656,7 +678,7 @@ impl ShapeImportManager {
                 // Don't fail the entire import, just return empty directives
             }
         }
-        
+
         Ok(directives)
     }
 
@@ -814,7 +836,7 @@ impl ShapeImportManager {
         constraint: &crate::constraints::Constraint,
     ) -> Option<Vec<String>> {
         let mut external_refs = Vec::new();
-        
+
         match constraint {
             crate::constraints::Constraint::Node(node_constraint) => {
                 // Node constraints reference other shapes
@@ -867,7 +889,7 @@ impl ShapeImportManager {
             crate::constraints::Constraint::Sparql(sparql_constraint) => {
                 // SPARQL constraints might reference external resources in the query
                 let query = &sparql_constraint.query;
-                
+
                 // Look for GRAPH clauses with IRIs
                 if let Some(graph_iris) = self.extract_graph_iris_from_sparql(query) {
                     for graph_iri in graph_iris {
@@ -876,7 +898,7 @@ impl ShapeImportManager {
                         }
                     }
                 }
-                
+
                 // Look for SERVICE clauses (federated queries)
                 if let Some(service_iris) = self.extract_service_iris_from_sparql(query) {
                     for service_iri in service_iris {
@@ -889,21 +911,21 @@ impl ShapeImportManager {
             // Other constraint types don't typically have external references
             _ => {}
         }
-        
+
         if external_refs.is_empty() {
             None
         } else {
             Some(external_refs)
         }
     }
-    
+
     /// Check if an IRI refers to an external resource that needs importing
     fn is_external_reference(&self, iri: &str) -> bool {
         // Consider an IRI external if it's:
         // 1. An absolute HTTP/HTTPS IRI (not a local reference)
         // 2. Not in our current cache
         // 3. Not using a local base IRI
-        
+
         if let Ok(parsed_url) = Url::parse(iri) {
             match parsed_url.scheme() {
                 "http" | "https" => {
@@ -921,46 +943,204 @@ impl ShapeImportManager {
             false
         }
     }
-    
+
     /// Extract GRAPH IRIs from SPARQL query
     fn extract_graph_iris_from_sparql(&self, query: &str) -> Option<Vec<String>> {
         use regex::Regex;
-        
+
         // Basic regex to find GRAPH clauses - could be improved
         let graph_regex = Regex::new(r"(?i)GRAPH\s+<([^>]+)>").ok()?;
         let mut iris = Vec::new();
-        
+
         for captures in graph_regex.captures_iter(query) {
             if let Some(iri_match) = captures.get(1) {
                 iris.push(iri_match.as_str().to_string());
             }
         }
-        
+
         if iris.is_empty() {
             None
         } else {
             Some(iris)
         }
     }
-    
+
     /// Extract SERVICE IRIs from SPARQL query
     fn extract_service_iris_from_sparql(&self, query: &str) -> Option<Vec<String>> {
         use regex::Regex;
-        
+
         // Basic regex to find SERVICE clauses - could be improved
         let service_regex = Regex::new(r"(?i)SERVICE\s+<([^>]+)>").ok()?;
         let mut iris = Vec::new();
-        
+
         for captures in service_regex.captures_iter(query) {
             if let Some(iri_match) = captures.get(1) {
                 iris.push(iri_match.as_str().to_string());
             }
         }
-        
+
         if iris.is_empty() {
             None
         } else {
             Some(iris)
+        }
+    }
+
+    /// Remap a shape ID to a new namespace
+    fn remap_shape_id(&self, shape_id: &ShapeId, target_namespace: &str) -> Option<ShapeId> {
+        let original_iri = shape_id.as_str();
+
+        // Try to extract the local part from the original IRI
+        if let Some(hash_pos) = original_iri.rfind('#') {
+            let local_part = &original_iri[hash_pos + 1..];
+            let new_iri = format!("{}{}", target_namespace, local_part);
+            Some(ShapeId::new(new_iri))
+        } else if let Some(slash_pos) = original_iri.rfind('/') {
+            let local_part = &original_iri[slash_pos + 1..];
+            let new_iri = if target_namespace.ends_with('#') || target_namespace.ends_with('/') {
+                format!("{}{}", target_namespace, local_part)
+            } else {
+                format!("{}#{}", target_namespace, local_part)
+            };
+            Some(ShapeId::new(new_iri))
+        } else {
+            // Can't extract local part, use original
+            None
+        }
+    }
+
+    /// Remap target IRIs in a target definition
+    fn remap_target_iris(&self, target: &mut Target, target_namespace: &str) {
+        match target {
+            Target::Class(class_iri) => {
+                if let Some(remapped) = self.remap_iri_string(class_iri.as_str(), target_namespace)
+                {
+                    if let Ok(new_node) = NamedNode::new(remapped) {
+                        *class_iri = new_node;
+                    }
+                }
+            }
+            Target::Node(node_iri) => {
+                if let Some(remapped) = self.remap_iri_string(node_iri.as_str(), target_namespace) {
+                    if let Ok(new_node) = NamedNode::new(remapped) {
+                        *node_iri = new_node;
+                    }
+                }
+            }
+            Target::ObjectsOf(prop_iri) => {
+                if let Some(remapped) = self.remap_iri_string(prop_iri.as_str(), target_namespace) {
+                    if let Ok(new_node) = NamedNode::new(remapped) {
+                        *prop_iri = new_node;
+                    }
+                }
+            }
+            Target::SubjectsOf(prop_iri) => {
+                if let Some(remapped) = self.remap_iri_string(prop_iri.as_str(), target_namespace) {
+                    if let Ok(new_node) = NamedNode::new(remapped) {
+                        *prop_iri = new_node;
+                    }
+                }
+            }
+            // For SPARQL targets, we'd need to parse and rewrite the query
+            Target::Sparql(_) => {
+                // Complex remapping for SPARQL targets would require SPARQL parsing
+                tracing::warn!("SPARQL target remapping not yet implemented");
+            }
+        }
+    }
+
+    /// Remap constraint IRIs in a constraint
+    fn remap_constraint_iris(
+        &self,
+        constraint: &mut crate::constraints::Constraint,
+        target_namespace: &str,
+    ) {
+        use crate::constraints::Constraint;
+
+        match constraint {
+            Constraint::Node(node_constraint) => {
+                if let Some(remapped) =
+                    self.remap_shape_id(&node_constraint.shape, target_namespace)
+                {
+                    node_constraint.shape = remapped;
+                }
+            }
+            Constraint::QualifiedValueShape(qvs_constraint) => {
+                if let Some(remapped) = self.remap_shape_id(&qvs_constraint.shape, target_namespace)
+                {
+                    qvs_constraint.shape = remapped;
+                }
+            }
+            Constraint::And(and_constraint) => {
+                for shape_id in &mut and_constraint.shapes {
+                    if let Some(remapped) = self.remap_shape_id(shape_id, target_namespace) {
+                        *shape_id = remapped;
+                    }
+                }
+            }
+            Constraint::Or(or_constraint) => {
+                for shape_id in &mut or_constraint.shapes {
+                    if let Some(remapped) = self.remap_shape_id(shape_id, target_namespace) {
+                        *shape_id = remapped;
+                    }
+                }
+            }
+            Constraint::Xone(xone_constraint) => {
+                for shape_id in &mut xone_constraint.shapes {
+                    if let Some(remapped) = self.remap_shape_id(shape_id, target_namespace) {
+                        *shape_id = remapped;
+                    }
+                }
+            }
+            Constraint::Not(not_constraint) => {
+                if let Some(remapped) = self.remap_shape_id(&not_constraint.shape, target_namespace)
+                {
+                    not_constraint.shape = remapped;
+                }
+            }
+            Constraint::Class(class_constraint) => {
+                if let Some(remapped) =
+                    self.remap_iri_string(class_constraint.class.as_str(), target_namespace)
+                {
+                    if let Ok(new_node) = NamedNode::new(remapped) {
+                        class_constraint.class = new_node;
+                    }
+                }
+            }
+            Constraint::In(in_constraint) => {
+                for value in &mut in_constraint.values {
+                    if let crate::constraints::ValueType::IRI(iri) = value {
+                        if let Some(remapped) =
+                            self.remap_iri_string(iri.as_str(), target_namespace)
+                        {
+                            if let Ok(new_node) = NamedNode::new(remapped) {
+                                *iri = new_node;
+                            }
+                        }
+                    }
+                }
+            }
+            // Other constraints may not have IRIs that need remapping
+            _ => {}
+        }
+    }
+
+    /// Helper to remap a single IRI string to a new namespace
+    fn remap_iri_string(&self, original_iri: &str, target_namespace: &str) -> Option<String> {
+        // Extract local part and combine with target namespace
+        if let Some(hash_pos) = original_iri.rfind('#') {
+            let local_part = &original_iri[hash_pos + 1..];
+            Some(format!("{}{}", target_namespace, local_part))
+        } else if let Some(slash_pos) = original_iri.rfind('/') {
+            let local_part = &original_iri[slash_pos + 1..];
+            if target_namespace.ends_with('#') || target_namespace.ends_with('/') {
+                Some(format!("{}{}", target_namespace, local_part))
+            } else {
+                Some(format!("{}#{}", target_namespace, local_part))
+            }
+        } else {
+            // Can't extract local part, return None to keep original
+            None
         }
     }
 }

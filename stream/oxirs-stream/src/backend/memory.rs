@@ -3,6 +3,7 @@
 //! In-memory backend implementation for testing and development.
 
 use async_trait::async_trait;
+use dashmap::DashMap;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -16,7 +17,7 @@ use crate::types::{Offset, PartitionId, StreamPosition, TopicName};
 /// In-memory stream storage
 #[derive(Clone)]
 struct MemoryStorage {
-    topics: Arc<RwLock<HashMap<TopicName, TopicData>>>,
+    topics: Arc<DashMap<TopicName, Arc<RwLock<TopicData>>>>,
 }
 
 #[derive(Clone)]
@@ -29,7 +30,7 @@ struct TopicData {
 impl Default for MemoryStorage {
     fn default() -> Self {
         Self {
-            topics: Arc::new(RwLock::new(HashMap::new())),
+            topics: Arc::new(DashMap::new()),
         }
     }
 }
@@ -72,39 +73,45 @@ impl StreamBackend for MemoryBackend {
     }
 
     async fn create_topic(&self, topic: &TopicName, _partitions: u32) -> StreamResult<()> {
-        let mut topics = self.storage.topics.write().await;
-        topics.entry(topic.clone()).or_insert_with(|| TopicData {
-            events: VecDeque::new(),
-            next_offset: 0,
-            consumer_offsets: HashMap::new(),
+        self.storage.topics.entry(topic.clone()).or_insert_with(|| {
+            Arc::new(RwLock::new(TopicData {
+                events: VecDeque::new(),
+                next_offset: 0,
+                consumer_offsets: HashMap::new(),
+            }))
         });
         Ok(())
     }
 
     async fn delete_topic(&self, topic: &TopicName) -> StreamResult<()> {
-        let mut topics = self.storage.topics.write().await;
-        topics.remove(topic);
+        self.storage.topics.remove(topic);
         Ok(())
     }
 
     async fn list_topics(&self) -> StreamResult<Vec<TopicName>> {
-        let topics = self.storage.topics.read().await;
-        Ok(topics.keys().cloned().collect())
+        Ok(self
+            .storage
+            .topics
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect())
     }
 
     async fn send_event(&self, topic: &TopicName, event: StreamEvent) -> StreamResult<Offset> {
-        let mut topics = self.storage.topics.write().await;
-        let topic_data = topics
-            .get_mut(topic)
+        let topic_data = self
+            .storage
+            .topics
+            .get(topic)
             .ok_or_else(|| StreamError::TopicNotFound(topic.to_string()))?;
 
-        let offset = Offset::new(topic_data.next_offset);
-        topic_data.next_offset += 1;
-        topic_data.events.push_back((event, offset));
+        let mut data = topic_data.write().await;
+        let offset = Offset::new(data.next_offset);
+        data.next_offset += 1;
+        data.events.push_back((event, offset));
 
         // Limit memory usage
-        if topic_data.events.len() > 10000 {
-            topic_data.events.pop_front();
+        if data.events.len() > 10000 {
+            data.events.pop_front();
         }
 
         Ok(offset)
@@ -130,34 +137,33 @@ impl StreamBackend for MemoryBackend {
         position: StreamPosition,
         max_events: usize,
     ) -> StreamResult<Vec<(StreamEvent, Offset)>> {
-        let mut topics = self.storage.topics.write().await;
-        let topic_data = topics
-            .get_mut(topic)
+        let topic_data = self
+            .storage
+            .topics
+            .get(topic)
             .ok_or_else(|| StreamError::TopicNotFound(topic.to_string()))?;
+
+        let mut data = topic_data.write().await;
 
         let start_offset = if let Some(group) = consumer_group {
             let group_name = group.name();
-            let current_offset = topic_data
-                .consumer_offsets
-                .get(group_name)
-                .copied()
-                .unwrap_or(0);
+            let current_offset = data.consumer_offsets.get(group_name).copied().unwrap_or(0);
 
             match position {
                 StreamPosition::Beginning => current_offset, // Use consumer group's current offset
-                StreamPosition::End => topic_data.next_offset,
+                StreamPosition::End => data.next_offset,
                 StreamPosition::Offset(offset) => offset,
             }
         } else {
             match position {
                 StreamPosition::Beginning => 0,
-                StreamPosition::End => topic_data.next_offset,
+                StreamPosition::End => data.next_offset,
                 StreamPosition::Offset(offset) => offset,
             }
         };
 
         let mut events = Vec::new();
-        for (event, offset) in &topic_data.events {
+        for (event, offset) in &data.events {
             if offset.value() >= start_offset && events.len() < max_events {
                 events.push((event.clone(), *offset));
             }
@@ -166,8 +172,7 @@ impl StreamBackend for MemoryBackend {
         // Update consumer offset if using consumer group
         if let Some(group) = consumer_group {
             if let Some((_, last_offset)) = events.last() {
-                topic_data
-                    .consumer_offsets
+                data.consumer_offsets
                     .insert(group.name().to_string(), last_offset.value() + 1);
             }
         }
@@ -182,13 +187,14 @@ impl StreamBackend for MemoryBackend {
         _partition: PartitionId,
         offset: Offset,
     ) -> StreamResult<()> {
-        let mut topics = self.storage.topics.write().await;
-        let topic_data = topics
-            .get_mut(topic)
+        let topic_data = self
+            .storage
+            .topics
+            .get(topic)
             .ok_or_else(|| StreamError::TopicNotFound(topic.to_string()))?;
 
-        topic_data
-            .consumer_offsets
+        let mut data = topic_data.write().await;
+        data.consumer_offsets
             .insert(consumer_group.name().to_string(), offset.value() + 1);
         Ok(())
     }
@@ -200,19 +206,21 @@ impl StreamBackend for MemoryBackend {
         _partition: PartitionId,
         position: StreamPosition,
     ) -> StreamResult<()> {
-        let mut topics = self.storage.topics.write().await;
-        let topic_data = topics
-            .get_mut(topic)
+        let topic_data = self
+            .storage
+            .topics
+            .get(topic)
             .ok_or_else(|| StreamError::TopicNotFound(topic.to_string()))?;
+
+        let mut data = topic_data.write().await;
 
         let offset = match position {
             StreamPosition::Beginning => 0,
-            StreamPosition::End => topic_data.next_offset,
+            StreamPosition::End => data.next_offset,
             StreamPosition::Offset(offset) => offset,
         };
 
-        topic_data
-            .consumer_offsets
+        data.consumer_offsets
             .insert(consumer_group.name().to_string(), offset);
         Ok(())
     }
@@ -222,42 +230,42 @@ impl StreamBackend for MemoryBackend {
         topic: &TopicName,
         consumer_group: &ConsumerGroup,
     ) -> StreamResult<HashMap<PartitionId, u64>> {
-        let topics = self.storage.topics.read().await;
-        let topic_data = topics
+        let topic_data = self
+            .storage
+            .topics
             .get(topic)
             .ok_or_else(|| StreamError::TopicNotFound(topic.to_string()))?;
 
-        let current_offset = topic_data
+        let data = topic_data.read().await;
+
+        let current_offset = data
             .consumer_offsets
             .get(consumer_group.name())
             .copied()
             .unwrap_or(0);
 
-        let lag = topic_data.next_offset.saturating_sub(current_offset);
+        let lag = data.next_offset.saturating_sub(current_offset);
         let mut result = HashMap::new();
         result.insert(PartitionId::new(0), lag);
         Ok(result)
     }
 
     async fn get_topic_metadata(&self, topic: &TopicName) -> StreamResult<HashMap<String, String>> {
-        let topics = self.storage.topics.read().await;
-        let topic_data = topics
+        let topic_data = self
+            .storage
+            .topics
             .get(topic)
             .ok_or_else(|| StreamError::TopicNotFound(topic.to_string()))?;
 
+        let data = topic_data.read().await;
+
         let mut metadata = HashMap::new();
         metadata.insert("backend".to_string(), "memory".to_string());
-        metadata.insert(
-            "event_count".to_string(),
-            topic_data.events.len().to_string(),
-        );
-        metadata.insert(
-            "next_offset".to_string(),
-            topic_data.next_offset.to_string(),
-        );
+        metadata.insert("event_count".to_string(), data.events.len().to_string());
+        metadata.insert("next_offset".to_string(), data.next_offset.to_string());
         metadata.insert(
             "consumer_groups".to_string(),
-            topic_data.consumer_offsets.len().to_string(),
+            data.consumer_offsets.len().to_string(),
         );
 
         Ok(metadata)

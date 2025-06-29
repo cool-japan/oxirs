@@ -115,14 +115,17 @@ impl GpuMemoryPool {
             if block.size_bytes >= size_bytes && block.device_id == device_id {
                 let block = free_blocks.remove(i).unwrap();
                 let block_id = block.ptr;
-                
+
                 let mut reused_block = block;
                 reused_block.last_used = Instant::now();
-                
+
                 allocated_blocks.insert(block_id, reused_block);
                 stats.cache_hits += 1;
-                
-                debug!("Reused GPU memory block {} of size {}", block_id, size_bytes);
+
+                debug!(
+                    "Reused GPU memory block {} of size {}",
+                    block_id, size_bytes
+                );
                 return Ok(block_id);
             }
         }
@@ -130,10 +133,10 @@ impl GpuMemoryPool {
         // No suitable free block found, allocate new one
         stats.cache_misses += 1;
         stats.total_allocations += 1;
-        
+
         let block_id = stats.total_allocations; // Simple ID generation
         let now = Instant::now();
-        
+
         let block = MemoryBlock {
             device_id,
             size_bytes,
@@ -143,16 +146,19 @@ impl GpuMemoryPool {
         };
 
         allocated_blocks.insert(block_id, block);
-        
+
         let mut total_allocated = self.total_allocated.lock().unwrap();
         *total_allocated += size_bytes;
         stats.current_memory_usage += size_bytes;
-        
+
         if stats.current_memory_usage > stats.peak_memory_usage {
             stats.peak_memory_usage = stats.current_memory_usage;
         }
 
-        info!("Allocated new GPU memory block {} of size {} bytes", block_id, size_bytes);
+        info!(
+            "Allocated new GPU memory block {} of size {} bytes",
+            block_id, size_bytes
+        );
         Ok(block_id)
     }
 
@@ -165,15 +171,15 @@ impl GpuMemoryPool {
         if let Some(block) = allocated_blocks.remove(&block_id) {
             stats.total_deallocations += 1;
             stats.current_memory_usage -= block.size_bytes;
-            
+
             // Add to free blocks for reuse
             free_blocks.push_back(block);
-            
+
             // Limit free blocks to prevent memory leaks
             if free_blocks.len() > 100 {
                 free_blocks.pop_front();
             }
-            
+
             debug!("Deallocated GPU memory block {}", block_id);
             Ok(())
         } else {
@@ -189,15 +195,15 @@ impl GpuMemoryPool {
     /// Defragment memory by consolidating free blocks
     pub fn defragment(&self) -> Result<()> {
         let mut free_blocks = self.free_blocks.lock().unwrap();
-        
+
         // Sort free blocks by device and size
         let mut blocks: Vec<_> = free_blocks.drain(..).collect();
         blocks.sort_by_key(|b| (b.device_id, b.size_bytes));
-        
+
         // Merge adjacent blocks (simplified implementation)
         let mut merged_blocks = VecDeque::new();
         let mut current_block: Option<MemoryBlock> = None;
-        
+
         for block in blocks {
             if let Some(ref mut current) = current_block {
                 if current.device_id == block.device_id {
@@ -211,14 +217,17 @@ impl GpuMemoryPool {
                 current_block = Some(block);
             }
         }
-        
+
         if let Some(block) = current_block {
             merged_blocks.push_back(block);
         }
-        
+
         *free_blocks = merged_blocks;
-        
-        info!("Memory defragmentation completed, {} free blocks remaining", free_blocks.len());
+
+        info!(
+            "Memory defragmentation completed, {} free blocks remaining",
+            free_blocks.len()
+        );
         Ok(())
     }
 }
@@ -267,9 +276,9 @@ impl TensorCache {
     pub fn cache_entity_tensor(&self, entity: &str, tensor: Array2<f32>, device_id: usize) {
         let mut cache = self.entity_tensors.lock().unwrap();
         let mut stats = self.cache_stats.lock().unwrap();
-        
+
         let size_bytes = tensor.len() * std::mem::size_of::<f32>();
-        
+
         let cached_tensor = CachedTensor {
             data: tensor,
             device_id,
@@ -277,13 +286,13 @@ impl TensorCache {
             access_count: 1,
             size_bytes,
         };
-        
+
         // Check if we need to evict old entries
         self.evict_if_needed(&mut stats);
-        
+
         cache.insert(entity.to_string(), cached_tensor);
         stats.total_memory_usage += size_bytes;
-        
+
         debug!("Cached entity tensor for {}", entity);
     }
 
@@ -291,12 +300,12 @@ impl TensorCache {
     pub fn get_entity_tensor(&self, entity: &str) -> Option<Array2<f32>> {
         let mut cache = self.entity_tensors.lock().unwrap();
         let mut stats = self.cache_stats.lock().unwrap();
-        
+
         if let Some(cached) = cache.get_mut(entity) {
             cached.last_accessed = Instant::now();
             cached.access_count += 1;
             stats.hits += 1;
-            
+
             debug!("Cache hit for entity tensor {}", entity);
             Some(cached.data.clone())
         } else {
@@ -310,9 +319,9 @@ impl TensorCache {
     pub fn cache_attention_weights(&self, key: &str, weights: Array2<f32>, device_id: usize) {
         let mut cache = self.attention_weights.lock().unwrap();
         let mut stats = self.cache_stats.lock().unwrap();
-        
+
         let size_bytes = weights.len() * std::mem::size_of::<f32>();
-        
+
         let cached_tensor = CachedTensor {
             data: weights,
             device_id,
@@ -320,12 +329,12 @@ impl TensorCache {
             access_count: 1,
             size_bytes,
         };
-        
+
         self.evict_if_needed(&mut stats);
-        
+
         cache.insert(key.to_string(), cached_tensor);
         stats.total_memory_usage += size_bytes;
-        
+
         debug!("Cached attention weights for key {}", key);
     }
 
@@ -333,12 +342,12 @@ impl TensorCache {
     pub fn get_attention_weights(&self, key: &str) -> Option<Array2<f32>> {
         let mut cache = self.attention_weights.lock().unwrap();
         let mut stats = self.cache_stats.lock().unwrap();
-        
+
         if let Some(cached) = cache.get_mut(key) {
             cached.last_accessed = Instant::now();
             cached.access_count += 1;
             stats.hits += 1;
-            
+
             debug!("Cache hit for attention weights {}", key);
             Some(cached.data.clone())
         } else {
@@ -351,12 +360,12 @@ impl TensorCache {
     /// Evict old entries if cache is too large
     fn evict_if_needed(&self, stats: &mut CacheStats) {
         let max_memory = self.config.cache_size_mb * 1024 * 1024; // Convert MB to bytes
-        
+
         if stats.total_memory_usage > max_memory {
             // Simple LRU eviction (would be more sophisticated in real implementation)
             stats.evictions += 1;
             stats.total_memory_usage = max_memory / 2; // Simplified
-            
+
             warn!("Tensor cache eviction triggered, freed memory");
         }
     }
@@ -371,10 +380,10 @@ impl TensorCache {
         self.entity_tensors.lock().unwrap().clear();
         self.attention_weights.lock().unwrap().clear();
         self.intermediate_activations.lock().unwrap().clear();
-        
+
         let mut stats = self.cache_stats.lock().unwrap();
         stats.total_memory_usage = 0;
-        
+
         info!("Cleared all tensor caches");
     }
 }
@@ -403,7 +412,7 @@ impl MixedPrecisionProcessor {
         if !self.fp16_enabled {
             return tensor.clone();
         }
-        
+
         // Simulate FP16 conversion (real implementation would use GPU ops)
         tensor.mapv(|x| {
             // Clamp to FP16 range and simulate precision loss
@@ -426,7 +435,7 @@ impl MixedPrecisionProcessor {
         if !self.fp16_enabled {
             return true;
         }
-        
+
         // Check for overflow
         if self.overflow_detection {
             let has_overflow = gradients.iter().any(|&x| !x.is_finite());
@@ -435,7 +444,7 @@ impl MixedPrecisionProcessor {
                 return false;
             }
         }
-        
+
         // Unscale gradients
         gradients.mapv_inplace(|x| x / self.loss_scaling);
         true
@@ -464,7 +473,7 @@ impl MultiStreamProcessor {
     /// Create new multi-stream processor
     pub fn new(config: GpuAccelerationConfig) -> Self {
         let stream_ids = (0..config.num_streams).collect();
-        
+
         Self {
             config,
             stream_ids,
@@ -487,11 +496,11 @@ impl MultiStreamProcessor {
     ) -> Result<Vec<Array1<f32>>> {
         let chunk_size = (entities.len() + self.config.num_streams - 1) / self.config.num_streams;
         let mut tasks = Vec::new();
-        
+
         for chunk in entities.chunks(chunk_size) {
             let stream_id = self.get_next_stream();
             let chunk_entities = chunk.to_vec();
-            
+
             let task = tokio::spawn(async move {
                 let mut results = Vec::new();
                 for entity in chunk_entities {
@@ -500,17 +509,17 @@ impl MultiStreamProcessor {
                 }
                 results
             });
-            
+
             tasks.push(task);
         }
-        
+
         // Collect results from all streams
         let mut all_results = Vec::new();
         for task in tasks {
             let chunk_results = task.await?;
             all_results.extend(chunk_results);
         }
-        
+
         Ok(all_results)
     }
 
@@ -537,7 +546,7 @@ impl GpuAccelerationManager {
         let tensor_cache = TensorCache::new(config.clone());
         let mixed_precision = MixedPrecisionProcessor::new(config.clone());
         let multi_stream = MultiStreamProcessor::new(config.clone());
-        
+
         Self {
             config,
             memory_pool,
@@ -579,14 +588,14 @@ impl GpuAccelerationManager {
         }
 
         // Use multi-stream processing for parallel computation
-        let results = self.multi_stream.process_batch_parallel(
-            entities,
-            move |entity, stream_id| {
+        let results = self
+            .multi_stream
+            .process_batch_parallel(entities, move |entity, stream_id| {
                 // In real implementation, this would use the appropriate GPU stream
                 debug!("Processing entity {} on stream {}", entity, stream_id);
                 base_compute_fn(&entity)
-            },
-        ).await?;
+            })
+            .await?;
 
         self.multi_stream.synchronize_all();
         Ok(results)
@@ -596,7 +605,7 @@ impl GpuAccelerationManager {
     pub fn get_performance_stats(&self) -> GpuPerformanceStats {
         let memory_stats = self.memory_pool.get_stats();
         let cache_stats = self.tensor_cache.get_stats();
-        
+
         GpuPerformanceStats {
             memory_allocations: memory_stats.total_allocations,
             memory_deallocations: memory_stats.total_deallocations,
@@ -654,9 +663,9 @@ impl MemoryDefragmenter {
     pub fn should_defragment(&self, memory_pool: &GpuMemoryPool) -> bool {
         let stats = memory_pool.get_stats();
         let fragmentation_ratio = self.calculate_fragmentation_ratio(&stats);
-        
-        fragmentation_ratio > self.defrag_threshold &&
-        self.last_defrag.elapsed() > self.defrag_interval
+
+        fragmentation_ratio > self.defrag_threshold
+            && self.last_defrag.elapsed() > self.defrag_interval
     }
 
     /// Calculate memory fragmentation ratio
@@ -664,12 +673,12 @@ impl MemoryDefragmenter {
         if stats.current_memory_usage == 0 {
             return 0.0;
         }
-        
+
         // Simplified fragmentation calculation
         // In real implementation, would analyze actual memory layout
         let theoretical_optimal = stats.current_memory_usage;
         let actual_allocated = stats.peak_memory_usage;
-        
+
         if actual_allocated == 0 {
             0.0
         } else {
@@ -681,30 +690,32 @@ impl MemoryDefragmenter {
     pub fn defragment(&mut self, memory_pool: &GpuMemoryPool) -> Result<DefragmentationResult> {
         info!("Starting GPU memory defragmentation");
         let start_time = Instant::now();
-        
+
         // In real implementation, would:
         // 1. Identify fragmented memory regions
         // 2. Move active allocations to contiguous regions
         // 3. Release fragmented blocks back to the pool
-        
+
         // Simulate defragmentation work
         std::thread::sleep(Duration::from_millis(100));
-        
+
         let stats_before = memory_pool.get_stats();
-        
+
         // Simulate memory compaction (in real implementation would actually move memory)
         // This would involve GPU kernel calls to move data
-        
+
         let stats_after = memory_pool.get_stats();
         self.last_defrag = Instant::now();
-        
+
         let result = DefragmentationResult {
             duration: start_time.elapsed(),
-            memory_freed: stats_before.peak_memory_usage.saturating_sub(stats_after.current_memory_usage),
+            memory_freed: stats_before
+                .peak_memory_usage
+                .saturating_sub(stats_after.current_memory_usage),
             fragmentation_before: self.calculate_fragmentation_ratio(&stats_before),
             fragmentation_after: self.calculate_fragmentation_ratio(&stats_after),
         };
-        
+
         info!("Defragmentation completed: {:?}", result);
         Ok(result)
     }
@@ -733,7 +744,7 @@ impl OutOfCoreProcessor {
         let memory_limit = config.memory_pool_size_mb * 1024 * 1024; // Convert to bytes
         let chunk_size = memory_limit / 4; // Use 25% of available memory per chunk
         let overlap_size = chunk_size / 10; // 10% overlap between chunks
-        
+
         Self {
             config,
             chunk_size,
@@ -760,7 +771,11 @@ impl OutOfCoreProcessor {
         let max_items_per_chunk = self.chunk_size / item_size;
         let chunk_size = max_items_per_chunk.min(1000).max(1); // Between 1 and 1000 items
 
-        info!("Processing {} items in chunks of {}", data.len(), chunk_size);
+        info!(
+            "Processing {} items in chunks of {}",
+            data.len(),
+            chunk_size
+        );
 
         let mut results = Vec::new();
         let mut processed_count = 0;
@@ -769,9 +784,9 @@ impl OutOfCoreProcessor {
             // Process chunk on GPU
             let chunk_results = process_fn(chunk)?;
             results.extend(chunk_results);
-            
+
             processed_count += chunk.len();
-            
+
             if processed_count % (chunk_size * 10) == 0 {
                 info!("Processed {}/{} items", processed_count, data.len());
             }
@@ -806,19 +821,21 @@ impl OutOfCoreProcessor {
         while start_idx < data.len() {
             let end_idx = (start_idx + chunk_size).min(data.len());
             let chunk = &data[start_idx..end_idx];
-            
+
             let chunk_results = process_fn(chunk)?;
-            
+
             // Handle overlap by only taking non-overlapping results
             let take_count = if start_idx == 0 {
                 chunk_results.len()
             } else {
                 // Skip overlap_size results from the beginning
-                chunk_results.len().saturating_sub(self.overlap_size / item_size)
+                chunk_results
+                    .len()
+                    .saturating_sub(self.overlap_size / item_size)
             };
-            
+
             results.extend(chunk_results.into_iter().take(take_count));
-            
+
             start_idx += chunk_size - self.overlap_size / item_size;
             tokio::task::yield_now().await;
         }
@@ -863,27 +880,27 @@ impl DynamicShapeHandler {
 
         // Calculate optimal shape based on GPU characteristics
         let optimized_shape = self.calculate_optimal_shape(&shape);
-        
+
         // Cache the result
         self.cache_shape_info(shape.clone(), optimized_shape.clone());
-        
+
         optimized_shape
     }
 
     /// Calculate optimal shape for GPU processing
     fn calculate_optimal_shape(&self, shape: &[usize]) -> Vec<usize> {
         let mut optimized = shape.to_vec();
-        
+
         // Align dimensions to GPU warp/wavefront sizes (typically 32)
         const WARP_SIZE: usize = 32;
-        
+
         for dim in &mut optimized {
             if *dim > 0 {
                 // Round up to next multiple of warp size for better GPU utilization
                 *dim = ((*dim + WARP_SIZE - 1) / WARP_SIZE) * WARP_SIZE;
             }
         }
-        
+
         optimized
     }
 
@@ -915,14 +932,15 @@ impl DynamicShapeHandler {
 
         let available_memory = (self.config.memory_pool_size_mb * 1024 * 1024) / 2; // Use 50% of available memory
         let max_batch_size = available_memory / memory_per_item;
-        
+
         // Clamp to reasonable range
         max_batch_size.clamp(1, 1024)
     }
 
     /// Evict oldest cached shape
     fn evict_oldest_shape(&mut self) {
-        if let Some(oldest_key) = self.shape_cache
+        if let Some(oldest_key) = self
+            .shape_cache
             .iter()
             .min_by_key(|(_, info)| info.last_used)
             .map(|(key, _)| key.clone())
@@ -987,7 +1005,7 @@ impl BatchSizeOptimizer {
 
         let test_sizes = vec![1, 8, 16, 32, 64, 128, 256, 512];
         let max_test_size = sample_data.len().min(512);
-        
+
         let mut best_batch_size = 1;
         let mut best_throughput = 0.0;
 
@@ -997,15 +1015,19 @@ impl BatchSizeOptimizer {
             }
 
             // Test this batch size
-            let performance = self.test_batch_size(
-                &sample_data[..batch_size.min(sample_data.len())],
-                batch_size,
-                process_fn,
-            ).await?;
+            let performance = self
+                .test_batch_size(
+                    &sample_data[..batch_size.min(sample_data.len())],
+                    batch_size,
+                    process_fn,
+                )
+                .await?;
 
             info!(
                 "Batch size {}: {:.2} items/sec, {:.1}ms processing time",
-                batch_size, performance.throughput, performance.processing_time.as_millis()
+                batch_size,
+                performance.throughput,
+                performance.processing_time.as_millis()
             );
 
             if performance.throughput > best_throughput {
@@ -1099,17 +1121,21 @@ impl BatchSizeOptimizer {
     /// Get performance statistics
     pub fn get_performance_stats(&self) -> BatchSizeOptimizerStats {
         let avg_throughput = if !self.performance_history.is_empty() {
-            self.performance_history.iter()
+            self.performance_history
+                .iter()
                 .map(|p| p.throughput)
-                .sum::<f64>() / self.performance_history.len() as f64
+                .sum::<f64>()
+                / self.performance_history.len() as f64
         } else {
             0.0
         };
 
         let avg_gpu_utilization = if !self.performance_history.is_empty() {
-            self.performance_history.iter()
+            self.performance_history
+                .iter()
                 .map(|p| p.gpu_utilization)
-                .sum::<f64>() / self.performance_history.len() as f64
+                .sum::<f64>()
+                / self.performance_history.len() as f64
         } else {
             0.0
         };
@@ -1150,12 +1176,12 @@ mod tests {
     fn test_memory_pool_allocation() {
         let config = GpuAccelerationConfig::default();
         let pool = GpuMemoryPool::new(config);
-        
+
         let block_id = pool.allocate(1024, 0).unwrap();
         assert!(block_id > 0);
-        
+
         pool.deallocate(block_id).unwrap();
-        
+
         // Should reuse the block
         let block_id2 = pool.allocate(1024, 0).unwrap();
         assert_eq!(block_id, block_id2);
@@ -1165,10 +1191,10 @@ mod tests {
     fn test_tensor_cache() {
         let config = GpuAccelerationConfig::default();
         let cache = TensorCache::new(config);
-        
+
         let tensor = Array2::zeros((10, 20));
         cache.cache_entity_tensor("test_entity", tensor.clone(), 0);
-        
+
         let cached = cache.get_entity_tensor("test_entity").unwrap();
         assert_eq!(cached.shape(), tensor.shape());
     }
@@ -1177,11 +1203,11 @@ mod tests {
     fn test_mixed_precision() {
         let config = GpuAccelerationConfig::default();
         let processor = MixedPrecisionProcessor::new(config);
-        
+
         // Use a value that will definitely cause precision loss in FP16 simulation
         let tensor = Array2::from_elem((2, 2), 1.0001);
         let fp16_tensor = processor.to_fp16(&tensor);
-        
+
         if processor.fp16_enabled {
             // Should have some precision loss in FP16 simulation
             assert!(fp16_tensor[[0, 0]] != tensor[[0, 0]]);
@@ -1195,13 +1221,16 @@ mod tests {
     async fn test_multi_stream_processing() {
         let config = GpuAccelerationConfig::default();
         let mut processor = MultiStreamProcessor::new(config);
-        
+
         let entities = vec!["entity1".to_string(), "entity2".to_string()];
         let process_fn = |entity: String, _stream_id: usize| -> Array1<f32> {
             Array1::from_vec(vec![entity.len() as f32])
         };
-        
-        let results = processor.process_batch_parallel(entities, process_fn).await.unwrap();
+
+        let results = processor
+            .process_batch_parallel(entities, process_fn)
+            .await
+            .unwrap();
         assert_eq!(results.len(), 2);
     }
 }

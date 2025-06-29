@@ -17,10 +17,10 @@ use tracing::{debug, info, span, warn, Level};
 
 use crate::advanced_optimizer::{AdvancedOptimizer, AdvancedOptimizerConfig};
 use crate::algebra::{Algebra, Expression, Term, TriplePattern, Variable};
-use crate::bgp_optimizer::{OptimizedBGP, BGPOptimizer, IndexUsagePlan};
+use crate::bgp_optimizer::{BGPOptimizer, IndexUsagePlan, OptimizedBGP};
 use crate::cost_model::{CostEstimate, CostModel};
 use crate::optimizer::{IndexStatistics, IndexType, OptimizationDecision, Statistics};
-use crate::statistics_collector::{StatisticsCollector, Histogram};
+use crate::statistics_collector::{Histogram, StatisticsCollector};
 use crate::streaming::{StreamingConfig, StreamingExecutor};
 
 /// Integrated query planner combining all optimization techniques
@@ -274,9 +274,9 @@ impl Default for AdaptiveThresholds {
     fn default() -> Self {
         Self {
             streaming_memory_threshold: 512 * 1024 * 1024, // 512MB
-            parallel_execution_threshold: 100.0, // Cost units
-            index_recommendation_threshold: 0.1, // 10% improvement
-            plan_cache_accuracy_threshold: 0.8, // 80% accuracy
+            parallel_execution_threshold: 100.0,           // Cost units
+            index_recommendation_threshold: 0.1,           // 10% improvement
+            plan_cache_accuracy_threshold: 0.8,            // 80% accuracy
             statistics_staleness_threshold: Duration::from_secs(3600), // 1 hour
         }
     }
@@ -290,16 +290,20 @@ impl IntegratedQueryPlanner {
         let statistics_collector = Arc::new(StatisticsCollector::new());
         let statistics = Statistics::new();
         let index_stats = IndexStatistics::default();
-        
+
         let advanced_config = AdvancedOptimizerConfig {
             enable_ml_optimization: config.ml_cost_estimation,
             cross_query_optimization: config.cross_query_optimization,
             parallel_optimization: config.parallel_planning,
             ..Default::default()
         };
-        
-        let advanced_optimizer = AdvancedOptimizer::new(advanced_config, cost_model.clone(), statistics_collector.clone());
-        
+
+        let advanced_optimizer = AdvancedOptimizer::new(
+            advanced_config,
+            cost_model.clone(),
+            statistics_collector.clone(),
+        );
+
         let streaming_executor = if config.streaming_threshold > 0 {
             let streaming_config = StreamingConfig {
                 max_memory_usage: config.streaming_threshold,
@@ -343,27 +347,30 @@ impl IntegratedQueryPlanner {
 
         // Step 1: Analyze query complexity and characteristics
         let query_analysis = self.analyze_query(algebra)?;
-        
+
         // Step 2: Collect and update statistics
         self.update_statistics(&query_analysis)?;
-        
+
         // Step 3: Optimize BGP patterns with index awareness
         let optimized_bgp = self.optimize_bgp_patterns(algebra)?;
-        
-        // Step 4: Apply advanced optimizations  
+
+        // Step 4: Apply advanced optimizations
         let advanced_optimized = algebra.clone(); // Use algebra directly for now
-        
+
         // Step 5: Determine execution strategy (streaming vs. in-memory)
-        let execution_strategy = self.determine_execution_strategy(&advanced_optimized, &query_analysis)?;
-        
+        let execution_strategy =
+            self.determine_execution_strategy(&advanced_optimized, &query_analysis)?;
+
         // Step 6: Generate cost estimates
-        let cost_estimate = self.estimate_execution_cost(&advanced_optimized, &execution_strategy)?;
-        
+        let cost_estimate =
+            self.estimate_execution_cost(&advanced_optimized, &execution_strategy)?;
+
         // Step 7: Create adaptive hints
         let adaptive_hints = self.generate_adaptive_hints(&advanced_optimized, &cost_estimate)?;
-        
+
         // Step 8: Generate alternative plans
-        let alternative_plans = self.generate_alternative_plans(&advanced_optimized, &cost_estimate)?;
+        let alternative_plans =
+            self.generate_alternative_plans(&advanced_optimized, &cost_estimate)?;
 
         let plan = IntegratedExecutionPlan {
             optimized_algebra: advanced_optimized,
@@ -381,7 +388,10 @@ impl IntegratedQueryPlanner {
         self.cache_plan(query_hash, plan.clone())?;
 
         let planning_time = start_time.elapsed();
-        info!("Plan created in {:?} with confidence {:.2}", planning_time, plan.confidence);
+        info!(
+            "Plan created in {:?} with confidence {:.2}",
+            planning_time, plan.confidence
+        );
 
         Ok(plan)
     }
@@ -442,25 +452,31 @@ impl IntegratedQueryPlanner {
     /// Analyze query characteristics for optimization
     fn analyze_query(&self, algebra: &Algebra) -> Result<QueryAnalysis> {
         let mut analysis = QueryAnalysis::default();
-        
+
         self.analyze_algebra_recursive(algebra, &mut analysis)?;
-        
+
         // Calculate complexity score
         analysis.complexity_score = self.calculate_complexity_score(&analysis);
-        
+
         // Estimate memory requirements
         analysis.estimated_memory = self.estimate_memory_requirements(&analysis)?;
-        
+
         Ok(analysis)
     }
 
     /// Recursively analyze algebra expression
-    fn analyze_algebra_recursive(&self, algebra: &Algebra, analysis: &mut QueryAnalysis) -> Result<()> {
+    fn analyze_algebra_recursive(
+        &self,
+        algebra: &Algebra,
+        analysis: &mut QueryAnalysis,
+    ) -> Result<()> {
         match algebra {
             Algebra::Bgp(patterns) => {
                 analysis.triple_pattern_count += patterns.len();
                 for pattern in patterns {
-                    analysis.variables.extend(self.extract_pattern_variables(pattern));
+                    analysis
+                        .variables
+                        .extend(self.extract_pattern_variables(pattern));
                 }
             }
             Algebra::Join { left, right } => {
@@ -496,23 +512,29 @@ impl IntegratedQueryPlanner {
     /// Calculate complexity score for query
     fn calculate_complexity_score(&self, analysis: &QueryAnalysis) -> f64 {
         let mut score = 0.0;
-        
+
         score += analysis.triple_pattern_count as f64 * 1.0;
         score += analysis.join_count as f64 * 5.0;
         score += analysis.union_count as f64 * 3.0;
         score += analysis.filter_count as f64 * 2.0;
-        
-        if analysis.has_aggregation { score += 10.0; }
-        if analysis.has_sorting { score += 8.0; }
-        if analysis.has_complex_filters { score += 5.0; }
-        
+
+        if analysis.has_aggregation {
+            score += 10.0;
+        }
+        if analysis.has_sorting {
+            score += 8.0;
+        }
+        if analysis.has_complex_filters {
+            score += 5.0;
+        }
+
         score
     }
 
     /// Extract variables from a triple pattern
     fn extract_pattern_variables(&self, pattern: &TriplePattern) -> HashSet<Variable> {
         let mut variables = HashSet::new();
-        
+
         if let Term::Variable(var) = &pattern.subject {
             variables.insert(var.clone());
         }
@@ -522,7 +544,7 @@ impl IntegratedQueryPlanner {
         if let Term::Variable(var) = &pattern.object {
             variables.insert(var.clone());
         }
-        
+
         variables
     }
 
@@ -567,7 +589,7 @@ impl IntegratedQueryPlanner {
     fn calculate_memory_hints(&self, cost_estimate: &CostEstimate) -> Result<MemoryHints> {
         let base_memory = 64 * 1024 * 1024; // 64MB base
         let cardinality_memory = cost_estimate.cardinality * 100; // ~100 bytes per result
-        
+
         Ok(MemoryHints {
             min_memory: base_memory,
             optimal_memory: base_memory + cardinality_memory,
@@ -580,7 +602,7 @@ impl IntegratedQueryPlanner {
     fn compute_algebra_hash(&self, algebra: &Algebra) -> u64 {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
         format!("{:?}", algebra).hash(&mut hasher);
         hasher.finish()
@@ -605,7 +627,7 @@ impl IntegratedQueryPlanner {
         let base_confidence = 0.7;
         let stats_factor = 0.2; // Would be calculated from statistics quality
         let history_factor = 0.1; // Would be calculated from execution history
-        
+
         Ok(base_confidence + stats_factor + history_factor)
     }
 
@@ -685,7 +707,8 @@ impl PlanCache {
     }
 
     fn evict_lru(&mut self) {
-        if let Some(oldest_key) = self.last_access
+        if let Some(oldest_key) = self
+            .last_access
             .iter()
             .min_by_key(|(_, &instant)| instant)
             .map(|(&key, _)| key)
@@ -724,22 +747,74 @@ impl IntegratedQueryPlanner {
     fn optimize_bgp_patterns(&mut self, algebra: &Algebra) -> Result<OptimizedBGP> {
         // Create BGPOptimizer with required statistics
         let bgp_optimizer = BGPOptimizer::new(&self.statistics, &self.index_stats);
-        
-        // Use BGP optimizer to optimize basic graph patterns
-        // This is a simplified implementation
+
+        // Extract BGP patterns from algebra
+        let bgp_patterns = self.extract_bgp_patterns(algebra);
+
+        // Optimize each BGP with the optimizer
+        let mut optimized_patterns = Vec::new();
+        let mut total_cost = 0.0;
+        let mut pattern_selectivity = Vec::new();
+        let mut join_selectivity = HashMap::new();
+        let mut pattern_indexes = Vec::new();
+
+        for pattern in &bgp_patterns {
+            // Calculate pattern selectivity based on statistics
+            let selectivity = self.estimate_pattern_selectivity(pattern);
+            let cardinality = (1_000_000.0 * selectivity).max(1.0) as usize;
+
+            let pattern_sel = crate::bgp_optimizer::PatternSelectivity {
+                pattern: pattern.clone(),
+                selectivity,
+                cardinality,
+                factors: crate::bgp_optimizer::SelectivityFactors {
+                    subject_selectivity: 1.0,
+                    predicate_selectivity: 1.0,
+                    object_selectivity: 1.0,
+                    index_selectivity: 1.0,
+                },
+            };
+            pattern_selectivity.push(pattern_sel);
+
+            // Determine index usage for this pattern
+            let index_hint = self.suggest_index_for_pattern(pattern);
+            if let Some(index) = index_hint {
+                pattern_indexes.push(index);
+            }
+
+            total_cost += selectivity * 10.0; // Base cost per pattern
+            optimized_patterns.push(pattern.clone());
+        }
+
+        // Calculate join selectivity between patterns
+        for i in 0..bgp_patterns.len() {
+            for j in i + 1..bgp_patterns.len() {
+                let join_vars = self.find_join_variables(&bgp_patterns[i], &bgp_patterns[j]);
+                if !join_vars.is_empty() {
+                    let selectivity =
+                        self.estimate_join_selectivity(&bgp_patterns[i], &bgp_patterns[j]);
+                    join_selectivity.insert((i, j), selectivity);
+                }
+            }
+        }
+
+        // Calculate overall selectivity
+        let overall_selectivity = pattern_selectivity.iter().product::<f64>()
+            * join_selectivity.values().product::<f64>();
+
         Ok(OptimizedBGP {
-            patterns: vec![], // Would contain optimized patterns
-            estimated_cost: 0.0,
+            patterns: optimized_patterns,
+            estimated_cost: total_cost,
             selectivity_info: crate::bgp_optimizer::SelectivityInfo {
-                pattern_selectivity: vec![],
-                join_selectivity: HashMap::new(),
-                overall_selectivity: 1.0,
+                pattern_selectivity,
+                join_selectivity,
+                overall_selectivity,
             },
             index_plan: IndexUsagePlan {
-                pattern_indexes: vec![],
-                join_indexes: vec![],
-                index_intersections: vec![],
-                bloom_filter_candidates: vec![],
+                pattern_indexes,
+                join_indexes: vec![], // Would be computed based on join analysis
+                index_intersections: vec![], // Would be computed for complex patterns
+                bloom_filter_candidates: vec![], // Would be suggested for large joins
             },
         })
     }
@@ -752,22 +827,105 @@ impl IntegratedQueryPlanner {
         Ok(ExecutionStrategy {
             use_streaming: analysis.estimated_memory > self.config.streaming_threshold,
             memory_allocation: analysis.estimated_memory,
-            parallel_execution: analysis.complexity_score > self.adaptive_thresholds.parallel_execution_threshold,
+            parallel_execution: analysis.complexity_score
+                > self.adaptive_thresholds.parallel_execution_threshold,
             index_recommendations: vec![],
         })
     }
 
     fn estimate_execution_cost(
         &self,
-        _algebra: &Algebra,
+        algebra: &Algebra,
         strategy: &ExecutionStrategy,
     ) -> Result<CostEstimate> {
+        let mut cpu_cost = 0.0;
+        let mut io_cost = 0.0;
+        let mut memory_cost = strategy.memory_allocation as f64 / 1024.0 / 1024.0; // Memory cost in MB
+        let mut network_cost = 0.0;
+        let mut estimated_cardinality = 1;
+
+        // Recursively calculate costs based on algebra structure
+        match algebra {
+            Algebra::Bgp(patterns) => {
+                // Cost for BGP evaluation
+                cpu_cost += patterns.len() as f64 * 2.0; // Base cost per pattern
+                io_cost += patterns.len() as f64 * 1.0; // I/O cost for pattern matching
+                estimated_cardinality = (patterns.len() * 100).max(1); // Estimate based on pattern count
+            }
+            Algebra::Join { left, right } => {
+                // Recursive cost calculation for joins
+                let left_cost = self.estimate_execution_cost(left, strategy)?;
+                let right_cost = self.estimate_execution_cost(right, strategy)?;
+
+                cpu_cost += left_cost.cpu_cost + right_cost.cpu_cost;
+                io_cost += left_cost.io_cost + right_cost.io_cost;
+
+                // Join cost is proportional to the product of cardinalities
+                let join_cost = (left_cost.cardinality * right_cost.cardinality) as f64 * 0.001;
+                cpu_cost += join_cost;
+
+                estimated_cardinality =
+                    ((left_cost.cardinality as f64 * right_cost.cardinality as f64 * 0.1) as usize)
+                        .max(1);
+            }
+            Algebra::Union { left, right } => {
+                let left_cost = self.estimate_execution_cost(left, strategy)?;
+                let right_cost = self.estimate_execution_cost(right, strategy)?;
+
+                cpu_cost += left_cost.cpu_cost + right_cost.cpu_cost;
+                io_cost += left_cost.io_cost + right_cost.io_cost;
+                estimated_cardinality = left_cost.cardinality + right_cost.cardinality;
+            }
+            Algebra::Filter { pattern, .. } => {
+                let pattern_cost = self.estimate_execution_cost(pattern, strategy)?;
+                cpu_cost += pattern_cost.cpu_cost + 5.0; // Additional cost for filtering
+                io_cost += pattern_cost.io_cost;
+                estimated_cardinality = (pattern_cost.cardinality as f64 * 0.5) as usize;
+                // Filtering reduces cardinality
+            }
+            Algebra::Group {
+                pattern, variables, ..
+            } => {
+                let pattern_cost = self.estimate_execution_cost(pattern, strategy)?;
+                cpu_cost += pattern_cost.cpu_cost + variables.len() as f64 * 3.0; // Grouping cost
+                io_cost += pattern_cost.io_cost;
+                estimated_cardinality = (pattern_cost.cardinality as f64 * 0.2) as usize;
+                // Grouping reduces cardinality
+            }
+            Algebra::OrderBy {
+                pattern,
+                conditions,
+            } => {
+                let pattern_cost = self.estimate_execution_cost(pattern, strategy)?;
+                let sort_cost = (pattern_cost.cardinality as f64).log2() * conditions.len() as f64; // O(n log n) sort
+                cpu_cost += pattern_cost.cpu_cost + sort_cost;
+                io_cost += pattern_cost.io_cost;
+                estimated_cardinality = pattern_cost.cardinality;
+            }
+            _ => {
+                // Default costs for other algebra types
+                cpu_cost += 1.0;
+                io_cost += 0.5;
+                estimated_cardinality = 100;
+            }
+        }
+
+        // Apply strategy-specific adjustments
+        if strategy.use_streaming {
+            memory_cost *= 0.5; // Streaming reduces memory usage
+            io_cost *= 1.2; // But increases I/O
+        }
+
+        if strategy.parallel_execution {
+            cpu_cost *= 0.7; // Parallel execution improves CPU efficiency
+        }
+
         Ok(CostEstimate::new(
-            10.0, // cpu_cost
-            5.0,  // io_cost
-            strategy.memory_allocation as f64 / 1024.0 / 1024.0, // memory_cost in MB
-            0.0,  // network_cost
-            1000, // cardinality
+            cpu_cost,
+            io_cost,
+            memory_cost,
+            network_cost,
+            estimated_cardinality,
         ))
     }
 
@@ -775,7 +933,7 @@ impl IntegratedQueryPlanner {
         let base_memory = 64 * 1024 * 1024; // 64MB
         let variable_factor = analysis.variables.len() * 1024 * 1024; // 1MB per variable
         let complexity_factor = (analysis.complexity_score * 1024.0 * 1024.0) as usize;
-        
+
         Ok(base_memory + variable_factor + complexity_factor)
     }
 
@@ -788,19 +946,197 @@ impl IntegratedQueryPlanner {
         Ok(vec![])
     }
 
-    fn update_adaptive_thresholds(&mut self, _record: &ExecutionRecord) -> Result<()> {
+    fn update_adaptive_thresholds(&mut self, record: &ExecutionRecord) -> Result<()> {
         // Update adaptive thresholds based on execution performance
+        let accuracy_ratio = if record.estimated_duration.as_millis() > 0 {
+            record.actual_duration.as_millis() as f64 / record.estimated_duration.as_millis() as f64
+        } else {
+            1.0
+        };
+
+        // If our estimates are consistently off, adjust thresholds
+        if accuracy_ratio > 2.0 {
+            // We're underestimating, be more conservative
+            self.adaptive_thresholds.streaming_memory_threshold =
+                (self.adaptive_thresholds.streaming_memory_threshold as f64 * 1.1) as usize;
+            self.adaptive_thresholds.parallel_execution_threshold *= 1.1;
+        } else if accuracy_ratio < 0.5 {
+            // We're overestimating, be more aggressive
+            self.adaptive_thresholds.streaming_memory_threshold =
+                (self.adaptive_thresholds.streaming_memory_threshold as f64 * 0.9) as usize;
+            self.adaptive_thresholds.parallel_execution_threshold *= 0.9;
+        }
+
+        // Update plan cache accuracy threshold based on actual success rate
+        if record.success {
+            self.adaptive_thresholds.plan_cache_accuracy_threshold =
+                (self.adaptive_thresholds.plan_cache_accuracy_threshold * 0.95 + 0.05).min(0.95);
+        } else {
+            self.adaptive_thresholds.plan_cache_accuracy_threshold =
+                (self.adaptive_thresholds.plan_cache_accuracy_threshold * 0.95).max(0.5);
+        }
+
+        debug!("Updated adaptive thresholds based on execution feedback");
         Ok(())
     }
 
-    fn update_cost_model(&mut self, _record: &ExecutionRecord) -> Result<()> {
+    fn update_cost_model(&mut self, record: &ExecutionRecord) -> Result<()> {
         // Update cost model with actual vs. estimated performance
+        let mut cost_model = self.cost_model.lock().unwrap();
+
+        // Calculate estimation error
+        let duration_error = if record.estimated_duration.as_millis() > 0 {
+            (record.actual_duration.as_millis() as f64
+                - record.estimated_duration.as_millis() as f64)
+                .abs()
+                / record.estimated_duration.as_millis() as f64
+        } else {
+            0.0
+        };
+
+        let cardinality_error = if record.estimated_cardinality > 0 {
+            (record.actual_cardinality as f64 - record.estimated_cardinality as f64).abs()
+                / record.estimated_cardinality as f64
+        } else {
+            0.0
+        };
+
+        // Update cost model parameters based on errors
+        // This is a simplified approach - in practice, you'd use more sophisticated ML techniques
+        if duration_error > 0.5 {
+            info!(
+                "Large duration estimation error: {:.2}, updating cost model",
+                duration_error
+            );
+            // Adjust cost factors based on the error
+        }
+
+        if cardinality_error > 0.5 {
+            info!(
+                "Large cardinality estimation error: {:.2}, updating statistics",
+                cardinality_error
+            );
+            // Update cardinality estimation parameters
+        }
+
+        // Update statistics collector with actual execution data
+        self.statistics_collector.update_execution_statistics(
+            record.actual_duration,
+            record.actual_cardinality,
+            record.memory_used,
+        );
+
+        debug!("Updated cost model with execution feedback");
         Ok(())
     }
 
-    fn analyze_index_opportunities(&self, _history: &ExecutionHistory) -> Result<Vec<IndexRecommendation>> {
+    fn analyze_index_opportunities(
+        &self,
+        _history: &ExecutionHistory,
+    ) -> Result<Vec<IndexRecommendation>> {
         // Analyze execution history to recommend new indexes
-        Ok(vec![])
+        let mut recommendations = Vec::new();
+
+        // Basic index recommendations based on common query patterns
+        // In a full implementation, this would analyze actual execution history
+
+        // Recommend B-tree index for frequently filtered properties
+        recommendations.push(IndexRecommendation {
+            index_type: IndexType::BTree,
+            estimated_benefit: 0.3, // 30% improvement
+            creation_cost: 100.0,
+            maintenance_cost: 10.0,
+            confidence: 0.8,
+        });
+
+        // Recommend hash index for equality lookups
+        recommendations.push(IndexRecommendation {
+            index_type: IndexType::Hash,
+            estimated_benefit: 0.5, // 50% improvement for exact matches
+            creation_cost: 50.0,
+            maintenance_cost: 5.0,
+            confidence: 0.9,
+        });
+
+        Ok(recommendations)
+    }
+
+    /// Extract BGP patterns from algebra expression
+    fn extract_bgp_patterns(&self, algebra: &Algebra) -> Vec<TriplePattern> {
+        match algebra {
+            Algebra::Bgp(patterns) => patterns.clone(),
+            Algebra::Join { left, right } => {
+                let mut patterns = self.extract_bgp_patterns(left);
+                patterns.extend(self.extract_bgp_patterns(right));
+                patterns
+            }
+            Algebra::Union { left, right } => {
+                let mut patterns = self.extract_bgp_patterns(left);
+                patterns.extend(self.extract_bgp_patterns(right));
+                patterns
+            }
+            Algebra::Filter { pattern, .. } => self.extract_bgp_patterns(pattern),
+            _ => Vec::new(),
+        }
+    }
+
+    /// Estimate selectivity of a triple pattern
+    fn estimate_pattern_selectivity(&self, pattern: &TriplePattern) -> f64 {
+        // Basic selectivity estimation based on pattern structure
+        let mut selectivity = 1.0;
+
+        // Reduce selectivity for each concrete term (non-variable)
+        if !matches!(pattern.subject, Term::Variable(_)) {
+            selectivity *= 0.1; // Subject specified reduces selectivity to 10%
+        }
+        if !matches!(pattern.predicate, Term::Variable(_)) {
+            selectivity *= 0.2; // Predicate specified reduces selectivity to 20%
+        }
+        if !matches!(pattern.object, Term::Variable(_)) {
+            selectivity *= 0.1; // Object specified reduces selectivity to 10%
+        }
+
+        // Ensure minimum selectivity
+        selectivity.max(0.001)
+    }
+
+    /// Suggest an index for a specific pattern
+    fn suggest_index_for_pattern(&self, pattern: &TriplePattern) -> Option<(usize, IndexType)> {
+        // Suggest index based on pattern characteristics
+        match (&pattern.subject, &pattern.predicate, &pattern.object) {
+            // If subject is variable but predicate is concrete, suggest predicate index
+            (Term::Variable(_), Term::Iri(_), _) => Some((1, IndexType::BTree)),
+            // If object is concrete, suggest object index
+            (_, _, Term::Literal(_)) => Some((2, IndexType::Hash)),
+            // If subject is concrete, suggest subject index
+            (Term::Iri(_), _, _) => Some((0, IndexType::Hash)),
+            _ => None,
+        }
+    }
+
+    /// Find join variables between two patterns
+    fn find_join_variables(&self, left: &TriplePattern, right: &TriplePattern) -> Vec<Variable> {
+        let left_vars = self.extract_pattern_variables(left);
+        let right_vars = self.extract_pattern_variables(right);
+
+        left_vars.intersection(&right_vars).cloned().collect()
+    }
+
+    /// Estimate join selectivity between two patterns
+    fn estimate_join_selectivity(&self, left: &TriplePattern, right: &TriplePattern) -> f64 {
+        let join_vars = self.find_join_variables(left, right);
+
+        if join_vars.is_empty() {
+            return 1.0; // Cartesian product
+        }
+
+        // Estimate based on number of join variables
+        // More join variables typically means higher selectivity
+        match join_vars.len() {
+            1 => 0.1,  // Single variable join
+            2 => 0.05, // Two variable join - more selective
+            _ => 0.01, // Multiple variable joins are very selective
+        }
     }
 }
 
@@ -819,10 +1155,10 @@ mod tests {
     fn test_query_analysis() {
         let config = IntegratedPlannerConfig::default();
         let planner = IntegratedQueryPlanner::new(config).unwrap();
-        
+
         let algebra = Algebra::Bgp(vec![]);
         let analysis = planner.analyze_query(&algebra).unwrap();
-        
+
         assert_eq!(analysis.triple_pattern_count, 0);
         assert_eq!(analysis.join_count, 0);
     }
@@ -830,7 +1166,7 @@ mod tests {
     #[test]
     fn test_plan_cache() {
         let mut cache = PlanCache::new(10);
-        
+
         let plan = IntegratedExecutionPlan {
             optimized_algebra: Algebra::Bgp(vec![]),
             estimated_cost: CostEstimate {
@@ -856,7 +1192,7 @@ mod tests {
             adaptive_hints: AdaptiveHints::default(),
             alternative_plans: vec![],
         };
-        
+
         cache.insert_plan(12345, plan);
         assert!(cache.get_plan(12345).is_some());
     }

@@ -1,9 +1,9 @@
 //! Comparison constraint implementations
 
-use serde::{Deserialize, Serialize};
-use oxirs_core::{rdf_store::Store, model::Term};
-use crate::{Result, ConstraintComponentId, Severity};
 use super::constraint_context::{ConstraintContext, ConstraintEvaluationResult};
+use crate::{ConstraintComponentId, Result, Severity};
+use oxirs_core::{model::Term, rdf_store::Store};
+use serde::{Deserialize, Serialize};
 
 /// Equals constraint
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -21,7 +21,11 @@ impl EqualsConstraint {
         Ok(())
     }
 
-    pub fn evaluate(&self, _context: &ConstraintContext, _store: &Store) -> Result<ConstraintEvaluationResult> {
+    pub fn evaluate(
+        &self,
+        _context: &ConstraintContext,
+        _store: &Store,
+    ) -> Result<ConstraintEvaluationResult> {
         // TODO: Implement equals constraint evaluation
         Ok(ConstraintEvaluationResult::Satisfied)
     }
@@ -43,7 +47,11 @@ impl DisjointConstraint {
         Ok(())
     }
 
-    pub fn evaluate(&self, _context: &ConstraintContext, _store: &Store) -> Result<ConstraintEvaluationResult> {
+    pub fn evaluate(
+        &self,
+        _context: &ConstraintContext,
+        _store: &Store,
+    ) -> Result<ConstraintEvaluationResult> {
         // TODO: Implement disjoint constraint evaluation
         Ok(ConstraintEvaluationResult::Satisfied)
     }
@@ -65,7 +73,11 @@ impl LessThanConstraint {
         Ok(())
     }
 
-    pub fn evaluate(&self, _context: &ConstraintContext, _store: &Store) -> Result<ConstraintEvaluationResult> {
+    pub fn evaluate(
+        &self,
+        _context: &ConstraintContext,
+        _store: &Store,
+    ) -> Result<ConstraintEvaluationResult> {
         // TODO: Implement less than constraint evaluation
         Ok(ConstraintEvaluationResult::Satisfied)
     }
@@ -87,7 +99,11 @@ impl LessThanOrEqualsConstraint {
         Ok(())
     }
 
-    pub fn evaluate(&self, _context: &ConstraintContext, _store: &Store) -> Result<ConstraintEvaluationResult> {
+    pub fn evaluate(
+        &self,
+        _context: &ConstraintContext,
+        _store: &Store,
+    ) -> Result<ConstraintEvaluationResult> {
         // TODO: Implement less than or equals constraint evaluation
         Ok(ConstraintEvaluationResult::Satisfied)
     }
@@ -109,7 +125,11 @@ impl InConstraint {
         Ok(())
     }
 
-    pub fn evaluate(&self, _context: &ConstraintContext, _store: &Store) -> Result<ConstraintEvaluationResult> {
+    pub fn evaluate(
+        &self,
+        _context: &ConstraintContext,
+        _store: &Store,
+    ) -> Result<ConstraintEvaluationResult> {
         // TODO: Implement in constraint evaluation
         Ok(ConstraintEvaluationResult::Satisfied)
     }
@@ -131,7 +151,11 @@ impl HasValueConstraint {
         Ok(())
     }
 
-    pub fn evaluate(&self, _context: &ConstraintContext, _store: &Store) -> Result<ConstraintEvaluationResult> {
+    pub fn evaluate(
+        &self,
+        _context: &ConstraintContext,
+        _store: &Store,
+    ) -> Result<ConstraintEvaluationResult> {
         // TODO: Implement has value constraint evaluation
         Ok(ConstraintEvaluationResult::Satisfied)
     }

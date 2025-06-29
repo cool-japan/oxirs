@@ -297,7 +297,10 @@ impl ModelCompressionManager {
         model_weights: &HashMap<String, Array2<f32>>,
         compression_target: CompressionTarget,
     ) -> Result<CompressedModel> {
-        println!("🗜️  Starting model compression with target: {:?}", compression_target);
+        println!(
+            "🗜️  Starting model compression with target: {:?}",
+            compression_target
+        );
 
         let mut compressed_weights = model_weights.clone();
         let mut compression_stats = CompressionStats::default();
@@ -307,17 +310,23 @@ impl ModelCompressionManager {
         let pruning_result = self.pruning.prune_weights(&compressed_weights).await?;
         compressed_weights = pruning_result.pruned_weights;
         compression_stats.sparsity_ratio = pruning_result.sparsity_achieved;
-        
+
         // Step 2: Apply quantization
         println!("📊 Applying quantization...");
-        let quantization_result = self.quantization.quantize_weights(&compressed_weights).await?;
+        let quantization_result = self
+            .quantization
+            .quantize_weights(&compressed_weights)
+            .await?;
         let quantized_weights = quantization_result.quantized_weights;
         compression_stats.quantization_ratio = quantization_result.compression_ratio;
 
         // Step 3: Knowledge distillation (if student model requested)
         let distilled_weights = if compression_target.enable_distillation {
             println!("🎓 Applying knowledge distillation...");
-            let distillation_result = self.distillation.distill_knowledge(&compressed_weights).await?;
+            let distillation_result = self
+                .distillation
+                .distill_knowledge(&compressed_weights)
+                .await?;
             compression_stats.distillation_loss = distillation_result.final_loss;
             distillation_result.student_weights
         } else {
@@ -326,9 +335,12 @@ impl ModelCompressionManager {
 
         // Calculate overall compression statistics
         let original_size = self.calculate_model_size(model_weights);
-        let compressed_size = self.calculate_quantized_size(&quantized_weights, self.quantization.config.bit_precision);
-        compression_stats.size_reduction_ratio = 1.0 - (compressed_size as f32 / original_size as f32);
-        compression_stats.memory_savings_mb = (original_size - compressed_size) as f32 / (1024.0 * 1024.0);
+        let compressed_size = self
+            .calculate_quantized_size(&quantized_weights, self.quantization.config.bit_precision);
+        compression_stats.size_reduction_ratio =
+            1.0 - (compressed_size as f32 / original_size as f32);
+        compression_stats.memory_savings_mb =
+            (original_size - compressed_size) as f32 / (1024.0 * 1024.0);
 
         let compressed_model = CompressedModel {
             original_weights: model_weights.clone(),
@@ -339,26 +351,38 @@ impl ModelCompressionManager {
         };
 
         println!("✅ Model compression completed!");
-        println!("   📉 Size reduction: {:.1}%", compressed_model.stats.size_reduction_ratio * 100.0);
-        println!("   💾 Memory saved: {:.1}MB", compressed_model.stats.memory_savings_mb);
-        println!("   🕳️  Sparsity: {:.1}%", compressed_model.stats.sparsity_ratio * 100.0);
+        println!(
+            "   📉 Size reduction: {:.1}%",
+            compressed_model.stats.size_reduction_ratio * 100.0
+        );
+        println!(
+            "   💾 Memory saved: {:.1}MB",
+            compressed_model.stats.memory_savings_mb
+        );
+        println!(
+            "   🕳️  Sparsity: {:.1}%",
+            compressed_model.stats.sparsity_ratio * 100.0
+        );
 
         Ok(compressed_model)
     }
 
     /// Calculate model size in bytes
     fn calculate_model_size(&self, weights: &HashMap<String, Array2<f32>>) -> usize {
-        weights.values()
+        weights
+            .values()
             .map(|w| w.len() * std::mem::size_of::<f32>())
             .sum()
     }
 
     /// Calculate quantized model size
-    fn calculate_quantized_size(&self, weights: &HashMap<String, Array2<f32>>, bit_precision: u8) -> usize {
+    fn calculate_quantized_size(
+        &self,
+        weights: &HashMap<String, Array2<f32>>,
+        bit_precision: u8,
+    ) -> usize {
         let bytes_per_element = (bit_precision as f32 / 8.0).ceil() as usize;
-        weights.values()
-            .map(|w| w.len() * bytes_per_element)
-            .sum()
+        weights.values().map(|w| w.len() * bytes_per_element).sum()
     }
 }
 
@@ -403,10 +427,10 @@ impl QuantizationProcessor {
 
             // Apply quantization
             let quantized = self.apply_quantization(weight_tensor, &params)?;
-            
+
             total_size_original += weight_tensor.len() * std::mem::size_of::<f32>();
             total_size_quantized += weight_tensor.len() * (self.config.bit_precision as usize / 8);
-            
+
             quantized_weights.insert(layer_name.clone(), quantized);
         }
 
@@ -450,10 +474,16 @@ impl QuantizationProcessor {
     }
 
     /// Apply quantization to tensor
-    fn apply_quantization(&self, tensor: &Array2<f32>, params: &QuantizationParams) -> Result<Array2<f32>> {
+    fn apply_quantization(
+        &self,
+        tensor: &Array2<f32>,
+        params: &QuantizationParams,
+    ) -> Result<Array2<f32>> {
         let quantized = tensor.mapv(|x| {
             let quantized_val = (x / params.scale + params.zero_point as f32).round();
-            let clamped = quantized_val.max(0.0).min((1 << self.config.bit_precision) as f32 - 1.0);
+            let clamped = quantized_val
+                .max(0.0)
+                .min((1 << self.config.bit_precision) as f32 - 1.0);
             (clamped - params.zero_point as f32) * params.scale
         });
 
@@ -496,10 +526,10 @@ impl PruningProcessor {
         for (layer_name, weight_tensor) in weights {
             let mask = self.generate_pruning_mask(weight_tensor)?;
             let pruned = self.apply_pruning_mask(weight_tensor, &mask);
-            
+
             total_params += weight_tensor.len();
             pruned_params += mask.iter().filter(|&&x| !x).count();
-            
+
             self.pruning_masks.insert(layer_name.clone(), mask);
             pruned_weights.insert(layer_name.clone(), pruned);
         }
@@ -542,7 +572,7 @@ impl PruningProcessor {
     fn calculate_magnitude_threshold(&self, tensor: &Array2<f32>) -> f32 {
         let mut abs_values: Vec<f32> = tensor.iter().map(|&x| x.abs()).collect();
         abs_values.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        
+
         let percentile_index = (abs_values.len() as f32 * self.config.sparsity_ratio) as usize;
         abs_values.get(percentile_index).copied().unwrap_or(0.0)
     }
@@ -560,7 +590,7 @@ impl PruningProcessor {
     fn calculate_snip_threshold(&self, importance_scores: &Array2<f32>) -> f32 {
         let mut scores: Vec<f32> = importance_scores.iter().copied().collect();
         scores.sort_by(|a, b| b.partial_cmp(a).unwrap()); // Descending order
-        
+
         let keep_index = ((scores.len() as f32) * (1.0 - self.config.sparsity_ratio)) as usize;
         scores.get(keep_index).copied().unwrap_or(0.0)
     }
@@ -570,14 +600,15 @@ impl PruningProcessor {
         // Simplified lottery ticket: iterative magnitude pruning
         let mut current_tensor = tensor.clone();
         let mut mask = Array2::from_elem(tensor.dim(), true);
-        
+
         let pruning_rate = 0.2; // Prune 20% each iteration
-        let iterations = (self.config.sparsity_ratio.ln() / (1.0f32 - pruning_rate).ln()).ceil() as usize;
-        
+        let iterations =
+            (self.config.sparsity_ratio.ln() / (1.0f32 - pruning_rate).ln()).ceil() as usize;
+
         for _ in 0..iterations {
             let threshold = self.calculate_percentile_threshold(&current_tensor, pruning_rate);
             let iteration_mask = current_tensor.mapv(|x| x.abs() >= threshold);
-            
+
             // Update mask and tensor
             for ((i, j), &keep) in iteration_mask.indexed_iter() {
                 if !keep {
@@ -586,22 +617,23 @@ impl PruningProcessor {
                 }
             }
         }
-        
+
         Ok(mask)
     }
 
     /// Calculate percentile threshold
     fn calculate_percentile_threshold(&self, tensor: &Array2<f32>, percentile: f32) -> f32 {
-        let mut abs_values: Vec<f32> = tensor.iter()
+        let mut abs_values: Vec<f32> = tensor
+            .iter()
             .filter(|&&x| x != 0.0) // Only consider non-zero values
             .map(|&x| x.abs())
             .collect();
         abs_values.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        
+
         if abs_values.is_empty() {
             return 0.0;
         }
-        
+
         let index = (abs_values.len() as f32 * percentile) as usize;
         abs_values.get(index).copied().unwrap_or(0.0)
     }
@@ -630,21 +662,21 @@ impl DistillationProcessor {
     ) -> Result<DistillationResult> {
         // Simulate knowledge distillation process
         println!("🎓 Starting knowledge distillation...");
-        
+
         // Create smaller student model (50% of teacher size)
         let mut student_weights = HashMap::new();
         for (layer_name, teacher_tensor) in teacher_weights {
             let (rows, cols) = teacher_tensor.dim();
             let student_rows = rows / 2;
             let student_cols = cols / 2;
-            
+
             // Initialize student weights (simplified)
             let student_tensor = Array2::from_shape_fn((student_rows, student_cols), |(i, j)| {
                 let teacher_i = (i * rows) / student_rows;
                 let teacher_j = (j * cols) / student_cols;
                 teacher_tensor[[teacher_i, teacher_j]] * 0.8 // Scale down
             });
-            
+
             student_weights.insert(layer_name.clone(), student_tensor);
         }
 
@@ -653,9 +685,12 @@ impl DistillationProcessor {
         for epoch in 0..20 {
             // Simulate knowledge transfer
             distillation_loss *= 0.95; // Gradual improvement
-            
+
             if epoch % 5 == 0 {
-                println!("  📉 Epoch {}: Distillation loss = {:.4}", epoch, distillation_loss);
+                println!(
+                    "  📉 Epoch {}: Distillation loss = {:.4}",
+                    epoch, distillation_loss
+                );
             }
         }
 
@@ -674,11 +709,18 @@ impl DistillationProcessor {
     ) -> f32 {
         let teacher_soft = self.apply_temperature_softmax(teacher_output, self.config.temperature);
         let student_soft = self.apply_temperature_softmax(student_output, self.config.temperature);
-        
+
         // KL divergence
-        teacher_soft.iter()
+        teacher_soft
+            .iter()
             .zip(student_soft.iter())
-            .map(|(&t, &s)| if t > 0.0 { t * (t / s.max(1e-8)).ln() } else { 0.0 })
+            .map(|(&t, &s)| {
+                if t > 0.0 {
+                    t * (t / s.max(1e-8)).ln()
+                } else {
+                    0.0
+                }
+            })
             .sum()
     }
 
@@ -711,13 +753,13 @@ impl NASProcessor {
     /// Search for optimal architecture
     pub async fn search_architecture(&mut self) -> Result<OptimalArchitecture> {
         println!("🔍 Starting Neural Architecture Search...");
-        
+
         // Initialize population
         self.initialize_population()?;
-        
+
         let mut best_architecture = None;
         let mut best_score = f32::NEG_INFINITY;
-        
+
         // Evolution iterations
         for generation in 0..20 {
             // Evaluate population
@@ -730,22 +772,25 @@ impl NASProcessor {
                     best_architecture = Some(candidate.clone());
                 }
             }
-            
+
             // Update scores
             for (i, score) in scores.into_iter().enumerate() {
                 self.population[i].score = score;
             }
-            
+
             // Selection and mutation
             self.evolve_population()?;
-            
+
             if generation % 5 == 0 {
-                println!("  🧬 Generation {}: Best score = {:.4}", generation, best_score);
+                println!(
+                    "  🧬 Generation {}: Best score = {:.4}",
+                    generation, best_score
+                );
             }
         }
 
         let optimal = best_architecture.ok_or_else(|| anyhow!("No optimal architecture found"))?;
-        
+
         Ok(OptimalArchitecture {
             architecture: optimal.architecture,
             performance_score: optimal.score,
@@ -757,7 +802,7 @@ impl NASProcessor {
     /// Initialize architecture population
     fn initialize_population(&mut self) -> Result<()> {
         self.population.clear();
-        
+
         for _ in 0..self.config.num_architectures {
             let architecture = self.generate_random_architecture()?;
             let candidate = ArchitectureCandidate {
@@ -768,7 +813,7 @@ impl NASProcessor {
             };
             self.population.push(candidate);
         }
-        
+
         Ok(())
     }
 
@@ -776,7 +821,7 @@ impl NASProcessor {
     fn generate_random_architecture(&self) -> Result<Architecture> {
         let num_layers = rand::random::<usize>() % 8 + 2; // 2-10 layers
         let mut layers = Vec::new();
-        
+
         for _ in 0..num_layers {
             let layer_type = match rand::random::<usize>() % 4 {
                 0 => LayerType::Linear,
@@ -784,10 +829,10 @@ impl NASProcessor {
                 2 => LayerType::Convolution,
                 _ => LayerType::Normalization,
             };
-            
+
             let input_dim = 128 + (rand::random::<usize>() % 512);
             let output_dim = 128 + (rand::random::<usize>() % 512);
-            
+
             layers.push(LayerConfig {
                 layer_type,
                 input_dim,
@@ -795,7 +840,7 @@ impl NASProcessor {
                 activation: ActivationType::ReLU,
             });
         }
-        
+
         Ok(Architecture {
             layers,
             skip_connections: rand::random::<bool>(),
@@ -804,15 +849,18 @@ impl NASProcessor {
     }
 
     /// Evaluate architecture performance (readonly)
-    async fn evaluate_architecture_readonly(&self, candidate: &ArchitectureCandidate) -> Result<f32> {
+    async fn evaluate_architecture_readonly(
+        &self,
+        candidate: &ArchitectureCandidate,
+    ) -> Result<f32> {
         // Estimate performance based on architecture properties
         let complexity_score = self.calculate_complexity_score(&candidate.architecture);
         let efficiency_score = self.calculate_efficiency_score(&candidate.architecture);
         let hardware_score = self.calculate_hardware_score(&candidate.architecture);
-        
+
         // Combined score (higher is better)
         let score = complexity_score * 0.4 + efficiency_score * 0.4 + hardware_score * 0.2;
-        
+
         Ok(score)
     }
 
@@ -822,23 +870,25 @@ impl NASProcessor {
         let complexity_score = self.calculate_complexity_score(&candidate.architecture);
         let efficiency_score = self.calculate_efficiency_score(&candidate.architecture);
         let hardware_score = self.calculate_hardware_score(&candidate.architecture);
-        
+
         // Update estimates
         candidate.estimated_memory = self.estimate_memory_usage(&candidate.architecture);
         candidate.estimated_latency = self.estimate_inference_time(&candidate.architecture);
-        
+
         // Combined score (higher is better)
         let score = complexity_score * 0.4 + efficiency_score * 0.4 + hardware_score * 0.2;
-        
+
         Ok(score)
     }
 
     /// Calculate complexity score
     fn calculate_complexity_score(&self, architecture: &Architecture) -> f32 {
-        let total_params: usize = architecture.layers.iter()
+        let total_params: usize = architecture
+            .layers
+            .iter()
             .map(|layer| layer.input_dim * layer.output_dim)
             .sum();
-        
+
         // Prefer moderate complexity
         let optimal_params = 100_000;
         let ratio = total_params as f32 / optimal_params as f32;
@@ -848,7 +898,7 @@ impl NASProcessor {
     /// Calculate efficiency score
     fn calculate_efficiency_score(&self, architecture: &Architecture) -> f32 {
         let mut score = 0.0;
-        
+
         // Reward efficient layer types
         for layer in &architecture.layers {
             score += match layer.layer_type {
@@ -858,11 +908,15 @@ impl NASProcessor {
                 LayerType::Normalization => 0.9,
             };
         }
-        
+
         // Bonus for skip connections and normalization
-        if architecture.skip_connections { score += 0.2; }
-        if architecture.normalization { score += 0.1; }
-        
+        if architecture.skip_connections {
+            score += 0.2;
+        }
+        if architecture.normalization {
+            score += 0.1;
+        }
+
         score / architecture.layers.len() as f32
     }
 
@@ -870,37 +924,43 @@ impl NASProcessor {
     fn calculate_hardware_score(&self, architecture: &Architecture) -> f32 {
         let memory_usage = self.estimate_memory_usage(architecture);
         let inference_time = self.estimate_inference_time(architecture);
-        
-        let memory_score = if memory_usage <= self.config.hardware_constraints.max_memory_mb as f32 {
+
+        let memory_score = if memory_usage <= self.config.hardware_constraints.max_memory_mb as f32
+        {
             1.0 - (memory_usage / self.config.hardware_constraints.max_memory_mb as f32)
         } else {
             0.0
         };
-        
-        let time_score = if inference_time <= self.config.hardware_constraints.max_inference_time_ms {
+
+        let time_score = if inference_time <= self.config.hardware_constraints.max_inference_time_ms
+        {
             1.0 - (inference_time / self.config.hardware_constraints.max_inference_time_ms)
         } else {
             0.0
         };
-        
+
         (memory_score + time_score) / 2.0
     }
 
     /// Estimate memory usage
     fn estimate_memory_usage(&self, architecture: &Architecture) -> f32 {
-        let param_memory: usize = architecture.layers.iter()
+        let param_memory: usize = architecture
+            .layers
+            .iter()
             .map(|layer| layer.input_dim * layer.output_dim * 4) // 4 bytes per float
             .sum();
-        
+
         param_memory as f32 / (1024.0 * 1024.0) // Convert to MB
     }
 
     /// Estimate inference time
     fn estimate_inference_time(&self, architecture: &Architecture) -> f32 {
-        let ops_count: usize = architecture.layers.iter()
+        let ops_count: usize = architecture
+            .layers
+            .iter()
             .map(|layer| layer.input_dim * layer.output_dim)
             .sum();
-        
+
         // Simple model: assume 1 GFLOP/s processing speed
         ops_count as f32 / 1_000_000.0 // Convert to milliseconds
     }
@@ -908,12 +968,13 @@ impl NASProcessor {
     /// Evolve population using genetic algorithm
     fn evolve_population(&mut self) -> Result<()> {
         // Sort by score (descending)
-        self.population.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
-        
+        self.population
+            .sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+
         // Keep top 50%
         let survivors = self.population.len() / 2;
         self.population.truncate(survivors);
-        
+
         // Generate offspring through mutation
         let mut offspring = Vec::new();
         for parent in &self.population {
@@ -922,7 +983,7 @@ impl NASProcessor {
             child.score = 0.0; // Reset score for re-evaluation
             offspring.push(child);
         }
-        
+
         self.population.extend(offspring);
         Ok(())
     }
@@ -930,14 +991,19 @@ impl NASProcessor {
     /// Mutate architecture
     fn mutate_architecture(&self, architecture: &mut Architecture) -> Result<()> {
         let mutation_type = rand::random::<usize>() % 4;
-        
+
         match mutation_type {
             0 => {
                 // Mutate layer dimensions
                 let layer_count = architecture.layers.len();
                 if layer_count > 0 {
-                    if let Some(layer) = architecture.layers.get_mut(rand::random::<usize>() % layer_count) {
-                        layer.output_dim = (layer.output_dim as f32 * (0.8 + rand::random::<f32>() * 0.4)) as usize;
+                    if let Some(layer) = architecture
+                        .layers
+                        .get_mut(rand::random::<usize>() % layer_count)
+                    {
+                        layer.output_dim = (layer.output_dim as f32
+                            * (0.8 + rand::random::<f32>() * 0.4))
+                            as usize;
                         layer.output_dim = layer.output_dim.max(32).min(1024);
                     }
                 }
@@ -946,7 +1012,10 @@ impl NASProcessor {
                 // Change layer type
                 let layer_count = architecture.layers.len();
                 if layer_count > 0 {
-                    if let Some(layer) = architecture.layers.get_mut(rand::random::<usize>() % layer_count) {
+                    if let Some(layer) = architecture
+                        .layers
+                        .get_mut(rand::random::<usize>() % layer_count)
+                    {
                         layer.layer_type = match rand::random::<usize>() % 4 {
                             0 => LayerType::Linear,
                             1 => LayerType::Attention,
@@ -965,7 +1034,7 @@ impl NASProcessor {
                 architecture.normalization = !architecture.normalization;
             }
         }
-        
+
         Ok(())
     }
 }
@@ -1109,10 +1178,10 @@ mod tests {
     fn test_quantization_processor() {
         let config = QuantizationConfig::default();
         let processor = QuantizationProcessor::new(config);
-        
+
         let tensor = Array2::from_shape_fn((4, 4), |(i, j)| (i + j) as f32 * 0.1);
         let params = processor.calculate_quantization_params(&tensor).unwrap();
-        
+
         assert!(params.scale > 0.0);
         assert!(params.min_val <= params.max_val);
     }
@@ -1121,10 +1190,10 @@ mod tests {
     fn test_pruning_processor() {
         let config = PruningConfig::default();
         let mut processor = PruningProcessor::new(config);
-        
+
         let tensor = Array2::from_shape_fn((4, 4), |(i, j)| if i == j { 1.0 } else { 0.01 });
         let mask = processor.generate_pruning_mask(&tensor).unwrap();
-        
+
         // Should preserve diagonal elements (higher magnitude)
         assert!(mask[[0, 0]]);
         assert!(mask[[1, 1]]);
@@ -1133,14 +1202,20 @@ mod tests {
     #[tokio::test]
     async fn test_model_compression_manager() {
         let mut manager = ModelCompressionManager::new();
-        
+
         let mut weights = HashMap::new();
-        weights.insert("layer1".to_string(), Array2::from_shape_fn((8, 8), |(i, j)| (i + j) as f32 * 0.1));
-        weights.insert("layer2".to_string(), Array2::from_shape_fn((8, 4), |(i, j)| (i as f32 - j as f32) * 0.05));
-        
+        weights.insert(
+            "layer1".to_string(),
+            Array2::from_shape_fn((8, 8), |(i, j)| (i + j) as f32 * 0.1),
+        );
+        weights.insert(
+            "layer2".to_string(),
+            Array2::from_shape_fn((8, 4), |(i, j)| (i as f32 - j as f32) * 0.05),
+        );
+
         let target = CompressionTarget::default();
         let result = manager.compress_model(&weights, target).await.unwrap();
-        
+
         assert!(result.stats.size_reduction_ratio > 0.0);
         assert!(result.stats.memory_savings_mb >= 0.0);
         assert_eq!(result.compressed_weights.len(), weights.len());

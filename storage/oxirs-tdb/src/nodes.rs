@@ -388,6 +388,20 @@ impl StringDictionary {
         self.ref_counts.get(&id).copied().unwrap_or(0)
     }
 
+    /// Reset all reference counts to zero (used during compaction)
+    pub fn reset_ref_counts(&mut self) {
+        for count in self.ref_counts.values_mut() {
+            *count = 0;
+        }
+    }
+
+    /// Increment reference count for a specific ID (used during compaction)
+    pub fn increment_ref_count(&mut self, id: u32) {
+        if self.id_to_string.contains_key(&id) {
+            *self.ref_counts.entry(id).or_insert(0) += 1;
+        }
+    }
+
     /// Clear all entries from the dictionary
     pub fn clear(&mut self) {
         self.string_to_id.clear();
@@ -781,8 +795,30 @@ impl NodeTable {
 
         let (before_size, _, _) = dictionary.stats();
 
-        // In a real implementation, we would scan all nodes and rebuild the dictionary
-        // For now, this is a placeholder
+        // Step 1: Reset all reference counts to zero
+        dictionary.reset_ref_counts();
+
+        // Step 2: Scan all stored terms and rebuild reference counts
+        let terms = self
+            .term_to_id
+            .read()
+            .map_err(|_| anyhow!("Failed to acquire term_to_id lock"))?;
+
+        let mut strings_in_use = std::collections::HashSet::new();
+
+        for term in terms.keys() {
+            self.extract_strings_from_term(term, &mut strings_in_use);
+        }
+
+        // Step 3: Rebuild reference counts based on actual usage
+        for string in &strings_in_use {
+            if let Some(id) = dictionary.get_id(string) {
+                dictionary.increment_ref_count(id);
+            }
+        }
+
+        // Step 4: Run garbage collection to remove unreferenced entries
+        let removed_entries = dictionary.garbage_collect();
 
         let (after_size, _, _) = dictionary.stats();
         let cleaned = before_size.saturating_sub(after_size);
@@ -792,7 +828,58 @@ impl NodeTable {
             stats.dictionary_size = after_size;
         }
 
+        tracing::info!(
+            "Dictionary compaction completed: removed {} entries, cleaned {} bytes",
+            removed_entries,
+            cleaned
+        );
+
         Ok(cleaned)
+    }
+
+    /// Extract all strings from a term for dictionary reference counting
+    fn extract_strings_from_term(
+        &self,
+        term: &Term,
+        strings: &mut std::collections::HashSet<String>,
+    ) {
+        match term {
+            Term::Iri(iri) => {
+                strings.insert(iri.clone());
+
+                // Also check if this IRI uses any common prefixes
+                if self.config.enable_prefix_compression {
+                    if let Ok(iri_prefixes) = self.iri_prefixes.read() {
+                        for prefix in iri_prefixes.keys() {
+                            if iri.starts_with(prefix) {
+                                strings.insert(prefix.clone());
+                                strings.insert(iri[prefix.len()..].to_string());
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            Term::Literal {
+                value,
+                datatype,
+                language,
+            } => {
+                strings.insert(value.clone());
+                if let Some(dt) = datatype {
+                    strings.insert(dt.clone());
+                }
+                if let Some(lang) = language {
+                    strings.insert(lang.clone());
+                }
+            }
+            Term::BlankNode(id) => {
+                strings.insert(id.clone());
+            }
+            Term::Variable(name) => {
+                strings.insert(name.clone());
+            }
+        }
     }
 
     /// Clear all nodes

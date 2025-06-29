@@ -250,11 +250,13 @@ impl MockStore {
 pub mod ast;
 pub mod execution;
 pub mod federation;
+pub mod hybrid_optimizer;
 pub mod introspection;
 pub mod mapping;
 pub mod ml_optimizer;
 pub mod optimizer;
 pub mod parser;
+pub mod quantum_optimizer;
 pub mod rdf_scalars;
 pub mod resolvers;
 pub mod schema;
@@ -265,11 +267,13 @@ pub mod validation;
 
 // Advanced performance modules
 pub mod advanced_cache;
+pub mod benchmarking;
 pub mod dataloader;
 pub mod performance;
 
 // Organized module groups
 pub mod core;
+pub mod distributed_cache;
 pub mod docs;
 pub mod features;
 pub mod networking;
@@ -296,6 +300,7 @@ pub struct GraphQLConfig {
     pub max_query_complexity: Option<usize>,
     pub validation_config: validation::ValidationConfig,
     pub enable_query_validation: bool,
+    pub distributed_cache_config: Option<distributed_cache::CacheConfig>,
 }
 
 impl Default for GraphQLConfig {
@@ -307,6 +312,7 @@ impl Default for GraphQLConfig {
             max_query_complexity: Some(1000),
             validation_config: validation::ValidationConfig::default(),
             enable_query_validation: true,
+            distributed_cache_config: None, // Disabled by default
         }
     }
 }
@@ -315,6 +321,7 @@ impl Default for GraphQLConfig {
 pub struct GraphQLServer {
     config: GraphQLConfig,
     store: Arc<RdfStore>,
+    cache: Option<Arc<distributed_cache::GraphQLQueryCache>>,
 }
 
 impl GraphQLServer {
@@ -322,6 +329,7 @@ impl GraphQLServer {
         Self {
             config: GraphQLConfig::default(),
             store,
+            cache: None,
         }
     }
 
@@ -331,12 +339,32 @@ impl GraphQLServer {
         Self {
             config: GraphQLConfig::default(),
             store: rdf_store,
+            cache: None,
         }
     }
 
     pub fn with_config(mut self, config: GraphQLConfig) -> Self {
         self.config = config;
         self
+    }
+
+    /// Enable distributed caching
+    pub async fn with_distributed_cache(
+        mut self,
+        cache_config: distributed_cache::CacheConfig,
+    ) -> Result<Self> {
+        let cache = Arc::new(distributed_cache::GraphQLQueryCache::new(cache_config).await?);
+        self.cache = Some(cache);
+        Ok(self)
+    }
+
+    /// Get cache statistics if caching is enabled
+    pub async fn get_cache_stats(&self) -> Option<distributed_cache::CacheStats> {
+        if let Some(cache) = &self.cache {
+            cache.get_stats().await.ok()
+        } else {
+            None
+        }
     }
 
     pub async fn start(&self, addr: &str) -> Result<()> {

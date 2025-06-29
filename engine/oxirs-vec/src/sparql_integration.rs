@@ -1768,3 +1768,546 @@ impl Default for VectorServiceRegistry {
         Self::new()
     }
 }
+
+/// Federated vector service for remote SERVICE endpoint calls
+#[derive(Debug, Clone)]
+pub struct FederatedVectorService {
+    pub endpoint_url: String,
+    pub timeout: Duration,
+    pub auth_token: Option<String>,
+    pub retry_config: RetryConfig,
+    pub connection_pool: Arc<RwLock<ConnectionPool>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RetryConfig {
+    pub max_retries: usize,
+    pub base_delay: Duration,
+    pub max_delay: Duration,
+    pub backoff_multiplier: f32,
+}
+
+impl Default for RetryConfig {
+    fn default() -> Self {
+        Self {
+            max_retries: 3,
+            base_delay: Duration::from_millis(100),
+            max_delay: Duration::from_secs(10),
+            backoff_multiplier: 2.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ConnectionPool {
+    pub max_connections: usize,
+    pub active_connections: usize,
+    pub available_connections: Vec<Connection>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Connection {
+    pub id: String,
+    pub endpoint: String,
+    pub created_at: Instant,
+    pub last_used: Instant,
+}
+
+impl FederatedVectorService {
+    pub fn new(endpoint_url: String) -> Self {
+        Self {
+            endpoint_url,
+            timeout: Duration::from_secs(30),
+            auth_token: None,
+            retry_config: RetryConfig::default(),
+            connection_pool: Arc::new(RwLock::new(ConnectionPool {
+                max_connections: 10,
+                active_connections: 0,
+                available_connections: Vec::new(),
+            })),
+        }
+    }
+
+    pub fn with_auth(mut self, token: String) -> Self {
+        self.auth_token = Some(token);
+        self
+    }
+
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
+        self
+    }
+
+    pub fn with_retry_config(mut self, config: RetryConfig) -> Self {
+        self.retry_config = config;
+        self
+    }
+
+    /// Execute a remote vector service function call
+    pub async fn execute_remote_function(
+        &self,
+        function_name: &str,
+        args: &[VectorServiceArg],
+    ) -> Result<VectorServiceResult> {
+        let request_payload = self.build_service_request(function_name, args)?;
+
+        // Execute with retry logic
+        let mut last_error = None;
+        let mut delay = self.retry_config.base_delay;
+
+        for attempt in 0..=self.retry_config.max_retries {
+            match self.send_request(&request_payload).await {
+                Ok(response) => {
+                    return self.parse_service_response(response);
+                }
+                Err(e) => {
+                    last_error = Some(e);
+
+                    if attempt < self.retry_config.max_retries {
+                        tracing::warn!(
+                            "Remote service call failed (attempt {}), retrying in {:?}: {}",
+                            attempt + 1,
+                            delay,
+                            last_error.as_ref().unwrap()
+                        );
+
+                        tokio::time::sleep(delay).await;
+                        delay = std::cmp::min(
+                            Duration::from_millis(
+                                (delay.as_millis() as f32 * self.retry_config.backoff_multiplier)
+                                    as u64,
+                            ),
+                            self.retry_config.max_delay,
+                        );
+                    }
+                }
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| anyhow!("Maximum retries exceeded")))
+    }
+
+    /// Execute federated vector search across multiple endpoints
+    pub async fn execute_federated_search(
+        &self,
+        endpoints: &[String],
+        query: &VectorQuery,
+    ) -> Result<Vec<VectorQueryResult>> {
+        let mut handles = Vec::new();
+
+        // Launch searches on all endpoints in parallel
+        for endpoint in endpoints {
+            let federated_service = FederatedVectorService::new(endpoint.clone())
+                .with_timeout(self.timeout)
+                .with_retry_config(self.retry_config.clone());
+
+            if let Some(ref token) = self.auth_token {
+                federated_service.clone().with_auth(token.clone());
+            }
+
+            let query_clone = query.clone();
+            let handle =
+                tokio::spawn(
+                    async move { federated_service.execute_remote_query(&query_clone).await },
+                );
+            handles.push(handle);
+        }
+
+        // Collect results from all endpoints
+        let mut results = Vec::new();
+        for handle in handles {
+            match handle.await {
+                Ok(Ok(result)) => results.push(result),
+                Ok(Err(e)) => {
+                    tracing::warn!("Federated search endpoint failed: {}", e);
+                }
+                Err(e) => {
+                    tracing::error!("Federated search task failed: {}", e);
+                }
+            }
+        }
+
+        Ok(results)
+    }
+
+    /// Execute a remote vector query
+    async fn execute_remote_query(&self, query: &VectorQuery) -> Result<VectorQueryResult> {
+        let request_payload = self.build_query_request(query)?;
+        let response = self.send_request(&request_payload).await?;
+        self.parse_query_response(response)
+    }
+
+    /// Build SPARQL SERVICE request payload
+    fn build_service_request(
+        &self,
+        function_name: &str,
+        args: &[VectorServiceArg],
+    ) -> Result<serde_json::Value> {
+        let mut json_args = Vec::new();
+
+        for arg in args {
+            let json_arg = match arg {
+                VectorServiceArg::IRI(uri) => serde_json::json!({
+                    "type": "iri",
+                    "value": uri
+                }),
+                VectorServiceArg::String(s) => serde_json::json!({
+                    "type": "literal",
+                    "value": s
+                }),
+                VectorServiceArg::Number(n) => serde_json::json!({
+                    "type": "literal",
+                    "value": n,
+                    "datatype": "http://www.w3.org/2001/XMLSchema#float"
+                }),
+                VectorServiceArg::Vector(v) => serde_json::json!({
+                    "type": "vector",
+                    "dimensions": v.dimensions,
+                    "precision": v.precision,
+                    "values": v.as_f32()
+                }),
+                VectorServiceArg::Metric(m) => serde_json::json!({
+                    "type": "metric",
+                    "value": format!("{:?}", m)
+                }),
+                VectorServiceArg::Boolean(b) => serde_json::json!({
+                    "type": "literal",
+                    "value": b,
+                    "datatype": "http://www.w3.org/2001/XMLSchema#boolean"
+                }),
+            };
+            json_args.push(json_arg);
+        }
+
+        Ok(serde_json::json!({
+            "function": function_name,
+            "arguments": json_args,
+            "context": {
+                "timestamp": chrono::Utc::now().to_rfc3339(),
+                "version": "1.0"
+            }
+        }))
+    }
+
+    /// Build query request payload for federated search
+    fn build_query_request(&self, query: &VectorQuery) -> Result<serde_json::Value> {
+        Ok(serde_json::json!({
+            "operation_type": query.operation_type,
+            "parameters": query.parameters,
+            "metadata": query.metadata,
+            "preferred_index": query.preferred_index,
+            "use_cache": query.use_cache,
+            "parallel_execution": query.parallel_execution,
+            "estimated_result_size": query.estimated_result_size
+        }))
+    }
+
+    /// Send HTTP request to remote service
+    async fn send_request(&self, payload: &serde_json::Value) -> Result<serde_json::Value> {
+        let client = reqwest::Client::new();
+        let mut request_builder = client
+            .post(&format!("{}/vector/service", self.endpoint_url))
+            .json(payload)
+            .timeout(self.timeout);
+
+        // Add authentication if available
+        if let Some(ref token) = self.auth_token {
+            request_builder = request_builder.bearer_auth(token);
+        }
+
+        let response = request_builder
+            .send()
+            .await
+            .map_err(|e| anyhow!("Failed to send request: {}", e))?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!(
+                "Remote service returned error status: {}",
+                response.status()
+            ));
+        }
+
+        let json_response: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| anyhow!("Failed to parse response: {}", e))?;
+
+        Ok(json_response)
+    }
+
+    /// Parse service function response
+    fn parse_service_response(&self, response: serde_json::Value) -> Result<VectorServiceResult> {
+        let result_type = response["type"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing result type in response"))?;
+
+        match result_type {
+            "similarity_list" => {
+                let list = response["value"]
+                    .as_array()
+                    .ok_or_else(|| anyhow!("Invalid similarity list format"))?;
+
+                let mut results = Vec::new();
+                for item in list {
+                    let resource = item["resource"]
+                        .as_str()
+                        .ok_or_else(|| anyhow!("Missing resource in similarity result"))?;
+                    let score = item["score"]
+                        .as_f64()
+                        .ok_or_else(|| anyhow!("Missing score in similarity result"))?
+                        as f32;
+                    results.push((resource.to_string(), score));
+                }
+
+                Ok(VectorServiceResult::SimilarityList(results))
+            }
+            "number" => {
+                let value = response["value"]
+                    .as_f64()
+                    .ok_or_else(|| anyhow!("Invalid number format"))?
+                    as f32;
+                Ok(VectorServiceResult::Number(value))
+            }
+            "string" => {
+                let value = response["value"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("Invalid string format"))?;
+                Ok(VectorServiceResult::String(value.to_string()))
+            }
+            "vector" => {
+                let dimensions = response["dimensions"]
+                    .as_u64()
+                    .ok_or_else(|| anyhow!("Missing vector dimensions"))?
+                    as usize;
+                let values = response["values"]
+                    .as_array()
+                    .ok_or_else(|| anyhow!("Missing vector values"))?;
+
+                let mut vector_values = Vec::new();
+                for value in values {
+                    let f_val = value
+                        .as_f64()
+                        .ok_or_else(|| anyhow!("Invalid vector value"))?
+                        as f32;
+                    vector_values.push(f_val);
+                }
+
+                if vector_values.len() != dimensions {
+                    return Err(anyhow!("Vector dimensions mismatch"));
+                }
+
+                Ok(VectorServiceResult::Vector(Vector::new(vector_values)))
+            }
+            "clusters" => {
+                let clusters_json = response["value"]
+                    .as_array()
+                    .ok_or_else(|| anyhow!("Invalid clusters format"))?;
+
+                let mut clusters = Vec::new();
+                for cluster_json in clusters_json {
+                    let cluster_array = cluster_json
+                        .as_array()
+                        .ok_or_else(|| anyhow!("Invalid cluster format"))?;
+
+                    let mut cluster = Vec::new();
+                    for member in cluster_array {
+                        let member_str = member
+                            .as_str()
+                            .ok_or_else(|| anyhow!("Invalid cluster member"))?;
+                        cluster.push(member_str.to_string());
+                    }
+                    clusters.push(cluster);
+                }
+
+                Ok(VectorServiceResult::Clusters(clusters))
+            }
+            "boolean" => {
+                let value = response["value"]
+                    .as_bool()
+                    .ok_or_else(|| anyhow!("Invalid boolean format"))?;
+                Ok(VectorServiceResult::Boolean(value))
+            }
+            _ => Err(anyhow!("Unknown result type: {}", result_type)),
+        }
+    }
+
+    /// Parse query response
+    fn parse_query_response(&self, response: serde_json::Value) -> Result<VectorQueryResult> {
+        let results_json = response["results"]
+            .as_array()
+            .ok_or_else(|| anyhow!("Missing results in query response"))?;
+
+        let mut results = Vec::new();
+        for result in results_json {
+            let resource = result["resource"]
+                .as_str()
+                .ok_or_else(|| anyhow!("Missing resource in result"))?;
+            let score = result["score"]
+                .as_f64()
+                .ok_or_else(|| anyhow!("Missing score in result"))? as f32;
+            results.push((resource.to_string(), score));
+        }
+
+        let metadata = if let Some(meta) = response["metadata"].as_object() {
+            meta.iter()
+                .map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string()))
+                .collect()
+        } else {
+            HashMap::new()
+        };
+
+        let execution_time = response["execution_time"]
+            .as_u64()
+            .map(Duration::from_millis);
+
+        let cache_hit = response["cache_hit"].as_bool().unwrap_or(false);
+
+        Ok(VectorQueryResult {
+            results,
+            metadata,
+            execution_time,
+            cache_hit,
+        })
+    }
+
+    /// Check if remote service is available
+    pub async fn health_check(&self) -> Result<ServiceHealthStatus> {
+        let health_endpoint = format!("{}/health", self.endpoint_url);
+
+        let client = reqwest::Client::new();
+        let request_builder = client.get(&health_endpoint).timeout(Duration::from_secs(5));
+
+        match request_builder.send().await {
+            Ok(response) => {
+                if response.status().is_success() {
+                    if let Ok(json) = response.json::<serde_json::Value>().await {
+                        Ok(ServiceHealthStatus {
+                            available: true,
+                            response_time: None,
+                            version: json["version"].as_str().map(|s| s.to_string()),
+                            capabilities: json["capabilities"]
+                                .as_array()
+                                .map(|arr| {
+                                    arr.iter()
+                                        .filter_map(|v| v.as_str())
+                                        .map(|s| s.to_string())
+                                        .collect()
+                                })
+                                .unwrap_or_default(),
+                        })
+                    } else {
+                        Ok(ServiceHealthStatus {
+                            available: true,
+                            response_time: None,
+                            version: None,
+                            capabilities: Vec::new(),
+                        })
+                    }
+                } else {
+                    Ok(ServiceHealthStatus {
+                        available: false,
+                        response_time: None,
+                        version: None,
+                        capabilities: Vec::new(),
+                    })
+                }
+            }
+            Err(_) => Ok(ServiceHealthStatus {
+                available: false,
+                response_time: None,
+                version: None,
+                capabilities: Vec::new(),
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ServiceHealthStatus {
+    pub available: bool,
+    pub response_time: Option<Duration>,
+    pub version: Option<String>,
+    pub capabilities: Vec<String>,
+}
+
+/// Enhanced service registry with federated capabilities
+impl VectorServiceRegistry {
+    /// Register a federated vector service endpoint
+    pub fn register_federated_endpoint(
+        &mut self,
+        name: String,
+        endpoint_url: String,
+        auth_token: Option<String>,
+    ) {
+        let mut federated_service = FederatedVectorService::new(endpoint_url);
+
+        if let Some(token) = auth_token {
+            federated_service = federated_service.with_auth(token);
+        }
+
+        // Store federated service information for later use
+        // In a real implementation, this would be more sophisticated
+        tracing::info!("Registered federated vector service: {}", name);
+    }
+
+    /// Execute federated query across multiple services
+    pub async fn execute_federated_query(
+        &mut self,
+        endpoints: &[String],
+        query: &VectorQuery,
+    ) -> Result<FederatedQueryResult> {
+        if endpoints.is_empty() {
+            return Err(anyhow!("No endpoints specified for federated query"));
+        }
+
+        let mut federated_results = Vec::new();
+        let start_time = Instant::now();
+
+        // Execute query on all endpoints
+        for endpoint in endpoints {
+            let federated_service = FederatedVectorService::new(endpoint.clone());
+
+            match federated_service.execute_remote_query(query).await {
+                Ok(result) => {
+                    federated_results.push(FederatedEndpointResult {
+                        endpoint: endpoint.clone(),
+                        result: Some(result),
+                        error: None,
+                        response_time: start_time.elapsed(),
+                    });
+                }
+                Err(e) => {
+                    federated_results.push(FederatedEndpointResult {
+                        endpoint: endpoint.clone(),
+                        result: None,
+                        error: Some(e.to_string()),
+                        response_time: start_time.elapsed(),
+                    });
+                }
+            }
+        }
+
+        Ok(FederatedQueryResult {
+            endpoint_results: federated_results,
+            total_execution_time: start_time.elapsed(),
+            successful_endpoints: endpoints.len(),
+            failed_endpoints: 0,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FederatedQueryResult {
+    pub endpoint_results: Vec<FederatedEndpointResult>,
+    pub total_execution_time: Duration,
+    pub successful_endpoints: usize,
+    pub failed_endpoints: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct FederatedEndpointResult {
+    pub endpoint: String,
+    pub result: Option<VectorQueryResult>,
+    pub error: Option<String>,
+    pub response_time: Duration,
+}

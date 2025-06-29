@@ -11,20 +11,20 @@
 //! - Performance optimization and reoptimization
 //! - Core planner implementation
 
-pub mod types;
 pub mod entity_resolution;
-pub mod schema_composition;
-pub mod query_analysis;
-pub mod schema_introspection;
 pub mod performance_optimizer;
+pub mod query_analysis;
+pub mod schema_composition;
+pub mod schema_introspection;
+pub mod types;
 
 // Re-export commonly used types and functions
-pub use types::*;
 pub use entity_resolution::EntityResolver;
-pub use schema_composition::SchemaComposer;
-pub use query_analysis::{QueryAnalyzer, QueryInfo, QueryComplexity};
-pub use schema_introspection::SchemaIntrospector;
 pub use performance_optimizer::PerformanceOptimizer;
+pub use query_analysis::{QueryAnalyzer, QueryComplexity, QueryInfo};
+pub use schema_composition::SchemaComposer;
+pub use schema_introspection::SchemaIntrospector;
+pub use types::*;
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
@@ -87,7 +87,9 @@ impl FederatedQueryPlanner {
             schema_composer: SchemaComposer,
             entity_resolver: EntityResolver,
             schema_introspector: SchemaIntrospector,
-            performance_optimizer: PerformanceOptimizer::with_config(config.optimization_config.clone()),
+            performance_optimizer: PerformanceOptimizer::with_config(
+                config.optimization_config.clone(),
+            ),
             config,
             performance_history: Arc::new(RwLock::new(HistoricalPerformance {
                 query_patterns: HashMap::new(),
@@ -114,21 +116,31 @@ impl FederatedQueryPlanner {
         let query_info = QueryAnalyzer::extract_query_info(&parsed_query);
 
         // Get planning recommendations based on performance history
-        let recommendations = self.performance_optimizer.get_planning_recommendations(&query_info);
+        let recommendations = self
+            .performance_optimizer
+            .get_planning_recommendations(&query_info);
 
         // Create unified schema from all services
-        let unified_schema = self.create_unified_schema_from_registry(service_registry).await?;
+        let unified_schema = self
+            .create_unified_schema_from_registry(service_registry)
+            .await?;
 
         // Validate query against schema
-        let validation_errors = QueryAnalyzer::validate_query_against_schema(&parsed_query, &unified_schema)?;
+        let validation_errors =
+            QueryAnalyzer::validate_query_against_schema(&parsed_query, &unified_schema)?;
         if !validation_errors.is_empty() {
-            return Err(anyhow!("Query validation failed: {}", validation_errors.join(", ")));
+            return Err(anyhow!(
+                "Query validation failed: {}",
+                validation_errors.join(", ")
+            ));
         }
 
         // Check if federation is required
         if !QueryAnalyzer::requires_federation(&parsed_query, &unified_schema) {
             // Single service query - create simple plan
-            return self.create_single_service_plan(query, variables, context, service_registry).await;
+            return self
+                .create_single_service_plan(query, variables, context, service_registry)
+                .await;
         }
 
         // Decompose query for federation
@@ -155,13 +167,16 @@ impl FederatedQueryPlanner {
                 service_id: Some(service_query.service_id.clone()),
                 query_fragment: service_query.query.clone(),
                 dependencies: Vec::new(),
-                estimated_cost: self.estimate_step_cost(&service_query.query, &service_query.service_id),
+                estimated_cost: self
+                    .estimate_step_cost(&service_query.query, &service_query.service_id),
                 timeout: recommendations.suggested_timeout,
-                retry_config: self.config.default_retry_config.as_ref().map(|rc| crate::planner::planning::types::RetryConfig {
-                    max_attempts: rc.max_attempts as usize,
-                    initial_delay: std::time::Duration::from_millis(rc.initial_delay_ms),
-                    max_delay: std::time::Duration::from_millis(rc.max_delay_ms),
-                    backoff_multiplier: rc.backoff_multiplier,
+                retry_config: self.config.default_retry_config.as_ref().map(|rc| {
+                    crate::planner::planning::types::RetryConfig {
+                        max_attempts: rc.max_attempts as usize,
+                        initial_delay: std::time::Duration::from_millis(rc.initial_delay_ms),
+                        max_delay: std::time::Duration::from_millis(rc.max_delay_ms),
+                        backoff_multiplier: rc.backoff_multiplier,
+                    }
                 }),
             };
             steps.push(step);
@@ -178,12 +193,14 @@ impl FederatedQueryPlanner {
                     dependencies: entity_step.depends_on.clone(),
                     estimated_cost: 10.0, // Base cost for entity resolution
                     timeout: recommendations.suggested_timeout,
-                    retry_config: self.config.default_retry_config.as_ref().map(|rc| crate::planner::planning::types::RetryConfig {
-                    max_attempts: rc.max_attempts as usize,
-                    initial_delay: std::time::Duration::from_millis(rc.initial_delay_ms),
-                    max_delay: std::time::Duration::from_millis(rc.max_delay_ms),
-                    backoff_multiplier: rc.backoff_multiplier,
-                }),
+                    retry_config: self.config.default_retry_config.as_ref().map(|rc| {
+                        crate::planner::planning::types::RetryConfig {
+                            max_attempts: rc.max_attempts as usize,
+                            initial_delay: std::time::Duration::from_millis(rc.initial_delay_ms),
+                            max_delay: std::time::Duration::from_millis(rc.max_delay_ms),
+                            backoff_multiplier: rc.backoff_multiplier,
+                        }
+                    }),
                 };
                 steps.push(step);
             }
@@ -207,15 +224,17 @@ impl FederatedQueryPlanner {
         let planning_time = start_time.elapsed();
 
         let estimated_total_cost: f64 = steps.iter().map(|s| s.estimated_cost).sum();
-        
+
         Ok(ExecutionPlan {
             query_id: context.query_id.clone(),
             steps,
             estimated_total_cost,
-            max_parallelism: if recommendations.preferred_execution_strategy == performance_optimizer::ExecutionStrategy::Parallel { 
-                self.config.max_parallel_steps 
-            } else { 
-                1 
+            max_parallelism: if recommendations.preferred_execution_strategy
+                == performance_optimizer::ExecutionStrategy::Parallel
+            {
+                self.config.max_parallel_steps
+            } else {
+                1
             },
             planning_time,
             cache_key: self.generate_cache_key(query, &variables),
@@ -233,7 +252,8 @@ impl FederatedQueryPlanner {
         service_registry: &ServiceRegistry,
     ) -> Result<ExecutionPlan> {
         // Find the appropriate service (simplified - would use more sophisticated logic)
-        let service_id = service_registry.get_all_services()
+        let service_id = service_registry
+            .get_all_services()
             .next()
             .map(|s| s.id.clone())
             .unwrap_or_else(|| "default".to_string());
@@ -246,11 +266,13 @@ impl FederatedQueryPlanner {
             dependencies: Vec::new(),
             estimated_cost: self.estimate_step_cost(query, &service_id),
             timeout: std::time::Duration::from_secs(30),
-            retry_config: self.config.default_retry_config.as_ref().map(|rc| crate::planner::planning::types::RetryConfig {
-                max_attempts: rc.max_attempts as usize,
-                initial_delay: std::time::Duration::from_millis(rc.initial_delay_ms),
-                max_delay: std::time::Duration::from_millis(rc.max_delay_ms),
-                backoff_multiplier: rc.backoff_multiplier,
+            retry_config: self.config.default_retry_config.as_ref().map(|rc| {
+                crate::planner::planning::types::RetryConfig {
+                    max_attempts: rc.max_attempts as usize,
+                    initial_delay: std::time::Duration::from_millis(rc.initial_delay_ms),
+                    max_delay: std::time::Duration::from_millis(rc.max_delay_ms),
+                    backoff_multiplier: rc.backoff_multiplier,
+                }
             }),
         };
 
@@ -311,12 +333,20 @@ impl FederatedQueryPlanner {
     fn estimate_step_cost(&self, query: &str, service_id: &str) -> f64 {
         // Simplified cost estimation based on query length and service
         let base_cost = query.len() as f64 * 0.1;
-        let service_multiplier = if service_id.contains("slow") { 2.0 } else { 1.0 };
+        let service_multiplier = if service_id.contains("slow") {
+            2.0
+        } else {
+            1.0
+        };
         base_cost * service_multiplier
     }
 
     /// Generate cache key for the query
-    fn generate_cache_key(&self, query: &str, variables: &Option<serde_json::Value>) -> Option<String> {
+    fn generate_cache_key(
+        &self,
+        query: &str,
+        variables: &Option<serde_json::Value>,
+    ) -> Option<String> {
         if self.config.enable_caching {
             let mut hasher = std::collections::hash_map::DefaultHasher::new();
             std::hash::Hash::hash(query, &mut hasher);
@@ -336,11 +366,26 @@ impl FederatedQueryPlanner {
         recommendations: &performance_optimizer::PlanningRecommendations,
     ) -> HashMap<String, String> {
         let mut metadata = HashMap::new();
-        metadata.insert("operation_type".to_string(), format!("{:?}", parsed_query.operation_type));
-        metadata.insert("field_count".to_string(), parsed_query.selection_set.len().to_string());
-        metadata.insert("has_variables".to_string(), (!parsed_query.variables.is_empty()).to_string());
-        metadata.insert("execution_strategy".to_string(), format!("{:?}", recommendations.preferred_execution_strategy));
-        metadata.insert("caching_enabled".to_string(), recommendations.enable_caching.to_string());
+        metadata.insert(
+            "operation_type".to_string(),
+            format!("{:?}", parsed_query.operation_type),
+        );
+        metadata.insert(
+            "field_count".to_string(),
+            parsed_query.selection_set.len().to_string(),
+        );
+        metadata.insert(
+            "has_variables".to_string(),
+            (!parsed_query.variables.is_empty()).to_string(),
+        );
+        metadata.insert(
+            "execution_strategy".to_string(),
+            format!("{:?}", recommendations.preferred_execution_strategy),
+        );
+        metadata.insert(
+            "caching_enabled".to_string(),
+            recommendations.enable_caching.to_string(),
+        );
         metadata
     }
 
@@ -350,7 +395,8 @@ impl FederatedQueryPlanner {
         execution_metrics: &performance_optimizer::ExecutionMetrics,
         context: &ExecutionContext,
     ) -> Result<ReoptimizationAnalysis> {
-        self.performance_optimizer.analyze_performance(execution_metrics, context)
+        self.performance_optimizer
+            .analyze_performance(execution_metrics, context)
     }
 
     /// Update performance history
@@ -359,7 +405,8 @@ impl FederatedQueryPlanner {
         metrics: &performance_optimizer::ExecutionMetrics,
         context: &ExecutionContext,
     ) {
-        self.performance_optimizer.update_performance_history(metrics, context);
+        self.performance_optimizer
+            .update_performance_history(metrics, context);
     }
 
     /// Get historical performance data

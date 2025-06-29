@@ -1015,7 +1015,12 @@ impl AdvancedOptimizer {
             IndexType::SubjectPredicate | IndexType::PredicateObject | IndexType::SubjectObject => {
                 1.0
             }
-            IndexType::SPO | IndexType::PSO | IndexType::OSP | IndexType::OPS | IndexType::SOP | IndexType::POS => {
+            IndexType::SPO
+            | IndexType::PSO
+            | IndexType::OSP
+            | IndexType::OPS
+            | IndexType::SOP
+            | IndexType::POS => {
                 1.0 // RDF permutation indices
             }
             IndexType::Hash | IndexType::BTree | IndexType::Bitmap | IndexType::Bloom => {
@@ -2460,13 +2465,35 @@ impl MLPredictor {
     }
 
     fn retrain_model(&mut self) -> Result<()> {
-        // Simple gradient descent for linear regression
-        let learning_rate = 0.01;
         let n = self.training_data.len() as f64;
-
         if n == 0.0 {
             return Ok(());
         }
+
+        match self.model.model_type {
+            MLModelType::LinearRegression => {
+                self.train_linear_regression()?;
+            }
+            MLModelType::RandomForest => {
+                self.train_random_forest()?;
+            }
+            MLModelType::NeuralNetwork => {
+                self.train_neural_network()?;
+            }
+            MLModelType::GradientBoosting => {
+                self.train_gradient_boosting()?;
+            }
+        }
+
+        // Update accuracy metrics
+        self.update_accuracy_metrics()?;
+        
+        Ok(())
+    }
+
+    fn train_linear_regression(&mut self) -> Result<()> {
+        let learning_rate = 0.01;
+        let n = self.training_data.len() as f64;
 
         // Calculate gradients
         let mut weight_gradients = vec![0.0; self.model.weights.len()];
@@ -2490,6 +2517,237 @@ impl MLPredictor {
             self.model.weights[i] -= learning_rate * gradient / n;
         }
 
+        Ok(())
+    }
+
+    fn train_random_forest(&mut self) -> Result<()> {
+        // Simplified random forest implementation
+        // Use bootstrap sampling and feature subsampling
+        let num_trees = 10;
+        let feature_subsample_ratio = 0.7;
+        let data_subsample_ratio = 0.8;
+        
+        // For simplicity, we'll simulate random forest by training multiple linear models
+        // on different subsets of data and features
+        let mut tree_weights = Vec::new();
+        
+        for _ in 0..num_trees {
+            // Bootstrap sample the data
+            let sample_size = (self.training_data.len() as f64 * data_subsample_ratio) as usize;
+            let mut sampled_data = Vec::new();
+            
+            for _ in 0..sample_size {
+                let idx = fastrand::usize(0..self.training_data.len());
+                sampled_data.push(self.training_data[idx].clone());
+            }
+            
+            // Train a simple model on this subset
+            let mut tree_model = self.model.clone();
+            self.train_tree_model(&mut tree_model, &sampled_data, feature_subsample_ratio)?;
+            tree_weights.push(tree_model.weights.clone());
+        }
+        
+        // Average the weights from all trees
+        for i in 0..self.model.weights.len() {
+            let avg_weight: f64 = tree_weights.iter().map(|w| w.get(i).unwrap_or(&0.0)).sum::<f64>() / num_trees as f64;
+            self.model.weights[i] = avg_weight;
+        }
+        
+        Ok(())
+    }
+
+    fn train_neural_network(&mut self) -> Result<()> {
+        // Simplified neural network with one hidden layer
+        let learning_rate = 0.001;
+        let epochs = 50;
+        let hidden_size = 10;
+        
+        // Initialize hidden layer weights if not already done
+        if self.model.weights.len() < self.feature_extractor.feature_names.len() * hidden_size + hidden_size {
+            // Expand weights to accommodate hidden layer
+            let input_size = self.feature_extractor.feature_names.len();
+            let total_weights = input_size * hidden_size + hidden_size; // input->hidden + output weights
+            self.model.weights.resize(total_weights, 0.0);
+            
+            // Initialize with small random values
+            for weight in &mut self.model.weights {
+                *weight = (fastrand::f64() - 0.5) * 0.1;
+            }
+        }
+        
+        // Simple gradient descent for neural network
+        for _ in 0..epochs {
+            let mut total_loss = 0.0;
+            
+            for example in &self.training_data {
+                let prediction = self.forward_pass(&example.features, hidden_size)?;
+                let error = prediction - example.actual_cost;
+                total_loss += error * error;
+                
+                // Simplified backpropagation
+                self.backward_pass(&example.features, error, learning_rate, hidden_size)?;
+            }
+            
+            // Early stopping if loss is small
+            if total_loss / self.training_data.len() as f64 < 0.01 {
+                break;
+            }
+        }
+        
+        Ok(())
+    }
+
+    fn train_gradient_boosting(&mut self) -> Result<()> {
+        // Simplified gradient boosting implementation
+        let num_boosting_rounds = 20;
+        let learning_rate = 0.1;
+        
+        // Initialize with mean prediction
+        let mean_target: f64 = self.training_data.iter().map(|ex| ex.actual_cost).sum::<f64>() / self.training_data.len() as f64;
+        self.model.bias = mean_target;
+        
+        for _ in 0..num_boosting_rounds {
+            // Calculate residuals
+            let mut residuals = Vec::new();
+            for example in &self.training_data {
+                let prediction = self.predict_cost(&example.features)?;
+                residuals.push(example.actual_cost - prediction);
+            }
+            
+            // Train a weak learner on residuals (simple linear model)
+            let mut weak_learner_weights = vec![0.0; self.model.weights.len()];
+            let gradient_learning_rate = 0.01;
+            
+            for (i, example) in self.training_data.iter().enumerate() {
+                let residual = residuals[i];
+                for (j, &feature) in example.features.iter().enumerate() {
+                    if j < weak_learner_weights.len() {
+                        weak_learner_weights[j] += gradient_learning_rate * residual * feature;
+                    }
+                }
+            }
+            
+            // Add weak learner to ensemble
+            for (i, &weak_weight) in weak_learner_weights.iter().enumerate() {
+                if i < self.model.weights.len() {
+                    self.model.weights[i] += learning_rate * weak_weight;
+                }
+            }
+        }
+        
+        Ok(())
+    }
+
+    fn train_tree_model(&self, model: &mut MLModel, data: &[TrainingExample], feature_ratio: f64) -> Result<()> {
+        // Train a simple linear model on subset of features
+        let feature_count = (self.feature_extractor.feature_names.len() as f64 * feature_ratio) as usize;
+        let learning_rate = 0.01;
+        
+        for _ in 0..50 { // 50 iterations
+            for example in data {
+                let prediction = self.predict_cost_with_model(model, &example.features)?;
+                let error = prediction - example.actual_cost;
+                
+                for i in 0..feature_count.min(example.features.len()).min(model.weights.len()) {
+                    model.weights[i] -= learning_rate * error * example.features[i];
+                }
+                model.bias -= learning_rate * error;
+            }
+        }
+        
+        Ok(())
+    }
+
+    fn forward_pass(&self, features: &[f64], hidden_size: usize) -> Result<f64> {
+        let input_size = features.len();
+        
+        // Forward pass through hidden layer (ReLU activation)
+        let mut hidden_activations = vec![0.0; hidden_size];
+        for h in 0..hidden_size {
+            let mut sum = 0.0;
+            for i in 0..input_size {
+                if h * input_size + i < self.model.weights.len() {
+                    sum += features[i] * self.model.weights[h * input_size + i];
+                }
+            }
+            hidden_activations[h] = sum.max(0.0); // ReLU
+        }
+        
+        // Output layer (linear)
+        let mut output = self.model.bias;
+        let output_start = input_size * hidden_size;
+        for h in 0..hidden_size {
+            if output_start + h < self.model.weights.len() {
+                output += hidden_activations[h] * self.model.weights[output_start + h];
+            }
+        }
+        
+        Ok(output)
+    }
+
+    fn backward_pass(&mut self, features: &[f64], error: f64, learning_rate: f64, hidden_size: usize) -> Result<()> {
+        let input_size = features.len();
+        
+        // Simplified backpropagation - update output weights
+        let output_start = input_size * hidden_size;
+        for h in 0..hidden_size {
+            if output_start + h < self.model.weights.len() {
+                // Calculate hidden activation
+                let mut hidden_activation = 0.0;
+                for i in 0..input_size {
+                    if h * input_size + i < self.model.weights.len() {
+                        hidden_activation += features[i] * self.model.weights[h * input_size + i];
+                    }
+                }
+                hidden_activation = hidden_activation.max(0.0); // ReLU
+                
+                self.model.weights[output_start + h] -= learning_rate * error * hidden_activation;
+            }
+        }
+        
+        // Update bias
+        self.model.bias -= learning_rate * error;
+        
+        Ok(())
+    }
+
+    fn predict_cost_with_model(&self, model: &MLModel, features: &[f64]) -> Result<f64> {
+        let mut prediction = model.bias;
+        for (i, &feature) in features.iter().enumerate() {
+            if i < model.weights.len() {
+                prediction += feature * model.weights[i];
+            }
+        }
+        Ok(prediction.max(0.0))
+    }
+
+    fn update_accuracy_metrics(&mut self) -> Result<()> {
+        if self.training_data.is_empty() {
+            return Ok(());
+        }
+        
+        let mut total_error = 0.0;
+        let mut total_absolute_error = 0.0;
+        let mut correct_predictions = 0;
+        
+        for example in &self.training_data {
+            let prediction = self.predict_cost(&example.features)?;
+            let error = prediction - example.actual_cost;
+            
+            total_error += error * error;
+            total_absolute_error += error.abs();
+            
+            // Consider prediction correct if within 20% of actual
+            if (error.abs() / example.actual_cost.max(1.0)) < 0.2 {
+                correct_predictions += 1;
+            }
+        }
+        
+        let n = self.training_data.len() as f64;
+        self.model.accuracy_metrics.mse = total_error / n;
+        self.model.accuracy_metrics.mae = total_absolute_error / n;
+        self.model.accuracy_metrics.accuracy = correct_predictions as f64 / n;
+        
         Ok(())
     }
 }

@@ -68,6 +68,9 @@ impl From<serde_json::Error> for CoreError {
 /// Result type alias using CoreError
 pub type CoreResult<T> = Result<T, CoreError>;
 
+// Re-export the main OxiRS error types for compatibility
+pub use crate::{OxirsError, Result as OxirsResult};
+
 /// Validation functions for common parameter checks
 pub mod validation {
     use super::{CoreError, CoreResult};

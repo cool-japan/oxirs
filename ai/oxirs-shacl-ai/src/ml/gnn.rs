@@ -297,9 +297,11 @@ impl GraphNeuralNetwork {
                 GNNArchitecture::GraphTransformer => GNNLayer::GraphTransformerLayer(
                     Self::init_graph_transformer_layer(current_dim, output_dim),
                 ),
-                GNNArchitecture::HierarchicalGraphTransformer => GNNLayer::HierarchicalGraphTransformerLayer(
-                    Self::init_hierarchical_graph_transformer_layer(current_dim, output_dim),
-                ),
+                GNNArchitecture::HierarchicalGraphTransformer => {
+                    GNNLayer::HierarchicalGraphTransformerLayer(
+                        Self::init_hierarchical_graph_transformer_layer(current_dim, output_dim),
+                    )
+                }
             };
 
             layers.push(layer);
@@ -1169,7 +1171,11 @@ impl GraphNeuralNetwork {
                     GNNLayer::HierarchicalGraphTransformerLayer(ref mut layer) => {
                         let update = &grad.weight_gradients * learning_rate;
                         layer.hierarchical_attention = &layer.hierarchical_attention - &update;
-                        layer.level_encoders = layer.level_encoders.iter().map(|encoder| encoder - &update).collect();
+                        layer.level_encoders = layer
+                            .level_encoders
+                            .iter()
+                            .map(|encoder| encoder - &update)
+                            .collect();
                     }
                 }
             }
@@ -1357,7 +1363,10 @@ impl GraphNeuralNetwork {
     }
 
     /// Initialize Graph Transformer layer
-    fn init_graph_transformer_layer(input_dim: usize, output_dim: usize) -> GraphTransformerLayerState {
+    fn init_graph_transformer_layer(
+        input_dim: usize,
+        output_dim: usize,
+    ) -> GraphTransformerLayerState {
         GraphTransformerLayerState {
             attention_weights: Array2::from_elem((input_dim, output_dim), 0.1),
             feed_forward: Array2::from_elem((output_dim, output_dim), 0.1),
@@ -1365,13 +1374,13 @@ impl GraphNeuralNetwork {
     }
 
     /// Initialize Hierarchical Graph Transformer layer
-    fn init_hierarchical_graph_transformer_layer(input_dim: usize, output_dim: usize) -> HierarchicalGraphTransformerLayerState {
+    fn init_hierarchical_graph_transformer_layer(
+        input_dim: usize,
+        output_dim: usize,
+    ) -> HierarchicalGraphTransformerLayerState {
         HierarchicalGraphTransformerLayerState {
             hierarchical_attention: Array3::from_elem((2, input_dim, output_dim), 0.1),
-            level_encoders: vec![
-                Array2::from_elem((input_dim, output_dim), 0.1);
-                3
-            ],
+            level_encoders: vec![Array2::from_elem((input_dim, output_dim), 0.1); 3],
         }
     }
 

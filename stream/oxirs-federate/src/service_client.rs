@@ -790,12 +790,12 @@ pub enum QueryResponse {
 
 /// GraphQL request structure
 #[derive(Debug, Serialize)]
-struct GraphQLRequest {
-    query: String,
+pub struct GraphQLRequest {
+    pub query: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    variables: Option<serde_json::Value>,
+    pub variables: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    operation_name: Option<String>,
+    pub operation_name: Option<String>,
 }
 
 /// Connection pool for managing concurrent connections

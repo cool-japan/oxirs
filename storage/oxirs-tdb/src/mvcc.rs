@@ -631,9 +631,27 @@ where
     }
 
     fn has_been_modified_since(&self, key_str: &str, since_version: Version) -> Result<bool> {
-        // This is a simplified implementation that would need to be more sophisticated
-        // in a real system to handle different key types
-        Ok(false) // Placeholder
+        let data = self
+            .data
+            .read()
+            .map_err(|_| anyhow!("Failed to acquire data lock"))?;
+
+        // Check all keys that match the string pattern (for different key types)
+        for (key, versions) in data.iter() {
+            let key_string = key.to_string();
+
+            // Check if this key matches the pattern (exact match or prefix)
+            if key_string == key_str || key_string.starts_with(key_str) {
+                // Check if any version was committed after since_version
+                for version in versions.iter() {
+                    if version.version > since_version && version.version > 0 {
+                        return Ok(true);
+                    }
+                }
+            }
+        }
+
+        Ok(false)
     }
 
     fn finalize_writes(&self, tx_id: TransactionId, commit_version: Version) -> Result<()> {

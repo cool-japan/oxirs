@@ -32,37 +32,37 @@ pub struct MetaLearner {
 pub struct MetaLearningConfig {
     /// Number of gradient steps for fast adaptation
     pub adaptation_steps: usize,
-    
+
     /// Meta-learning rate for outer loop optimization
     pub meta_learning_rate: f64,
-    
+
     /// Inner loop learning rate for task adaptation
     pub inner_learning_rate: f64,
-    
+
     /// Number of support examples for few-shot learning
     pub support_size: usize,
-    
+
     /// Number of query examples for evaluation
     pub query_size: usize,
-    
+
     /// Enable gradient-based meta-learning (MAML-style)
     pub enable_gradient_based: bool,
-    
+
     /// Enable memory-augmented meta-learning
     pub enable_memory_augmented: bool,
-    
+
     /// Enable prototypical networks
     pub enable_prototypical: bool,
-    
+
     /// Memory capacity for episodic learning
     pub memory_capacity: usize,
-    
+
     /// Similarity threshold for memory retrieval
     pub similarity_threshold: f64,
-    
+
     /// Enable curriculum learning
     pub enable_curriculum: bool,
-    
+
     /// Task complexity progression rate
     pub curriculum_rate: f64,
 }
@@ -91,16 +91,16 @@ impl Default for MetaLearningConfig {
 pub struct MetaModel {
     /// Base network parameters
     base_parameters: Array2<f64>,
-    
+
     /// Meta-parameters for adaptation
     meta_parameters: HashMap<String, Vec<f64>>,
-    
+
     /// Episodic memory for pattern storage
     episodic_memory: EpisodicMemory,
-    
+
     /// Prototypical embeddings
     prototypes: HashMap<String, Vec<f64>>,
-    
+
     /// Attention mechanisms for memory retrieval
     attention_weights: Array2<f64>,
 }
@@ -267,7 +267,7 @@ impl MetaLearner {
     pub fn with_config(config: MetaLearningConfig) -> Self {
         let meta_model = MetaModel::new(&config);
         let adaptation_strategies = Self::initialize_adaptation_strategies();
-        
+
         Self {
             config,
             meta_model,
@@ -278,18 +278,15 @@ impl MetaLearner {
     }
 
     /// Perform few-shot learning on a new task
-    pub fn few_shot_learning(
-        &mut self,
-        task: &LearningTask,
-    ) -> Result<MetaLearningResult> {
+    pub fn few_shot_learning(&mut self, task: &LearningTask) -> Result<MetaLearningResult> {
         tracing::info!("Starting few-shot learning for task: {}", task.task_id);
 
         // Retrieve relevant experiences from episodic memory
         let relevant_memories = self.retrieve_relevant_memories(task)?;
-        
+
         // Select best adaptation strategy
         let strategy = self.select_adaptation_strategy(task, &relevant_memories)?;
-        
+
         // Perform adaptation
         let adapted_model = match strategy.adaptation_type {
             AdaptationType::GradientBased => {
@@ -308,41 +305,49 @@ impl MetaLearner {
 
         // Evaluate adapted model
         let performance_metrics = self.evaluate_adapted_model(&adapted_model, task)?;
-        
+
         // Generate adaptation insights
-        let adaptation_insights = self.generate_adaptation_insights(task, &adapted_model, &relevant_memories)?;
-        
+        let adaptation_insights =
+            self.generate_adaptation_insights(task, &adapted_model, &relevant_memories)?;
+
         // Store learning experience
         self.store_learning_experience(task, &adapted_model, &performance_metrics)?;
-        
+
         // Update meta-model
         self.update_meta_model(task, &adapted_model, &performance_metrics)?;
 
         let result = MetaLearningResult {
             adapted_model,
             confidence: performance_metrics.accuracy,
-            adaptation_steps_used: strategy.hyperparameters.get("steps").copied().unwrap_or(5.0) as usize,
+            adaptation_steps_used: strategy
+                .hyperparameters
+                .get("steps")
+                .copied()
+                .unwrap_or(5.0) as usize,
             performance_metrics,
             retrieved_memories: relevant_memories,
             adaptation_insights,
         };
 
-        tracing::info!("Few-shot learning completed with confidence: {:.3}", result.confidence);
+        tracing::info!(
+            "Few-shot learning completed with confidence: {:.3}",
+            result.confidence
+        );
         Ok(result)
     }
 
     /// Retrieve relevant memories for a task
     fn retrieve_relevant_memories(&self, task: &LearningTask) -> Result<Vec<MemoryEpisode>> {
         let mut relevant_memories = Vec::new();
-        
+
         // Calculate task embedding for similarity comparison
         let task_embedding = self.compute_task_embedding(task)?;
-        
+
         for memory in &self.meta_model.episodic_memory.memories {
             if memory.task_type == task.task_type {
                 let memory_embedding = &memory.learned_representation;
                 let similarity = self.compute_cosine_similarity(&task_embedding, memory_embedding);
-                
+
                 if similarity >= self.config.similarity_threshold {
                     relevant_memories.push(memory.clone());
                 }
@@ -390,14 +395,14 @@ impl MetaLearner {
         memories: &[MemoryEpisode],
     ) -> Result<f64> {
         let mut score = strategy.success_rate;
-        
+
         // Boost score if strategy has been successful for similar tasks
         for memory in memories {
             if memory.success_score > 0.8 {
                 score += 0.1;
             }
         }
-        
+
         // Adjust score based on task complexity
         if task.complexity_score > 0.7 {
             match strategy.adaptation_type {
@@ -430,7 +435,7 @@ impl MetaLearner {
         for step in 0..self.config.adaptation_steps {
             // Compute gradients (simplified implementation)
             let gradients = self.compute_task_gradients(task, &adapted_parameters)?;
-            
+
             // Update parameters
             let mut loss_value = 0.0;
             for (name, param) in adapted_parameters.iter_mut() {
@@ -448,7 +453,10 @@ impl MetaLearner {
             // Record adaptation step
             adaptation_steps.push(AdaptationStep {
                 step_number: step,
-                parameter_updates: gradients.iter().map(|(k, v)| (k.clone(), v.iter().sum::<f64>())).collect(),
+                parameter_updates: gradients
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.iter().sum::<f64>()))
+                    .collect(),
                 loss_value,
                 validation_score: 0.8, // Simplified
                 gradient_norm: loss_value.sqrt(),
@@ -467,7 +475,10 @@ impl MetaLearner {
             adaptation_metadata: AdaptationMetadata {
                 source_tasks: vec![task.task_id.clone()],
                 adaptation_strategy: "gradient_based".to_string(),
-                convergence_achieved: adaptation_steps.last().map(|s| s.loss_value < 1e-4).unwrap_or(false),
+                convergence_achieved: adaptation_steps
+                    .last()
+                    .map(|s| s.loss_value < 1e-4)
+                    .unwrap_or(false),
                 overfitting_detected: false,
                 regularization_applied: vec!["l2".to_string()],
             },
@@ -483,7 +494,7 @@ impl MetaLearner {
         tracing::debug!("Performing memory-based adaptation");
 
         let mut adapted_parameters = HashMap::new();
-        
+
         if memories.is_empty() {
             // Fall back to base parameters
             for (name, base_param) in &self.meta_model.meta_parameters {
@@ -492,10 +503,10 @@ impl MetaLearner {
         } else {
             // Combine parameters from similar memories
             let weights = self.compute_memory_weights(task, memories)?;
-            
+
             for (name, base_param) in &self.meta_model.meta_parameters {
                 let mut weighted_param = vec![0.0; base_param.len()];
-                
+
                 for (memory, weight) in memories.iter().zip(&weights) {
                     // In a full implementation, this would access learned parameters from memory
                     // For now, use a simplified approach
@@ -503,7 +514,7 @@ impl MetaLearner {
                         weighted_param[i] += param_val * *weight;
                     }
                 }
-                
+
                 adapted_parameters.insert(name.clone(), weighted_param);
             }
         }
@@ -537,7 +548,10 @@ impl MetaLearner {
         // Group patterns by type
         for pattern in &task.support_set {
             let pattern_type = self.get_pattern_type(pattern);
-            class_patterns.entry(pattern_type).or_insert_with(Vec::new).push(pattern);
+            class_patterns
+                .entry(pattern_type)
+                .or_insert_with(Vec::new)
+                .push(pattern);
         }
 
         // Compute prototype embeddings
@@ -546,7 +560,7 @@ impl MetaLearner {
                 .iter()
                 .map(|p| self.compute_pattern_embedding(p))
                 .collect::<Result<Vec<_>>>()?;
-            
+
             // Average embeddings to create prototype
             if !embeddings.is_empty() {
                 let dim = embeddings[0].len();
@@ -593,11 +607,14 @@ impl MetaLearner {
         memories: &[MemoryEpisode],
         strategies: &[AdaptationType],
     ) -> Result<AdaptedModel> {
-        tracing::debug!("Performing advanced hybrid adaptation with {} strategies", strategies.len());
+        tracing::debug!(
+            "Performing advanced hybrid adaptation with {} strategies",
+            strategies.len()
+        );
 
         let mut strategy_results = Vec::new();
         let mut strategy_confidences = Vec::new();
-        
+
         for strategy_type in strategies {
             let result = match strategy_type {
                 AdaptationType::GradientBased => self.gradient_based_adaptation(task, memories)?,
@@ -605,7 +622,7 @@ impl MetaLearner {
                 AdaptationType::Prototypical => self.prototypical_adaptation(task, memories)?,
                 AdaptationType::Hybrid(_) => continue, // Avoid infinite recursion
             };
-            
+
             // Evaluate strategy confidence
             let confidence = self.evaluate_strategy_confidence(&result, task)?;
             strategy_confidences.push(confidence);
@@ -613,16 +630,15 @@ impl MetaLearner {
         }
 
         if strategy_results.is_empty() {
-            return Err(ShaclAiError::MetaLearning("No valid strategies in hybrid approach".to_string()));
+            return Err(ShaclAiError::MetaLearning(
+                "No valid strategies in hybrid approach".to_string(),
+            ));
         }
 
         // Advanced ensemble using weighted combination based on confidence
-        let combined_result = self.ensemble_models_with_confidence(
-            strategy_results, 
-            strategy_confidences,
-            task
-        )?;
-        
+        let combined_result =
+            self.ensemble_models_with_confidence(strategy_results, strategy_confidences, task)?;
+
         Ok(combined_result)
     }
 
@@ -633,21 +649,26 @@ impl MetaLearner {
         task: &LearningTask,
     ) -> Result<f64> {
         let mut confidence: f64 = 0.5; // Base confidence
-        
+
         // Boost confidence based on adaptation metadata
         if model.adaptation_metadata.convergence_achieved {
             confidence += 0.2;
         }
-        
+
         if !model.adaptation_metadata.overfitting_detected {
             confidence += 0.1;
         }
-        
+
         // Adjust based on task complexity
-        if task.complexity_score > 0.8 && model.adaptation_metadata.adaptation_strategy.contains("gradient") {
+        if task.complexity_score > 0.8
+            && model
+                .adaptation_metadata
+                .adaptation_strategy
+                .contains("gradient")
+        {
             confidence += 0.1; // Gradient methods better for complex tasks
         }
-        
+
         Ok(confidence.min(1.0))
     }
 
@@ -658,12 +679,17 @@ impl MetaLearner {
         confidences: Vec<f64>,
         task: &LearningTask,
     ) -> Result<AdaptedModel> {
-        tracing::debug!("Ensembling {} models with confidence weighting", models.len());
-        
+        tracing::debug!(
+            "Ensembling {} models with confidence weighting",
+            models.len()
+        );
+
         if models.is_empty() {
-            return Err(ShaclAiError::MetaLearning("No models to ensemble".to_string()));
+            return Err(ShaclAiError::MetaLearning(
+                "No models to ensemble".to_string(),
+            ));
         }
-        
+
         // Normalize confidences
         let total_confidence: f64 = confidences.iter().sum();
         let normalized_weights: Vec<f64> = if total_confidence > 0.0 {
@@ -671,14 +697,14 @@ impl MetaLearner {
         } else {
             vec![1.0 / models.len() as f64; models.len()]
         };
-        
+
         // Weighted combination of model parameters
         let mut ensemble_parameters = HashMap::new();
-        
+
         if let Some(first_model) = models.first() {
             for (param_name, _) in &first_model.adapted_parameters {
                 let mut weighted_param = vec![0.0; 64]; // Default size
-                
+
                 for (model, weight) in models.iter().zip(&normalized_weights) {
                     if let Some(param_values) = model.adapted_parameters.get(param_name) {
                         for (i, &value) in param_values.iter().enumerate() {
@@ -688,22 +714,24 @@ impl MetaLearner {
                         }
                     }
                 }
-                
+
                 ensemble_parameters.insert(param_name.clone(), weighted_param);
             }
         }
-        
+
         // Combine metadata from all strategies
-        let source_tasks: Vec<String> = models.iter()
+        let source_tasks: Vec<String> = models
+            .iter()
             .flat_map(|m| m.adaptation_metadata.source_tasks.iter().cloned())
             .collect();
-            
-        let regularization_applied: Vec<String> = models.iter()
+
+        let regularization_applied: Vec<String> = models
+            .iter()
             .flat_map(|m| m.adaptation_metadata.regularization_applied.iter().cloned())
             .collect::<std::collections::HashSet<_>>()
             .into_iter()
             .collect();
-        
+
         Ok(AdaptedModel {
             base_model_id: "ensemble_meta_model".to_string(),
             adapted_parameters: ensemble_parameters,
@@ -711,8 +739,12 @@ impl MetaLearner {
             adaptation_metadata: AdaptationMetadata {
                 source_tasks,
                 adaptation_strategy: "advanced_hybrid_ensemble".to_string(),
-                convergence_achieved: models.iter().any(|m| m.adaptation_metadata.convergence_achieved),
-                overfitting_detected: models.iter().any(|m| m.adaptation_metadata.overfitting_detected),
+                convergence_achieved: models
+                    .iter()
+                    .any(|m| m.adaptation_metadata.convergence_achieved),
+                overfitting_detected: models
+                    .iter()
+                    .any(|m| m.adaptation_metadata.overfitting_detected),
                 regularization_applied,
             },
         })
@@ -722,7 +754,7 @@ impl MetaLearner {
     fn compute_task_embedding(&self, task: &LearningTask) -> Result<Vec<f64>> {
         // Simplified task embedding computation
         let mut embedding = vec![0.0; 64];
-        
+
         // Encode task type
         let type_encoding = match task.task_type {
             TaskType::DomainAdaptation => 1.0,
@@ -733,18 +765,18 @@ impl MetaLearner {
             TaskType::CrossModal => 6.0,
         };
         embedding[0] = type_encoding;
-        
+
         // Encode complexity
         embedding[1] = task.complexity_score;
-        
+
         // Encode support set size
         embedding[2] = task.support_set.len() as f64;
-        
+
         // Add some randomness for diversity (in practice, would use learned embeddings)
         for i in 3..embedding.len() {
             embedding[i] = (i as f64 * task.complexity_score).sin();
         }
-        
+
         Ok(embedding)
     }
 
@@ -752,11 +784,11 @@ impl MetaLearner {
         if a.len() != b.len() {
             return 0.0;
         }
-        
+
         let dot_product: f64 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
         let norm_a: f64 = a.iter().map(|x| x * x).sum::<f64>().sqrt();
         let norm_b: f64 = b.iter().map(|x| x * x).sum::<f64>().sqrt();
-        
+
         if norm_a == 0.0 || norm_b == 0.0 {
             0.0
         } else {
@@ -771,12 +803,12 @@ impl MetaLearner {
     ) -> Result<HashMap<String, Vec<f64>>> {
         // Simplified gradient computation
         let mut gradients = HashMap::new();
-        
+
         for (name, _param) in _parameters {
             // In a real implementation, this would compute actual gradients
             gradients.insert(name.clone(), vec![0.01; 64]);
         }
-        
+
         Ok(gradients)
     }
 
@@ -787,12 +819,13 @@ impl MetaLearner {
     ) -> Result<Vec<f64>> {
         let task_embedding = self.compute_task_embedding(task)?;
         let mut weights = Vec::new();
-        
+
         for memory in memories {
-            let similarity = self.compute_cosine_similarity(&task_embedding, &memory.learned_representation);
+            let similarity =
+                self.compute_cosine_similarity(&task_embedding, &memory.learned_representation);
             weights.push(similarity);
         }
-        
+
         // Normalize weights
         let sum: f64 = weights.iter().sum();
         if sum > 0.0 {
@@ -800,7 +833,7 @@ impl MetaLearner {
                 *weight /= sum;
             }
         }
-        
+
         Ok(weights)
     }
 
@@ -845,7 +878,10 @@ impl MetaLearner {
         memories: &[MemoryEpisode],
     ) -> Result<AdaptationInsights> {
         Ok(AdaptationInsights {
-            key_patterns_identified: vec!["structural_pattern".to_string(), "usage_pattern".to_string()],
+            key_patterns_identified: vec![
+                "structural_pattern".to_string(),
+                "usage_pattern".to_string(),
+            ],
             critical_features: vec!["confidence".to_string(), "support".to_string()],
             adaptation_bottlenecks: vec!["limited_support_data".to_string()],
             recommended_improvements: vec!["increase_support_size".to_string()],
@@ -886,9 +922,10 @@ impl MetaLearner {
         if metrics.accuracy > 0.7 {
             self.performance_tracker.successful_adaptations += 1;
         }
-        
-        self.performance_tracker.average_accuracy = 
-            (self.performance_tracker.average_accuracy * (self.performance_tracker.total_tasks - 1) as f64 + metrics.accuracy) 
+
+        self.performance_tracker.average_accuracy = (self.performance_tracker.average_accuracy
+            * (self.performance_tracker.total_tasks - 1) as f64
+            + metrics.accuracy)
             / self.performance_tracker.total_tasks as f64;
 
         if metrics.accuracy > self.performance_tracker.best_accuracy {
@@ -902,40 +939,62 @@ impl MetaLearner {
     fn initialize_adaptation_strategies() -> HashMap<String, AdaptationStrategy> {
         let mut strategies = HashMap::new();
 
-        strategies.insert("gradient_maml".to_string(), AdaptationStrategy {
-            strategy_name: "gradient_maml".to_string(),
-            adaptation_type: AdaptationType::GradientBased,
-            hyperparameters: [
-                ("steps".to_string(), 5.0),
-                ("learning_rate".to_string(), 0.01),
-            ].iter().cloned().collect(),
-            success_rate: 0.8,
-            avg_adaptation_time: 15.0,
-            applicable_contexts: vec!["complex_patterns".to_string(), "novel_domains".to_string()],
-        });
+        strategies.insert(
+            "gradient_maml".to_string(),
+            AdaptationStrategy {
+                strategy_name: "gradient_maml".to_string(),
+                adaptation_type: AdaptationType::GradientBased,
+                hyperparameters: [
+                    ("steps".to_string(), 5.0),
+                    ("learning_rate".to_string(), 0.01),
+                ]
+                .iter()
+                .cloned()
+                .collect(),
+                success_rate: 0.8,
+                avg_adaptation_time: 15.0,
+                applicable_contexts: vec![
+                    "complex_patterns".to_string(),
+                    "novel_domains".to_string(),
+                ],
+            },
+        );
 
-        strategies.insert("memory_retrieval".to_string(), AdaptationStrategy {
-            strategy_name: "memory_retrieval".to_string(),
-            adaptation_type: AdaptationType::MemoryBased,
-            hyperparameters: [
-                ("similarity_threshold".to_string(), 0.8),
-                ("top_k".to_string(), 5.0),
-            ].iter().cloned().collect(),
-            success_rate: 0.7,
-            avg_adaptation_time: 5.0,
-            applicable_contexts: vec!["similar_domains".to_string(), "rapid_adaptation".to_string()],
-        });
+        strategies.insert(
+            "memory_retrieval".to_string(),
+            AdaptationStrategy {
+                strategy_name: "memory_retrieval".to_string(),
+                adaptation_type: AdaptationType::MemoryBased,
+                hyperparameters: [
+                    ("similarity_threshold".to_string(), 0.8),
+                    ("top_k".to_string(), 5.0),
+                ]
+                .iter()
+                .cloned()
+                .collect(),
+                success_rate: 0.7,
+                avg_adaptation_time: 5.0,
+                applicable_contexts: vec![
+                    "similar_domains".to_string(),
+                    "rapid_adaptation".to_string(),
+                ],
+            },
+        );
 
-        strategies.insert("prototypical".to_string(), AdaptationStrategy {
-            strategy_name: "prototypical".to_string(),
-            adaptation_type: AdaptationType::Prototypical,
-            hyperparameters: [
-                ("prototype_dim".to_string(), 64.0),
-            ].iter().cloned().collect(),
-            success_rate: 0.75,
-            avg_adaptation_time: 10.0,
-            applicable_contexts: vec!["few_shot".to_string(), "classification".to_string()],
-        });
+        strategies.insert(
+            "prototypical".to_string(),
+            AdaptationStrategy {
+                strategy_name: "prototypical".to_string(),
+                adaptation_type: AdaptationType::Prototypical,
+                hyperparameters: [("prototype_dim".to_string(), 64.0)]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                success_rate: 0.75,
+                avg_adaptation_time: 10.0,
+                applicable_contexts: vec!["few_shot".to_string(), "classification".to_string()],
+            },
+        );
 
         strategies
     }
@@ -953,7 +1012,10 @@ impl MetaModel {
             meta_parameters: [
                 ("embedding".to_string(), vec![0.0; 64]),
                 ("adaptation".to_string(), vec![0.0; 32]),
-            ].iter().cloned().collect(),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
             episodic_memory: EpisodicMemory::new(config.memory_capacity),
             prototypes: HashMap::new(),
             attention_weights: Array2::zeros((32, 64)),
@@ -981,7 +1043,7 @@ impl EpisodicMemory {
         let episode_id = episode.episode_id.clone();
         let index = self.memories.len();
         self.memories.push_back(episode);
-        
+
         // Update retrieval index
         self.retrieval_index.insert(episode_id, vec![index]);
     }
@@ -1022,7 +1084,7 @@ mod tests {
     #[test]
     fn test_episodic_memory() {
         let mut memory = EpisodicMemory::new(2);
-        
+
         let episode1 = MemoryEpisode {
             episode_id: "test1".to_string(),
             timestamp: Utc::now(),
@@ -1045,7 +1107,7 @@ mod tests {
             support_size: 3,
             ..Default::default()
         };
-        
+
         assert_eq!(config.adaptation_steps, 10);
         assert_eq!(config.support_size, 3);
         assert!(config.enable_gradient_based);

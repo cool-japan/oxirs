@@ -124,7 +124,7 @@ impl QueryExecutor {
     ) -> Result<Vec<Vec<HashMap<String, crate::algebra::Term>>>> {
         // Simple implementation for UPDATE support
         // This would need proper integration with the full execution engine
-        
+
         // For now, return empty results to satisfy the interface
         // In a full implementation, this would execute the algebra and return variable bindings
         Ok(vec![])
@@ -212,11 +212,18 @@ impl QueryExecutor {
                 let pattern_results = self.execute_serial(pattern, dataset)?;
                 Ok(self.apply_distinct(pattern_results))
             }
-            Algebra::OrderBy { pattern, conditions } => {
+            Algebra::OrderBy {
+                pattern,
+                conditions,
+            } => {
                 let pattern_results = self.execute_serial(pattern, dataset)?;
                 Ok(self.apply_order_by(pattern_results, conditions))
             }
-            Algebra::Slice { pattern, offset, limit } => {
+            Algebra::Slice {
+                pattern,
+                offset,
+                limit,
+            } => {
                 let pattern_results = self.execute_serial(pattern, dataset)?;
                 Ok(self.apply_slice(pattern_results, *offset, *limit))
             }
@@ -479,14 +486,12 @@ impl QueryExecutor {
         // Use BGP optimizer to determine best execution order and index usage
         let stats = crate::optimizer::Statistics::new();
         let index_stats = crate::optimizer::IndexStatistics::default();
-        let optimizer = crate::bgp_optimizer::BGPOptimizer::new(
-            &stats,
-            &index_stats,
-        );
+        let optimizer = crate::bgp_optimizer::BGPOptimizer::new(&stats, &index_stats);
         let optimized_bgp = optimizer.optimize_bgp(patterns.to_vec())?;
 
         // Execute patterns in optimized order with index hints
-        let mut current_solution = self.execute_single_pattern(&optimized_bgp.patterns[0], dataset)?;
+        let mut current_solution =
+            self.execute_single_pattern(&optimized_bgp.patterns[0], dataset)?;
 
         for pattern in optimized_bgp.patterns.iter().skip(1) {
             let pattern_results = self.execute_single_pattern(pattern, dataset)?;
@@ -602,18 +607,27 @@ impl QueryExecutor {
         use std::collections::HashMap;
 
         // Build hash table from smaller side
-        let mut hash_table: HashMap<Vec<(crate::algebra::Variable, crate::algebra::Term)>, Vec<&crate::algebra::Binding>> = HashMap::new();
+        let mut hash_table: HashMap<
+            Vec<(crate::algebra::Variable, crate::algebra::Term)>,
+            Vec<&crate::algebra::Binding>,
+        > = HashMap::new();
 
         for binding in &build_side {
-            let key: Vec<_> = binding.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+            let key: Vec<_> = binding
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
             hash_table.entry(key).or_insert_with(Vec::new).push(binding);
         }
 
         // Probe with larger side
         let mut result = Solution::new();
         for probe_binding in &probe_side {
-            let probe_key: Vec<_> = probe_binding.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-            
+            let probe_key: Vec<_> = probe_binding
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
+
             if let Some(matching_bindings) = hash_table.get(&probe_key) {
                 for &build_binding in matching_bindings {
                     let mut merged = probe_binding.clone();
@@ -631,15 +645,23 @@ impl QueryExecutor {
     }
 
     /// Apply filter to solution
-    fn apply_filter(&self, solution: Solution, _condition: &crate::algebra::Expression) -> Result<Solution> {
+    fn apply_filter(
+        &self,
+        solution: Solution,
+        _condition: &crate::algebra::Expression,
+    ) -> Result<Solution> {
         // Simplified filter application - would need full expression evaluation
         Ok(solution)
     }
 
     /// Apply projection to solution
-    fn apply_projection(&self, solution: Solution, variables: &[crate::algebra::Variable]) -> Result<Solution> {
+    fn apply_projection(
+        &self,
+        solution: Solution,
+        variables: &[crate::algebra::Variable],
+    ) -> Result<Solution> {
         let var_set: std::collections::HashSet<_> = variables.iter().collect();
-        
+
         let projected = solution
             .into_iter()
             .map(|binding| {
@@ -660,7 +682,10 @@ impl QueryExecutor {
         let mut result = Solution::new();
 
         for binding in solution {
-            let key: Vec<_> = binding.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+            let key: Vec<_> = binding
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
             if seen.insert(key) {
                 result.push(binding);
             }
@@ -670,14 +695,23 @@ impl QueryExecutor {
     }
 
     /// Apply order by to solution
-    fn apply_order_by(&self, mut solution: Solution, _conditions: &[crate::algebra::OrderCondition]) -> Solution {
+    fn apply_order_by(
+        &self,
+        mut solution: Solution,
+        _conditions: &[crate::algebra::OrderCondition],
+    ) -> Solution {
         // Simplified ordering - would need full expression evaluation
         solution.sort_by(|a, b| a.len().cmp(&b.len()));
         solution
     }
 
     /// Apply slice (limit/offset) to solution
-    fn apply_slice(&self, solution: Solution, offset: Option<usize>, limit: Option<usize>) -> Solution {
+    fn apply_slice(
+        &self,
+        solution: Solution,
+        offset: Option<usize>,
+        limit: Option<usize>,
+    ) -> Solution {
         let start = offset.unwrap_or(0);
         let end = if let Some(limit) = limit {
             start + limit
@@ -689,25 +723,41 @@ impl QueryExecutor {
     }
 
     /// Lookup by subject index
-    fn lookup_by_subject(&self, pattern: &crate::algebra::TriplePattern, _dataset: &dyn Dataset) -> Result<Solution> {
+    fn lookup_by_subject(
+        &self,
+        pattern: &crate::algebra::TriplePattern,
+        _dataset: &dyn Dataset,
+    ) -> Result<Solution> {
         // Placeholder implementation - would use actual dataset indices
         self.create_sample_binding(pattern)
     }
 
     /// Lookup by predicate index  
-    fn lookup_by_predicate(&self, pattern: &crate::algebra::TriplePattern, _dataset: &dyn Dataset) -> Result<Solution> {
+    fn lookup_by_predicate(
+        &self,
+        pattern: &crate::algebra::TriplePattern,
+        _dataset: &dyn Dataset,
+    ) -> Result<Solution> {
         // Placeholder implementation - would use actual dataset indices
         self.create_sample_binding(pattern)
     }
 
     /// Lookup by object index
-    fn lookup_by_object(&self, pattern: &crate::algebra::TriplePattern, _dataset: &dyn Dataset) -> Result<Solution> {
+    fn lookup_by_object(
+        &self,
+        pattern: &crate::algebra::TriplePattern,
+        _dataset: &dyn Dataset,
+    ) -> Result<Solution> {
         // Placeholder implementation - would use actual dataset indices
         self.create_sample_binding(pattern)
     }
 
     /// Full scan pattern
-    fn full_scan_pattern(&self, pattern: &crate::algebra::TriplePattern, _dataset: &dyn Dataset) -> Result<Solution> {
+    fn full_scan_pattern(
+        &self,
+        pattern: &crate::algebra::TriplePattern,
+        _dataset: &dyn Dataset,
+    ) -> Result<Solution> {
         // Placeholder implementation - would use actual dataset scanning
         self.create_sample_binding(pattern)
     }

@@ -294,7 +294,7 @@ impl OntologyConstraints {
             .entry(entity1.to_string())
             .or_default()
             .insert(entity2.to_string());
-        
+
         // Symmetric relationship
         self.cross_modal_alignments
             .entry(entity2.to_string())
@@ -310,7 +310,9 @@ impl OntologyConstraints {
     /// Build property characteristics cache
     pub fn build_property_characteristics_cache(&mut self) {
         // Build comprehensive property characteristics
-        let all_properties: HashSet<String> = self.property_domains.keys()
+        let all_properties: HashSet<String> = self
+            .property_domains
+            .keys()
             .chain(self.property_ranges.keys())
             .chain(self.functional_properties.iter())
             .chain(self.symmetric_properties.iter())
@@ -321,27 +323,33 @@ impl OntologyConstraints {
 
         for property in all_properties {
             let mut characteristics = PropertyCharacteristics::default();
-            
+
             characteristics.is_functional = self.functional_properties.contains(&property);
             characteristics.is_symmetric = self.symmetric_properties.contains(&property);
             characteristics.is_transitive = self.transitive_properties.contains(&property);
             characteristics.has_inverse = self.inverse_properties.get(&property).cloned();
-            
+
             if let Some(domains) = self.property_domains.get(&property) {
                 characteristics.domain_classes = domains.clone();
             }
-            
+
             if let Some(ranges) = self.property_ranges.get(&property) {
                 characteristics.range_classes = ranges.clone();
             }
-            
-            self.property_characteristics.insert(property, characteristics);
+
+            self.property_characteristics
+                .insert(property, characteristics);
         }
     }
 
     /// Validate property usage based on domain/range constraints
-    pub fn validate_property_usage(&self, subject: &str, property: &str, object: &str, 
-                                   entity_types: &HashMap<String, String>) -> bool {
+    pub fn validate_property_usage(
+        &self,
+        subject: &str,
+        property: &str,
+        object: &str,
+        entity_types: &HashMap<String, String>,
+    ) -> bool {
         if let Some(characteristics) = self.property_characteristics.get(property) {
             // Check domain constraints
             if characteristics.has_domain_constraints() {
@@ -351,7 +359,7 @@ impl OntologyConstraints {
                     }
                 }
             }
-            
+
             // Check range constraints
             if characteristics.has_range_constraints() {
                 if let Some(object_type) = entity_types.get(object) {
@@ -361,30 +369,39 @@ impl OntologyConstraints {
                 }
             }
         }
-        
+
         true
     }
 
     /// Infer new triples based on property chains
     pub fn infer_from_property_chains(&self, existing_triples: &[Triple]) -> Vec<Triple> {
         let mut inferred_triples = Vec::new();
-        
+
         for (target_property, chains) in &self.property_chains {
             for chain in chains {
                 if chain.len() >= 2 {
                     // Find sequences of triples that match the property chain
-                    inferred_triples.extend(self.find_chain_matches(existing_triples, target_property, chain));
+                    inferred_triples.extend(self.find_chain_matches(
+                        existing_triples,
+                        target_property,
+                        chain,
+                    ));
                 }
             }
         }
-        
+
         inferred_triples
     }
 
     /// Find triple sequences that match a property chain pattern
-    fn find_chain_matches(&self, triples: &[Triple], target_property: &str, chain: &[String]) -> Vec<Triple> {
+    fn find_chain_matches(
+        &self,
+        triples: &[Triple],
+        target_property: &str,
+        chain: &[String],
+    ) -> Vec<Triple> {
         let mut matches = Vec::new();
-        
+
         // Build index of triples by predicate for faster lookup
         let mut triples_by_predicate: HashMap<String, Vec<&Triple>> = HashMap::new();
         for triple in triples {
@@ -393,15 +410,15 @@ impl OntologyConstraints {
                 .or_default()
                 .push(triple);
         }
-        
+
         // For simplicity, handle 2-property chains
         if chain.len() == 2 {
             let prop1 = &chain[0];
             let prop2 = &chain[1];
-            
+
             if let (Some(triples1), Some(triples2)) = (
                 triples_by_predicate.get(prop1),
-                triples_by_predicate.get(prop2)
+                triples_by_predicate.get(prop2),
             ) {
                 for t1 in triples1 {
                     for t2 in triples2 {
@@ -411,7 +428,7 @@ impl OntologyConstraints {
                             if let (Ok(subject), Ok(predicate), Ok(object)) = (
                                 crate::NamedNode::new(&t1.subject.iri),
                                 crate::NamedNode::new(target_property),
-                                crate::NamedNode::new(&t2.object.iri)
+                                crate::NamedNode::new(&t2.object.iri),
                             ) {
                                 matches.push(Triple::new(subject, predicate, object));
                             }
@@ -420,7 +437,7 @@ impl OntologyConstraints {
                 }
             }
         }
-        
+
         matches
     }
 }
@@ -738,7 +755,7 @@ impl OntologyAwareEmbedding {
                     if let Some(emb2) = self.entity_embeddings.get(entity2) {
                         // Positive similarity
                         let pos_sim = emb1.dot(emb2) / temperature;
-                        
+
                         // Negative similarities (sample random entities)
                         let mut neg_sims = Vec::new();
                         for (neg_entity, neg_emb) in self.entity_embeddings.iter().take(10) {
@@ -781,9 +798,10 @@ impl OntologyAwareEmbedding {
         for (entity, entity_emb) in &self.entity_embeddings {
             for (_relation, relation_emb) in &self.relation_embeddings {
                 // Check if this entity-relation pair appears in training data
-                let pair_exists = self.triples.iter().any(|t| 
-                    t.subject.iri == *entity || t.object.iri == *entity
-                );
+                let pair_exists = self
+                    .triples
+                    .iter()
+                    .any(|t| t.subject.iri == *entity || t.object.iri == *entity);
 
                 if pair_exists {
                     // Encourage high mutual information for related pairs
@@ -818,7 +836,7 @@ impl OntologyAwareEmbedding {
                         // For 2-property chains: target ≈ prop1 + prop2
                         if let (Some(prop1_emb), Some(prop2_emb)) = (
                             self.relation_embeddings.get(&chain[0]),
-                            self.relation_embeddings.get(&chain[1])
+                            self.relation_embeddings.get(&chain[1]),
                         ) {
                             let chain_emb = prop1_emb + prop2_emb;
                             let distance = (target_emb - &chain_emb).mapv(|x| x * x).sum().sqrt();
@@ -862,9 +880,10 @@ impl EmbeddingModel for OntologyAwareEmbedding {
 
         // Extract ontology constraints first
         self.extract_ontology_constraints();
-        
+
         // Build property characteristics cache for enhanced constraint handling
-        self.ontology_constraints.build_property_characteristics_cache();
+        self.ontology_constraints
+            .build_property_characteristics_cache();
 
         // Build entity and relation vocabularies
         let mut entity_set = HashSet::new();
@@ -1168,7 +1187,9 @@ impl EmbeddingModel for OntologyAwareEmbedding {
     }
 
     async fn encode(&self, _texts: &[String]) -> Result<Vec<Vec<f32>>> {
-        Err(anyhow!("Knowledge graph embedding model does not support text encoding"))
+        Err(anyhow!(
+            "Knowledge graph embedding model does not support text encoding"
+        ))
     }
 }
 

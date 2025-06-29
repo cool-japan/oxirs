@@ -7,33 +7,44 @@
 
 use anyhow::Result;
 use oxirs_embed::{
-    // Core embedding infrastructure
-    EmbeddingModel, ModelConfig, NamedNode, Triple,
-    
-    // Biomedical AI capabilities
-    BiomedicalEmbedding, BiomedicalEmbeddingConfig,
-    SpecializedTextEmbedding, SpecializedTextModel,
-    
-    // GPU acceleration
-    GpuAccelerationConfig, GpuAccelerationManager,
-    
-    // Traditional embedding models
-    TransE, ComplEx, RotatE,
-    
-    // Advanced models
-    TransformerEmbedding, TransformerConfig,
-    GNNEmbedding, GNNConfig, GNNType,
-    models::gnn::AggregationType,
-    
-    // Evaluation and benchmarking
-    evaluation::{EvaluationSuite, BenchmarkSuite},
-    
-    // Caching and optimization
-    CacheConfig, CacheManager,
     caching::EvictionPolicy,
+    // Evaluation and benchmarking
+    evaluation::{BenchmarkSuite, EvaluationSuite},
+
+    models::gnn::AggregationType,
+
+    // Biomedical AI capabilities
+    BiomedicalEmbedding,
+    BiomedicalEmbeddingConfig,
+    // Caching and optimization
+    CacheConfig,
+    CacheManager,
+    ComplEx,
+    // Core embedding infrastructure
+    EmbeddingModel,
+    GNNConfig,
+    GNNEmbedding,
+    GNNType,
+    // GPU acceleration
+    GpuAccelerationConfig,
+    GpuAccelerationManager,
+
+    ModelConfig,
+    NamedNode,
+    RotatE,
+
+    SpecializedTextEmbedding,
+    SpecializedTextModel,
+
+    // Traditional embedding models
+    TransE,
+    TransformerConfig,
+    // Advanced models
+    TransformerEmbedding,
+    Triple,
 };
-use std::time::Instant;
 use std::collections::HashMap;
+use std::time::Instant;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -42,19 +53,19 @@ async fn main() -> Result<()> {
 
     // 1. Initialize AI Platform
     let platform = AIPlatform::new().await?;
-    
+
     // 2. Multi-Domain Knowledge Integration
     platform.demo_multi_domain_integration().await?;
-    
+
     // 3. Advanced AI Model Ensemble
     platform.demo_model_ensemble().await?;
-    
+
     // 4. Real-time AI Inference Pipeline
     platform.demo_inference_pipeline().await?;
-    
+
     // 5. Comprehensive Evaluation Framework
     platform.demo_evaluation_framework().await?;
-    
+
     // 6. Production-Ready Deployment
     platform.demo_production_deployment().await?;
 
@@ -65,19 +76,19 @@ async fn main() -> Result<()> {
 struct AIPlatform {
     // GPU acceleration infrastructure
     gpu_manager: GpuAccelerationManager,
-    
+
     // Multi-domain embedding models
     biomedical_model: BiomedicalEmbedding,
     knowledge_model: TransE,
     transformer_model: TransformerEmbedding,
     gnn_model: GNNEmbedding,
-    
+
     // Specialized text processors
     text_processors: HashMap<String, SpecializedTextEmbedding>,
-    
+
     // Caching and optimization
     cache_manager: CacheManager,
-    
+
     // Evaluation infrastructure
     evaluation_suite: EvaluationSuite,
     benchmark_suite: BenchmarkSuite,
@@ -92,7 +103,7 @@ impl AIPlatform {
         let gpu_config = GpuAccelerationConfig {
             enabled: true,
             device_ids: vec![0, 1, 2, 3], // Multi-GPU setup
-            memory_pool_size_mb: 8192, // 8GB pool
+            memory_pool_size_mb: 8192,    // 8GB pool
             mixed_precision: true,
             tensor_caching: true,
             cache_size_mb: 2048, // 2GB cache
@@ -186,12 +197,18 @@ impl AIPlatform {
 
         // Initialize specialized text processors
         let mut text_processors = HashMap::new();
-        text_processors.insert("scientific".to_string(), 
-            SpecializedTextEmbedding::new(SpecializedTextEmbedding::scibert_config()));
-        text_processors.insert("biomedical".to_string(), 
-            SpecializedTextEmbedding::new(SpecializedTextEmbedding::biobert_config()));
-        text_processors.insert("code".to_string(), 
-            SpecializedTextEmbedding::new(SpecializedTextEmbedding::codebert_config()));
+        text_processors.insert(
+            "scientific".to_string(),
+            SpecializedTextEmbedding::new(SpecializedTextEmbedding::scibert_config()),
+        );
+        text_processors.insert(
+            "biomedical".to_string(),
+            SpecializedTextEmbedding::new(SpecializedTextEmbedding::biobert_config()),
+        );
+        text_processors.insert(
+            "code".to_string(),
+            SpecializedTextEmbedding::new(SpecializedTextEmbedding::codebert_config()),
+        );
         println!("   ✅ Specialized text processors initialized (3 domains)");
 
         // Initialize caching infrastructure
@@ -211,12 +228,28 @@ impl AIPlatform {
 
         // Initialize evaluation infrastructure
         let test_triples = vec![
-            ("gene:BRCA1".to_string(), "causes".to_string(), "disease:breast_cancer".to_string()),
-            ("drug:imatinib".to_string(), "inhibits".to_string(), "protein:BCR_ABL".to_string()),
+            (
+                "gene:BRCA1".to_string(),
+                "causes".to_string(),
+                "disease:breast_cancer".to_string(),
+            ),
+            (
+                "drug:imatinib".to_string(),
+                "inhibits".to_string(),
+                "protein:BCR_ABL".to_string(),
+            ),
         ];
         let validation_triples = vec![
-            ("gene:TP53".to_string(), "tumor_suppressor".to_string(), "pathway:apoptosis".to_string()),
-            ("drug:trastuzumab".to_string(), "targets".to_string(), "protein:HER2".to_string()),
+            (
+                "gene:TP53".to_string(),
+                "tumor_suppressor".to_string(),
+                "pathway:apoptosis".to_string(),
+            ),
+            (
+                "drug:trastuzumab".to_string(),
+                "targets".to_string(),
+                "protein:HER2".to_string(),
+            ),
         ];
         let evaluation_suite = EvaluationSuite::new(test_triples, validation_triples);
         let benchmark_suite = BenchmarkSuite::new();
@@ -243,7 +276,7 @@ impl AIPlatform {
         println!("───────────────────────────────────\n");
 
         println!("🔬 Integrating knowledge from multiple scientific domains:");
-        
+
         // Biomedical knowledge
         println!("\n📚 1. Biomedical Knowledge Base:");
         let biomedical_triples = vec![
@@ -251,12 +284,10 @@ impl AIPlatform {
             ("gene:BRCA1", "causes", "disease:breast_cancer"),
             ("gene:TP53", "tumor_suppressor", "pathway:apoptosis"),
             ("gene:EGFR", "overexpressed_in", "disease:lung_cancer"),
-            
             // Drug-target interactions
             ("drug:imatinib", "inhibits", "protein:BCR_ABL"),
             ("drug:trastuzumab", "targets", "protein:HER2"),
             ("drug:rituximab", "binds_to", "protein:CD20"),
-            
             // Pathway interactions
             ("pathway:p53_signaling", "regulates", "pathway:cell_cycle"),
             ("pathway:mtor", "controls", "process:protein_synthesis"),
@@ -271,7 +302,11 @@ impl AIPlatform {
         println!("\n⚗️  2. Chemical Knowledge Base:");
         let chemical_triples = vec![
             ("compound:aspirin", "chemical_class", "nsaid"),
-            ("compound:caffeine", "molecular_target", "adenosine_receptor"),
+            (
+                "compound:caffeine",
+                "molecular_target",
+                "adenosine_receptor",
+            ),
             ("compound:penicillin", "mechanism", "cell_wall_inhibition"),
             ("compound:morphine", "targets", "opioid_receptor"),
         ];
@@ -313,12 +348,20 @@ impl AIPlatform {
         println!("   • Patient data → Biomarkers → Personalized treatments");
 
         println!("\n📊 Integration statistics:");
-        println!("   Biomedical entities: {} triples", biomedical_triples.len());
+        println!(
+            "   Biomedical entities: {} triples",
+            biomedical_triples.len()
+        );
         println!("   Chemical entities: {} triples", chemical_triples.len());
         println!("   Clinical entities: {} triples", clinical_triples.len());
         println!("   Literature documents: {} papers", literature_texts.len());
-        println!("   Total knowledge: {} facts", 
-            biomedical_triples.len() + chemical_triples.len() + clinical_triples.len() + literature_texts.len());
+        println!(
+            "   Total knowledge: {} facts",
+            biomedical_triples.len()
+                + chemical_triples.len()
+                + clinical_triples.len()
+                + literature_texts.len()
+        );
 
         println!();
         Ok(())
@@ -341,12 +384,12 @@ impl AIPlatform {
 
         // Ensemble prediction framework
         println!("\n🎯 Ensemble prediction framework:");
-        
+
         // Sample query: "What drugs might be effective for treating lung cancer?"
         println!("\n❓ Query: 'What drugs might be effective for treating lung cancer?'");
-        
+
         println!("\n🔍 Model contributions:");
-        
+
         // TransE contribution
         println!("   📊 TransE model:");
         println!("      • Identifies: drug → targets → protein → pathway → disease");
@@ -395,7 +438,10 @@ impl AIPlatform {
         ];
 
         for (drug, confidence, mechanism) in drug_candidates {
-            println!("   🏆 {}: {:.2} confidence ({})", drug, confidence, mechanism);
+            println!(
+                "   🏆 {}: {:.2} confidence ({})",
+                drug, confidence, mechanism
+            );
         }
 
         // Performance metrics
@@ -435,7 +481,7 @@ impl AIPlatform {
 
         // Real-time query processing
         println!("\n🔄 Real-time query processing:");
-        
+
         let queries = vec![
             "What are the side effects of ibuprofen?",
             "Find genes associated with Alzheimer's disease",
@@ -446,29 +492,29 @@ impl AIPlatform {
 
         for (i, query) in queries.iter().enumerate() {
             let start = Instant::now();
-            
+
             // Simulate query processing stages
             println!("\n   🔍 Query {}: \"{}\"", i + 1, query);
-            
+
             // Stage 1: Query analysis
             let analysis_time = 12; // ms
             println!("      ⚡ Query analysis: {}ms", analysis_time);
-            
+
             // Stage 2: Model ensemble
             let ensemble_time = 89; // ms
             println!("      🤖 Model ensemble: {}ms", ensemble_time);
-            
+
             // Stage 3: Result aggregation
             let aggregation_time = 23; // ms
             println!("      🔗 Result aggregation: {}ms", aggregation_time);
-            
+
             // Stage 4: Response formatting
             let formatting_time = 8; // ms
             println!("      📋 Response formatting: {}ms", formatting_time);
-            
+
             let total_time = analysis_time + ensemble_time + aggregation_time + formatting_time;
             println!("      ✅ Total latency: {}ms", total_time);
-            
+
             // Cache status
             let cache_hit = i > 0 && i % 3 == 0;
             if cache_hit {
@@ -538,7 +584,10 @@ impl AIPlatform {
         ];
 
         for (fold, precision, recall, f1) in cv_results {
-            println!("      {}: P={:.1}%, R={:.1}%, F1={:.1}%", fold, precision, recall, f1);
+            println!(
+                "      {}: P={:.1}%, R={:.1}%, F1={:.1}%",
+                fold, precision, recall, f1
+            );
         }
 
         // Robustness evaluation

@@ -22,7 +22,7 @@ use tracing::{debug, error, info, instrument, warn};
 use crate::{
     cache::FederationCache,
     executor::{
-        QueryResultData, SparqlBinding, SparqlHead, SparqlResultSet, SparqlResults, SparqlValue,
+        QueryResultData, SparqlBinding, SparqlHead, SparqlResults, SparqlResultsData, SparqlValue,
     },
     service::{FederatedService, ServiceCapability},
     service_optimizer::{OptimizedServiceClause, ServiceExecutionStrategy},
@@ -160,7 +160,7 @@ impl ServiceExecutor {
             result_count: all_results.len(),
             results: SparqlResults {
                 head: SparqlHead { vars: vec![] },
-                results: SparqlResultSet {
+                results: SparqlResultsData {
                     bindings: all_results,
                 },
             },
@@ -339,7 +339,7 @@ impl ServiceExecutor {
         warn!("XML result parsing not fully implemented, returning empty results");
         Ok(SparqlResults {
             head: SparqlHead { vars: vec![] },
-            results: SparqlResultSet { bindings: vec![] },
+            results: SparqlResultsData { bindings: vec![] },
         })
     }
 
@@ -349,7 +349,7 @@ impl ServiceExecutor {
         if lines.is_empty() {
             return Ok(SparqlResults {
                 head: SparqlHead { vars: vec![] },
-                results: SparqlResultSet { bindings: vec![] },
+                results: SparqlResultsData { bindings: vec![] },
             });
         }
 
@@ -389,7 +389,7 @@ impl ServiceExecutor {
 
         Ok(SparqlResults {
             head: SparqlHead { vars },
-            results: SparqlResultSet { bindings },
+            results: SparqlResultsData { bindings },
         })
     }
 }
@@ -491,7 +491,7 @@ impl JoinExecutor {
 
         Ok(SparqlResults {
             head: SparqlHead { vars: all_vars },
-            results: SparqlResultSet {
+            results: SparqlResultsData {
                 bindings: result_bindings,
             },
         })
@@ -539,7 +539,7 @@ impl JoinExecutor {
 
         Ok(SparqlResults {
             head: SparqlHead { vars: all_vars },
-            results: SparqlResultSet {
+            results: SparqlResultsData {
                 bindings: result_bindings,
             },
         })
@@ -662,7 +662,7 @@ impl JoinExecutor {
 
         Ok(SparqlResults {
             head: SparqlHead { vars: all_vars },
-            results: SparqlResultSet {
+            results: SparqlResultsData {
                 bindings: result_bindings,
             },
         })
@@ -727,7 +727,7 @@ impl JoinExecutor {
 
         Ok(SparqlResults {
             head: SparqlHead { vars: all_vars },
-            results: SparqlResultSet {
+            results: SparqlResultsData {
                 bindings: result_bindings,
             },
         })
@@ -837,7 +837,7 @@ impl JoinExecutor {
 
         Ok(SparqlResults {
             head: SparqlHead { vars: all_vars },
-            results: SparqlResultSet {
+            results: SparqlResultsData {
                 bindings: result_bindings,
             },
         })
@@ -885,7 +885,7 @@ impl JoinExecutor {
 
         Ok(SparqlResults {
             head: left.head.clone(),
-            results: SparqlResultSet {
+            results: SparqlResultsData {
                 bindings: result_bindings,
             },
         })
@@ -933,7 +933,7 @@ impl JoinExecutor {
 
         Ok(SparqlResults {
             head: left.head.clone(),
-            results: SparqlResultSet {
+            results: SparqlResultsData {
                 bindings: result_bindings,
             },
         })
@@ -1038,7 +1038,7 @@ impl JoinExecutor {
 
         Ok(SparqlResults {
             head: results.head.clone(),
-            results: SparqlResultSet {
+            results: SparqlResultsData {
                 bindings: filtered_bindings,
             },
         })
@@ -1106,6 +1106,7 @@ impl JoinExecutor {
         match data {
             QueryResultData::Sparql(results) => results.results.bindings.len(),
             QueryResultData::GraphQL(_) => 1, // Simplified for GraphQL
+            QueryResultData::ServiceResult(_) => 1, // Simplified for service results
         }
     }
 

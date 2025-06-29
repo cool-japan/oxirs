@@ -79,6 +79,8 @@ pub enum Term {
     Iri(NamedNode),
     Literal(Literal),
     BlankNode(String),
+    QuotedTriple(Box<TriplePattern>),
+    PropertyPath(PropertyPath),
 }
 
 impl fmt::Display for Term {
@@ -88,6 +90,12 @@ impl fmt::Display for Term {
             Term::Iri(iri) => write!(f, "{}", iri),
             Term::Literal(lit) => write!(f, "{}", lit),
             Term::BlankNode(id) => write!(f, "_:{}", id),
+            Term::QuotedTriple(triple) => write!(
+                f,
+                "<<{} {} {}>>",
+                triple.subject, triple.predicate, triple.object
+            ),
+            Term::PropertyPath(path) => write!(f, "{}", path),
         }
     }
 }
@@ -98,10 +106,13 @@ impl From<Subject> for Term {
             Subject::NamedNode(n) => Term::Iri(n),
             Subject::BlankNode(b) => Term::BlankNode(b.id().to_string()),
             Subject::Variable(v) => Term::Variable(v),
-            Subject::QuotedTriple(_) => {
-                // For now, convert quoted triples to a placeholder
-                // TODO: Implement proper quoted triple support
-                Term::Iri(NamedNode::new_unchecked("__quoted_triple__"))
+            Subject::QuotedTriple(quoted_triple) => {
+                // Implement proper quoted triple support for RDF-star
+                Term::QuotedTriple(Box::new(TriplePattern {
+                    subject: Term::from(quoted_triple.subject().clone()),
+                    predicate: Term::from(quoted_triple.predicate().clone()),
+                    object: Term::from(quoted_triple.object().clone()),
+                }))
             }
         }
     }
@@ -123,10 +134,13 @@ impl From<Object> for Term {
             Object::BlankNode(b) => Term::BlankNode(b.id().to_string()),
             Object::Literal(l) => Term::Literal(l.into()),
             Object::Variable(v) => Term::Variable(v),
-            Object::QuotedTriple(_) => {
-                // For now, convert quoted triples to a placeholder
-                // TODO: Implement proper quoted triple support
-                Term::Iri(NamedNode::new_unchecked("__quoted_triple__"))
+            Object::QuotedTriple(quoted_triple) => {
+                // Implement proper quoted triple support for RDF-star
+                Term::QuotedTriple(Box::new(TriplePattern {
+                    subject: Term::from(quoted_triple.subject().clone()),
+                    predicate: Term::from(quoted_triple.predicate().clone()),
+                    object: Term::from(quoted_triple.object().clone()),
+                }))
             }
         }
     }
@@ -157,7 +171,7 @@ impl From<Variable> for Term {
 }
 
 /// Triple pattern
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct TriplePattern {
     pub subject: Term,
     pub predicate: Term,
@@ -315,7 +329,7 @@ pub struct GroupCondition {
 }
 
 /// Property path expressions for advanced SPARQL 1.1 graph navigation
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum PropertyPath {
     /// Direct property IRI
     Iri(Iri),

@@ -8,8 +8,8 @@ use std::collections::HashMap;
 use std::time::Duration;
 use tracing::{debug, info, warn};
 
+use super::query_analysis::{QueryComplexity, QueryInfo};
 use super::types::*;
-use super::query_analysis::{QueryInfo, QueryComplexity};
 
 /// Performance optimizer for federated queries
 pub struct PerformanceOptimizer {
@@ -60,13 +60,15 @@ impl PerformanceOptimizer {
         };
 
         // Check if execution time has degraded
-        let performance_degradation = self.calculate_performance_degradation(execution_metrics, context);
+        let performance_degradation =
+            self.calculate_performance_degradation(execution_metrics, context);
         analysis.performance_degradation = performance_degradation;
 
         // Suggest reoptimization if degradation exceeds threshold
         if performance_degradation > self.optimization_config.reoptimization_threshold {
             analysis.should_reoptimize = true;
-            analysis.suggested_changes = self.generate_optimization_suggestions(execution_metrics, context);
+            analysis.suggested_changes =
+                self.generate_optimization_suggestions(execution_metrics, context);
             analysis.confidence_score = self.calculate_confidence_score(execution_metrics);
         }
 
@@ -83,8 +85,12 @@ impl PerformanceOptimizer {
         context: &ExecutionContext,
     ) -> f64 {
         let query_pattern = self.extract_query_pattern(context);
-        
-        if let Some(&historical_avg) = self.historical_performance.query_patterns.get(&query_pattern) {
+
+        if let Some(&historical_avg) = self
+            .historical_performance
+            .query_patterns
+            .get(&query_pattern)
+        {
             let current_time = metrics.total_execution_time.as_millis() as f64;
             let degradation = (current_time - historical_avg) / historical_avg;
             degradation.max(0.0) // Only positive degradation
@@ -108,7 +114,9 @@ impl PerformanceOptimizer {
         let mut suggestions = Vec::new();
 
         // Analyze service execution times
-        let slowest_service = metrics.service_times.iter()
+        let slowest_service = metrics
+            .service_times
+            .iter()
             .max_by_key(|(_, &time)| time.as_millis());
 
         if let Some((service_id, time)) = slowest_service {
@@ -201,7 +209,9 @@ impl PerformanceOptimizer {
         }
 
         // Check for memory pressure
-        if metrics.peak_memory_usage > self.optimization_config.high_memory_threshold_mb * 1024 * 1024 {
+        if metrics.peak_memory_usage
+            > self.optimization_config.high_memory_threshold_mb * 1024 * 1024
+        {
             analysis.should_reoptimize = true;
             analysis.suggested_changes.push(format!(
                 "High memory usage ({}MB) - consider streaming or reducing batch sizes",
@@ -220,37 +230,44 @@ impl PerformanceOptimizer {
         let execution_time = metrics.total_execution_time.as_millis() as f64;
 
         // Update query pattern performance
-        let current_avg = self.historical_performance.query_patterns
+        let current_avg = self
+            .historical_performance
+            .query_patterns
             .get(&query_pattern)
             .copied()
             .unwrap_or(execution_time);
-        
+
         // Exponential moving average
         let alpha = 0.1;
         let new_avg = alpha * execution_time + (1.0 - alpha) * current_avg;
-        self.historical_performance.query_patterns.insert(query_pattern, new_avg);
+        self.historical_performance
+            .query_patterns
+            .insert(query_pattern, new_avg);
 
         // Update service performance
         for (service_id, &service_time) in &metrics.service_times {
             let service_time_ms = service_time.as_millis() as f64;
-            let current_avg = self.historical_performance.service_performance
+            let current_avg = self
+                .historical_performance
+                .service_performance
                 .get(service_id)
                 .copied()
                 .unwrap_or(service_time_ms);
-            
+
             let new_avg = alpha * service_time_ms + (1.0 - alpha) * current_avg;
-            self.historical_performance.service_performance.insert(service_id.clone(), new_avg);
+            self.historical_performance
+                .service_performance
+                .insert(service_id.clone(), new_avg);
         }
 
         // Update average response times
-        self.historical_performance.avg_response_times.insert(context.query_id.clone(), metrics.total_execution_time);
+        self.historical_performance
+            .avg_response_times
+            .insert(context.query_id.clone(), metrics.total_execution_time);
     }
 
     /// Get performance recommendations for query planning
-    pub fn get_planning_recommendations(
-        &self,
-        query_info: &QueryInfo,
-    ) -> PlanningRecommendations {
+    pub fn get_planning_recommendations(&self, query_info: &QueryInfo) -> PlanningRecommendations {
         let mut recommendations = PlanningRecommendations {
             preferred_execution_strategy: ExecutionStrategy::Sequential,
             suggested_timeout: Duration::from_secs(30),
@@ -286,10 +303,7 @@ impl PerformanceOptimizer {
     }
 
     /// Analyze join performance
-    pub fn analyze_join_performance(
-        &self,
-        join_metrics: &JoinMetrics,
-    ) -> JoinOptimizationAdvice {
+    pub fn analyze_join_performance(&self, join_metrics: &JoinMetrics) -> JoinOptimizationAdvice {
         let mut advice = JoinOptimizationAdvice {
             recommended_join_strategy: JoinStrategy::HashJoin,
             estimated_cost: join_metrics.execution_time.as_millis() as f64,
@@ -300,17 +314,23 @@ impl PerformanceOptimizer {
         // Recommend join strategy based on result set sizes
         if join_metrics.left_result_size > 10000 && join_metrics.right_result_size > 10000 {
             advice.recommended_join_strategy = JoinStrategy::SortMergeJoin;
-            advice.suggestions.push("Large result sets detected - sort-merge join recommended".to_string());
+            advice
+                .suggestions
+                .push("Large result sets detected - sort-merge join recommended".to_string());
         } else if join_metrics.left_result_size < 100 || join_metrics.right_result_size < 100 {
             advice.recommended_join_strategy = JoinStrategy::NestedLoopJoin;
-            advice.suggestions.push("Small result sets - nested loop join is efficient".to_string());
+            advice
+                .suggestions
+                .push("Small result sets - nested loop join is efficient".to_string());
         }
 
         // Check memory efficiency
         let total_memory = join_metrics.left_result_size + join_metrics.right_result_size;
         if total_memory > self.optimization_config.high_memory_threshold_mb * 1024 * 1024 {
             advice.memory_efficient = false;
-            advice.suggestions.push("High memory usage - consider streaming joins".to_string());
+            advice
+                .suggestions
+                .push("High memory usage - consider streaming joins".to_string());
         }
 
         advice
@@ -323,7 +343,7 @@ impl PerformanceOptimizer {
         context: &ExecutionContext,
     ) -> Result<OptimizationReport> {
         let analysis = self.analyze_performance(metrics, context)?;
-        
+
         let mut report = OptimizationReport {
             query_id: context.query_id.clone(),
             execution_time: metrics.total_execution_time,
@@ -336,7 +356,11 @@ impl PerformanceOptimizer {
         // Add service-specific analysis
         for (service_id, &service_time) in &metrics.service_times {
             if service_time.as_millis() > self.optimization_config.slow_service_threshold_ms {
-                report.bottlenecks.push(format!("Slow service: {} ({}ms)", service_id, service_time.as_millis()));
+                report.bottlenecks.push(format!(
+                    "Slow service: {} ({}ms)",
+                    service_id,
+                    service_time.as_millis()
+                ));
             }
         }
 
@@ -372,13 +396,16 @@ impl PerformanceOptimizer {
 
         // Network bottlenecks
         let total_network_time: Duration = metrics.service_times.values().sum();
-        let network_ratio = total_network_time.as_millis() as f64 / metrics.total_execution_time.as_millis() as f64;
+        let network_ratio =
+            total_network_time.as_millis() as f64 / metrics.total_execution_time.as_millis() as f64;
         if network_ratio > 0.7 {
             bottlenecks.push("Network latency is the primary bottleneck".to_string());
         }
 
         // Memory bottlenecks
-        if metrics.peak_memory_usage > self.optimization_config.high_memory_threshold_mb * 1024 * 1024 {
+        if metrics.peak_memory_usage
+            > self.optimization_config.high_memory_threshold_mb * 1024 * 1024
+        {
             bottlenecks.push("High memory usage may be limiting performance".to_string());
         }
 
@@ -391,17 +418,31 @@ impl PerformanceOptimizer {
     }
 
     /// Compare current performance with historical data
-    fn compare_with_history(&self, metrics: &ExecutionMetrics, context: &ExecutionContext) -> String {
+    fn compare_with_history(
+        &self,
+        metrics: &ExecutionMetrics,
+        context: &ExecutionContext,
+    ) -> String {
         let query_pattern = self.extract_query_pattern(context);
-        
-        if let Some(&historical_avg) = self.historical_performance.query_patterns.get(&query_pattern) {
+
+        if let Some(&historical_avg) = self
+            .historical_performance
+            .query_patterns
+            .get(&query_pattern)
+        {
             let current_time = metrics.total_execution_time.as_millis() as f64;
             let diff_percent = ((current_time - historical_avg) / historical_avg) * 100.0;
-            
+
             if diff_percent > 10.0 {
-                format!("Performance degraded by {:.1}% compared to historical average", diff_percent)
+                format!(
+                    "Performance degraded by {:.1}% compared to historical average",
+                    diff_percent
+                )
             } else if diff_percent < -10.0 {
-                format!("Performance improved by {:.1}% compared to historical average", -diff_percent)
+                format!(
+                    "Performance improved by {:.1}% compared to historical average",
+                    -diff_percent
+                )
             } else {
                 "Performance consistent with historical average".to_string()
             }
@@ -436,8 +477,8 @@ impl Default for OptimizationConfig {
             slow_service_threshold_ms: 1000,
             max_parallel_steps: 10,
             large_result_threshold_bytes: 10 * 1024 * 1024, // 10MB
-            high_network_ratio_threshold: 0.8, // 80%
-            high_error_rate_threshold: 0.1, // 10%
+            high_network_ratio_threshold: 0.8,              // 80%
+            high_error_rate_threshold: 0.1,                 // 10%
             high_memory_threshold_mb: 256,
         }
     }

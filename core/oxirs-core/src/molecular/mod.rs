@@ -1,20 +1,14 @@
 //! Molecular-Level Memory Management
-//! 
+//!
 //! This module implements biomimetic memory management inspired by cellular
 //! and molecular processes for ultra-efficient RDF data storage and processing.
 
+use crate::error::OxirsResult;
+use crate::model::{Quad, Term, Triple};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
-use std::cell::RefCell;
-use crate::error::OxirsResult;
-use crate::model::{Term, Triple, Quad};
-
-pub mod dna_storage;
-pub mod cellular_division;
-pub mod molecular_recognition;
-pub mod protein_folding;
-pub mod enzymatic_optimization;
 
 /// DNA-inspired data structure for RDF storage
 #[derive(Debug, Clone)]
@@ -107,6 +101,7 @@ pub struct TelomereSequence {
 }
 
 /// Replication machinery for data copying
+#[derive(Debug, Clone)]
 pub struct ReplicationMachinery {
     /// DNA polymerase for strand synthesis
     polymerase: DnaPolymerase,
@@ -121,6 +116,7 @@ pub struct ReplicationMachinery {
 }
 
 /// DNA polymerase for data synthesis
+#[derive(Debug, Clone)]
 pub struct DnaPolymerase {
     /// Synthesis rate (nucleotides per second)
     synthesis_rate: f64,
@@ -133,6 +129,7 @@ pub struct DnaPolymerase {
 }
 
 /// Helicase for strand unwinding
+#[derive(Debug, Clone)]
 pub struct Helicase {
     /// Unwinding rate (base pairs per second)
     unwinding_rate: f64,
@@ -143,6 +140,7 @@ pub struct Helicase {
 }
 
 /// Ligase for joining DNA fragments
+#[derive(Debug, Clone)]
 pub struct Ligase {
     /// Ligation efficiency
     efficiency: f64,
@@ -151,6 +149,7 @@ pub struct Ligase {
 }
 
 /// Primase for primer synthesis
+#[derive(Debug, Clone)]
 pub struct Primase {
     /// Primer length
     primer_length: usize,
@@ -159,6 +158,7 @@ pub struct Primase {
 }
 
 /// Proofreading system for error correction
+#[derive(Debug, Clone)]
 pub struct ProofreadingSystem {
     /// Exonuclease activity
     exonuclease: ExonucleaseActivity,
@@ -169,6 +169,7 @@ pub struct ProofreadingSystem {
 }
 
 /// Exonuclease activity for error removal
+#[derive(Debug, Clone)]
 pub struct ExonucleaseActivity {
     /// 3' to 5' exonuclease activity
     three_to_five: bool,
@@ -179,6 +180,7 @@ pub struct ExonucleaseActivity {
 }
 
 /// Mismatch detector for error identification
+#[derive(Debug, Clone)]
 pub struct MismatchDetector {
     /// Detection sensitivity
     sensitivity: f64,
@@ -204,6 +206,7 @@ pub enum RepairMechanism {
 }
 
 /// Cellular division for memory management
+#[derive(Debug, Clone)]
 pub struct CellularDivision {
     /// Cell cycle phases
     cell_cycle: CellCycle,
@@ -334,6 +337,7 @@ pub struct SpindleFormation {
 }
 
 /// Mitotic apparatus
+#[derive(Debug, Clone)]
 pub struct MitoticApparatus {
     /// Centrosomes
     centrosomes: Vec<Centrosome>,
@@ -346,6 +350,7 @@ pub struct MitoticApparatus {
 }
 
 /// Centrosome structure
+#[derive(Debug, Clone)]
 pub struct Centrosome {
     /// Centrioles
     centrioles: (Centriole, Centriole),
@@ -356,6 +361,7 @@ pub struct Centrosome {
 }
 
 /// Centriole structure
+#[derive(Debug, Clone)]
 pub struct Centriole {
     /// Barrel structure
     barrel_structure: BarrelStructure,
@@ -366,6 +372,7 @@ pub struct Centriole {
 }
 
 /// Barrel structure of centriole
+#[derive(Debug, Clone)]
 pub struct BarrelStructure {
     /// Triplet microtubules
     triplets: Vec<TripletMicrotubule>,
@@ -376,6 +383,7 @@ pub struct BarrelStructure {
 }
 
 /// Triplet microtubule
+#[derive(Debug, Clone)]
 pub struct TripletMicrotubule {
     /// A tubule
     a_tubule: Microtubule,
@@ -386,6 +394,7 @@ pub struct TripletMicrotubule {
 }
 
 /// Microtubule structure
+#[derive(Debug, Clone)]
 pub struct Microtubule {
     /// Protofilaments
     protofilaments: Vec<Protofilament>,
@@ -398,6 +407,7 @@ pub struct Microtubule {
 }
 
 /// Protofilament
+#[derive(Debug, Clone)]
 pub struct Protofilament {
     /// Tubulin dimers
     tubulin_dimers: Vec<TubulinDimer>,
@@ -406,6 +416,7 @@ pub struct Protofilament {
 }
 
 /// Tubulin dimer
+#[derive(Debug, Clone)]
 pub struct TubulinDimer {
     /// Alpha tubulin
     alpha_tubulin: AlphaTubulin,
@@ -416,6 +427,7 @@ pub struct TubulinDimer {
 }
 
 /// Alpha tubulin
+#[derive(Debug, Clone)]
 pub struct AlphaTubulin {
     /// Amino acid sequence
     sequence: Vec<AminoAcid>,
@@ -424,6 +436,7 @@ pub struct AlphaTubulin {
 }
 
 /// Beta tubulin
+#[derive(Debug, Clone)]
 pub struct BetaTubulin {
     /// Amino acid sequence
     sequence: Vec<AminoAcid>,
@@ -434,10 +447,26 @@ pub struct BetaTubulin {
 /// Amino acid representation
 #[derive(Debug, Clone)]
 pub enum AminoAcid {
-    Alanine, Arginine, Asparagine, AsparticAcid, Cysteine,
-    GlutamicAcid, Glutamine, Glycine, Histidine, Isoleucine,
-    Leucine, Lysine, Methionine, Phenylalanine, Proline,
-    Serine, Threonine, Tryptophan, Tyrosine, Valine,
+    Alanine,
+    Arginine,
+    Asparagine,
+    AsparticAcid,
+    Cysteine,
+    GlutamicAcid,
+    Glutamine,
+    Glycine,
+    Histidine,
+    Isoleucine,
+    Leucine,
+    Lysine,
+    Methionine,
+    Phenylalanine,
+    Proline,
+    Serine,
+    Threonine,
+    Tryptophan,
+    Tyrosine,
+    Valine,
 }
 
 /// Post-translational modification
@@ -460,6 +489,7 @@ pub enum NucleotideState {
 }
 
 /// Longitudinal contact
+#[derive(Debug, Clone)]
 pub struct LongitudinalContact {
     /// Contact strength
     strength: f64,
@@ -477,6 +507,7 @@ pub enum ContactType {
 }
 
 /// Microtubule end
+#[derive(Debug, Clone)]
 pub struct MicrotubuleEnd {
     /// Growth rate
     growth_rate: f64,
@@ -489,6 +520,7 @@ pub struct MicrotubuleEnd {
 }
 
 /// Dynamic instability of microtubules
+#[derive(Debug, Clone)]
 pub struct DynamicInstability {
     /// Growth phase
     growth_phase: GrowthPhase,
@@ -499,6 +531,7 @@ pub struct DynamicInstability {
 }
 
 /// Growth phase parameters
+#[derive(Debug, Clone)]
 pub struct GrowthPhase {
     /// Velocity
     velocity: f64,
@@ -509,6 +542,7 @@ pub struct GrowthPhase {
 }
 
 /// Shrinkage phase parameters
+#[derive(Debug, Clone)]
 pub struct ShrinkagePhase {
     /// Velocity
     velocity: f64,
@@ -528,6 +562,7 @@ pub enum CatastropheTrigger {
 }
 
 /// Transition frequencies
+#[derive(Debug, Clone)]
 pub struct TransitionFrequencies {
     /// Catastrophe frequency
     catastrophe: f64,
@@ -538,6 +573,7 @@ pub struct TransitionFrequencies {
 }
 
 /// Central hub of centriole
+#[derive(Debug, Clone)]
 pub struct CentralHub {
     /// Hub proteins
     hub_proteins: Vec<HubProtein>,
@@ -546,6 +582,7 @@ pub struct CentralHub {
 }
 
 /// Hub protein
+#[derive(Debug, Clone)]
 pub struct HubProtein {
     /// Protein name
     name: String,
@@ -556,6 +593,7 @@ pub struct HubProtein {
 }
 
 /// Centriolar appendage
+#[derive(Debug, Clone)]
 pub struct CentriolarAppendage {
     /// Appendage type
     appendage_type: AppendageType,
@@ -581,6 +619,7 @@ pub enum DuplicationStatus {
 }
 
 /// Pericentriolar material
+#[derive(Debug, Clone)]
 pub struct PericentriolarMaterial {
     /// Gamma tubulin ring complexes
     gamma_tubulin_complexes: Vec<GammaTubulinComplex>,
@@ -591,6 +630,7 @@ pub struct PericentriolarMaterial {
 }
 
 /// Gamma tubulin complex
+#[derive(Debug, Clone)]
 pub struct GammaTubulinComplex {
     /// Complex type
     complex_type: GammaTubulinComplexType,
@@ -617,6 +657,7 @@ pub enum OrganizationLevel {
 }
 
 /// Spindle fiber
+#[derive(Debug, Clone)]
 pub struct SpindleFiber {
     /// Fiber type
     fiber_type: SpindleFiberType,
@@ -635,6 +676,7 @@ pub enum SpindleFiberType {
 }
 
 /// Kinetochore structure
+#[derive(Debug, Clone)]
 pub struct Kinetochore {
     /// Inner kinetochore
     inner_kinetochore: InnerKinetochore,
@@ -645,6 +687,7 @@ pub struct Kinetochore {
 }
 
 /// Inner kinetochore
+#[derive(Debug, Clone)]
 pub struct InnerKinetochore {
     /// CENP proteins
     cenp_proteins: Vec<CenpProtein>,
@@ -653,6 +696,7 @@ pub struct InnerKinetochore {
 }
 
 /// CENP protein
+#[derive(Debug, Clone)]
 pub struct CenpProtein {
     /// Protein type
     protein_type: CenpType,
@@ -665,7 +709,24 @@ pub struct CenpProtein {
 /// CENP protein type
 #[derive(Debug, Clone)]
 pub enum CenpType {
-    CenpA, CenpB, CenpC, CenpH, CenpI, CenpK, CenpL, CenpM, CenpN, CenpO, CenpP, CenpQ, CenpR, CenpS, CenpT, CenpU, CenpW, CenpX,
+    CenpA,
+    CenpB,
+    CenpC,
+    CenpH,
+    CenpI,
+    CenpK,
+    CenpL,
+    CenpM,
+    CenpN,
+    CenpO,
+    CenpP,
+    CenpQ,
+    CenpR,
+    CenpS,
+    CenpT,
+    CenpU,
+    CenpW,
+    CenpX,
 }
 
 /// CENP protein function
@@ -678,6 +739,7 @@ pub enum CenpFunction {
 }
 
 /// Outer kinetochore
+#[derive(Debug, Clone)]
 pub struct OuterKinetochore {
     /// KNL1 complex
     knl1_complex: Knl1Complex,
@@ -688,6 +750,7 @@ pub struct OuterKinetochore {
 }
 
 /// KNL1 complex
+#[derive(Debug, Clone)]
 pub struct Knl1Complex {
     /// Checkpoint proteins
     checkpoint_proteins: Vec<CheckpointProtein>,
@@ -696,6 +759,7 @@ pub struct Knl1Complex {
 }
 
 /// Checkpoint protein
+#[derive(Debug, Clone)]
 pub struct CheckpointProtein {
     /// Protein name
     name: String,
@@ -706,6 +770,7 @@ pub struct CheckpointProtein {
 }
 
 /// Phosphorylation site
+#[derive(Debug, Clone)]
 pub struct PhosphorylationSite {
     /// Position
     position: usize,
@@ -724,6 +789,7 @@ pub enum PhosphorylationStatus {
 }
 
 /// MIS12 complex
+#[derive(Debug, Clone)]
 pub struct Mis12Complex {
     /// Complex stability
     stability: f64,
@@ -732,6 +798,7 @@ pub struct Mis12Complex {
 }
 
 /// NDC80 complex
+#[derive(Debug, Clone)]
 pub struct Ndc80Complex {
     /// Microtubule binding
     microtubule_binding: f64,
@@ -751,6 +818,7 @@ pub enum AttachmentStatus {
 }
 
 /// Centromere structure
+#[derive(Debug, Clone)]
 pub struct Centromere {
     /// Centromeric DNA
     centromeric_dna: CentromericDna,
@@ -761,6 +829,7 @@ pub struct Centromere {
 }
 
 /// Centromeric DNA
+#[derive(Debug, Clone)]
 pub struct CentromericDna {
     /// Repeat sequences
     repeat_sequences: Vec<RepeatSequence>,
@@ -771,6 +840,7 @@ pub struct CentromericDna {
 }
 
 /// Repeat sequence
+#[derive(Debug, Clone)]
 pub struct RepeatSequence {
     /// Sequence motif
     motif: String,
@@ -781,6 +851,7 @@ pub struct RepeatSequence {
 }
 
 /// Chromatin structure
+#[derive(Debug, Clone)]
 pub struct ChromatinStructure {
     /// Nucleosome positioning
     nucleosome_positioning: Vec<NucleosomePosition>,
@@ -791,6 +862,7 @@ pub struct ChromatinStructure {
 }
 
 /// Nucleosome position
+#[derive(Debug, Clone)]
 pub struct NucleosomePosition {
     /// Position on DNA
     position: usize,
@@ -801,6 +873,7 @@ pub struct NucleosomePosition {
 }
 
 /// Histone modification
+#[derive(Debug, Clone)]
 pub struct HistoneModification {
     /// Histone type
     histone_type: HistoneType,
@@ -815,7 +888,11 @@ pub struct HistoneModification {
 /// Histone type
 #[derive(Debug, Clone)]
 pub enum HistoneType {
-    H1, H2A, H2B, H3, H4,
+    H1,
+    H2A,
+    H2B,
+    H3,
+    H4,
 }
 
 /// Histone modification type
@@ -830,6 +907,7 @@ pub enum HistoneModificationType {
 }
 
 /// Cohesin complex
+#[derive(Debug, Clone)]
 pub struct CohesinComplex {
     /// SMC proteins
     smc_proteins: (SmcProtein, SmcProtein),
@@ -842,6 +920,7 @@ pub struct CohesinComplex {
 }
 
 /// SMC protein
+#[derive(Debug, Clone)]
 pub struct SmcProtein {
     /// SMC type
     smc_type: SmcType,
@@ -854,10 +933,16 @@ pub struct SmcProtein {
 /// SMC type
 #[derive(Debug, Clone)]
 pub enum SmcType {
-    Smc1, Smc2, Smc3, Smc4, Smc5, Smc6,
+    Smc1,
+    Smc2,
+    Smc3,
+    Smc4,
+    Smc5,
+    Smc6,
 }
 
 /// Coiled coil domain
+#[derive(Debug, Clone)]
 pub struct CoiledCoilDomain {
     /// Length
     length: usize,
@@ -868,6 +953,7 @@ pub struct CoiledCoilDomain {
 }
 
 /// Hinge region
+#[derive(Debug, Clone)]
 pub struct HingeRegion {
     /// Position
     position: usize,
@@ -878,6 +964,7 @@ pub struct HingeRegion {
 }
 
 /// Kleisin subunit
+#[derive(Debug, Clone)]
 pub struct KleisinSubunit {
     /// Subunit type
     subunit_type: KleisinType,
@@ -890,10 +977,13 @@ pub struct KleisinSubunit {
 /// Kleisin type
 #[derive(Debug, Clone)]
 pub enum KleisinType {
-    Rad21, Rec8, Rad21L,
+    Rad21,
+    Rec8,
+    Rad21L,
 }
 
 /// Regulatory site
+#[derive(Debug, Clone)]
 pub struct RegulatorySite {
     /// Site type
     site_type: RegulatorySiteType,
@@ -919,6 +1009,7 @@ pub enum ModificationStatus {
 }
 
 /// Regulatory protein
+#[derive(Debug, Clone)]
 pub struct RegulatoryProtein {
     /// Protein name
     name: String,
@@ -938,6 +1029,7 @@ pub enum RegulatoryFunction {
 }
 
 /// Checkpoint system
+#[derive(Debug, Clone)]
 pub struct CheckpointSystem {
     /// Spindle checkpoint
     spindle_checkpoint: SpindleCheckpoint,
@@ -948,6 +1040,7 @@ pub struct CheckpointSystem {
 }
 
 /// Spindle checkpoint
+#[derive(Debug, Clone)]
 pub struct SpindleCheckpoint {
     /// Mad proteins
     mad_proteins: Vec<MadProtein>,
@@ -958,6 +1051,7 @@ pub struct SpindleCheckpoint {
 }
 
 /// Mad protein
+#[derive(Debug, Clone)]
 pub struct MadProtein {
     /// Protein type
     protein_type: MadType,
@@ -970,10 +1064,13 @@ pub struct MadProtein {
 /// Mad protein type
 #[derive(Debug, Clone)]
 pub enum MadType {
-    Mad1, Mad2, Mad3,
+    Mad1,
+    Mad2,
+    Mad3,
 }
 
 /// Bub protein
+#[derive(Debug, Clone)]
 pub struct BubProtein {
     /// Protein type
     protein_type: BubType,
@@ -986,10 +1083,13 @@ pub struct BubProtein {
 /// Bub protein type
 #[derive(Debug, Clone)]
 pub enum BubType {
-    Bub1, Bub3, BubR1,
+    Bub1,
+    Bub3,
+    BubR1,
 }
 
 /// APC/C regulation
+#[derive(Debug, Clone)]
 pub struct ApcCRegulation {
     /// Inhibition level
     inhibition_level: f64,
@@ -998,6 +1098,7 @@ pub struct ApcCRegulation {
 }
 
 /// Activating signal
+#[derive(Debug, Clone)]
 pub struct ActivatingSignal {
     /// Signal type
     signal_type: SignalType,
@@ -1016,6 +1117,7 @@ pub enum SignalType {
 }
 
 /// DNA damage checkpoint
+#[derive(Debug, Clone)]
 pub struct DnaDamageCheckpoint {
     /// ATM kinase
     atm_kinase: AtmKinase,
@@ -1026,6 +1128,7 @@ pub struct DnaDamageCheckpoint {
 }
 
 /// ATM kinase
+#[derive(Debug, Clone)]
 pub struct AtmKinase {
     /// Activation status
     activation_status: bool,
@@ -1034,6 +1137,7 @@ pub struct AtmKinase {
 }
 
 /// ATR kinase
+#[derive(Debug, Clone)]
 pub struct AtrKinase {
     /// Activation status
     activation_status: bool,
@@ -1042,6 +1146,7 @@ pub struct AtrKinase {
 }
 
 /// p53 pathway
+#[derive(Debug, Clone)]
 pub struct P53Pathway {
     /// p53 level
     p53_level: f64,
@@ -1052,6 +1157,7 @@ pub struct P53Pathway {
 }
 
 /// Substrate for kinases
+#[derive(Debug, Clone)]
 pub struct Substrate {
     /// Substrate name
     name: String,
@@ -1071,6 +1177,7 @@ pub enum SubstrateFunction {
 }
 
 /// Replication checkpoint
+#[derive(Debug, Clone)]
 pub struct ReplicationCheckpoint {
     /// Replication stress response
     replication_stress_response: ReplicationStressResponse,
@@ -1079,6 +1186,7 @@ pub struct ReplicationCheckpoint {
 }
 
 /// Replication stress response
+#[derive(Debug, Clone)]
 pub struct ReplicationStressResponse {
     /// ATR activation
     atr_activation: f64,
@@ -1089,6 +1197,7 @@ pub struct ReplicationStressResponse {
 }
 
 /// Fork protection complex
+#[derive(Debug, Clone)]
 pub struct ForkProtectionComplex {
     /// Complex assembly
     complex_assembly: f64,
@@ -1107,6 +1216,7 @@ pub enum RestartMechanism {
 }
 
 /// Apoptosis machinery
+#[derive(Debug, Clone)]
 pub struct ApoptosisMachinery {
     /// Apoptotic triggers
     apoptotic_triggers: Vec<ApoptoticTrigger>,
@@ -1130,6 +1240,7 @@ pub enum ApoptoticTrigger {
 }
 
 /// Caspase cascade
+#[derive(Debug, Clone)]
 pub struct CaspaseCascade {
     /// Initiator caspases
     initiator_caspases: Vec<InitiatorCaspase>,
@@ -1140,6 +1251,7 @@ pub struct CaspaseCascade {
 }
 
 /// Initiator caspase
+#[derive(Debug, Clone)]
 pub struct InitiatorCaspase {
     /// Caspase type
     caspase_type: InitiatorCaspaseType,
@@ -1152,10 +1264,13 @@ pub struct InitiatorCaspase {
 /// Initiator caspase type
 #[derive(Debug, Clone)]
 pub enum InitiatorCaspaseType {
-    Caspase8, Caspase9, Caspase10,
+    Caspase8,
+    Caspase9,
+    Caspase10,
 }
 
 /// Executioner caspase
+#[derive(Debug, Clone)]
 pub struct ExecutionerCaspase {
     /// Caspase type
     caspase_type: ExecutionerCaspaseType,
@@ -1168,10 +1283,13 @@ pub struct ExecutionerCaspase {
 /// Executioner caspase type
 #[derive(Debug, Clone)]
 pub enum ExecutionerCaspaseType {
-    Caspase3, Caspase6, Caspase7,
+    Caspase3,
+    Caspase6,
+    Caspase7,
 }
 
 /// Cleavage target
+#[derive(Debug, Clone)]
 pub struct CleavageTarget {
     /// Target protein
     target_protein: String,
@@ -1182,6 +1300,7 @@ pub struct CleavageTarget {
 }
 
 /// Mitochondrial pathway
+#[derive(Debug, Clone)]
 pub struct MitochondrialPathway {
     /// Cytochrome c release
     cytochrome_c_release: f64,
@@ -1192,6 +1311,7 @@ pub struct MitochondrialPathway {
 }
 
 /// Death receptor pathway
+#[derive(Debug, Clone)]
 pub struct DeathReceptorPathway {
     /// Receptor activation
     receptor_activation: f64,
@@ -1217,83 +1337,101 @@ impl DnaDataStructure {
     pub fn insert_triple(&mut self, triple: &Triple) -> OxirsResult<()> {
         // Convert triple to nucleotide sequence
         let sequence = self.triple_to_nucleotides(triple)?;
-        
+
         // Add start codon
-        self.primary_strand.push(NucleotideData::Cytosine(SpecialMarker::StartCodon));
-        
+        self.primary_strand
+            .push(NucleotideData::Cytosine(SpecialMarker::StartCodon));
+
         // Add triple data
         self.primary_strand.extend(sequence);
-        
+
         // Add stop codon
-        self.primary_strand.push(NucleotideData::Cytosine(SpecialMarker::StopCodon));
-        
+        self.primary_strand
+            .push(NucleotideData::Cytosine(SpecialMarker::StopCodon));
+
         // Generate complementary strand
         self.generate_complementary_strand()?;
-        
+
         Ok(())
     }
 
     /// Convert triple to nucleotide sequence
     fn triple_to_nucleotides(&self, triple: &Triple) -> OxirsResult<Vec<NucleotideData>> {
         let mut sequence = Vec::new();
-        
+
         // Subject -> Adenine
-        sequence.push(NucleotideData::Adenine(Arc::new(triple.subject.clone())));
-        
+        sequence.push(NucleotideData::Adenine(Arc::new(
+            triple.subject().clone().into(),
+        )));
+
         // Predicate -> Thymine
-        sequence.push(NucleotideData::Thymine(Arc::new(triple.predicate.clone())));
-        
+        sequence.push(NucleotideData::Thymine(Arc::new(
+            triple.predicate().clone().into(),
+        )));
+
         // Object -> Guanine
-        sequence.push(NucleotideData::Guanine(Arc::new(triple.object.clone())));
-        
+        sequence.push(NucleotideData::Guanine(Arc::new(
+            triple.object().clone().into(),
+        )));
+
         Ok(sequence)
     }
 
     /// Generate complementary strand
     fn generate_complementary_strand(&mut self) -> OxirsResult<()> {
         self.complementary_strand.clear();
-        
+
         for nucleotide in &self.primary_strand {
             let complement = match nucleotide {
                 NucleotideData::Adenine(term) => NucleotideData::Thymine(term.clone()),
                 NucleotideData::Thymine(term) => NucleotideData::Adenine(term.clone()),
-                NucleotideData::Guanine(term) => NucleotideData::Cytosine(SpecialMarker::Promoter("complement".to_string())),
-                NucleotideData::Cytosine(marker) => NucleotideData::Guanine(Arc::new(crate::model::Term::BlankNode(
-                    crate::model::BlankNode::new("complement").unwrap()
-                ))),
+                NucleotideData::Guanine(term) => {
+                    NucleotideData::Cytosine(SpecialMarker::Promoter("complement".to_string()))
+                }
+                NucleotideData::Cytosine(marker) => {
+                    NucleotideData::Guanine(Arc::new(crate::model::Term::BlankNode(
+                        crate::model::BlankNode::new("complement").unwrap(),
+                    )))
+                }
             };
             self.complementary_strand.push(complement);
         }
-        
+
         Ok(())
     }
 
     /// Replicate DNA structure
     pub fn replicate(&mut self) -> OxirsResult<DnaDataStructure> {
-        self.replication_machinery.replicate(self)
+        let mut machinery = self.replication_machinery.clone();
+        machinery.replicate(self)
     }
 
     /// Perform genetic crossing over
-    pub fn crossing_over(&mut self, other: &mut DnaDataStructure, position: usize) -> OxirsResult<()> {
+    pub fn crossing_over(
+        &mut self,
+        other: &mut DnaDataStructure,
+        position: usize,
+    ) -> OxirsResult<()> {
         if position < self.primary_strand.len() && position < other.primary_strand.len() {
             // Swap genetic material after position
             let self_tail = self.primary_strand.split_off(position);
             let other_tail = other.primary_strand.split_off(position);
-            
+
             self.primary_strand.extend(other_tail);
             other.primary_strand.extend(self_tail);
-            
+
             // Regenerate complementary strands
             self.generate_complementary_strand()?;
             other.generate_complementary_strand()?;
         }
-        
+
         Ok(())
     }
 
     /// Detect and repair mutations
     pub fn dna_repair(&mut self) -> OxirsResult<()> {
-        self.replication_machinery.proofreading.repair_dna(self)
+        let proofreading = self.replication_machinery.proofreading.clone();
+        proofreading.repair_dna(self)
     }
 }
 
@@ -1312,20 +1450,21 @@ impl ReplicationMachinery {
     /// Replicate DNA structure
     pub fn replicate(&mut self, template: &DnaDataStructure) -> OxirsResult<DnaDataStructure> {
         let mut new_structure = DnaDataStructure::new();
-        
+
         // Unwind DNA
         self.helicase.unwind(template)?;
-        
+
         // Synthesize new strands
         new_structure.primary_strand = self.polymerase.synthesize(&template.primary_strand)?;
-        new_structure.complementary_strand = self.polymerase.synthesize(&template.complementary_strand)?;
-        
+        new_structure.complementary_strand =
+            self.polymerase.synthesize(&template.complementary_strand)?;
+
         // Ligate fragments
         self.ligase.ligate(&mut new_structure)?;
-        
+
         // Proofread
         self.proofreading.proofread(&mut new_structure)?;
-        
+
         Ok(new_structure)
     }
 }
@@ -1335,8 +1474,8 @@ impl DnaPolymerase {
     pub fn new() -> Self {
         Self {
             synthesis_rate: 1000.0, // nucleotides per second
-            error_rate: 1e-5, // errors per nucleotide
-            processivity: 10000, // nucleotides before dissociation
+            error_rate: 1e-5,       // errors per nucleotide
+            processivity: 10000,    // nucleotides before dissociation
             position: 0,
         }
     }
@@ -1344,21 +1483,21 @@ impl DnaPolymerase {
     /// Synthesize new DNA strand
     pub fn synthesize(&mut self, template: &[NucleotideData]) -> OxirsResult<Vec<NucleotideData>> {
         let mut new_strand = Vec::with_capacity(template.len());
-        
+
         for nucleotide in template {
             // Add complementary nucleotide with error checking
             let complement = self.add_nucleotide(nucleotide)?;
             new_strand.push(complement);
-            
+
             self.position += 1;
-            
+
             // Check processivity
             if self.position >= self.processivity {
                 self.position = 0;
                 break;
             }
         }
-        
+
         Ok(new_strand)
     }
 
@@ -1367,20 +1506,24 @@ impl DnaPolymerase {
         // Simplified nucleotide addition
         use rand::prelude::*;
         let mut rng = rand::thread_rng();
-        
+
         if rng.gen::<f64>() < self.error_rate {
             // Introduce error
-            return Ok(NucleotideData::Cytosine(SpecialMarker::Promoter("error".to_string())));
+            return Ok(NucleotideData::Cytosine(SpecialMarker::Promoter(
+                "error".to_string(),
+            )));
         }
-        
+
         // Add correct complement
         match template {
             NucleotideData::Adenine(term) => Ok(NucleotideData::Thymine(term.clone())),
             NucleotideData::Thymine(term) => Ok(NucleotideData::Adenine(term.clone())),
-            NucleotideData::Guanine(term) => Ok(NucleotideData::Cytosine(SpecialMarker::Promoter("complement".to_string()))),
-            NucleotideData::Cytosine(marker) => Ok(NucleotideData::Guanine(Arc::new(crate::model::Term::BlankNode(
-                crate::model::BlankNode::new("complement").unwrap()
-            )))),
+            NucleotideData::Guanine(term) => Ok(NucleotideData::Cytosine(SpecialMarker::Promoter(
+                "complement".to_string(),
+            ))),
+            NucleotideData::Cytosine(marker) => Ok(NucleotideData::Guanine(Arc::new(
+                crate::model::Term::BlankNode(crate::model::BlankNode::new("complement").unwrap()),
+            ))),
         }
     }
 }
@@ -1389,7 +1532,7 @@ impl Helicase {
     /// Create new helicase
     pub fn new() -> Self {
         Self {
-            unwinding_rate: 500.0, // base pairs per second
+            unwinding_rate: 500.0,   // base pairs per second
             energy_consumption: 1.0, // ATP per base pair
             position: 0,
         }
@@ -1447,12 +1590,12 @@ impl ProofreadingSystem {
     pub fn proofread(&self, structure: &mut DnaDataStructure) -> OxirsResult<()> {
         // Detect mismatches
         let mismatches = self.mismatch_detector.detect_mismatches(structure)?;
-        
+
         // Repair detected errors
         for mismatch in mismatches {
             self.repair_mismatch(structure, mismatch)?;
         }
-        
+
         Ok(())
     }
 
@@ -1462,24 +1605,33 @@ impl ProofreadingSystem {
         for mechanism in &self.repair_mechanisms {
             self.apply_repair_mechanism(structure, mechanism)?;
         }
-        
+
         Ok(())
     }
 
     /// Repair single mismatch
-    fn repair_mismatch(&self, _structure: &mut DnaDataStructure, _mismatch: Mismatch) -> OxirsResult<()> {
+    fn repair_mismatch(
+        &self,
+        _structure: &mut DnaDataStructure,
+        _mismatch: Mismatch,
+    ) -> OxirsResult<()> {
         // Simplified mismatch repair
         Ok(())
     }
 
     /// Apply repair mechanism
-    fn apply_repair_mechanism(&self, _structure: &mut DnaDataStructure, _mechanism: &RepairMechanism) -> OxirsResult<()> {
+    fn apply_repair_mechanism(
+        &self,
+        _structure: &mut DnaDataStructure,
+        _mechanism: &RepairMechanism,
+    ) -> OxirsResult<()> {
         // Simplified repair mechanism application
         Ok(())
     }
 }
 
 /// Mismatch in DNA structure
+#[derive(Debug, Clone)]
 pub struct Mismatch {
     /// Position of mismatch
     position: usize,
@@ -1513,12 +1665,14 @@ impl MismatchDetector {
     /// Detect mismatches in DNA structure
     pub fn detect_mismatches(&self, structure: &DnaDataStructure) -> OxirsResult<Vec<Mismatch>> {
         let mut mismatches = Vec::new();
-        
+
         // Compare primary and complementary strands
-        for (i, (primary, complement)) in structure.primary_strand.iter()
+        for (i, (primary, complement)) in structure
+            .primary_strand
+            .iter()
             .zip(structure.complementary_strand.iter())
-            .enumerate() {
-            
+            .enumerate()
+        {
             if !self.is_complement(primary, complement) {
                 mismatches.push(Mismatch {
                     position: i,
@@ -1527,7 +1681,7 @@ impl MismatchDetector {
                 });
             }
         }
-        
+
         Ok(mismatches)
     }
 
@@ -1547,10 +1701,12 @@ impl MismatchDetector {
         match nucleotide {
             NucleotideData::Adenine(term) => Ok(NucleotideData::Thymine(term.clone())),
             NucleotideData::Thymine(term) => Ok(NucleotideData::Adenine(term.clone())),
-            NucleotideData::Guanine(term) => Ok(NucleotideData::Cytosine(SpecialMarker::Promoter("complement".to_string()))),
-            NucleotideData::Cytosine(_) => Ok(NucleotideData::Guanine(Arc::new(crate::model::Term::BlankNode(
-                crate::model::BlankNode::new("complement").unwrap()
-            )))),
+            NucleotideData::Guanine(term) => Ok(NucleotideData::Cytosine(SpecialMarker::Promoter(
+                "complement".to_string(),
+            ))),
+            NucleotideData::Cytosine(_) => Ok(NucleotideData::Guanine(Arc::new(
+                crate::model::Term::BlankNode(crate::model::BlankNode::new("complement").unwrap()),
+            ))),
         }
     }
 }
@@ -1575,16 +1731,16 @@ impl CellularDivision {
         // Check if division is appropriate
         if !self.should_divide(memory_data.len())? {
             return Err(crate::error::OxirsError::MolecularError(
-                "Cell division not recommended".to_string()
+                "Cell division not recommended".to_string(),
             ));
         }
 
         // Progress through cell cycle
         self.progress_cell_cycle()?;
-        
+
         // Perform mitosis
         let (daughter1, daughter2) = self.perform_mitosis(memory_data)?;
-        
+
         Ok((daughter1, daughter2))
     }
 
@@ -1634,7 +1790,7 @@ impl CellularDivision {
                 // Stay in G0 unless stimulated
             }
         }
-        
+
         Ok(())
     }
 
@@ -1644,7 +1800,7 @@ impl CellularDivision {
         let midpoint = data.len() / 2;
         let daughter1 = data[..midpoint].to_vec();
         let daughter2 = data[midpoint..].to_vec();
-        
+
         Ok((daughter1, daughter2))
     }
 
@@ -1768,17 +1924,17 @@ impl MicrotubuleEnd {
     pub fn new(is_plus_end: bool) -> Self {
         if is_plus_end {
             Self {
-                growth_rate: 10.0, // μm/min
-                shrinkage_rate: 15.0, // μm/min
+                growth_rate: 10.0,           // μm/min
+                shrinkage_rate: 15.0,        // μm/min
                 catastrophe_frequency: 0.01, // per second
-                rescue_frequency: 0.005, // per second
+                rescue_frequency: 0.005,     // per second
             }
         } else {
             Self {
-                growth_rate: 2.0, // μm/min
-                shrinkage_rate: 5.0, // μm/min
+                growth_rate: 2.0,            // μm/min
+                shrinkage_rate: 5.0,         // μm/min
                 catastrophe_frequency: 0.02, // per second
-                rescue_frequency: 0.002, // per second
+                rescue_frequency: 0.002,     // per second
             }
         }
     }
@@ -1906,7 +2062,7 @@ impl ApoptosisMachinery {
     /// Trigger apoptosis
     pub fn trigger_apoptosis(&mut self, trigger: ApoptoticTrigger) -> OxirsResult<()> {
         self.apoptotic_triggers.push(trigger.clone());
-        
+
         match trigger {
             ApoptoticTrigger::DNADamage | ApoptoticTrigger::MetabolicStress => {
                 self.mitochondrial_pathway.activate()?;
@@ -1922,7 +2078,7 @@ impl ApoptosisMachinery {
                 self.caspase_cascade.activate()?;
             }
         }
-        
+
         Ok(())
     }
 
@@ -1946,17 +2102,17 @@ impl CaspaseCascade {
     /// Activate caspase cascade
     pub fn activate(&mut self) -> OxirsResult<()> {
         self.cascade_activation = 1.0;
-        
+
         // Activate initiator caspases
         for caspase in &mut self.initiator_caspases {
             caspase.activation_level = 1.0;
         }
-        
+
         // Activate executioner caspases
         for caspase in &mut self.executioner_caspases {
             caspase.activity_level = 1.0;
         }
-        
+
         Ok(())
     }
 }
@@ -2000,6 +2156,7 @@ impl DeathReceptorPathway {
 }
 
 /// Molecular memory manager
+#[derive(Debug, Clone)]
 pub struct MolecularMemoryManager {
     /// DNA storage system
     dna_storage: DnaDataStructure,
@@ -2012,6 +2169,7 @@ pub struct MolecularMemoryManager {
 }
 
 /// Memory cell
+#[derive(Debug, Clone)]
 pub struct MemoryCell {
     /// Cell ID
     id: String,
@@ -2026,6 +2184,7 @@ pub struct MemoryCell {
 }
 
 /// Molecular garbage collector
+#[derive(Debug, Clone)]
 pub struct MolecularGarbageCollector {
     /// Collection strategy
     collection_strategy: GarbageCollectionStrategy,
@@ -2051,6 +2210,7 @@ pub enum GarbageCollectionStrategy {
 }
 
 /// Mark and sweep system
+#[derive(Debug, Clone)]
 pub struct MarkAndSweepSystem {
     /// Marked objects
     marked_objects: std::collections::HashSet<String>,
@@ -2059,6 +2219,7 @@ pub struct MarkAndSweepSystem {
 }
 
 /// Reference counting system
+#[derive(Debug, Clone)]
 pub struct ReferenceCountingSystem {
     /// Reference counts
     reference_counts: HashMap<String, usize>,
@@ -2092,7 +2253,7 @@ impl MolecularMemoryManager {
         let cell_id = format!("cell_{}", self.memory_cells.len());
         let mut data = Vec::with_capacity(size.max(1024));
         data.resize(size, 0);
-        
+
         let cell = MemoryCell {
             id: cell_id.clone(),
             data,
@@ -2100,7 +2261,7 @@ impl MolecularMemoryManager {
             health: 1.0,
             division_count: 0,
         };
-        
+
         self.memory_cells.push(cell);
         Ok(cell_id)
     }
@@ -2109,10 +2270,11 @@ impl MolecularMemoryManager {
     pub fn deallocate(&mut self, cell_id: &str) -> OxirsResult<()> {
         if let Some(pos) = self.memory_cells.iter().position(|c| c.id == cell_id) {
             let cell = self.memory_cells.remove(pos);
-            
+
             // Trigger apoptosis for large cells
             if cell.data.len() > 1024 * 1024 {
-                self.cellular_division.trigger_apoptosis(ApoptoticTrigger::MemoryPressure)?;
+                self.cellular_division
+                    .trigger_apoptosis(ApoptoticTrigger::MemoryPressure)?;
             }
         }
         Ok(())
@@ -2122,11 +2284,11 @@ impl MolecularMemoryManager {
     pub fn divide_memory(&mut self, cell_id: &str) -> OxirsResult<(String, String)> {
         if let Some(cell) = self.memory_cells.iter().find(|c| c.id == cell_id) {
             let (data1, data2) = self.cellular_division.divide_cell(&cell.data)?;
-            
+
             // Create daughter cells
             let daughter1_id = format!("{}_daughter1", cell_id);
             let daughter2_id = format!("{}_daughter2", cell_id);
-            
+
             let daughter1 = MemoryCell {
                 id: daughter1_id.clone(),
                 data: data1,
@@ -2134,7 +2296,7 @@ impl MolecularMemoryManager {
                 health: 1.0,
                 division_count: cell.division_count + 1,
             };
-            
+
             let daughter2 = MemoryCell {
                 id: daughter2_id.clone(),
                 data: data2,
@@ -2142,16 +2304,17 @@ impl MolecularMemoryManager {
                 health: 1.0,
                 division_count: cell.division_count + 1,
             };
-            
+
             self.memory_cells.push(daughter1);
             self.memory_cells.push(daughter2);
-            
+
             return Ok((daughter1_id, daughter2_id));
         }
-        
-        Err(crate::error::OxirsError::MolecularError(
-            format!("Cell {} not found", cell_id)
-        ))
+
+        Err(crate::error::OxirsError::MolecularError(format!(
+            "Cell {} not found",
+            cell_id
+        )))
     }
 
     /// Store RDF data in DNA structure
@@ -2176,14 +2339,15 @@ impl MolecularMemoryManager {
     pub fn age_cells(&mut self, elapsed: Duration) -> OxirsResult<()> {
         for cell in &mut self.memory_cells {
             cell.age += elapsed;
-            
+
             // Reduce health with age
             let age_factor = cell.age.as_secs_f64() / (24.0 * 3600.0); // days
             cell.health = (1.0 - age_factor * 0.01).max(0.0);
-            
+
             // Trigger apoptosis for old cells
             if cell.health < 0.1 {
-                self.cellular_division.trigger_apoptosis(ApoptoticTrigger::CellCycleArrest)?;
+                self.cellular_division
+                    .trigger_apoptosis(ApoptoticTrigger::CellCycleArrest)?;
             }
         }
         Ok(())
@@ -2223,7 +2387,7 @@ impl MolecularGarbageCollector {
     fn molecular_apoptosis_collect(&mut self, cells: &mut Vec<MemoryCell>) -> OxirsResult<()> {
         // Remove cells with low health
         cells.retain(|cell| cell.health > 0.1);
-        
+
         // Compact healthy cells
         for cell in cells.iter_mut() {
             if cell.health < 0.5 {
@@ -2231,7 +2395,7 @@ impl MolecularGarbageCollector {
                 cell.health = (cell.health + 0.1).min(1.0);
             }
         }
-        
+
         Ok(())
     }
 }
@@ -2249,23 +2413,23 @@ impl MarkAndSweepSystem {
     pub fn collect(&mut self, cells: &mut Vec<MemoryCell>) -> OxirsResult<()> {
         // Mark phase
         self.mark_objects(cells)?;
-        
+
         // Sweep phase
         self.sweep_objects(cells)?;
-        
+
         Ok(())
     }
 
     /// Mark objects
     fn mark_objects(&mut self, cells: &[MemoryCell]) -> OxirsResult<()> {
         self.marked_objects.clear();
-        
+
         for cell in cells {
             if cell.health > 0.5 {
                 self.marked_objects.insert(cell.id.clone());
             }
         }
-        
+
         Ok(())
     }
 
@@ -2289,25 +2453,23 @@ impl ReferenceCountingSystem {
     pub fn collect(&mut self, cells: &mut Vec<MemoryCell>) -> OxirsResult<()> {
         // Update reference counts
         self.update_reference_counts(cells)?;
-        
+
         // Remove cells with zero references
-        cells.retain(|cell| {
-            self.reference_counts.get(&cell.id).unwrap_or(&0) > &0
-        });
-        
+        cells.retain(|cell| self.reference_counts.get(&cell.id).unwrap_or(&0) > &0);
+
         Ok(())
     }
 
     /// Update reference counts
     fn update_reference_counts(&mut self, cells: &[MemoryCell]) -> OxirsResult<()> {
         self.reference_counts.clear();
-        
+
         for cell in cells {
             // Simplified reference counting
             let count = if cell.health > 0.5 { 1 } else { 0 };
             self.reference_counts.insert(cell.id.clone(), count);
         }
-        
+
         Ok(())
     }
 }
@@ -2336,7 +2498,7 @@ mod tests {
         let mut manager = MolecularMemoryManager::new();
         let cell_id = manager.allocate(1024).unwrap();
         assert!(!cell_id.is_empty());
-        
+
         let result = manager.deallocate(&cell_id);
         assert!(result.is_ok());
     }
@@ -2360,7 +2522,7 @@ mod tests {
                 division_count: 0,
             },
         ];
-        
+
         let result = collector.collect(&mut cells);
         assert!(result.is_ok());
         assert_eq!(cells.len(), 1); // Low health cell should be removed
@@ -2370,11 +2532,11 @@ mod tests {
     fn test_triple_to_nucleotides() {
         let dna = DnaDataStructure::new();
         let triple = Triple::new(
-            crate::model::NamedNode::new("http://example.org/s").unwrap().into(),
-            crate::model::NamedNode::new("http://example.org/p").unwrap().into(),
-            crate::model::NamedNode::new("http://example.org/o").unwrap().into(),
+            crate::model::NamedNode::new("http://example.org/s").unwrap(),
+            crate::model::NamedNode::new("http://example.org/p").unwrap(),
+            crate::model::NamedNode::new("http://example.org/o").unwrap(),
         );
-        
+
         let result = dna.triple_to_nucleotides(&triple);
         assert!(result.is_ok());
         let nucleotides = result.unwrap();

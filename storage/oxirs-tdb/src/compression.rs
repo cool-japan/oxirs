@@ -1185,9 +1185,21 @@ impl AdaptiveCompressor {
                 let compressor = ColumnStoreCompressor::default();
                 compressor.compress(data)?
             }
-            _ => {
-                // For any remaining unimplemented algorithms, return data as-is
-                data.to_vec()
+            AdvancedCompressionType::Delta => {
+                // Delta encoding for sequences
+                DeltaEncoder::encode(data)?
+            }
+            AdvancedCompressionType::FrameOfReference => {
+                // Frame of Reference encoding for numbers
+                FrameOfReferenceEncoder::encode(data)?
+            }
+            AdvancedCompressionType::AdaptiveDictionary => {
+                // Adaptive dictionary compression with frequency analysis
+                AdaptiveDictionaryEncoder::encode(data)?
+            }
+            AdvancedCompressionType::Adaptive => {
+                // Adaptive compression: analyze data and choose best algorithm
+                self.adaptive_compress(data)?
             }
         };
 
@@ -1289,9 +1301,16 @@ impl AdaptiveCompressor {
                 let compressor = ColumnStoreCompressor::default();
                 compressor.decompress(&compressed.data)
             }
-            _ => {
-                // For any remaining unimplemented algorithms, return data as-is
-                Ok(compressed.data.clone())
+            AdvancedCompressionType::Delta => DeltaEncoder::decode(&compressed.data),
+            AdvancedCompressionType::FrameOfReference => {
+                FrameOfReferenceEncoder::decode(&compressed.data)
+            }
+            AdvancedCompressionType::AdaptiveDictionary => {
+                AdaptiveDictionaryEncoder::decode(&compressed.data)
+            }
+            AdvancedCompressionType::Adaptive => {
+                // For adaptive compression, decode based on metadata
+                self.adaptive_decompress(compressed)
             }
         }
     }
@@ -1355,6 +1374,72 @@ impl AdaptiveCompressor {
             data: compressed_data,
             metadata,
         })
+    }
+
+    /// Adaptive compression: analyze data and choose best algorithm
+    fn adaptive_compress(&self, data: &[u8]) -> Result<Vec<u8>> {
+        if data.len() < 16 {
+            // Too small for meaningful compression
+            return Ok(data.to_vec());
+        }
+
+        // Try different algorithms and pick the best one
+        let mut best_algorithm = AdvancedCompressionType::RunLength;
+        let mut best_compressed = data.to_vec();
+        let mut best_ratio = 1.0f64;
+
+        // Test run-length encoding
+        if let Ok(compressed) = RunLengthEncoder::encode(data) {
+            let ratio = compressed.len() as f64 / data.len() as f64;
+            if ratio < best_ratio {
+                best_ratio = ratio;
+                best_compressed = compressed;
+                best_algorithm = AdvancedCompressionType::RunLength;
+            }
+        }
+
+        // Test delta encoding (if data looks like numbers)
+        if data.len() % 8 == 0 && data.len() >= 16 {
+            let values: Vec<u64> = data
+                .chunks_exact(8)
+                .map(|chunk| u64::from_le_bytes(chunk.try_into().unwrap()))
+                .collect();
+
+            if let Ok(compressed) = DeltaEncoder::encode_u64_sequence(&values) {
+                let ratio = compressed.len() as f64 / data.len() as f64;
+                if ratio < best_ratio {
+                    best_ratio = ratio;
+                    best_compressed = compressed;
+                    best_algorithm = AdvancedCompressionType::Delta;
+                }
+            }
+        }
+
+        // Store metadata about which algorithm was used
+        let mut result = Vec::new();
+        result.push(best_algorithm as u8);
+        result.extend_from_slice(&best_compressed);
+
+        Ok(result)
+    }
+
+    /// Adaptive decompression: decode based on stored metadata
+    fn adaptive_decompress(&self, compressed: &CompressedData) -> Result<Vec<u8>> {
+        if compressed.data.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // First byte indicates which algorithm was used
+        let algorithm_byte = compressed.data[0];
+        let data = &compressed.data[1..];
+
+        match algorithm_byte {
+            10 => RunLengthEncoder::decode(data),          // RunLength = 10
+            13 => DeltaEncoder::decode(data),              // Delta = 13
+            14 => FrameOfReferenceEncoder::decode(data),   // FrameOfReference = 14
+            15 => AdaptiveDictionaryEncoder::decode(data), // AdaptiveDictionary = 15
+            _ => Ok(data.to_vec()),                        // Fallback to raw data
+        }
     }
 }
 
@@ -1556,6 +1641,327 @@ impl BitmapRoaringEncoder {
         }
 
         Ok(result)
+    }
+}
+
+/// Byte delta encoder for compressing byte sequences with small differences
+pub struct ByteDeltaEncoder;
+
+impl ByteDeltaEncoder {
+    /// Encode byte data using delta compression
+    pub fn encode(data: &[u8]) -> Result<Vec<u8>> {
+        if data.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut compressed = Vec::new();
+        compressed.push(data[0]); // Store first value as-is
+
+        for i in 1..data.len() {
+            let delta = data[i].wrapping_sub(data[i - 1]);
+            compressed.push(delta);
+        }
+
+        Ok(compressed)
+    }
+
+    /// Decode delta-compressed data
+    pub fn decode(data: &[u8]) -> Result<Vec<u8>> {
+        if data.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut decoded = Vec::new();
+        decoded.push(data[0]); // First value is stored as-is
+
+        for i in 1..data.len() {
+            let prev_value = decoded[i - 1];
+            let delta = data[i];
+            decoded.push(prev_value.wrapping_add(delta));
+        }
+
+        Ok(decoded)
+    }
+
+    /// Encode sequence of u64 values using delta compression
+    pub fn encode_u64_sequence(values: &[u64]) -> Result<Vec<u8>> {
+        if values.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut compressed = Vec::new();
+
+        // Store first value as-is
+        compressed.extend_from_slice(&values[0].to_le_bytes());
+
+        for i in 1..values.len() {
+            let delta = values[i].wrapping_sub(values[i - 1]);
+            compressed.extend_from_slice(&delta.to_le_bytes());
+        }
+
+        Ok(compressed)
+    }
+
+    /// Decode u64 sequence from delta-compressed data
+    pub fn decode_u64_sequence(data: &[u8]) -> Result<Vec<u64>> {
+        if data.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        if data.len() % 8 != 0 {
+            return Err(anyhow!("Invalid data length for u64 sequence"));
+        }
+
+        let mut decoded = Vec::new();
+        let mut offset = 0;
+
+        // Read first value
+        let first_value = u64::from_le_bytes([
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+            data[offset + 4],
+            data[offset + 5],
+            data[offset + 6],
+            data[offset + 7],
+        ]);
+        decoded.push(first_value);
+        offset += 8;
+
+        // Decode deltas
+        while offset + 8 <= data.len() {
+            let delta = u64::from_le_bytes([
+                data[offset],
+                data[offset + 1],
+                data[offset + 2],
+                data[offset + 3],
+                data[offset + 4],
+                data[offset + 5],
+                data[offset + 6],
+                data[offset + 7],
+            ]);
+            let prev_value = decoded[decoded.len() - 1];
+            decoded.push(prev_value.wrapping_add(delta));
+            offset += 8;
+        }
+
+        Ok(decoded)
+    }
+}
+
+impl ByteFrameOfReferenceEncoder {
+    /// Encode byte data using Frame of Reference
+    pub fn encode(data: &[u8]) -> Result<Vec<u8>> {
+        if data.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let min_value = *data.iter().min().unwrap();
+        let max_value = *data.iter().max().unwrap();
+        let range = max_value - min_value;
+
+        let mut compressed = Vec::new();
+        compressed.push(min_value); // Store reference value
+        compressed.push(range); // Store range for validation
+
+        for &value in data {
+            let offset = value - min_value;
+            compressed.push(offset);
+        }
+
+        Ok(compressed)
+    }
+
+    /// Decode Frame of Reference compressed data
+    pub fn decode(data: &[u8]) -> Result<Vec<u8>> {
+        if data.len() < 2 {
+            return Ok(Vec::new());
+        }
+
+        let min_value = data[0];
+        let _range = data[1]; // Could be used for validation
+
+        let mut decoded = Vec::new();
+        for i in 2..data.len() {
+            let offset = data[i];
+            decoded.push(min_value + offset);
+        }
+
+        Ok(decoded)
+    }
+
+    /// Encode sequence of u64 values using Frame of Reference
+    pub fn encode_u64_sequence(values: &[u64], _bit_width: u8) -> Result<Vec<u8>> {
+        if values.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let min_value = *values.iter().min().unwrap();
+        let max_value = *values.iter().max().unwrap();
+        let _range = max_value - min_value;
+
+        let mut compressed = Vec::new();
+
+        // Store metadata
+        compressed.extend_from_slice(&min_value.to_le_bytes());
+        compressed.extend_from_slice(&(values.len() as u32).to_le_bytes());
+
+        // Store offsets
+        for &value in values {
+            let offset = value - min_value;
+            compressed.extend_from_slice(&offset.to_le_bytes());
+        }
+
+        Ok(compressed)
+    }
+
+    /// Decode u64 sequence from Frame of Reference compressed data
+    pub fn decode_u64_sequence(data: &[u8]) -> Result<Vec<u64>> {
+        if data.len() < 12 {
+            return Ok(Vec::new());
+        }
+
+        let min_value = u64::from_le_bytes([
+            data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7],
+        ]);
+        let count = u32::from_le_bytes([data[8], data[9], data[10], data[11]]) as usize;
+
+        let mut decoded = Vec::new();
+        let mut offset = 12;
+
+        for _ in 0..count {
+            if offset + 8 > data.len() {
+                break;
+            }
+            let relative_offset = u64::from_le_bytes([
+                data[offset],
+                data[offset + 1],
+                data[offset + 2],
+                data[offset + 3],
+                data[offset + 4],
+                data[offset + 5],
+                data[offset + 6],
+                data[offset + 7],
+            ]);
+            decoded.push(min_value + relative_offset);
+            offset += 8;
+        }
+
+        Ok(decoded)
+    }
+}
+
+/// Adaptive dictionary encoder with frequency-based compression
+pub struct AdaptiveDictionaryEncoder;
+
+impl AdaptiveDictionaryEncoder {
+    /// Encode data using adaptive dictionary compression
+    pub fn encode(data: &[u8]) -> Result<Vec<u8>> {
+        // Simple implementation: find repeated patterns
+        let mut dictionary = std::collections::HashMap::new();
+        let mut compressed = Vec::new();
+
+        // Build dictionary of byte patterns
+        let pattern_size = 4; // Use 4-byte patterns
+        for chunk in data.chunks(pattern_size) {
+            *dictionary.entry(chunk.to_vec()).or_insert(0u32) += 1;
+        }
+
+        // Sort by frequency (most frequent first)
+        let mut patterns: Vec<_> = dictionary.into_iter().collect();
+        patterns.sort_by(|a, b| b.1.cmp(&a.1));
+
+        // Store dictionary size
+        compressed.extend_from_slice(&(patterns.len() as u32).to_le_bytes());
+
+        // Store dictionary
+        for (pattern, _freq) in &patterns {
+            compressed.push(pattern.len() as u8);
+            compressed.extend_from_slice(pattern);
+        }
+
+        // Encode data using dictionary indices
+        let pattern_map: std::collections::HashMap<Vec<u8>, u16> = patterns
+            .iter()
+            .enumerate()
+            .map(|(i, (pattern, _))| (pattern.clone(), i as u16))
+            .collect();
+
+        for chunk in data.chunks(pattern_size) {
+            if let Some(&index) = pattern_map.get(chunk) {
+                compressed.extend_from_slice(&index.to_le_bytes());
+            } else {
+                // Fallback: store raw bytes with special marker
+                compressed.extend_from_slice(&0xFFFFu16.to_le_bytes());
+                compressed.push(chunk.len() as u8);
+                compressed.extend_from_slice(chunk);
+            }
+        }
+
+        Ok(compressed)
+    }
+
+    /// Decode adaptive dictionary compressed data
+    pub fn decode(data: &[u8]) -> Result<Vec<u8>> {
+        if data.len() < 4 {
+            return Ok(Vec::new());
+        }
+
+        let mut offset = 0;
+
+        // Read dictionary size
+        let dict_size = u32::from_le_bytes([
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+        ]) as usize;
+        offset += 4;
+
+        // Read dictionary
+        let mut dictionary = Vec::new();
+        for _ in 0..dict_size {
+            if offset >= data.len() {
+                break;
+            }
+            let pattern_len = data[offset] as usize;
+            offset += 1;
+
+            if offset + pattern_len > data.len() {
+                break;
+            }
+            let pattern = data[offset..offset + pattern_len].to_vec();
+            dictionary.push(pattern);
+            offset += pattern_len;
+        }
+
+        // Decode data
+        let mut decoded = Vec::new();
+        while offset + 2 <= data.len() {
+            let index = u16::from_le_bytes([data[offset], data[offset + 1]]);
+            offset += 2;
+
+            if index == 0xFFFF {
+                // Raw bytes
+                if offset >= data.len() {
+                    break;
+                }
+                let raw_len = data[offset] as usize;
+                offset += 1;
+
+                if offset + raw_len > data.len() {
+                    break;
+                }
+                decoded.extend_from_slice(&data[offset..offset + raw_len]);
+                offset += raw_len;
+            } else if (index as usize) < dictionary.len() {
+                // Dictionary reference
+                decoded.extend_from_slice(&dictionary[index as usize]);
+            }
+        }
+
+        Ok(decoded)
     }
 }
 

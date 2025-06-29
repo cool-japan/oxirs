@@ -109,14 +109,9 @@ pub struct BackupChainInfo {
 
 impl BackupMetadata {
     /// Create new backup metadata
-    pub fn new(
-        id: String,
-        backup_type: BackupType,
-        database_version: u64,
-        start_lsn: u64,
-    ) -> Self {
+    pub fn new(id: String, backup_type: BackupType, database_version: u64, start_lsn: u64) -> Self {
         let now = SystemTime::now();
-        
+
         Self {
             id,
             backup_type,
@@ -168,9 +163,7 @@ impl BackupMetadata {
 
     /// Get backup duration
     pub fn duration(&self) -> Option<Duration> {
-        self.completed_at?
-            .duration_since(self.created_at)
-            .ok()
+        self.completed_at?.duration_since(self.created_at).ok()
     }
 
     /// Get compression ratio
@@ -459,7 +452,7 @@ impl BackupRestoreManager {
 
         // Get list of files to backup
         let files_to_backup = self.get_files_to_backup(database_path, &metadata)?;
-        
+
         let mut total_original_size = 0u64;
         let mut total_compressed_size = 0u64;
         let mut backup_files = Vec::new();
@@ -467,17 +460,14 @@ impl BackupRestoreManager {
         // Process each file
         for (source_path, relative_path) in files_to_backup {
             let backup_file_path = backup_dir.join(&relative_path);
-            
+
             // Ensure parent directory exists
             if let Some(parent) = backup_file_path.parent() {
                 fs::create_dir_all(parent)?;
             }
 
-            let (original_size, compressed_size) = self.backup_file(
-                &source_path,
-                &backup_file_path,
-                &metadata,
-            )?;
+            let (original_size, compressed_size) =
+                self.backup_file(&source_path, &backup_file_path, &metadata)?;
 
             total_original_size += original_size;
             total_compressed_size += compressed_size;
@@ -522,7 +512,7 @@ impl BackupRestoreManager {
         source_file.read_to_end(&mut buffer)?;
 
         let original_size = buffer.len() as u64;
-        
+
         // Compress if enabled
         let final_data = match metadata.compression_level {
             CompressionLevel::None => buffer,
@@ -549,8 +539,14 @@ impl BackupRestoreManager {
         restore_path: &Path,
         options: RecoveryOptions,
     ) -> Result<RecoveryProgress> {
-        let session_id = format!("restore_{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos());
-        
+        let session_id = format!(
+            "restore_{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+
         let mut progress = RecoveryProgress {
             session_id: session_id.clone(),
             current_phase: RecoveryPhase::Initializing,
@@ -563,7 +559,8 @@ impl BackupRestoreManager {
         let start_time = Instant::now();
 
         // Get backup metadata
-        let metadata = self.get_backup_metadata(backup_id)?
+        let metadata = self
+            .get_backup_metadata(backup_id)?
             .ok_or_else(|| anyhow!("Backup {} not found", backup_id))?;
 
         // Build restoration chain
@@ -578,7 +575,7 @@ impl BackupRestoreManager {
         // Restore files from each backup in chain
         for (index, backup_meta) in restoration_chain.iter().enumerate() {
             progress.progress_percent = (index as f64) / (restoration_chain.len() as f64);
-            
+
             self.restore_backup_files(backup_meta, restore_path)?;
         }
 
@@ -619,7 +616,8 @@ impl BackupRestoreManager {
             }
 
             if let Some(prev_id) = &current.previous_backup_id {
-                current = self.get_backup_metadata(prev_id)?
+                current = self
+                    .get_backup_metadata(prev_id)?
                     .ok_or_else(|| anyhow!("Previous backup {} not found", prev_id))?;
             } else {
                 return Err(anyhow!("Incomplete backup chain"));
@@ -711,7 +709,7 @@ impl BackupRestoreManager {
     /// Verify backup integrity
     fn verify_backup(&self, metadata: &BackupMetadata) -> Result<()> {
         let backup_dir = self.config.backup_directory.join(&metadata.id);
-        
+
         // Verify all files exist
         for file_path in &metadata.file_paths {
             let backup_file = backup_dir.join(file_path);
@@ -730,11 +728,7 @@ impl BackupRestoreManager {
     }
 
     /// Verify restoration integrity
-    fn verify_restoration(
-        &self,
-        _restore_path: &Path,
-        _chain: &[BackupMetadata],
-    ) -> Result<()> {
+    fn verify_restoration(&self, _restore_path: &Path, _chain: &[BackupMetadata]) -> Result<()> {
         // Implementation would verify:
         // - File integrity
         // - Database consistency
@@ -749,7 +743,7 @@ impl BackupRestoreManager {
         use std::hash::{Hash, Hasher};
 
         let mut hasher = DefaultHasher::new();
-        
+
         // Hash all files in backup directory
         for entry in fs::read_dir(backup_dir)? {
             let entry = entry?;
@@ -786,7 +780,10 @@ impl BackupRestoreManager {
                 self.collect_config_files(database_path, &mut files)?;
             }
             _ => {
-                return Err(anyhow!("Unsupported backup type: {:?}", metadata.backup_type));
+                return Err(anyhow!(
+                    "Unsupported backup type: {:?}",
+                    metadata.backup_type
+                ));
             }
         }
 
@@ -794,13 +791,18 @@ impl BackupRestoreManager {
     }
 
     /// Collect all database files
-    fn collect_all_files(&self, database_path: &Path, files: &mut Vec<(PathBuf, String)>) -> Result<()> {
+    fn collect_all_files(
+        &self,
+        database_path: &Path,
+        files: &mut Vec<(PathBuf, String)>,
+    ) -> Result<()> {
         for entry in fs::read_dir(database_path)? {
             let entry = entry?;
             let path = entry.path();
-            
+
             if path.is_file() {
-                let relative_path = path.strip_prefix(database_path)?
+                let relative_path = path
+                    .strip_prefix(database_path)?
                     .to_string_lossy()
                     .to_string();
                 files.push((path, relative_path));
@@ -830,11 +832,12 @@ impl BackupRestoreManager {
         for entry in fs::read_dir(database_path)? {
             let entry = entry?;
             let path = entry.path();
-            
+
             if path.is_file() {
                 let modified_time = fs::metadata(&path)?.modified()?;
                 if modified_time > previous_backup_time {
-                    let relative_path = path.strip_prefix(database_path)?
+                    let relative_path = path
+                        .strip_prefix(database_path)?
                         .to_string_lossy()
                         .to_string();
                     files.push((path, relative_path));
@@ -846,17 +849,22 @@ impl BackupRestoreManager {
     }
 
     /// Collect configuration files only
-    fn collect_config_files(&self, database_path: &Path, files: &mut Vec<(PathBuf, String)>) -> Result<()> {
+    fn collect_config_files(
+        &self,
+        database_path: &Path,
+        files: &mut Vec<(PathBuf, String)>,
+    ) -> Result<()> {
         let config_extensions = [".toml", ".yaml", ".yml", ".json", ".conf"];
-        
+
         for entry in fs::read_dir(database_path)? {
             let entry = entry?;
             let path = entry.path();
-            
+
             if path.is_file() {
                 if let Some(extension) = path.extension() {
                     if config_extensions.contains(&extension.to_string_lossy().as_ref()) {
-                        let relative_path = path.strip_prefix(database_path)?
+                        let relative_path = path
+                            .strip_prefix(database_path)?
                             .to_string_lossy()
                             .to_string();
                         files.push((path, relative_path));
@@ -879,7 +887,8 @@ impl BackupRestoreManager {
 
     /// Get chain info for a backup
     fn get_chain_info(&self, backup_id: &str) -> Result<BackupChainInfo> {
-        let metadata = self.get_backup_metadata(backup_id)?
+        let metadata = self
+            .get_backup_metadata(backup_id)?
             .ok_or_else(|| anyhow!("Backup {} not found", backup_id))?;
         Ok(metadata.chain_info)
     }
@@ -890,7 +899,7 @@ impl BackupRestoreManager {
         if metadata_file.exists() {
             let content = fs::read_to_string(metadata_file)?;
             let metadata: HashMap<String, BackupMetadata> = serde_json::from_str(&content)?;
-            
+
             let mut metadata_store = self.backup_metadata.write().unwrap();
             *metadata_store = metadata;
         }
@@ -921,20 +930,22 @@ impl BackupRestoreManager {
     /// Update backup statistics
     fn update_backup_stats(&self, metadata: &BackupMetadata, duration: Duration) -> Result<()> {
         let mut stats = self.stats.write().unwrap();
-        
+
         stats.total_backups_created += 1;
         match metadata.backup_type {
             BackupType::Full => stats.full_backups += 1,
             BackupType::Incremental => stats.incremental_backups += 1,
             _ => {}
         }
-        
+
         stats.total_backup_size_bytes += metadata.original_size_bytes;
         stats.total_compressed_size_bytes += metadata.compressed_size_bytes;
-        
-        let total_time = stats.average_backup_time_seconds * (stats.total_backups_created - 1) as f64;
-        stats.average_backup_time_seconds = (total_time + duration.as_secs_f64()) / stats.total_backups_created as f64;
-        
+
+        let total_time =
+            stats.average_backup_time_seconds * (stats.total_backups_created - 1) as f64;
+        stats.average_backup_time_seconds =
+            (total_time + duration.as_secs_f64()) / stats.total_backups_created as f64;
+
         stats.last_backup_time = metadata.completed_at;
 
         Ok(())
@@ -943,12 +954,14 @@ impl BackupRestoreManager {
     /// Update restore statistics
     fn update_restore_stats(&self, _metadata: &BackupMetadata, duration: Duration) -> Result<()> {
         let mut stats = self.stats.write().unwrap();
-        
+
         stats.total_restores_performed += 1;
-        
-        let total_time = stats.average_restore_time_seconds * (stats.total_restores_performed - 1) as f64;
-        stats.average_restore_time_seconds = (total_time + duration.as_secs_f64()) / stats.total_restores_performed as f64;
-        
+
+        let total_time =
+            stats.average_restore_time_seconds * (stats.total_restores_performed - 1) as f64;
+        stats.average_restore_time_seconds =
+            (total_time + duration.as_secs_f64()) / stats.total_restores_performed as f64;
+
         stats.last_restore_time = Some(SystemTime::now());
 
         Ok(())
@@ -992,7 +1005,7 @@ impl BackupRestoreManager {
     pub fn cleanup_old_backups(&self) -> Result<Vec<String>> {
         let retention_duration = Duration::from_secs(self.config.retention_days as u64 * 24 * 3600);
         let cutoff_time = SystemTime::now() - retention_duration;
-        
+
         let mut deleted_backups = Vec::new();
         let backups_to_delete: Vec<String> = {
             let metadata_store = self.backup_metadata.read().unwrap();
@@ -1019,12 +1032,7 @@ mod tests {
 
     #[test]
     fn test_backup_metadata() {
-        let mut metadata = BackupMetadata::new(
-            "test_backup".to_string(),
-            BackupType::Full,
-            1,
-            100,
-        );
+        let mut metadata = BackupMetadata::new("test_backup".to_string(), BackupType::Full, 1, 100);
 
         assert!(!metadata.is_complete());
         assert_eq!(metadata.backup_type, BackupType::Full);

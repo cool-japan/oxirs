@@ -70,9 +70,9 @@ lru = "0.12"
 glob = "0.3"
 
 # Columnar storage dependencies
-arrow = "53"
-datafusion = "43"
-parquet = "53"
+arrow.workspace = true
+datafusion = "48.0"
+parquet.workspace = true
 
 # Compression dependencies
 lz4 = "1.28"

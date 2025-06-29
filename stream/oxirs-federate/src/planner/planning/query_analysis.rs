@@ -96,20 +96,20 @@ impl QueryAnalyzer {
     /// Parse variables from GraphQL query
     fn parse_variables(query: &str) -> Result<HashMap<String, serde_json::Value>> {
         let mut variables = HashMap::new();
-        
+
         // Look for variable definitions in the operation signature
         // Example: query GetUser($id: ID!, $includeProfile: Boolean = false)
         if let Some(start) = query.find('(') {
             if let Some(end) = query.find(')') {
                 let var_section = &query[start + 1..end];
-                
+
                 // Split by commas and parse each variable
                 for var_def in var_section.split(',') {
                     let var_def = var_def.trim();
                     if var_def.starts_with('$') {
                         if let Some(colon_pos) = var_def.find(':') {
                             let var_name = var_def[1..colon_pos].trim().to_string();
-                            
+
                             // Check for default value
                             let type_and_default = &var_def[colon_pos + 1..];
                             if let Some(eq_pos) = type_and_default.find('=') {
@@ -126,14 +126,14 @@ impl QueryAnalyzer {
                 }
             }
         }
-        
+
         Ok(variables)
     }
 
     /// Parse a variable value from string
     fn parse_variable_value(value: &str) -> Result<serde_json::Value> {
         let value = value.trim();
-        
+
         if value == "true" {
             Ok(serde_json::Value::Bool(true))
         } else if value == "false" {
@@ -141,11 +141,15 @@ impl QueryAnalyzer {
         } else if value == "null" {
             Ok(serde_json::Value::Null)
         } else if value.starts_with('"') && value.ends_with('"') {
-            Ok(serde_json::Value::String(value[1..value.len()-1].to_string()))
+            Ok(serde_json::Value::String(
+                value[1..value.len() - 1].to_string(),
+            ))
         } else if let Ok(num) = value.parse::<i64>() {
             Ok(serde_json::Value::Number(serde_json::Number::from(num)))
         } else if let Ok(num) = value.parse::<f64>() {
-            Ok(serde_json::Value::Number(serde_json::Number::from_f64(num).unwrap_or_else(|| serde_json::Number::from(0))))
+            Ok(serde_json::Value::Number(
+                serde_json::Number::from_f64(num).unwrap_or_else(|| serde_json::Number::from(0)),
+            ))
         } else {
             // Assume it's a string without quotes
             Ok(serde_json::Value::String(value.to_string()))
@@ -300,7 +304,8 @@ impl QueryAnalyzer {
         complexity.nesting_depth = Self::calculate_max_depth(&query.selection_set);
 
         // Estimate cost based on fields and depth
-        complexity.estimated_cost = (complexity.field_count as f64) * (1.0 + complexity.nesting_depth as f64 * 0.5);
+        complexity.estimated_cost =
+            (complexity.field_count as f64) * (1.0 + complexity.nesting_depth as f64 * 0.5);
 
         complexity
     }
@@ -329,22 +334,23 @@ impl QueryAnalyzer {
     /// Estimate query execution time based on complexity
     fn estimate_execution_time(query: &ParsedQuery) -> std::time::Duration {
         let complexity = Self::analyze_query_complexity(query);
-        
+
         // Base time of 10ms + 5ms per field + 2ms per nesting level
         let base_time_ms = 10.0;
         let field_time_ms = complexity.field_count as f64 * 5.0;
         let depth_time_ms = complexity.nesting_depth as f64 * 2.0;
-        
+
         let total_ms = base_time_ms + field_time_ms + depth_time_ms;
         std::time::Duration::from_millis(total_ms as u64)
     }
 
     /// Check if query requires federation
     pub fn requires_federation(query: &ParsedQuery, schema: &UnifiedSchema) -> bool {
-        let field_ownership = Self::analyze_field_ownership(query, schema).unwrap_or_else(|_| FieldOwnership {
-            field_to_service: HashMap::new(),
-            service_to_fields: HashMap::new(),
-        });
+        let field_ownership =
+            Self::analyze_field_ownership(query, schema).unwrap_or_else(|_| FieldOwnership {
+                field_to_service: HashMap::new(),
+                service_to_fields: HashMap::new(),
+            });
 
         // Query requires federation if fields are owned by multiple services
         field_ownership.service_to_fields.len() > 1
@@ -374,17 +380,26 @@ impl QueryAnalyzer {
             match query.operation_type {
                 GraphQLOperationType::Query => {
                     if !schema.queries.contains_key(&selection.name) {
-                        errors.push(format!("Query field '{}' not found in schema", selection.name));
+                        errors.push(format!(
+                            "Query field '{}' not found in schema",
+                            selection.name
+                        ));
                     }
                 }
                 GraphQLOperationType::Mutation => {
                     if !schema.mutations.contains_key(&selection.name) {
-                        errors.push(format!("Mutation field '{}' not found in schema", selection.name));
+                        errors.push(format!(
+                            "Mutation field '{}' not found in schema",
+                            selection.name
+                        ));
                     }
                 }
                 GraphQLOperationType::Subscription => {
                     if !schema.subscriptions.contains_key(&selection.name) {
-                        errors.push(format!("Subscription field '{}' not found in schema", selection.name));
+                        errors.push(format!(
+                            "Subscription field '{}' not found in schema",
+                            selection.name
+                        ));
                     }
                 }
             }

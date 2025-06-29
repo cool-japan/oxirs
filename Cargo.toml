@@ -92,6 +92,31 @@ async-trait = "0.1"
 uuid = { version = "1.10", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 
+# Arrow crates (latest versions)
+arrow = "55.2"
+arrow-array = "55.2"
+arrow-buffer = "55.2"
+arrow-data = "55.2"
+arrow-arith = "55.2"
+arrow-cast = "55.2"
+arrow-csv = "55.2"
+arrow-ipc = "55.2"
+arrow-json = "55.2"
+arrow-ord = "55.2"
+arrow-row = "55.2"
+arrow-select = "55.2"
+arrow-string = "55.2"
+arrow-schema = "55.2"
+parquet = "55.2"
+# DataFusion compatible with arrow 55.2
+datafusion = "45.0"
+datafusion-common = "45.0"
+datafusion-expr = "45.0"
+datafusion-physical-expr = "45.0"
+datafusion-physical-plan = "45.0"
+datafusion-optimizer = "45.0"
+datafusion-sql = "45.0"
+
 # WebSocket support for GraphQL subscriptions
 tokio-tungstenite = "0.21"
 futures-util = "0.3"

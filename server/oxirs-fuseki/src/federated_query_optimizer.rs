@@ -534,7 +534,6 @@ impl FederatedQueryOptimizer {
     }
 }
 
-
 impl EndpointRegistry {
     pub fn new() -> Self {
         Self {
@@ -1229,7 +1228,6 @@ impl ExecutionStrategy for AdaptiveExecutionStrategy {
     }
 }
 
-
 impl ResultMerger {
     pub fn new() -> Self {
         Self {
@@ -1476,7 +1474,31 @@ mod tests {
 
     #[tokio::test]
     async fn test_extract_service_patterns() {
-        let optimizer = FederatedQueryOptimizer::new(Arc::new(MetricsService::new()));
+        let config = crate::config::MonitoringConfig {
+            metrics: crate::config::MetricsConfig {
+                enabled: false,
+                port: 9000,
+                prometheus: crate::config::PrometheusConfig {
+                    enabled: false,
+                    endpoint: "/metrics".to_string(),
+                },
+                custom_metrics: std::collections::HashMap::new(),
+            },
+            health_checks: crate::config::HealthCheckConfig {
+                enabled: false,
+                interval: std::time::Duration::from_secs(30),
+                endpoint: "/health".to_string(),
+                timeout: std::time::Duration::from_secs(5),
+            },
+            tracing: crate::config::TracingConfig {
+                enabled: false,
+                level: "info".to_string(),
+                format: "json".to_string(),
+                output: crate::config::TracingOutput::Stdout,
+            },
+        };
+        let optimizer =
+            FederatedQueryOptimizer::new(Arc::new(MetricsService::new(config).unwrap()));
 
         let query = r#"
             PREFIX foaf: <http://xmlns.com/foaf/0.1/>
@@ -1497,7 +1519,31 @@ mod tests {
 
     #[tokio::test]
     async fn test_multiple_service_patterns() {
-        let optimizer = FederatedQueryOptimizer::new(Arc::new(MetricsService::new()));
+        let config = crate::config::MonitoringConfig {
+            metrics: crate::config::MetricsConfig {
+                enabled: false,
+                port: 9000,
+                prometheus: crate::config::PrometheusConfig {
+                    enabled: false,
+                    endpoint: "/metrics".to_string(),
+                },
+                custom_metrics: std::collections::HashMap::new(),
+            },
+            health_checks: crate::config::HealthCheckConfig {
+                enabled: false,
+                interval: std::time::Duration::from_secs(30),
+                endpoint: "/health".to_string(),
+                timeout: std::time::Duration::from_secs(5),
+            },
+            tracing: crate::config::TracingConfig {
+                enabled: false,
+                level: "info".to_string(),
+                format: "json".to_string(),
+                output: crate::config::TracingOutput::Stdout,
+            },
+        };
+        let optimizer =
+            FederatedQueryOptimizer::new(Arc::new(MetricsService::new(config).unwrap()));
 
         let query = r#"
             SELECT ?s ?p ?o

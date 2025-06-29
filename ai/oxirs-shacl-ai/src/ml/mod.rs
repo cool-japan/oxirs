@@ -307,7 +307,7 @@ impl ModelEnsemble {
 
         // Collect all unique shape IDs across all predictions
         let mut shape_votes: HashMap<String, Vec<(LearnedShape, f64)>> = HashMap::new();
-        
+
         for (shapes, _weight) in &predictions {
             for shape in shapes {
                 shape_votes
@@ -331,7 +331,7 @@ impl ModelEnsemble {
 
         // Sort by aggregated confidence
         final_shapes.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
-        
+
         Ok(final_shapes)
     }
 
@@ -351,7 +351,7 @@ impl ModelEnsemble {
 
         // Collect weighted votes for each shape
         let mut shape_votes: HashMap<String, Vec<(LearnedShape, f64)>> = HashMap::new();
-        
+
         for (shapes, weight) in &predictions {
             let normalized_weight = weight / total_weight;
             for shape in shapes {
@@ -366,17 +366,18 @@ impl ModelEnsemble {
         let mut final_shapes = Vec::new();
         for (shape_id, votes) in shape_votes {
             let aggregated_shape = self.aggregate_shapes_weighted(&votes)?;
-            
+
             // Only include shapes with sufficient weighted support
             let total_vote_weight: f64 = votes.iter().map(|(_, w)| w).sum();
-            if total_vote_weight >= 0.3 { // Require at least 30% total weight support
+            if total_vote_weight >= 0.3 {
+                // Require at least 30% total weight support
                 final_shapes.push(aggregated_shape);
             }
         }
 
         // Sort by weighted confidence
         final_shapes.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
-        
+
         Ok(final_shapes)
     }
 
@@ -397,7 +398,9 @@ impl ModelEnsemble {
         votes: &[(LearnedShape, f64)],
     ) -> Result<LearnedShape, ModelError> {
         if votes.is_empty() {
-            return Err(ModelError::InvalidParams("No votes to aggregate".to_string()));
+            return Err(ModelError::InvalidParams(
+                "No votes to aggregate".to_string(),
+            ));
         }
 
         let first_shape = &votes[0].0;
@@ -409,8 +412,8 @@ impl ModelEnsemble {
         };
 
         // Aggregate confidence as simple average
-        aggregated_shape.confidence = votes.iter().map(|(shape, _)| shape.confidence).sum::<f64>() 
-            / votes.len() as f64;
+        aggregated_shape.confidence =
+            votes.iter().map(|(shape, _)| shape.confidence).sum::<f64>() / votes.len() as f64;
 
         // Aggregate constraints by finding most common ones
         let mut constraint_counts: HashMap<String, Vec<LearnedConstraint>> = HashMap::new();
@@ -428,10 +431,10 @@ impl ModelEnsemble {
         for (constraint_type, constraints) in constraint_counts {
             if constraints.len() >= majority_threshold {
                 // Create aggregated constraint
-                let avg_confidence = constraints.iter().map(|c| c.confidence).sum::<f64>() 
+                let avg_confidence = constraints.iter().map(|c| c.confidence).sum::<f64>()
                     / constraints.len() as f64;
-                let avg_support = constraints.iter().map(|c| c.support).sum::<f64>() 
-                    / constraints.len() as f64;
+                let avg_support =
+                    constraints.iter().map(|c| c.support).sum::<f64>() / constraints.len() as f64;
 
                 // Use parameters from first constraint (could be improved with averaging)
                 let parameters = constraints[0].parameters.clone();
@@ -448,11 +451,13 @@ impl ModelEnsemble {
         // Aggregate feature importance
         for (shape, _) in votes {
             for (feature, importance) in &shape.feature_importance {
-                let current = aggregated_shape.feature_importance.get(feature).unwrap_or(&0.0);
-                aggregated_shape.feature_importance.insert(
-                    feature.clone(),
-                    current + importance / votes.len() as f64,
-                );
+                let current = aggregated_shape
+                    .feature_importance
+                    .get(feature)
+                    .unwrap_or(&0.0);
+                aggregated_shape
+                    .feature_importance
+                    .insert(feature.clone(), current + importance / votes.len() as f64);
             }
         }
 
@@ -465,7 +470,9 @@ impl ModelEnsemble {
         votes: &[(LearnedShape, f64)],
     ) -> Result<LearnedShape, ModelError> {
         if votes.is_empty() {
-            return Err(ModelError::InvalidParams("No votes to aggregate".to_string()));
+            return Err(ModelError::InvalidParams(
+                "No votes to aggregate".to_string(),
+            ));
         }
 
         let first_shape = &votes[0].0;
@@ -485,7 +492,8 @@ impl ModelEnsemble {
         aggregated_shape.confidence = votes
             .iter()
             .map(|(shape, weight)| shape.confidence * weight)
-            .sum::<f64>() / total_weight;
+            .sum::<f64>()
+            / total_weight;
 
         // Aggregate constraints with weighted voting
         let mut constraint_weights: HashMap<String, (Vec<LearnedConstraint>, f64)> = HashMap::new();
@@ -508,13 +516,15 @@ impl ModelEnsemble {
                     .iter()
                     .zip(votes.iter().map(|(_, w)| w))
                     .map(|(constraint, weight)| constraint.confidence * weight)
-                    .sum::<f64>() / constraint_weight;
+                    .sum::<f64>()
+                    / constraint_weight;
 
                 let weighted_support = constraints
                     .iter()
                     .zip(votes.iter().map(|(_, w)| w))
                     .map(|(constraint, weight)| constraint.support * weight)
-                    .sum::<f64>() / constraint_weight;
+                    .sum::<f64>()
+                    / constraint_weight;
 
                 // Use parameters from highest-weighted constraint
                 let best_constraint = constraints
@@ -536,7 +546,10 @@ impl ModelEnsemble {
         // Weighted average of feature importance
         for (shape, weight) in votes {
             for (feature, importance) in &shape.feature_importance {
-                let current = aggregated_shape.feature_importance.get(feature).unwrap_or(&0.0);
+                let current = aggregated_shape
+                    .feature_importance
+                    .get(feature)
+                    .unwrap_or(&0.0);
                 aggregated_shape.feature_importance.insert(
                     feature.clone(),
                     current + (importance * weight) / total_weight,

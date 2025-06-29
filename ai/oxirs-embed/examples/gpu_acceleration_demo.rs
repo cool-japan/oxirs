@@ -5,12 +5,12 @@
 //! multi-stream processing for high-performance embedding generation.
 
 use anyhow::Result;
-use oxirs_embed::{
-    GpuAccelerationConfig, GpuAccelerationManager, GpuMemoryPool, TensorCache,
-    MixedPrecisionProcessor, MultiStreamProcessor, EmbeddingModel, NamedNode, Triple,
-    TransE, ModelConfig,
-};
 use ndarray::Array1;
+use oxirs_embed::{
+    EmbeddingModel, GpuAccelerationConfig, GpuAccelerationManager, GpuMemoryPool,
+    MixedPrecisionProcessor, ModelConfig, MultiStreamProcessor, NamedNode, TensorCache, TransE,
+    Triple,
+};
 use std::time::Instant;
 use tokio::time::{sleep, Duration};
 
@@ -48,7 +48,7 @@ async fn demo_gpu_memory_management() -> Result<()> {
     // Create GPU memory pool with custom configuration
     let config = GpuAccelerationConfig {
         enabled: true,
-        device_ids: vec![0, 1], // Multi-GPU setup
+        device_ids: vec![0, 1],    // Multi-GPU setup
         memory_pool_size_mb: 4096, // 4GB pool
         mixed_precision: true,
         tensor_caching: true,
@@ -72,23 +72,26 @@ async fn demo_gpu_memory_management() -> Result<()> {
 
     // Demonstrate memory allocation and deallocation
     println!("\n📦 Memory allocation demonstration:");
-    
+
     let mut allocated_blocks = Vec::new();
-    
+
     // Allocate several memory blocks
     for i in 0..5 {
         let size_mb = (i + 1) * 128; // 128MB, 256MB, 384MB, 512MB, 640MB
         let size_bytes = size_mb * 1024 * 1024;
         let device_id = i % config.device_ids.len();
-        
+
         println!("   Allocating {} MB on device {}...", size_mb, device_id);
         let block_id = memory_pool.allocate(size_bytes, device_id)?;
         allocated_blocks.push(block_id);
-        
+
         // Show allocation stats
         let stats = memory_pool.get_stats();
-        println!("     Block ID: {}, Current usage: {} MB", 
-            block_id, stats.current_memory_usage / (1024 * 1024));
+        println!(
+            "     Block ID: {}, Current usage: {} MB",
+            block_id,
+            stats.current_memory_usage / (1024 * 1024)
+        );
     }
 
     // Deallocate some blocks
@@ -110,9 +113,18 @@ async fn demo_gpu_memory_management() -> Result<()> {
     let final_stats = memory_pool.get_stats();
     println!("\n📊 Final memory statistics:");
     println!("   Total allocations: {}", final_stats.total_allocations);
-    println!("   Total deallocations: {}", final_stats.total_deallocations);
-    println!("   Peak usage: {} MB", final_stats.peak_memory_usage / (1024 * 1024));
-    println!("   Current usage: {} MB", final_stats.current_memory_usage / (1024 * 1024));
+    println!(
+        "   Total deallocations: {}",
+        final_stats.total_deallocations
+    );
+    println!(
+        "   Peak usage: {} MB",
+        final_stats.peak_memory_usage / (1024 * 1024)
+    );
+    println!(
+        "   Current usage: {} MB",
+        final_stats.current_memory_usage / (1024 * 1024)
+    );
     println!("   Cache hits: {}", final_stats.cache_hits);
     println!("   Cache misses: {}", final_stats.cache_misses);
 
@@ -137,30 +149,55 @@ async fn demo_tensor_caching() -> Result<()> {
 
     // Cache some entity tensors
     let entity_tensors = vec![
-        ("entity_1", ndarray::Array2::from_shape_vec((64, 128), (0..8192).map(|i| i as f32 / 1000.0).collect())?),
-        ("entity_2", ndarray::Array2::from_shape_vec((64, 128), (1000..9192).map(|i| i as f32 / 1000.0).collect())?),
-        ("entity_3", ndarray::Array2::from_shape_vec((64, 128), (2000..10192).map(|i| i as f32 / 1000.0).collect())?),
+        (
+            "entity_1",
+            ndarray::Array2::from_shape_vec(
+                (64, 128),
+                (0..8192).map(|i| i as f32 / 1000.0).collect(),
+            )?,
+        ),
+        (
+            "entity_2",
+            ndarray::Array2::from_shape_vec(
+                (64, 128),
+                (1000..9192).map(|i| i as f32 / 1000.0).collect(),
+            )?,
+        ),
+        (
+            "entity_3",
+            ndarray::Array2::from_shape_vec(
+                (64, 128),
+                (2000..10192).map(|i| i as f32 / 1000.0).collect(),
+            )?,
+        ),
     ];
 
     // Cache entity tensors
     println!("\n📥 Caching entity tensors:");
     for (entity, tensor) in &entity_tensors {
         tensor_cache.cache_entity_tensor(entity, tensor.clone(), 0);
-        println!("   Cached tensor for {} (shape: {:?})", entity, tensor.shape());
+        println!(
+            "   Cached tensor for {} (shape: {:?})",
+            entity,
+            tensor.shape()
+        );
     }
 
     // Cache attention weights
     println!("\n🎯 Caching attention weights:");
     let attention_weights = ndarray::Array2::from_shape_vec(
-        (32, 32), 
-        (0..1024).map(|i| (i as f32).sin() / 10.0).collect()
+        (32, 32),
+        (0..1024).map(|i| (i as f32).sin() / 10.0).collect(),
     )?;
     tensor_cache.cache_attention_weights("attention_layer_1", attention_weights.clone(), 0);
-    println!("   Cached attention weights (shape: {:?})", attention_weights.shape());
+    println!(
+        "   Cached attention weights (shape: {:?})",
+        attention_weights.shape()
+    );
 
     // Demonstrate cache hits and misses
     println!("\n🎯 Testing cache performance:");
-    
+
     let start = Instant::now();
     for i in 0..1000 {
         let entity = format!("entity_{}", (i % 3) + 1);
@@ -187,9 +224,14 @@ async fn demo_tensor_caching() -> Result<()> {
     println!("\n📊 Cache statistics:");
     println!("   Hits: {}", cache_stats.hits);
     println!("   Misses: {}", cache_stats.misses);
-    println!("   Hit rate: {:.2}%", 
-        (cache_stats.hits as f64 / (cache_stats.hits + cache_stats.misses) as f64) * 100.0);
-    println!("   Memory usage: {} MB", cache_stats.total_memory_usage / (1024 * 1024));
+    println!(
+        "   Hit rate: {:.2}%",
+        (cache_stats.hits as f64 / (cache_stats.hits + cache_stats.misses) as f64) * 100.0
+    );
+    println!(
+        "   Memory usage: {} MB",
+        cache_stats.total_memory_usage / (1024 * 1024)
+    );
     println!("   Evictions: {}", cache_stats.evictions);
 
     println!();
@@ -213,25 +255,40 @@ async fn demo_mixed_precision() -> Result<()> {
     // Create sample tensors for demonstration
     let fp32_tensor = ndarray::Array2::from_shape_vec(
         (128, 256),
-        (0..32768).map(|i| (i as f32) / 1000.0 + 0.5).collect()
+        (0..32768).map(|i| (i as f32) / 1000.0 + 0.5).collect(),
     )?;
 
     println!("\n📊 Original FP32 tensor:");
     println!("   Shape: {:?}", fp32_tensor.shape());
-    println!("   Min value: {:.6}", fp32_tensor.iter().fold(f32::INFINITY, |a, &b| a.min(b)));
-    println!("   Max value: {:.6}", fp32_tensor.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b)));
+    println!(
+        "   Min value: {:.6}",
+        fp32_tensor.iter().fold(f32::INFINITY, |a, &b| a.min(b))
+    );
+    println!(
+        "   Max value: {:.6}",
+        fp32_tensor.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b))
+    );
     println!("   Mean: {:.6}", fp32_tensor.mean().unwrap());
 
     // Convert to FP16 for computation
     let fp16_tensor = mixed_precision.to_fp16(&fp32_tensor);
     println!("\n🎯 Converted to FP16:");
     println!("   Shape: {:?}", fp16_tensor.shape());
-    println!("   Min value: {:.6}", fp16_tensor.iter().fold(f32::INFINITY, |a, &b| a.min(b)));
-    println!("   Max value: {:.6}", fp16_tensor.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b)));
+    println!(
+        "   Min value: {:.6}",
+        fp16_tensor.iter().fold(f32::INFINITY, |a, &b| a.min(b))
+    );
+    println!(
+        "   Max value: {:.6}",
+        fp16_tensor.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b))
+    );
     println!("   Mean: {:.6}", fp16_tensor.mean().unwrap());
 
     // Demonstrate precision difference
-    let precision_loss = (&fp32_tensor - &fp16_tensor).mapv(|x| x.abs()).mean().unwrap();
+    let precision_loss = (&fp32_tensor - &fp16_tensor)
+        .mapv(|x| x.abs())
+        .mean()
+        .unwrap();
     println!("   Precision loss: {:.8}", precision_loss);
 
     // Demonstrate loss scaling
@@ -246,23 +303,27 @@ async fn demo_mixed_precision() -> Result<()> {
     println!("\n🔄 Gradient processing:");
     let mut gradients = ndarray::Array2::from_shape_vec(
         (64, 128),
-        (0..8192).map(|i| (i as f32) / 10000.0).collect()
+        (0..8192).map(|i| (i as f32) / 10000.0).collect(),
     )?;
 
-    println!("   Original gradient norm: {:.6}", 
-        gradients.iter().map(|x| x * x).sum::<f32>().sqrt());
+    println!(
+        "   Original gradient norm: {:.6}",
+        gradients.iter().map(|x| x * x).sum::<f32>().sqrt()
+    );
 
     let success = mixed_precision.unscale_gradients(&mut gradients);
     println!("   Unscaling successful: {}", success);
-    println!("   Unscaled gradient norm: {:.6}", 
-        gradients.iter().map(|x| x * x).sum::<f32>().sqrt());
+    println!(
+        "   Unscaled gradient norm: {:.6}",
+        gradients.iter().map(|x| x * x).sum::<f32>().sqrt()
+    );
 
     // Demonstrate overflow detection and loss scaling adjustment
     println!("\n🚨 Overflow detection:");
     let mut overflow_gradients = ndarray::Array2::from_elem((32, 32), f32::INFINITY);
     let overflow_detected = !mixed_precision.unscale_gradients(&mut overflow_gradients);
     println!("   Overflow detected: {}", overflow_detected);
-    
+
     if overflow_detected {
         mixed_precision.adjust_loss_scaling(true);
         println!("   Loss scaling reduced for next iteration");
@@ -313,10 +374,9 @@ async fn demo_multi_stream_processing() -> Result<()> {
 
     // Measure parallel processing time
     let start = Instant::now();
-    let parallel_results = multi_stream.process_batch_parallel(
-        entities.clone(),
-        compute_embedding
-    ).await?;
+    let parallel_results = multi_stream
+        .process_batch_parallel(entities.clone(), compute_embedding)
+        .await?;
     let parallel_time = start.elapsed();
     println!("   Parallel processing: {:?}", parallel_time);
 
@@ -325,11 +385,15 @@ async fn demo_multi_stream_processing() -> Result<()> {
     println!("   Speedup: {:.2}x", speedup);
 
     // Verify results are equivalent
-    let results_match = serial_results.len() == parallel_results.len() &&
-        serial_results.iter().zip(&parallel_results).all(|(a, b)| {
-            a.iter().zip(b.iter()).all(|(x, y)| (x - y).abs() < 1e-6)
-        });
-    println!("   Results match: {}", if results_match { "✅" } else { "❌" });
+    let results_match = serial_results.len() == parallel_results.len()
+        && serial_results
+            .iter()
+            .zip(&parallel_results)
+            .all(|(a, b)| a.iter().zip(b.iter()).all(|(x, y)| (x - y).abs() < 1e-6));
+    println!(
+        "   Results match: {}",
+        if results_match { "✅" } else { "❌" }
+    );
 
     // Demonstrate stream assignment
     println!("\n🔄 Stream assignment demonstration:");
@@ -385,24 +449,47 @@ async fn demo_accelerated_training() -> Result<()> {
     // Add sample knowledge graph data
     println!("\n📚 Creating sample knowledge graph:");
     let sample_triples = vec![
-        ("http://example.org/person/alice", "http://example.org/knows", "http://example.org/person/bob"),
-        ("http://example.org/person/bob", "http://example.org/works_at", "http://example.org/company/tech_corp"),
-        ("http://example.org/person/alice", "http://example.org/lives_in", "http://example.org/city/new_york"),
-        ("http://example.org/company/tech_corp", "http://example.org/located_in", "http://example.org/city/san_francisco"),
-        ("http://example.org/person/charlie", "http://example.org/knows", "http://example.org/person/alice"),
-        ("http://example.org/person/bob", "http://example.org/friend_of", "http://example.org/person/charlie"),
+        (
+            "http://example.org/person/alice",
+            "http://example.org/knows",
+            "http://example.org/person/bob",
+        ),
+        (
+            "http://example.org/person/bob",
+            "http://example.org/works_at",
+            "http://example.org/company/tech_corp",
+        ),
+        (
+            "http://example.org/person/alice",
+            "http://example.org/lives_in",
+            "http://example.org/city/new_york",
+        ),
+        (
+            "http://example.org/company/tech_corp",
+            "http://example.org/located_in",
+            "http://example.org/city/san_francisco",
+        ),
+        (
+            "http://example.org/person/charlie",
+            "http://example.org/knows",
+            "http://example.org/person/alice",
+        ),
+        (
+            "http://example.org/person/bob",
+            "http://example.org/friend_of",
+            "http://example.org/person/charlie",
+        ),
     ];
 
     for (s, p, o) in sample_triples {
-        let triple = Triple::new(
-            NamedNode::new(s)?,
-            NamedNode::new(p)?,
-            NamedNode::new(o)?,
-        );
+        let triple = Triple::new(NamedNode::new(s)?, NamedNode::new(p)?, NamedNode::new(o)?);
         model.add_triple(triple)?;
     }
 
-    println!("   Added {} triples to the model", model.get_stats().num_triples);
+    println!(
+        "   Added {} triples to the model",
+        model.get_stats().num_triples
+    );
 
     // Define embedding computation function
     let embedding_fn = |entity: &str| -> Array1<f32> {
@@ -418,34 +505,45 @@ async fn demo_accelerated_training() -> Result<()> {
     println!("   Processing {} entities", entities.len());
 
     let start = Instant::now();
-    let accelerated_embeddings = gpu_manager.accelerated_embedding_generation(
-        entities.clone(),
-        embedding_fn
-    ).await?;
+    let accelerated_embeddings = gpu_manager
+        .accelerated_embedding_generation(entities.clone(), embedding_fn)
+        .await?;
     let accelerated_time = start.elapsed();
 
     println!("   Accelerated generation: {:?}", accelerated_time);
     println!("   Generated {} embeddings", accelerated_embeddings.len());
-    println!("   Average embedding norm: {:.4}", 
-        accelerated_embeddings.iter()
+    println!(
+        "   Average embedding norm: {:.4}",
+        accelerated_embeddings
+            .iter()
             .map(|emb| emb.iter().map(|x| x * x).sum::<f32>().sqrt())
-            .sum::<f32>() / accelerated_embeddings.len() as f32
+            .sum::<f32>()
+            / accelerated_embeddings.len() as f32
     );
 
     // Show GPU performance statistics
     println!("\n📊 GPU Performance Statistics:");
     let perf_stats = gpu_manager.get_performance_stats();
     println!("   Memory allocations: {}", perf_stats.memory_allocations);
-    println!("   Peak memory usage: {} MB", perf_stats.peak_memory_usage_mb);
+    println!(
+        "   Peak memory usage: {} MB",
+        perf_stats.peak_memory_usage_mb
+    );
     println!("   Memory pool hits: {}", perf_stats.memory_pool_hits);
     println!("   Memory pool misses: {}", perf_stats.memory_pool_misses);
     println!("   Tensor cache hits: {}", perf_stats.tensor_cache_hits);
     println!("   Tensor cache misses: {}", perf_stats.tensor_cache_misses);
-    println!("   Cache hit rate: {:.2}%", 
-        (perf_stats.tensor_cache_hits as f64 / 
-         (perf_stats.tensor_cache_hits + perf_stats.tensor_cache_misses) as f64) * 100.0);
+    println!(
+        "   Cache hit rate: {:.2}%",
+        (perf_stats.tensor_cache_hits as f64
+            / (perf_stats.tensor_cache_hits + perf_stats.tensor_cache_misses) as f64)
+            * 100.0
+    );
     println!("   Active streams: {}", perf_stats.num_active_streams);
-    println!("   Loss scaling factor: {:.1}", perf_stats.loss_scaling_factor);
+    println!(
+        "   Loss scaling factor: {:.1}",
+        perf_stats.loss_scaling_factor
+    );
 
     println!();
     Ok(())
@@ -458,88 +556,107 @@ async fn demo_performance_benchmarks() -> Result<()> {
 
     // Test different configurations
     let configs = vec![
-        ("Baseline", GpuAccelerationConfig {
-            enabled: false,
-            ..Default::default()
-        }),
-        ("GPU Basic", GpuAccelerationConfig {
-            enabled: true,
-            mixed_precision: false,
-            tensor_caching: false,
-            multi_stream: false,
-            ..Default::default()
-        }),
-        ("GPU + Mixed Precision", GpuAccelerationConfig {
-            enabled: true,
-            mixed_precision: true,
-            tensor_caching: false,
-            multi_stream: false,
-            ..Default::default()
-        }),
-        ("GPU + Caching", GpuAccelerationConfig {
-            enabled: true,
-            mixed_precision: false,
-            tensor_caching: true,
-            multi_stream: false,
-            ..Default::default()
-        }),
-        ("GPU Full Optimization", GpuAccelerationConfig {
-            enabled: true,
-            mixed_precision: true,
-            tensor_caching: true,
-            multi_stream: true,
-            num_streams: 8,
-            ..Default::default()
-        }),
+        (
+            "Baseline",
+            GpuAccelerationConfig {
+                enabled: false,
+                ..Default::default()
+            },
+        ),
+        (
+            "GPU Basic",
+            GpuAccelerationConfig {
+                enabled: true,
+                mixed_precision: false,
+                tensor_caching: false,
+                multi_stream: false,
+                ..Default::default()
+            },
+        ),
+        (
+            "GPU + Mixed Precision",
+            GpuAccelerationConfig {
+                enabled: true,
+                mixed_precision: true,
+                tensor_caching: false,
+                multi_stream: false,
+                ..Default::default()
+            },
+        ),
+        (
+            "GPU + Caching",
+            GpuAccelerationConfig {
+                enabled: true,
+                mixed_precision: false,
+                tensor_caching: true,
+                multi_stream: false,
+                ..Default::default()
+            },
+        ),
+        (
+            "GPU Full Optimization",
+            GpuAccelerationConfig {
+                enabled: true,
+                mixed_precision: true,
+                tensor_caching: true,
+                multi_stream: true,
+                num_streams: 8,
+                ..Default::default()
+            },
+        ),
     ];
 
     println!("🔥 Running performance benchmarks:");
 
     for (name, config) in configs {
         println!("\n📊 Configuration: {}", name);
-        
+
         let mut gpu_manager = GpuAccelerationManager::new(config);
-        
+
         // Create larger dataset for benchmarking
         let entities: Vec<String> = (0..1000).map(|i| format!("entity_{}", i)).collect();
-        
+
         // Benchmark embedding function
         let benchmark_fn = |entity: &str| -> Array1<f32> {
             let hash = entity.bytes().map(|b| b as f32).sum::<f32>();
-            let embedding: Vec<f32> = (0..256).map(|i| {
-                let val = (hash + i as f32).sin() * (hash + i as f32).cos();
-                val / 100.0
-            }).collect();
+            let embedding: Vec<f32> = (0..256)
+                .map(|i| {
+                    let val = (hash + i as f32).sin() * (hash + i as f32).cos();
+                    val / 100.0
+                })
+                .collect();
             Array1::from_vec(embedding)
         };
 
         // Run benchmark
         let start = Instant::now();
-        let results = gpu_manager.accelerated_embedding_generation(
-            entities.clone(),
-            benchmark_fn
-        ).await?;
+        let results = gpu_manager
+            .accelerated_embedding_generation(entities.clone(), benchmark_fn)
+            .await?;
         let duration = start.elapsed();
 
         // Calculate metrics
         let throughput = entities.len() as f64 / duration.as_secs_f64();
         let avg_latency = duration.as_micros() as f64 / entities.len() as f64;
-        
+
         println!("   Entities processed: {}", results.len());
         println!("   Total time: {:?}", duration);
         println!("   Throughput: {:.1} embeddings/sec", throughput);
         println!("   Average latency: {:.1} μs/embedding", avg_latency);
-        
+
         // Memory efficiency
         let perf_stats = gpu_manager.get_performance_stats();
         println!("   Peak memory: {} MB", perf_stats.peak_memory_usage_mb);
-        println!("   Cache hit rate: {:.1}%", 
+        println!(
+            "   Cache hit rate: {:.1}%",
             if perf_stats.tensor_cache_hits + perf_stats.tensor_cache_misses > 0 {
-                (perf_stats.tensor_cache_hits as f64 / 
-                 (perf_stats.tensor_cache_hits + perf_stats.tensor_cache_misses) as f64) * 100.0
+                (perf_stats.tensor_cache_hits as f64
+                    / (perf_stats.tensor_cache_hits + perf_stats.tensor_cache_misses) as f64)
+                    * 100.0
             } else {
                 0.0
-            });
+            }
+        );
 
         // Brief pause between benchmarks
         sleep(Duration::from_millis(100)).await;

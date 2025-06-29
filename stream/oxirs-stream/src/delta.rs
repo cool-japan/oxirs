@@ -372,8 +372,11 @@ impl DeltaComputer {
             Vec::new()
         };
 
-        debug!("Parsed DELETE/INSERT: delete={} triples, insert={} triples", 
-               delete_triples.len(), insert_triples.len());
+        debug!(
+            "Parsed DELETE/INSERT: delete={} triples, insert={} triples",
+            delete_triples.len(),
+            insert_triples.len()
+        );
 
         Ok(Some(UpdateOperation::DeleteInsert {
             delete: delete_triples,
@@ -429,34 +432,48 @@ impl DeltaComputer {
         // Find the keyword followed by whitespace and then a '{'
         let pattern = format!(r"{}\s*\{{", regex::escape(&keyword_upper));
         let re = regex::Regex::new(&pattern)?;
-        
+
         if let Some(m) = re.find(&upper) {
             let start_pos = m.start();
-            let brace_pos = statement[start_pos..].find('{').unwrap() + start_pos;
-            
-            // Find matching closing brace
-            let mut brace_count = 1;
-            let mut end_pos = brace_pos + 1;
-            let chars: Vec<char> = statement.chars().collect();
-            
-            while end_pos < chars.len() && brace_count > 0 {
-                match chars[end_pos] {
-                    '{' => brace_count += 1,
-                    '}' => brace_count -= 1,
-                    _ => {}
+            if let Some(brace_pos_relative) = statement[start_pos..].find('{') {
+                let brace_pos = start_pos + brace_pos_relative;
+
+                // Find matching closing brace with proper quote handling
+                let mut brace_count = 1;
+                let mut end_pos = brace_pos + 1;
+                let chars: Vec<char> = statement.chars().collect();
+                let mut in_quotes = false;
+                let mut escape_next = false;
+
+                while end_pos < chars.len() && brace_count > 0 {
+                    let c = chars[end_pos];
+
+                    if escape_next {
+                        escape_next = false;
+                    } else {
+                        match c {
+                            '\\' if in_quotes => escape_next = true,
+                            '"' => in_quotes = !in_quotes,
+                            '{' if !in_quotes => brace_count += 1,
+                            '}' if !in_quotes => {
+                                brace_count -= 1;
+                                if brace_count == 0 {
+                                    break;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    end_pos += 1;
                 }
+
                 if brace_count == 0 {
-                    break;
+                    let content = statement[brace_pos + 1..end_pos].trim();
+                    return Ok(Some(content.to_string()));
                 }
-                end_pos += 1;
-            }
-            
-            if brace_count == 0 {
-                let content = statement[brace_pos + 1..end_pos].trim();
-                return Ok(Some(content.to_string()));
             }
         }
-        
+
         Ok(None)
     }
 
@@ -465,26 +482,34 @@ impl DeltaComputer {
         let keyword_upper = keyword.to_uppercase();
 
         if let Some(start) = upper.find(&keyword_upper) {
-            let after_keyword = &statement[start + keyword.len()..].trim();
+            let after_keyword = statement[start + keyword.len()..].trim();
 
             if let Some(open_brace) = after_keyword.find('{') {
                 let from_brace = &after_keyword[open_brace + 1..];
 
-                // Find matching closing brace
+                // Find matching closing brace with proper quote handling
                 let mut brace_count = 1;
                 let mut end_pos = 0;
+                let mut in_quotes = false;
+                let mut escape_next = false;
 
                 for (i, c) in from_brace.char_indices() {
-                    match c {
-                        '{' => brace_count += 1,
-                        '}' => {
-                            brace_count -= 1;
-                            if brace_count == 0 {
-                                end_pos = i;
-                                break;
+                    if escape_next {
+                        escape_next = false;
+                    } else {
+                        match c {
+                            '\\' if in_quotes => escape_next = true,
+                            '"' => in_quotes = !in_quotes,
+                            '{' if !in_quotes => brace_count += 1,
+                            '}' if !in_quotes => {
+                                brace_count -= 1;
+                                if brace_count == 0 {
+                                    end_pos = i;
+                                    break;
+                                }
                             }
+                            _ => {}
                         }
-                        _ => {}
                     }
                 }
 
@@ -512,13 +537,22 @@ impl DeltaComputer {
             }
         }
 
-        // Look for bare URI after keyword
-        let parts: Vec<&str> = statement.split_whitespace().collect();
-        for part in parts {
-            if part.starts_with('<') && part.ends_with('>') {
-                let uri = &part[1..part.len() - 1];
-                let normalized_uri = Self::normalize_uri(uri);
-                return Ok(Some(normalized_uri));
+        // Look for URI immediately after graph-related keywords (CLEAR, DROP, CREATE)
+        let upper = statement.to_uppercase();
+        let keywords = ["CLEAR", "DROP", "CREATE"];
+
+        for keyword in &keywords {
+            if let Some(keyword_pos) = upper.find(keyword) {
+                let after_keyword = &statement[keyword_pos + keyword.len()..];
+
+                // Find the first URI in angle brackets after the keyword
+                if let Some(start) = after_keyword.find('<') {
+                    if let Some(end) = after_keyword[start..].find('>') {
+                        let uri = &after_keyword[start + 1..start + end];
+                        let normalized_uri = Self::normalize_uri(uri);
+                        return Ok(Some(normalized_uri));
+                    }
+                }
             }
         }
 
@@ -550,7 +584,7 @@ impl DeltaComputer {
         let mut current = String::new();
         let mut in_quotes = false;
         let mut in_uri = false;
-        
+
         for c in data.chars() {
             match c {
                 '"' => {
@@ -578,13 +612,13 @@ impl DeltaComputer {
                 }
             }
         }
-        
+
         // Add any remaining content
         let stmt = current.trim().to_string();
         if !stmt.is_empty() {
             statements.push(stmt);
         }
-        
+
         statements
     }
 
@@ -593,10 +627,21 @@ impl DeltaComputer {
         let mut current_part = String::new();
         let mut in_quotes = false;
         let mut in_uri = false;
+        let mut escape_next = false;
         let mut chars = line.chars().peekable();
 
         while let Some(c) = chars.next() {
+            if escape_next {
+                current_part.push(c);
+                escape_next = false;
+                continue;
+            }
+
             match c {
+                '\\' if in_quotes => {
+                    escape_next = true;
+                    current_part.push(c);
+                }
                 '"' => {
                     in_quotes = !in_quotes;
                     current_part.push(c);
@@ -610,9 +655,18 @@ impl DeltaComputer {
                     current_part.push(c);
                 }
                 ' ' | '\t' if !in_quotes && !in_uri => {
+                    // Only split on whitespace outside quotes and URIs
                     if !current_part.is_empty() {
                         parts.push(current_part.trim().to_string());
                         current_part.clear();
+                    }
+                    // Skip consecutive whitespace
+                    while let Some(&next_c) = chars.peek() {
+                        if next_c == ' ' || next_c == '\t' {
+                            chars.next();
+                        } else {
+                            break;
+                        }
                     }
                 }
                 _ => {
@@ -677,26 +731,24 @@ impl DeltaComputer {
             || uri.starts_with("HTTPS://")
         {
             // Find the path start position
-            let scheme_end = if uri.starts_with("https://") || uri.starts_with("HTTPS://") {
+            let scheme_end = if uri.len() >= 8 && uri[..8].to_lowercase() == "https://" {
                 8
             } else {
                 7
             };
-            
+
             if let Some(path_start) = uri[scheme_end..].find('/') {
                 let scheme_and_domain = &uri[..scheme_end + path_start];
                 let path = &uri[scheme_end + path_start..];
                 format!("{}{}", scheme_and_domain.to_lowercase(), path)
             } else {
-                // No path, just normalize the whole URI
-                let mut normalized = uri.to_lowercase();
-                // Remove trailing slashes for consistency only if there's no path
-                if normalized.ends_with('/') && normalized.matches('/').count() == 2 {
-                    normalized = normalized.trim_end_matches('/').to_string();
-                }
+                // No path, just normalize scheme and domain
+                let normalized = uri.to_lowercase();
+                // Don't remove trailing slashes as they might be significant
                 normalized
             }
         } else {
+            // For non-HTTP URIs, return as-is to preserve case sensitivity
             uri.to_string()
         }
     }

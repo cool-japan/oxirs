@@ -91,8 +91,8 @@ pub use block_manager::{
     BlockMetadata, BlockStatus,
 };
 pub use checkpoint::{
-    CheckpointConfig, CheckpointManagerStats, CheckpointMetadata, CheckpointType,
-    DirtyPageStats, DirtyPageTracker, OnlineCheckpointManager, PageModificationInfo,
+    CheckpointConfig, CheckpointManagerStats, CheckpointMetadata, CheckpointType, DirtyPageStats,
+    DirtyPageTracker, OnlineCheckpointManager, PageModificationInfo,
 };
 pub use compression::{
     AdaptiveCompressor, AdvancedCompressionType, ColumnStoreCompressor, CompressedData,
@@ -101,7 +101,9 @@ pub use compression::{
 pub use dictionary::{
     DictionaryConfig, DictionaryStats, InternedString, StringDictionary, StringId,
 };
-pub use filesystem::{DatabaseMetadata, FileSystemConfig, FileType, TdbFileSystem};
+pub use filesystem::{
+    AdvancedLockingConfig, DatabaseMetadata, FileSystemConfig, FileType, TdbFileSystem,
+};
 pub use hash_index::{HashIndex, HashIndexConfig, HashIndexStats};
 pub use lock_manager::{
     LockGrant, LockManager, LockManagerConfig, LockManagerError, LockManagerStats, LockMode,
@@ -113,8 +115,8 @@ pub use production_hardening::{
     CircuitBreaker, EdgeCaseValidator, HealthMetrics, HealthMonitor, ResourceLimits,
 };
 pub use timestamp_ordering::{
-    CausalRelation, ClockSyncManager, HybridLogicalClock, LamportTimestamp, NodeId as TimestampNodeId,
-    TimestampBundle, TimestampManager, TimestampStats, VectorClock,
+    CausalRelation, ClockSyncManager, HybridLogicalClock, LamportTimestamp,
+    NodeId as TimestampNodeId, TimestampBundle, TimestampManager, TimestampStats, VectorClock,
 };
 pub use triple_store::{Quad, Triple, TripleStore, TripleStoreConfig, TripleStoreStats};
 
@@ -298,6 +300,7 @@ impl TdbStore {
             backup_on_startup: false, // Don't backup on every open
             max_file_handles: 256,
             page_size: crate::page::PAGE_SIZE,
+            advanced_locking: AdvancedLockingConfig::default(),
         };
 
         let filesystem = TdbFileSystem::new(&config.location, filesystem_config)?;

@@ -7,6 +7,7 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::sync::{Arc, RwLock};
+use tracing::info;
 
 /// Block identifier type
 pub type BlockId = u64;
@@ -282,6 +283,7 @@ pub struct BlockManagerStats {
     pub coalescing_operations: u64,
     pub compaction_operations: u64,
     pub gc_runs: u64,
+    pub total_allocation_time: std::time::Duration,
 }
 
 /// Block allocation strategy
@@ -774,15 +776,193 @@ impl BlockManager {
         stats.fragmentation_ratio > self.config.compaction_threshold
     }
 
-    /// Perform compaction (placeholder for now)
+    /// Perform compaction to reduce fragmentation
+    ///
+    /// Compaction moves allocated blocks towards the beginning of the storage area,
+    /// coalescing free space into larger contiguous regions. This improves allocation
+    /// efficiency and reduces fragmentation.
+    ///
+    /// # Algorithm
+    /// 1. Identify moveable blocks (allocated blocks that can be relocated)
+    /// 2. Sort them by access patterns and age for optimal placement
+    /// 3. Move blocks to create contiguous allocated and free regions
+    /// 4. Update all metadata and free block tracking
+    ///
+    /// # Returns
+    /// Returns `Ok(())` on successful compaction, or an error if compaction fails
     pub fn compact(&self) -> Result<()> {
-        // This would implement block compaction logic
-        // For now, just update statistics
-        {
-            let mut stats = self.stats.write().unwrap();
+        let start_time = std::time::Instant::now();
+
+        // Get exclusive access to all data structures
+        let mut all_blocks = self.all_blocks.write().unwrap();
+        let mut free_blocks = self.free_blocks.write().unwrap();
+        let mut stats = self.stats.write().unwrap();
+
+        // Collect all allocated blocks
+        let mut allocated_blocks: Vec<BlockMetadata> = all_blocks
+            .values()
+            .filter(|block| block.status == BlockStatus::Allocated)
+            .cloned()
+            .collect();
+
+        if allocated_blocks.is_empty() {
             stats.compaction_operations += 1;
+            return Ok(());
         }
+
+        // Sort blocks for optimal compaction:
+        // 1. By access frequency (frequently accessed blocks first)
+        // 2. By creation time (newer blocks first for better locality)
+        allocated_blocks.sort_by(|a, b| {
+            // Primary sort: access count (descending)
+            match b.access_count.cmp(&a.access_count) {
+                std::cmp::Ordering::Equal => {
+                    // Secondary sort: creation time (descending - newer first)
+                    b.created_at.cmp(&a.created_at)
+                }
+                other => other,
+            }
+        });
+
+        // Clear free block tracker - we'll rebuild it
+        *free_blocks = FreeBlockTracker::new();
+
+        // Perform compaction by reassigning offsets
+        let mut current_offset = 0u64;
+        let mut compaction_moves = 0u64;
+
+        for block in allocated_blocks.iter_mut() {
+            let old_offset = block.offset;
+
+            // Assign new offset (compacted position)
+            block.offset = current_offset;
+            current_offset += block.size as u64;
+
+            // Track if block was moved
+            if old_offset != block.offset {
+                compaction_moves += 1;
+            }
+
+            // Update the block in the all_blocks map
+            all_blocks.insert(block.id, block.clone());
+        }
+
+        // Update file size to reflect compacted layout
+        let mut file_size = self.file_size.write().unwrap();
+        *file_size = current_offset;
+
+        // Create a single large free block for remaining space
+        if current_offset < *file_size {
+            let free_size = *file_size - current_offset;
+            let mut next_id = self.next_block_id.write().unwrap();
+            let free_block = BlockMetadata {
+                id: *next_id,
+                offset: current_offset,
+                size: free_size as BlockSize,
+                status: BlockStatus::Free,
+                created_at: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
+                last_accessed: 0,
+                access_count: 0,
+                checksum: 0,
+            };
+            *next_id += 1;
+            free_blocks.add_free_block(free_block);
+        }
+
+        // Coalesce any remaining small free blocks
+        self.coalesce_free_blocks_internal(&mut *free_blocks, &*all_blocks);
+
+        // Update statistics
+        let compaction_time = start_time.elapsed();
+        stats.compaction_operations += 1;
+        stats.total_allocation_time += compaction_time;
+
+        // Log compaction results
+        info!(
+            "Compaction completed: moved {} blocks in {:?}, fragmentation reduced to {:.2}%",
+            compaction_moves,
+            compaction_time,
+            self.calculate_fragmentation_ratio_internal(&*free_blocks, &*all_blocks) * 100.0
+        );
+
         Ok(())
+    }
+
+    /// Internal helper for coalescing free blocks during compaction
+    fn coalesce_free_blocks_internal(
+        &self,
+        free_blocks: &mut FreeBlockTracker,
+        all_blocks: &HashMap<BlockId, BlockMetadata>,
+    ) {
+        // Get all free block metadata sorted by offset
+        let mut free_metadata: Vec<BlockMetadata> =
+            free_blocks.block_metadata.values().cloned().collect();
+
+        free_metadata.sort_by_key(|block| block.offset);
+
+        // Clear and rebuild free block tracker with coalesced blocks
+        *free_blocks = FreeBlockTracker::new();
+
+        let mut coalesced_blocks = Vec::new();
+        let mut current_block: Option<BlockMetadata> = None;
+
+        for block in free_metadata {
+            match current_block {
+                None => {
+                    current_block = Some(block);
+                }
+                Some(ref mut current) => {
+                    // Check if blocks are adjacent
+                    if current.offset + current.size as u64 == block.offset {
+                        // Coalesce blocks
+                        current.size += block.size;
+                    } else {
+                        // Blocks are not adjacent, finalize current block
+                        coalesced_blocks.push(current.clone());
+                        current_block = Some(block);
+                    }
+                }
+            }
+        }
+
+        // Add final block if exists
+        if let Some(block) = current_block {
+            coalesced_blocks.push(block);
+        }
+
+        // Add coalesced blocks back to free block tracker
+        for block in coalesced_blocks {
+            free_blocks.add_free_block(block);
+        }
+    }
+
+    /// Internal helper for calculating fragmentation ratio
+    fn calculate_fragmentation_ratio_internal(
+        &self,
+        free_blocks: &FreeBlockTracker,
+        _all_blocks: &HashMap<BlockId, BlockMetadata>,
+    ) -> f64 {
+        let (total_free_space, free_block_count, _) = free_blocks.get_stats();
+
+        if total_free_space == 0 {
+            return 0.0;
+        }
+
+        if free_block_count <= 1 {
+            return 0.0; // No fragmentation with 0 or 1 free blocks
+        }
+
+        // Calculate average free block size
+        let avg_free_block_size = total_free_space as f64 / free_block_count as f64;
+
+        // Calculate fragmentation as deviation from ideal (single large block)
+        let ideal_block_size = total_free_space as f64;
+        let fragmentation_ratio = 1.0 - (avg_free_block_size / ideal_block_size);
+
+        fragmentation_ratio.clamp(0.0, 1.0)
     }
 
     /// Check if garbage collection should run

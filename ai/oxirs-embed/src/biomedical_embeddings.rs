@@ -8,7 +8,7 @@ use crate::{EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vect
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::Utc;
-use ndarray::{Array1, Array2};
+use ndarray::Array1;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
@@ -37,7 +37,7 @@ impl BiomedicalEntityType {
     pub fn namespace(&self) -> &'static str {
         match self {
             BiomedicalEntityType::Gene => "gene",
-            BiomedicalEntityType::Protein => "protein", 
+            BiomedicalEntityType::Protein => "protein",
             BiomedicalEntityType::Disease => "disease",
             BiomedicalEntityType::Drug => "drug",
             BiomedicalEntityType::Compound => "compound",
@@ -121,7 +121,9 @@ impl BiomedicalRelationType {
     pub fn from_iri(iri: &str) -> Option<Self> {
         match iri.to_lowercase().as_str() {
             s if s.contains("causes") => Some(BiomedicalRelationType::CausesDisease),
-            s if s.contains("associated_with") => Some(BiomedicalRelationType::AssociatedWithDisease),
+            s if s.contains("associated_with") => {
+                Some(BiomedicalRelationType::AssociatedWithDisease)
+            }
             s if s.contains("targets") => Some(BiomedicalRelationType::TargetsProtein),
             s if s.contains("inhibits") => Some(BiomedicalRelationType::InhibitsProtein),
             s if s.contains("activates") => Some(BiomedicalRelationType::ActivatesProtein),
@@ -264,46 +266,40 @@ impl BiomedicalEmbedding {
 
     /// Add gene-disease association
     pub fn add_gene_disease_association(&mut self, gene: &str, disease: &str, score: f32) {
-        self.features.gene_disease_associations.insert(
-            (gene.to_string(), disease.to_string()),
-            score,
-        );
-        
+        self.features
+            .gene_disease_associations
+            .insert((gene.to_string(), disease.to_string()), score);
+
         // Also add reverse mapping
-        self.features.gene_disease_associations.insert(
-            (disease.to_string(), gene.to_string()),
-            score,
-        );
+        self.features
+            .gene_disease_associations
+            .insert((disease.to_string(), gene.to_string()), score);
     }
 
     /// Add drug-target interaction
     pub fn add_drug_target_interaction(&mut self, drug: &str, target: &str, affinity: f32) {
-        self.features.drug_target_affinities.insert(
-            (drug.to_string(), target.to_string()),
-            affinity,
-        );
+        self.features
+            .drug_target_affinities
+            .insert((drug.to_string(), target.to_string()), affinity);
     }
 
     /// Add pathway membership
     pub fn add_pathway_membership(&mut self, entity: &str, pathway: &str, score: f32) {
-        self.features.pathway_memberships.insert(
-            (entity.to_string(), pathway.to_string()),
-            score,
-        );
+        self.features
+            .pathway_memberships
+            .insert((entity.to_string(), pathway.to_string()), score);
     }
 
     /// Add protein-protein interaction
     pub fn add_protein_interaction(&mut self, protein1: &str, protein2: &str, score: f32) {
-        self.features.protein_interactions.insert(
-            (protein1.to_string(), protein2.to_string()),
-            score,
-        );
-        
+        self.features
+            .protein_interactions
+            .insert((protein1.to_string(), protein2.to_string()), score);
+
         // Symmetric relationship
-        self.features.protein_interactions.insert(
-            (protein2.to_string(), protein1.to_string()),
-            score,
-        );
+        self.features
+            .protein_interactions
+            .insert((protein2.to_string(), protein1.to_string()), score);
     }
 
     /// Get entity embedding with biomedical type awareness
@@ -322,7 +318,11 @@ impl BiomedicalEmbedding {
             if let Some(emb) = embedding {
                 Ok(Vector::from_array1(emb))
             } else {
-                Err(anyhow!("No embedding found for {} of type {:?}", entity, entity_type))
+                Err(anyhow!(
+                    "No embedding found for {} of type {:?}",
+                    entity,
+                    entity_type
+                ))
             }
         } else {
             Err(anyhow!("Unknown entity type for {}", entity))
@@ -330,35 +330,44 @@ impl BiomedicalEmbedding {
     }
 
     /// Predict gene-disease associations
-    pub fn predict_gene_disease_associations(&self, gene: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    pub fn predict_gene_disease_associations(
+        &self,
+        gene: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         if !self.is_trained {
             return Err(anyhow!("Model not trained"));
         }
 
-        let gene_embedding = self.gene_embeddings.get(gene)
+        let gene_embedding = self
+            .gene_embeddings
+            .get(gene)
             .ok_or_else(|| anyhow!("Gene {} not found", gene))?;
 
         let mut scores = Vec::new();
-        
+
         for (disease, disease_embedding) in &self.disease_embeddings {
             // Base similarity
             let similarity = gene_embedding.dot(disease_embedding) as f64;
-            
+
             // Enhance with existing association data
-            let enhanced_score = if let Some(&assoc_score) = 
-                self.features.gene_disease_associations.get(&(gene.to_string(), disease.clone())) {
+            let enhanced_score = if let Some(&assoc_score) = self
+                .features
+                .gene_disease_associations
+                .get(&(gene.to_string(), disease.clone()))
+            {
                 similarity * (1.0 + assoc_score as f64)
             } else {
                 similarity
             };
-            
+
             scores.push((disease.clone(), enhanced_score));
         }
 
         // Sort by score and return top k
         scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         scores.truncate(k);
-        
+
         Ok(scores)
     }
 
@@ -368,45 +377,52 @@ impl BiomedicalEmbedding {
             return Err(anyhow!("Model not trained"));
         }
 
-        let drug_embedding = self.drug_embeddings.get(drug)
+        let drug_embedding = self
+            .drug_embeddings
+            .get(drug)
             .ok_or_else(|| anyhow!("Drug {} not found", drug))?;
 
         let mut scores = Vec::new();
-        
+
         for (protein, protein_embedding) in &self.protein_embeddings {
             // Base similarity
             let similarity = drug_embedding.dot(protein_embedding) as f64;
-            
+
             // Enhance with binding affinity data
-            let enhanced_score = if let Some(&affinity) = 
-                self.features.drug_target_affinities.get(&(drug.to_string(), protein.clone())) {
+            let enhanced_score = if let Some(&affinity) = self
+                .features
+                .drug_target_affinities
+                .get(&(drug.to_string(), protein.clone()))
+            {
                 similarity * (1.0 + affinity as f64)
             } else {
                 similarity
             };
-            
+
             scores.push((protein.clone(), enhanced_score));
         }
 
         scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         scores.truncate(k);
-        
+
         Ok(scores)
     }
 
     /// Find pathway-related entities
     pub fn find_pathway_entities(&self, pathway: &str, k: usize) -> Result<Vec<(String, f64)>> {
-        let pathway_embedding = self.pathway_embeddings.get(pathway)
+        let pathway_embedding = self
+            .pathway_embeddings
+            .get(pathway)
             .ok_or_else(|| anyhow!("Pathway {} not found", pathway))?;
 
         let mut scores = Vec::new();
-        
+
         // Check genes
         for (gene, gene_embedding) in &self.gene_embeddings {
             let similarity = pathway_embedding.dot(gene_embedding) as f64;
             scores.push((gene.clone(), similarity));
         }
-        
+
         // Check proteins
         for (protein, protein_embedding) in &self.protein_embeddings {
             let similarity = pathway_embedding.dot(protein_embedding) as f64;
@@ -415,7 +431,7 @@ impl BiomedicalEmbedding {
 
         scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         scores.truncate(k);
-        
+
         Ok(scores)
     }
 
@@ -424,16 +440,19 @@ impl BiomedicalEmbedding {
         for triple in &self.triples {
             // Extract entity types from IRIs
             if let Some(subject_type) = BiomedicalEntityType::from_iri(&triple.subject.iri) {
-                self.entity_types.insert(triple.subject.iri.clone(), subject_type);
+                self.entity_types
+                    .insert(triple.subject.iri.clone(), subject_type);
             }
-            
+
             if let Some(object_type) = BiomedicalEntityType::from_iri(&triple.object.iri) {
-                self.entity_types.insert(triple.object.iri.clone(), object_type);
+                self.entity_types
+                    .insert(triple.object.iri.clone(), object_type);
             }
-            
+
             // Extract relation types
             if let Some(relation_type) = BiomedicalRelationType::from_iri(&triple.predicate.iri) {
-                self.relation_types.insert(triple.predicate.iri.clone(), relation_type);
+                self.relation_types
+                    .insert(triple.predicate.iri.clone(), relation_type);
             }
         }
     }
@@ -441,7 +460,7 @@ impl BiomedicalEmbedding {
     /// Initialize embeddings with biomedical-specific features
     fn initialize_embeddings(&mut self) -> Result<()> {
         let dimensions = self.config.base_config.dimensions;
-        
+
         // Initialize embeddings for each entity type
         for (entity, entity_type) in &self.entity_types {
             let embedding = Array1::from_vec(
@@ -449,7 +468,7 @@ impl BiomedicalEmbedding {
                     .map(|_| (rand::random::<f32>() - 0.5) * 0.1)
                     .collect(),
             );
-            
+
             match entity_type {
                 BiomedicalEntityType::Gene => {
                     self.gene_embeddings.insert(entity.clone(), embedding);
@@ -475,7 +494,7 @@ impl BiomedicalEmbedding {
                 }
             }
         }
-        
+
         // Initialize relation embeddings
         for relation in self.relation_types.keys() {
             let embedding = Array1::from_vec(
@@ -485,7 +504,7 @@ impl BiomedicalEmbedding {
             );
             self.relation_embeddings.insert(relation.clone(), embedding);
         }
-        
+
         Ok(())
     }
 
@@ -542,7 +561,8 @@ impl BiomedicalEmbedding {
 
     /// Helper to get entity embedding from any type map
     fn get_entity_embedding_any_type(&self, entity: &str) -> Option<&Array1<f32>> {
-        self.gene_embeddings.get(entity)
+        self.gene_embeddings
+            .get(entity)
             .or_else(|| self.protein_embeddings.get(entity))
             .or_else(|| self.disease_embeddings.get(entity))
             .or_else(|| self.drug_embeddings.get(entity))
@@ -576,29 +596,29 @@ impl EmbeddingModel for BiomedicalEmbedding {
 
         // Extract entity and relation types
         self.extract_entity_types();
-        
+
         // Initialize embeddings
         self.initialize_embeddings()?;
 
         // Training loop
         let mut loss_history = Vec::new();
-        
+
         for epoch in 0..epochs {
             let epoch_loss = self.compute_biomedical_loss();
             loss_history.push(epoch_loss as f64);
-            
+
             // Simple convergence check
             if epoch > 10 && epoch_loss < 0.001 {
                 break;
             }
-            
+
             if epoch % 100 == 0 {
                 println!("Epoch {}: Loss = {:.6}", epoch, epoch_loss);
             }
         }
 
         let training_time = start_time.elapsed().as_secs_f64();
-        
+
         self.training_stats = TrainingStats {
             epochs_completed: epochs,
             final_loss: loss_history.last().copied().unwrap_or(0.0),
@@ -610,7 +630,7 @@ impl EmbeddingModel for BiomedicalEmbedding {
         self.is_trained = true;
         self.model_stats.is_trained = true;
         self.model_stats.last_training_time = Some(Utc::now());
-        
+
         // Update entity counts
         self.model_stats.num_entities = self.entity_types.len();
         self.model_stats.num_relations = self.relation_types.len();
@@ -642,21 +662,25 @@ impl EmbeddingModel for BiomedicalEmbedding {
             let diff = subject_emb.values[i] + relation_emb.values[i] - object_emb.values[i];
             score += diff * diff;
         }
-        
+
         // Convert to similarity score (higher is better)
         Ok(1.0 / (1.0 + score as f64))
     }
 
-    fn predict_objects(&self, subject: &str, predicate: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_objects(
+        &self,
+        subject: &str,
+        predicate: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         // Use specialized prediction methods based on relation type
         if let Some(relation_type) = self.relation_types.get(predicate) {
             match relation_type {
-                BiomedicalRelationType::CausesDisease |
-                BiomedicalRelationType::AssociatedWithDisease => {
+                BiomedicalRelationType::CausesDisease
+                | BiomedicalRelationType::AssociatedWithDisease => {
                     return self.predict_gene_disease_associations(subject, k);
                 }
-                BiomedicalRelationType::TargetsProtein |
-                BiomedicalRelationType::BindsToProtein => {
+                BiomedicalRelationType::TargetsProtein | BiomedicalRelationType::BindsToProtein => {
                     return self.predict_drug_targets(subject, k);
                 }
                 _ => {
@@ -680,11 +704,16 @@ impl EmbeddingModel for BiomedicalEmbedding {
 
         scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         scores.truncate(k);
-        
+
         Ok(scores)
     }
 
-    fn predict_subjects(&self, predicate: &str, object: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_subjects(
+        &self,
+        predicate: &str,
+        object: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let object_emb = self.get_entity_embedding(object)?;
         let relation_emb = self.get_relation_embedding(predicate)?;
 
@@ -699,11 +728,16 @@ impl EmbeddingModel for BiomedicalEmbedding {
 
         scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         scores.truncate(k);
-        
+
         Ok(scores)
     }
 
-    fn predict_relations(&self, subject: &str, object: &str, k: usize) -> Result<Vec<(String, f64)>> {
+    fn predict_relations(
+        &self,
+        subject: &str,
+        object: &str,
+        k: usize,
+    ) -> Result<Vec<(String, f64)>> {
         let subject_emb = self.get_entity_embedding(subject)?;
         let object_emb = self.get_entity_embedding(object)?;
 
@@ -716,7 +750,7 @@ impl EmbeddingModel for BiomedicalEmbedding {
 
         scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         scores.truncate(k);
-        
+
         Ok(scores)
     }
 
@@ -763,7 +797,7 @@ impl EmbeddingModel for BiomedicalEmbedding {
 
     async fn encode(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         let mut embeddings = Vec::new();
-        
+
         for text in texts {
             if let Ok(embedding) = self.get_entity_embedding(text) {
                 embeddings.push(embedding.values);
@@ -772,7 +806,7 @@ impl EmbeddingModel for BiomedicalEmbedding {
                 embeddings.push(vec![0.0; self.config.base_config.dimensions]);
             }
         }
-        
+
         Ok(embeddings)
     }
 }
@@ -1111,7 +1145,10 @@ impl SpecializedTextEmbedding {
         match rule {
             PreprocessingRule::NormalizeScientificNotation => {
                 // Convert scientific notation to normalized form (simplified)
-                Ok(text.replace("E+", "e+").replace("E-", "e-").replace("E", "e"))
+                Ok(text
+                    .replace("E+", "e+")
+                    .replace("E-", "e-")
+                    .replace("E", "e"))
             }
             PreprocessingRule::HandleChemicalFormulas => {
                 // Preserve chemical formulas by adding special tokens (simplified)
@@ -1139,7 +1176,7 @@ impl SpecializedTextEmbedding {
                     ("t.i.d.", "three times daily"),
                     ("q.i.d.", "four times daily"),
                 ];
-                
+
                 for (abbrev, expansion) in &replacements {
                     result = result.replace(abbrev, expansion);
                 }
@@ -1147,7 +1184,9 @@ impl SpecializedTextEmbedding {
             }
             PreprocessingRule::HandleGeneNames => {
                 // Standardize gene name formatting (simplified)
-                Ok(text.replace("BRCA1", "[GENE]BRCA1[/GENE]").replace("TP53", "[GENE]TP53[/GENE]"))
+                Ok(text
+                    .replace("BRCA1", "[GENE]BRCA1[/GENE]")
+                    .replace("TP53", "[GENE]TP53[/GENE]"))
             }
             PreprocessingRule::PreserveCodeTokens => {
                 // Preserve code-like tokens (simplified)
@@ -1172,10 +1211,11 @@ impl SpecializedTextEmbedding {
 
         // Generate embedding using domain-specific model
         let embedding = self.generate_specialized_embedding(&processed_text).await?;
-        
+
         // Cache the result
-        self.text_embeddings.insert(processed_text, embedding.clone());
-        
+        self.text_embeddings
+            .insert(processed_text, embedding.clone());
+
         Ok(embedding)
     }
 
@@ -1183,50 +1223,76 @@ impl SpecializedTextEmbedding {
     async fn generate_specialized_embedding(&self, text: &str) -> Result<Array1<f32>> {
         // In a real implementation, this would use the actual pre-trained model
         // For now, simulate domain-specific embeddings with enhanced features
-        
+
         let embedding_dim = self.config.model_type.embedding_dim();
         let mut embedding = vec![0.0; embedding_dim];
-        
+
         // Domain-specific feature extraction
         match self.config.model_type {
             SpecializedTextModel::SciBERT => {
                 // Scientific text features: citations, formulas, terminology
                 embedding[0] = if text.contains("et al.") { 1.0 } else { 0.0 };
-                embedding[1] = if text.contains("figure") || text.contains("table") { 1.0 } else { 0.0 };
+                embedding[1] = if text.contains("figure") || text.contains("table") {
+                    1.0
+                } else {
+                    0.0
+                };
                 embedding[2] = text.matches(char::is_numeric).count() as f32 / text.len() as f32;
             }
             SpecializedTextModel::CodeBERT => {
                 // Code features: keywords, operators, structures
-                embedding[0] = if text.contains("function") || text.contains("def") { 1.0 } else { 0.0 };
-                embedding[1] = if text.contains("class") || text.contains("struct") { 1.0 } else { 0.0 };
-                embedding[2] = text.matches(|c: char| "{}()[]".contains(c)).count() as f32 / text.len() as f32;
+                embedding[0] = if text.contains("function") || text.contains("def") {
+                    1.0
+                } else {
+                    0.0
+                };
+                embedding[1] = if text.contains("class") || text.contains("struct") {
+                    1.0
+                } else {
+                    0.0
+                };
+                embedding[2] =
+                    text.matches(|c: char| "{}()[]".contains(c)).count() as f32 / text.len() as f32;
             }
             SpecializedTextModel::BioBERT => {
                 // Biomedical features: genes, proteins, diseases
-                embedding[0] = if text.contains("protein") || text.contains("gene") { 1.0 } else { 0.0 };
-                embedding[1] = if text.contains("disease") || text.contains("syndrome") { 1.0 } else { 0.0 };
-                embedding[2] = if text.contains("mg") || text.contains("dose") { 1.0 } else { 0.0 };
+                embedding[0] = if text.contains("protein") || text.contains("gene") {
+                    1.0
+                } else {
+                    0.0
+                };
+                embedding[1] = if text.contains("disease") || text.contains("syndrome") {
+                    1.0
+                } else {
+                    0.0
+                };
+                embedding[2] = if text.contains("mg") || text.contains("dose") {
+                    1.0
+                } else {
+                    0.0
+                };
             }
             _ => {
                 // Generic specialized features
                 embedding[0] = text.len() as f32 / 1000.0; // Length normalization
-                embedding[1] = text.split_whitespace().count() as f32 / text.len() as f32; // Word density
+                embedding[1] = text.split_whitespace().count() as f32 / text.len() as f32;
+                // Word density
             }
         }
-        
+
         // Fill remaining dimensions with text-based features
         for i in 3..embedding_dim {
             let byte_val = text.bytes().nth(i % text.len()).unwrap_or(0) as f32;
             embedding[i] = (byte_val / 255.0 - 0.5) * 2.0; // Normalize to [-1, 1]
         }
-        
+
         // Apply domain-specific transformations
         if self.config.domain_pretraining {
             for val in &mut embedding {
                 *val *= 1.2; // Amplify features for domain-pretrained models
             }
         }
-        
+
         Ok(Array1::from_vec(embedding))
     }
 
@@ -1234,33 +1300,33 @@ impl SpecializedTextEmbedding {
     pub async fn fine_tune(&mut self, training_texts: Vec<String>) -> Result<TrainingStats> {
         let start_time = std::time::Instant::now();
         let epochs = self.config.fine_tune_config.epochs;
-        
+
         let mut loss_history = Vec::new();
-        
+
         for epoch in 0..epochs {
             let mut epoch_loss = 0.0;
-            
+
             for text in &training_texts {
                 // Generate embedding and compute loss
                 let embedding = self.encode_text(text).await?;
-                
+
                 // Simplified fine-tuning loss computation
                 let target_variance = 0.1; // Target embedding variance
                 let actual_variance = embedding.var(0.0);
                 let loss = (actual_variance - target_variance).powi(2);
                 epoch_loss += loss;
             }
-            
+
             epoch_loss /= training_texts.len() as f32;
             loss_history.push(epoch_loss as f64);
-            
+
             if epoch % 10 == 0 {
                 println!("Fine-tuning epoch {}: Loss = {:.6}", epoch, epoch_loss);
             }
         }
-        
+
         let training_time = start_time.elapsed().as_secs_f64();
-        
+
         self.training_stats = TrainingStats {
             epochs_completed: epochs,
             final_loss: loss_history.last().copied().unwrap_or(0.0),
@@ -1268,11 +1334,11 @@ impl SpecializedTextEmbedding {
             convergence_achieved: loss_history.last().map_or(false, |&loss| loss < 0.01),
             loss_history,
         };
-        
+
         self.is_trained = true;
         self.model_stats.is_trained = true;
         self.model_stats.last_training_time = Some(Utc::now());
-        
+
         Ok(self.training_stats.clone())
     }
 
@@ -1290,12 +1356,12 @@ impl SpecializedTextEmbedding {
 // Simplified regex-like functionality for preprocessing
 mod regex {
     pub struct Regex(String);
-    
+
     impl Regex {
         pub fn new(pattern: &str) -> Result<Self, &'static str> {
             Ok(Regex(pattern.to_string()))
         }
-        
+
         pub fn replace_all<'a, F>(&self, text: &'a str, rep: F) -> std::borrow::Cow<'a, str>
         where
             F: Fn(&str) -> String,
@@ -1339,7 +1405,7 @@ mod tests {
     fn test_biomedical_embedding_creation() {
         let config = BiomedicalEmbeddingConfig::default();
         let model = BiomedicalEmbedding::new(config);
-        
+
         assert_eq!(model.model_type(), "BiomedicalEmbedding");
         assert!(!model.is_trained());
         assert_eq!(model.gene_embeddings.len(), 0);
@@ -1348,11 +1414,14 @@ mod tests {
     #[test]
     fn test_gene_disease_association() {
         let mut model = BiomedicalEmbedding::new(BiomedicalEmbeddingConfig::default());
-        
+
         model.add_gene_disease_association("BRCA1", "breast_cancer", 0.8);
-        
+
         assert_eq!(
-            model.features.gene_disease_associations.get(&("BRCA1".to_string(), "breast_cancer".to_string())),
+            model
+                .features
+                .gene_disease_associations
+                .get(&("BRCA1".to_string(), "breast_cancer".to_string())),
             Some(&0.8)
         );
     }
@@ -1360,11 +1429,14 @@ mod tests {
     #[test]
     fn test_drug_target_interaction() {
         let mut model = BiomedicalEmbedding::new(BiomedicalEmbeddingConfig::default());
-        
+
         model.add_drug_target_interaction("aspirin", "COX1", 0.9);
-        
+
         assert_eq!(
-            model.features.drug_target_affinities.get(&("aspirin".to_string(), "COX1".to_string())),
+            model
+                .features
+                .drug_target_affinities
+                .get(&("aspirin".to_string(), "COX1".to_string())),
             Some(&0.9)
         );
     }
@@ -1428,7 +1500,7 @@ mod tests {
     fn test_specialized_text_embedding_creation() {
         let config = SpecializedTextEmbedding::scibert_config();
         let model = SpecializedTextEmbedding::new(config);
-        
+
         assert!(model.model_stats.model_type.contains("SciBERT"));
         assert_eq!(model.model_stats.dimensions, 768);
         assert!(!model.is_trained);
@@ -1440,10 +1512,10 @@ mod tests {
     fn test_preprocessing_medical_terms() {
         let config = SpecializedTextEmbedding::biobert_config();
         let model = SpecializedTextEmbedding::new(config);
-        
+
         let text = "Patient takes 100 mg/kg b.i.d. for treatment";
         let processed = model.preprocess_text(text).unwrap();
-        
+
         // Should expand medical abbreviations
         assert!(processed.contains("milligrams per kilogram"));
         assert!(processed.contains("twice daily"));
@@ -1454,10 +1526,10 @@ mod tests {
         let mut config = SpecializedTextEmbedding::biobert_config();
         config.preprocessing_enabled = false;
         let model = SpecializedTextEmbedding::new(config);
-        
+
         let text = "Patient takes 100 mg/kg b.i.d. for treatment";
         let processed = model.preprocess_text(text).unwrap();
-        
+
         // Should be unchanged when preprocessing is disabled
         assert_eq!(processed, text);
     }
@@ -1466,12 +1538,12 @@ mod tests {
     async fn test_specialized_text_encoding() {
         let config = SpecializedTextEmbedding::scibert_config();
         let mut model = SpecializedTextEmbedding::new(config);
-        
+
         let text = "The protein folding study shows significant results with p < 0.001";
         let embedding = model.encode_text(text).await.unwrap();
-        
+
         assert_eq!(embedding.len(), 768);
-        
+
         // Test caching - second call should return cached result
         let embedding2 = model.encode_text(text).await.unwrap();
         assert_eq!(embedding.to_vec(), embedding2.to_vec());
@@ -1483,10 +1555,10 @@ mod tests {
         // Test SciBERT features
         let config = SpecializedTextEmbedding::scibert_config();
         let mut model = SpecializedTextEmbedding::new(config);
-        
+
         let scientific_text = "The study by Smith et al. shows figure 1 demonstrates the results";
         let embedding = model.encode_text(scientific_text).await.unwrap();
-        
+
         // Should detect scientific features (citations, figures)
         // Values are amplified by 1.2 due to domain pretraining
         assert_eq!(embedding[0], 1.2); // et al. detected, amplified
@@ -1495,10 +1567,10 @@ mod tests {
         // Test CodeBERT features
         let config = SpecializedTextEmbedding::codebert_config();
         let mut model = SpecializedTextEmbedding::new(config);
-        
+
         let code_text = "function calculateSum() { return a + b; }";
         let embedding = model.encode_text(code_text).await.unwrap();
-        
+
         // Should detect code features (amplified by domain pretraining)
         assert_eq!(embedding[0], 1.2); // function detected, amplified
         assert!(embedding[2] > 0.0); // brackets detected (text-based features)
@@ -1506,10 +1578,11 @@ mod tests {
         // Test BioBERT features
         let config = SpecializedTextEmbedding::biobert_config();
         let mut model = SpecializedTextEmbedding::new(config);
-        
-        let biomedical_text = "The protein expression correlates with cancer disease progression, dose 100mg";
+
+        let biomedical_text =
+            "The protein expression correlates with cancer disease progression, dose 100mg";
         let embedding = model.encode_text(biomedical_text).await.unwrap();
-        
+
         // Should detect biomedical features (amplified by domain pretraining)
         assert_eq!(embedding[0], 1.2); // protein detected, amplified
         assert_eq!(embedding[1], 1.2); // disease detected, amplified
@@ -1520,20 +1593,388 @@ mod tests {
     async fn test_fine_tuning() {
         let config = SpecializedTextEmbedding::biobert_config();
         let mut model = SpecializedTextEmbedding::new(config);
-        
+
         let training_texts = vec![
             "Gene expression analysis in cancer cells".to_string(),
             "Protein folding mechanisms in disease".to_string(),
             "Drug interaction with target proteins".to_string(),
         ];
-        
+
         let stats = model.fine_tune(training_texts).await.unwrap();
-        
+
         assert!(model.is_trained);
         assert_eq!(stats.epochs_completed, 5); // BioBERT config has 5 epochs
         assert!(stats.training_time_seconds > 0.0);
         assert!(!stats.loss_history.is_empty());
         assert!(model.model_stats.is_trained);
         assert!(model.model_stats.last_training_time.is_some());
+    }
+}
+
+// =============================================================================
+// Research Publication Networks
+// =============================================================================
+
+/// Research publication network analysis and embeddings
+#[derive(Debug, Clone)]
+pub struct PublicationNetworkAnalyzer {
+    /// Author embedding cache
+    author_embeddings: HashMap<String, Vector>,
+    /// Citation graph
+    citation_graph: HashMap<String, Vec<String>>,
+    /// Topic model for publications
+    topic_model: TopicModel,
+    /// Collaboration network
+    collaboration_network: HashMap<String, Vec<CollaborationEdge>>,
+    /// Impact metrics
+    impact_metrics: HashMap<String, ImpactMetrics>,
+}
+
+/// Topic modeling for research publications
+#[derive(Debug, Clone)]
+pub struct TopicModel {
+    /// Topic distributions for documents
+    topic_distributions: HashMap<String, Vec<f64>>,
+    /// Topic keywords
+    topic_keywords: HashMap<usize, Vec<String>>,
+    /// Number of topics
+    num_topics: usize,
+}
+
+/// Collaboration edge in research network
+#[derive(Debug, Clone)]
+pub struct CollaborationEdge {
+    /// Collaborator ID
+    pub collaborator_id: String,
+    /// Number of joint publications
+    pub joint_publications: usize,
+    /// Collaboration strength (0.0 to 1.0)
+    pub strength: f64,
+    /// Research areas in common
+    pub common_areas: Vec<String>,
+}
+
+/// Impact metrics for authors and publications
+#[derive(Debug, Clone)]
+pub struct ImpactMetrics {
+    /// Citation count
+    pub citation_count: usize,
+    /// H-index
+    pub h_index: f64,
+    /// Collaboration impact score
+    pub collaboration_impact: f64,
+    /// Trend prediction score
+    pub trend_score: f64,
+    /// Cross-disciplinary impact
+    pub cross_disciplinary_score: f64,
+}
+
+/// Research network analysis results
+#[derive(Debug, Clone)]
+pub struct NetworkAnalysisResults {
+    /// Central authors in the network
+    pub central_authors: Vec<String>,
+    /// Emerging research trends
+    pub emerging_trends: Vec<String>,
+    /// Collaboration clusters
+    pub collaboration_clusters: Vec<Vec<String>>,
+    /// Citation flow patterns
+    pub citation_patterns: HashMap<String, f64>,
+}
+
+impl PublicationNetworkAnalyzer {
+    /// Create new publication network analyzer
+    pub fn new() -> Self {
+        Self {
+            author_embeddings: HashMap::new(),
+            citation_graph: HashMap::new(),
+            topic_model: TopicModel {
+                topic_distributions: HashMap::new(),
+                topic_keywords: HashMap::new(),
+                num_topics: 50,
+            },
+            collaboration_network: HashMap::new(),
+            impact_metrics: HashMap::new(),
+        }
+    }
+
+    /// Generate author embeddings based on publications
+    pub async fn generate_author_embeddings(
+        &mut self,
+        author_id: &str,
+        publications: &[String],
+    ) -> Result<Vector> {
+        // Combine all publication texts for this author
+        let combined_text = publications.join(" ");
+
+        // Use biomedical text embedding
+        let config = SpecializedTextEmbedding::scibert_config();
+        let model = SpecializedTextEmbedding::new(config);
+        let embedding = model.encode_text(&combined_text).await?;
+
+        // Store in cache
+        self.author_embeddings
+            .insert(author_id.to_string(), embedding.clone());
+
+        Ok(embedding)
+    }
+
+    /// Analyze citation network patterns
+    pub fn analyze_citation_network(
+        &mut self,
+        citations: &[(String, String)],
+    ) -> NetworkAnalysisResults {
+        // Build citation graph
+        for (from_paper, to_paper) in citations {
+            self.citation_graph
+                .entry(from_paper.clone())
+                .or_default()
+                .push(to_paper.clone());
+        }
+
+        // Calculate centrality metrics
+        let central_authors = self.calculate_centrality();
+
+        // Detect emerging trends
+        let emerging_trends = self.detect_emerging_trends();
+
+        // Find collaboration clusters
+        let collaboration_clusters = self.find_collaboration_clusters();
+
+        // Analyze citation patterns
+        let citation_patterns = self.analyze_citation_patterns();
+
+        NetworkAnalysisResults {
+            central_authors,
+            emerging_trends,
+            collaboration_clusters,
+            citation_patterns,
+        }
+    }
+
+    /// Calculate author centrality in citation network
+    fn calculate_centrality(&self) -> Vec<String> {
+        let mut centrality_scores: HashMap<String, f64> = HashMap::new();
+
+        // Simple degree centrality calculation
+        for (paper, citations) in &self.citation_graph {
+            let score = citations.len() as f64;
+            centrality_scores.insert(paper.clone(), score);
+        }
+
+        // Sort by centrality score
+        let mut sorted: Vec<_> = centrality_scores.into_iter().collect();
+        sorted.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+
+        sorted
+            .into_iter()
+            .take(10)
+            .map(|(author, _)| author)
+            .collect()
+    }
+
+    /// Detect emerging research trends
+    fn detect_emerging_trends(&self) -> Vec<String> {
+        // Mock implementation - in reality would use temporal analysis
+        vec![
+            "AI-driven drug discovery".to_string(),
+            "CRISPR gene editing applications".to_string(),
+            "Personalized medicine genomics".to_string(),
+            "Quantum biology mechanisms".to_string(),
+            "Microbiome therapeutics".to_string(),
+        ]
+    }
+
+    /// Find collaboration clusters using community detection
+    fn find_collaboration_clusters(&self) -> Vec<Vec<String>> {
+        // Mock implementation - would use graph clustering algorithms
+        vec![
+            vec![
+                "author1".to_string(),
+                "author2".to_string(),
+                "author3".to_string(),
+            ],
+            vec!["author4".to_string(), "author5".to_string()],
+            vec![
+                "author6".to_string(),
+                "author7".to_string(),
+                "author8".to_string(),
+            ],
+        ]
+    }
+
+    /// Analyze citation flow patterns
+    fn analyze_citation_patterns(&self) -> HashMap<String, f64> {
+        let mut patterns = HashMap::new();
+        patterns.insert("self_citation_rate".to_string(), 0.15);
+        patterns.insert("cross_disciplinary_rate".to_string(), 0.23);
+        patterns.insert("recency_bias".to_string(), 0.67);
+        patterns.insert("impact_diffusion_rate".to_string(), 0.34);
+        patterns
+    }
+
+    /// Predict collaboration likelihood between authors
+    pub fn predict_collaboration(&self, author1: &str, author2: &str) -> f64 {
+        // Get author embeddings
+        let emb1 = self.author_embeddings.get(author1);
+        let emb2 = self.author_embeddings.get(author2);
+
+        match (emb1, emb2) {
+            (Some(e1), Some(e2)) => {
+                // Calculate cosine similarity
+                let dot_product: f32 = e1.iter().zip(e2.iter()).map(|(a, b)| a * b).sum();
+                let norm1: f32 = e1.iter().map(|x| x * x).sum::<f32>().sqrt();
+                let norm2: f32 = e2.iter().map(|x| x * x).sum::<f32>().sqrt();
+
+                if norm1 > 0.0 && norm2 > 0.0 {
+                    (dot_product / (norm1 * norm2)) as f64
+                } else {
+                    0.0
+                }
+            }
+            _ => 0.0,
+        }
+    }
+
+    /// Predict research impact of a publication
+    pub fn predict_impact(&mut self, paper_text: &str, authors: &[String]) -> ImpactMetrics {
+        // Mock implementation - would use ML models trained on historical data
+        let citation_count = (paper_text.len() / 100).min(500); // Rough heuristic
+        let h_index = (citation_count as f64).sqrt();
+        let collaboration_impact = authors.len() as f64 * 0.1;
+
+        ImpactMetrics {
+            citation_count,
+            h_index,
+            collaboration_impact,
+            trend_score: 0.75,
+            cross_disciplinary_score: 0.68,
+        }
+    }
+
+    /// Build topic model from publication corpus
+    pub fn build_topic_model(&mut self, publications: &[String]) -> Result<()> {
+        // Mock implementation - would use LDA or similar
+        for (i, pub_text) in publications.iter().enumerate() {
+            // Simple keyword extraction
+            let words: Vec<&str> = pub_text.split_whitespace().collect();
+            let mut topic_dist = vec![0.0; self.topic_model.num_topics];
+
+            // Assign random topic distribution for demo
+            topic_dist[i % self.topic_model.num_topics] = 0.8;
+            topic_dist[(i + 1) % self.topic_model.num_topics] = 0.2;
+
+            self.topic_model
+                .topic_distributions
+                .insert(i.to_string(), topic_dist);
+
+            // Store keywords for topics
+            if words.len() > 3 {
+                self.topic_model
+                    .topic_keywords
+                    .entry(i % self.topic_model.num_topics)
+                    .or_default()
+                    .extend(words.into_iter().take(3).map(|s| s.to_string()));
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl Default for PublicationNetworkAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// =============================================================================
+// Tests for Publication Networks
+// =============================================================================
+
+#[cfg(test)]
+mod publication_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_author_embeddings() {
+        let mut analyzer = PublicationNetworkAnalyzer::new();
+
+        let publications = vec![
+            "Machine learning applications in drug discovery".to_string(),
+            "Deep neural networks for protein structure prediction".to_string(),
+        ];
+
+        let embedding = analyzer
+            .generate_author_embeddings("dr_smith", &publications)
+            .await
+            .unwrap();
+        assert_eq!(embedding.len(), 768); // SciBERT embedding dimension
+        assert!(analyzer.author_embeddings.contains_key("dr_smith"));
+    }
+
+    #[test]
+    fn test_citation_network_analysis() {
+        let mut analyzer = PublicationNetworkAnalyzer::new();
+
+        let citations = vec![
+            ("paper1".to_string(), "paper2".to_string()),
+            ("paper1".to_string(), "paper3".to_string()),
+            ("paper2".to_string(), "paper3".to_string()),
+        ];
+
+        let results = analyzer.analyze_citation_network(&citations);
+        assert!(!results.central_authors.is_empty());
+        assert!(!results.emerging_trends.is_empty());
+        assert!(!results.collaboration_clusters.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_collaboration_prediction() {
+        let mut analyzer = PublicationNetworkAnalyzer::new();
+
+        // Generate embeddings for two authors
+        let pub1 = vec!["AI in healthcare".to_string()];
+        let pub2 = vec!["Machine learning for medical diagnosis".to_string()];
+
+        analyzer
+            .generate_author_embeddings("author1", &pub1)
+            .await
+            .unwrap();
+        analyzer
+            .generate_author_embeddings("author2", &pub2)
+            .await
+            .unwrap();
+
+        let similarity = analyzer.predict_collaboration("author1", "author2");
+        assert!(similarity >= 0.0 && similarity <= 1.0);
+    }
+
+    #[test]
+    fn test_impact_prediction() {
+        let mut analyzer = PublicationNetworkAnalyzer::new();
+
+        let paper_text = "Revolutionary breakthrough in quantum computing applications for drug discovery with novel algorithms and experimental validation across multiple therapeutic areas";
+        let authors = vec!["Dr. Smith".to_string(), "Dr. Jones".to_string()];
+
+        let metrics = analyzer.predict_impact(paper_text, &authors);
+        assert!(metrics.citation_count > 0);
+        assert!(metrics.h_index > 0.0);
+        assert!(metrics.collaboration_impact > 0.0);
+    }
+
+    #[test]
+    fn test_topic_modeling() {
+        let mut analyzer = PublicationNetworkAnalyzer::new();
+
+        let publications = vec![
+            "Machine learning in healthcare".to_string(),
+            "Deep learning for drug discovery".to_string(),
+            "AI applications in genomics".to_string(),
+        ];
+
+        analyzer.build_topic_model(&publications).unwrap();
+        assert!(!analyzer.topic_model.topic_distributions.is_empty());
+        assert!(!analyzer.topic_model.topic_keywords.is_empty());
     }
 }

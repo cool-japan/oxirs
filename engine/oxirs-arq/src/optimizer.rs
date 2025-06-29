@@ -91,12 +91,12 @@ pub enum IndexType {
     Spatial,
     Temporal,
     // RDF Triple pattern indices (SPO permutations)
-    SPO,  // Subject-Predicate-Object
-    PSO,  // Predicate-Subject-Object
-    OSP,  // Object-Subject-Predicate
-    OPS,  // Object-Predicate-Subject
-    SOP,  // Subject-Object-Predicate
-    POS,  // Predicate-Object-Subject
+    SPO, // Subject-Predicate-Object
+    PSO, // Predicate-Subject-Object
+    OSP, // Object-Subject-Predicate
+    OPS, // Object-Predicate-Subject
+    SOP, // Subject-Object-Predicate
+    POS, // Predicate-Object-Subject
     // Additional index types
     Hash,
     BTree,
@@ -155,6 +155,42 @@ pub enum OptimizationType {
     IndexSelection,
     MaterializationPoint,
     ParallelizationStrategy,
+}
+
+/// Query characteristics for adaptive optimization
+#[derive(Debug, Clone)]
+pub struct QueryCharacteristics {
+    pub variable_count: usize,
+    pub has_object_variables: bool,
+    pub has_literal_constraints: bool,
+    pub join_complexity: JoinComplexity,
+    pub pattern_count: usize,
+}
+
+/// Join complexity classification
+#[derive(Debug, Clone)]
+pub enum JoinComplexity {
+    Simple,   // 1-2 patterns, simple joins
+    Moderate, // 3-5 patterns, some complexity
+    Complex,  // 6+ patterns or complex join patterns
+}
+
+/// Index union plan for OR conditions
+#[derive(Debug, Clone)]
+pub struct IndexUnionPlan {
+    pub left_indexes: Vec<IndexType>,
+    pub right_indexes: Vec<IndexType>,
+    pub union_cost: f64,
+    pub estimated_selectivity: f64,
+}
+
+/// Index filter plan for push-down optimization
+#[derive(Debug, Clone)]
+pub struct IndexFilterPlan {
+    pub pattern_index: usize,
+    pub filter_index: IndexType,
+    pub push_down_conditions: Vec<Expression>,
+    pub estimated_cost: f64,
 }
 
 impl Statistics {
@@ -880,7 +916,7 @@ impl QueryOptimizer {
         current
     }
 
-    /// Index-aware optimization
+    /// Index-aware optimization with dynamic selection and union support
     fn index_aware_optimization(&self, algebra: Algebra) -> Result<Algebra> {
         match algebra {
             Algebra::Bgp(patterns) => {
@@ -892,13 +928,183 @@ impl QueryOptimizer {
                 // Store index plan metadata for the executor
                 self.record_index_plan(&optimized_bgp.index_plan)?;
 
+                // Apply dynamic index selection
+                let dynamically_optimized = self.apply_dynamic_index_selection(optimized_bgp)?;
+
                 // Check if we need to transform BGP based on index opportunities
-                let transformed_algebra = self.transform_bgp_for_indexes(&optimized_bgp)?;
+                let transformed_algebra = self.transform_bgp_for_indexes(&dynamically_optimized)?;
 
                 Ok(transformed_algebra)
             }
+            Algebra::Union { left, right } => {
+                // Check for index union opportunities
+                if let Some(union_optimized) = self.optimize_union_with_indexes(&left, &right)? {
+                    Ok(union_optimized)
+                } else {
+                    // Apply recursively
+                    Ok(Algebra::Union {
+                        left: Box::new(self.index_aware_optimization(*left)?),
+                        right: Box::new(self.index_aware_optimization(*right)?),
+                    })
+                }
+            }
+            Algebra::Filter { pattern, condition } => {
+                // Check for index-aware filter optimization
+                if let Some(filter_optimized) =
+                    self.optimize_filter_with_indexes(&pattern, &condition)?
+                {
+                    Ok(filter_optimized)
+                } else {
+                    Ok(Algebra::Filter {
+                        pattern: Box::new(self.index_aware_optimization(*pattern)?),
+                        condition,
+                    })
+                }
+            }
             _ => self.apply_to_children(algebra, |child| self.index_aware_optimization(child)),
         }
+    }
+
+    /// Apply dynamic index selection based on query patterns and statistics
+    fn apply_dynamic_index_selection(
+        &self,
+        mut optimized_bgp: OptimizedBGP,
+    ) -> Result<OptimizedBGP> {
+        let mut improved_plan = optimized_bgp.index_plan.clone();
+
+        // Analyze query workload patterns for adaptive index selection
+        let query_characteristics = self.analyze_query_characteristics(&optimized_bgp.patterns);
+
+        // Adjust index selections based on runtime statistics
+        for assignment in &mut improved_plan.pattern_indexes {
+            if let Some(better_index) = self.select_adaptive_index(
+                &optimized_bgp.patterns[assignment.pattern_idx],
+                &query_characteristics,
+            ) {
+                assignment.index_type = better_index.0;
+                assignment.scan_cost = better_index.1;
+            }
+        }
+
+        // Check for new intersection opportunities
+        let new_intersections =
+            self.find_additional_intersections(&optimized_bgp.patterns, &improved_plan)?;
+        improved_plan.index_intersections.extend(new_intersections);
+
+        optimized_bgp.index_plan = improved_plan;
+        Ok(optimized_bgp)
+    }
+
+    /// Analyze query characteristics for adaptive optimization
+    fn analyze_query_characteristics(&self, patterns: &[TriplePattern]) -> QueryCharacteristics {
+        let variable_count = patterns
+            .iter()
+            .flat_map(|p| p.variables())
+            .collect::<HashSet<_>>()
+            .len();
+
+        let has_object_variables = patterns
+            .iter()
+            .any(|p| matches!(p.object, Term::Variable(_)));
+
+        let has_literal_constraints = patterns
+            .iter()
+            .any(|p| matches!(p.object, Term::Literal(_)));
+
+        let join_complexity = self.calculate_join_complexity(patterns);
+
+        QueryCharacteristics {
+            variable_count,
+            has_object_variables,
+            has_literal_constraints,
+            join_complexity,
+            pattern_count: patterns.len(),
+        }
+    }
+
+    /// Select adaptive index based on query characteristics
+    fn select_adaptive_index(
+        &self,
+        pattern: &TriplePattern,
+        characteristics: &QueryCharacteristics,
+    ) -> Option<(IndexType, f64)> {
+        // Use different heuristics based on query characteristics
+        match characteristics.join_complexity {
+            JoinComplexity::Simple => {
+                // For simple queries, prefer direct indexes
+                if !matches!(pattern.predicate, Term::Variable(_)) {
+                    self.select_single_optimal_index(pattern)
+                } else {
+                    None
+                }
+            }
+            JoinComplexity::Moderate => {
+                // For moderate complexity, consider intersections
+                self.select_index_intersection(pattern)
+                    .or_else(|| self.select_single_optimal_index(pattern))
+            }
+            JoinComplexity::Complex => {
+                // For complex queries, prioritize most selective indexes
+                self.select_most_selective_index(pattern)
+            }
+        }
+    }
+
+    /// Find additional index intersection opportunities
+    fn find_additional_intersections(
+        &self,
+        patterns: &[TriplePattern],
+        current_plan: &crate::bgp_optimizer::IndexUsagePlan,
+    ) -> Result<Vec<crate::bgp_optimizer::IndexIntersection>> {
+        let mut intersections = Vec::new();
+
+        // Look for patterns that share variables and could benefit from intersections
+        for i in 0..patterns.len() {
+            for j in i + 1..patterns.len() {
+                let shared_vars = self.get_shared_variables_in_patterns(&patterns[i], &patterns[j]);
+                if !shared_vars.is_empty() {
+                    if let Some(intersection) =
+                        self.create_intersection_opportunity(i, j, &shared_vars)
+                    {
+                        intersections.push(intersection);
+                    }
+                }
+            }
+        }
+
+        Ok(intersections)
+    }
+
+    /// Optimize union operations with index unions
+    fn optimize_union_with_indexes(
+        &self,
+        left: &Algebra,
+        right: &Algebra,
+    ) -> Result<Option<Algebra>> {
+        // Check if both sides are BGPs that could benefit from index unions
+        if let (Algebra::Bgp(left_patterns), Algebra::Bgp(right_patterns)) = (left, right) {
+            // Look for opportunities to use index unions instead of separate scans
+            if self.can_use_index_union(left_patterns, right_patterns) {
+                let union_plan = self.create_index_union_plan(left_patterns, right_patterns)?;
+                return Ok(Some(self.execute_index_union_plan(union_plan)?));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Optimize filters with index-aware strategies
+    fn optimize_filter_with_indexes(
+        &self,
+        pattern: &Algebra,
+        condition: &Expression,
+    ) -> Result<Option<Algebra>> {
+        // Check if the filter condition can be pushed into index scans
+        if let Algebra::Bgp(patterns) = pattern {
+            if let Some(index_filter_plan) = self.create_index_filter_plan(patterns, condition)? {
+                return Ok(Some(self.execute_index_filter_plan(index_filter_plan)?));
+            }
+        }
+        Ok(None)
     }
 
     /// Record index plan for later execution
@@ -1018,14 +1224,45 @@ impl QueryOptimizer {
         base_cost * index_factor
     }
 
-    /// Enhanced index selection considering multiple factors
+    /// Enhanced index selection considering multiple factors and intersections
     fn select_optimal_index(&self, pattern: &TriplePattern) -> Option<IndexType> {
+        // First check for single-index optimization
+        let single_best = self.select_single_optimal_index(pattern);
+
+        // Then check for index intersection opportunities
+        let intersection_best = self.select_index_intersection(pattern);
+
+        // Compare costs and return the best option
+        match (single_best.as_ref(), intersection_best.as_ref()) {
+            (Some((single_idx, single_cost)), Some((intersect_idx, intersect_cost))) => {
+                if intersect_cost < single_cost {
+                    intersection_best.map(|(idx, _)| idx)
+                } else {
+                    single_best.map(|(idx, _)| idx)
+                }
+            }
+            (Some(_), None) => single_best.map(|(idx, _)| idx),
+            (None, Some(_)) => intersection_best.map(|(idx, _)| idx),
+            (None, None) => None,
+        }
+    }
+
+    /// Select optimal single index for a pattern
+    fn select_single_optimal_index(&self, pattern: &TriplePattern) -> Option<(IndexType, f64)> {
         let mut best_index = None;
         let mut best_cost = f64::INFINITY;
 
         for index_type in &self.statistics.index_stats.available_indexes {
-            if let Some(selectivity) = self.statistics.index_stats.index_selectivity.get(index_type) {
-                let access_cost = self.statistics.index_stats.index_access_cost
+            if let Some(selectivity) = self
+                .statistics
+                .index_stats
+                .index_selectivity
+                .get(index_type)
+            {
+                let access_cost = self
+                    .statistics
+                    .index_stats
+                    .index_access_cost
                     .get(index_type)
                     .copied()
                     .unwrap_or(1.0);
@@ -1036,12 +1273,123 @@ impl QueryOptimizer {
 
                 if total_cost < best_cost && self.index_supports_pattern(index_type, pattern) {
                     best_cost = total_cost;
-                    best_index = Some(index_type.clone());
+                    best_index = Some((index_type.clone(), total_cost));
                 }
             }
         }
 
         best_index
+    }
+
+    /// Select optimal index intersection for a pattern
+    fn select_index_intersection(&self, pattern: &TriplePattern) -> Option<(IndexType, f64)> {
+        let available_indices: Vec<_> = self
+            .statistics
+            .index_stats
+            .available_indexes
+            .iter()
+            .filter(|idx| self.index_supports_pattern(idx, pattern))
+            .collect();
+
+        if available_indices.len() < 2 {
+            return None;
+        }
+
+        // Find best combination of indices for intersection
+        let mut best_intersection = None;
+        let mut best_cost = f64::INFINITY;
+
+        // Check pairwise intersections
+        for i in 0..available_indices.len() {
+            for j in i + 1..available_indices.len() {
+                let idx1 = available_indices[i];
+                let idx2 = available_indices[j];
+
+                if let Some(intersection_cost) =
+                    self.estimate_intersection_cost(pattern, idx1, idx2)
+                {
+                    if intersection_cost < best_cost {
+                        best_cost = intersection_cost;
+                        // Create a virtual intersection index
+                        best_intersection = Some((
+                            IndexType::Custom(format!(
+                                "intersection_{}_{}",
+                                self.index_name(idx1),
+                                self.index_name(idx2)
+                            )),
+                            intersection_cost,
+                        ));
+                    }
+                }
+            }
+        }
+
+        best_intersection
+    }
+
+    /// Estimate cost of index intersection
+    fn estimate_intersection_cost(
+        &self,
+        pattern: &TriplePattern,
+        idx1: &IndexType,
+        idx2: &IndexType,
+    ) -> Option<f64> {
+        let sel1 = self
+            .statistics
+            .index_stats
+            .index_selectivity
+            .get(idx1)
+            .copied()
+            .unwrap_or(1.0);
+        let sel2 = self
+            .statistics
+            .index_stats
+            .index_selectivity
+            .get(idx2)
+            .copied()
+            .unwrap_or(1.0);
+        let cost1 = self
+            .statistics
+            .index_stats
+            .index_access_cost
+            .get(idx1)
+            .copied()
+            .unwrap_or(1.0);
+        let cost2 = self
+            .statistics
+            .index_stats
+            .index_access_cost
+            .get(idx2)
+            .copied()
+            .unwrap_or(1.0);
+
+        // Intersection selectivity is typically the product of individual selectivities
+        let intersection_selectivity = sel1 * sel2;
+
+        // Cost includes accessing both indices plus intersection computation
+        let base_cardinality = self.statistics.estimate_pattern_cardinality(pattern) as f64;
+        let intersection_cost = cost1 + cost2 + (base_cardinality * intersection_selectivity * 0.1);
+
+        // Only beneficial if intersection selectivity is significantly better
+        if intersection_selectivity < sel1.min(sel2) * 0.8 {
+            Some(intersection_cost)
+        } else {
+            None
+        }
+    }
+
+    /// Get a readable name for an index type
+    fn index_name(&self, index_type: &IndexType) -> String {
+        match index_type {
+            IndexType::SPO => "SPO".to_string(),
+            IndexType::PSO => "PSO".to_string(),
+            IndexType::OSP => "OSP".to_string(),
+            IndexType::Hash => "Hash".to_string(),
+            IndexType::BTree => "BTree".to_string(),
+            IndexType::Bitmap => "Bitmap".to_string(),
+            IndexType::Custom(name) => name.clone(),
+            _ => format!("{:?}", index_type),
+        }
     }
 
     /// Check if an index supports a given pattern
@@ -1055,15 +1403,15 @@ impl QueryOptimizer {
             IndexType::POS => !matches!(pattern.predicate, Term::Variable(_)),
             IndexType::Bloom => {
                 // Bloom filters are good for existence checks with concrete values
-                !matches!(pattern.subject, Term::Variable(_)) ||
-                !matches!(pattern.predicate, Term::Variable(_)) ||
-                !matches!(pattern.object, Term::Variable(_))
+                !matches!(pattern.subject, Term::Variable(_))
+                    || !matches!(pattern.predicate, Term::Variable(_))
+                    || !matches!(pattern.object, Term::Variable(_))
             }
             IndexType::Hash => {
                 // Hash indexes are good for equality lookups
-                !matches!(pattern.subject, Term::Variable(_)) &&
-                !matches!(pattern.predicate, Term::Variable(_)) &&
-                !matches!(pattern.object, Term::Variable(_))
+                !matches!(pattern.subject, Term::Variable(_))
+                    && !matches!(pattern.predicate, Term::Variable(_))
+                    && !matches!(pattern.object, Term::Variable(_))
             }
             IndexType::BTree => true, // B-tree supports range queries and existence
             IndexType::Bitmap => {
@@ -1072,16 +1420,16 @@ impl QueryOptimizer {
             }
             // Basic index types
             IndexType::SubjectPredicate => {
-                !matches!(pattern.subject, Term::Variable(_)) &&
-                !matches!(pattern.predicate, Term::Variable(_))
+                !matches!(pattern.subject, Term::Variable(_))
+                    && !matches!(pattern.predicate, Term::Variable(_))
             }
             IndexType::PredicateObject => {
-                !matches!(pattern.predicate, Term::Variable(_)) &&
-                !matches!(pattern.object, Term::Variable(_))
+                !matches!(pattern.predicate, Term::Variable(_))
+                    && !matches!(pattern.object, Term::Variable(_))
             }
             IndexType::SubjectObject => {
-                !matches!(pattern.subject, Term::Variable(_)) &&
-                !matches!(pattern.object, Term::Variable(_))
+                !matches!(pattern.subject, Term::Variable(_))
+                    && !matches!(pattern.object, Term::Variable(_))
             }
             IndexType::FullText => {
                 // Full-text search typically works with literals
@@ -1101,53 +1449,53 @@ impl QueryOptimizer {
                 IndexPosition::Predicate => !matches!(pattern.predicate, Term::Variable(_)),
                 IndexPosition::Object => !matches!(pattern.object, Term::Variable(_)),
                 IndexPosition::SubjectPredicate => {
-                    !matches!(pattern.subject, Term::Variable(_)) &&
-                    !matches!(pattern.predicate, Term::Variable(_))
+                    !matches!(pattern.subject, Term::Variable(_))
+                        && !matches!(pattern.predicate, Term::Variable(_))
                 }
                 IndexPosition::PredicateObject => {
-                    !matches!(pattern.predicate, Term::Variable(_)) &&
-                    !matches!(pattern.object, Term::Variable(_))
+                    !matches!(pattern.predicate, Term::Variable(_))
+                        && !matches!(pattern.object, Term::Variable(_))
                 }
                 IndexPosition::SubjectObject => {
-                    !matches!(pattern.subject, Term::Variable(_)) &&
-                    !matches!(pattern.object, Term::Variable(_))
+                    !matches!(pattern.subject, Term::Variable(_))
+                        && !matches!(pattern.object, Term::Variable(_))
                 }
                 IndexPosition::FullTriple => true,
-            }
+            },
             IndexType::HashIndex(pos) => match pos {
                 IndexPosition::Subject => !matches!(pattern.subject, Term::Variable(_)),
                 IndexPosition::Predicate => !matches!(pattern.predicate, Term::Variable(_)),
                 IndexPosition::Object => !matches!(pattern.object, Term::Variable(_)),
                 IndexPosition::SubjectPredicate => {
-                    !matches!(pattern.subject, Term::Variable(_)) &&
-                    !matches!(pattern.predicate, Term::Variable(_))
+                    !matches!(pattern.subject, Term::Variable(_))
+                        && !matches!(pattern.predicate, Term::Variable(_))
                 }
                 IndexPosition::PredicateObject => {
-                    !matches!(pattern.predicate, Term::Variable(_)) &&
-                    !matches!(pattern.object, Term::Variable(_))
+                    !matches!(pattern.predicate, Term::Variable(_))
+                        && !matches!(pattern.object, Term::Variable(_))
                 }
                 IndexPosition::SubjectObject => {
-                    !matches!(pattern.subject, Term::Variable(_)) &&
-                    !matches!(pattern.object, Term::Variable(_))
+                    !matches!(pattern.subject, Term::Variable(_))
+                        && !matches!(pattern.object, Term::Variable(_))
                 }
                 IndexPosition::FullTriple => {
-                    !matches!(pattern.subject, Term::Variable(_)) &&
-                    !matches!(pattern.predicate, Term::Variable(_)) &&
-                    !matches!(pattern.object, Term::Variable(_))
+                    !matches!(pattern.subject, Term::Variable(_))
+                        && !matches!(pattern.predicate, Term::Variable(_))
+                        && !matches!(pattern.object, Term::Variable(_))
                 }
-            }
+            },
             IndexType::BitmapIndex(pos) => match pos {
                 IndexPosition::Subject => !matches!(pattern.subject, Term::Variable(_)),
                 IndexPosition::Predicate => !matches!(pattern.predicate, Term::Variable(_)),
                 IndexPosition::Object => !matches!(pattern.object, Term::Variable(_)),
                 _ => false, // Bitmap indexes typically work best with single positions
-            }
+            },
             IndexType::BloomFilter(pos) => match pos {
                 IndexPosition::Subject => !matches!(pattern.subject, Term::Variable(_)),
                 IndexPosition::Predicate => !matches!(pattern.predicate, Term::Variable(_)),
                 IndexPosition::Object => !matches!(pattern.object, Term::Variable(_)),
                 _ => true, // Bloom filters can work with compound keys
-            }
+            },
             IndexType::SpatialRTree => {
                 // Spatial R-tree for geometric queries
                 matches!(pattern.object, Term::Literal(_))
@@ -1202,11 +1550,10 @@ impl QueryOptimizer {
     /// Estimate cardinality of an algebra expression
     fn estimate_algebra_cardinality(&self, algebra: &Algebra) -> f64 {
         match algebra {
-            Algebra::Bgp(patterns) => {
-                patterns.iter()
-                    .map(|p| self.statistics.estimate_pattern_cardinality(p) as f64)
-                    .product()
-            }
+            Algebra::Bgp(patterns) => patterns
+                .iter()
+                .map(|p| self.statistics.estimate_pattern_cardinality(p) as f64)
+                .product(),
             Algebra::Join { left, right } => {
                 let left_card = self.estimate_algebra_cardinality(left);
                 let right_card = self.estimate_algebra_cardinality(right);
@@ -1906,6 +2253,388 @@ impl QueryOptimizer {
             // Default
             _ => 0.5,
         }
+    }
+
+    /// Calculate join complexity for adaptive optimization
+    fn calculate_join_complexity(&self, patterns: &[TriplePattern]) -> JoinComplexity {
+        let pattern_count = patterns.len();
+        let total_variables = patterns
+            .iter()
+            .flat_map(|p| p.variables())
+            .collect::<HashSet<_>>()
+            .len();
+
+        // Classify based on pattern count and variable complexity
+        match pattern_count {
+            1..=2 if total_variables <= 3 => JoinComplexity::Simple,
+            3..=5 if total_variables <= 8 => JoinComplexity::Moderate,
+            _ => JoinComplexity::Complex,
+        }
+    }
+
+    /// Select most selective index for complex queries
+    fn select_most_selective_index(&self, pattern: &TriplePattern) -> Option<(IndexType, f64)> {
+        self.statistics
+            .index_stats
+            .available_indexes
+            .iter()
+            .filter(|idx| self.index_supports_pattern(idx, pattern))
+            .min_by(|a, b| {
+                let sel_a = self
+                    .statistics
+                    .index_stats
+                    .index_selectivity
+                    .get(a)
+                    .copied()
+                    .unwrap_or(1.0);
+                let sel_b = self
+                    .statistics
+                    .index_stats
+                    .index_selectivity
+                    .get(b)
+                    .copied()
+                    .unwrap_or(1.0);
+                sel_a.partial_cmp(&sel_b).unwrap()
+            })
+            .and_then(|idx| {
+                let selectivity = self
+                    .statistics
+                    .index_stats
+                    .index_selectivity
+                    .get(idx)
+                    .copied()
+                    .unwrap_or(1.0);
+                let cost = self
+                    .statistics
+                    .index_stats
+                    .index_access_cost
+                    .get(idx)
+                    .copied()
+                    .unwrap_or(1.0);
+                Some((idx.clone(), cost * selectivity))
+            })
+    }
+
+    /// Get shared variables between two patterns
+    fn get_shared_variables_in_patterns(
+        &self,
+        p1: &TriplePattern,
+        p2: &TriplePattern,
+    ) -> Vec<Variable> {
+        let vars1: HashSet<_> = p1.variables().into_iter().collect();
+        let vars2: HashSet<_> = p2.variables().into_iter().collect();
+        vars1.intersection(&vars2).cloned().collect()
+    }
+
+    /// Create intersection opportunity for two patterns
+    fn create_intersection_opportunity(
+        &self,
+        i: usize,
+        j: usize,
+        shared_vars: &[Variable],
+    ) -> Option<crate::bgp_optimizer::IndexIntersection> {
+        // Create intersection metadata
+        Some(crate::bgp_optimizer::IndexIntersection {
+            left_pattern_idx: i,
+            right_pattern_idx: j,
+            intersection_variable: shared_vars.first()?.clone(),
+            estimated_benefit: 2.0, // Simplified benefit estimation
+            intersection_type: crate::bgp_optimizer::IntersectionType::VariableJoin,
+        })
+    }
+
+    /// Check if index union can be used
+    fn can_use_index_union(
+        &self,
+        left_patterns: &[TriplePattern],
+        right_patterns: &[TriplePattern],
+    ) -> bool {
+        // Simple heuristic: can use index union if patterns are similar structure
+        left_patterns.len() == 1
+            && right_patterns.len() == 1
+            && self.patterns_have_similar_structure(&left_patterns[0], &right_patterns[0])
+    }
+
+    /// Check if patterns have similar structure for union optimization
+    fn patterns_have_similar_structure(&self, p1: &TriplePattern, p2: &TriplePattern) -> bool {
+        // Patterns are similar if they have the same predicate or object structure
+        match (&p1.predicate, &p2.predicate) {
+            (Term::Iri(iri1), Term::Iri(iri2)) if iri1 == iri2 => true,
+            (Term::Variable(_), Term::Variable(_)) => true,
+            _ => false,
+        }
+    }
+
+    /// Create index union plan
+    fn create_index_union_plan(
+        &self,
+        left_patterns: &[TriplePattern],
+        right_patterns: &[TriplePattern],
+    ) -> Result<IndexUnionPlan> {
+        let left_indexes = left_patterns
+            .iter()
+            .filter_map(|p| self.select_single_optimal_index(p).map(|(idx, _)| idx))
+            .collect();
+
+        let right_indexes = right_patterns
+            .iter()
+            .filter_map(|p| self.select_single_optimal_index(p).map(|(idx, _)| idx))
+            .collect();
+
+        // Advanced cost estimation for index union
+        let left_cost = self.estimate_index_group_cost(&left_indexes)?;
+        let right_cost = self.estimate_index_group_cost(&right_indexes)?;
+        let union_overhead = (left_cost + right_cost) * 0.15; // 15% overhead for union operation
+        let deduplication_cost = (left_cost * right_cost).sqrt() * 0.1; // Cost of deduplication
+        
+        let union_cost = left_cost + right_cost + union_overhead + deduplication_cost;
+        
+        // Advanced selectivity estimation based on pattern overlap
+        let left_selectivity = self.estimate_pattern_group_selectivity(left_patterns)?;
+        let right_selectivity = self.estimate_pattern_group_selectivity(right_patterns)?;
+        let overlap_factor = self.estimate_pattern_overlap(left_patterns, right_patterns)?;
+        
+        // Union selectivity: left + right - overlap
+        let estimated_selectivity = left_selectivity + right_selectivity - (left_selectivity * right_selectivity * overlap_factor);
+
+        Ok(IndexUnionPlan {
+            left_indexes,
+            right_indexes,
+            union_cost,
+            estimated_selectivity,
+        })
+    }
+
+    /// Execute index union plan
+    fn execute_index_union_plan(&self, plan: IndexUnionPlan) -> Result<Algebra> {
+        // Create left-side BGP with index hints
+        let left_bgp = self.create_index_optimized_bgp(&plan.left_indexes)?;
+        
+        // Create right-side BGP with index hints
+        let right_bgp = self.create_index_optimized_bgp(&plan.right_indexes)?;
+        
+        // Create union with proper index hints and cost estimates
+        let union = Algebra::Union {
+            left: Box::new(left_bgp),
+            right: Box::new(right_bgp),
+        };
+        
+        // Apply index-aware optimization if beneficial
+        if plan.estimated_selectivity < 0.7 && plan.union_cost < 10000.0 {
+            // Wrap with index scan hints for better execution
+            Ok(Algebra::Filter {
+                pattern: Box::new(union),
+                condition: Expression::Bound(true),
+            })
+        } else {
+            Ok(union)
+        }
+    }
+
+    /// Create index-optimized BGP from index types
+    fn create_index_optimized_bgp(&self, indexes: &[IndexType]) -> Result<Algebra> {
+        if indexes.is_empty() {
+            return Ok(Algebra::Table);
+        }
+        
+        // Create BGP patterns optimized for the given indexes
+        let mut patterns = Vec::new();
+        
+        for index_type in indexes {
+            match index_type {
+                IndexType::SPO => {
+                    // Create subject-predicate-object optimized pattern
+                    patterns.push(TriplePattern {
+                        subject: Term::Variable(Variable::new("s")),
+                        predicate: Term::Variable(Variable::new("p")),
+                        object: Term::Variable(Variable::new("o")),
+                    });
+                }
+                IndexType::PSO => {
+                    // Create predicate-subject-object optimized pattern
+                    patterns.push(TriplePattern {
+                        subject: Term::Variable(Variable::new("s")),
+                        predicate: Term::Variable(Variable::new("p")),
+                        object: Term::Variable(Variable::new("o")),
+                    });
+                }
+                IndexType::SubjectPredicate => {
+                    patterns.push(TriplePattern {
+                        subject: Term::Variable(Variable::new("s")),
+                        predicate: Term::Variable(Variable::new("p")),
+                        object: Term::Variable(Variable::new("o")),
+                    });
+                }
+                IndexType::PredicateObject => {
+                    patterns.push(TriplePattern {
+                        subject: Term::Variable(Variable::new("s")),
+                        predicate: Term::Variable(Variable::new("p")),
+                        object: Term::Variable(Variable::new("o")),
+                    });
+                }
+                _ => {
+                    // Default pattern for other index types
+                    patterns.push(TriplePattern {
+                        subject: Term::Variable(Variable::new("s")),
+                        predicate: Term::Variable(Variable::new("p")),
+                        object: Term::Variable(Variable::new("o")),
+                    });
+                }
+            }
+        }
+        
+        if patterns.len() == 1 {
+            Ok(Algebra::TriplePattern(patterns[0].clone()))
+        } else {
+            // Create efficient join structure for multiple patterns
+            let mut bgp = Algebra::TriplePattern(patterns[0].clone());
+            for pattern in patterns.iter().skip(1) {
+                bgp = Algebra::Join {
+                    left: Box::new(bgp),
+                    right: Box::new(Algebra::TriplePattern(pattern.clone())),
+                };
+            }
+            Ok(bgp)
+        }
+    }
+
+    /// Estimate cost for a group of indexes
+    fn estimate_index_group_cost(&self, indexes: &[IndexType]) -> Result<f64> {
+        if indexes.is_empty() {
+            return Ok(100.0); // Base cost for empty index group
+        }
+        
+        let mut total_cost = 0.0;
+        for index_type in indexes {
+            let index_cost = self.statistics.index_stats.index_access_cost
+                .get(index_type)
+                .unwrap_or(&500.0); // Default cost
+            total_cost += index_cost;
+        }
+        
+        // Apply scaling factor for multiple indexes (diminishing returns)
+        let scaling_factor = if indexes.len() > 1 {
+            1.0 + (indexes.len() as f64 - 1.0) * 0.3 // Each additional index adds 30% overhead
+        } else {
+            1.0
+        };
+        
+        Ok(total_cost * scaling_factor)
+    }
+    
+    /// Estimate selectivity for a group of patterns
+    fn estimate_pattern_group_selectivity(&self, patterns: &[TriplePattern]) -> Result<f64> {
+        if patterns.is_empty() {
+            return Ok(1.0);
+        }
+        
+        let mut combined_selectivity = 1.0;
+        for pattern in patterns {
+            let pattern_key = format!("{:?}", pattern);
+            let pattern_selectivity = self.statistics.pattern_cardinality
+                .get(&pattern_key)
+                .map(|card| (*card as f64) / 1_000_000.0) // Normalize by estimated total triples
+                .unwrap_or(0.1); // Default selectivity
+            
+            // Combine selectivities (assuming independence)
+            combined_selectivity *= pattern_selectivity.min(1.0);
+        }
+        
+        Ok(combined_selectivity)
+    }
+    
+    /// Estimate overlap between two pattern groups
+    fn estimate_pattern_overlap(&self, left_patterns: &[TriplePattern], right_patterns: &[TriplePattern]) -> Result<f64> {
+        if left_patterns.is_empty() || right_patterns.is_empty() {
+            return Ok(0.0);
+        }
+        
+        let mut overlap_score = 0.0;
+        let mut total_comparisons = 0;
+        
+        for left_pattern in left_patterns {
+            for right_pattern in right_patterns {
+                total_comparisons += 1;
+                
+                // Check for variable overlap
+                let left_vars: std::collections::HashSet<_> = left_pattern.variables().into_iter().collect();
+                let right_vars: std::collections::HashSet<_> = right_pattern.variables().into_iter().collect();
+                let shared_vars = left_vars.intersection(&right_vars).count();
+                
+                if shared_vars > 0 {
+                    // Higher overlap score for more shared variables
+                    overlap_score += (shared_vars as f64) / (left_vars.len() + right_vars.len()) as f64;
+                }
+                
+                // Check for term overlap (exact matches in subject/predicate/object)
+                let mut term_matches = 0;
+                if left_pattern.subject == right_pattern.subject { term_matches += 1; }
+                if left_pattern.predicate == right_pattern.predicate { term_matches += 1; }
+                if left_pattern.object == right_pattern.object { term_matches += 1; }
+                
+                if term_matches > 0 {
+                    overlap_score += (term_matches as f64) / 3.0; // Normalize by max possible matches
+                }
+            }
+        }
+        
+        if total_comparisons > 0 {
+            Ok((overlap_score / total_comparisons as f64).min(1.0))
+        } else {
+            Ok(0.0)
+        }
+    }
+
+    /// Create index filter plan
+    fn create_index_filter_plan(
+        &self,
+        patterns: &[TriplePattern],
+        condition: &Expression,
+    ) -> Result<Option<IndexFilterPlan>> {
+        // Analyze if condition can be pushed to index level
+        if let Some((pattern_idx, compatible_index)) =
+            self.find_filter_compatible_index(patterns, condition)
+        {
+            let push_down_conditions = vec![condition.clone()];
+            let estimated_cost = 500.0; // Simplified cost
+
+            Ok(Some(IndexFilterPlan {
+                pattern_index: pattern_idx,
+                filter_index: compatible_index,
+                push_down_conditions,
+                estimated_cost,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Find index compatible with filter condition
+    fn find_filter_compatible_index(
+        &self,
+        patterns: &[TriplePattern],
+        condition: &Expression,
+    ) -> Option<(usize, IndexType)> {
+        // Simplified: look for bitmap or B-tree indexes that can handle the filter
+        for (i, pattern) in patterns.iter().enumerate() {
+            if let Some((index_type, _)) = self.select_single_optimal_index(pattern) {
+                match index_type {
+                    IndexType::BTree | IndexType::Bitmap => return Some((i, index_type)),
+                    _ => continue,
+                }
+            }
+        }
+        None
+    }
+
+    /// Execute index filter plan
+    fn execute_index_filter_plan(&self, plan: IndexFilterPlan) -> Result<Algebra> {
+        // Create optimized filter representation
+        // In practice, this would create specialized filter algebra with index hints
+        Ok(Algebra::Filter {
+            pattern: Box::new(Algebra::Table), // Placeholder
+            condition: plan.push_down_conditions.into_iter().next().unwrap(),
+        })
     }
 }
 

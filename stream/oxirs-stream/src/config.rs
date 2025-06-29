@@ -20,7 +20,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::{
     CompressionType, MonitoringConfig, PerformanceConfig, RetryConfig, SaslConfig, SecurityConfig,
-    StreamBackend, StreamConfig,
+    StreamBackendType, StreamConfig,
 };
 
 /// Configuration source types
@@ -572,7 +572,7 @@ impl ConfigManager {
 
                     #[cfg(feature = "kafka")]
                     {
-                        StreamBackend::Kafka {
+                        StreamBackendType::Kafka {
                             brokers,
                             security_protocol: std::env::var(format!("{}_KAFKA_SECURITY", prefix))
                                 .ok(),
@@ -581,13 +581,13 @@ impl ConfigManager {
                     }
                     #[cfg(not(feature = "kafka"))]
                     {
-                        StreamBackend::Memory {
+                        StreamBackendType::Memory {
                             max_size: Some(10000),
                             persistence: false,
                         }
                     }
                 }
-                "memory" => StreamBackend::Memory {
+                "memory" => StreamBackendType::Memory {
                     max_size: Some(10000),
                     persistence: false,
                 },
@@ -621,7 +621,7 @@ impl ConfigManager {
     async fn apply_secrets(&self, mut config: StreamConfig) -> Result<StreamConfig> {
         // Apply SASL password if using Kafka
         #[cfg(feature = "kafka")]
-        if let StreamBackend::Kafka {
+        if let StreamBackendType::Kafka {
             brokers,
             security_protocol,
             sasl_config,
@@ -632,7 +632,7 @@ impl ConfigManager {
                     if let Ok(password) = self.secret_manager.get_secret("kafka_password").await {
                         #[cfg(feature = "kafka")]
                         {
-                            config.backend = StreamBackend::Kafka {
+                            config.backend = StreamBackendType::Kafka {
                                 brokers: brokers.clone(),
                                 security_protocol: security_protocol.clone(),
                                 sasl_config: Some(SaslConfig {
@@ -711,7 +711,7 @@ impl ConfigManager {
         // Backend-specific validation
         match &config.backend {
             #[cfg(feature = "kafka")]
-            StreamBackend::Kafka { brokers, .. } => {
+            StreamBackendType::Kafka { brokers, .. } => {
                 if brokers.is_empty() {
                     return Err(anyhow!("Kafka brokers list cannot be empty"));
                 }

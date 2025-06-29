@@ -875,7 +875,9 @@ impl EmbeddingModel for GNNEmbedding {
     }
 
     async fn encode(&self, _texts: &[String]) -> Result<Vec<Vec<f32>>> {
-        Err(anyhow!("Knowledge graph embedding model does not support text encoding"))
+        Err(anyhow!(
+            "Knowledge graph embedding model does not support text encoding"
+        ))
     }
 }
 

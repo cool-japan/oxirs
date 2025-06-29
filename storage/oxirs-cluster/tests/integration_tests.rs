@@ -400,7 +400,7 @@ impl TestCluster {
 
     async fn find_leader(&self) -> Result<&ClusterNode> {
         for node in &self.nodes {
-            if node.is_leader().await? {
+            if node.is_leader().await {
                 return Ok(node);
             }
         }

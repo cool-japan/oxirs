@@ -5,8 +5,8 @@
 
 use anyhow::Result;
 use oxirs_embed::{
-    AlignmentObjective, ContrastiveConfig, CrossDomainConfig, CrossModalConfig, MultiModalEmbedding,
-    NamedNode, Triple, EmbeddingModel,
+    AlignmentObjective, ContrastiveConfig, CrossDomainConfig, CrossModalConfig, EmbeddingModel,
+    MultiModalEmbedding, NamedNode, Triple,
 };
 
 #[tokio::main]
@@ -42,16 +42,31 @@ async fn main() -> Result<()> {
 
     // Create multi-modal embedding model
     let mut model = MultiModalEmbedding::new(config);
-    println!("✅ Created multi-modal embedding model with ID: {}", model.model_id());
+    println!(
+        "✅ Created multi-modal embedding model with ID: {}",
+        model.model_id()
+    );
 
     // Add text-KG alignments
     println!("\n🔗 Adding Text-KG Alignments:");
     let alignments = vec![
-        ("A person who conducts scientific research", "http://example.org/Scientist"),
-        ("A medical professional who treats patients", "http://example.org/Doctor"),
+        (
+            "A person who conducts scientific research",
+            "http://example.org/Scientist",
+        ),
+        (
+            "A medical professional who treats patients",
+            "http://example.org/Doctor",
+        ),
         ("An educational instructor", "http://example.org/Teacher"),
-        ("A legal professional who represents clients", "http://example.org/Lawyer"),
-        ("A person who develops software", "http://example.org/Developer"),
+        (
+            "A legal professional who represents clients",
+            "http://example.org/Lawyer",
+        ),
+        (
+            "A person who develops software",
+            "http://example.org/Developer",
+        ),
     ];
 
     for (text, entity) in &alignments {
@@ -62,11 +77,26 @@ async fn main() -> Result<()> {
     // Add entity descriptions
     println!("\n📖 Adding Entity Descriptions:");
     let descriptions = vec![
-        ("http://example.org/Scientist", "A researcher who uses scientific methods to study natural phenomena"),
-        ("http://example.org/Doctor", "A healthcare professional with medical degree who diagnoses and treats illnesses"),
-        ("http://example.org/Teacher", "An educator who instructs students in academic subjects"),
-        ("http://example.org/Lawyer", "A legal practitioner who represents clients in legal matters"),
-        ("http://example.org/Developer", "A software professional who creates computer programs and applications"),
+        (
+            "http://example.org/Scientist",
+            "A researcher who uses scientific methods to study natural phenomena",
+        ),
+        (
+            "http://example.org/Doctor",
+            "A healthcare professional with medical degree who diagnoses and treats illnesses",
+        ),
+        (
+            "http://example.org/Teacher",
+            "An educator who instructs students in academic subjects",
+        ),
+        (
+            "http://example.org/Lawyer",
+            "A legal practitioner who represents clients in legal matters",
+        ),
+        (
+            "http://example.org/Developer",
+            "A software professional who creates computer programs and applications",
+        ),
     ];
 
     for (entity, description) in &descriptions {
@@ -91,9 +121,30 @@ async fn main() -> Result<()> {
     // Add multilingual mappings
     println!("\n🌍 Adding Multilingual Mappings:");
     let multilingual = vec![
-        ("scientist", vec!["científico".to_string(), "scientifique".to_string(), "wissenschaftler".to_string()]),
-        ("doctor", vec!["médico".to_string(), "médecin".to_string(), "arzt".to_string()]),
-        ("teacher", vec!["profesor".to_string(), "enseignant".to_string(), "lehrer".to_string()]),
+        (
+            "scientist",
+            vec![
+                "científico".to_string(),
+                "scientifique".to_string(),
+                "wissenschaftler".to_string(),
+            ],
+        ),
+        (
+            "doctor",
+            vec![
+                "médico".to_string(),
+                "médecin".to_string(),
+                "arzt".to_string(),
+            ],
+        ),
+        (
+            "teacher",
+            vec![
+                "profesor".to_string(),
+                "enseignant".to_string(),
+                "lehrer".to_string(),
+            ],
+        ),
     ];
 
     for (concept, translations) in &multilingual {
@@ -117,10 +168,26 @@ async fn main() -> Result<()> {
     // Add some RDF triples for structured knowledge
     println!("\n📊 Adding RDF Triples:");
     let triples = vec![
-        ("http://example.org/alice", "http://www.w3.org/1999/02/22-rdf-syntax-ns#type", "http://example.org/Scientist"),
-        ("http://example.org/alice", "http://example.org/worksAt", "http://example.org/university"),
-        ("http://example.org/bob", "http://www.w3.org/1999/02/22-rdf-syntax-ns#type", "http://example.org/Doctor"),
-        ("http://example.org/bob", "http://example.org/specializes", "http://example.org/cardiology"),
+        (
+            "http://example.org/alice",
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+            "http://example.org/Scientist",
+        ),
+        (
+            "http://example.org/alice",
+            "http://example.org/worksAt",
+            "http://example.org/university",
+        ),
+        (
+            "http://example.org/bob",
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+            "http://example.org/Doctor",
+        ),
+        (
+            "http://example.org/bob",
+            "http://example.org/specializes",
+            "http://example.org/cardiology",
+        ),
     ];
 
     for (subject, predicate, object) in &triples {
@@ -135,7 +202,7 @@ async fn main() -> Result<()> {
 
     println!("\n🧠 Training Multi-Modal Model...");
     let training_stats = model.train(Some(50)).await?;
-    
+
     println!("✅ Training completed!");
     println!("  📈 Epochs: {}", training_stats.epochs_completed);
     println!("  ⏱️  Time: {:.2}s", training_stats.training_time_seconds);
@@ -145,14 +212,25 @@ async fn main() -> Result<()> {
     // Demonstrate unified embedding generation
     println!("\n🎨 Generating Unified Embeddings:");
     let unified_examples = vec![
-        ("A brilliant researcher in artificial intelligence", "http://example.org/Scientist"),
+        (
+            "A brilliant researcher in artificial intelligence",
+            "http://example.org/Scientist",
+        ),
         ("An experienced heart surgeon", "http://example.org/Doctor"),
-        ("A dedicated high school mathematics teacher", "http://example.org/Teacher"),
+        (
+            "A dedicated high school mathematics teacher",
+            "http://example.org/Teacher",
+        ),
     ];
 
     for (text, entity) in &unified_examples {
         let unified_embedding = model.generate_unified_embedding(text, entity).await?;
-        println!("  🎯 \"{}\" + {} → Embedding[{}D]", text, entity, unified_embedding.len());
+        println!(
+            "  🎯 \"{}\" + {} → Embedding[{}D]",
+            text,
+            entity,
+            unified_embedding.len()
+        );
     }
 
     // Demonstrate zero-shot prediction
@@ -195,11 +273,19 @@ async fn main() -> Result<()> {
 
     // Demonstrate cross-domain transfer
     println!("\n🌐 Cross-Domain Transfer:");
-    let transfer_results = model.cross_domain_transfer("scientific", "biomedical").await?;
-    println!("  🔄 Scientific → Biomedical transfer loss: {:.3}", transfer_results);
+    let transfer_results = model
+        .cross_domain_transfer("scientific", "biomedical")
+        .await?;
+    println!(
+        "  🔄 Scientific → Biomedical transfer loss: {:.3}",
+        transfer_results
+    );
 
     let transfer_results = model.cross_domain_transfer("general", "legal").await?;
-    println!("  🔄 General → Legal transfer loss: {:.3}", transfer_results);
+    println!(
+        "  🔄 General → Legal transfer loss: {:.3}",
+        transfer_results
+    );
 
     // Show model statistics
     println!("\n📊 Multi-Modal Model Statistics:");
@@ -208,26 +294,45 @@ async fn main() -> Result<()> {
     println!("  🧠 KG embeddings: {}", stats.num_kg_embeddings);
     println!("  🎯 Unified embeddings: {}", stats.num_unified_embeddings);
     println!("  🔗 Text-KG alignments: {}", stats.num_alignments);
-    println!("  📖 Entity descriptions: {}", stats.num_entity_descriptions);
+    println!(
+        "  📖 Entity descriptions: {}",
+        stats.num_entity_descriptions
+    );
     println!("  🔀 Property texts: {}", stats.num_property_texts);
-    println!("  🌍 Multilingual mappings: {}", stats.num_multilingual_mappings);
-    println!("  🌐 Cross-domain mappings: {}", stats.num_cross_domain_mappings);
-    println!("  📏 Dimensions: {}D text, {}D KG, {}D unified", 
-             stats.text_dim, stats.kg_dim, stats.unified_dim);
+    println!(
+        "  🌍 Multilingual mappings: {}",
+        stats.num_multilingual_mappings
+    );
+    println!(
+        "  🌐 Cross-domain mappings: {}",
+        stats.num_cross_domain_mappings
+    );
+    println!(
+        "  📏 Dimensions: {}D text, {}D KG, {}D unified",
+        stats.text_dim, stats.kg_dim, stats.unified_dim
+    );
 
     // Demonstrate similarity searches
     println!("\n🔍 Similarity Search:");
     let query_text = "machine learning expert";
     if let Ok(text_embeddings) = model.encode(&[query_text.to_string()]).await {
         if let Some(query_embedding) = text_embeddings.first() {
-            println!("  📊 Generated embedding for \"{}\" with {} dimensions", query_text, query_embedding.len());
-            
+            println!(
+                "  📊 Generated embedding for \"{}\" with {} dimensions",
+                query_text,
+                query_embedding.len()
+            );
+
             // Find most similar entities
             let entities = model.get_entities();
             if !entities.is_empty() {
                 println!("  🎯 Found {} entities for comparison", entities.len());
-                
-                let predictions = model.predict_objects("http://example.org/alice", "http://www.w3.org/1999/02/22-rdf-syntax-ns#type", 3)?;
+
+                let predictions = model.predict_objects(
+                    "http://example.org/alice",
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+                    3,
+                )?;
                 println!("  🔮 Type predictions for Alice:");
                 for (entity, score) in predictions {
                     println!("    → {} (confidence: {:.3})", entity, score);

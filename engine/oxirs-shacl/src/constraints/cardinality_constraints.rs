@@ -4,8 +4,10 @@ use serde::{Deserialize, Serialize};
 
 use oxirs_core::Store;
 
+use super::{
+    ConstraintContext, ConstraintEvaluationResult, ConstraintEvaluator, ConstraintValidator,
+};
 use crate::Result;
-use super::{ConstraintValidator, ConstraintEvaluator, ConstraintContext, ConstraintEvaluationResult};
 
 /// sh:minCount constraint - validates minimum number of values
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

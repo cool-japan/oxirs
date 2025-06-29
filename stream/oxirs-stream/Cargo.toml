@@ -21,11 +21,11 @@ thiserror.workspace = true
 tracing.workspace = true
 rdkafka = { workspace = true, optional = true }
 async-nats = { workspace = true, optional = true }
-chrono = { version = "0.4", features = ["serde"] }
-uuid = { version = "1.0", features = ["v4"] }
+chrono.workspace = true
+uuid.workspace = true
 regex = "1.10"
-futures-util = "0.3"
-futures = "0.3"
+futures-util.workspace = true
+futures.workspace = true
 async-trait = "0.1"
 parking_lot = "0.12"
 bytes = "1.5"
@@ -49,13 +49,14 @@ reqwest = { version = "0.12", features = ["json"] }
 hmac = "0.12"
 sha2 = "0.10"
 hex = "0.4"
-rand = "0.8"
+rand.workspace = true
 prost = "0.12"
 prost-types = "0.12"
 apache-avro = "0.16"
 tokio-stream = "0.1"
 lz4_flex = "0.11"
 crc32fast = "1.4"
+dashmap = "6.0"
 
 [dev-dependencies]
 criterion.workspace = true

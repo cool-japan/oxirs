@@ -493,6 +493,171 @@ impl PerformanceAnalyticsEngine {
         Ok(stats.clone())
     }
 
+    /// Advanced real-time performance optimization with ML-based decision making
+    pub fn apply_intelligent_optimization(
+        &mut self,
+        session_id: &str,
+        performance_data: &[PerformanceSnapshot],
+    ) -> Result<IntelligentOptimizationResult> {
+        tracing::info!(
+            "Applying intelligent optimization for session: {}",
+            session_id
+        );
+
+        let optimization_strategy = self.determine_optimization_strategy(performance_data)?;
+        let ml_recommendations = self.generate_ml_optimization_recommendations(performance_data)?;
+        let resource_allocation = self.optimize_resource_allocation(performance_data)?;
+
+        let result = IntelligentOptimizationResult {
+            session_id: session_id.to_string(),
+            optimization_strategy,
+            ml_recommendations,
+            resource_allocation,
+            predicted_improvement: self.predict_optimization_effectiveness(performance_data)?,
+            confidence_score: self.calculate_optimization_confidence(performance_data)?,
+            implementation_timeline: self.estimate_implementation_timeline(&ml_recommendations)?,
+            risk_assessment: self.assess_optimization_risks(&ml_recommendations)?,
+            monitoring_plan: self.create_optimization_monitoring_plan()?,
+        };
+
+        // Update statistics
+        if let Ok(mut stats) = self.statistics.write() {
+            stats.optimizations_applied += 1;
+            stats.successful_optimizations += if result.confidence_score > 0.8 { 1 } else { 0 };
+            stats.average_performance_improvement =
+                (stats.average_performance_improvement + result.predicted_improvement) / 2.0;
+        }
+
+        Ok(result)
+    }
+
+    /// Advanced anomaly detection with multi-dimensional analysis
+    pub fn detect_complex_anomalies(
+        &mut self,
+        time_window: Duration,
+    ) -> Result<ComplexAnomalyAnalysis> {
+        tracing::info!(
+            "Performing complex anomaly detection over {:?}",
+            time_window
+        );
+
+        let monitor = self.real_time_monitor.lock().map_err(|e| {
+            ShaclAiError::PerformanceAnalytics(format!("Failed to lock monitor: {}", e))
+        })?;
+
+        let cutoff_time = SystemTime::now() - time_window;
+        let recent_metrics: Vec<_> = monitor
+            .metrics_buffer
+            .iter()
+            .filter(|m| m.timestamp >= cutoff_time)
+            .collect();
+
+        let anomaly_detection_results =
+            self.run_multi_dimensional_anomaly_detection(&recent_metrics)?;
+        let pattern_analysis = self.analyze_anomaly_patterns(&anomaly_detection_results)?;
+        let root_cause_analysis = self.perform_root_cause_analysis(&anomaly_detection_results)?;
+        let impact_prediction = self.predict_anomaly_impact(&anomaly_detection_results)?;
+
+        Ok(ComplexAnomalyAnalysis {
+            analysis_window: time_window,
+            total_data_points: recent_metrics.len(),
+            anomaly_detection_results,
+            pattern_analysis,
+            root_cause_analysis,
+            impact_prediction,
+            mitigation_strategies: self.generate_anomaly_mitigation_strategies(&recent_metrics)?,
+            prevention_recommendations: self
+                .generate_anomaly_prevention_recommendations(&recent_metrics)?,
+            confidence_metrics: self.calculate_anomaly_detection_confidence(&recent_metrics)?,
+        })
+    }
+
+    /// Real-time performance prediction with neural network models
+    pub fn predict_performance_evolution(
+        &self,
+        prediction_horizon: Duration,
+        confidence_threshold: f64,
+    ) -> Result<PerformanceEvolutionPrediction> {
+        tracing::info!(
+            "Predicting performance evolution for {:?}",
+            prediction_horizon
+        );
+
+        let monitor = self.real_time_monitor.lock().map_err(|e| {
+            ShaclAiError::PerformanceAnalytics(format!("Failed to lock monitor: {}", e))
+        })?;
+
+        let historical_data: Vec<_> = monitor.metrics_buffer.iter().collect();
+
+        let neural_predictions =
+            self.run_neural_performance_prediction(&historical_data, prediction_horizon)?;
+        let time_series_predictions =
+            self.run_time_series_prediction(&historical_data, prediction_horizon)?;
+        let ensemble_predictions =
+            self.combine_prediction_models(&neural_predictions, &time_series_predictions)?;
+
+        let risk_factors = self.identify_performance_risk_factors(&historical_data)?;
+        let scenario_analysis =
+            self.perform_scenario_analysis(&ensemble_predictions, &risk_factors)?;
+
+        Ok(PerformanceEvolutionPrediction {
+            prediction_horizon,
+            confidence_threshold,
+            neural_predictions,
+            time_series_predictions,
+            ensemble_predictions,
+            confidence_intervals: self
+                .calculate_prediction_confidence_intervals(&ensemble_predictions)?,
+            risk_factors,
+            scenario_analysis,
+            actionable_insights: self
+                .generate_actionable_insights(&ensemble_predictions, &risk_factors)?,
+            early_warning_indicators: self
+                .establish_early_warning_indicators(&ensemble_predictions)?,
+        })
+    }
+
+    /// Advanced capacity planning with machine learning
+    pub fn perform_intelligent_capacity_planning(
+        &self,
+        planning_horizon: Duration,
+        growth_assumptions: &GrowthAssumptions,
+    ) -> Result<IntelligentCapacityPlan> {
+        tracing::info!(
+            "Performing intelligent capacity planning for {:?}",
+            planning_horizon
+        );
+
+        let current_capacity = self.assess_current_capacity()?;
+        let demand_forecast = self.forecast_demand(planning_horizon, growth_assumptions)?;
+        let resource_requirements = self.calculate_resource_requirements(&demand_forecast)?;
+        let optimization_opportunities =
+            self.identify_capacity_optimization_opportunities(&current_capacity)?;
+
+        let scaling_strategies = self.generate_scaling_strategies(
+            &current_capacity,
+            &demand_forecast,
+            &resource_requirements,
+        )?;
+
+        let cost_analysis = self.perform_capacity_cost_analysis(&scaling_strategies)?;
+        let risk_assessment = self.assess_capacity_risks(&scaling_strategies)?;
+
+        Ok(IntelligentCapacityPlan {
+            planning_horizon,
+            current_capacity,
+            demand_forecast,
+            resource_requirements,
+            optimization_opportunities,
+            scaling_strategies,
+            cost_analysis,
+            risk_assessment,
+            implementation_roadmap: self
+                .create_capacity_implementation_roadmap(&scaling_strategies)?,
+            monitoring_framework: self.design_capacity_monitoring_framework()?,
+        })
+    }
+
     // Private helper methods
 
     fn generate_session_summary(&self, session: &MonitoringSession) -> Result<PerformanceSummary> {
@@ -758,10 +923,283 @@ impl PerformanceAnalyticsEngine {
 
     fn generate_performance_recommendations(
         &self,
-        _metrics: &[&PerformanceMetric],
+        metrics: &[&PerformanceMetric],
     ) -> Result<Vec<PerformanceRecommendation>> {
-        // Placeholder implementation
-        Ok(vec![])
+        let mut recommendations = Vec::new();
+
+        // Analyze execution time patterns
+        if let Some(avg_execution_time) =
+            self.calculate_average_metric_value(metrics, "execution_time")
+        {
+            if avg_execution_time > self.config.performance_threshold_ms {
+                recommendations.push(PerformanceRecommendation {
+                    recommendation_type: RecommendationType::Optimization,
+                    title: "Optimize Execution Time".to_string(),
+                    description: format!(
+                        "Average execution time ({:.2}ms) exceeds threshold. Consider constraint reordering, caching improvements, or parallel processing.",
+                        avg_execution_time
+                    ),
+                    priority: RecommendationPriority::High,
+                    expected_impact: 0.3, // 30% improvement
+                    implementation_steps: vec![
+                        "Analyze constraint execution order".to_string(),
+                        "Implement constraint result caching".to_string(),
+                        "Enable parallel constraint evaluation".to_string(),
+                        "Optimize data access patterns".to_string(),
+                    ],
+                });
+            }
+        }
+
+        // Analyze memory usage patterns
+        if let Some(memory_trend) = self.analyze_memory_trend(metrics) {
+            if memory_trend.slope > 0.1 {
+                // Increasing memory usage
+                recommendations.push(PerformanceRecommendation {
+                    recommendation_type: RecommendationType::Infrastructure,
+                    title: "Address Memory Growth".to_string(),
+                    description: "Detected increasing memory usage trend. Investigate potential memory leaks or optimize memory allocation.".to_string(),
+                    priority: RecommendationPriority::Medium,
+                    expected_impact: 0.25,
+                    implementation_steps: vec![
+                        "Profile memory allocation patterns".to_string(),
+                        "Implement memory pooling".to_string(),
+                        "Optimize data structures".to_string(),
+                        "Add memory monitoring alerts".to_string(),
+                    ],
+                });
+            }
+        }
+
+        // Analyze throughput optimization opportunities
+        if let Some(throughput_analysis) = self.analyze_throughput_potential(metrics) {
+            if throughput_analysis.improvement_potential > 0.2 {
+                recommendations.push(PerformanceRecommendation {
+                    recommendation_type: RecommendationType::Optimization,
+                    title: "Enhance Throughput".to_string(),
+                    description: format!(
+                        "Identified {:.1}% throughput improvement potential through optimization.",
+                        throughput_analysis.improvement_potential * 100.0
+                    ),
+                    priority: RecommendationPriority::Medium,
+                    expected_impact: throughput_analysis.improvement_potential,
+                    implementation_steps: vec![
+                        "Implement connection pooling".to_string(),
+                        "Optimize batch processing".to_string(),
+                        "Enable asynchronous processing".to_string(),
+                        "Tune thread pool configurations".to_string(),
+                    ],
+                });
+            }
+        }
+
+        Ok(recommendations)
+    }
+
+    // Advanced analytics helper methods
+
+    fn determine_optimization_strategy(
+        &self,
+        performance_data: &[PerformanceSnapshot],
+    ) -> Result<OptimizationStrategy> {
+        let avg_execution_time = performance_data
+            .iter()
+            .map(|s| s.execution_time.as_millis() as f64)
+            .sum::<f64>()
+            / performance_data.len() as f64;
+
+        let strategy_type = if avg_execution_time > self.config.performance_threshold_ms * 2.0 {
+            StrategyType::Aggressive
+        } else if avg_execution_time > self.config.performance_threshold_ms {
+            StrategyType::Moderate
+        } else {
+            StrategyType::Conservative
+        };
+
+        Ok(OptimizationStrategy {
+            strategy_type,
+            target_improvement: match strategy_type {
+                StrategyType::Aggressive => 0.5,    // 50% improvement
+                StrategyType::Moderate => 0.3,      // 30% improvement
+                StrategyType::Conservative => 0.15, // 15% improvement
+            },
+            risk_tolerance: match strategy_type {
+                StrategyType::Aggressive => RiskTolerance::High,
+                StrategyType::Moderate => RiskTolerance::Medium,
+                StrategyType::Conservative => RiskTolerance::Low,
+            },
+            implementation_phases: self.generate_implementation_phases(&strategy_type)?,
+        })
+    }
+
+    fn generate_ml_optimization_recommendations(
+        &self,
+        performance_data: &[PerformanceSnapshot],
+    ) -> Result<Vec<MLOptimizationRecommendation>> {
+        let mut recommendations = Vec::new();
+
+        // Neural network-based recommendation
+        let nn_recommendation = self.generate_neural_network_recommendation(performance_data)?;
+        recommendations.push(nn_recommendation);
+
+        // Decision tree-based recommendation
+        let dt_recommendation = self.generate_decision_tree_recommendation(performance_data)?;
+        recommendations.push(dt_recommendation);
+
+        // Ensemble-based recommendation
+        let ensemble_recommendation = self.generate_ensemble_recommendation(performance_data)?;
+        recommendations.push(ensemble_recommendation);
+
+        Ok(recommendations)
+    }
+
+    fn optimize_resource_allocation(
+        &self,
+        performance_data: &[PerformanceSnapshot],
+    ) -> Result<ResourceAllocationPlan> {
+        let current_utilization = self.calculate_current_resource_utilization(performance_data)?;
+        let optimal_allocation =
+            self.calculate_optimal_resource_allocation(&current_utilization)?;
+
+        Ok(ResourceAllocationPlan {
+            current_utilization,
+            optimal_allocation,
+            reallocation_steps: self
+                .generate_reallocation_steps(&current_utilization, &optimal_allocation)?,
+            expected_efficiency_gain: self
+                .calculate_efficiency_gain(&current_utilization, &optimal_allocation)?,
+        })
+    }
+
+    fn run_multi_dimensional_anomaly_detection(
+        &self,
+        metrics: &[&PerformanceMetric],
+    ) -> Result<Vec<AnomalyDetectionResult>> {
+        let mut results = Vec::new();
+
+        // Statistical anomaly detection
+        results.extend(self.detect_statistical_anomalies(metrics)?);
+
+        // Pattern-based anomaly detection
+        results.extend(self.detect_pattern_anomalies(metrics)?);
+
+        // Machine learning-based anomaly detection
+        results.extend(self.detect_ml_anomalies(metrics)?);
+
+        // Multi-variate anomaly detection
+        results.extend(self.detect_multivariate_anomalies(metrics)?);
+
+        Ok(results)
+    }
+
+    fn analyze_anomaly_patterns(
+        &self,
+        anomaly_results: &[AnomalyDetectionResult],
+    ) -> Result<AnomalyPatternAnalysis> {
+        let temporal_patterns = self.identify_temporal_anomaly_patterns(anomaly_results)?;
+        let correlation_patterns = self.identify_correlation_patterns(anomaly_results)?;
+        let recurrence_patterns = self.identify_recurrence_patterns(anomaly_results)?;
+
+        Ok(AnomalyPatternAnalysis {
+            temporal_patterns,
+            correlation_patterns,
+            recurrence_patterns,
+            pattern_confidence: self.calculate_pattern_confidence(anomaly_results)?,
+        })
+    }
+
+    fn calculate_average_metric_value(
+        &self,
+        metrics: &[&PerformanceMetric],
+        metric_name: &str,
+    ) -> Option<f64> {
+        if metrics.is_empty() {
+            return None;
+        }
+
+        let total: f64 = metrics.iter().map(|m| m.value).sum();
+        Some(total / metrics.len() as f64)
+    }
+
+    fn analyze_memory_trend(&self, metrics: &[&PerformanceMetric]) -> Option<MemoryTrendAnalysis> {
+        if metrics.len() < 2 {
+            return None;
+        }
+
+        // Simple linear regression for memory trend
+        let n = metrics.len() as f64;
+        let sum_x: f64 = (0..metrics.len()).map(|i| i as f64).sum();
+        let sum_y: f64 = metrics.iter().map(|m| m.value).sum();
+        let sum_xy: f64 = metrics
+            .iter()
+            .enumerate()
+            .map(|(i, m)| i as f64 * m.value)
+            .sum();
+        let sum_x2: f64 = (0..metrics.len()).map(|i| (i as f64).powi(2)).sum();
+
+        let slope = (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x.powi(2));
+        let intercept = (sum_y - slope * sum_x) / n;
+
+        Some(MemoryTrendAnalysis {
+            slope,
+            intercept,
+            r_squared: self.calculate_r_squared(metrics, slope, intercept),
+        })
+    }
+
+    fn analyze_throughput_potential(
+        &self,
+        metrics: &[&PerformanceMetric],
+    ) -> Option<ThroughputAnalysis> {
+        if metrics.is_empty() {
+            return None;
+        }
+
+        let current_avg = metrics.iter().map(|m| m.value).sum::<f64>() / metrics.len() as f64;
+        let theoretical_max = self.calculate_theoretical_throughput_max(metrics);
+        let improvement_potential = (theoretical_max - current_avg) / current_avg;
+
+        Some(ThroughputAnalysis {
+            current_throughput: current_avg,
+            theoretical_max,
+            improvement_potential: improvement_potential.max(0.0),
+            bottleneck_factors: self.identify_throughput_bottlenecks(metrics),
+        })
+    }
+
+    fn calculate_r_squared(
+        &self,
+        metrics: &[&PerformanceMetric],
+        slope: f64,
+        intercept: f64,
+    ) -> f64 {
+        let mean_y = metrics.iter().map(|m| m.value).sum::<f64>() / metrics.len() as f64;
+
+        let ss_tot: f64 = metrics.iter().map(|m| (m.value - mean_y).powi(2)).sum();
+        let ss_res: f64 = metrics
+            .iter()
+            .enumerate()
+            .map(|(i, m)| {
+                let predicted = slope * i as f64 + intercept;
+                (m.value - predicted).powi(2)
+            })
+            .sum();
+
+        1.0 - (ss_res / ss_tot)
+    }
+
+    fn calculate_theoretical_throughput_max(&self, metrics: &[&PerformanceMetric]) -> f64 {
+        // Simplified calculation - in practice would use more sophisticated modeling
+        metrics.iter().map(|m| m.value).fold(0.0, f64::max) * 1.5
+    }
+
+    fn identify_throughput_bottlenecks(&self, _metrics: &[&PerformanceMetric]) -> Vec<String> {
+        // Placeholder - would analyze specific bottleneck patterns
+        vec![
+            "CPU utilization".to_string(),
+            "Memory allocation".to_string(),
+            "I/O operations".to_string(),
+        ]
     }
 }
 

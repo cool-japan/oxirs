@@ -9,6 +9,7 @@ use crate::algebra::{
 use crate::extensions::{ExecutionContext as ExtContext, ExtensionRegistry};
 use crate::term::{xsd, BindingContext, NumericValue, Term};
 use anyhow::{anyhow, bail, Result};
+use chrono::{Datelike, NaiveDate, NaiveDateTime};
 use oxirs_core::model::NamedNode;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -465,10 +466,49 @@ impl ExpressionEvaluator {
         if let (Term::Literal(input_lit), Term::Literal(pattern_lit), Term::Literal(repl_lit)) =
             (input, pattern, replacement)
         {
-            // TODO: Handle regex flags if 4th argument provided
-            let result = input_lit
-                .lexical_form
-                .replace(&pattern_lit.lexical_form, &repl_lit.lexical_form);
+            let result = if args.len() == 4 {
+                // Handle regex flags in 4th argument
+                let flags = self.builtin_str(&[args[3].clone()])?;
+                if let Term::Literal(flags_lit) = flags {
+                    use regex::RegexBuilder;
+
+                    let mut builder = RegexBuilder::new(&pattern_lit.lexical_form);
+
+                    // Parse flags
+                    for flag in flags_lit.lexical_form.chars() {
+                        match flag {
+                            'i' => {
+                                builder.case_insensitive(true);
+                            }
+                            'm' => {
+                                builder.multi_line(true);
+                            }
+                            's' => {
+                                builder.dot_matches_new_line(true);
+                            }
+                            'x' => {
+                                builder.ignore_whitespace(true);
+                            }
+                            _ => bail!("Unknown regex flag: {}", flag),
+                        }
+                    }
+
+                    match builder.build() {
+                        Ok(regex) => regex
+                            .replace_all(&input_lit.lexical_form, repl_lit.lexical_form.as_str())
+                            .to_string(),
+                        Err(e) => bail!("Invalid regex pattern: {}", e),
+                    }
+                } else {
+                    unreachable!()
+                }
+            } else {
+                // Simple string replacement without regex
+                input_lit
+                    .lexical_form
+                    .replace(&pattern_lit.lexical_form, &repl_lit.lexical_form)
+            };
+
             Ok(Term::literal(&result))
         } else {
             unreachable!()
@@ -575,8 +615,35 @@ impl ExpressionEvaluator {
             bail!("YEAR expects 1 argument");
         }
 
-        // TODO: Extract year from date/datetime literal
-        bail!("YEAR function not fully implemented")
+        match &args[0] {
+            Term::Literal(lit) => {
+                let dt_iri = lit
+                    .datatype
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("YEAR function requires a date/dateTime literal"))?;
+
+                match dt_iri.as_str() {
+                    xsd::DATE | xsd::DATE_TIME | xsd::DATE_TIME_STAMP => {
+                        // Parse ISO 8601 date/datetime
+                        if let Ok(datetime) = chrono::DateTime::parse_from_rfc3339(&lit.value) {
+                            Ok(Term::integer(datetime.year() as i64))
+                        } else if let Ok(date) =
+                            chrono::NaiveDate::parse_from_str(&lit.value, "%Y-%m-%d")
+                        {
+                            Ok(Term::integer(date.year() as i64))
+                        } else if let Ok(datetime) =
+                            chrono::NaiveDateTime::parse_from_str(&lit.value, "%Y-%m-%dT%H:%M:%S")
+                        {
+                            Ok(Term::integer(datetime.year() as i64))
+                        } else {
+                            bail!("Invalid date/dateTime format: {}", lit.value)
+                        }
+                    }
+                    _ => bail!("YEAR function can only be applied to date/dateTime literals"),
+                }
+            }
+            _ => bail!("YEAR function requires a literal argument"),
+        }
     }
 
     fn builtin_month(&self, args: &[Term]) -> Result<Term> {
@@ -584,8 +651,35 @@ impl ExpressionEvaluator {
             bail!("MONTH expects 1 argument");
         }
 
-        // TODO: Extract month from date/datetime literal
-        bail!("MONTH function not fully implemented")
+        match &args[0] {
+            Term::Literal(lit) => {
+                let dt_iri = lit
+                    .datatype
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("MONTH function requires a date/dateTime literal"))?;
+
+                match dt_iri.as_str() {
+                    xsd::DATE | xsd::DATE_TIME | xsd::DATE_TIME_STAMP => {
+                        // Parse ISO 8601 date/datetime
+                        if let Ok(datetime) = chrono::DateTime::parse_from_rfc3339(&lit.value) {
+                            Ok(Term::integer(datetime.month() as i64))
+                        } else if let Ok(date) =
+                            chrono::NaiveDate::parse_from_str(&lit.value, "%Y-%m-%d")
+                        {
+                            Ok(Term::integer(date.month() as i64))
+                        } else if let Ok(datetime) =
+                            chrono::NaiveDateTime::parse_from_str(&lit.value, "%Y-%m-%dT%H:%M:%S")
+                        {
+                            Ok(Term::integer(datetime.month() as i64))
+                        } else {
+                            bail!("Invalid date/dateTime format: {}", lit.value)
+                        }
+                    }
+                    _ => bail!("MONTH function can only be applied to date/dateTime literals"),
+                }
+            }
+            _ => bail!("MONTH function requires a literal argument"),
+        }
     }
 
     fn builtin_day(&self, args: &[Term]) -> Result<Term> {
@@ -593,8 +687,35 @@ impl ExpressionEvaluator {
             bail!("DAY expects 1 argument");
         }
 
-        // TODO: Extract day from date/datetime literal
-        bail!("DAY function not fully implemented")
+        match &args[0] {
+            Term::Literal(lit) => {
+                let dt_iri = lit
+                    .datatype
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("DAY function requires a date/dateTime literal"))?;
+
+                match dt_iri.as_str() {
+                    xsd::DATE | xsd::DATE_TIME | xsd::DATE_TIME_STAMP => {
+                        // Parse ISO 8601 date/datetime
+                        if let Ok(datetime) = chrono::DateTime::parse_from_rfc3339(&lit.value) {
+                            Ok(Term::integer(datetime.day() as i64))
+                        } else if let Ok(date) =
+                            chrono::NaiveDate::parse_from_str(&lit.value, "%Y-%m-%d")
+                        {
+                            Ok(Term::integer(date.day() as i64))
+                        } else if let Ok(datetime) =
+                            chrono::NaiveDateTime::parse_from_str(&lit.value, "%Y-%m-%dT%H:%M:%S")
+                        {
+                            Ok(Term::integer(datetime.day() as i64))
+                        } else {
+                            bail!("Invalid date/dateTime format: {}", lit.value)
+                        }
+                    }
+                    _ => bail!("DAY function can only be applied to date/dateTime literals"),
+                }
+            }
+            _ => bail!("DAY function requires a literal argument"),
+        }
     }
 
     fn builtin_if(&self, args: &[Term]) -> Result<Term> {

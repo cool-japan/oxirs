@@ -167,9 +167,17 @@ pub struct PerformanceMetrics {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TrainingState {
     Untrained,
-    Training { current_epoch: usize, total_epochs: usize },
-    Trained { final_epoch: usize, converged: bool },
-    Failed { error_message: String },
+    Training {
+        current_epoch: usize,
+        total_epochs: usize,
+    },
+    Trained {
+        final_epoch: usize,
+        converged: bool,
+    },
+    Failed {
+        error_message: String,
+    },
 }
 
 /// Advanced neural architecture manager
@@ -485,9 +493,9 @@ impl AdvancedNeuralManager {
         validation_data: Option<TrainingData>,
     ) -> Result<()> {
         let mut architectures = self.architectures.write().await;
-        let architecture = architectures
-            .get_mut(name)
-            .ok_or_else(|| ShaclAiError::Configuration(format!("Architecture {} not found", name)))?;
+        let architecture = architectures.get_mut(name).ok_or_else(|| {
+            ShaclAiError::Configuration(format!("Architecture {} not found", name))
+        })?;
 
         // Cache training data
         {
@@ -506,26 +514,32 @@ impl AdvancedNeuralManager {
 
         // Simulate training process (in a real implementation, this would use an ML framework)
         let start_time = std::time::Instant::now();
-        
+
         // Training simulation based on architecture type
         let success = match &architecture.architecture_type {
             ArchitectureType::Transformer { .. } => {
-                self.simulate_transformer_training(architecture, &training_data, &validation_data).await
+                self.simulate_transformer_training(architecture, &training_data, &validation_data)
+                    .await
             }
             ArchitectureType::GraphAttention { .. } => {
-                self.simulate_gat_training(architecture, &training_data, &validation_data).await
+                self.simulate_gat_training(architecture, &training_data, &validation_data)
+                    .await
             }
             ArchitectureType::VariationalAutoencoder { .. } => {
-                self.simulate_vae_training(architecture, &training_data, &validation_data).await
+                self.simulate_vae_training(architecture, &training_data, &validation_data)
+                    .await
             }
             ArchitectureType::GenerativeAdversarial { .. } => {
-                self.simulate_gan_training(architecture, &training_data, &validation_data).await
+                self.simulate_gan_training(architecture, &training_data, &validation_data)
+                    .await
             }
             ArchitectureType::NeuralODE { .. } => {
-                self.simulate_ode_training(architecture, &training_data, &validation_data).await
+                self.simulate_ode_training(architecture, &training_data, &validation_data)
+                    .await
             }
             ArchitectureType::MemoryAugmented { .. } => {
-                self.simulate_mann_training(architecture, &training_data, &validation_data).await
+                self.simulate_mann_training(architecture, &training_data, &validation_data)
+                    .await
             }
         };
 
@@ -581,7 +595,7 @@ impl AdvancedNeuralManager {
         architecture.metrics.recall = 0.92;
         architecture.metrics.auc_roc = 0.96;
         architecture.metrics.inference_time_ms = 2.5;
-        
+
         true
     }
 
@@ -601,7 +615,7 @@ impl AdvancedNeuralManager {
         architecture.metrics.recall = 0.86;
         architecture.metrics.auc_roc = 0.92;
         architecture.metrics.inference_time_ms = 5.2;
-        
+
         true
     }
 
@@ -615,7 +629,7 @@ impl AdvancedNeuralManager {
         architecture.metrics.training_loss = 0.35;
         architecture.metrics.validation_loss = 0.38;
         architecture.metrics.inference_time_ms = 8.1;
-        
+
         true
     }
 
@@ -629,7 +643,7 @@ impl AdvancedNeuralManager {
         architecture.metrics.training_loss = 0.45;
         architecture.metrics.validation_loss = 0.47;
         architecture.metrics.inference_time_ms = 12.3;
-        
+
         true
     }
 
@@ -649,7 +663,7 @@ impl AdvancedNeuralManager {
         architecture.metrics.recall = 0.87;
         architecture.metrics.auc_roc = 0.94;
         architecture.metrics.inference_time_ms = 15.7;
-        
+
         true
     }
 
@@ -669,7 +683,7 @@ impl AdvancedNeuralManager {
         architecture.metrics.recall = 0.90;
         architecture.metrics.auc_roc = 0.95;
         architecture.metrics.inference_time_ms = 18.4;
-        
+
         true
     }
 }
@@ -687,19 +701,13 @@ mod tests {
     #[tokio::test]
     async fn test_transformer_architecture_creation() {
         let manager = AdvancedNeuralManager::default();
-        
+
         let result = manager
-            .create_transformer_architecture(
-                "test_transformer".to_string(),
-                6,
-                8,
-                512,
-                1024,
-            )
+            .create_transformer_architecture("test_transformer".to_string(), 6, 8, 512, 1024)
             .await;
-        
+
         assert!(result.is_ok());
-        
+
         let architectures = manager.list_architectures().await;
         assert_eq!(architectures.len(), 1);
         assert!(architectures.contains(&"test_transformer".to_string()));
@@ -708,24 +716,20 @@ mod tests {
     #[tokio::test]
     async fn test_graph_attention_architecture_creation() {
         let manager = AdvancedNeuralManager::default();
-        
+
         let result = manager
-            .create_graph_attention_architecture(
-                "test_gat".to_string(),
-                3,
-                4,
-                64,
-                0.1,
-            )
+            .create_graph_attention_architecture("test_gat".to_string(), 3, 4, 64, 0.1)
             .await;
-        
+
         assert!(result.is_ok());
-        
+
         let arch = manager.get_architecture("test_gat").await;
         assert!(arch.is_some());
-        
+
         if let Some(architecture) = arch {
-            if let ArchitectureType::GraphAttention { num_layers, .. } = architecture.architecture_type {
+            if let ArchitectureType::GraphAttention { num_layers, .. } =
+                architecture.architecture_type
+            {
                 assert_eq!(num_layers, 3);
             } else {
                 panic!("Expected GraphAttention architecture");
@@ -736,34 +740,28 @@ mod tests {
     #[tokio::test]
     async fn test_training_simulation() {
         let manager = AdvancedNeuralManager::default();
-        
+
         manager
-            .create_transformer_architecture(
-                "test_training".to_string(),
-                2,
-                4,
-                128,
-                256,
-            )
+            .create_transformer_architecture("test_training".to_string(), 2, 4, 128, 256)
             .await
             .unwrap();
-        
+
         let training_data = TrainingData {
             inputs: vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]],
             targets: vec![vec![0.8], vec![0.9]],
             metadata: HashMap::new(),
             created_at: chrono::Utc::now(),
         };
-        
+
         let result = manager
             .train_architecture("test_training", training_data, None)
             .await;
-        
+
         assert!(result.is_ok());
-        
+
         let metrics = manager.get_metrics("test_training").await;
         assert!(metrics.is_some());
-        
+
         if let Some(m) = metrics {
             assert!(m.training_accuracy > 0.0);
             assert!(m.inference_time_ms > 0.0);

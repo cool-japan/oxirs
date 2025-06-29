@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use oxirs_core::Store;
 
-use crate::{sparql::SparqlConstraint, ConstraintComponentId, Result, Severity};
 use crate::constraints::constraint_context::{ConstraintContext, ConstraintEvaluationResult};
+use crate::{sparql::SparqlConstraint, ConstraintComponentId, Result, Severity};
 
 /// SHACL constraint types
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

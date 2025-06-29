@@ -58,18 +58,22 @@ use oxirs_shacl::{
 };
 
 pub mod advanced_neural;
+pub mod advanced_visualization;
 pub mod ai_orchestrator;
 pub mod analytics;
+pub mod blockchain_validation;
 pub mod collaborative_development;
 pub mod deployment;
 pub mod error_handling;
 pub mod evolution_strategies;
+pub mod explainable_ai;
 pub mod federated_learning;
 pub mod forecasting_models;
 pub mod insights;
 pub mod learning;
 pub mod meta_learning;
 pub mod ml;
+pub mod multimodal_validation;
 pub mod neural_patterns;
 pub mod optimization;
 pub mod optimization_engine;
@@ -84,6 +88,7 @@ pub mod recommendation_systems;
 pub mod self_adaptive_ai;
 pub mod shape;
 pub mod shape_management;
+pub mod streaming_adaptation;
 pub mod system_monitoring;
 pub mod validation_performance;
 pub mod version_control;
@@ -93,6 +98,11 @@ pub use advanced_neural::{
     AdvancedNeuralArchitecture, AdvancedNeuralManager, ArchitectureConfig, ArchitectureType,
     EarlyStoppingConfig, ManagerConfig, ODESolverType, OptimizerType, PerformanceMetrics,
     RegularizationConfig, TrainingData, TrainingState,
+};
+pub use advanced_visualization::{
+    AdvancedVisualizationEngine, ArchitectureVisualizationType, ColorScheme, ExportFormat,
+    ExportResult, InteractiveControls, QuantumVisualizationMode, VisualizationConfig,
+    VisualizationData, VisualizationOutput,
 };
 pub use ai_orchestrator::*;
 pub use analytics::*;
@@ -141,9 +151,27 @@ pub use validation_performance::*;
 pub use version_control::*;
 
 // Ultrathink Mode Exports
+pub use blockchain_validation::{
+    AuditTrailResult, BlockchainEvent, BlockchainValidationConfig, BlockchainValidationResult,
+    BlockchainValidator, CrossChainAggregation, CrossChainValidationResult, PrivacyLevel,
+    PrivateValidationResult, SmartContractValidationResult, ValidationMode,
+};
+pub use explainable_ai::{
+    AdaptationExplanation, AuditTrail, DecisionTree, DecisionType, ExplainableAI,
+    ExplainableAIConfig, ExplanationDepth, FeatureImportanceAnalysis, InterpretabilityReport,
+    KeyFactor, PatternExplanation, QuantumExplanation, ValidationExplanation,
+};
 pub use federated_learning::{
-    FederatedLearningCoordinator, FederatedNode, PrivacyLevel, AggregationStrategy,
-    FederationStats, ConsensusAlgorithm,
+    AggregationStrategy, ConsensusAlgorithm, FederatedLearningCoordinator, FederatedNode,
+    FederationStats, PrivacyLevel as FederatedPrivacyLevel,
+};
+pub use multimodal_validation::{
+    ContentType, CrossModalValidation, MultiModalConfig, MultiModalReport, MultiModalValidator,
+    QualityAssessment, ValidationMode,
+};
+pub use streaming_adaptation::{
+    AdaptationEvent, AdaptationEventType, RealTimeAdaptationStats, RealTimeMetrics, StreamType,
+    StreamingAdaptationEngine, StreamingConfig,
 };
 
 /// Core error type for SHACL-AI operations

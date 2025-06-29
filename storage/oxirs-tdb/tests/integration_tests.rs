@@ -125,7 +125,7 @@ fn test_transaction_isolation() -> Result<()> {
     // tx2 should still see the old value due to snapshot isolation
     let results = store.query_triples(Some(&subject), Some(&predicate), None)?;
     // Note: This would need proper transaction context handling in the actual implementation
-    
+
     store.commit_transaction(tx1)?;
     store.rollback_transaction(tx2)?;
 
@@ -146,7 +146,7 @@ fn test_compression_features() -> Result<()> {
     for i in 0..1000 {
         let subject = Term::iri(&format!("{}{}", base_iri, i));
         let name = Term::literal(&format!("Person {}", i));
-        
+
         store.insert_triple(&subject, &name_pred, &name)?;
         store.insert_triple(&subject, &type_pred, &person_type)?;
     }
@@ -159,10 +159,14 @@ fn test_compression_features() -> Result<()> {
     let start = std::time::Instant::now();
     let results = store.query_triples(None, Some(&type_pred), Some(&person_type))?;
     let query_time = start.elapsed();
-    
+
     assert_eq!(results.len(), 1000);
     // Should complete within reasonable time even with compression
-    assert!(query_time.as_millis() < 100, "Query took {} ms", query_time.as_millis());
+    assert!(
+        query_time.as_millis() < 100,
+        "Query took {} ms",
+        query_time.as_millis()
+    );
 
     Ok(())
 }
@@ -173,31 +177,39 @@ fn test_performance_benchmarks() -> Result<()> {
 
     // Performance test: Insert 10,000 triples and measure time
     let start = std::time::Instant::now();
-    
+
     for i in 0..10_000 {
         let subject = Term::iri(&format!("http://example.org/item{}", i));
         let predicate = Term::iri("http://example.org/hasValue");
         let object = Term::literal(&format!("value{}", i));
-        
+
         store.insert_triple(&subject, &predicate, &object)?;
     }
-    
+
     let insert_time = start.elapsed();
     println!("Inserted 10,000 triples in {} ms", insert_time.as_millis());
-    
+
     // Performance requirement: Should handle bulk inserts efficiently
-    assert!(insert_time.as_secs() < 5, "Bulk insert took {} seconds", insert_time.as_secs());
+    assert!(
+        insert_time.as_secs() < 5,
+        "Bulk insert took {} seconds",
+        insert_time.as_secs()
+    );
 
     // Test query performance
     let start = std::time::Instant::now();
     let results = store.query_triples(None, None, None)?;
     let query_time = start.elapsed();
-    
+
     assert_eq!(results.len(), 10_000);
     println!("Queried 10,000 triples in {} ms", query_time.as_millis());
-    
+
     // Performance requirement: Query should complete under 1 second
-    assert!(query_time.as_millis() < 1000, "Query took {} ms", query_time.as_millis());
+    assert!(
+        query_time.as_millis() < 1000,
+        "Query took {} ms",
+        query_time.as_millis()
+    );
 
     Ok(())
 }
@@ -208,14 +220,21 @@ fn test_health_monitoring() -> Result<()> {
 
     // Test health monitoring functionality
     let health_result = store.check_health();
-    
+
     // Should be healthy for a new store
-    assert!(health_result.is_ok(), "Health check failed: {:?}", health_result);
+    assert!(
+        health_result.is_ok(),
+        "Health check failed: {:?}",
+        health_result
+    );
 
     // Test health report generation
     let report = store.generate_health_report();
     assert!(!report.is_empty(), "Health report should not be empty");
-    assert!(report.contains("Health"), "Report should contain health information");
+    assert!(
+        report.contains("Health"),
+        "Report should contain health information"
+    );
 
     // Test operation statistics
     let stats = store.get_operation_stats();
@@ -233,19 +252,31 @@ fn test_backup_and_integrity() -> Result<()> {
     let subject = Term::iri("http://example.org/backup_test");
     let predicate = Term::iri("http://example.org/value");
     let object = Term::literal("backup test data");
-    
+
     store.insert_triple(&subject, &predicate, &object)?;
 
     // Test database backup creation
     let backup_result = store.create_backup();
-    assert!(backup_result.is_ok(), "Backup creation failed: {:?}", backup_result);
+    assert!(
+        backup_result.is_ok(),
+        "Backup creation failed: {:?}",
+        backup_result
+    );
 
     // Test integrity validation
     let integrity_result = store.validate_integrity();
-    assert!(integrity_result.is_ok(), "Integrity validation failed: {:?}", integrity_result);
-    
+    assert!(
+        integrity_result.is_ok(),
+        "Integrity validation failed: {:?}",
+        integrity_result
+    );
+
     let issues = integrity_result.unwrap();
-    assert!(issues.is_empty(), "Database integrity issues found: {:?}", issues);
+    assert!(
+        issues.is_empty(),
+        "Database integrity issues found: {:?}",
+        issues
+    );
 
     // Test metadata operations
     let metadata = store.get_database_metadata();
@@ -262,7 +293,7 @@ fn test_edge_cases_and_robustness() -> Result<()> {
     let empty_literal = Term::literal("");
     let subject = Term::iri("http://example.org/edge_case");
     let predicate = Term::iri("http://example.org/empty");
-    
+
     let result = store.insert_triple(&subject, &predicate, &empty_literal);
     assert!(result.is_ok(), "Should handle empty literals");
 
@@ -270,21 +301,21 @@ fn test_edge_cases_and_robustness() -> Result<()> {
     let long_value = "x".repeat(10_000);
     let long_literal = Term::literal(&long_value);
     let long_predicate = Term::iri("http://example.org/long_value");
-    
+
     let result = store.insert_triple(&subject, &long_predicate, &long_literal);
     assert!(result.is_ok(), "Should handle long literals");
 
     // Test with Unicode characters
     let unicode_literal = Term::literal("🔥 Unicode test with émojis and spëcial çharacters");
     let unicode_predicate = Term::iri("http://example.org/unicode");
-    
+
     let result = store.insert_triple(&subject, &unicode_predicate, &unicode_literal);
     assert!(result.is_ok(), "Should handle Unicode correctly");
 
     // Test duplicate insertions (should be idempotent)
     store.insert_triple(&subject, &predicate, &empty_literal)?;
     store.insert_triple(&subject, &predicate, &empty_literal)?;
-    
+
     let results = store.query_triples(Some(&subject), Some(&predicate), Some(&empty_literal))?;
     assert_eq!(results.len(), 1, "Duplicate insertions should be handled");
 
@@ -294,12 +325,12 @@ fn test_edge_cases_and_robustness() -> Result<()> {
 #[test]
 fn test_concurrent_operations() -> Result<()> {
     let (store, _temp_dir) = create_test_store()?;
-    
+
     // Test concurrent read operations
     let subject = Term::iri("http://example.org/concurrent");
     let predicate = Term::iri("http://example.org/test");
     let object = Term::literal("concurrent test");
-    
+
     store.insert_triple(&subject, &predicate, &object)?;
 
     // Simulate concurrent reads
@@ -312,7 +343,7 @@ fn test_concurrent_operations() -> Result<()> {
     let protected_result = store.execute_protected("test_operation", || {
         Ok(store.query_triples(None, None, None)?.len())
     });
-    
+
     assert!(protected_result.is_ok(), "Protected operation failed");
 
     Ok(())

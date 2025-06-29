@@ -25,6 +25,12 @@ pub struct MLOptimizerConfig {
     pub model_update_interval: Duration,
     pub max_training_samples: usize,
     pub performance_history_window: Duration,
+    pub use_neural_network: bool,
+    pub neural_network_layers: Vec<usize>,
+    pub neural_learning_rate: f64,
+    pub enable_reinforcement_learning: bool,
+    pub enable_semantic_analysis: bool,
+    pub adaptive_optimization: bool,
 }
 
 impl Default for MLOptimizerConfig {
@@ -37,6 +43,12 @@ impl Default for MLOptimizerConfig {
             model_update_interval: Duration::from_secs(3600), // 1 hour
             max_training_samples: 10000,
             performance_history_window: Duration::from_secs(86400), // 24 hours
+            use_neural_network: false,
+            neural_network_layers: vec![64, 32, 16],
+            neural_learning_rate: 0.001,
+            enable_reinforcement_learning: false,
+            enable_semantic_analysis: true,
+            adaptive_optimization: true,
         }
     }
 }
@@ -80,7 +92,10 @@ impl QueryFeatures {
     /// Create features from a vector
     pub fn from_vector(vector: &[f64]) -> Result<Self> {
         if vector.len() != 12 {
-            return Err(anyhow!("Invalid feature vector length: expected 12, got {}", vector.len()));
+            return Err(anyhow!(
+                "Invalid feature vector length: expected 12, got {}",
+                vector.len()
+            ));
         }
 
         Ok(Self {
@@ -141,6 +156,34 @@ pub enum RecommendationType {
     ReduceComplexity,
 }
 
+/// Advanced neural network model for performance prediction
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NeuralNetworkModel {
+    pub layers: Vec<Layer>,
+    pub learning_rate: f64,
+    pub training_iterations: usize,
+    pub accuracy: f64,
+    pub last_trained: SystemTime,
+}
+
+/// Neural network layer
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Layer {
+    pub weights: Vec<Vec<f64>>,
+    pub biases: Vec<f64>,
+    pub activation: ActivationFunction,
+}
+
+/// Activation functions for neural network
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ActivationFunction {
+    ReLU,
+    Sigmoid,
+    Tanh,
+    Linear,
+    Softmax,
+}
+
 /// Simple linear regression model for performance prediction
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinearRegressionModel {
@@ -166,11 +209,12 @@ impl LinearRegressionModel {
             return 1000.0; // Default prediction
         }
 
-        let prediction = self.bias + features
-            .iter()
-            .zip(&self.weights)
-            .map(|(f, w)| f * w)
-            .sum::<f64>();
+        let prediction = self.bias
+            + features
+                .iter()
+                .zip(&self.weights)
+                .map(|(f, w)| f * w)
+                .sum::<f64>();
 
         prediction.max(0.0) // Ensure non-negative prediction
     }
@@ -187,12 +231,12 @@ impl LinearRegressionModel {
 
             for sample in samples {
                 let features = sample.features.to_vector();
-                
+
                 // Safety check: ensure features match model dimensions
                 if features.len() != self.weights.len() {
                     continue; // Skip this sample if dimensions don't match
                 }
-                
+
                 let prediction = self.predict(&features);
                 let error = prediction - sample.execution_time_ms;
 
@@ -243,7 +287,7 @@ impl FeatureStatistics {
         }
 
         let feature_count = samples[0].features.to_vector().len();
-        
+
         if self.feature_means.is_empty() {
             self.feature_means = vec![0.0; feature_count];
             self.feature_stds = vec![1.0; feature_count];
@@ -261,7 +305,9 @@ impl FeatureStatistics {
         let total_samples = self.sample_count + samples.len();
         for i in 0..feature_count {
             let new_mean = sums[i] / samples.len() as f64;
-            self.feature_means[i] = (self.feature_means[i] * self.sample_count as f64 + new_mean * samples.len() as f64) / total_samples as f64;
+            self.feature_means[i] = (self.feature_means[i] * self.sample_count as f64
+                + new_mean * samples.len() as f64)
+                / total_samples as f64;
         }
 
         // Calculate standard deviations
@@ -298,10 +344,7 @@ impl FeatureStatistics {
 
 impl MLQueryOptimizer {
     /// Create a new ML-enhanced query optimizer
-    pub fn new(
-        config: MLOptimizerConfig,
-        performance_tracker: Arc<PerformanceTracker>,
-    ) -> Self {
+    pub fn new(config: MLOptimizerConfig, performance_tracker: Arc<PerformanceTracker>) -> Self {
         let feature_count = 12; // Number of features in QueryFeatures
 
         Self {
@@ -345,7 +388,8 @@ impl MLQueryOptimizer {
                     }
 
                     // Analyze selection set
-                    let (fc, md, sc, uft, nlc, ac, dc) = self.analyze_selection_set(&operation.selection_set, 1)?;
+                    let (fc, md, sc, uft, nlc, ac, dc) =
+                        self.analyze_selection_set(&operation.selection_set, 1)?;
                     field_count += fc;
                     max_depth = max_depth.max(md);
                     selection_count += sc;
@@ -411,7 +455,9 @@ impl MLQueryOptimizer {
         let predicted_memory_mb = memory_model.predict(&normalized_features);
 
         // Calculate confidence based on training samples
-        let confidence = self.calculate_confidence(&execution_time_model, &memory_model).await;
+        let confidence = self
+            .calculate_confidence(&execution_time_model, &memory_model)
+            .await;
 
         // Estimate cache hit probability and error probability based on complexity
         let cache_hit_probability = self.estimate_cache_hit_probability(&features);
@@ -427,7 +473,10 @@ impl MLQueryOptimizer {
     }
 
     /// Generate optimization recommendations based on ML predictions
-    pub async fn recommend_optimizations(&self, document: &Document) -> Result<Vec<OptimizationRecommendation>> {
+    pub async fn recommend_optimizations(
+        &self,
+        document: &Document,
+    ) -> Result<Vec<OptimizationRecommendation>> {
         let features = self.extract_features(document)?;
         let prediction = self.predict_performance(document).await?;
         let mut recommendations = Vec::new();
@@ -456,7 +505,8 @@ impl MLQueryOptimizer {
         if prediction.cache_hit_probability < 0.3 {
             recommendations.push(OptimizationRecommendation {
                 recommendation_type: RecommendationType::AddCaching,
-                description: "Low cache hit probability, consider adding caching strategy".to_string(),
+                description: "Low cache hit probability, consider adding caching strategy"
+                    .to_string(),
                 estimated_improvement: 30.0,
                 confidence: 0.6,
             });
@@ -465,7 +515,8 @@ impl MLQueryOptimizer {
         if features.field_count > 20.0 {
             recommendations.push(OptimizationRecommendation {
                 recommendation_type: RecommendationType::ParallelizeFields,
-                description: "Many fields requested, consider parallelizing field resolution".to_string(),
+                description: "Many fields requested, consider parallelizing field resolution"
+                    .to_string(),
                 estimated_improvement: 25.0,
                 confidence: 0.7,
             });
@@ -475,7 +526,11 @@ impl MLQueryOptimizer {
     }
 
     /// Record query execution for learning
-    pub async fn record_execution(&self, document: &Document, metrics: &OperationMetrics) -> Result<()> {
+    pub async fn record_execution(
+        &self,
+        document: &Document,
+        metrics: &OperationMetrics,
+    ) -> Result<()> {
         if !self.config.learning_enabled {
             return Ok(());
         }
@@ -518,9 +573,8 @@ impl MLQueryOptimizer {
         let recent_samples: Vec<_> = samples
             .iter()
             .filter(|sample| {
-                sample.timestamp
-                    .elapsed()
-                    .unwrap_or(Duration::from_secs(0)) < self.config.performance_history_window
+                sample.timestamp.elapsed().unwrap_or(Duration::from_secs(0))
+                    < self.config.performance_history_window
             })
             .cloned()
             .collect();
@@ -576,7 +630,8 @@ impl MLQueryOptimizer {
                     directive_count += field.directives.len();
 
                     if let Some(ref sub_selection_set) = field.selection_set {
-                        let (fc, md, sc, uft, nlc, ac, dc) = self.analyze_selection_set(sub_selection_set, depth + 1)?;
+                        let (fc, md, sc, uft, nlc, ac, dc) =
+                            self.analyze_selection_set(sub_selection_set, depth + 1)?;
                         field_count += fc;
                         max_depth = max_depth.max(md);
                         selection_count += sc;
@@ -593,7 +648,8 @@ impl MLQueryOptimizer {
                 }
                 Selection::InlineFragment(fragment) => {
                     directive_count += fragment.directives.len();
-                    let (fc, md, sc, uft, nlc, ac, dc) = self.analyze_selection_set(&fragment.selection_set, depth)?;
+                    let (fc, md, sc, uft, nlc, ac, dc) =
+                        self.analyze_selection_set(&fragment.selection_set, depth)?;
                     field_count += fc;
                     max_depth = max_depth.max(md);
                     selection_count += sc;
@@ -609,13 +665,23 @@ impl MLQueryOptimizer {
             }
         }
 
-        Ok((field_count, max_depth, selection_count, unique_field_types, nested_list_count, argument_count, directive_count))
+        Ok((
+            field_count,
+            max_depth,
+            selection_count,
+            unique_field_types,
+            nested_list_count,
+            argument_count,
+            directive_count,
+        ))
     }
 
     /// Estimate result size based on query complexity
     fn estimate_result_size(&self, complexity: &QueryComplexity) -> f64 {
         // Simple heuristic based on field count and depth
-        (complexity.field_count as f64 * complexity.depth as f64).log10().max(1.0)
+        (complexity.field_count as f64 * complexity.depth as f64)
+            .log10()
+            .max(1.0)
     }
 
     /// Estimate cache hit probability based on query features
@@ -638,8 +704,11 @@ impl MLQueryOptimizer {
         execution_model: &LinearRegressionModel,
         memory_model: &LinearRegressionModel,
     ) -> f64 {
-        let min_samples = execution_model.training_samples.min(memory_model.training_samples);
-        let confidence = (min_samples as f64 / self.config.min_samples_for_learning as f64).min(1.0);
+        let min_samples = execution_model
+            .training_samples
+            .min(memory_model.training_samples);
+        let confidence =
+            (min_samples as f64 / self.config.min_samples_for_learning as f64).min(1.0);
         confidence.max(0.1)
     }
 }
@@ -654,11 +723,14 @@ mod tests {
     fn test_linear_regression_model() {
         let feature_count = 12; // Match QueryFeatures vector length
         let mut model = LinearRegressionModel::new(feature_count);
-        
+
         // Create simple training data
         let samples = vec![
             TrainingSample {
-                features: QueryFeatures::from_vector(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]).unwrap(),
+                features: QueryFeatures::from_vector(&[
+                    1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
+                ])
+                .unwrap(),
                 execution_time_ms: 100.0,
                 memory_usage_mb: 0.0,
                 cache_hit: false,
@@ -666,7 +738,10 @@ mod tests {
                 timestamp: SystemTime::now(),
             },
             TrainingSample {
-                features: QueryFeatures::from_vector(&[2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0]).unwrap(),
+                features: QueryFeatures::from_vector(&[
+                    2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0,
+                ])
+                .unwrap(),
                 execution_time_ms: 200.0,
                 memory_usage_mb: 0.0,
                 cache_hit: false,
@@ -678,9 +753,11 @@ mod tests {
         model.train(&samples, 0.01, 100);
 
         // Test prediction with a feature vector
-        let test_features = [1.5, 3.0, 4.5, 6.0, 7.5, 9.0, 10.5, 12.0, 13.5, 15.0, 16.5, 18.0];
+        let test_features = [
+            1.5, 3.0, 4.5, 6.0, 7.5, 9.0, 10.5, 12.0, 13.5, 15.0, 16.5, 18.0,
+        ];
         let prediction = model.predict(&test_features);
-        
+
         // Since we're training with limited data, just ensure we get a reasonable prediction
         assert!(prediction >= 0.0, "Prediction should be non-negative");
         assert!(prediction < 1000.0, "Prediction should be reasonable");
@@ -689,10 +766,13 @@ mod tests {
     #[test]
     fn test_feature_statistics() {
         let mut stats = FeatureStatistics::default();
-        
+
         let samples = vec![
             TrainingSample {
-                features: QueryFeatures::from_vector(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]).unwrap(),
+                features: QueryFeatures::from_vector(&[
+                    1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
+                ])
+                .unwrap(),
                 execution_time_ms: 100.0,
                 memory_usage_mb: 10.0,
                 cache_hit: false,
@@ -700,7 +780,10 @@ mod tests {
                 timestamp: SystemTime::now(),
             },
             TrainingSample {
-                features: QueryFeatures::from_vector(&[2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0]).unwrap(),
+                features: QueryFeatures::from_vector(&[
+                    2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0,
+                ])
+                .unwrap(),
                 execution_time_ms: 200.0,
                 memory_usage_mb: 20.0,
                 cache_hit: true,
@@ -716,7 +799,9 @@ mod tests {
         assert_eq!(stats.sample_count, 2);
 
         // Test normalization
-        let normalized = stats.normalize(&[1.5, 3.0, 4.5, 6.0, 7.5, 9.0, 10.5, 12.0, 13.5, 15.0, 16.5, 18.0]);
+        let normalized = stats.normalize(&[
+            1.5, 3.0, 4.5, 6.0, 7.5, 9.0, 10.5, 12.0, 13.5, 15.0, 16.5, 18.0,
+        ]);
         assert_eq!(normalized.len(), 12);
     }
 
@@ -724,40 +809,34 @@ mod tests {
     async fn test_ml_optimizer_creation() {
         let config = MLOptimizerConfig::default();
         let performance_tracker = Arc::new(PerformanceTracker::new());
-        
+
         let optimizer = MLQueryOptimizer::new(config, performance_tracker);
-        
+
         // Test with a simple document
         let document = Document {
-            definitions: vec![
-                Definition::Operation(OperationDefinition {
-                    operation_type: OperationType::Query,
-                    name: Some("TestQuery".to_string()),
-                    variable_definitions: vec![],
-                    directives: vec![],
-                    selection_set: SelectionSet {
-                        selections: vec![
-                            Selection::Field(Field {
+            definitions: vec![Definition::Operation(OperationDefinition {
+                operation_type: OperationType::Query,
+                name: Some("TestQuery".to_string()),
+                variable_definitions: vec![],
+                directives: vec![],
+                selection_set: SelectionSet {
+                    selections: vec![Selection::Field(Field {
+                        alias: None,
+                        name: "user".to_string(),
+                        arguments: vec![],
+                        directives: vec![],
+                        selection_set: Some(SelectionSet {
+                            selections: vec![Selection::Field(Field {
                                 alias: None,
-                                name: "user".to_string(),
+                                name: "id".to_string(),
                                 arguments: vec![],
                                 directives: vec![],
-                                selection_set: Some(SelectionSet {
-                                    selections: vec![
-                                        Selection::Field(Field {
-                                            alias: None,
-                                            name: "id".to_string(),
-                                            arguments: vec![],
-                                            directives: vec![],
-                                            selection_set: None,
-                                        }),
-                                    ],
-                                }),
-                            }),
-                        ],
-                    },
-                }),
-            ],
+                                selection_set: None,
+                            })],
+                        }),
+                    })],
+                },
+            })],
         };
 
         let features = optimizer.extract_features(&document).unwrap();

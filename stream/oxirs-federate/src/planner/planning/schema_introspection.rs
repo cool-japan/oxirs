@@ -113,16 +113,13 @@ impl SchemaIntrospector {
             }
         "#;
 
-        let response = Self::execute_introspection_query(service_endpoint, introspection_query)
-            .await?;
+        let response =
+            Self::execute_introspection_query(service_endpoint, introspection_query).await?;
         Self::parse_introspection_response(response)
     }
 
     /// Execute introspection query against a GraphQL service
-    async fn execute_introspection_query(
-        endpoint: &str,
-        query: &str,
-    ) -> Result<serde_json::Value> {
+    async fn execute_introspection_query(endpoint: &str, query: &str) -> Result<serde_json::Value> {
         let client = reqwest::Client::new();
         let request_body = serde_json::json!({
             "query": query
@@ -147,9 +144,7 @@ impl SchemaIntrospector {
     }
 
     /// Parse introspection response to extract schema capabilities
-    fn parse_introspection_response(
-        response: serde_json::Value,
-    ) -> Result<SchemaCapabilities> {
+    fn parse_introspection_response(response: serde_json::Value) -> Result<SchemaCapabilities> {
         let schema = response["data"]["__schema"]
             .as_object()
             .ok_or_else(|| anyhow!("Invalid introspection response: missing schema"))?;
@@ -375,13 +370,15 @@ impl SchemaIntrospector {
         };
 
         // Check federation version compatibility
-        if !Self::is_version_compatible(&service_info.capabilities.federation_version, &requirements.min_federation_version) {
+        if !Self::is_version_compatible(
+            &service_info.capabilities.federation_version,
+            &requirements.min_federation_version,
+        ) {
             report.is_compatible = false;
             report.version_mismatch = true;
             report.warnings.push(format!(
                 "Federation version {} is below minimum required {}",
-                service_info.capabilities.federation_version,
-                requirements.min_federation_version
+                service_info.capabilities.federation_version, requirements.min_federation_version
             ));
         }
 
@@ -391,19 +388,29 @@ impl SchemaIntrospector {
             report.missing_features.push("entities".to_string());
         }
 
-        if requirements.requires_entity_interfaces && !service_info.capabilities.supports_entity_interfaces {
-            report.warnings.push("Entity interfaces not supported".to_string());
+        if requirements.requires_entity_interfaces
+            && !service_info.capabilities.supports_entity_interfaces
+        {
+            report
+                .warnings
+                .push("Entity interfaces not supported".to_string());
         }
 
-        if requirements.requires_progressive_override && !service_info.capabilities.supports_progressive_override {
-            report.warnings.push("Progressive override not supported".to_string());
+        if requirements.requires_progressive_override
+            && !service_info.capabilities.supports_progressive_override
+        {
+            report
+                .warnings
+                .push("Progressive override not supported".to_string());
         }
 
         // Check entity types
         for required_entity in &requirements.required_entity_types {
             if !service_info.entity_types.contains(required_entity) {
                 report.is_compatible = false;
-                report.missing_features.push(format!("entity type: {}", required_entity));
+                report
+                    .missing_features
+                    .push(format!("entity type: {}", required_entity));
             }
         }
 
@@ -507,19 +514,49 @@ impl SchemaIntrospector {
     pub fn generate_capability_summary(capabilities: &SchemaCapabilities) -> String {
         let mut summary = String::new();
 
-        summary.push_str(&format!("Federation Support: {}\n", 
-            if capabilities.supports_federation { "Yes" } else { "No" }));
-        
-        summary.push_str(&format!("Subscriptions: {}\n",
-            if capabilities.supports_subscriptions { "Yes" } else { "No" }));
-        
-        summary.push_str(&format!("Defer/Stream: {}\n",
-            if capabilities.supports_defer_stream { "Yes" } else { "No" }));
-        
-        summary.push_str(&format!("Entity Types: {}\n", capabilities.entity_types.len()));
-        summary.push_str(&format!("Custom Directives: {}\n", capabilities.custom_directives.len()));
-        summary.push_str(&format!("Custom Scalars: {}\n", capabilities.scalar_types.len()));
-        summary.push_str(&format!("Estimated Complexity: {:.1}\n", capabilities.estimated_complexity));
+        summary.push_str(&format!(
+            "Federation Support: {}\n",
+            if capabilities.supports_federation {
+                "Yes"
+            } else {
+                "No"
+            }
+        ));
+
+        summary.push_str(&format!(
+            "Subscriptions: {}\n",
+            if capabilities.supports_subscriptions {
+                "Yes"
+            } else {
+                "No"
+            }
+        ));
+
+        summary.push_str(&format!(
+            "Defer/Stream: {}\n",
+            if capabilities.supports_defer_stream {
+                "Yes"
+            } else {
+                "No"
+            }
+        ));
+
+        summary.push_str(&format!(
+            "Entity Types: {}\n",
+            capabilities.entity_types.len()
+        ));
+        summary.push_str(&format!(
+            "Custom Directives: {}\n",
+            capabilities.custom_directives.len()
+        ));
+        summary.push_str(&format!(
+            "Custom Scalars: {}\n",
+            capabilities.scalar_types.len()
+        ));
+        summary.push_str(&format!(
+            "Estimated Complexity: {:.1}\n",
+            capabilities.estimated_complexity
+        ));
 
         if !capabilities.entity_types.is_empty() {
             summary.push_str("Entity Types: ");

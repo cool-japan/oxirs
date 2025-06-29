@@ -865,13 +865,16 @@ impl QueryParser {
             self.skip_whitespace_and_newlines();
             let object = self.parse_term()?;
 
-            // Convert property path pattern to BGP with property path algebra
-            // For now, we'll treat it as a regular triple pattern with a path term
-            // TODO: Create separate handling for property paths in the algebra
+            // Convert property path pattern to proper property path algebra
+            // Create a PropertyPathPattern which will be handled by the algebra
+            let path_pattern = PropertyPathPattern::new(subject, path, object);
+
+            // For now, return a special triple pattern that indicates property path processing
+            // The actual property path evaluation would be handled in the algebra/executor
             return Ok(TriplePattern::new(
-                subject,
-                Term::Iri(NamedNode::new_unchecked("__property_path__")), // Placeholder
-                object,
+                path_pattern.subject.clone(),
+                Term::PropertyPath(path_pattern.path.clone()),
+                path_pattern.object.clone(),
             ));
         }
 
@@ -1735,13 +1738,41 @@ impl QueryParser {
                 Some(Token::With) => {
                     // WITH clause followed by UPDATE operation
                     self.advance(); // consume WITH
-                    let _graph = self.expect_iri()?;
-                    // TODO: Handle WITH clause properly
-                    match self.peek() {
+                    let graph_iri = self.expect_iri()?;
+                    let graph_ref = GraphReference::Iri(graph_iri);
+
+                    // Parse the operation and set the WITH graph as the default
+                    let mut operation = match self.peek() {
                         Some(Token::Insert) => self.parse_insert_operation()?,
                         Some(Token::Delete) => self.parse_delete_operation()?,
                         _ => bail!("Expected INSERT or DELETE after WITH clause"),
+                    };
+
+                    // Apply the WITH graph to the operation
+                    match &mut operation {
+                        UpdateOperation::DeleteInsertWhere { using, .. } => {
+                            if using.is_none() {
+                                *using = Some(vec![graph_ref]);
+                            }
+                        }
+                        UpdateOperation::InsertWhere { template, .. } => {
+                            // Set default graph for all quads in template
+                            for quad in template {
+                                if quad.graph.is_none() {
+                                    quad.graph = Some(graph_ref.clone());
+                                }
+                            }
+                        }
+                        UpdateOperation::DeleteWhere { .. } => {
+                            // WITH clause affects the evaluation context
+                            // This would be handled at execution time
+                        }
+                        _ => {
+                            // Other operations don't support WITH clause in the same way
+                        }
                     }
+
+                    operation
                 }
                 Some(Token::Eof) => break,
                 _ => bail!("Expected UPDATE operation"),

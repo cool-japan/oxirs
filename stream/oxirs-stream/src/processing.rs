@@ -454,7 +454,7 @@ impl EventWindow {
 
     fn update_aggregations(&mut self, event: &StreamEvent) {
         for aggregate in &self.config.aggregates {
-            let key = format!("{:?}", aggregate);
+            let key = self.get_aggregate_key(aggregate);
 
             match aggregate {
                 AggregateFunction::Count => {
@@ -550,6 +550,21 @@ impl EventWindow {
                     warn!("Custom aggregation not yet implemented");
                 }
             }
+        }
+    }
+
+    /// Generate consistent aggregation keys
+    fn get_aggregate_key(&self, aggregate: &AggregateFunction) -> String {
+        match aggregate {
+            AggregateFunction::Count => "Count".to_string(),
+            AggregateFunction::Sum { field } => format!("Sum {{ field: \"{}\" }}", field),
+            AggregateFunction::Average { field } => format!("Average {{ field: \"{}\" }}", field),
+            AggregateFunction::Min { field } => format!("Min {{ field: \"{}\" }}", field),
+            AggregateFunction::Max { field } => format!("Max {{ field: \"{}\" }}", field),
+            AggregateFunction::First => "First".to_string(),
+            AggregateFunction::Last => "Last".to_string(),
+            AggregateFunction::Distinct { field } => format!("Distinct {{ field: \"{}\" }}", field),
+            AggregateFunction::Custom { name, .. } => format!("Custom {{ name: \"{}\" }}", name),
         }
     }
 
@@ -805,9 +820,12 @@ impl EventWindow {
 
         for (key, state) in &self.aggregation_state {
             let value = match state {
-                AggregationState::Count(count) => serde_json::Value::Number((*count).into()),
+                AggregationState::Count(count) => {
+                    serde_json::Value::Number(serde_json::Number::from(*count))
+                }
                 AggregationState::Sum(sum) => serde_json::Value::Number(
-                    serde_json::Number::from_f64(*sum).unwrap_or_else(|| 0.into()),
+                    serde_json::Number::from_f64(*sum)
+                        .unwrap_or_else(|| serde_json::Number::from(0)),
                 ),
                 AggregationState::Average { sum, count } => {
                     let avg = if *count > 0 {
@@ -816,30 +834,35 @@ impl EventWindow {
                         0.0
                     };
                     serde_json::Value::Number(
-                        serde_json::Number::from_f64(avg).unwrap_or_else(|| 0.into()),
+                        serde_json::Number::from_f64(avg)
+                            .unwrap_or_else(|| serde_json::Number::from(0)),
                     )
                 }
                 AggregationState::Min(min) => {
-                    if min.is_infinite() {
+                    if *min == f64::INFINITY {
                         serde_json::Value::Null // No values seen yet
                     } else {
                         serde_json::Value::Number(
-                            serde_json::Number::from_f64(*min).unwrap_or_else(|| 0.into()),
+                            serde_json::Number::from_f64(*min)
+                                .unwrap_or_else(|| serde_json::Number::from(0)),
                         )
                     }
                 }
                 AggregationState::Max(max) => {
-                    if max.is_infinite() {
+                    if *max == f64::NEG_INFINITY {
                         serde_json::Value::Null // No values seen yet
                     } else {
                         serde_json::Value::Number(
-                            serde_json::Number::from_f64(*max).unwrap_or_else(|| 0.into()),
+                            serde_json::Number::from_f64(*max)
+                                .unwrap_or_else(|| serde_json::Number::from(0)),
                         )
                     }
                 }
                 AggregationState::First(_) => serde_json::Value::String("first_event".to_string()),
                 AggregationState::Last(_) => serde_json::Value::String("last_event".to_string()),
-                AggregationState::Distinct(set) => serde_json::Value::Number(set.len().into()),
+                AggregationState::Distinct(set) => {
+                    serde_json::Value::Number(serde_json::Number::from(set.len() as u64))
+                }
             };
 
             aggregations.insert(key.clone(), value);

@@ -230,7 +230,9 @@ impl DirtyPageTracker {
 
     /// Mark a page as dirty
     pub fn mark_dirty(&self, page_id: PageId, lsn: u64, page_size: usize) -> Result<()> {
-        let mut dirty_pages = self.dirty_pages.write()
+        let mut dirty_pages = self
+            .dirty_pages
+            .write()
             .map_err(|_| anyhow!("Failed to acquire dirty pages lock"))?;
 
         match dirty_pages.get_mut(&page_id) {
@@ -248,7 +250,9 @@ impl DirtyPageTracker {
 
     /// Get all dirty pages since a specific LSN (for incremental checkpoints)
     pub fn get_dirty_pages_since_lsn(&self, lsn: u64) -> Result<Vec<PageId>> {
-        let dirty_pages = self.dirty_pages.read()
+        let dirty_pages = self
+            .dirty_pages
+            .read()
             .map_err(|_| anyhow!("Failed to acquire dirty pages lock"))?;
 
         let pages = dirty_pages
@@ -262,7 +266,9 @@ impl DirtyPageTracker {
 
     /// Get all dirty pages
     pub fn get_all_dirty_pages(&self) -> Result<Vec<PageId>> {
-        let dirty_pages = self.dirty_pages.read()
+        let dirty_pages = self
+            .dirty_pages
+            .read()
             .map_err(|_| anyhow!("Failed to acquire dirty pages lock"))?;
 
         Ok(dirty_pages.keys().copied().collect())
@@ -270,7 +276,9 @@ impl DirtyPageTracker {
 
     /// Mark pages as clean (after successful checkpoint)
     pub fn mark_pages_clean(&self, pages: &[PageId]) -> Result<()> {
-        let mut dirty_pages = self.dirty_pages.write()
+        let mut dirty_pages = self
+            .dirty_pages
+            .write()
             .map_err(|_| anyhow!("Failed to acquire dirty pages lock"))?;
 
         for &page_id in pages {
@@ -286,14 +294,18 @@ impl DirtyPageTracker {
 
     /// Get dirty page statistics
     pub fn get_stats(&self) -> Result<DirtyPageStats> {
-        let stats = self.stats.read()
+        let stats = self
+            .stats
+            .read()
             .map_err(|_| anyhow!("Failed to acquire stats lock"))?;
         Ok(stats.clone())
     }
 
     /// Record checkpoint completion
     pub fn record_checkpoint(&self, checkpoint: CheckpointMetadata) -> Result<()> {
-        let mut history = self.checkpoint_history.write()
+        let mut history = self
+            .checkpoint_history
+            .write()
             .map_err(|_| anyhow!("Failed to acquire checkpoint history lock"))?;
 
         history.push_back(checkpoint);
@@ -308,25 +320,23 @@ impl DirtyPageTracker {
 
     /// Get the most recent complete checkpoint
     pub fn get_latest_checkpoint(&self) -> Result<Option<CheckpointMetadata>> {
-        let history = self.checkpoint_history.read()
+        let history = self
+            .checkpoint_history
+            .read()
             .map_err(|_| anyhow!("Failed to acquire checkpoint history lock"))?;
 
-        Ok(history
-            .iter()
-            .rev()
-            .find(|cp| cp.is_complete())
-            .cloned())
+        Ok(history.iter().rev().find(|cp| cp.is_complete()).cloned())
     }
 
     /// Determine if incremental checkpoint is beneficial
     pub fn should_use_incremental_checkpoint(&self, threshold_ratio: f64) -> Result<bool> {
         let latest_checkpoint = self.get_latest_checkpoint()?;
-        
+
         if let Some(checkpoint) = latest_checkpoint {
             let all_dirty = self.get_all_dirty_pages()?.len();
-            let incremental_dirty = self.get_dirty_pages_since_lsn(
-                checkpoint.end_lsn.unwrap_or(checkpoint.start_lsn)
-            )?.len();
+            let incremental_dirty = self
+                .get_dirty_pages_since_lsn(checkpoint.end_lsn.unwrap_or(checkpoint.start_lsn))?
+                .len();
 
             let ratio = if all_dirty > 0 {
                 incremental_dirty as f64 / all_dirty as f64
@@ -342,22 +352,26 @@ impl DirtyPageTracker {
 
     /// Update dirty page statistics
     fn update_stats(&self) -> Result<()> {
-        let dirty_pages = self.dirty_pages.read()
+        let dirty_pages = self
+            .dirty_pages
+            .read()
             .map_err(|_| anyhow!("Failed to acquire dirty pages lock"))?;
 
-        let mut stats = self.stats.write()
+        let mut stats = self
+            .stats
+            .write()
             .map_err(|_| anyhow!("Failed to acquire stats lock"))?;
 
         stats.total_dirty_pages = dirty_pages.len();
-        stats.hot_pages = dirty_pages.values()
+        stats.hot_pages = dirty_pages
+            .values()
             .filter(|info| info.is_hot_page(100)) // 100 modifications threshold
             .count();
-        stats.total_modifications = dirty_pages.values()
+        stats.total_modifications = dirty_pages
+            .values()
             .map(|info| info.modification_count)
             .sum();
-        stats.bytes_dirty = dirty_pages.values()
-            .map(|info| info.page_size as u64)
-            .sum();
+        stats.bytes_dirty = dirty_pages.values().map(|info| info.page_size as u64).sum();
 
         Ok(())
     }
@@ -392,7 +406,7 @@ impl Default for CheckpointConfig {
             checkpoint_interval: Duration::from_secs(300), // 5 minutes
             max_dirty_pages: 10000,
             max_log_size_bytes: 100 * 1024 * 1024, // 100MB
-            incremental_threshold_ratio: 0.3, // 30% of pages changed
+            incremental_threshold_ratio: 0.3,      // 30% of pages changed
             enable_fuzzy_checkpoints: true,
             max_checkpoint_duration: Duration::from_secs(60), // 1 minute
             checkpoint_threads: 2,
@@ -477,14 +491,17 @@ impl OnlineCheckpointManager {
     pub fn stop(&mut self) -> Result<()> {
         // Signal shutdown
         {
-            let mut shutdown = self.shutdown.lock()
+            let mut shutdown = self
+                .shutdown
+                .lock()
                 .map_err(|_| anyhow!("Failed to acquire shutdown lock"))?;
             *shutdown = true;
         }
 
         // Wait for thread to complete
         if let Some(handle) = self.thread_pool.take() {
-            handle.join()
+            handle
+                .join()
                 .map_err(|_| anyhow!("Failed to join checkpoint thread"))?;
         }
 
@@ -504,7 +521,9 @@ impl OnlineCheckpointManager {
 
         // Check if checkpoint is already in progress
         {
-            let active = self.active_checkpoint.lock()
+            let active = self
+                .active_checkpoint
+                .lock()
                 .map_err(|_| anyhow!("Failed to acquire active checkpoint lock"))?;
             if active.is_some() {
                 return Err(anyhow!("Checkpoint already in progress"));
@@ -513,9 +532,10 @@ impl OnlineCheckpointManager {
 
         // Determine checkpoint type if not specified
         let actual_type = if checkpoint_type == CheckpointType::Scheduled {
-            if self.dirty_page_tracker.should_use_incremental_checkpoint(
-                self.config.incremental_threshold_ratio
-            )? {
+            if self
+                .dirty_page_tracker
+                .should_use_incremental_checkpoint(self.config.incremental_threshold_ratio)?
+            {
                 CheckpointType::Incremental
             } else {
                 CheckpointType::Full
@@ -526,7 +546,9 @@ impl OnlineCheckpointManager {
 
         // Generate checkpoint ID
         let checkpoint_id = {
-            let mut next_id = self.next_checkpoint_id.lock()
+            let mut next_id = self
+                .next_checkpoint_id
+                .lock()
                 .map_err(|_| anyhow!("Failed to acquire checkpoint ID lock"))?;
             let id = *next_id;
             *next_id += 1;
@@ -539,7 +561,7 @@ impl OnlineCheckpointManager {
             CheckpointType::Incremental => {
                 if let Some(last_checkpoint) = self.dirty_page_tracker.get_latest_checkpoint()? {
                     self.dirty_page_tracker.get_dirty_pages_since_lsn(
-                        last_checkpoint.end_lsn.unwrap_or(last_checkpoint.start_lsn)
+                        last_checkpoint.end_lsn.unwrap_or(last_checkpoint.start_lsn),
                     )?
                 } else {
                     self.dirty_page_tracker.get_all_dirty_pages()?
@@ -568,7 +590,9 @@ impl OnlineCheckpointManager {
 
         // Mark checkpoint as active
         {
-            let mut active = self.active_checkpoint.lock()
+            let mut active = self
+                .active_checkpoint
+                .lock()
                 .map_err(|_| anyhow!("Failed to acquire active checkpoint lock"))?;
             *active = Some(checkpoint.clone());
         }
@@ -582,7 +606,9 @@ impl OnlineCheckpointManager {
 
         // Clear active checkpoint
         {
-            let mut active = self.active_checkpoint.lock()
+            let mut active = self
+                .active_checkpoint
+                .lock()
                 .map_err(|_| anyhow!("Failed to acquire active checkpoint lock"))?;
             *active = None;
         }
@@ -591,10 +617,11 @@ impl OnlineCheckpointManager {
             Ok(()) => {
                 // Update statistics
                 self.update_checkpoint_stats(&checkpoint)?;
-                
+
                 // Record in history
-                self.dirty_page_tracker.record_checkpoint(checkpoint.clone())?;
-                
+                self.dirty_page_tracker
+                    .record_checkpoint(checkpoint.clone())?;
+
                 // Mark pages as clean
                 self.dirty_page_tracker.mark_pages_clean(&dirty_pages)?;
 
@@ -609,7 +636,9 @@ impl OnlineCheckpointManager {
             Err(e) => {
                 // Update failure statistics
                 {
-                    let mut stats = self.stats.write()
+                    let mut stats = self
+                        .stats
+                        .write()
                         .map_err(|_| anyhow!("Failed to acquire stats lock"))?;
                     stats.failed_checkpoints += 1;
                 }
@@ -689,7 +718,7 @@ impl OnlineCheckpointManager {
         // Check various triggers
         let dirty_page_trigger = dirty_stats.total_dirty_pages > self.config.max_dirty_pages;
         let size_trigger = dirty_stats.bytes_dirty > self.config.max_log_size_bytes;
-        
+
         // Time-based trigger would be handled by the scheduler thread
 
         Ok(dirty_page_trigger || size_trigger)
@@ -697,7 +726,9 @@ impl OnlineCheckpointManager {
 
     /// Update checkpoint statistics
     fn update_checkpoint_stats(&self, checkpoint: &CheckpointMetadata) -> Result<()> {
-        let mut stats = self.stats.write()
+        let mut stats = self
+            .stats
+            .write()
             .map_err(|_| anyhow!("Failed to acquire stats lock"))?;
 
         stats.total_checkpoints += 1;
@@ -709,8 +740,10 @@ impl OnlineCheckpointManager {
         }
 
         if let Some(duration_ms) = checkpoint.duration_ms {
-            let total_time = stats.average_checkpoint_time_ms * (stats.total_checkpoints - 1) as f64;
-            stats.average_checkpoint_time_ms = (total_time + duration_ms as f64) / stats.total_checkpoints as f64;
+            let total_time =
+                stats.average_checkpoint_time_ms * (stats.total_checkpoints - 1) as f64;
+            stats.average_checkpoint_time_ms =
+                (total_time + duration_ms as f64) / stats.total_checkpoints as f64;
         }
 
         stats.last_checkpoint_time = checkpoint.completed_at;
@@ -727,7 +760,9 @@ impl OnlineCheckpointManager {
 
     /// Get checkpoint statistics
     pub fn get_stats(&self) -> Result<CheckpointManagerStats> {
-        let stats = self.stats.read()
+        let stats = self
+            .stats
+            .read()
             .map_err(|_| anyhow!("Failed to acquire stats lock"))?;
         Ok(stats.clone())
     }
@@ -741,7 +776,7 @@ impl OnlineCheckpointManager {
     pub fn wait_for_checkpoint_completion(&self, timeout: Duration) -> Result<bool> {
         let (lock, cvar) = &*self.checkpoint_complete;
         let mut completed = lock.lock().unwrap();
-        
+
         let result = cvar.wait_timeout(completed, timeout).unwrap();
         Ok(*result.0)
     }
@@ -834,7 +869,7 @@ mod tests {
         assert_eq!(info.last_modified_lsn, 101);
 
         assert!(!info.is_hot_page(100)); // Below threshold
-        
+
         // Make it a hot page
         for i in 0..150 {
             info.update(102 + i);
@@ -852,7 +887,9 @@ mod tests {
         manager.mark_page_dirty(2, 101, 8192).unwrap();
 
         // Create a checkpoint
-        let checkpoint = manager.create_checkpoint(CheckpointType::Full, true).unwrap();
+        let checkpoint = manager
+            .create_checkpoint(CheckpointType::Full, true)
+            .unwrap();
         assert!(checkpoint.is_complete());
         assert_eq!(checkpoint.checkpoint_type, CheckpointType::Full);
 
@@ -867,7 +904,8 @@ mod tests {
         let tracker = DirtyPageTracker::new(10);
 
         // Create a full checkpoint
-        let checkpoint = CheckpointMetadata::new(1, CheckpointType::Full, 100, vec![], vec![1, 2, 3, 4, 5]);
+        let checkpoint =
+            CheckpointMetadata::new(1, CheckpointType::Full, 100, vec![], vec![1, 2, 3, 4, 5]);
         let mut checkpoint = checkpoint;
         checkpoint.complete(105, 1024, 0x12345);
         tracker.record_checkpoint(checkpoint).unwrap();

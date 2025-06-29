@@ -109,6 +109,9 @@ pub enum ShaclError {
     #[error("Property path error: {0}")]
     PropertyPath(String),
 
+    #[error("Path evaluation error: {0}")]
+    PathEvaluationError(String),
+
     #[error("SPARQL execution error: {0}")]
     SparqlExecution(String),
 
@@ -138,6 +141,9 @@ pub enum ShaclError {
 
     #[error("Security violation: {0}")]
     SecurityViolation(String),
+
+    #[error("Shape validation error: {0}")]
+    ShapeValidation(String),
 }
 
 /// Result type alias for SHACL operations
@@ -664,6 +670,15 @@ impl Validator {
         // 7. Validate inheritance references
         self.validate_inheritance_references(shape)?;
 
+        // 8. Enhanced SHACL specification compliance
+        self.validate_shacl_compliance(shape)?;
+
+        // 9. Validate constraint parameter restrictions
+        self.validate_constraint_parameters(shape)?;
+
+        // 10. Validate logical constraint consistency
+        self.validate_logical_consistency(shape)?;
+
         Ok(())
     }
 
@@ -933,6 +948,236 @@ impl Validator {
                 // This is a warning, not an error, as the parent shape might be defined later
             }
         }
+        Ok(())
+    }
+
+    /// Enhanced SHACL specification compliance validation
+    fn validate_shacl_compliance(&self, shape: &Shape) -> Result<()> {
+        // Check for required properties on property shapes
+        if shape.is_property_shape() {
+            if shape.path.is_none() {
+                return Err(ShaclError::ShapeParsing(format!(
+                    "Property shape '{}' must have exactly one sh:path property",
+                    shape.id
+                )));
+            }
+        }
+
+        // Validate that node shapes don't have sh:path
+        if shape.is_node_shape() && shape.path.is_some() {
+            return Err(ShaclError::ShapeParsing(format!(
+                "Node shape '{}' must not have sh:path property",
+                shape.id
+            )));
+        }
+
+        // Check for valid target combinations
+        self.validate_target_combinations(shape)?;
+
+        // Validate constraint applicability to shape type
+        self.validate_constraint_applicability(shape)?;
+
+        // Check for deprecated or experimental features
+        self.validate_feature_usage(shape)?;
+
+        Ok(())
+    }
+
+    /// Validate target combinations
+    fn validate_target_combinations(&self, shape: &Shape) -> Result<()> {
+        // Node shapes should typically have targets, property shapes may or may not
+        if shape.is_node_shape() && shape.targets.is_empty() {
+            tracing::warn!(
+                "Node shape '{}' has no targets - it will not validate any data",
+                shape.id
+            );
+        }
+
+        // Check for redundant targets
+        let mut unique_targets = HashSet::new();
+        for target in &shape.targets {
+            let target_key = format!("{:?}", target);
+            if unique_targets.contains(&target_key) {
+                tracing::warn!("Shape '{}' has duplicate target: {:?}", shape.id, target);
+            }
+            unique_targets.insert(target_key);
+        }
+
+        Ok(())
+    }
+
+    /// Validate constraint applicability to shape type
+    fn validate_constraint_applicability(&self, shape: &Shape) -> Result<()> {
+        for (constraint_id, constraint) in &shape.constraints {
+            // Some constraints only make sense for property shapes
+            match constraint {
+                Constraint::MinCount(_) | Constraint::MaxCount(_) => {
+                    if shape.is_node_shape() {
+                        tracing::warn!(
+                            "Cardinality constraint '{}' in node shape '{}' has no effect",
+                            constraint_id,
+                            shape.id
+                        );
+                    }
+                }
+                Constraint::UniqueLang(_) => {
+                    if shape.is_node_shape() {
+                        tracing::warn!(
+                            "UniqueLang constraint in node shape '{}' may not be meaningful",
+                            shape.id
+                        );
+                    }
+                }
+                _ => {} // Other constraints are valid for both types
+            }
+        }
+        Ok(())
+    }
+
+    /// Validate feature usage for warnings about deprecated/experimental features
+    fn validate_feature_usage(&self, _shape: &Shape) -> Result<()> {
+        // This could be expanded to check for deprecated SHACL features
+        // or warn about experimental extensions
+        Ok(())
+    }
+
+    /// Validate constraint parameters for correctness
+    fn validate_constraint_parameters(&self, shape: &Shape) -> Result<()> {
+        for (constraint_id, constraint) in &shape.constraints {
+            match constraint {
+                Constraint::Pattern(pattern_constraint) => {
+                    // Validate regex pattern
+                    if let Err(e) = regex::Regex::new(&pattern_constraint.pattern) {
+                        return Err(ShaclError::ShapeParsing(format!(
+                            "Invalid regex pattern in constraint '{}' for shape '{}': {}",
+                            constraint_id, shape.id, e
+                        )));
+                    }
+                }
+                Constraint::LanguageIn(lang_constraint) => {
+                    // Validate language tags
+                    for lang_tag in &lang_constraint.languages {
+                        if !self.is_valid_language_tag(lang_tag) {
+                            return Err(ShaclError::ShapeParsing(format!(
+                                "Invalid language tag '{}' in constraint '{}' for shape '{}'",
+                                lang_tag, constraint_id, shape.id
+                            )));
+                        }
+                    }
+                }
+                Constraint::In(in_constraint) => {
+                    // Validate that the list is not empty
+                    if in_constraint.values.is_empty() {
+                        return Err(ShaclError::ShapeParsing(format!(
+                            "sh:in constraint in shape '{}' cannot have empty value list",
+                            shape.id
+                        )));
+                    }
+                }
+                Constraint::QualifiedValueShape(qvs_constraint) => {
+                    // Validate qualified cardinality constraints
+                    if qvs_constraint.qualified_min_count.is_none()
+                        && qvs_constraint.qualified_max_count.is_none()
+                    {
+                        return Err(ShaclError::ShapeParsing(format!(
+                            "QualifiedValueShape constraint in shape '{}' must have at least one of sh:qualifiedMinCount or sh:qualifiedMaxCount",
+                            shape.id
+                        )));
+                    }
+
+                    if let (Some(min), Some(max)) = (
+                        qvs_constraint.qualified_min_count,
+                        qvs_constraint.qualified_max_count,
+                    ) {
+                        if min > max {
+                            return Err(ShaclError::ShapeParsing(format!(
+                                "QualifiedValueShape constraint in shape '{}' has qualifiedMinCount ({}) > qualifiedMaxCount ({})",
+                                shape.id, min, max
+                            )));
+                        }
+                    }
+                }
+                _ => {} // Other constraints validated elsewhere
+            }
+        }
+        Ok(())
+    }
+
+    /// Validate logical consistency of constraint combinations
+    fn validate_logical_consistency(&self, shape: &Shape) -> Result<()> {
+        let constraints = &shape.constraints;
+
+        // Check for impossible combinations
+        self.validate_impossible_combinations(shape, constraints)?;
+
+        // Check for redundant constraints
+        self.validate_redundant_constraints(shape, constraints)?;
+
+        // Check for conflicting constraints
+        self.validate_conflicting_constraints(shape, constraints)?;
+
+        Ok(())
+    }
+
+    /// Check for impossible constraint combinations
+    fn validate_impossible_combinations(
+        &self,
+        shape: &Shape,
+        constraints: &IndexMap<ConstraintComponentId, Constraint>,
+    ) -> Result<()> {
+        // Check for NodeKind + Datatype conflicts
+        if let (Some(node_kind), Some(datatype)) = (
+            constraints.get(&ConstraintComponentId::new("nodeKind")),
+            constraints.get(&ConstraintComponentId::new("datatype")),
+        ) {
+            if let (Constraint::NodeKind(nk), Constraint::Datatype(_)) = (node_kind, datatype) {
+                use crate::constraints::value_constraints::NodeKindType;
+                match nk.node_kind {
+                    NodeKindType::IRI | NodeKindType::BlankNode | NodeKindType::BlankNodeOrIRI => {
+                        return Err(ShaclError::ShapeParsing(format!(
+                            "Shape '{}' has conflicting nodeKind and datatype constraints - IRIs and blank nodes cannot have datatypes",
+                            shape.id
+                        )));
+                    }
+                    _ => {} // Literal node kinds can have datatypes
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check for redundant constraints
+    fn validate_redundant_constraints(
+        &self,
+        shape: &Shape,
+        _constraints: &IndexMap<ConstraintComponentId, Constraint>,
+    ) -> Result<()> {
+        // This could be expanded to detect more redundant patterns
+        tracing::debug!(
+            "Checking for redundant constraints in shape '{}'...",
+            shape.id
+        );
+        Ok(())
+    }
+
+    /// Check for conflicting constraints beyond basic cases
+    fn validate_conflicting_constraints(
+        &self,
+        shape: &Shape,
+        constraints: &IndexMap<ConstraintComponentId, Constraint>,
+    ) -> Result<()> {
+        // Check for class/datatype conflicts
+        if let (Some(Constraint::Class(_)), Some(Constraint::Datatype(_))) = (
+            constraints.get(&ConstraintComponentId::new("class")),
+            constraints.get(&ConstraintComponentId::new("datatype")),
+        ) {
+            tracing::warn!(
+                "Shape '{}' has both class and datatype constraints - ensure they are compatible",
+                shape.id
+            );
+        }
+
         Ok(())
     }
 

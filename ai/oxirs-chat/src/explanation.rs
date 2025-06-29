@@ -7,10 +7,10 @@
 //! - Evidence presentation and uncertainty quantification
 //! - Alternative viewpoints and assumption validation
 
+use crate::types::Message;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::types::Message;
 
 /// Explanation result with attribution and reasoning
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -333,12 +333,12 @@ pub struct ClarificationRequest {
 /// Types of ambiguity
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AmbiguityType {
-    Lexical,        // Word meaning ambiguity
-    Syntactic,      // Grammar structure ambiguity
-    Semantic,       // Meaning ambiguity
-    Pragmatic,      // Context-dependent ambiguity
-    Referential,    // What something refers to
-    Scope,          // Scope of quantifiers/modifiers
+    Lexical,     // Word meaning ambiguity
+    Syntactic,   // Grammar structure ambiguity
+    Semantic,    // Meaning ambiguity
+    Pragmatic,   // Context-dependent ambiguity
+    Referential, // What something refers to
+    Scope,       // Scope of quantifiers/modifiers
 }
 
 /// Clarification option
@@ -354,10 +354,10 @@ pub struct ClarificationOption {
 /// Urgency levels for clarification
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ClarificationUrgency {
-    Critical,   // Must clarify to proceed
-    High,       // Strongly recommended
-    Medium,     // Helpful but not required
-    Low,        // Optional clarification
+    Critical, // Must clarify to proceed
+    High,     // Strongly recommended
+    Medium,   // Helpful but not required
+    Low,      // Optional clarification
 }
 
 /// Explanation engine for generating explanations
@@ -389,39 +389,42 @@ impl ExplanationEngine {
         reasoning_trace: &[IntermediateStep],
     ) -> Result<ExplanationResult> {
         // Generate response explanation
-        let response_explanation = self.generate_response_explanation(
-            query, response, reasoning_trace
-        ).await?;
+        let response_explanation = self
+            .generate_response_explanation(query, response, reasoning_trace)
+            .await?;
 
         // Generate source attribution
-        let source_attribution = self.citation_generator.generate_attribution(
-            sources, &response_explanation
-        ).await?;
+        let source_attribution = self
+            .citation_generator
+            .generate_attribution(sources, &response_explanation)
+            .await?;
 
         // Build reasoning path
-        let reasoning_path = self.build_reasoning_path(
-            query, response, reasoning_trace
-        ).await?;
+        let reasoning_path = self
+            .build_reasoning_path(query, response, reasoning_trace)
+            .await?;
 
         // Calculate confidence indicators
-        let confidence_indicators = self.confidence_calculator.calculate_confidence(
-            sources, reasoning_trace, context
-        ).await?;
+        let confidence_indicators = self
+            .confidence_calculator
+            .calculate_confidence(sources, reasoning_trace, context)
+            .await?;
 
         // Collect evidence
-        let evidence = self.collect_evidence(
-            sources, reasoning_trace, response
-        ).await?;
+        let evidence = self
+            .collect_evidence(sources, reasoning_trace, response)
+            .await?;
 
         // Quantify uncertainty
-        let uncertainty_quantification = self.uncertainty_analyzer.quantify_uncertainty(
-            &confidence_indicators, sources, reasoning_trace
-        ).await?;
+        let uncertainty_quantification = self
+            .uncertainty_analyzer
+            .quantify_uncertainty(&confidence_indicators, sources, reasoning_trace)
+            .await?;
 
         // Generate alternative views
-        let alternative_views = self.generate_alternative_views(
-            query, response, sources
-        ).await?;
+        let alternative_views = self
+            .generate_alternative_views(query, response, sources)
+            .await?;
 
         Ok(ExplanationResult {
             response_explanation,
@@ -435,8 +438,14 @@ impl ExplanationEngine {
     }
 
     /// Detect ambiguities in user query
-    pub async fn detect_ambiguities(&self, query: &str, context: &[Message]) -> Result<Vec<ClarificationRequest>> {
-        self.ambiguity_detector.detect_ambiguities(query, context).await
+    pub async fn detect_ambiguities(
+        &self,
+        query: &str,
+        context: &[Message],
+    ) -> Result<Vec<ClarificationRequest>> {
+        self.ambiguity_detector
+            .detect_ambiguities(query, context)
+            .await
     }
 
     /// Generate clarification questions
@@ -449,17 +458,23 @@ impl ExplanationEngine {
         for ambiguity in ambiguities {
             let question = match ambiguity.ambiguity_type {
                 AmbiguityType::Lexical => {
-                    format!("Could you clarify what you mean by '{}'? {}", 
-                        self.extract_ambiguous_term(&ambiguity.context), 
-                        ambiguity.clarification_question)
+                    format!(
+                        "Could you clarify what you mean by '{}'? {}",
+                        self.extract_ambiguous_term(&ambiguity.context),
+                        ambiguity.clarification_question
+                    )
                 }
                 AmbiguityType::Semantic => {
-                    format!("I want to make sure I understand correctly. {}", 
-                        ambiguity.clarification_question)
+                    format!(
+                        "I want to make sure I understand correctly. {}",
+                        ambiguity.clarification_question
+                    )
                 }
                 AmbiguityType::Referential => {
-                    format!("When you mention '{}', which specific entity are you referring to?", 
-                        self.extract_reference(&ambiguity.context))
+                    format!(
+                        "When you mention '{}', which specific entity are you referring to?",
+                        self.extract_reference(&ambiguity.context)
+                    )
                 }
                 _ => ambiguity.clarification_question.clone(),
             };
@@ -482,8 +497,12 @@ impl ExplanationEngine {
                 assumption: assumption.clone(),
                 validation_status: self.check_assumption_validity(assumption, sources).await?,
                 supporting_evidence: self.find_supporting_evidence(assumption, sources).await?,
-                contradicting_evidence: self.find_contradicting_evidence(assumption, sources).await?,
-                confidence: self.calculate_assumption_confidence(assumption, sources).await?,
+                contradicting_evidence: self
+                    .find_contradicting_evidence(assumption, sources)
+                    .await?,
+                confidence: self
+                    .calculate_assumption_confidence(assumption, sources)
+                    .await?,
             };
             validations.push(validation);
         }
@@ -499,20 +518,27 @@ impl ExplanationEngine {
         response: &str,
         reasoning_trace: &[IntermediateStep],
     ) -> Result<ResponseExplanation> {
-        let reasoning_steps: Vec<_> = reasoning_trace.iter().enumerate().map(|(i, step)| {
-            ReasoningStep {
-                step_number: i as u32 + 1,
-                description: step.explanation.clone(),
-                reasoning_type: self.classify_reasoning_type(&step.operation),
-                inputs: vec![step.input_data.clone()],
-                outputs: vec![step.output_data.clone()],
-                confidence: step.confidence,
-                sources: vec![], // Would be populated from actual sources
-            }
-        }).collect();
+        let reasoning_steps: Vec<_> = reasoning_trace
+            .iter()
+            .enumerate()
+            .map(|(i, step)| {
+                ReasoningStep {
+                    step_number: i as u32 + 1,
+                    description: step.explanation.clone(),
+                    reasoning_type: self.classify_reasoning_type(&step.operation),
+                    inputs: vec![step.input_data.clone()],
+                    outputs: vec![step.output_data.clone()],
+                    confidence: step.confidence,
+                    sources: vec![], // Would be populated from actual sources
+                }
+            })
+            .collect();
 
         Ok(ResponseExplanation {
-            summary: format!("Response generated through {} reasoning steps", reasoning_steps.len()),
+            summary: format!(
+                "Response generated through {} reasoning steps",
+                reasoning_steps.len()
+            ),
             reasoning_steps,
             methodology: "Retrieval-Augmented Generation with semantic reasoning".to_string(),
             assumptions: vec![
@@ -546,9 +572,11 @@ impl ExplanationEngine {
         response: &str,
         reasoning_trace: &[IntermediateStep],
     ) -> Result<ReasoningPath> {
-        let path_confidence = reasoning_trace.iter()
+        let path_confidence = reasoning_trace
+            .iter()
             .map(|step| step.confidence)
-            .sum::<f32>() / reasoning_trace.len() as f32;
+            .sum::<f32>()
+            / reasoning_trace.len() as f32;
 
         Ok(ReasoningPath {
             path_id: uuid::Uuid::new_v4().to_string(),
@@ -556,14 +584,12 @@ impl ExplanationEngine {
             end_response: response.to_string(),
             intermediate_steps: reasoning_trace.to_vec(),
             path_confidence,
-            alternative_paths: vec![
-                AlternativePath {
-                    path_description: "Direct database lookup".to_string(),
-                    confidence: 0.7,
-                    why_not_chosen: "Less comprehensive than RAG approach".to_string(),
-                    potential_outcome: "More precise but potentially incomplete answer".to_string(),
-                }
-            ],
+            alternative_paths: vec![AlternativePath {
+                path_description: "Direct database lookup".to_string(),
+                confidence: 0.7,
+                why_not_chosen: "Less comprehensive than RAG approach".to_string(),
+                potential_outcome: "More precise but potentially incomplete answer".to_string(),
+            }],
         })
     }
 
@@ -597,17 +623,15 @@ impl ExplanationEngine {
         response: &str,
         sources: &[DataSource],
     ) -> Result<Vec<AlternativeView>> {
-        Ok(vec![
-            AlternativeView {
-                viewpoint_id: "alt_1".to_string(),
-                title: "Alternative interpretation".to_string(),
-                description: "Different perspective on the same data".to_string(),
-                supporting_evidence: vec!["Alternative source analysis".to_string()],
-                likelihood: 0.3,
-                implications: vec!["Would lead to different conclusion".to_string()],
-                why_alternative: "Based on different weighting of evidence".to_string(),
-            }
-        ])
+        Ok(vec![AlternativeView {
+            viewpoint_id: "alt_1".to_string(),
+            title: "Alternative interpretation".to_string(),
+            description: "Different perspective on the same data".to_string(),
+            supporting_evidence: vec!["Alternative source analysis".to_string()],
+            likelihood: 0.3,
+            implications: vec!["Would lead to different conclusion".to_string()],
+            why_alternative: "Based on different weighting of evidence".to_string(),
+        }])
     }
 
     fn classify_reasoning_type(&self, operation: &str) -> ReasoningType {
@@ -622,7 +646,11 @@ impl ExplanationEngine {
 
     fn extract_ambiguous_term(&self, context: &str) -> String {
         // Simple extraction - in practice would use NLP
-        context.split_whitespace().next().unwrap_or("term").to_string()
+        context
+            .split_whitespace()
+            .next()
+            .unwrap_or("term")
+            .to_string()
     }
 
     fn extract_reference(&self, context: &str) -> String {
@@ -630,20 +658,36 @@ impl ExplanationEngine {
         "reference".to_string()
     }
 
-    async fn check_assumption_validity(&self, assumption: &str, sources: &[DataSource]) -> Result<ValidationStatus> {
+    async fn check_assumption_validity(
+        &self,
+        assumption: &str,
+        sources: &[DataSource],
+    ) -> Result<ValidationStatus> {
         // Check if assumption is supported by sources
         Ok(ValidationStatus::Supported)
     }
 
-    async fn find_supporting_evidence(&self, assumption: &str, sources: &[DataSource]) -> Result<Vec<String>> {
+    async fn find_supporting_evidence(
+        &self,
+        assumption: &str,
+        sources: &[DataSource],
+    ) -> Result<Vec<String>> {
         Ok(vec!["Supporting evidence from reliable sources".to_string()])
     }
 
-    async fn find_contradicting_evidence(&self, assumption: &str, sources: &[DataSource]) -> Result<Vec<String>> {
+    async fn find_contradicting_evidence(
+        &self,
+        assumption: &str,
+        sources: &[DataSource],
+    ) -> Result<Vec<String>> {
         Ok(vec![])
     }
 
-    async fn calculate_assumption_confidence(&self, assumption: &str, sources: &[DataSource]) -> Result<f32> {
+    async fn calculate_assumption_confidence(
+        &self,
+        assumption: &str,
+        sources: &[DataSource],
+    ) -> Result<f32> {
         Ok(0.8)
     }
 }
@@ -681,19 +725,20 @@ impl CitationGenerator {
         sources: &[DataSource],
         explanation: &ResponseExplanation,
     ) -> Result<SourceAttribution> {
-        let primary_sources: Vec<DataSource> = sources.iter()
+        let primary_sources: Vec<DataSource> = sources
+            .iter()
             .filter(|s| s.relevance_score > 0.7)
             .cloned()
             .collect();
 
-        let secondary_sources: Vec<DataSource> = sources.iter()
+        let secondary_sources: Vec<DataSource> = sources
+            .iter()
             .filter(|s| s.relevance_score <= 0.7)
             .cloned()
             .collect();
 
-        let overall_quality = sources.iter()
-            .map(|s| s.reliability_score)
-            .sum::<f32>() / sources.len() as f32;
+        let overall_quality =
+            sources.iter().map(|s| s.reliability_score).sum::<f32>() / sources.len() as f32;
 
         Ok(SourceAttribution {
             primary_sources,
@@ -726,13 +771,11 @@ impl ConfidenceCalculator {
         reasoning_trace: &[IntermediateStep],
         context: &[Message],
     ) -> Result<ConfidenceIndicators> {
-        let data_confidence = sources.iter()
-            .map(|s| s.reliability_score)
-            .sum::<f32>() / sources.len() as f32;
+        let data_confidence =
+            sources.iter().map(|s| s.reliability_score).sum::<f32>() / sources.len() as f32;
 
-        let reasoning_confidence = reasoning_trace.iter()
-            .map(|s| s.confidence)
-            .sum::<f32>() / reasoning_trace.len() as f32;
+        let reasoning_confidence = reasoning_trace.iter().map(|s| s.confidence).sum::<f32>()
+            / reasoning_trace.len() as f32;
 
         let overall_confidence = (data_confidence + reasoning_confidence) / 2.0;
 
@@ -769,7 +812,11 @@ impl AmbiguityDetector {
         Self {}
     }
 
-    async fn detect_ambiguities(&self, query: &str, context: &[Message]) -> Result<Vec<ClarificationRequest>> {
+    async fn detect_ambiguities(
+        &self,
+        query: &str,
+        context: &[Message],
+    ) -> Result<Vec<ClarificationRequest>> {
         let mut requests = Vec::new();
 
         // Detect lexical ambiguity
@@ -802,13 +849,17 @@ impl AmbiguityDetector {
     fn has_ambiguous_terms(&self, query: &str) -> bool {
         // Simple check for common ambiguous words
         let ambiguous_words = ["bank", "right", "left", "table", "class"];
-        ambiguous_words.iter().any(|word| query.to_lowercase().contains(word))
+        ambiguous_words
+            .iter()
+            .any(|word| query.to_lowercase().contains(word))
     }
 
     fn has_unclear_references(&self, query: &str) -> bool {
         // Check for pronouns and demonstratives
         let reference_words = ["this", "that", "it", "they", "them"];
-        reference_words.iter().any(|word| query.to_lowercase().contains(word))
+        reference_words
+            .iter()
+            .any(|word| query.to_lowercase().contains(word))
     }
 
     fn generate_term_options(&self, query: &str) -> Vec<ClarificationOption> {
@@ -831,15 +882,13 @@ impl AmbiguityDetector {
     }
 
     fn generate_reference_options(&self, query: &str) -> Vec<ClarificationOption> {
-        vec![
-            ClarificationOption {
-                option_id: "ref_1".to_string(),
-                description: "Previous entity mentioned".to_string(),
-                interpretation: "Referring to earlier context".to_string(),
-                likelihood: 0.7,
-                example: None,
-            },
-        ]
+        vec![ClarificationOption {
+            option_id: "ref_1".to_string(),
+            description: "Previous entity mentioned".to_string(),
+            interpretation: "Referring to earlier context".to_string(),
+            likelihood: 0.7,
+            example: None,
+        }]
     }
 }
 
@@ -880,14 +929,12 @@ impl UncertaintyAnalyzer {
                     mitigation: Some("Use ensemble methods".to_string()),
                 },
             ],
-            confidence_intervals: vec![
-                ConfidenceInterval {
-                    parameter: "Response accuracy".to_string(),
-                    lower_bound: confidence.overall_confidence - 0.1,
-                    upper_bound: confidence.overall_confidence + 0.1,
-                    confidence_level: 0.95,
-                }
-            ],
+            confidence_intervals: vec![ConfidenceInterval {
+                parameter: "Response accuracy".to_string(),
+                lower_bound: confidence.overall_confidence - 0.1,
+                upper_bound: confidence.overall_confidence + 0.1,
+                confidence_level: 0.95,
+            }],
             sensitivity_analysis: SensitivityAnalysis {
                 most_sensitive_factors: vec!["Source quality".to_string()],
                 robustness_score: 0.75,
@@ -923,7 +970,7 @@ mod tests {
         let engine = ExplanationEngine::new();
         let query = "Show me the bank data";
         let context = vec![];
-        
+
         let ambiguities = engine.detect_ambiguities(query, &context).await.unwrap();
         assert!(!ambiguities.is_empty());
     }
@@ -942,7 +989,7 @@ mod tests {
             access_date: chrono::Utc::now(),
             relevance_score: 0.8,
         }];
-        
+
         let reasoning_trace = vec![IntermediateStep {
             step_id: "step1".to_string(),
             operation: "retrieve".to_string(),
@@ -952,10 +999,13 @@ mod tests {
             confidence: 0.9,
             explanation: "Retrieved relevant data".to_string(),
         }];
-        
+
         let context = vec![];
-        let confidence = calculator.calculate_confidence(&sources, &reasoning_trace, &context).await.unwrap();
-        
+        let confidence = calculator
+            .calculate_confidence(&sources, &reasoning_trace, &context)
+            .await
+            .unwrap();
+
         assert!(confidence.overall_confidence > 0.0);
         assert!(confidence.overall_confidence <= 1.0);
     }

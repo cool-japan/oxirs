@@ -417,8 +417,14 @@ impl ShardManager {
                     .await
                     .insert(op_id.clone(), operation.clone());
 
-                match Self::process_operation(operation, storage.clone(), network.clone(), node_id, shard_ownership.clone())
-                    .await
+                match Self::process_operation(
+                    operation,
+                    storage.clone(),
+                    network.clone(),
+                    node_id,
+                    shard_ownership.clone(),
+                )
+                .await
                 {
                     Ok(()) => {
                         info!("Completed shard operation {}", op_id);
@@ -453,8 +459,11 @@ impl ShardManager {
                 target_shards,
                 split_points,
             } => {
-                info!("Starting shard split operation: {} -> {:?}", source_shard, target_shards);
-                
+                info!(
+                    "Starting shard split operation: {} -> {:?}",
+                    source_shard, target_shards
+                );
+
                 // Check if this node owns the source shard
                 let ownership = shard_ownership.read().await;
                 if let Some(owner_nodes) = ownership.get(&source_shard) {
@@ -462,14 +471,21 @@ impl ShardManager {
                         return Ok(()); // Not our responsibility
                     }
                 } else {
-                    warn!("Source shard {} not found in ownership mapping", source_shard);
+                    warn!(
+                        "Source shard {} not found in ownership mapping",
+                        source_shard
+                    );
                     return Ok(());
                 }
                 drop(ownership);
 
                 // Get all triples from the source shard
                 let source_triples = storage.get_shard_triples(source_shard).await?;
-                info!("Retrieved {} triples from source shard {}", source_triples.len(), source_shard);
+                info!(
+                    "Retrieved {} triples from source shard {}",
+                    source_triples.len(),
+                    source_shard
+                );
 
                 // Partition triples based on split points
                 let mut partitioned_triples: HashMap<ShardId, Vec<Triple>> = HashMap::new();
@@ -479,8 +495,13 @@ impl ShardManager {
 
                 for triple in source_triples {
                     // Determine which target shard this triple should go to
-                    let target_shard = Self::determine_split_target(&triple, &target_shards, &split_points).await?;
-                    partitioned_triples.entry(target_shard).or_default().push(triple);
+                    let target_shard =
+                        Self::determine_split_target(&triple, &target_shards, &split_points)
+                            .await?;
+                    partitioned_triples
+                        .entry(target_shard)
+                        .or_default()
+                        .push(triple);
                 }
 
                 // Create target shards and transfer data
@@ -488,8 +509,13 @@ impl ShardManager {
                     if !triples.is_empty() {
                         storage.create_shard(target_shard).await?;
                         let triple_count = triples.len();
-                        storage.insert_triples_to_shard(target_shard, triples).await?;
-                        info!("Created target shard {} with {} triples", target_shard, triple_count);
+                        storage
+                            .insert_triples_to_shard(target_shard, triples)
+                            .await?;
+                        info!(
+                            "Created target shard {} with {} triples",
+                            target_shard, triple_count
+                        );
                     }
                 }
 
@@ -510,8 +536,11 @@ impl ShardManager {
                 source_shards,
                 target_shard,
             } => {
-                info!("Starting shard merge operation: {:?} -> {}", source_shards, target_shard);
-                
+                info!(
+                    "Starting shard merge operation: {:?} -> {}",
+                    source_shards, target_shard
+                );
+
                 // Verify this node owns at least one of the source shards
                 let ownership = shard_ownership.read().await;
                 let mut owns_shard = false;
@@ -523,11 +552,11 @@ impl ShardManager {
                         }
                     }
                 }
-                
+
                 if !owns_shard {
                     return Ok(()); // Not our responsibility
                 }
-                
+
                 // Collect all nodes that own any of the source shards for target ownership
                 let mut target_nodes = HashSet::new();
                 for shard_id in &source_shards {
@@ -543,17 +572,22 @@ impl ShardManager {
                 // Collect all triples from source shards
                 let mut all_triples = Vec::new();
                 let mut total_size = 0;
-                
+
                 for shard_id in &source_shards {
                     let triples = storage.get_shard_triples(*shard_id).await?;
                     total_size += triples.len();
                     all_triples.extend(triples);
-                    info!("Retrieved {} triples from source shard {}", total_size, shard_id);
+                    info!(
+                        "Retrieved {} triples from source shard {}",
+                        total_size, shard_id
+                    );
                 }
 
                 // Remove duplicate triples that might exist across shards
                 all_triples.sort_by(|a, b| {
-                    a.subject().to_string().cmp(&b.subject().to_string())
+                    a.subject()
+                        .to_string()
+                        .cmp(&b.subject().to_string())
                         .then_with(|| a.predicate().to_string().cmp(&b.predicate().to_string()))
                         .then_with(|| a.object().to_string().cmp(&b.object().to_string()))
                 });
@@ -561,9 +595,13 @@ impl ShardManager {
 
                 // Insert all triples into the target shard
                 let merged_count = all_triples.len();
-                storage.insert_triples_to_shard(target_shard, all_triples).await?;
-                info!("Merged {} triples into target shard {} (deduplicated from {} original)", 
-                      merged_count, target_shard, total_size);
+                storage
+                    .insert_triples_to_shard(target_shard, all_triples)
+                    .await?;
+                info!(
+                    "Merged {} triples into target shard {} (deduplicated from {} original)",
+                    merged_count, target_shard, total_size
+                );
 
                 // Update ownership mapping
                 let mut ownership = shard_ownership.write().await;
@@ -576,7 +614,7 @@ impl ShardManager {
                 for shard_id in source_shards {
                     storage.mark_shard_for_deletion(shard_id).await?;
                 }
-                
+
                 info!("Successfully completed shard merge operation");
             }
 
@@ -585,12 +623,15 @@ impl ShardManager {
                 from_nodes,
                 to_nodes,
             } => {
-                info!("Starting shard migration: shard {} from {:?} to {:?}", shard_id, from_nodes, to_nodes);
-                
+                info!(
+                    "Starting shard migration: shard {} from {:?} to {:?}",
+                    shard_id, from_nodes, to_nodes
+                );
+
                 // Check if this node is involved in the migration
                 let is_source = from_nodes.contains(&node_id);
                 let is_target = to_nodes.contains(&node_id);
-                
+
                 if !is_source && !is_target {
                     return Ok(()); // Not involved in this migration
                 }
@@ -598,23 +639,40 @@ impl ShardManager {
                 if is_source {
                     // Source node: transfer data to target nodes
                     let shard_triples = storage.get_shard_triples(shard_id).await?;
-                    info!("Source node: retrieved {} triples for migration", shard_triples.len());
-                    
+                    info!(
+                        "Source node: retrieved {} triples for migration",
+                        shard_triples.len()
+                    );
+
                     // Send data to each target node
                     for &target_node in &to_nodes {
                         if target_node != node_id {
-                            match Self::transfer_shard_data(network.clone(), node_id, target_node, shard_id, &shard_triples).await {
+                            match Self::transfer_shard_data(
+                                network.clone(),
+                                node_id,
+                                target_node,
+                                shard_id,
+                                &shard_triples,
+                            )
+                            .await
+                            {
                                 Ok(_) => {
-                                    info!("Successfully transferred shard {} data to node {}", shard_id, target_node);
+                                    info!(
+                                        "Successfully transferred shard {} data to node {}",
+                                        shard_id, target_node
+                                    );
                                 }
                                 Err(e) => {
-                                    error!("Failed to transfer shard {} data to node {}: {}", shard_id, target_node, e);
+                                    error!(
+                                        "Failed to transfer shard {} data to node {}: {}",
+                                        shard_id, target_node, e
+                                    );
                                     return Err(e);
                                 }
                             }
                         }
                     }
-                    
+
                     // After successful transfer, mark local copy for cleanup
                     storage.mark_shard_for_deletion(shard_id).await?;
                 }
@@ -622,55 +680,86 @@ impl ShardManager {
                 if is_target && !is_source {
                     // Target node: ensure shard exists and is ready
                     storage.create_shard(shard_id).await?;
-                    info!("Target node: created shard {} ready for data reception", shard_id);
+                    info!(
+                        "Target node: created shard {} ready for data reception",
+                        shard_id
+                    );
                 }
 
                 // Update ownership mapping
                 let mut ownership = shard_ownership.write().await;
                 ownership.insert(shard_id, to_nodes.iter().cloned().collect());
-                
-                info!("Successfully completed shard migration for shard {}", shard_id);
+
+                info!(
+                    "Successfully completed shard migration for shard {}",
+                    shard_id
+                );
             }
 
             ShardOperation::Rebalance { rebalance_plan } => {
-                info!("Starting shard rebalancing with {} movements", rebalance_plan.movements.len());
-                
+                info!(
+                    "Starting shard rebalancing with {} movements",
+                    rebalance_plan.movements.len()
+                );
+
                 // Execute each shard movement in the rebalance plan
                 for movement in &rebalance_plan.movements {
                     // Check if this node is involved in this movement
                     let is_source = movement.from_node == node_id;
                     let is_target = movement.to_node == node_id;
-                    
+
                     if !is_source && !is_target {
                         continue; // Skip movements not involving this node
                     }
-                    
-                    info!("Executing movement: shard {} from node {} to node {} ({} triples)", 
-                          movement.shard_id, movement.from_node, movement.to_node, movement.triple_count);
+
+                    info!(
+                        "Executing movement: shard {} from node {} to node {} ({} triples)",
+                        movement.shard_id,
+                        movement.from_node,
+                        movement.to_node,
+                        movement.triple_count
+                    );
 
                     if is_source {
                         // Source node: transfer the shard
                         let shard_triples = storage.get_shard_triples(movement.shard_id).await?;
-                        
+
                         // Verify triple count matches expectation (with some tolerance)
                         let actual_count = shard_triples.len();
-                        if actual_count > movement.triple_count * 2 || actual_count < movement.triple_count / 2 {
-                            warn!("Triple count mismatch for shard {}: expected ~{}, found {}", 
-                                  movement.shard_id, movement.triple_count, actual_count);
+                        if actual_count > movement.triple_count * 2
+                            || actual_count < movement.triple_count / 2
+                        {
+                            warn!(
+                                "Triple count mismatch for shard {}: expected ~{}, found {}",
+                                movement.shard_id, movement.triple_count, actual_count
+                            );
                         }
-                        
+
                         // Transfer to target node
-                        Self::transfer_shard_data(network.clone(), node_id, movement.to_node, movement.shard_id, &shard_triples).await?;
-                        
+                        Self::transfer_shard_data(
+                            network.clone(),
+                            node_id,
+                            movement.to_node,
+                            movement.shard_id,
+                            &shard_triples,
+                        )
+                        .await?;
+
                         // Update local ownership and mark for cleanup
                         storage.mark_shard_for_deletion(movement.shard_id).await?;
-                        info!("Completed transfer of shard {} to node {}", movement.shard_id, movement.to_node);
+                        info!(
+                            "Completed transfer of shard {} to node {}",
+                            movement.shard_id, movement.to_node
+                        );
                     }
 
                     if is_target && !is_source {
                         // Target node: prepare to receive the shard
                         storage.create_shard(movement.shard_id).await?;
-                        info!("Prepared to receive shard {} from node {}", movement.shard_id, movement.from_node);
+                        info!(
+                            "Prepared to receive shard {} from node {}",
+                            movement.shard_id, movement.from_node
+                        );
                     }
 
                     // Update ownership mapping
@@ -685,9 +774,11 @@ impl ShardManager {
                         ownership.insert(movement.shard_id, new_owners);
                     }
                 }
-                
-                info!("Successfully completed rebalancing operation with {} data bytes transferred", 
-                      rebalance_plan.data_transfer_bytes);
+
+                info!(
+                    "Successfully completed rebalancing operation with {} data bytes transferred",
+                    rebalance_plan.data_transfer_bytes
+                );
             }
         }
 
@@ -723,13 +814,13 @@ impl ShardManager {
                         let split_points = vec![
                             "middle".to_string(), // Simple split point strategy
                         ];
-                        
+
                         let split_op = ShardOperation::Split {
                             source_shard: dist.shard_id,
                             target_shards,
                             split_points,
                         };
-                        
+
                         if let Err(e) = tx.send(split_op).await {
                             error!("Failed to queue split operation: {}", e);
                         }
@@ -759,19 +850,22 @@ impl ShardManager {
                             max_load, min_load
                         );
                         // Create rebalance operation
-                        let movements = Self::calculate_rebalance_movements(&stats.distribution).await;
-                        let total_transfer_bytes = movements.iter()
+                        let movements =
+                            Self::calculate_rebalance_movements(&stats.distribution).await;
+                        let total_transfer_bytes = movements
+                            .iter()
                             .map(|m| m.triple_count as u64 * 100) // Estimate 100 bytes per triple
                             .sum();
-                        
+
                         let rebalance_plan = RebalancePlan {
                             movements,
-                            balance_improvement: (max_load as f64 / min_load as f64) - config.max_imbalance_ratio,
+                            balance_improvement: (max_load as f64 / min_load as f64)
+                                - config.max_imbalance_ratio,
                             data_transfer_bytes: total_transfer_bytes,
                         };
-                        
+
                         let rebalance_op = ShardOperation::Rebalance { rebalance_plan };
-                        
+
                         if let Err(e) = tx.send(rebalance_op).await {
                             error!("Failed to queue rebalance operation: {}", e);
                         }
@@ -811,9 +905,13 @@ impl ShardManager {
 
         // Send via network service
         network.send_message(target_node, transfer_msg).await?;
-        
-        info!("Transferred {} triples for shard {} to node {}", 
-              triples.len(), shard_id, target_node);
+
+        info!(
+            "Transferred {} triples for shard {} to node {}",
+            triples.len(),
+            shard_id,
+            target_node
+        );
         Ok(())
     }
 
@@ -822,7 +920,7 @@ impl ShardManager {
         distribution: &[crate::shard::ShardDistribution],
     ) -> Vec<ShardMovement> {
         let mut movements = Vec::new();
-        
+
         if distribution.len() < 2 {
             return movements; // Can't rebalance with less than 2 shards
         }

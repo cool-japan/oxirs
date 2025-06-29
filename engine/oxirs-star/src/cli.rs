@@ -17,6 +17,9 @@ use crate::model::{StarGraph, StarQuad, StarTerm, StarTriple};
 use crate::parser::{ParseError, StarFormat, StarParser};
 use crate::serializer::{SerializationOptions, StarSerializer};
 use crate::store::StarStore;
+use crate::troubleshooting::{
+    DiagnosticAnalyzer, MigrationAssistant, MigrationSourceFormat, TroubleshootingGuide,
+};
 use crate::{StarConfig, StarError, StarResult};
 
 /// CLI application for RDF-star tools
@@ -53,6 +56,9 @@ impl StarCli {
             Some(("debug", sub_matches)) => self.debug_command(sub_matches),
             Some(("benchmark", sub_matches)) => self.benchmark_command(sub_matches),
             Some(("query", sub_matches)) => self.query_command(sub_matches),
+            Some(("troubleshoot", sub_matches)) => self.troubleshoot_command(sub_matches),
+            Some(("migrate", sub_matches)) => self.migrate_command(sub_matches),
+            Some(("doctor", sub_matches)) => self.doctor_command(sub_matches),
             _ => {
                 eprintln!("No command specified. Use --help for usage information.");
                 std::process::exit(1);
@@ -240,6 +246,75 @@ impl StarCli {
                             .help("Output format for results")
                             .value_name("FORMAT")
                             .default_value("table"),
+                    ),
+            )
+            .subcommand(
+                Command::new("troubleshoot")
+                    .about("Get troubleshooting help for specific errors")
+                    .arg(
+                        Arg::new("error")
+                            .help("Error message or type to troubleshoot")
+                            .required(true)
+                            .value_name("ERROR"),
+                    )
+                    .arg(
+                        Arg::new("output")
+                            .short('o')
+                            .long("output")
+                            .help("Output troubleshooting report to file")
+                            .value_name("OUTPUT_FILE"),
+                    ),
+            )
+            .subcommand(
+                Command::new("migrate")
+                    .about("Migrate data from other RDF stores to RDF-star")
+                    .arg(
+                        Arg::new("source")
+                            .help("Source data file")
+                            .required(true)
+                            .value_name("SOURCE_FILE"),
+                    )
+                    .arg(
+                        Arg::new("output")
+                            .help("Output RDF-star file")
+                            .required(true)
+                            .value_name("OUTPUT_FILE"),
+                    )
+                    .arg(
+                        Arg::new("source-format")
+                            .long("source-format")
+                            .help("Source format (standard-rdf, jena, rdflib, etc.)")
+                            .value_name("FORMAT")
+                            .default_value("standard-rdf"),
+                    )
+                    .arg(
+                        Arg::new("plan")
+                            .long("plan")
+                            .help("Generate migration plan without executing")
+                            .action(clap::ArgAction::SetTrue),
+                    ),
+            )
+            .subcommand(
+                Command::new("doctor")
+                    .about("Comprehensive diagnostic analysis of RDF-star data")
+                    .arg(
+                        Arg::new("input")
+                            .help("Input file to diagnose")
+                            .required(true)
+                            .value_name("FILE"),
+                    )
+                    .arg(
+                        Arg::new("report")
+                            .short('r')
+                            .long("report")
+                            .help("Output detailed diagnostic report")
+                            .value_name("REPORT_FILE"),
+                    )
+                    .arg(
+                        Arg::new("fix")
+                            .long("fix")
+                            .help("Attempt to automatically fix issues")
+                            .action(clap::ArgAction::SetTrue),
                     ),
             )
     }
@@ -674,6 +749,8 @@ impl StarCli {
 
     /// Execute SPARQL-star query
     fn execute_query(&self, data_path: &str, query_input: &str, output_format: &str) -> Result<()> {
+        use crate::query::{QueryEngine, QueryResult};
+
         // Load data
         let content = fs::read_to_string(data_path)?;
         let format = self.detect_format(data_path, &content)?;
@@ -693,13 +770,27 @@ impl StarCli {
             query_input.to_string()
         };
 
-        // Execute query (placeholder - would need full SPARQL implementation)
-        println!("Query: {}", query_text);
-        println!("Data loaded: {} triples", store.len());
-        println!("Output format: {}", output_format);
+        info!("Executing SPARQL-star query on {} triples", store.len());
 
-        // TODO: Implement actual SPARQL-star query execution
-        println!("Query execution not yet implemented");
+        // Execute query using the query engine
+        let mut engine = QueryEngine::new();
+        let start_time = Instant::now();
+
+        match engine.execute(&query_text, &store) {
+            Ok(result) => {
+                let duration = start_time.elapsed();
+
+                if !self.quiet {
+                    println!("Query executed in {:?}", duration);
+                }
+
+                self.format_query_results(&result, output_format)?;
+            }
+            Err(e) => {
+                error!("Query execution failed: {}", e);
+                return Err(anyhow!("Query execution failed: {}", e));
+            }
+        }
 
         Ok(())
     }
@@ -721,7 +812,10 @@ impl StarCli {
         if path_lower.ends_with(".nqs") || path_lower.ends_with(".nquads-star") {
             return Ok(StarFormat::NQuadsStar);
         }
-        if path_lower.ends_with(".jlds") || path_lower.ends_with(".jsonld-star") || path_lower.ends_with(".json") {
+        if path_lower.ends_with(".jlds")
+            || path_lower.ends_with(".jsonld-star")
+            || path_lower.ends_with(".json")
+        {
             return Ok(StarFormat::JsonLdStar);
         }
 
@@ -888,6 +982,250 @@ impl StarCli {
             "Serialize throughput: {:.2} MB/s",
             (results.file_size as f64) / (1024.0 * 1024.0 * avg_serialize)
         );
+    }
+
+    /// Run troubleshooting diagnostics
+    fn troubleshoot_command(&self, matches: &ArgMatches) -> Result<()> {
+        let error_input = matches.get_one::<String>("error").unwrap();
+        let output_path = matches.get_one::<String>("output");
+
+        let guide = TroubleshootingGuide::new();
+        let analyzer = DiagnosticAnalyzer::new();
+
+        info!("Analyzing error: {}", error_input);
+
+        // Analyze the error
+        let diagnosis = analyzer.analyze_error(error_input)?;
+
+        // Get troubleshooting recommendations
+        let recommendations = guide.get_recommendations(&diagnosis)?;
+
+        // System health check
+        let health_report = self.run_system_diagnostics()?;
+
+        let report = format!(
+            "RDF-star Troubleshooting Report\n"
+                + "================================\n\n"
+                + "Error Analysis:\n"
+                + "---------------\n"
+                + "Error Type: {}\n"
+                + "Severity: {:?}\n"
+                + "Description: {}\n\n"
+                + "Recommendations:\n"
+                + "----------------\n{}"
+                + "\n\nSystem Health:\n"
+                + "---------------\n{}",
+            diagnosis.error_type,
+            diagnosis.severity,
+            diagnosis.description,
+            recommendations
+                .iter()
+                .map(|r| format!("• {}\n", r))
+                .collect::<String>(),
+            health_report
+        );
+
+        if let Some(output) = output_path {
+            fs::write(output, &report)?;
+            println!("Troubleshooting report written to: {}", output);
+        } else {
+            println!("{}", report);
+        }
+
+        Ok(())
+    }
+
+    fn migrate_command(&self, matches: &ArgMatches) -> Result<()> {
+        let source_file = matches.get_one::<String>("source").unwrap();
+        let output_file = matches.get_one::<String>("output").unwrap();
+        let source_format = matches.get_one::<String>("source-format").unwrap();
+        let plan_only = matches.get_flag("plan");
+
+        info!(
+            "Starting RDF-star migration from {} to {}",
+            source_file, output_file
+        );
+
+        let mut assistant = MigrationAssistant::new();
+        let migration_format = source_format
+            .parse::<MigrationSourceFormat>()
+            .map_err(|_| anyhow!("Unsupported source format: {}", source_format))?;
+
+        // Analyze source data
+        let analysis = assistant.analyze_source(source_file, migration_format)?;
+
+        if !self.quiet {
+            println!("Source Analysis:");
+            println!("  Format: {:?}", migration_format);
+            println!("  Triples: {}", analysis.triple_count);
+            println!(
+                "  Estimated quoted triples after migration: {}",
+                analysis.estimated_star_triples
+            );
+            println!("  Complexity: {:?}", analysis.complexity);
+        }
+
+        // Generate migration plan
+        let plan = assistant.create_migration_plan(&analysis)?;
+
+        if plan_only {
+            println!("Migration Plan:");
+            println!("===============");
+            for (i, step) in plan.steps.iter().enumerate() {
+                println!("{}. {}", i + 1, step.description);
+                if let Some(notes) = &step.notes {
+                    println!("   Notes: {}", notes);
+                }
+            }
+            return Ok(());
+        }
+
+        // Execute migration
+        let start_time = Instant::now();
+        let result = assistant.execute_migration(source_file, output_file, &plan)?;
+        let duration = start_time.elapsed();
+
+        if !self.quiet {
+            println!("Migration completed in {:?}", duration);
+            println!("Results:");
+            println!("  Input triples: {}", result.input_triples);
+            println!("  Output triples: {}", result.output_triples);
+            println!(
+                "  Quoted triples created: {}",
+                result.quoted_triples_created
+            );
+            println!("  Warnings: {}", result.warnings.len());
+
+            if !result.warnings.is_empty() {
+                println!("\nWarnings:");
+                for warning in &result.warnings {
+                    println!("  ⚠ {}", warning);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn doctor_command(&self, matches: &ArgMatches) -> Result<()> {
+        let input_file = matches.get_one::<String>("input").unwrap();
+        let report_path = matches.get_one::<String>("report");
+        let auto_fix = matches.get_flag("fix");
+
+        info!(
+            "Running comprehensive diagnostic analysis on: {}",
+            input_file
+        );
+
+        let analyzer = DiagnosticAnalyzer::new();
+        let start_time = Instant::now();
+
+        // Comprehensive file analysis
+        let diagnostic_result = analyzer.run_comprehensive_analysis(input_file)?;
+        let duration = start_time.elapsed();
+
+        let mut issues_found = 0;
+        let mut fixes_applied = 0;
+
+        // System health check
+        let system_health = self.run_system_diagnostics()?;
+
+        // Performance analysis
+        let perf_analysis = self.run_performance_analysis(input_file)?;
+
+        // Generate comprehensive report
+        let report = format!(
+            "RDF-star Diagnostic Report\n"
+                + "===========================\n\n"
+                + "File: {}\n"
+                + "Analysis Duration: {:?}\n\n"
+                + "Structural Analysis:\n"
+                + "--------------------\n"
+                + "Total Triples: {}\n"
+                + "Quoted Triples: {}\n"
+                + "Max Nesting Depth: {}\n"
+                + "Syntax Errors: {}\n"
+                + "Semantic Issues: {}\n\n"
+                + "Quality Assessment:\n"
+                + "-------------------\n"
+                + "Overall Score: {}/100\n"
+                + "Readability: {}/10\n"
+                + "Efficiency: {}/10\n"
+                + "Compliance: {}/10\n\n"
+                + "Issues Found:\n"
+                + "-------------\n{}"
+                + "\nPerformance Analysis:\n"
+                + "---------------------\n{}"
+                + "\nSystem Health:\n"
+                + "---------------\n{}",
+            input_file,
+            duration,
+            diagnostic_result.total_triples,
+            diagnostic_result.quoted_triples,
+            diagnostic_result.max_nesting_depth,
+            diagnostic_result.syntax_errors.len(),
+            diagnostic_result.semantic_issues.len(),
+            diagnostic_result.quality_score,
+            diagnostic_result.readability_score,
+            diagnostic_result.efficiency_score,
+            diagnostic_result.compliance_score,
+            diagnostic_result
+                .issues
+                .iter()
+                .map(|issue| format!(
+                    "• {} ({}): {}\n",
+                    issue.severity, issue.category, issue.description
+                ))
+                .collect::<String>(),
+            perf_analysis,
+            system_health
+        );
+
+        // Apply automatic fixes if requested
+        if auto_fix {
+            let fixes = analyzer.apply_automatic_fixes(input_file, &diagnostic_result.issues)?;
+            fixes_applied = fixes.len();
+
+            if !self.quiet && fixes_applied > 0 {
+                println!("Applied {} automatic fixes:", fixes_applied);
+                for fix in &fixes {
+                    println!("  ✓ {}", fix);
+                }
+            }
+        }
+
+        issues_found = diagnostic_result.issues.len();
+
+        if let Some(report_file) = report_path {
+            fs::write(report_file, &report)?;
+            println!("Diagnostic report written to: {}", report_file);
+        } else if !self.quiet {
+            println!("{}", report);
+        }
+
+        // Summary
+        if !self.quiet {
+            println!("\nDiagnostic Summary:");
+            println!("===================");
+            println!("Issues found: {}", issues_found);
+            if auto_fix {
+                println!("Fixes applied: {}", fixes_applied);
+            }
+            println!(
+                "Overall health: {}",
+                if issues_found == 0 {
+                    "Excellent"
+                } else if issues_found < 5 {
+                    "Good"
+                } else if issues_found < 10 {
+                    "Fair"
+                } else {
+                    "Needs attention"
+                }
+            );
+        }
+
+        Ok(())
     }
 }
 

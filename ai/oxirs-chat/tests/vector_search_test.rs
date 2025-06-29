@@ -1,4 +1,6 @@
-use oxirs_chat::rag::{QueryContext, QueryIntent, RAGConfig, RAGSystem, SimpleEmbeddingModel, EmbeddingModel};
+use oxirs_chat::rag::{
+    EmbeddingModel, QueryContext, QueryIntent, RAGConfig, RAGSystem, SimpleEmbeddingModel,
+};
 use oxirs_core::{Literal, NamedNode, Store, Triple};
 use oxirs_vec::{
     index::AdvancedVectorIndex,
@@ -128,7 +130,7 @@ async fn test_vector_search_similarity() {
         vector_index
             .add(
                 format!("id_{}", i),
-                embedding[0].clone(),
+                embedding.clone(),
                 triple.clone(),
                 metadata,
             )

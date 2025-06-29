@@ -3,7 +3,7 @@
 //! This module provides index-aware BGP optimization with sophisticated
 //! selectivity estimation for triple patterns.
 
-use crate::algebra::{Algebra, Term, TriplePattern};
+use crate::algebra::{Algebra, Term, TriplePattern, Variable};
 use crate::optimizer::{IndexPosition, IndexStatistics, IndexType, Statistics};
 use anyhow::Result;
 use oxirs_core::model::NamedNode;
@@ -101,16 +101,29 @@ pub struct JoinIndexOpportunity {
 /// Multi-index intersection for complex queries
 #[derive(Debug, Clone)]
 pub struct IndexIntersection {
-    /// Pattern index
+    /// Pattern index for intersection
     pub pattern_idx: usize,
-    /// Primary index to use
+    /// Primary index type
     pub primary_index: IndexType,
-    /// Secondary indexes to intersect
+    /// Secondary indexes for intersection
     pub secondary_indexes: Vec<IndexType>,
-    /// Expected selectivity improvement
+    /// Expected benefit from intersection
     pub selectivity_improvement: f64,
-    /// Intersection algorithm recommendation
+    /// Intersection algorithm to use
     pub intersection_algorithm: IntersectionAlgorithm,
+}
+
+/// Types of index intersections
+#[derive(Debug, Clone)]
+pub enum IntersectionType {
+    /// Variable-based join intersection
+    VariableJoin,
+    /// Value-based intersection
+    ValueIntersection,
+    /// Spatial intersection
+    SpatialIntersection,
+    /// Temporal intersection
+    TemporalIntersection,
 }
 
 /// Intersection algorithm types
@@ -1182,7 +1195,9 @@ impl<'a> BGPOptimizer<'a> {
             // Simple index types
             IndexType::Hash => {
                 // Hash indexes work best with bound terms
-                self.is_bound(&pattern.subject) && self.is_bound(&pattern.predicate) && self.is_bound(&pattern.object)
+                self.is_bound(&pattern.subject)
+                    && self.is_bound(&pattern.predicate)
+                    && self.is_bound(&pattern.object)
             }
             IndexType::BTree => true, // B-tree supports range queries and existence
             IndexType::Bitmap => {
@@ -1191,7 +1206,9 @@ impl<'a> BGPOptimizer<'a> {
             }
             IndexType::Bloom => {
                 // Bloom filters are good for existence checks
-                self.is_bound(&pattern.subject) || self.is_bound(&pattern.predicate) || self.is_bound(&pattern.object)
+                self.is_bound(&pattern.subject)
+                    || self.is_bound(&pattern.predicate)
+                    || self.is_bound(&pattern.object)
             }
             IndexType::FullText => {
                 // Full-text indexes apply to literal values
@@ -1628,7 +1645,8 @@ impl<'a> BGPOptimizer<'a> {
         let mut intersection_cost = 0.0;
 
         // Calculate pattern cardinality for more accurate estimation
-        let pattern_cardinality = self.statistics
+        let pattern_cardinality = self
+            .statistics
             .pattern_cardinality
             .get(&format!("{:?}", pattern))
             .copied()
@@ -1636,18 +1654,27 @@ impl<'a> BGPOptimizer<'a> {
 
         for secondary in secondary_indexes {
             let secondary_selectivity = self.get_index_selectivity(secondary);
-            let intersection_overhead = self.calculate_intersection_overhead(primary_index, secondary);
+            let intersection_overhead =
+                self.calculate_intersection_overhead(primary_index, secondary);
 
             // Advanced combination rules based on index characteristics
             combined_selectivity = match (primary_index, secondary) {
                 (IndexType::BTreeIndex(_), IndexType::HashIndex(_)) => {
                     // B-tree + Hash: Excellent for range + exact match
-                    let synergy_factor = if pattern_cardinality > 100000 { 0.7 } else { 0.8 };
+                    let synergy_factor = if pattern_cardinality > 100000 {
+                        0.7
+                    } else {
+                        0.8
+                    };
                     combined_selectivity * secondary_selectivity * synergy_factor
                 }
                 (IndexType::BitmapIndex(_), IndexType::BTreeIndex(_)) => {
                     // Bitmap + B-tree: Outstanding for categorical + range queries
-                    let synergy_factor = if self.is_low_cardinality_predicate(pattern) { 0.6 } else { 0.9 };
+                    let synergy_factor = if self.is_low_cardinality_predicate(pattern) {
+                        0.6
+                    } else {
+                        0.9
+                    };
                     combined_selectivity * secondary_selectivity * synergy_factor
                 }
                 (IndexType::BloomFilter(_), _) => {
@@ -1695,10 +1722,10 @@ impl<'a> BGPOptimizer<'a> {
         match (primary, secondary) {
             (IndexType::BTreeIndex(_), IndexType::HashIndex(_)) => 10.0, // Moderate overhead
             (IndexType::BitmapIndex(_), IndexType::BitmapIndex(_)) => 5.0, // Low overhead - bitwise ops
-            (IndexType::BloomFilter(_), _) => 2.0, // Very low overhead
+            (IndexType::BloomFilter(_), _) => 2.0,                         // Very low overhead
             (IndexType::SpatialRTree, _) => 25.0, // Higher overhead for spatial operations
             (IndexType::HashIndex(_), IndexType::HashIndex(_)) => 15.0, // Hash probe overhead
-            _ => 12.0, // Default overhead
+            _ => 12.0,                            // Default overhead
         }
     }
 
@@ -1821,7 +1848,7 @@ impl<'a> BGPOptimizer<'a> {
             // Identify patterns that should use streaming execution
             for (idx, pattern_sel) in pattern_selectivities.iter().enumerate() {
                 let pattern_memory = self.estimate_pattern_memory_usage(pattern_sel)?;
-                
+
                 if pattern_memory > memory_limit / 4 {
                     streaming_plan.streaming_patterns.push(StreamingPattern {
                         pattern_index: idx,
@@ -1833,15 +1860,15 @@ impl<'a> BGPOptimizer<'a> {
             }
 
             // Generate index-specific streaming recommendations
-            streaming_plan.index_streaming_recommendations = 
+            streaming_plan.index_streaming_recommendations =
                 self.generate_index_streaming_recommendations(patterns, &pattern_selectivities)?;
 
             // Identify pipeline breaker locations
-            streaming_plan.pipeline_breakers = 
+            streaming_plan.pipeline_breakers =
                 self.identify_pipeline_breakers(patterns, &pattern_selectivities, memory_limit)?;
 
             // Identify spill candidates for memory-intensive operations
-            streaming_plan.spill_candidates = 
+            streaming_plan.spill_candidates =
                 self.identify_spill_candidates(patterns, &pattern_selectivities, memory_limit)?;
         }
 
@@ -1849,7 +1876,10 @@ impl<'a> BGPOptimizer<'a> {
     }
 
     /// Estimate total memory usage for a set of patterns
-    fn estimate_total_memory_usage(&self, pattern_selectivities: &[PatternSelectivity]) -> Result<usize> {
+    fn estimate_total_memory_usage(
+        &self,
+        pattern_selectivities: &[PatternSelectivity],
+    ) -> Result<usize> {
         let mut total_memory = 0;
         let mut cumulative_cardinality = 1;
 
@@ -1865,9 +1895,10 @@ impl<'a> BGPOptimizer<'a> {
             }
 
             // Update cumulative cardinality for next join
-            cumulative_cardinality = (cumulative_cardinality as f64 * 
-                pattern_sel.cardinality as f64 * 
-                pattern_sel.selectivity).ceil() as usize;
+            cumulative_cardinality = (cumulative_cardinality as f64
+                * pattern_sel.cardinality as f64
+                * pattern_sel.selectivity)
+                .ceil() as usize;
         }
 
         Ok(total_memory)
@@ -1888,7 +1919,10 @@ impl<'a> BGPOptimizer<'a> {
     }
 
     /// Recommend streaming strategy for a pattern
-    fn recommend_streaming_strategy(&self, pattern_sel: &PatternSelectivity) -> Result<StreamingStrategy> {
+    fn recommend_streaming_strategy(
+        &self,
+        pattern_sel: &PatternSelectivity,
+    ) -> Result<StreamingStrategy> {
         let cardinality = pattern_sel.cardinality;
         let selectivity = pattern_sel.selectivity;
 
@@ -1940,9 +1974,7 @@ impl<'a> BGPOptimizer<'a> {
                         recommendations.push(IndexStreamingRecommendation {
                             pattern_index: idx,
                             index_type: best_index,
-                            streaming_mode: IndexStreamingMode::BatchLookup {
-                                batch_size: 5_000,
-                            },
+                            streaming_mode: IndexStreamingMode::BatchLookup { batch_size: 5_000 },
                             memory_limit: pattern_sel.cardinality * 80,
                         });
                     }
@@ -1997,8 +2029,9 @@ impl<'a> BGPOptimizer<'a> {
             if idx > 0 {
                 let prev_cardinality = pattern_selectivities[idx - 1].cardinality;
                 let join_cost = prev_cardinality * pattern_sel.cardinality;
-                
-                if join_cost > 10_000_000 { // 10M tuple join threshold
+
+                if join_cost > 10_000_000 {
+                    // 10M tuple join threshold
                     breakers.push(PipelineBreaker {
                         location: PipelineBreakerLocation::BeforeJoin(idx - 1, idx),
                         estimated_memory_saving: join_cost / 10,
@@ -2025,8 +2058,9 @@ impl<'a> BGPOptimizer<'a> {
 
             // Large intermediate results are good spill candidates
             if pattern_memory > memory_limit / 8 {
-                let spill_benefit = self.calculate_spill_benefit(pattern_sel, pattern_memory, memory_limit);
-                
+                let spill_benefit =
+                    self.calculate_spill_benefit(pattern_sel, pattern_memory, memory_limit);
+
                 candidates.push(SpillCandidate {
                     pattern_index: idx,
                     operation: SpillOperation::IntermediateResults,
@@ -2040,8 +2074,9 @@ impl<'a> BGPOptimizer<'a> {
             if idx > 0 {
                 let join_memory = pattern_selectivities[idx - 1].cardinality * 200;
                 if join_memory > memory_limit / 10 {
-                    let spill_benefit = self.calculate_spill_benefit(pattern_sel, join_memory, memory_limit);
-                    
+                    let spill_benefit =
+                        self.calculate_spill_benefit(pattern_sel, join_memory, memory_limit);
+
                     candidates.push(SpillCandidate {
                         pattern_index: idx,
                         operation: SpillOperation::HashTable,
@@ -2064,11 +2099,16 @@ impl<'a> BGPOptimizer<'a> {
     }
 
     /// Calculate benefit of spilling an operation
-    fn calculate_spill_benefit(&self, pattern_sel: &PatternSelectivity, memory_usage: usize, memory_limit: usize) -> f64 {
+    fn calculate_spill_benefit(
+        &self,
+        pattern_sel: &PatternSelectivity,
+        memory_usage: usize,
+        memory_limit: usize,
+    ) -> f64 {
         let memory_pressure = memory_usage as f64 / memory_limit as f64;
         let cardinality_factor = (pattern_sel.cardinality as f64).ln() / 10.0;
         let selectivity_factor = 1.0 - pattern_sel.selectivity;
-        
+
         memory_pressure * cardinality_factor * selectivity_factor
     }
 
@@ -2076,7 +2116,7 @@ impl<'a> BGPOptimizer<'a> {
     fn estimate_spill_cost(&self, memory_usage: usize) -> f64 {
         // Assume 100 MB/s I/O throughput
         let io_time = memory_usage as f64 / (100.0 * 1024.0 * 1024.0);
-        
+
         // Cost includes write + read overhead
         io_time * 2.0 + 0.1 // Base spill overhead
     }
@@ -2139,7 +2179,10 @@ pub struct IndexStreamingRecommendation {
 #[derive(Debug, Clone)]
 pub enum IndexStreamingMode {
     /// Range scan for B-tree indexes
-    RangeScan { batch_size: usize, prefetch_size: usize },
+    RangeScan {
+        batch_size: usize,
+        prefetch_size: usize,
+    },
     /// Batch lookup for hash indexes
     BatchLookup { batch_size: usize },
     /// Bit-stream processing for bitmap indexes

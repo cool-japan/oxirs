@@ -35,6 +35,7 @@ use tracing::{debug, error, info, warn};
 pub mod auto_discovery;
 pub mod cache;
 pub mod capability_assessment;
+pub mod connection_pool_manager;
 pub mod discovery;
 pub mod executor;
 pub mod graphql;
@@ -49,6 +50,7 @@ pub mod network_optimizer;
 pub mod planner;
 pub mod query_decomposition;
 pub mod request_batcher;
+pub mod result_streaming;
 pub mod service;
 pub mod service_client;
 pub mod service_executor;
@@ -59,6 +61,7 @@ pub mod streaming_optimizer;
 pub use auto_discovery::*;
 pub use cache::*;
 pub use capability_assessment::*;
+pub use connection_pool_manager::*;
 pub use discovery::*;
 pub use executor::*;
 pub use graphql::*;
@@ -73,6 +76,7 @@ pub use network_optimizer::*;
 pub use planner::*;
 pub use query_decomposition::*;
 pub use request_batcher::*;
+pub use result_streaming::*;
 pub use service::*;
 pub use service_client::*;
 pub use service_executor::*;
@@ -388,7 +392,7 @@ impl FederationEngine {
                             .map(|binding| binding.keys().cloned().collect())
                             .unwrap_or_default(),
                     },
-                    results: crate::executor::SparqlResultSet {
+                    results: crate::executor::SparqlResultsData {
                         bindings: sparql_bindings,
                     },
                 };

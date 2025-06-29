@@ -1320,25 +1320,25 @@ pub struct AnomalyDetector {
 pub struct AnomalyDetectionConfig {
     /// Sensitivity threshold (0.0 = very sensitive, 1.0 = very conservative)
     pub sensitivity_threshold: f64,
-    
+
     /// Learning period in hours for establishing baselines
     pub learning_period_hours: u64,
-    
+
     /// Enable statistical anomaly detection
     pub enable_statistical_detection: bool,
-    
+
     /// Enable machine learning anomaly detection
     pub enable_ml_detection: bool,
-    
+
     /// Enable pattern-based anomaly detection
     pub enable_pattern_detection: bool,
-    
+
     /// Minimum confidence for anomaly alerts
     pub min_anomaly_confidence: f64,
-    
+
     /// Window size for rolling statistics
     pub rolling_window_size: usize,
-    
+
     /// Enable seasonal decomposition
     pub enable_seasonal_decomposition: bool,
 }
@@ -1521,7 +1521,7 @@ impl AnomalyDetector {
         // Store anomalies in history
         for anomaly in &anomalies {
             self.anomaly_history.push_back(anomaly.clone());
-            
+
             // Limit history size
             if self.anomaly_history.len() > 1000 {
                 self.anomaly_history.pop_front();
@@ -1532,10 +1532,13 @@ impl AnomalyDetector {
     }
 
     /// Detect statistical anomalies using z-score and IQR methods
-    fn detect_statistical_anomaly(&mut self, metric: &PerformanceMetric) -> Result<Option<AnomalyEvent>> {
+    fn detect_statistical_anomaly(
+        &mut self,
+        metric: &PerformanceMetric,
+    ) -> Result<Option<AnomalyEvent>> {
         let metric_name = "response_time_ms";
         let value = metric.response_time_ms;
-        
+
         // Get or create baseline profile
         if !self.baseline_profiles.contains_key(metric_name) {
             self.initialize_baseline_profile(metric_name, value)?;
@@ -1543,15 +1546,15 @@ impl AnomalyDetector {
         }
 
         let baseline = self.baseline_profiles.get(metric_name).unwrap();
-        
+
         // Z-score anomaly detection
         let z_score = (value - baseline.mean) / baseline.std_dev;
         let z_threshold = 3.0 * (1.0 - self.detection_config.sensitivity_threshold); // More sensitive = lower threshold
-        
+
         if z_score.abs() > z_threshold {
             let anomaly_score = z_score.abs() / z_threshold;
             let confidence = (anomaly_score - 1.0).min(1.0).max(0.0);
-            
+
             if confidence >= self.detection_config.min_anomaly_confidence {
                 let anomaly_type = if z_score > 0.0 {
                     AnomalyType::PositiveSpike
@@ -1573,7 +1576,10 @@ impl AnomalyDetector {
                     anomaly_type,
                     detection_method: AnomalyModelType::Statistical,
                     impact_assessment: self.assess_impact(metric_name, anomaly_score),
-                    related_metrics: vec!["cpu_usage_percent".to_string(), "memory_usage_mb".to_string()],
+                    related_metrics: vec![
+                        "cpu_usage_percent".to_string(),
+                        "memory_usage_mb".to_string(),
+                    ],
                     root_cause_hints,
                 };
 
@@ -1589,7 +1595,7 @@ impl AnomalyDetector {
         // Check for correlation breakdown between related metrics
         let response_time = metric.response_time_ms;
         let cpu_usage = metric.cpu_usage_percent;
-        
+
         // Normally, high CPU should correlate with higher response times
         // If response time is high but CPU is low, that's anomalous
         if response_time > 1000.0 && cpu_usage < 20.0 {
@@ -1608,7 +1614,10 @@ impl AnomalyDetector {
                     anomaly_type: AnomalyType::CorrelationBreakdown,
                     detection_method: AnomalyModelType::TemporalPattern,
                     impact_assessment: self.assess_impact("correlation", anomaly_score),
-                    related_metrics: vec!["response_time_ms".to_string(), "cpu_usage_percent".to_string()],
+                    related_metrics: vec![
+                        "response_time_ms".to_string(),
+                        "cpu_usage_percent".to_string(),
+                    ],
                     root_cause_hints: vec![
                         "I/O bottleneck possible".to_string(),
                         "Database connection issues".to_string(),
@@ -1647,7 +1656,8 @@ impl AnomalyDetector {
             seasonal_patterns: None,
         };
 
-        self.baseline_profiles.insert(metric_name.to_string(), profile);
+        self.baseline_profiles
+            .insert(metric_name.to_string(), profile);
         Ok(())
     }
 
@@ -1687,7 +1697,11 @@ impl AnomalyDetector {
     }
 
     /// Generate root cause hints for anomalies
-    fn generate_root_cause_hints(&self, metric_name: &str, anomaly_type: &AnomalyType) -> Vec<String> {
+    fn generate_root_cause_hints(
+        &self,
+        metric_name: &str,
+        anomaly_type: &AnomalyType,
+    ) -> Vec<String> {
         match (metric_name, anomaly_type) {
             ("response_time_ms", AnomalyType::PositiveSpike) => vec![
                 "High database load".to_string(),
@@ -1730,8 +1744,9 @@ impl AnomalyDetector {
             // Update running statistics
             let n = profile.sample_count as f64;
             let new_mean = (profile.mean * n + value) / (n + 1.0);
-            let new_variance = ((n - 1.0) * profile.std_dev.powi(2) + (value - new_mean).powi(2)) / n;
-            
+            let new_variance =
+                ((n - 1.0) * profile.std_dev.powi(2) + (value - new_mean).powi(2)) / n;
+
             profile.mean = new_mean;
             profile.std_dev = new_variance.sqrt();
             profile.min_value = profile.min_value.min(value);

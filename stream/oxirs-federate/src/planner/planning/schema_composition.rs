@@ -316,9 +316,7 @@ impl SchemaComposer {
     }
 
     /// Extract required fields from @requires directive
-    fn extract_requires_fields_from_directive(
-        directive: &DirectiveUsage,
-    ) -> Result<Vec<String>> {
+    fn extract_requires_fields_from_directive(directive: &DirectiveUsage) -> Result<Vec<String>> {
         if let Some(fields_value) = directive.arguments.get("fields") {
             if let Some(fields_str) = fields_value.as_str() {
                 return Ok(fields_str
@@ -331,9 +329,7 @@ impl SchemaComposer {
     }
 
     /// Extract provided fields from @provides directive
-    fn extract_provides_fields_from_directive(
-        directive: &DirectiveUsage,
-    ) -> Result<Vec<String>> {
+    fn extract_provides_fields_from_directive(directive: &DirectiveUsage) -> Result<Vec<String>> {
         if let Some(fields_value) = directive.arguments.get("fields") {
             if let Some(fields_str) = fields_value.as_str() {
                 return Ok(fields_str
@@ -460,7 +456,8 @@ impl SchemaComposer {
         // Check for field changes in existing types
         for (type_name, new_type) in &new_schema.types {
             if let Some(old_type) = old_schema.types.get(type_name) {
-                let type_changes = Self::detect_type_breaking_changes(type_name, old_type, new_type)?;
+                let type_changes =
+                    Self::detect_type_breaking_changes(type_name, old_type, new_type)?;
                 breaking_changes.extend(type_changes);
             }
         }
@@ -477,7 +474,9 @@ impl SchemaComposer {
         let mut changes = Vec::new();
 
         // Check for removed fields
-        if let (TypeKind::Object { fields: old_fields }, TypeKind::Object { fields: new_fields }) = (&old_type.kind, &new_type.kind) {
+        if let (TypeKind::Object { fields: old_fields }, TypeKind::Object { fields: new_fields }) =
+            (&old_type.kind, &new_type.kind)
+        {
             for field_name in old_fields.keys() {
                 if !new_fields.contains_key(field_name) {
                     changes.push(BreakingChange {

@@ -22,6 +22,9 @@ pub struct QueryIntelligenceEngine {
     performance_history: Arc<RwLock<Vec<QueryExecution>>>,
     optimization_rules: Arc<RwLock<Vec<OptimizationRule>>>,
     anomaly_detector: Arc<RwLock<AnomalyDetector>>,
+    neural_predictor: Arc<RwLock<NeuralPerformancePredictor>>,
+    adaptive_optimizer: Arc<RwLock<AdaptiveQueryOptimizer>>,
+    semantic_analyzer: Arc<RwLock<SemanticQueryAnalyzer>>,
     config: IntelligenceConfig,
 }
 
@@ -172,11 +175,159 @@ pub struct IntelligenceConfig {
     pub enable_pattern_learning: bool,
     pub enable_anomaly_detection: bool,
     pub enable_automatic_optimization: bool,
+    pub enable_neural_prediction: bool,
+    pub enable_semantic_analysis: bool,
     pub pattern_similarity_threshold: f64,
     pub anomaly_detection_threshold: f64,
     pub max_stored_executions: usize,
     pub learning_rate: f64,
     pub confidence_threshold: f64,
+    pub neural_model_path: Option<String>,
+    pub semantic_cache_size: usize,
+}
+
+/// Neural performance predictor using deep learning
+#[derive(Debug, Clone)]
+pub struct NeuralPerformancePredictor {
+    model_weights: Vec<Vec<f64>>,
+    input_features: Vec<String>,
+    prediction_cache: HashMap<String, PredictionResult>,
+    training_data: Vec<TrainingExample>,
+    model_accuracy: f64,
+    last_training: DateTime<Utc>,
+}
+
+/// Adaptive query optimizer with reinforcement learning
+#[derive(Debug, Clone)]
+pub struct AdaptiveQueryOptimizer {
+    optimization_strategies: HashMap<String, OptimizationStrategy>,
+    strategy_effectiveness: HashMap<String, f64>,
+    current_best_strategy: Option<String>,
+    adaptation_history: Vec<AdaptationEvent>,
+    learning_rate: f64,
+    exploration_rate: f64,
+}
+
+/// Semantic query analyzer for content understanding
+#[derive(Debug, Clone)]
+pub struct SemanticQueryAnalyzer {
+    ontology_cache: HashMap<String, OntologyMapping>,
+    concept_embeddings: HashMap<String, Vec<f64>>,
+    semantic_similarity_cache: HashMap<(String, String), f64>,
+    vocabulary_stats: VocabularyStatistics,
+    inference_rules: Vec<InferenceRule>,
+}
+
+/// Prediction result from neural model
+#[derive(Debug, Clone, Serialize)]
+pub struct PredictionResult {
+    pub predicted_execution_time: f64,
+    pub predicted_memory_usage: f64,
+    pub predicted_result_size: u64,
+    pub confidence_score: f64,
+    pub prediction_timestamp: DateTime<Utc>,
+    pub model_version: String,
+}
+
+/// Training example for neural model
+#[derive(Debug, Clone)]
+pub struct TrainingExample {
+    pub query_features: Vec<f64>,
+    pub actual_performance: PerformanceMetrics,
+    pub timestamp: DateTime<Utc>,
+}
+
+/// Performance metrics for training
+#[derive(Debug, Clone)]
+pub struct PerformanceMetrics {
+    pub execution_time_ms: f64,
+    pub memory_usage_mb: f64,
+    pub result_count: u64,
+    pub cpu_usage_percent: f64,
+    pub disk_io_mb: f64,
+}
+
+/// Optimization strategy definition
+#[derive(Debug, Clone)]
+pub struct OptimizationStrategy {
+    pub strategy_id: String,
+    pub strategy_name: String,
+    pub description: String,
+    pub applicable_patterns: Vec<String>,
+    pub effectiveness_score: f64,
+    pub resource_cost: f64,
+    pub implementation: OptimizationImplementation,
+}
+
+/// Optimization implementation details
+#[derive(Debug, Clone)]
+pub enum OptimizationImplementation {
+    QueryRewrite(QueryRewriteRule),
+    IndexHint(IndexHintRule),
+    CacheStrategy(CacheStrategyRule),
+    ParallelizationHint(ParallelizationRule),
+    MemoryManagement(MemoryRule),
+}
+
+/// Adaptation event in reinforcement learning
+#[derive(Debug, Clone)]
+pub struct AdaptationEvent {
+    pub event_id: String,
+    pub strategy_applied: String,
+    pub context: QueryContext,
+    pub outcome: AdaptationOutcome,
+    pub reward: f64,
+    pub timestamp: DateTime<Utc>,
+}
+
+/// Query context for adaptation
+#[derive(Debug, Clone)]
+pub struct QueryContext {
+    pub query_complexity: f64,
+    pub dataset_size: u64,
+    pub current_load: f64,
+    pub available_memory: f64,
+    pub time_constraints: Option<Duration>,
+}
+
+/// Outcome of adaptation attempt
+#[derive(Debug, Clone, Serialize)]
+pub struct AdaptationOutcome {
+    pub success: bool,
+    pub performance_improvement: f64,
+    pub resource_efficiency: f64,
+    pub user_satisfaction: Option<f64>,
+    pub side_effects: Vec<String>,
+}
+
+/// Ontology mapping for semantic analysis
+#[derive(Debug, Clone)]
+pub struct OntologyMapping {
+    pub concept_uri: String,
+    pub concept_labels: Vec<String>,
+    pub related_concepts: Vec<String>,
+    pub semantic_type: String,
+    pub confidence: f64,
+}
+
+/// Vocabulary statistics for semantic understanding
+#[derive(Debug, Clone)]
+pub struct VocabularyStatistics {
+    pub total_predicates: u64,
+    pub total_classes: u64,
+    pub average_instance_count: f64,
+    pub vocabulary_diversity: f64,
+    pub common_patterns: Vec<String>,
+}
+
+/// Inference rule for semantic reasoning
+#[derive(Debug, Clone)]
+pub struct InferenceRule {
+    pub rule_id: String,
+    pub premise: String,
+    pub conclusion: String,
+    pub confidence: f64,
+    pub application_count: u64,
 }
 
 /// Query analysis result

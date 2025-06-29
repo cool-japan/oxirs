@@ -123,7 +123,7 @@ impl ResultIntegrator {
             head: crate::executor::SparqlHead {
                 vars: all_variables.into_iter().collect(),
             },
-            results: crate::executor::SparqlResultSet {
+            results: crate::executor::SparqlResultsData {
                 bindings: all_bindings,
             },
         };
@@ -547,7 +547,7 @@ pub enum ConflictResolution {
 mod tests {
     use super::*;
     use crate::{
-        executor::{SparqlHead, SparqlResultSet, SparqlResults},
+        executor::{SparqlHead, SparqlResults, SparqlResultsData},
         QueryResultData, StepResult, StepType,
     };
     use std::time::Duration;
@@ -566,7 +566,7 @@ mod tests {
             head: SparqlHead {
                 vars: vec!["s".to_string()],
             },
-            results: SparqlResultSet { bindings: vec![] },
+            results: SparqlResultsData { bindings: vec![] },
         };
 
         let step_result = StepResult {

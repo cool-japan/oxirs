@@ -1005,7 +1005,7 @@ impl ResultDispatcher {
     async fn create_stream_producer_for_topic(&self, topic: &str) -> Result<crate::StreamProducer> {
         // Create a default stream configuration for this topic
         let config = crate::StreamConfig {
-            backend: crate::StreamBackend::Memory {
+            backend: crate::StreamBackendType::Memory {
                 max_size: Some(10000),
                 persistence: false,
             },

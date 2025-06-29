@@ -20,13 +20,13 @@ thiserror.workspace = true
 tracing.workspace = true
 hnsw_rs = { workspace = true, optional = true }
 zstd = { version = "0.13", default-features = false }
-rand = "0.8"
+rand = "0.9"
 rand_distr = "0.4"
-half = "2.4"
+half = "2.5"
 memmap2 = "0.9"
 parking_lot = "0.12"
-blake3 = "1.5"
-lru = "0.12"
+blake3 = "1.8"
+lru = "0.13"
 crossbeam-utils = "0.8"
 libc = "0.2"
 nalgebra = "0.33"
@@ -34,6 +34,13 @@ petgraph = "0.6"
 reqwest = { version = "0.12", features = ["json"] }
 tokio = { version = "1.0", features = ["rt", "time"] }
 bincode = "1.3"
+regex = "1.11"
+pdf-extract = { version = "0.7", optional = true }
+zip = { version = "2.2", optional = true }
+quick-xml = { version = "0.37", optional = true }
+base64 = { version = "0.22", optional = true }
+image = { version = "0.25", optional = true }
+chrono = { version = "0.4", features = ["serde"] }
 cuda-runtime-sys = { version = "0.3.0-alpha.1", optional = true }
 cudarc = { version = "0.12", features = ["cuda-12000"], optional = true }
 candle-core = { version = "0.9", optional = true }
@@ -52,4 +59,6 @@ blas = ["oxirs-core/blas"]
 cuda = ["cuda-runtime-sys", "cudarc"]
 candle-gpu = ["candle-core"]
 gpu-full = ["cuda", "candle-gpu", "gpu"]
+images = ["image"]
+content-processing = ["pdf-extract", "zip", "quick-xml", "base64", "images"]
 

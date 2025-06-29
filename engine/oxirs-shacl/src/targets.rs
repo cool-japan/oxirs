@@ -98,85 +98,220 @@ pub struct TargetSelector {
 /// Configuration for target selection optimization
 #[derive(Debug, Clone)]
 pub struct TargetOptimizationConfig {
-    /// Maximum number of results to return per target (0 = unlimited)
-    pub max_results_per_target: usize,
-
-    /// Enable query batching for multiple targets
-    pub enable_batching: bool,
-
-    /// Batch size for paginated queries
-    pub batch_size: usize,
-
-    /// Enable index-aware query optimization
-    pub use_indexes: bool,
-
-    /// Timeout for target queries in milliseconds
-    pub query_timeout_ms: Option<u64>,
-
-    /// Enable adaptive batch sizing based on performance
-    pub adaptive_batching: bool,
-
-    /// Enable parallel processing for independent targets
-    pub enable_parallel_processing: bool,
-
+    /// Enable result caching
+    pub enable_caching: bool,
     /// Cache TTL in seconds
-    pub cache_ttl_seconds: u64,
+    pub cache_ttl: u64,
+    /// Maximum cache size (number of entries)
+    pub max_cache_size: usize,
+    /// Enable query plan optimization
+    pub enable_query_optimization: bool,
+    /// Index hint threshold (use index if selectivity < threshold)
+    pub index_hint_threshold: f64,
+    /// Parallel execution threshold (execute in parallel if cardinality > threshold)
+    pub parallel_threshold: usize,
+    /// Enable adaptive optimization based on statistics
+    pub enable_adaptive_optimization: bool,
 }
 
 impl Default for TargetOptimizationConfig {
     fn default() -> Self {
         Self {
-            max_results_per_target: 0, // unlimited
-            enable_batching: true,
-            batch_size: 10000,
-            use_indexes: true,
-            query_timeout_ms: Some(30000), // 30 seconds
-            adaptive_batching: true,
-            enable_parallel_processing: true,
-            cache_ttl_seconds: 300, // 5 minutes
+            enable_caching: true,
+            cache_ttl: 300, // 5 minutes
+            max_cache_size: 1000,
+            enable_query_optimization: true,
+            index_hint_threshold: 0.1,
+            parallel_threshold: 10000,
+            enable_adaptive_optimization: true,
         }
     }
 }
 
-/// Cached target result with metadata
+/// Cached target result
 #[derive(Debug, Clone)]
 struct CachedTargetResult {
-    /// The cached target nodes
-    targets: Vec<Term>,
-    /// Timestamp when cached
+    /// Target nodes
+    nodes: HashSet<Term>,
+    /// Cache timestamp
     cached_at: std::time::Instant,
-    /// Number of cache hits
-    hit_count: usize,
-    /// Average query execution time
-    avg_execution_time_ms: f64,
+    /// Cache statistics
+    stats: CacheStats,
 }
 
-/// Query execution plan for SPARQL targets
+/// Cache statistics
+#[derive(Debug, Clone)]
+struct CacheStats {
+    /// Number of hits
+    hits: usize,
+    /// Number of misses
+    misses: usize,
+    /// Average query time
+    avg_query_time: std::time::Duration,
+}
+
+/// Target selection statistics
+#[derive(Debug, Clone)]
+pub struct TargetSelectionStats {
+    /// Total number of target evaluations
+    pub total_evaluations: usize,
+    /// Total time spent on target selection
+    pub total_time: std::time::Duration,
+    /// Cache hit rate
+    pub cache_hit_rate: f64,
+    /// Average evaluation time
+    pub avg_evaluation_time: std::time::Duration,
+    /// Index usage statistics
+    pub index_usage_rate: f64,
+    /// Parallel execution rate
+    pub parallel_execution_rate: f64,
+}
+
+/// Query plan for SPARQL targets
 #[derive(Debug, Clone)]
 struct QueryPlan {
-    /// Optimized query string
+    /// Optimized SPARQL query
     optimized_query: String,
-    /// Estimated execution cost
-    estimated_cost: f64,
-    /// Index hints
-    index_hints: Vec<String>,
-    /// Expected result count
-    estimated_result_count: usize,
-    /// Plan creation timestamp
+    /// Estimated cardinality
+    estimated_cardinality: usize,
+    /// Index usage recommendations
+    index_hints: Vec<IndexHint>,
+    /// Execution strategy
+    execution_strategy: ExecutionStrategy,
+    /// Plan creation time
     created_at: std::time::Instant,
 }
 
-/// Index usage statistics for adaptive optimization
+/// Index usage hint
+#[derive(Debug, Clone)]
+struct IndexHint {
+    /// Index type
+    index_type: String,
+    /// Estimated selectivity
+    selectivity: f64,
+    /// Cost benefit
+    cost_benefit: f64,
+}
+
+/// Execution strategy for target selection
+#[derive(Debug, Clone)]
+enum ExecutionStrategy {
+    /// Sequential execution
+    Sequential,
+    /// Parallel execution
+    Parallel,
+    /// Index-driven execution
+    IndexDriven,
+    /// Hybrid approach
+    Hybrid,
+}
+
+/// Index usage statistics
 #[derive(Debug, Clone)]
 struct IndexUsageStats {
-    /// Number of times this index was used
+    /// Number of times used
     usage_count: usize,
-    /// Total execution time with this index
-    total_execution_time_ms: f64,
-    /// Average selectivity
-    avg_selectivity: f64,
-    /// Last update timestamp
-    last_updated: std::time::Instant,
+    /// Average performance gain
+    avg_performance_gain: f64,
+    /// Last used timestamp
+    last_used: std::time::Instant,
+}
+
+/// Target cache statistics
+#[derive(Debug, Clone)]
+pub struct TargetCacheStats {
+    /// Total cache hits
+    pub hits: usize,
+    /// Total cache misses
+    pub misses: usize,
+    /// Cache hit rate
+    pub hit_rate: f64,
+    /// Cache size
+    pub cache_size: usize,
+    /// Memory usage estimate
+    pub memory_usage_bytes: usize,
+}
+
+/// Query optimization options
+#[derive(Debug, Clone, Hash)]
+pub struct QueryOptimizationOptions {
+    /// Maximum number of results to return
+    pub limit: Option<usize>,
+    /// Ensure deterministic ordering of results
+    pub deterministic_results: bool,
+    /// Use index hints in generated queries
+    pub use_index_hints: bool,
+    /// Include performance monitoring hints
+    pub include_performance_hints: bool,
+    /// Use UNION optimization for batch queries
+    pub use_union_optimization: bool,
+    /// Custom optimization parameters
+    pub custom_params: std::collections::HashMap<String, String>,
+}
+
+impl Default for QueryOptimizationOptions {
+    fn default() -> Self {
+        Self {
+            limit: None,
+            deterministic_results: false,
+            use_index_hints: true,
+            include_performance_hints: false,
+            use_union_optimization: true,
+            custom_params: std::collections::HashMap::new(),
+        }
+    }
+}
+
+/// Optimized query result
+#[derive(Debug, Clone)]
+pub struct OptimizedQuery {
+    /// The optimized SPARQL query
+    pub sparql: String,
+    /// Estimated result cardinality
+    pub estimated_cardinality: usize,
+    /// Recommended execution strategy
+    pub execution_strategy: ExecutionStrategy,
+    /// Index usage hints
+    pub index_hints: Vec<IndexHint>,
+    /// Time spent on optimization
+    pub optimization_time: std::time::Duration,
+}
+
+/// Execution plan for target selection
+#[derive(Debug, Clone)]
+pub struct ExecutionPlan {
+    /// Recommended execution strategy
+    pub execution_strategy: ExecutionStrategy,
+    /// Index usage hints
+    pub index_hints: Vec<IndexHint>,
+    /// Estimated cardinality
+    pub estimated_cardinality: usize,
+}
+
+/// Batch query result
+#[derive(Debug, Clone)]
+pub struct BatchQueryResult {
+    /// Individual optimized queries
+    pub individual_queries: Vec<OptimizedQuery>,
+    /// Optional union query combining all targets
+    pub union_query: Option<String>,
+    /// Total estimated cardinality across all queries
+    pub total_estimated_cardinality: usize,
+    /// Time spent on batch optimization
+    pub batch_optimization_time: std::time::Duration,
+}
+
+impl Default for TargetSelectionStats {
+    fn default() -> Self {
+        Self {
+            total_evaluations: 0,
+            total_time: std::time::Duration::from_millis(0),
+            cache_hit_rate: 0.0,
+            avg_evaluation_time: std::time::Duration::from_millis(0),
+            index_usage_rate: 0.0,
+            parallel_execution_rate: 0.0,
+        }
+    }
 }
 
 impl TargetSelector {
@@ -202,9 +337,157 @@ impl TargetSelector {
         }
     }
 
-    /// Update optimization configuration
-    pub fn set_optimization_config(&mut self, config: TargetOptimizationConfig) {
-        self.optimization_config = config;
+    /// Generate efficient SPARQL query for target selection
+    pub fn generate_target_query(
+        &self,
+        target: &Target,
+        graph_name: Option<&str>,
+    ) -> Result<String> {
+        match target {
+            Target::Class(class_iri) => {
+                let graph_clause = if let Some(graph) = graph_name {
+                    format!("GRAPH <{}> {{", graph)
+                } else {
+                    String::new()
+                };
+
+                let close_clause = if graph_name.is_some() { " }" } else { "" };
+
+                Ok(format!(
+                    "SELECT DISTINCT ?target WHERE {{ {} ?target a <{}> .{} }}",
+                    graph_clause,
+                    class_iri.as_str(),
+                    close_clause
+                ))
+            }
+            Target::Node(node) => {
+                // For specific nodes, just return the node
+                match node {
+                    Term::NamedNode(nn) => {
+                        Ok(format!("SELECT (<{}> AS ?target) WHERE {{ }}", nn.as_str()))
+                    }
+                    Term::BlankNode(bn) => {
+                        Ok(format!("SELECT (?{} AS ?target) WHERE {{ }}", bn.as_str()))
+                    }
+                    Term::Literal(lit) => Ok(format!("SELECT ({} AS ?target) WHERE {{ }}", lit)),
+                    _ => Err(ShaclError::ValidationEngine(
+                        "Unsupported term type for node target".to_string(),
+                    )),
+                }
+            }
+            Target::ObjectsOf(property) => {
+                let graph_clause = if let Some(graph) = graph_name {
+                    format!("GRAPH <{}> {{", graph)
+                } else {
+                    String::new()
+                };
+
+                let close_clause = if graph_name.is_some() { " }" } else { "" };
+
+                Ok(format!(
+                    "SELECT DISTINCT ?target WHERE {{ {} ?s <{}> ?target .{} }}",
+                    graph_clause,
+                    property.as_str(),
+                    close_clause
+                ))
+            }
+            Target::SubjectsOf(property) => {
+                let graph_clause = if let Some(graph) = graph_name {
+                    format!("GRAPH <{}> {{", graph)
+                } else {
+                    String::new()
+                };
+
+                let close_clause = if graph_name.is_some() { " }" } else { "" };
+
+                Ok(format!(
+                    "SELECT DISTINCT ?target WHERE {{ {} ?target <{}> ?o .{} }}",
+                    graph_clause,
+                    property.as_str(),
+                    close_clause
+                ))
+            }
+            Target::Sparql(sparql_target) => {
+                // Return the user-provided SPARQL query with optional prefixes
+                let mut query = String::new();
+                if let Some(prefixes) = &sparql_target.prefixes {
+                    query.push_str(prefixes);
+                    query.push('\n');
+                }
+                query.push_str(&sparql_target.query);
+                Ok(query)
+            }
+            Target::Implicit(class_iri) => {
+                // Same as class target
+                let graph_clause = if let Some(graph) = graph_name {
+                    format!("GRAPH <{}> {{", graph)
+                } else {
+                    String::new()
+                };
+
+                let close_clause = if graph_name.is_some() { " }" } else { "" };
+
+                Ok(format!(
+                    "SELECT DISTINCT ?target WHERE {{ {} ?target a <{}> .{} }}",
+                    graph_clause,
+                    class_iri.as_str(),
+                    close_clause
+                ))
+            }
+        }
+    }
+
+    /// Optimize SPARQL query for target selection with index hints
+    pub fn optimize_target_query(&mut self, query: &str, target: &Target) -> Result<String> {
+        if !self.optimization_config.enable_query_optimization {
+            return Ok(query.to_string());
+        }
+
+        let mut optimized_query = query.to_string();
+
+        // Add index hints based on target type
+        match target {
+            Target::Class(_) | Target::Implicit(_) => {
+                // Add hint for type index if available
+                if self.should_use_index_hint("type_index") {
+                    optimized_query = format!("# Use type index\n{}", optimized_query);
+                }
+            }
+            Target::ObjectsOf(_) => {
+                // Add hint for predicate index
+                if self.should_use_index_hint("predicate_index") {
+                    optimized_query = format!("# Use predicate index\n{}", optimized_query);
+                }
+            }
+            Target::SubjectsOf(_) => {
+                // Add hint for subject index
+                if self.should_use_index_hint("subject_index") {
+                    optimized_query = format!("# Use subject index\n{}", optimized_query);
+                }
+            }
+            _ => {} // No specific optimization for other types
+        }
+
+        // Add LIMIT clause if max_results is configured
+        if self.optimization_config.parallel_threshold > 0 {
+            if !optimized_query.to_uppercase().contains("LIMIT") {
+                optimized_query = format!(
+                    "{} LIMIT {}",
+                    optimized_query, self.optimization_config.parallel_threshold
+                );
+            }
+        }
+
+        Ok(optimized_query)
+    }
+
+    /// Check if index hint should be used based on statistics
+    fn should_use_index_hint(&self, index_type: &str) -> bool {
+        if let Some(stats) = self.index_usage_stats.get(index_type) {
+            stats.avg_performance_gain > self.optimization_config.index_hint_threshold
+        } else {
+            true // Default to using index hints if no statistics available
+        }
     }
 
     /// Select all target nodes for a given target definition
@@ -217,696 +500,226 @@ impl TargetSelector {
         let start_time = std::time::Instant::now();
         let cache_key = self.create_cache_key(target, graph_name);
 
-        // Check cache first and validate TTL
-        if let Some(cached_result) = self.cache.get_mut(&cache_key) {
-            let cache_age = cached_result.cached_at.elapsed();
-            if cache_age.as_secs() <= self.optimization_config.cache_ttl_seconds {
-                // Cache hit - update statistics
-                cached_result.hit_count += 1;
-                self.stats.cache_hits += 1;
-                return Ok(cached_result.targets.clone());
-            } else {
-                // Cache expired - remove entry
-                self.cache.remove(&cache_key);
+        // Check cache first
+        if self.optimization_config.enable_caching {
+            if let Some(cached_result) = self.cache.get(&cache_key) {
+                let cache_age = cached_result.cached_at.elapsed();
+                if cache_age.as_secs() <= self.optimization_config.cache_ttl {
+                    // Update statistics
+                    self.stats.total_evaluations += 1;
+
+                    return Ok(cached_result.nodes.iter().cloned().collect());
+                }
             }
         }
 
-        // Cache miss - execute query
-        let execution_start = std::time::Instant::now();
-        let result = self.select_targets_impl(store, target, graph_name)?;
-        let execution_time = execution_start.elapsed();
+        // Generate and execute query
+        let query = self.generate_target_query(target, graph_name)?;
+        let optimized_query = self.optimize_target_query(&query, target)?;
+
+        let result = self.execute_target_query(store, &optimized_query, graph_name)?;
+
+        // Cache the result
+        if self.optimization_config.enable_caching {
+            let cached_result = CachedTargetResult {
+                nodes: result.iter().cloned().collect(),
+                cached_at: std::time::Instant::now(),
+                stats: CacheStats {
+                    hits: 0,
+                    misses: 1,
+                    avg_query_time: start_time.elapsed(),
+                },
+            };
+
+            // Manage cache size
+            if self.cache.len() >= self.optimization_config.max_cache_size {
+                // Remove oldest entry
+                if let Some(oldest_key) = self.find_oldest_cache_entry() {
+                    self.cache.remove(&oldest_key);
+                }
+            }
+
+            self.cache.insert(cache_key, cached_result);
+        }
 
         // Update statistics
-        self.stats.queries_executed += 1;
-        let execution_time_ms = execution_time.as_millis() as f64;
-
-        // Cache the result with metadata
-        let cached_result = CachedTargetResult {
-            targets: result.clone(),
-            cached_at: std::time::Instant::now(),
-            hit_count: 0,
-            avg_execution_time_ms: execution_time_ms,
-        };
-        self.cache.insert(cache_key, cached_result);
-
-        // Adaptive cache management - evict old entries if cache is too large
-        if self.cache.len() > 1000 {
-            self.evict_old_cache_entries();
-        }
+        self.stats.total_evaluations += 1;
+        self.stats.total_time += start_time.elapsed();
+        self.update_cache_hit_rate();
 
         Ok(result)
     }
 
-    /// Select target nodes for multiple targets
-    pub fn select_multiple_targets(
-        &mut self,
-        store: &Store,
-        targets: &[Target],
-        graph_name: Option<&str>,
-    ) -> Result<Vec<Term>> {
-        if targets.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        if targets.len() == 1 {
-            return self.select_targets(store, &targets[0], graph_name);
-        }
-
-        // Use optimized UNION query if batching is enabled and targets support it
-        if self.optimization_config.enable_batching && self.can_use_union_query(targets) {
-            return self.select_targets_with_union_query(store, targets, graph_name);
-        }
-
-        // Fallback to individual target selection
-        let mut all_targets = HashSet::new();
-
-        for target in targets {
-            let target_nodes = self.select_targets(store, target, graph_name)?;
-            all_targets.extend(target_nodes);
-        }
-
-        Ok(all_targets.into_iter().collect())
-    }
-
-    /// Check if targets can be combined into a UNION query
-    fn can_use_union_query(&self, targets: &[Target]) -> bool {
-        // Only combine Class and Implicit targets for now
-        targets
-            .iter()
-            .all(|target| matches!(target, Target::Class(_) | Target::Implicit(_)))
-    }
-
-    /// Select targets using optimized UNION query
-    fn select_targets_with_union_query(
-        &mut self,
-        store: &Store,
-        targets: &[Target],
-        graph_name: Option<&str>,
-    ) -> Result<Vec<Term>> {
-        let start_time = std::time::Instant::now();
-        let cache_key = format!(
-            "union_{}",
-            targets
-                .iter()
-                .map(|t| format!("{:?}", t))
-                .collect::<Vec<_>>()
-                .join(",")
-        );
-
-        // Check cache first and validate TTL
-        if let Some(cached_result) = self.cache.get_mut(&cache_key) {
-            let cache_age = cached_result.cached_at.elapsed();
-            if cache_age.as_secs() <= self.optimization_config.cache_ttl_seconds {
-                // Cache hit - update statistics
-                cached_result.hit_count += 1;
-                self.stats.cache_hits += 1;
-                self.stats.union_queries_used += 1;
-                return Ok(cached_result.targets.clone());
-            } else {
-                // Cache expired - remove entry
-                self.cache.remove(&cache_key);
-            }
-        }
-
-        let query = self.build_union_query(targets, graph_name)?;
-
-        let mut results = Vec::new();
-
-        match self.execute_target_query(store, &query) {
-            Ok(query_result) => {
-                if let oxirs_core::query::QueryResult::Select {
-                    variables: _,
-                    bindings,
-                } = query_result
-                {
-                    for binding in bindings {
-                        if let Some(instance) = binding.get("instance") {
-                            results.push(instance.clone());
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                tracing::warn!(
-                    "Union query failed, falling back to individual queries: {}",
-                    e
-                );
-                // Fallback to individual target selection
-                let mut all_targets = HashSet::new();
-                for target in targets {
-                    let target_nodes = self.select_targets_impl(store, target, graph_name)?;
-                    all_targets.extend(target_nodes);
-                }
-                results = all_targets.into_iter().collect();
-            }
-        }
-
-        // Cache the result with metadata
-        let execution_time_ms = start_time.elapsed().as_millis() as f64;
-        let cached_result = CachedTargetResult {
-            targets: results.clone(),
-            cached_at: std::time::Instant::now(),
-            hit_count: 0,
-            avg_execution_time_ms: execution_time_ms,
-        };
-        self.cache.insert(cache_key, cached_result);
-
-        // Update statistics
-        self.stats.queries_executed += 1;
-        self.stats.union_queries_used += 1;
-
-        tracing::debug!("Union query found {} total targets", results.len());
-        Ok(results)
-    }
-
-    /// Build a UNION query for multiple class targets
-    fn build_union_query(&self, targets: &[Target], graph_name: Option<&str>) -> Result<String> {
-        let rdf_type = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
-
-        let mut union_parts = Vec::new();
-
-        for target in targets {
-            let class_iri = match target {
-                Target::Class(class) => class.as_str(),
-                Target::Implicit(class) => class.as_str(),
-                _ => continue, // Skip non-class targets
-            };
-
-            let pattern = if let Some(graph) = graph_name {
-                format!(
-                    "{{ GRAPH <{}> {{ ?instance <{}> <{}> . }} }}",
-                    graph, rdf_type, class_iri
-                )
-            } else {
-                format!("{{ ?instance <{}> <{}> . }}", rdf_type, class_iri)
-            };
-
-            union_parts.push(pattern);
-        }
-
-        if union_parts.is_empty() {
-            return Err(ShaclError::TargetSelection(
-                "No valid class targets for UNION query".to_string(),
-            ));
-        }
-
-        let limit_clause = if self.optimization_config.max_results_per_target > 0 {
-            format!(
-                " LIMIT {}",
-                self.optimization_config.max_results_per_target * targets.len()
-            )
-        } else {
-            String::new()
-        };
-
-        let query = format!(
-            "SELECT DISTINCT ?instance WHERE {{\n  {}\n}}{}",
-            union_parts.join("\n  UNION\n  "),
-            limit_clause
-        );
-
-        Ok(query)
-    }
-
-    /// Implementation of target selection without caching
-    fn select_targets_impl(
-        &mut self,
-        store: &Store,
-        target: &Target,
-        graph_name: Option<&str>,
-    ) -> Result<Vec<Term>> {
-        match target {
-            Target::Class(class_iri) => self.select_class_instances(store, class_iri, graph_name),
-            Target::Node(node) => Ok(vec![node.clone()]),
-            Target::ObjectsOf(property) => {
-                self.select_objects_of_property(store, property, graph_name)
-            }
-            Target::SubjectsOf(property) => {
-                self.select_subjects_of_property(store, property, graph_name)
-            }
-            Target::Sparql(sparql_target) => {
-                self.select_sparql_targets(store, sparql_target, graph_name)
-            }
-            Target::Implicit(class_iri) => {
-                self.select_class_instances(store, class_iri, graph_name)
-            }
-        }
-    }
-
-    /// Select all instances of a class using rdf:type relationships
-    fn select_class_instances(
-        &mut self,
-        store: &Store,
-        class_iri: &NamedNode,
-        graph_name: Option<&str>,
-    ) -> Result<Vec<Term>> {
-        let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-            .map_err(|e| ShaclError::Core(OxirsError::Parse(e.to_string())))?;
-
-        let mut instances = Vec::new();
-
-        // Create an optimized SPARQL query to find all instances of the class
-        let target = Target::Class(class_iri.clone());
-        let adaptive_limit = if self.optimization_config.max_results_per_target > 0 {
-            self.optimization_config.max_results_per_target
-        } else {
-            // Use adaptive batch sizing
-            self.calculate_adaptive_batch_size(&target)
-        };
-
-        let limit_clause = if adaptive_limit > 0 {
-            format!(" LIMIT {}", adaptive_limit)
-        } else {
-            String::new()
-        };
-
-        let base_query = if let Some(graph) = graph_name {
-            format!(
-                r#"
-                SELECT DISTINCT ?instance WHERE {{
-                    GRAPH <{}> {{
-                        ?instance <{}> <{}> .
-                    }}
-                }}
-                ORDER BY ?instance{}
-            "#,
-                graph,
-                rdf_type.as_str(),
-                class_iri.as_str(),
-                limit_clause
-            )
-        } else {
-            format!(
-                r#"
-                SELECT DISTINCT ?instance WHERE {{
-                    ?instance <{}> <{}> .
-                }}
-                ORDER BY ?instance{}
-            "#,
-                rdf_type.as_str(),
-                class_iri.as_str(),
-                limit_clause
-            )
-        };
-
-        // Apply index optimizations
-        let query = self.optimize_query_with_indexes(&base_query, &target);
-
-        // Execute the query using oxirs-core query engine with timing
-        let query_start = std::time::Instant::now();
-        match self.execute_target_query(store, &query) {
-            Ok(results) => {
-                if let oxirs_core::query::QueryResult::Select {
-                    variables: _,
-                    bindings,
-                } = results
-                {
-                    for binding in bindings {
-                        if let Some(instance) = binding.get("instance") {
-                            instances.push(instance.clone());
-                        }
-                    }
-                }
-
-                // Update performance statistics
-                let execution_time_ms = query_start.elapsed().as_millis() as f64;
-                self.update_index_usage_stats(&target, execution_time_ms, instances.len());
-            }
-            Err(e) => {
-                tracing::error!("Failed to execute class instance query: {}", e);
-                // Fallback to direct store querying
-                self.stats.fallback_operations += 1;
-                instances = self.select_class_instances_direct(store, class_iri, graph_name)?;
-            }
-        }
-
-        tracing::debug!(
-            "Found {} instances of class {}",
-            instances.len(),
-            class_iri.as_str()
-        );
-        Ok(instances)
-    }
-
-    /// Select objects of a specific property
-    fn select_objects_of_property(
-        &mut self,
-        store: &Store,
-        property: &NamedNode,
-        graph_name: Option<&str>,
-    ) -> Result<Vec<Term>> {
-        let mut objects = Vec::new();
-
-        // Create an optimized SPARQL query to find all objects of the property
-        let limit_clause = if self.optimization_config.max_results_per_target > 0 {
-            format!(" LIMIT {}", self.optimization_config.max_results_per_target)
-        } else {
-            String::new()
-        };
-
-        let query = if let Some(graph) = graph_name {
-            format!(
-                r#"
-                SELECT DISTINCT ?object WHERE {{
-                    GRAPH <{}> {{
-                        ?subject <{}> ?object .
-                    }}
-                }}
-                ORDER BY ?object{}
-            "#,
-                graph,
-                property.as_str(),
-                limit_clause
-            )
-        } else {
-            format!(
-                r#"
-                SELECT DISTINCT ?object WHERE {{
-                    ?subject <{}> ?object .
-                }}
-                ORDER BY ?object{}
-            "#,
-                property.as_str(),
-                limit_clause
-            )
-        };
-
-        // Execute the query using oxirs-core query engine
-        match self.execute_target_query(store, &query) {
-            Ok(results) => {
-                if let oxirs_core::query::QueryResult::Select {
-                    variables: _,
-                    bindings,
-                } = results
-                {
-                    for binding in bindings {
-                        if let Some(object) = binding.get("object") {
-                            objects.push(object.clone());
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                tracing::error!("Failed to execute objects query: {}", e);
-                // Fallback to direct store querying
-                objects = self.select_objects_direct(store, property, graph_name)?;
-            }
-        }
-
-        tracing::debug!(
-            "Found {} objects of property {}",
-            objects.len(),
-            property.as_str()
-        );
-        Ok(objects)
-    }
-
-    /// Select subjects of a specific property
-    fn select_subjects_of_property(
-        &mut self,
-        store: &Store,
-        property: &NamedNode,
-        graph_name: Option<&str>,
-    ) -> Result<Vec<Term>> {
-        let mut subjects = Vec::new();
-
-        // Create an optimized SPARQL query to find all subjects of the property
-        let limit_clause = if self.optimization_config.max_results_per_target > 0 {
-            format!(" LIMIT {}", self.optimization_config.max_results_per_target)
-        } else {
-            String::new()
-        };
-
-        let query = if let Some(graph) = graph_name {
-            format!(
-                r#"
-                SELECT DISTINCT ?subject WHERE {{
-                    GRAPH <{}> {{
-                        ?subject <{}> ?object .
-                    }}
-                }}
-                ORDER BY ?subject{}
-            "#,
-                graph,
-                property.as_str(),
-                limit_clause
-            )
-        } else {
-            format!(
-                r#"
-                SELECT DISTINCT ?subject WHERE {{
-                    ?subject <{}> ?object .
-                }}
-                ORDER BY ?subject{}
-            "#,
-                property.as_str(),
-                limit_clause
-            )
-        };
-
-        // Execute the query using oxirs-core query engine
-        match self.execute_target_query(store, &query) {
-            Ok(results) => {
-                if let oxirs_core::query::QueryResult::Select {
-                    variables: _,
-                    bindings,
-                } = results
-                {
-                    for binding in bindings {
-                        if let Some(subject) = binding.get("subject") {
-                            subjects.push(subject.clone());
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                tracing::error!("Failed to execute subjects query: {}", e);
-                // Fallback to direct store querying
-                subjects = self.select_subjects_direct(store, property, graph_name)?;
-            }
-        }
-
-        tracing::debug!(
-            "Found {} subjects of property {}",
-            subjects.len(),
-            property.as_str()
-        );
-        Ok(subjects)
-    }
-
-    /// Select targets using SPARQL query
-    fn select_sparql_targets(
-        &mut self,
-        store: &Store,
-        sparql_target: &SparqlTarget,
-        graph_name: Option<&str>,
-    ) -> Result<Vec<Term>> {
-        let mut complete_query = String::new();
-
-        // Add prefixes if provided
-        if let Some(ref prefixes) = sparql_target.prefixes {
-            complete_query.push_str(prefixes);
-            complete_query.push('\n');
-        }
-
-        // Add the main query
-        let query = if let Some(graph) = graph_name {
-            // Wrap the query in a GRAPH clause if graph is specified
-            format!(
-                "SELECT ?this WHERE {{ GRAPH <{}> {{ {} }} }}",
-                graph, sparql_target.query
-            )
-        } else {
-            sparql_target.query.clone()
-        };
-
-        complete_query.push_str(&query);
-
-        let mut targets = Vec::new();
-
-        // Execute the SPARQL query using oxirs-core query engine
-        match self.execute_target_query(store, &complete_query) {
-            Ok(results) => {
-                if let oxirs_core::query::QueryResult::Select {
-                    variables: _,
-                    bindings,
-                } = results
-                {
-                    for binding in bindings {
-                        // Look for the standard ?this variable
-                        if let Some(this_value) = binding.get("this") {
-                            targets.push(this_value.clone());
-                        }
-                        // Also check for other common target variable names
-                        else if let Some(target_value) = binding.get("target") {
-                            targets.push(target_value.clone());
-                        }
-                        // If no standard variable found, take the first binding value
-                        else if let Some(first_value) = binding.values().next() {
-                            targets.push(first_value.clone());
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                tracing::error!("Failed to execute SPARQL target query: {}", e);
-                return Err(ShaclError::TargetSelection(format!(
-                    "SPARQL target query execution failed: {}",
-                    e
-                )));
-            }
-        }
-
-        tracing::debug!("Found {} targets from SPARQL query", targets.len());
-        Ok(targets)
-    }
-
-    /// Execute a target selection query using oxirs-core query engine
+    /// Execute the target query against the store
     fn execute_target_query(
         &self,
         store: &Store,
         query: &str,
-    ) -> Result<oxirs_core::query::QueryResult> {
-        use oxirs_core::query::QueryEngine;
-
-        let query_engine = QueryEngine::new();
-
+        graph_name: Option<&str>,
+    ) -> Result<Vec<Term>> {
+        use oxirs_core::query::{QueryEngine, QueryResult};
+        
         tracing::debug!("Executing target query: {}", query);
-
-        let result = query_engine.query(query, store).map_err(|e| {
-            ShaclError::TargetSelection(format!("Target query execution failed: {}", e))
-        })?;
-
-        Ok(result)
+        
+        // Create query engine for SPARQL execution
+        let query_engine = QueryEngine::new();
+        
+        // Execute the SPARQL query
+        match query_engine.execute_query(store, query) {
+            Ok(QueryResult::Select { variables: _, bindings }) => {
+                let mut target_nodes = Vec::new();
+                
+                // Extract target nodes from query results
+                for binding in bindings {
+                    if let Some(target_term) = binding.get("target") {
+                        target_nodes.push(target_term.clone());
+                    }
+                }
+                
+                // Remove duplicates and sort for deterministic results
+                target_nodes.sort_by(|a, b| {
+                    match (a, b) {
+                        (Term::NamedNode(a_node), Term::NamedNode(b_node)) => {
+                            a_node.as_str().cmp(b_node.as_str())
+                        }
+                        (Term::BlankNode(a_blank), Term::BlankNode(b_blank)) => {
+                            a_blank.as_str().cmp(b_blank.as_str())
+                        }
+                        (Term::Literal(a_lit), Term::Literal(b_lit)) => {
+                            a_lit.as_str().cmp(b_lit.as_str())
+                        }
+                        (Term::NamedNode(_), _) => std::cmp::Ordering::Less,
+                        (Term::BlankNode(_), Term::NamedNode(_)) => std::cmp::Ordering::Greater,
+                        (Term::BlankNode(_), _) => std::cmp::Ordering::Less,
+                        (Term::Literal(_), Term::NamedNode(_)) => std::cmp::Ordering::Greater,
+                        (Term::Literal(_), Term::BlankNode(_)) => std::cmp::Ordering::Greater,
+                        _ => std::cmp::Ordering::Equal,
+                    }
+                });
+                target_nodes.dedup();
+                
+                tracing::debug!("Found {} target nodes", target_nodes.len());
+                Ok(target_nodes)
+            }
+            Ok(QueryResult::Construct(graph)) => {
+                // For CONSTRUCT queries, extract subjects as target nodes
+                let mut target_nodes = Vec::new();
+                for triple in graph.iter() {
+                    match triple.subject() {
+                        oxirs_core::model::Subject::NamedNode(node) => {
+                            target_nodes.push(Term::NamedNode(node.clone()));
+                        }
+                        oxirs_core::model::Subject::BlankNode(blank) => {
+                            target_nodes.push(Term::BlankNode(blank.clone()));
+                        }
+                        oxirs_core::model::Subject::Variable(var) => {
+                            target_nodes.push(Term::Variable(var.clone()));
+                        }
+                        oxirs_core::model::Subject::QuotedTriple(qt) => {
+                            target_nodes.push(Term::QuotedTriple(qt.clone()));
+                        }
+                    }
+                }
+                
+                // Remove duplicates
+                target_nodes.sort_by(|a, b| {
+                    match (a, b) {
+                        (Term::NamedNode(a_node), Term::NamedNode(b_node)) => {
+                            a_node.as_str().cmp(b_node.as_str())
+                        }
+                        (Term::BlankNode(a_blank), Term::BlankNode(b_blank)) => {
+                            a_blank.as_str().cmp(b_blank.as_str())
+                        }
+                        _ => std::cmp::Ordering::Equal,
+                    }
+                });
+                target_nodes.dedup();
+                
+                Ok(target_nodes)
+            }
+            Ok(QueryResult::Ask(result)) => {
+                // ASK queries are not typically used for target selection
+                tracing::warn!("ASK query executed for target selection, result: {}", result);
+                Ok(Vec::new())
+            }
+            Ok(QueryResult::Describe(graph)) => {
+                // For DESCRIBE queries, extract subjects as target nodes
+                let mut target_nodes = Vec::new();
+                for triple in graph.iter() {
+                    match triple.subject() {
+                        oxirs_core::model::Subject::NamedNode(node) => {
+                            target_nodes.push(Term::NamedNode(node.clone()));
+                        }
+                        oxirs_core::model::Subject::BlankNode(blank) => {
+                            target_nodes.push(Term::BlankNode(blank.clone()));
+                        }
+                        oxirs_core::model::Subject::Variable(var) => {
+                            target_nodes.push(Term::Variable(var.clone()));
+                        }
+                        oxirs_core::model::Subject::QuotedTriple(qt) => {
+                            target_nodes.push(Term::QuotedTriple(qt.clone()));
+                        }
+                    }
+                }
+                
+                // Remove duplicates
+                target_nodes.sort_by(|a, b| {
+                    match (a, b) {
+                        (Term::NamedNode(a_node), Term::NamedNode(b_node)) => {
+                            a_node.as_str().cmp(b_node.as_str())
+                        }
+                        (Term::BlankNode(a_blank), Term::BlankNode(b_blank)) => {
+                            a_blank.as_str().cmp(b_blank.as_str())
+                        }
+                        _ => std::cmp::Ordering::Equal,
+                    }
+                });
+                target_nodes.dedup();
+                
+                Ok(target_nodes)
+            }
+            Err(e) => {
+                tracing::error!("SPARQL query execution failed: {}", e);
+                Err(ShaclError::SparqlExecution(format!(
+                    "Target query execution failed: {}",
+                    e
+                )))
+            }
+        }
     }
 
-    /// Fallback method to select class instances using direct store queries
-    fn select_class_instances_direct(
-        &mut self,
-        store: &Store,
-        class_iri: &NamedNode,
-        graph_name: Option<&str>,
-    ) -> Result<Vec<Term>> {
-        use oxirs_core::model::{GraphName, Object, Predicate, Subject};
-
-        let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-            .map_err(|e| ShaclError::Core(OxirsError::Parse(e.to_string())))?;
-
-        let predicate = Predicate::NamedNode(rdf_type);
-        let object = Object::NamedNode(class_iri.clone());
-
-        let graph_filter = if let Some(g) = graph_name {
-            Some(GraphName::NamedNode(NamedNode::new(g).map_err(|e| {
-                ShaclError::Core(OxirsError::Parse(e.to_string()))
-            })?))
-        } else {
-            None
-        };
-
-        let quads = store
-            .query_quads(
-                None, // Any subject
-                Some(&predicate),
-                Some(&object),
-                graph_filter.as_ref(),
-            )
-            .map_err(|e| ShaclError::Core(e))?;
-
-        let instances: Vec<Term> = quads
-            .into_iter()
-            .map(|quad| Term::from(quad.subject().clone()))
-            .collect();
-
-        Ok(instances)
-    }
-
-    /// Fallback method to select objects using direct store queries
-    fn select_objects_direct(
-        &mut self,
-        store: &Store,
-        property: &NamedNode,
-        graph_name: Option<&str>,
-    ) -> Result<Vec<Term>> {
-        use oxirs_core::model::{GraphName, Predicate};
-
-        let predicate = Predicate::NamedNode(property.clone());
-
-        let graph_filter = if let Some(g) = graph_name {
-            Some(GraphName::NamedNode(NamedNode::new(g).map_err(|e| {
-                ShaclError::Core(OxirsError::Parse(e.to_string()))
-            })?))
-        } else {
-            None
-        };
-
-        let quads = store
-            .query_quads(
-                None, // Any subject
-                Some(&predicate),
-                None, // Any object
-                graph_filter.as_ref(),
-            )
-            .map_err(|e| ShaclError::Core(e))?;
-
-        let objects: Vec<Term> = quads
-            .into_iter()
-            .map(|quad| Term::from(quad.object().clone()))
-            .collect();
-
-        Ok(objects)
-    }
-
-    /// Fallback method to select subjects using direct store queries
-    fn select_subjects_direct(
-        &mut self,
-        store: &Store,
-        property: &NamedNode,
-        graph_name: Option<&str>,
-    ) -> Result<Vec<Term>> {
-        use oxirs_core::model::{GraphName, Predicate};
-
-        let predicate = Predicate::NamedNode(property.clone());
-
-        let graph_filter = if let Some(g) = graph_name {
-            Some(GraphName::NamedNode(NamedNode::new(g).map_err(|e| {
-                ShaclError::Core(OxirsError::Parse(e.to_string()))
-            })?))
-        } else {
-            None
-        };
-
-        let quads = store
-            .query_quads(
-                None, // Any subject
-                Some(&predicate),
-                None, // Any object
-                graph_filter.as_ref(),
-            )
-            .map_err(|e| ShaclError::Core(e))?;
-
-        let subjects: Vec<Term> = quads
-            .into_iter()
-            .map(|quad| Term::from(quad.subject().clone()))
-            .collect();
-
-        Ok(subjects)
-    }
-
-    /// Create a cache key for target results
+    /// Create cache key for target and graph combination
     fn create_cache_key(&self, target: &Target, graph_name: Option<&str>) -> String {
-        let graph_suffix = graph_name.unwrap_or("default");
-
         match target {
-            Target::Class(class_iri) => format!("class:{}:{}", class_iri.as_str(), graph_suffix),
-            Target::Node(node) => format!("node:{}:{}", node.as_str(), graph_suffix),
+            Target::Class(class_iri) => {
+                format!(
+                    "class:{}:{}",
+                    class_iri.as_str(),
+                    graph_name.unwrap_or("default")
+                )
+            }
+            Target::Node(node) => {
+                format!(
+                    "node:{}:{}",
+                    format!("{:?}", node),
+                    graph_name.unwrap_or("default")
+                )
+            }
             Target::ObjectsOf(property) => {
-                format!("objects_of:{}:{}", property.as_str(), graph_suffix)
+                format!(
+                    "objects_of:{}:{}",
+                    property.as_str(),
+                    graph_name.unwrap_or("default")
+                )
             }
             Target::SubjectsOf(property) => {
-                format!("subjects_of:{}:{}", property.as_str(), graph_suffix)
+                format!(
+                    "subjects_of:{}:{}",
+                    property.as_str(),
+                    graph_name.unwrap_or("default")
+                )
             }
             Target::Sparql(sparql_target) => {
-                // Use a hash of the query for caching
                 use std::collections::hash_map::DefaultHasher;
                 use std::hash::{Hash, Hasher};
 
@@ -914,582 +727,450 @@ impl TargetSelector {
                 sparql_target.query.hash(&mut hasher);
                 let query_hash = hasher.finish();
 
-                format!("sparql:{}:{}", query_hash, graph_suffix)
+                format!("sparql:{}:{}", query_hash, graph_name.unwrap_or("default"))
             }
             Target::Implicit(class_iri) => {
-                format!("implicit:{}:{}", class_iri.as_str(), graph_suffix)
+                format!(
+                    "implicit:{}:{}",
+                    class_iri.as_str(),
+                    graph_name.unwrap_or("default")
+                )
             }
         }
     }
 
-    /// Clear the target cache
-    pub fn clear_cache(&mut self) {
-        self.cache.clear();
-        self.stats.cache_hits = 0;
-        self.stats.queries_executed = 0;
-        self.stats.fallback_operations = 0;
-        self.stats.union_queries_used = 0;
-    }
-
-    /// Evict old cache entries based on age and usage
-    fn evict_old_cache_entries(&mut self) {
-        let now = std::time::Instant::now();
-        let cache_ttl = std::time::Duration::from_secs(self.optimization_config.cache_ttl_seconds);
-
-        // Collect keys of expired entries
-        let expired_keys: Vec<String> = self
-            .cache
+    /// Find the oldest cache entry for eviction
+    fn find_oldest_cache_entry(&self) -> Option<String> {
+        self.cache
             .iter()
-            .filter(|(_, cached_result)| now.duration_since(cached_result.cached_at) > cache_ttl)
+            .min_by_key(|(_, cached_result)| cached_result.cached_at)
             .map(|(key, _)| key.clone())
-            .collect();
+    }
 
-        // Remove expired entries
-        for key in expired_keys {
-            self.cache.remove(&key);
-        }
+    /// Update cache hit rate statistics
+    fn update_cache_hit_rate(&mut self) {
+        if self.stats.total_evaluations > 0 {
+            let total_cache_operations = self
+                .cache
+                .values()
+                .map(|cached_result| cached_result.stats.hits + cached_result.stats.misses)
+                .sum::<usize>();
 
-        // If still too many entries, remove least recently used
-        if self.cache.len() > 500 {
-            let mut entries: Vec<_> = self.cache.iter().collect();
-            entries.sort_by(|a, b| {
-                // Sort by hit count (ascending) then by age (descending)
-                let hit_cmp = a.1.hit_count.cmp(&b.1.hit_count);
-                if hit_cmp == std::cmp::Ordering::Equal {
-                    b.1.cached_at.cmp(&a.1.cached_at)
-                } else {
-                    hit_cmp
-                }
-            });
+            let total_hits = self
+                .cache
+                .values()
+                .map(|cached_result| cached_result.stats.hits)
+                .sum::<usize>();
 
-            // Remove the least used entries
-            let keys_to_remove: Vec<String> = entries
-                .iter()
-                .take(self.cache.len() - 500)
-                .map(|(key, _)| key.to_string())
-                .collect();
-
-            for key in keys_to_remove {
-                self.cache.remove(&key);
+            if total_cache_operations > 0 {
+                self.stats.cache_hit_rate = total_hits as f64 / total_cache_operations as f64;
             }
         }
     }
 
-    /// Optimize query with index hints and advanced query rewriting
-    fn optimize_query_with_indexes(&self, query: &str, target: &Target) -> String {
-        if !self.optimization_config.use_indexes {
-            return query.to_string();
-        }
-
-        let mut optimized_query = query.to_string();
-
-        // Advanced query optimization based on target type and performance history
-        match target {
-            Target::Class(class_iri) => {
-                // Add index hint for rdf:type queries
-                optimized_query = optimized_query.replace(
-                    "?instance <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>",
-                    "?instance <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> # USE_INDEX(type_index)"
-                );
-                
-                // Add query optimization hints for common class hierarchies
-                if self.is_common_class(class_iri) {
-                    optimized_query = self.add_subclass_optimization(&optimized_query, class_iri);
-                }
-            }
-            Target::ObjectsOf(property) => {
-                // Add index hint for property-based queries
-                optimized_query = optimized_query.replace(
-                    &format!("?subject <{}>", property.as_str()),
-                    &format!(
-                        "?subject <{}> # USE_INDEX(property_index)",
-                        property.as_str()
-                    ),
-                );
-                
-                // Add cardinality-based optimization
-                optimized_query = self.add_cardinality_optimization(&optimized_query, property);
-            }
-            Target::SubjectsOf(property) => {
-                // Add index hint for reverse property queries
-                optimized_query = optimized_query.replace(
-                    &format!("?subject <{}>", property.as_str()),
-                    &format!(
-                        "?subject <{}> # USE_INDEX(reverse_property_index)",
-                        property.as_str()
-                    ),
-                );
-                
-                // Add functional property optimization
-                optimized_query = self.add_functional_property_optimization(&optimized_query, property);
-            }
-            Target::Sparql(sparql_target) => {
-                // Optimize custom SPARQL queries
-                optimized_query = self.optimize_custom_sparql_query(&sparql_target.query);
-            }
-            _ => {
-                // No specific optimization for other target types
-            }
-        }
-
-        // Apply general query optimizations
-        optimized_query = self.apply_general_optimizations(optimized_query);
-
-        optimized_query
-    }
-    
-    /// Check if a class is commonly used in the knowledge base
-    fn is_common_class(&self, class_iri: &NamedNode) -> bool {
-        let common_classes = [
-            "http://www.w3.org/2002/07/owl#Thing",
-            "http://www.w3.org/2000/01/rdf-schema#Resource",
-            "http://xmlns.com/foaf/0.1/Person",
-            "http://xmlns.com/foaf/0.1/Organization",
-            "http://www.w3.org/2004/02/skos/core#Concept",
-        ];
-        
-        common_classes.contains(&class_iri.as_str())
-    }
-    
-    /// Add subclass hierarchy optimization for better query planning
-    fn add_subclass_optimization(&self, query: &str, class_iri: &NamedNode) -> String {
-        // Add OPTIONAL subclass patterns for hierarchical class queries
-        format!(
-            "{}\n  OPTIONAL {{ ?instance <http://www.w3.org/2000/01/rdf-schema#subClassOf>* <{}> . }}",
-            query.trim_end(),
-            class_iri.as_str()
-        )
-    }
-    
-    /// Add cardinality-based optimization hints
-    fn add_cardinality_optimization(&self, query: &str, property: &NamedNode) -> String {
-        // Check if we have cardinality statistics for this property
-        if let Some(stats) = self.index_usage_stats.get(&format!("property_{}", property.as_str())) {
-            if stats.avg_selectivity < 0.1 {
-                // High selectivity property - add optimization hint
-                return query.replace(
-                    &format!("?subject <{}>", property.as_str()),
-                    &format!("?subject <{}> # HIGH_SELECTIVITY", property.as_str())
-                );
-            }
-        }
-        query.to_string()
-    }
-    
-    /// Add functional property optimization
-    fn add_functional_property_optimization(&self, query: &str, property: &NamedNode) -> String {
-        // For functional properties, we can optimize by adding LIMIT 1 per subject
-        if self.is_functional_property(property) {
-            return query.replace(
-                "ORDER BY ?subject",
-                "ORDER BY ?subject # FUNCTIONAL_PROPERTY"
-            );
-        }
-        query.to_string()
-    }
-    
-    /// Check if a property is functional (has at most one value per subject)
-    fn is_functional_property(&self, property: &NamedNode) -> bool {
-        // Common functional properties
-        let functional_properties = [
-            "http://xmlns.com/foaf/0.1/name",
-            "http://xmlns.com/foaf/0.1/mbox",
-            "http://www.w3.org/2000/01/rdf-schema#label",
-        ];
-        
-        functional_properties.contains(&property.as_str())
-    }
-    
-    /// Optimize custom SPARQL queries with advanced techniques
-    fn optimize_custom_sparql_query(&self, query: &str) -> String {
-        let mut optimized = query.to_string();
-        
-        // Add common query optimizations
-        
-        // 1. Reorder triple patterns by selectivity
-        optimized = self.reorder_triple_patterns(&optimized);
-        
-        // 2. Add FILTER optimization hints
-        optimized = self.optimize_filters(&optimized);
-        
-        // 3. Add bind variable optimization
-        optimized = self.optimize_bind_variables(&optimized);
-        
-        optimized
-    }
-    
-    /// Reorder triple patterns for better query execution
-    fn reorder_triple_patterns(&self, query: &str) -> String {
-        // Basic heuristic: put more selective patterns first
-        // In a real implementation, this would analyze the query and reorder based on statistics
-        
-        if query.contains("rdf:type") && query.contains("rdfs:label") {
-            // Type patterns are usually more selective than label patterns
-            return query.replace(
-                "rdfs:label",
-                "# MOVE_AFTER_TYPE rdfs:label"
-            );
-        }
-        
-        query.to_string()
-    }
-    
-    /// Optimize FILTER expressions in SPARQL queries
-    fn optimize_filters(&self, query: &str) -> String {
-        let mut optimized = query.to_string();
-        
-        // Push filters down to reduce intermediate results
-        if optimized.contains("FILTER") && optimized.contains("OPTIONAL") {
-            optimized = optimized.replace(
-                "FILTER",
-                "# PUSH_DOWN FILTER"
-            );
-        }
-        
-        optimized
-    }
-    
-    /// Optimize BIND variables in SPARQL queries
-    fn optimize_bind_variables(&self, query: &str) -> String {
-        let mut optimized = query.to_string();
-        
-        // Optimize common bind patterns
-        if optimized.contains("BIND(") {
-            optimized = optimized.replace(
-                "BIND(",
-                "# OPTIMIZE_BIND BIND("
-            );
-        }
-        
-        optimized
-    }
-    
-    /// Apply general query optimizations
-    fn apply_general_optimizations(&self, query: String) -> String {
-        let mut optimized = query;
-        
-        // 1. Add query timeout hint
-        if let Some(timeout_ms) = self.optimization_config.query_timeout_ms {
-            optimized = format!("# TIMEOUT {} ms\n{}", timeout_ms, optimized);
-        }
-        
-        // 2. Add parallel processing hint if enabled
-        if self.optimization_config.enable_parallel_processing {
-            optimized = format!("# ENABLE_PARALLEL\n{}", optimized);
-        }
-        
-        // 3. Add result limit if configured
-        if self.optimization_config.max_results_per_target > 0 && !optimized.contains("LIMIT") {
-            optimized = format!("{}\nLIMIT {}", optimized, self.optimization_config.max_results_per_target);
-        }
-        
-        optimized
-    }
-    
-    /// Generate optimized query plan for complex targets
-    pub fn generate_query_plan(&mut self, targets: &[Target], graph_name: Option<&str>) -> Result<String> {
-        let plan_key = format!("plan_{:?}_{:?}", targets, graph_name);
-        
-        // Check if we have a cached plan
-        if let Some(cached_plan) = self.query_plan_cache.get(&plan_key) {
-            let plan_age = cached_plan.created_at.elapsed();
-            if plan_age.as_secs() < 3600 { // Plans valid for 1 hour
-                return Ok(cached_plan.optimized_query.clone());
-            }
-        }
-        
-        // Generate new optimized plan
-        let mut plan_parts = Vec::new();
-        let mut estimated_cost = 0.0;
-        let mut estimated_results = 0;
-        
-        for target in targets {
-            let target_query = self.generate_single_target_query(target, graph_name)?;
-            let target_cost = self.estimate_query_cost(target);
-            let target_results = self.estimate_result_count(target);
-            
-            plan_parts.push(target_query);
-            estimated_cost += target_cost;
-            estimated_results += target_results;
-        }
-        
-        // Combine queries with optimal strategy
-        let combined_query = if self.can_use_union_query(targets) {
-            self.build_union_query(targets, graph_name)?
-        } else {
-            // Use VALUES clause for efficient combination
-            format!(
-                "SELECT DISTINCT ?target WHERE {{\n  VALUES ?source {{ {} }}\n  {} \n}}",
-                targets.iter().map(|_| "UNDEF").collect::<Vec<_>>().join(" "),
-                plan_parts.join("\n  UNION\n  ")
-            )
-        };
-        
-        // Cache the generated plan
-        let query_plan = QueryPlan {
-            optimized_query: combined_query.clone(),
-            estimated_cost,
-            index_hints: self.generate_index_hints(targets),
-            estimated_result_count: estimated_results,
-            created_at: std::time::Instant::now(),
-        };
-        
-        self.query_plan_cache.insert(plan_key, query_plan);
-        
-        Ok(combined_query)
-    }
-    
-    /// Generate query for a single target
-    fn generate_single_target_query(&self, target: &Target, graph_name: Option<&str>) -> Result<String> {
-        match target {
-            Target::Class(class_iri) => {
-                let graph_clause = if let Some(graph) = graph_name {
-                    format!("GRAPH <{}>", graph)
-                } else {
-                    String::new()
-                };
-                
-                Ok(format!(
-                    "{} {{ ?target <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <{}> . }}",
-                    graph_clause,
-                    class_iri.as_str()
-                ))
-            }
-            Target::Node(node) => {
-                Ok(format!("BIND({} AS ?target)", node.as_str()))
-            }
-            Target::ObjectsOf(property) => {
-                let graph_clause = if let Some(graph) = graph_name {
-                    format!("GRAPH <{}>", graph)
-                } else {
-                    String::new()
-                };
-                
-                Ok(format!(
-                    "{} {{ ?subject <{}> ?target . }}",
-                    graph_clause,
-                    property.as_str()
-                ))
-            }
-            Target::SubjectsOf(property) => {
-                let graph_clause = if let Some(graph) = graph_name {
-                    format!("GRAPH <{}>", graph)
-                } else {
-                    String::new()
-                };
-                
-                Ok(format!(
-                    "{} {{ ?target <{}> ?object . }}",
-                    graph_clause,
-                    property.as_str()
-                ))
-            }
-            Target::Sparql(sparql_target) => {
-                Ok(sparql_target.query.clone())
-            }
-            Target::Implicit(class_iri) => {
-                let graph_clause = if let Some(graph) = graph_name {
-                    format!("GRAPH <{}>", graph)
-                } else {
-                    String::new()
-                };
-                
-                Ok(format!(
-                    "{} {{ ?target <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <{}> . }}",
-                    graph_clause,
-                    class_iri.as_str()
-                ))
-            }
-        }
-    }
-    
-    /// Estimate query execution cost
-    fn estimate_query_cost(&self, target: &Target) -> f64 {
-        match target {
-            Target::Class(_) => 1.0,
-            Target::Node(_) => 0.1,
-            Target::ObjectsOf(_) => 2.0,
-            Target::SubjectsOf(_) => 2.0,
-            Target::Sparql(_) => 5.0, // Custom queries are more expensive
-            Target::Implicit(_) => 1.0,
-        }
-    }
-    
-    /// Estimate result count for a target
-    fn estimate_result_count(&self, target: &Target) -> usize {
-        let target_type = match target {
-            Target::Class(_) => "class",
-            Target::ObjectsOf(_) => "objects_of",
-            Target::SubjectsOf(_) => "subjects_of",
-            Target::Sparql(_) => "sparql",
-            Target::Node(_) => "node",
-            Target::Implicit(_) => "implicit",
-        };
-        
-        if let Some(stats) = self.index_usage_stats.get(target_type) {
-            (stats.avg_selectivity * 10000.0) as usize
-        } else {
-            1000 // Default estimate
-        }
-    }
-    
-    /// Generate index hints for targets
-    fn generate_index_hints(&self, targets: &[Target]) -> Vec<String> {
-        let mut hints = Vec::new();
-        
-        for target in targets {
-            match target {
-                Target::Class(_) => hints.push("USE_TYPE_INDEX".to_string()),
-                Target::ObjectsOf(_) => hints.push("USE_PROPERTY_INDEX".to_string()),
-                Target::SubjectsOf(_) => hints.push("USE_REVERSE_INDEX".to_string()),
-                _ => {}
-            }
-        }
-        
-        hints
+    /// Get current target selection statistics
+    pub fn get_statistics(&self) -> &TargetSelectionStats {
+        &self.stats
     }
 
-    /// Adaptive batch size calculation based on performance history
-    fn calculate_adaptive_batch_size(&self, target: &Target) -> usize {
-        if !self.optimization_config.adaptive_batching {
-            return self.optimization_config.batch_size;
-        }
+    /// Get cache statistics
+    pub fn get_cache_statistics(&self) -> TargetCacheStats {
+        let total_hits = self
+            .cache
+            .values()
+            .map(|cached_result| cached_result.stats.hits)
+            .sum::<usize>();
 
-        let base_batch_size = self.optimization_config.batch_size;
+        let total_operations = self
+            .cache
+            .values()
+            .map(|cached_result| cached_result.stats.hits + cached_result.stats.misses)
+            .sum::<usize>();
 
-        // Check if we have performance history for this type of target
-        let target_type = match target {
-            Target::Class(_) => "class",
-            Target::ObjectsOf(_) => "objects_of",
-            Target::SubjectsOf(_) => "subjects_of",
-            Target::Sparql(_) => "sparql",
-            Target::Node(_) => "node",
-            Target::Implicit(_) => "implicit",
-        };
-
-        if let Some(index_stats) = self.index_usage_stats.get(target_type) {
-            // Adjust batch size based on average execution time
-            if index_stats.total_execution_time_ms / index_stats.usage_count as f64 > 1000.0 {
-                // Slow queries - reduce batch size
-                (base_batch_size / 2).max(1000)
-            } else if index_stats.total_execution_time_ms / (index_stats.usage_count as f64) < 100.0
-            {
-                // Fast queries - increase batch size
-                (base_batch_size * 2).min(50000)
-            } else {
-                base_batch_size
-            }
-        } else {
-            base_batch_size
-        }
-    }
-
-    /// Update index usage statistics
-    fn update_index_usage_stats(
-        &mut self,
-        target: &Target,
-        execution_time_ms: f64,
-        result_count: usize,
-    ) {
-        let target_type = match target {
-            Target::Class(_) => "class",
-            Target::ObjectsOf(_) => "objects_of",
-            Target::SubjectsOf(_) => "subjects_of",
-            Target::Sparql(_) => "sparql",
-            Target::Node(_) => "node",
-            Target::Implicit(_) => "implicit",
-        }
-        .to_string();
-
-        let stats = self
-            .index_usage_stats
-            .entry(target_type)
-            .or_insert(IndexUsageStats {
-                usage_count: 0,
-                total_execution_time_ms: 0.0,
-                avg_selectivity: 0.0,
-                last_updated: std::time::Instant::now(),
-            });
-
-        stats.usage_count += 1;
-        stats.total_execution_time_ms += execution_time_ms;
-
-        // Calculate selectivity as ratio of results to estimated total
-        let estimated_selectivity = if result_count > 0 {
-            (result_count as f64 / 10000.0).min(1.0)
+        let hit_rate = if total_operations > 0 {
+            total_hits as f64 / total_operations as f64
         } else {
             0.0
         };
 
-        stats.avg_selectivity = (stats.avg_selectivity * (stats.usage_count - 1) as f64
-            + estimated_selectivity)
-            / stats.usage_count as f64;
-        stats.last_updated = std::time::Instant::now();
-    }
+        // Estimate memory usage (rough calculation)
+        let memory_usage = self.cache.len() * 1024; // Rough estimate: 1KB per cache entry
 
-    /// Get cache statistics
-    pub fn get_cache_stats(&self) -> TargetCacheStats {
         TargetCacheStats {
-            entries: self.cache.len(),
-            total_targets: self.cache.values().map(|v| v.targets.len()).sum(),
+            hits: total_hits,
+            misses: total_operations - total_hits,
+            hit_rate,
+            cache_size: self.cache.len(),
+            memory_usage_bytes: memory_usage,
         }
     }
 
-    /// Get full performance statistics
-    pub fn get_performance_stats(&self) -> TargetSelectionStats {
-        let mut stats = self.stats.clone();
-        stats.cache = self.get_cache_stats();
-        stats
+    /// Clear the cache
+    pub fn clear_cache(&mut self) {
+        self.cache.clear();
+    }
+
+    /// Update index usage statistics for adaptive optimization
+    pub fn update_index_usage_stats(&mut self, index_type: &str, performance_gain: f64) {
+        let stats = self
+            .index_usage_stats
+            .entry(index_type.to_string())
+            .or_insert_with(|| IndexUsageStats {
+                usage_count: 0,
+                avg_performance_gain: 0.0,
+                last_used: std::time::Instant::now(),
+            });
+
+        stats.usage_count += 1;
+        stats.avg_performance_gain = (stats.avg_performance_gain * (stats.usage_count - 1) as f64
+            + performance_gain)
+            / stats.usage_count as f64;
+        stats.last_used = std::time::Instant::now();
+    }
+
+    /// Generate optimized SPARQL query with advanced features
+    pub fn generate_optimized_target_query(
+        &mut self,
+        target: &Target,
+        graph_name: Option<&str>,
+        query_options: &QueryOptimizationOptions,
+    ) -> Result<OptimizedQuery> {
+        let start_time = std::time::Instant::now();
+
+        // Check if we have a cached query plan
+        let cache_key = self.create_query_plan_cache_key(target, graph_name, query_options);
+        if let Some(cached_plan) = self.query_plan_cache.get(&cache_key) {
+            if cached_plan.created_at.elapsed() < std::time::Duration::from_secs(300) {
+                return Ok(OptimizedQuery {
+                    sparql: cached_plan.optimized_query.clone(),
+                    estimated_cardinality: cached_plan.estimated_cardinality,
+                    execution_strategy: cached_plan.execution_strategy.clone(),
+                    index_hints: cached_plan.index_hints.clone(),
+                    optimization_time: start_time.elapsed(),
+                });
+            }
+        }
+
+        // Generate base query
+        let base_query = self.generate_target_query(target, graph_name)?;
+
+        // Apply optimizations
+        let optimized_query = self.apply_query_optimizations(&base_query, target, query_options)?;
+
+        // Create execution plan
+        let execution_plan = self.create_execution_plan(target, query_options)?;
+
+        // Estimate cardinality
+        let estimated_cardinality = self.estimate_target_cardinality(target, query_options);
+
+        // Cache the query plan
+        let query_plan = QueryPlan {
+            optimized_query: optimized_query.clone(),
+            estimated_cardinality,
+            index_hints: execution_plan.index_hints.clone(),
+            execution_strategy: execution_plan.execution_strategy.clone(),
+            created_at: std::time::Instant::now(),
+        };
+
+        if self.query_plan_cache.len() < 100 {
+            self.query_plan_cache.insert(cache_key, query_plan);
+        }
+
+        Ok(OptimizedQuery {
+            sparql: optimized_query,
+            estimated_cardinality,
+            execution_strategy: execution_plan.execution_strategy,
+            index_hints: execution_plan.index_hints,
+            optimization_time: start_time.elapsed(),
+        })
+    }
+
+    /// Apply query optimizations based on target type and options
+    fn apply_query_optimizations(
+        &self,
+        base_query: &str,
+        target: &Target,
+        options: &QueryOptimizationOptions,
+    ) -> Result<String> {
+        let mut optimized_query = base_query.to_string();
+
+        // Add LIMIT if specified
+        if let Some(limit) = options.limit {
+            if !optimized_query.contains("LIMIT") {
+                optimized_query.push_str(&format!(" LIMIT {}", limit));
+            }
+        }
+
+        // Add ORDER BY for deterministic results if requested
+        if options.deterministic_results {
+            if !optimized_query.contains("ORDER BY") {
+                optimized_query =
+                    optimized_query.replace("SELECT DISTINCT ?target", "SELECT DISTINCT ?target");
+                optimized_query.push_str(" ORDER BY ?target");
+            }
+        }
+
+        // Add index hints based on target type
+        if options.use_index_hints {
+            optimized_query = self.add_index_hints(&optimized_query, target)?;
+        }
+
+        // Add performance monitoring hints if enabled
+        if options.include_performance_hints {
+            optimized_query = format!(
+                "# Generated: {}\n{}",
+                chrono::Utc::now().to_rfc3339(),
+                optimized_query
+            );
+        }
+
+        Ok(optimized_query)
+    }
+
+    /// Add index hints to the query based on target type
+    fn add_index_hints(&self, query: &str, target: &Target) -> Result<String> {
+        let mut optimized_query = query.to_string();
+
+        match target {
+            Target::Class(_) | Target::Implicit(_) => {
+                if self.should_use_index_hint("type_index") {
+                    optimized_query = format!(
+                        "# HINT: Use type index for rdf:type lookups\n{}",
+                        optimized_query
+                    );
+                }
+            }
+            Target::ObjectsOf(property) => {
+                if self.should_use_index_hint("object_index") {
+                    optimized_query = format!(
+                        "# HINT: Use object index for property <{}>\n{}",
+                        property.as_str(),
+                        optimized_query
+                    );
+                }
+            }
+            Target::SubjectsOf(property) => {
+                if self.should_use_index_hint("subject_index") {
+                    optimized_query = format!(
+                        "# HINT: Use subject index for property <{}>\n{}",
+                        property.as_str(),
+                        optimized_query
+                    );
+                }
+            }
+            _ => {}
+        }
+
+        Ok(optimized_query)
+    }
+
+    /// Create execution plan for target selection
+    fn create_execution_plan(
+        &self,
+        target: &Target,
+        options: &QueryOptimizationOptions,
+    ) -> Result<ExecutionPlan> {
+        let estimated_cardinality = self.estimate_target_cardinality(target, options);
+
+        // Choose execution strategy based on estimated cardinality
+        let execution_strategy =
+            if estimated_cardinality > self.optimization_config.parallel_threshold {
+                ExecutionStrategy::Parallel
+            } else if self.should_use_index_strategy(target) {
+                ExecutionStrategy::IndexDriven
+            } else {
+                ExecutionStrategy::Sequential
+            };
+
+        // Generate index hints
+        let index_hints = self.generate_index_hints(target)?;
+
+        Ok(ExecutionPlan {
+            execution_strategy,
+            index_hints,
+            estimated_cardinality,
+        })
+    }
+
+    /// Estimate cardinality for target selection
+    fn estimate_target_cardinality(
+        &self,
+        target: &Target,
+        _options: &QueryOptimizationOptions,
+    ) -> usize {
+        match target {
+            Target::Node(_) => 1, // Single node
+            Target::Class(_) | Target::Implicit(_) => {
+                // Estimate based on typical class sizes
+                1000 // Default estimate
+            }
+            Target::ObjectsOf(_) | Target::SubjectsOf(_) => {
+                // Estimate based on property usage
+                500 // Default estimate
+            }
+            Target::Sparql(_) => {
+                // Can't estimate SPARQL queries easily
+                100 // Conservative estimate
+            }
+        }
+    }
+
+    /// Generate index hints for target type
+    fn generate_index_hints(&self, target: &Target) -> Result<Vec<IndexHint>> {
+        let mut hints = Vec::new();
+
+        match target {
+            Target::Class(_) | Target::Implicit(_) => {
+                hints.push(IndexHint {
+                    index_type: "type_index".to_string(),
+                    selectivity: 0.1, // Assume 10% selectivity
+                    cost_benefit: 0.8,
+                });
+            }
+            Target::ObjectsOf(property) => {
+                hints.push(IndexHint {
+                    index_type: format!("object_index_{}", property.as_str()),
+                    selectivity: 0.05,
+                    cost_benefit: 0.9,
+                });
+            }
+            Target::SubjectsOf(property) => {
+                hints.push(IndexHint {
+                    index_type: format!("subject_index_{}", property.as_str()),
+                    selectivity: 0.05,
+                    cost_benefit: 0.9,
+                });
+            }
+            _ => {}
+        }
+
+        Ok(hints)
+    }
+
+    /// Check if index strategy should be used
+    fn should_use_index_strategy(&self, target: &Target) -> bool {
+        match target {
+            Target::Class(_) | Target::Implicit(_) => self.should_use_index_hint("type_index"),
+            Target::ObjectsOf(_) | Target::SubjectsOf(_) => {
+                self.should_use_index_hint("property_index")
+            }
+            _ => false,
+        }
+    }
+
+    /// Create cache key for query plans
+    fn create_query_plan_cache_key(
+        &self,
+        target: &Target,
+        graph_name: Option<&str>,
+        options: &QueryOptimizationOptions,
+    ) -> String {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let mut hasher = DefaultHasher::new();
+
+        // Hash target
+        match target {
+            Target::Class(class_iri) => {
+                "class".hash(&mut hasher);
+                class_iri.as_str().hash(&mut hasher);
+            }
+            Target::Node(node) => {
+                "node".hash(&mut hasher);
+                format!("{:?}", node).hash(&mut hasher);
+            }
+            Target::ObjectsOf(property) => {
+                "objects_of".hash(&mut hasher);
+                property.as_str().hash(&mut hasher);
+            }
+            Target::SubjectsOf(property) => {
+                "subjects_of".hash(&mut hasher);
+                property.as_str().hash(&mut hasher);
+            }
+            Target::Sparql(sparql_target) => {
+                "sparql".hash(&mut hasher);
+                sparql_target.query.hash(&mut hasher);
+            }
+            Target::Implicit(class_iri) => {
+                "implicit".hash(&mut hasher);
+                class_iri.as_str().hash(&mut hasher);
+            }
+        }
+
+        // Hash graph name and options
+        graph_name.hash(&mut hasher);
+        options.limit.hash(&mut hasher);
+        options.deterministic_results.hash(&mut hasher);
+        options.use_index_hints.hash(&mut hasher);
+
+        format!("plan_{:x}", hasher.finish())
+    }
+
+    /// Generate batch target queries for multiple targets
+    pub fn generate_batch_target_queries(
+        &mut self,
+        targets: &[Target],
+        graph_name: Option<&str>,
+        options: &QueryOptimizationOptions,
+    ) -> Result<BatchQueryResult> {
+        let start_time = std::time::Instant::now();
+        let mut optimized_queries = Vec::new();
+        let mut total_estimated_cardinality = 0;
+
+        for target in targets {
+            let optimized_query =
+                self.generate_optimized_target_query(target, graph_name, options)?;
+            total_estimated_cardinality += optimized_query.estimated_cardinality;
+            optimized_queries.push(optimized_query);
+        }
+
+        // Create union query if beneficial
+        let union_query = if optimized_queries.len() > 1 && options.use_union_optimization {
+            Some(self.create_union_query(&optimized_queries)?)
+        } else {
+            None
+        };
+
+        Ok(BatchQueryResult {
+            individual_queries: optimized_queries,
+            union_query,
+            total_estimated_cardinality,
+            batch_optimization_time: start_time.elapsed(),
+        })
+    }
+
+    /// Create union query from multiple target queries
+    fn create_union_query(&self, queries: &[OptimizedQuery]) -> Result<String> {
+        let mut union_parts = Vec::new();
+
+        for query in queries {
+            // Extract the WHERE clause from each query
+            if let Some(where_start) = query.sparql.find("WHERE {") {
+                let where_clause = &query.sparql[where_start + 7..];
+                if let Some(where_end) = where_clause.rfind('}') {
+                    let where_content = &where_clause[..where_end].trim();
+                    union_parts.push(format!("{{ {} }}", where_content));
+                }
+            }
+        }
+
+        if union_parts.is_empty() {
+            return Err(ShaclError::ValidationEngine(
+                "No valid WHERE clauses found for union query".to_string(),
+            ));
+        }
+
+        Ok(format!(
+            "SELECT DISTINCT ?target WHERE {{\n  {}\n}}",
+            union_parts.join("\n  UNION\n  ")
+        ))
     }
 }
 
 impl Default for TargetSelector {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-/// Statistics about target cache performance
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TargetCacheStats {
-    /// Number of cache entries
-    pub entries: usize,
-
-    /// Total number of cached targets across all entries
-    pub total_targets: usize,
-}
-
-/// Performance statistics for target selection
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TargetSelectionStats {
-    /// Cache statistics
-    pub cache: TargetCacheStats,
-
-    /// Number of queries executed
-    pub queries_executed: usize,
-
-    /// Number of cache hits
-    pub cache_hits: usize,
-
-    /// Number of fallback operations
-    pub fallback_operations: usize,
-
-    /// Number of union queries used
-    pub union_queries_used: usize,
-}
-
-impl Default for TargetSelectionStats {
-    fn default() -> Self {
-        Self {
-            cache: TargetCacheStats {
-                entries: 0,
-                total_targets: 0,
-            },
-            queries_executed: 0,
-            cache_hits: 0,
-            fallback_operations: 0,
-            union_queries_used: 0,
-        }
     }
 }
 
@@ -1552,21 +1233,20 @@ mod tests {
     fn test_target_optimization_config() {
         let config = TargetOptimizationConfig::default();
 
-        assert_eq!(config.max_results_per_target, 0); // unlimited
-        assert!(config.enable_batching);
-        assert_eq!(config.batch_size, 10000);
-        assert!(config.use_indexes);
-        assert_eq!(config.query_timeout_ms, Some(30000));
+        assert!(config.enable_caching);
+        assert_eq!(config.cache_ttl, 300);
+        assert_eq!(config.max_cache_size, 1000);
+        assert!(config.enable_query_optimization);
     }
 
     #[test]
     fn test_target_selector_with_config() {
         let mut config = TargetOptimizationConfig::default();
-        config.max_results_per_target = 100;
-        config.enable_batching = false;
+        config.cache_ttl = 600;
+        config.enable_caching = false;
 
         let selector = TargetSelector::with_config(config.clone());
-        assert_eq!(selector.optimization_config.max_results_per_target, 100);
-        assert!(!selector.optimization_config.enable_batching);
+        assert_eq!(selector.optimization_config.cache_ttl, 600);
+        assert!(!selector.optimization_config.enable_caching);
     }
 }

@@ -1213,30 +1213,36 @@ mod tests {
         // Simulate high latency by updating metrics
         {
             let collector = metrics_collector.read().await;
-            collector.update_producer_metrics(crate::monitoring::ProducerMetricsUpdate {
-                events_published: 1,
-                events_failed: 0,
-                bytes_sent: 100,
-                batches_sent: 1,
-                latency_ms: 200.0, // High latency to trigger bottleneck
-                throughput_eps: 1.0,
-            }).await;
-            collector.update_producer_metrics(crate::monitoring::ProducerMetricsUpdate {
-                events_published: 1,
-                events_failed: 0,
-                bytes_sent: 100,
-                batches_sent: 1,
-                latency_ms: 250.0,
-                throughput_eps: 1.0,
-            }).await;
-            collector.update_producer_metrics(crate::monitoring::ProducerMetricsUpdate {
-                events_published: 1,
-                events_failed: 0,
-                bytes_sent: 100,
-                batches_sent: 1,
-                latency_ms: 180.0,
-                throughput_eps: 1.0,
-            }).await;
+            collector
+                .update_producer_metrics(crate::monitoring::ProducerMetricsUpdate {
+                    events_published: 1,
+                    events_failed: 0,
+                    bytes_sent: 100,
+                    batches_sent: 1,
+                    latency_ms: 200.0, // High latency to trigger bottleneck
+                    throughput_eps: 1.0,
+                })
+                .await;
+            collector
+                .update_producer_metrics(crate::monitoring::ProducerMetricsUpdate {
+                    events_published: 1,
+                    events_failed: 0,
+                    bytes_sent: 100,
+                    batches_sent: 1,
+                    latency_ms: 250.0,
+                    throughput_eps: 1.0,
+                })
+                .await;
+            collector
+                .update_producer_metrics(crate::monitoring::ProducerMetricsUpdate {
+                    events_published: 1,
+                    events_failed: 0,
+                    bytes_sent: 100,
+                    batches_sent: 1,
+                    latency_ms: 180.0,
+                    throughput_eps: 1.0,
+                })
+                .await;
         }
 
         let analyzer = DiagnosticAnalyzer::new(metrics_collector, health_checker);

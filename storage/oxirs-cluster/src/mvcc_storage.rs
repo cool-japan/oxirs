@@ -539,12 +539,12 @@ impl StorageBackend for MVCCStorage {
 
         let prefix = format!("shard:{}:", shard_id);
         let results = self.mvcc.scan_prefix(&tx_id, &prefix).await?;
-        
+
         let mut triples = Vec::new();
         for (_, triple) in results {
             triples.push(triple);
         }
-        
+
         self.commit_transaction(&tx_id).await?;
         Ok(triples)
     }
@@ -573,10 +573,12 @@ impl StorageBackend for MVCCStorage {
         let marker_triple = Triple::new(
             Subject::NamedNode(NamedNode::new("urn:oxirs:shard:deleted").unwrap()),
             Predicate::NamedNode(NamedNode::new("urn:oxirs:prop:deletionMarker").unwrap()),
-            Object::Literal(Literal::new_simple_literal("true"))
+            Object::Literal(Literal::new_simple_literal("true")),
         );
-        
-        self.mvcc.write(&tx_id, &deletion_marker_key, Some(marker_triple)).await?;
+
+        self.mvcc
+            .write(&tx_id, &deletion_marker_key, Some(marker_triple))
+            .await?;
         self.commit_transaction(&tx_id).await
     }
 }

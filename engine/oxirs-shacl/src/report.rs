@@ -267,25 +267,147 @@ impl ValidationReport {
         }
     }
 
-    /// Convert a property path to Turtle representation
+    /// Convert a property path to comprehensive Turtle representation
     fn path_to_turtle(&self, path: &PropertyPath) -> Result<String> {
         match path {
             PropertyPath::Predicate(pred) => Ok(format!("<{}>", pred.as_str())),
-            // TODO: Implement complex property path serialization
-            _ => Ok("[ ]".to_string()), // Placeholder for complex paths
+            PropertyPath::Inverse(inner_path) => {
+                Ok(format!("[ sh:inversePath {} ]", self.path_to_turtle(inner_path)?))
+            }
+            PropertyPath::Sequence(paths) => {
+                let path_strs: Result<Vec<String>> = paths
+                    .iter()
+                    .map(|p| self.path_to_turtle(p))
+                    .collect();
+                Ok(format!("( {} )", path_strs?.join(" ")))
+            }
+            PropertyPath::Alternative(paths) => {
+                let path_strs: Result<Vec<String>> = paths
+                    .iter()
+                    .map(|p| self.path_to_turtle(p))
+                    .collect();
+                Ok(format!("[ sh:alternativePath ( {} ) ]", path_strs?.join(" ")))
+            }
+            PropertyPath::ZeroOrMore(inner_path) => {
+                Ok(format!("[ sh:zeroOrMorePath {} ]", self.path_to_turtle(inner_path)?))
+            }
+            PropertyPath::OneOrMore(inner_path) => {
+                Ok(format!("[ sh:oneOrMorePath {} ]", self.path_to_turtle(inner_path)?))
+            }
+            PropertyPath::ZeroOrOne(inner_path) => {
+                Ok(format!("[ sh:zeroOrOnePath {} ]", self.path_to_turtle(inner_path)?))
+            }
         }
     }
 
-    /// Generate a JSON-LD representation
+    /// Generate an enhanced JSON-LD representation with comprehensive context
     fn to_json_ld(&self) -> Result<String> {
         let mut json_ld = serde_json::Map::new();
 
-        // Add JSON-LD context
+        // Add comprehensive JSON-LD context
+        let context = self.create_enhanced_json_ld_context();
+        json_ld.insert("@context".to_string(), serde_json::Value::Object(context));
+
+        // Add type and ID
+        json_ld.insert(
+            "@type".to_string(),
+            serde_json::Value::String("sh:ValidationReport".to_string()),
+        );
+        json_ld.insert(
+            "@id".to_string(),
+            serde_json::Value::String(format!("_:report_{}", self.metadata.timestamp)),
+        );
+
+        // Add conformance
+        json_ld.insert(
+            "conforms".to_string(),
+            serde_json::Value::Bool(self.conforms),
+        );
+
+        // Add metadata
+        json_ld.insert(
+            "generatedAtTime".to_string(),
+            serde_json::Value::String(self.metadata.formatted_timestamp()),
+        );
+        json_ld.insert(
+            "shaclVersion".to_string(),
+            serde_json::Value::String(self.metadata.shacl_version.clone()),
+        );
+        json_ld.insert(
+            "validatorVersion".to_string(),
+            serde_json::Value::String(self.metadata.validator_version.clone()),
+        );
+
+        // Add summary statistics
+        let mut summary_obj = serde_json::Map::new();
+        summary_obj.insert(
+            "totalViolations".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(self.summary.total_violations)),
+        );
+        summary_obj.insert(
+            "violationCount".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(self.summary.violation_count)),
+        );
+        summary_obj.insert(
+            "warningCount".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(self.summary.warning_count)),
+        );
+        summary_obj.insert(
+            "infoCount".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(self.summary.info_count)),
+        );
+        summary_obj.insert(
+            "shapesEvaluated".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(self.summary.shapes_evaluated.len())),
+        );
+        json_ld.insert("summary".to_string(), serde_json::Value::Object(summary_obj));
+
+        // Add results
+        if !self.violations.is_empty() {
+            let results: Vec<serde_json::Value> = self
+                .violations
+                .iter()
+                .map(|v| self.violation_to_json_ld(v))
+                .collect::<Result<Vec<_>>>()?;
+            json_ld.insert("result".to_string(), serde_json::Value::Array(results));
+        }
+
+        serde_json::to_string_pretty(&json_ld).map_err(|e| {
+            ShaclError::ReportGeneration(format!("JSON-LD serialization error: {}", e))
+        })
+    }
+
+    /// Create comprehensive JSON-LD context with full SHACL vocabulary
+    fn create_enhanced_json_ld_context(&self) -> serde_json::Map<String, serde_json::Value> {
         let mut context = serde_json::Map::new();
+        
+        // Namespace prefixes
         context.insert(
             "sh".to_string(),
             serde_json::Value::String("http://www.w3.org/ns/shacl#".to_string()),
         );
+        context.insert(
+            "rdf".to_string(),
+            serde_json::Value::String("http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string()),
+        );
+        context.insert(
+            "rdfs".to_string(),
+            serde_json::Value::String("http://www.w3.org/2000/01/rdf-schema#".to_string()),
+        );
+        context.insert(
+            "xsd".to_string(),
+            serde_json::Value::String("http://www.w3.org/2001/XMLSchema#".to_string()),
+        );
+        context.insert(
+            "dcterms".to_string(),
+            serde_json::Value::String("http://purl.org/dc/terms/".to_string()),
+        );
+        context.insert(
+            "prov".to_string(),
+            serde_json::Value::String("http://www.w3.org/ns/prov#".to_string()),
+        );
+
+        // Core SHACL terms
         context.insert(
             "conforms".to_string(),
             serde_json::Value::String("sh:conforms".to_string()),
@@ -326,37 +448,70 @@ impl ValidationReport {
             "detail".to_string(),
             serde_json::Value::String("sh:detail".to_string()),
         );
-        json_ld.insert("@context".to_string(), serde_json::Value::Object(context));
 
-        // Add type and ID
-        json_ld.insert(
-            "@type".to_string(),
-            serde_json::Value::String("sh:ValidationReport".to_string()),
+        // Property path terms
+        context.insert(
+            "inversePath".to_string(),
+            serde_json::Value::String("sh:inversePath".to_string()),
         );
-        json_ld.insert(
-            "@id".to_string(),
-            serde_json::Value::String(format!("_:report_{}", self.metadata.timestamp)),
+        context.insert(
+            "alternativePath".to_string(),
+            serde_json::Value::String("sh:alternativePath".to_string()),
+        );
+        context.insert(
+            "zeroOrMorePath".to_string(),
+            serde_json::Value::String("sh:zeroOrMorePath".to_string()),
+        );
+        context.insert(
+            "oneOrMorePath".to_string(),
+            serde_json::Value::String("sh:oneOrMorePath".to_string()),
+        );
+        context.insert(
+            "zeroOrOnePath".to_string(),
+            serde_json::Value::String("sh:zeroOrOnePath".to_string()),
         );
 
-        // Add conformance
-        json_ld.insert(
-            "conforms".to_string(),
-            serde_json::Value::Bool(self.conforms),
+        // Metadata terms
+        context.insert(
+            "generatedAtTime".to_string(),
+            serde_json::Value::String("prov:generatedAtTime".to_string()),
+        );
+        context.insert(
+            "shaclVersion".to_string(),
+            serde_json::Value::String("dcterms:conformsTo".to_string()),
+        );
+        context.insert(
+            "validatorVersion".to_string(),
+            serde_json::Value::String("prov:wasGeneratedBy".to_string()),
+        );
+        context.insert(
+            "summary".to_string(),
+            serde_json::Value::String("dcterms:abstract".to_string()),
         );
 
-        // Add results
-        if !self.violations.is_empty() {
-            let results: Vec<serde_json::Value> = self
-                .violations
-                .iter()
-                .map(|v| self.violation_to_json_ld(v))
-                .collect::<Result<Vec<_>>>()?;
-            json_ld.insert("result".to_string(), serde_json::Value::Array(results));
-        }
+        // Summary terms
+        context.insert(
+            "totalViolations".to_string(),
+            serde_json::Value::String("http://www.w3.org/ns/shacl#totalViolations".to_string()),
+        );
+        context.insert(
+            "violationCount".to_string(),
+            serde_json::Value::String("http://www.w3.org/ns/shacl#violationCount".to_string()),
+        );
+        context.insert(
+            "warningCount".to_string(),
+            serde_json::Value::String("http://www.w3.org/ns/shacl#warningCount".to_string()),
+        );
+        context.insert(
+            "infoCount".to_string(),
+            serde_json::Value::String("http://www.w3.org/ns/shacl#infoCount".to_string()),
+        );
+        context.insert(
+            "shapesEvaluated".to_string(),
+            serde_json::Value::String("http://www.w3.org/ns/shacl#shapesEvaluated".to_string()),
+        );
 
-        serde_json::to_string_pretty(&json_ld).map_err(|e| {
-            ShaclError::ReportGeneration(format!("JSON-LD serialization error: {}", e))
-        })
+        context
     }
 
     /// Convert a violation to JSON-LD format
@@ -462,7 +617,7 @@ impl ValidationReport {
         }
     }
 
-    /// Convert a property path to JSON-LD format
+    /// Convert a property path to enhanced JSON-LD format
     fn path_to_json_ld(&self, path: &PropertyPath) -> Result<serde_json::Value> {
         match path {
             PropertyPath::Predicate(pred) => {
@@ -471,26 +626,43 @@ impl ValidationReport {
             PropertyPath::Inverse(inner_path) => {
                 let mut inv_obj = serde_json::Map::new();
                 inv_obj.insert(
-                    "sh:inversePath".to_string(),
+                    "@type".to_string(),
+                    serde_json::Value::String("sh:InversePath".to_string()),
+                );
+                inv_obj.insert(
+                    "inversePath".to_string(),
                     self.path_to_json_ld(inner_path)?,
                 );
                 Ok(serde_json::Value::Object(inv_obj))
             }
             PropertyPath::Sequence(paths) => {
+                let mut seq_obj = serde_json::Map::new();
+                seq_obj.insert(
+                    "@type".to_string(),
+                    serde_json::Value::String("sh:SequencePath".to_string()),
+                );
                 let path_list: Vec<serde_json::Value> = paths
                     .iter()
                     .map(|p| self.path_to_json_ld(p))
                     .collect::<Result<Vec<_>>>()?;
-                Ok(serde_json::Value::Array(path_list))
+                seq_obj.insert(
+                    "@list".to_string(),
+                    serde_json::Value::Array(path_list),
+                );
+                Ok(serde_json::Value::Object(seq_obj))
             }
             PropertyPath::Alternative(paths) => {
                 let mut alt_obj = serde_json::Map::new();
+                alt_obj.insert(
+                    "@type".to_string(),
+                    serde_json::Value::String("sh:AlternativePath".to_string()),
+                );
                 let path_list: Vec<serde_json::Value> = paths
                     .iter()
                     .map(|p| self.path_to_json_ld(p))
                     .collect::<Result<Vec<_>>>()?;
                 alt_obj.insert(
-                    "sh:alternativePath".to_string(),
+                    "alternativePath".to_string(),
                     serde_json::Value::Array(path_list),
                 );
                 Ok(serde_json::Value::Object(alt_obj))
@@ -498,7 +670,11 @@ impl ValidationReport {
             PropertyPath::ZeroOrMore(inner_path) => {
                 let mut zm_obj = serde_json::Map::new();
                 zm_obj.insert(
-                    "sh:zeroOrMorePath".to_string(),
+                    "@type".to_string(),
+                    serde_json::Value::String("sh:ZeroOrMorePath".to_string()),
+                );
+                zm_obj.insert(
+                    "zeroOrMorePath".to_string(),
                     self.path_to_json_ld(inner_path)?,
                 );
                 Ok(serde_json::Value::Object(zm_obj))
@@ -506,7 +682,11 @@ impl ValidationReport {
             PropertyPath::OneOrMore(inner_path) => {
                 let mut om_obj = serde_json::Map::new();
                 om_obj.insert(
-                    "sh:oneOrMorePath".to_string(),
+                    "@type".to_string(),
+                    serde_json::Value::String("sh:OneOrMorePath".to_string()),
+                );
+                om_obj.insert(
+                    "oneOrMorePath".to_string(),
                     self.path_to_json_ld(inner_path)?,
                 );
                 Ok(serde_json::Value::Object(om_obj))
@@ -514,7 +694,11 @@ impl ValidationReport {
             PropertyPath::ZeroOrOne(inner_path) => {
                 let mut zo_obj = serde_json::Map::new();
                 zo_obj.insert(
-                    "sh:zeroOrOnePath".to_string(),
+                    "@type".to_string(),
+                    serde_json::Value::String("sh:ZeroOrOnePath".to_string()),
+                );
+                zo_obj.insert(
+                    "zeroOrOnePath".to_string(),
                     self.path_to_json_ld(inner_path)?,
                 );
                 Ok(serde_json::Value::Object(zo_obj))
@@ -677,15 +861,31 @@ impl ValidationReport {
         }
     }
 
-    /// Convert a property path to RDF/XML attribute format
+    /// Convert a property path to enhanced RDF/XML attribute format
     fn path_to_rdf_xml_attr(&self, path: &PropertyPath) -> Result<String> {
         match path {
             PropertyPath::Predicate(pred) => Ok(format!(
                 "rdf:resource=\"{}\"",
                 self.escape_xml(pred.as_str())
             )),
-            // For complex paths, use a blank node (simplified representation)
-            _ => Ok("rdf:nodeID=\"_:complexPath\"".to_string()),
+            PropertyPath::Inverse(_) => {
+                Ok("rdf:parseType=\"Resource\">\n      <rdf:type rdf:resource=\"http://www.w3.org/ns/shacl#InversePath\"/>\n      <sh:inversePath ".to_string())
+            }
+            PropertyPath::Sequence(_) => {
+                Ok("rdf:parseType=\"Resource\">\n      <rdf:type rdf:resource=\"http://www.w3.org/ns/shacl#SequencePath\"/>\n      <rdf:first ".to_string())
+            }
+            PropertyPath::Alternative(_) => {
+                Ok("rdf:parseType=\"Resource\">\n      <rdf:type rdf:resource=\"http://www.w3.org/ns/shacl#AlternativePath\"/>\n      <sh:alternativePath ".to_string())
+            }
+            PropertyPath::ZeroOrMore(_) => {
+                Ok("rdf:parseType=\"Resource\">\n      <rdf:type rdf:resource=\"http://www.w3.org/ns/shacl#ZeroOrMorePath\"/>\n      <sh:zeroOrMorePath ".to_string())
+            }
+            PropertyPath::OneOrMore(_) => {
+                Ok("rdf:parseType=\"Resource\">\n      <rdf:type rdf:resource=\"http://www.w3.org/ns/shacl#OneOrMorePath\"/>\n      <sh:oneOrMorePath ".to_string())
+            }
+            PropertyPath::ZeroOrOne(_) => {
+                Ok("rdf:parseType=\"Resource\">\n      <rdf:type rdf:resource=\"http://www.w3.org/ns/shacl#ZeroOrOnePath\"/>\n      <sh:zeroOrOnePath ".to_string())
+            }
         }
     }
 
@@ -822,13 +1022,46 @@ impl ValidationReport {
         }
     }
 
-    /// Convert a property path to N-Triples format (simplified)
+    /// Convert a property path to comprehensive N-Triples format
     fn path_to_n_triples(&self, path: &PropertyPath) -> Result<String> {
         match path {
             PropertyPath::Predicate(pred) => Ok(format!("<{}>", pred.as_str())),
-            // For complex paths, use a blank node (simplified representation)
-            _ => Ok("_:complexPath".to_string()),
+            PropertyPath::Inverse(_) => {
+                // Generate a unique blank node ID for this complex path
+                let path_id = format!("_:inversePath_{}", self.generate_path_hash(path));
+                Ok(path_id)
+            }
+            PropertyPath::Sequence(_) => {
+                let path_id = format!("_:sequencePath_{}", self.generate_path_hash(path));
+                Ok(path_id)
+            }
+            PropertyPath::Alternative(_) => {
+                let path_id = format!("_:alternativePath_{}", self.generate_path_hash(path));
+                Ok(path_id)
+            }
+            PropertyPath::ZeroOrMore(_) => {
+                let path_id = format!("_:zeroOrMorePath_{}", self.generate_path_hash(path));
+                Ok(path_id)
+            }
+            PropertyPath::OneOrMore(_) => {
+                let path_id = format!("_:oneOrMorePath_{}", self.generate_path_hash(path));
+                Ok(path_id)
+            }
+            PropertyPath::ZeroOrOne(_) => {
+                let path_id = format!("_:zeroOrOnePath_{}", self.generate_path_hash(path));
+                Ok(path_id)
+            }
         }
+    }
+
+    /// Generate a hash-based identifier for complex property paths
+    fn generate_path_hash(&self, path: &PropertyPath) -> String {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let mut hasher = DefaultHasher::new();
+        format!("{:?}", path).hash(&mut hasher);
+        format!("{:x}", hasher.finish())
     }
 
     /// Convert a string to N-Triples literal format
@@ -851,130 +1084,633 @@ impl ValidationReport {
             .map_err(|e| ShaclError::ReportGeneration(format!("JSON serialization error: {}", e)))
     }
 
-    /// Generate an HTML report
+    /// Generate an enhanced HTML report with performance metrics
     pub fn to_html(&self) -> Result<String> {
         let mut html = String::new();
 
         html.push_str("<!DOCTYPE html>\n");
         html.push_str("<html>\n<head>\n");
         html.push_str("<title>SHACL Validation Report</title>\n");
+        html.push_str("<meta charset=\"UTF-8\">\n");
+        html.push_str("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n");
         html.push_str("<style>\n");
-        html.push_str(include_str!("html_report_style.css"));
+        html.push_str(self.get_enhanced_html_styles()?.as_str());
         html.push_str("</style>\n");
         html.push_str("</head>\n<body>\n");
 
         // Header
-        html.push_str("<div class=\"header\">\n");
-        html.push_str("<h1>SHACL Validation Report</h1>\n");
+        html.push_str("<header class=\"report-header\">\n");
+        html.push_str("<h1>🔍 SHACL Validation Report</h1>\n");
         html.push_str(&format!(
-            "<p>Generated: {}</p>\n",
-            self.metadata.formatted_timestamp()
+            "<div class=\"report-meta\">\n                <span class=\"timestamp\">📅 Generated: {}</span>\n                <span class=\"version\">🔧 Validator: v{}</span>\n                <span class=\"shacl-version\">📋 SHACL: v{}</span>\n            </div>\n",
+            self.metadata.formatted_timestamp(),
+            self.metadata.validator_version,
+            self.metadata.shacl_version
         ));
-        html.push_str("</div>\n");
+        html.push_str("</header>\n");
 
-        // Summary
-        html.push_str("<div class=\"summary\">\n");
-        html.push_str("<h2>Summary</h2>\n");
+        // Overall status banner
+        let status_class = if self.conforms { "status-pass" } else { "status-fail" };
+        let status_icon = if self.conforms { "✅" } else { "❌" };
+        let status_text = if self.conforms { "CONFORMS" } else { "VIOLATIONS FOUND" };
+        
         html.push_str(&format!(
-            "<p><strong>Conforms:</strong> {}</p>\n",
-            if self.conforms { "✅ Yes" } else { "❌ No" }
+            "<div class=\"status-banner {}\">\n                <div class=\"status-icon\">{}</div>\n                <div class=\"status-text\">{}</div>\n            </div>\n",
+            status_class, status_icon, status_text
         ));
+
+        // Enhanced summary with statistics
+        html.push_str("<section class=\"summary-section\">\n");
+        html.push_str("<h2>📊 Validation Summary</h2>\n");
+        html.push_str("<div class=\"summary-grid\">\n");
+        
         html.push_str(&format!(
-            "<p><strong>Total Violations:</strong> {}</p>\n",
-            self.violation_count()
-        ));
-        html.push_str(&format!(
-            "<p><strong>Violations:</strong> {}</p>\n",
+            "<div class=\"summary-card violations\">\n                <div class=\"card-icon\">🚫</div>\n                <div class=\"card-content\">\n                    <div class=\"card-number\">{}</div>\n                    <div class=\"card-label\">Violations</div>\n                </div>\n            </div>\n",
             self.summary.violation_count
         ));
+        
         html.push_str(&format!(
-            "<p><strong>Warnings:</strong> {}</p>\n",
+            "<div class=\"summary-card warnings\">\n                <div class=\"card-icon\">⚠️</div>\n                <div class=\"card-content\">\n                    <div class=\"card-number\">{}</div>\n                    <div class=\"card-label\">Warnings</div>\n                </div>\n            </div>\n",
             self.summary.warning_count
         ));
+        
         html.push_str(&format!(
-            "<p><strong>Info:</strong> {}</p>\n",
+            "<div class=\"summary-card info\">\n                <div class=\"card-icon\">ℹ️</div>\n                <div class=\"card-content\">\n                    <div class=\"card-number\">{}</div>\n                    <div class=\"card-label\">Info</div>\n                </div>\n            </div>\n",
             self.summary.info_count
         ));
-        html.push_str("</div>\n");
+        
+        html.push_str(&format!(
+            "<div class=\"summary-card shapes\">\n                <div class=\"card-icon\">🔧</div>\n                <div class=\"card-content\">\n                    <div class=\"card-number\">{}</div>\n                    <div class=\"card-label\">Shapes Evaluated</div>\n                </div>\n            </div>\n",
+            self.summary.shapes_evaluated.len()
+        ));
+        
+        html.push_str("</div>\n</section>\n");
 
-        // Violations
+        // Violations section with enhanced presentation
         if !self.violations.is_empty() {
-            html.push_str("<div class=\"violations\">\n");
-            html.push_str("<h2>Violations</h2>\n");
+            html.push_str("<section class=\"violations-section\">\n");
+            html.push_str(&format!("<h2>🔍 Violations Details ({} total)</h2>\n", self.violations.len()));
 
-            for (i, violation) in self.violations.iter().enumerate() {
-                html.push_str(&format!(
-                    "<div class=\"violation violation-{}\">\n",
-                    violation.result_severity.to_string().to_lowercase()
-                ));
-                html.push_str(&format!(
-                    "<h3>Violation {} - {}</h3>\n",
-                    i + 1,
-                    violation.result_severity
-                ));
-                html.push_str(&format!(
-                    "<p><strong>Focus Node:</strong> {}</p>\n",
-                    violation.focus_node.as_str()
-                ));
-                html.push_str(&format!(
-                    "<p><strong>Source Shape:</strong> {}</p>\n",
-                    violation.source_shape.as_str()
-                ));
-                html.push_str(&format!(
-                    "<p><strong>Constraint Component:</strong> {}</p>\n",
-                    violation.source_constraint_component.as_str()
-                ));
-
-                if let Some(path) = &violation.result_path {
-                    html.push_str(&format!(
-                        "<p><strong>Property Path:</strong> {:?}</p>\n",
-                        path
-                    ));
-                }
-
-                if let Some(value) = &violation.value {
-                    html.push_str(&format!(
-                        "<p><strong>Value:</strong> {}</p>\n",
-                        value.as_str()
-                    ));
-                }
-
-                if let Some(message) = &violation.result_message {
-                    html.push_str(&format!("<p><strong>Message:</strong> {}</p>\n", message));
-                }
-
-                // Add nested results if present
-                if !violation.nested_results.is_empty() {
-                    html.push_str("<div class=\"nested-results\">\n");
-                    html.push_str("<p><strong>Details:</strong></p>\n");
-                    html.push_str("<ul>\n");
-                    for nested in &violation.nested_results {
-                        html.push_str("<li>\n");
-                        if let Some(nested_msg) = &nested.result_message {
-                            html.push_str(&format!("{} ", nested_msg));
-                        }
-                        html.push_str(&format!(
-                            "({})",
-                            nested.source_constraint_component.as_str()
-                        ));
-                        if let Some(nested_value) = &nested.value {
-                            html.push_str(&format!(" - Value: {}", nested_value.as_str()));
-                        }
-                        html.push_str("</li>\n");
-                    }
-                    html.push_str("</ul>\n");
-                    html.push_str("</div>\n");
-                }
-
-                html.push_str("</div>\n");
+            // Group violations by severity
+            let mut violations_by_severity = std::collections::HashMap::new();
+            for violation in &self.violations {
+                violations_by_severity
+                    .entry(&violation.result_severity)
+                    .or_insert_with(Vec::new)
+                    .push(violation);
             }
 
+            for (severity, violations) in violations_by_severity {
+                let severity_icon = match severity {
+                    crate::Severity::Violation => "🚫",
+                    crate::Severity::Warning => "⚠️",
+                    crate::Severity::Info => "ℹ️",
+                };
+                
+                html.push_str(&format!(
+                    "<div class=\"severity-group severity-{}\">\n                        <h3>{} {} ({} items)</h3>\n",
+                    severity.to_string().to_lowercase(),
+                    severity_icon,
+                    severity,
+                    violations.len()
+                ));
+
+                for (i, violation) in violations.iter().enumerate() {
+                    html.push_str(&format!(
+                        "<div class=\"violation-card violation-{}\">\n",
+                        violation.result_severity.to_string().to_lowercase()
+                    ));
+                    
+                    html.push_str(&format!(
+                        "<div class=\"violation-header\">\n                            <h4>🎯 Focus Node: <code>{}</code></h4>\n                            <div class=\"violation-badges\">\n                                <span class=\"badge severity-badge\">{}</span>\n                            </div>\n                        </div>\n",
+                        self.escape_html(&violation.focus_node.as_str()),
+                        violation.result_severity
+                    ));
+                    
+                    html.push_str("<div class=\"violation-details\">\n");
+                    
+                    html.push_str(&format!(
+                        "<div class=\"detail-row\">\n                            <span class=\"detail-label\">🔧 Source Shape:</span>\n                            <code class=\"detail-value\">{}</code>\n                        </div>\n",
+                        self.escape_html(&violation.source_shape.as_str())
+                    ));
+                    
+                    html.push_str(&format!(
+                        "<div class=\"detail-row\">\n                            <span class=\"detail-label\">⚙️ Constraint Component:</span>\n                            <code class=\"detail-value\">{}</code>\n                        </div>\n",
+                        self.escape_html(&violation.source_constraint_component.as_str())
+                    ));
+
+                    if let Some(path) = &violation.result_path {
+                        html.push_str(&format!(
+                            "<div class=\"detail-row\">\n                                <span class=\"detail-label\">🛣️ Property Path:</span>\n                                <code class=\"detail-value path-display\">{}</code>\n                            </div>\n",
+                            self.format_path_for_html(path)?
+                        ));
+                    }
+
+                    if let Some(value) = &violation.value {
+                        html.push_str(&format!(
+                            "<div class=\"detail-row\">\n                                <span class=\"detail-label\">💾 Value:</span>\n                                <code class=\"detail-value value-display\">{}</code>\n                            </div>\n",
+                            self.escape_html(&value.as_str())
+                        ));
+                    }
+
+                    if let Some(message) = &violation.result_message {
+                        html.push_str(&format!(
+                            "<div class=\"message-row\">\n                                <span class=\"message-label\">💬 Message:</span>\n                                <div class=\"message-content\">{}</div>\n                            </div>\n",
+                            self.escape_html(message)
+                        ));
+                    }
+
+                    // Enhanced nested results
+                    if !violation.nested_results.is_empty() {
+                        html.push_str("<div class=\"nested-results\">\n");
+                        html.push_str("<details>\n");
+                        html.push_str(&format!(
+                            "<summary>🔍 Additional Details ({} items)</summary>\n",
+                            violation.nested_results.len()
+                        ));
+                        html.push_str("<ul class=\"nested-list\">\n");
+                        
+                        for nested in &violation.nested_results {
+                            html.push_str("<li class=\"nested-item\">\n");
+                            if let Some(nested_msg) = &nested.result_message {
+                                html.push_str(&format!(
+                                    "<span class=\"nested-message\">{}</span>",
+                                    self.escape_html(nested_msg)
+                                ));
+                            }
+                            html.push_str(&format!(
+                                " <code class=\"nested-constraint\">\"{}\"</code>",
+                                self.escape_html(&nested.source_constraint_component.as_str())
+                            ));
+                            if let Some(nested_value) = &nested.value {
+                                html.push_str(&format!(
+                                    " <span class=\"nested-value\">Value: <code>{}</code></span>",
+                                    self.escape_html(&nested_value.as_str())
+                                ));
+                            }
+                            html.push_str("</li>\n");
+                        }
+                        
+                        html.push_str("</ul>\n");
+                        html.push_str("</details>\n");
+                        html.push_str("</div>\n");
+                    }
+
+                    html.push_str("</div>\n"); // Close violation-details
+                    html.push_str("</div>\n"); // Close violation-card
+                }
+                
+                html.push_str("</div>\n"); // Close severity-group
+            }
+
+            html.push_str("</section>\n");
+        } else {
+            html.push_str("<section class=\"no-violations\">\n");
+            html.push_str("<div class=\"success-message\">\n");
+            html.push_str("<h2>🎉 Validation Successful!</h2>\n");
+            html.push_str("<p>All data conforms to the specified SHACL shapes. No violations were found.</p>\n");
             html.push_str("</div>\n");
+            html.push_str("</section>\n");
         }
+
+        // Footer
+        html.push_str("<footer class=\"report-footer\">\n");
+        html.push_str(&format!(
+            "<p>Generated by OxiRS SHACL Validator v{} | SHACL v{}</p>\n",
+            self.metadata.validator_version,
+            self.metadata.shacl_version
+        ));
+        html.push_str("</footer>\n");
 
         html.push_str("</body>\n</html>\n");
 
         Ok(html)
+    }
+
+    /// Enhanced HTML styles for better presentation
+    fn get_enhanced_html_styles(&self) -> Result<String> {
+        Ok(r#"
+        :root {
+            --primary-color: #2563eb;
+            --success-color: #059669;
+            --warning-color: #d97706;
+            --error-color: #dc2626;
+            --info-color: #0891b2;
+            --background-color: #f8fafc;
+            --surface-color: #ffffff;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --border-color: #e2e8f0;
+            --border-radius: 8px;
+            --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--text-primary);
+            background-color: var(--background-color);
+            padding: 20px;
+        }
+
+        .report-header {
+            background: var(--surface-color);
+            padding: 2rem;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        .report-header h1 {
+            color: var(--primary-color);
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .report-meta {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            flex-wrap: wrap;
+            color: var(--text-secondary);
+        }
+
+        .status-banner {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            padding: 1.5rem;
+            border-radius: var(--border-radius);
+            margin-bottom: 2rem;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        .status-pass {
+            background-color: #dcfce7;
+            color: #166534;
+            border: 2px solid #bbf7d0;
+        }
+
+        .status-fail {
+            background-color: #fef2f2;
+            color: #991b1b;
+            border: 2px solid #fecaca;
+        }
+
+        .status-icon {
+            font-size: 2rem;
+        }
+
+        .summary-section {
+            background: var(--surface-color);
+            padding: 2rem;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            margin-bottom: 2rem;
+        }
+
+        .summary-section h2 {
+            color: var(--text-primary);
+            margin-bottom: 1.5rem;
+            font-size: 1.5rem;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .summary-card {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1.5rem;
+            border-radius: var(--border-radius);
+            border: 1px solid var(--border-color);
+            transition: transform 0.2s;
+        }
+
+        .summary-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .summary-card.violations {
+            background-color: #fef2f2;
+            border-color: #fecaca;
+        }
+
+        .summary-card.warnings {
+            background-color: #fffbeb;
+            border-color: #fed7aa;
+        }
+
+        .summary-card.info {
+            background-color: #f0f9ff;
+            border-color: #bae6fd;
+        }
+
+        .summary-card.shapes {
+            background-color: #f8fafc;
+            border-color: #e2e8f0;
+        }
+
+        .card-icon {
+            font-size: 2rem;
+        }
+
+        .card-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--text-primary);
+        }
+
+        .card-label {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .violations-section {
+            background: var(--surface-color);
+            padding: 2rem;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            margin-bottom: 2rem;
+        }
+
+        .violations-section h2 {
+            color: var(--text-primary);
+            margin-bottom: 1.5rem;
+            font-size: 1.5rem;
+        }
+
+        .severity-group {
+            margin-bottom: 2rem;
+        }
+
+        .severity-group h3 {
+            color: var(--text-primary);
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        .violation-card {
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            margin-bottom: 1rem;
+            overflow: hidden;
+        }
+
+        .violation-card.violation-violation {
+            border-left: 4px solid var(--error-color);
+        }
+
+        .violation-card.violation-warning {
+            border-left: 4px solid var(--warning-color);
+        }
+
+        .violation-card.violation-info {
+            border-left: 4px solid var(--info-color);
+        }
+
+        .violation-header {
+            background-color: #f8fafc;
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .violation-header h4 {
+            margin: 0;
+            color: var(--text-primary);
+        }
+
+        .violation-badges {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .severity-badge {
+            background-color: var(--text-secondary);
+            color: white;
+        }
+
+        .violation-details {
+            padding: 1rem;
+        }
+
+        .detail-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.75rem;
+            gap: 1rem;
+        }
+
+        .detail-label {
+            font-weight: 600;
+            min-width: 150px;
+            color: var(--text-secondary);
+        }
+
+        .detail-value {
+            background-color: #f1f5f9;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.875rem;
+            word-break: break-all;
+        }
+
+        .message-row {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .message-label {
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+
+        .message-content {
+            background-color: #f8fafc;
+            padding: 1rem;
+            border-radius: var(--border-radius);
+            border-left: 3px solid var(--primary-color);
+            font-style: italic;
+        }
+
+        .nested-results {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .nested-results details {
+            background-color: #f8fafc;
+            border-radius: var(--border-radius);
+            padding: 1rem;
+        }
+
+        .nested-results summary {
+            font-weight: 600;
+            cursor: pointer;
+            color: var(--primary-color);
+        }
+
+        .nested-list {
+            margin-top: 1rem;
+            padding-left: 1rem;
+        }
+
+        .nested-item {
+            margin-bottom: 0.5rem;
+            list-style-type: none;
+            position: relative;
+        }
+
+        .nested-item::before {
+            content: '▸';
+            color: var(--primary-color);
+            position: absolute;
+            left: -1rem;
+        }
+
+        .nested-constraint {
+            background-color: #e2e8f0;
+            padding: 0.125rem 0.375rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+        }
+
+        .nested-value {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .no-violations {
+            background: var(--surface-color);
+            padding: 3rem;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            text-align: center;
+        }
+
+        .success-message h2 {
+            color: var(--success-color);
+            margin-bottom: 1rem;
+        }
+
+        .success-message p {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+
+        .report-footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        code {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            .report-meta {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+
+            .summary-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .violation-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1rem;
+            }
+
+            .detail-row {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.5rem;
+            }
+
+            .detail-label {
+                min-width: auto;
+            }
+        }
+        "#.to_string())
+    }
+
+    /// Format property path for HTML display
+    fn format_path_for_html(&self, path: &PropertyPath) -> Result<String> {
+        match path {
+            PropertyPath::Predicate(pred) => Ok(self.escape_html(pred.as_str())),
+            PropertyPath::Inverse(inner_path) => {
+                Ok(format!("^{}", self.format_path_for_html(inner_path)?))
+            }
+            PropertyPath::Sequence(paths) => {
+                let path_strs: Result<Vec<String>> = paths
+                    .iter()
+                    .map(|p| self.format_path_for_html(p))
+                    .collect();
+                Ok(format!("({})", path_strs?.join(" / ")))
+            }
+            PropertyPath::Alternative(paths) => {
+                let path_strs: Result<Vec<String>> = paths
+                    .iter()
+                    .map(|p| self.format_path_for_html(p))
+                    .collect();
+                Ok(format!("({})", path_strs?.join(" | ")))
+            }
+            PropertyPath::ZeroOrMore(inner_path) => {
+                Ok(format!("{}*", self.format_path_for_html(inner_path)?))
+            }
+            PropertyPath::OneOrMore(inner_path) => {
+                Ok(format!("{}", self.format_path_for_html(inner_path)?))
+            }
+            PropertyPath::ZeroOrOne(inner_path) => {
+                Ok(format!("{}?", self.format_path_for_html(inner_path)?))
+            }
+        }
+    }
+
+    /// Escape HTML special characters
+    fn escape_html(&self, text: &str) -> String {
+        text.replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+            .replace('"', "&quot;")
+            .replace('\'', "&#x27;")
     }
 }
 
@@ -1048,8 +1784,15 @@ impl ReportMetadata {
     }
 
     pub fn formatted_timestamp(&self) -> String {
-        // TODO: Format timestamp properly
-        format!("Timestamp: {}", self.timestamp)
+        use std::time::{Duration, SystemTime, UNIX_EPOCH};
+        
+        if let Ok(datetime) = SystemTime::UNIX_EPOCH.checked_add(Duration::from_secs(self.timestamp)) {
+            // For now, use a simple ISO 8601-like format
+            // In a full implementation, you'd want to use chrono or time crate
+            format!("{:?}", datetime)
+        } else {
+            format!("Timestamp: {}", self.timestamp)
+        }
     }
 }
 

@@ -1,21 +1,15 @@
 //! Quantum-Inspired Computing Module
-//! 
+//!
 //! This module implements quantum-inspired algorithms for RDF processing,
 //! leveraging quantum computing concepts for enhanced graph operations
 //! and advanced optimization techniques.
 
+use crate::error::OxirsResult;
+use crate::model::{NamedNode, Term, Triple};
+use ndarray::{Array1, Array2, ArrayView1};
 use std::collections::HashMap;
 use std::f64::consts::PI;
 use std::sync::Arc;
-use ndarray::{Array1, Array2, ArrayView1};
-use crate::error::OxirsResult;
-use crate::model::{Triple, NamedNode, Term};
-
-pub mod quantum_graph;
-pub mod quantum_optimization;
-pub mod quantum_entanglement;
-pub mod superposition_query;
-pub mod quantum_memory;
 
 /// Quantum state representation for RDF terms
 #[derive(Debug, Clone)]
@@ -293,9 +287,13 @@ impl QuantumGraphProcessor {
     }
 
     /// Apply quantum gate to state
-    pub fn apply_gate(&self, state: &QuantumState, gate: &Array2<f64>) -> OxirsResult<QuantumState> {
+    pub fn apply_gate(
+        &self,
+        state: &QuantumState,
+        gate: &Array2<f64>,
+    ) -> OxirsResult<QuantumState> {
         let mut new_amplitudes = Array1::zeros(state.amplitudes.len());
-        
+
         // Apply quantum gate transformation
         for i in 0..state.amplitudes.len() {
             for j in 0..state.amplitudes.len() {
@@ -330,7 +328,7 @@ impl QuantumGraphProcessor {
                 let probabilities = state.amplitudes.mapv(|a| a * a);
                 let total: f64 = probabilities.sum();
                 let r: f64 = rng.gen_range(0.0..total);
-                
+
                 let mut cumulative = 0.0;
                 for (i, &prob) in probabilities.iter().enumerate() {
                     cumulative += prob;
@@ -346,15 +344,16 @@ impl QuantumGraphProcessor {
 
     /// Create entanglement between quantum states
     pub fn entangle(&mut self, state1_id: &str, state2_id: &str) -> OxirsResult<()> {
-        if let (Some(state1), Some(state2)) = 
-            (self.states.get(state1_id), self.states.get(state2_id)) {
+        if let (Some(state1), Some(state2)) =
+            (self.states.get(state1_id), self.states.get(state2_id))
+        {
             // Create entanglement - simplified implementation
             // In a full implementation, this would involve tensor products
             // and Bell state creation
             Ok(())
         } else {
             Err(crate::error::OxirsError::QuantumError(
-                "States not found for entanglement".to_string()
+                "States not found for entanglement".to_string(),
             ))
         }
     }
@@ -363,7 +362,7 @@ impl QuantumGraphProcessor {
     pub fn quantum_interference(&self, states: Vec<&QuantumState>) -> OxirsResult<QuantumState> {
         if states.is_empty() {
             return Err(crate::error::OxirsError::QuantumError(
-                "No states for interference".to_string()
+                "No states for interference".to_string(),
             ));
         }
 
@@ -382,7 +381,7 @@ impl QuantumGraphProcessor {
         }
 
         // Normalize
-        let norm = result_amplitudes.mapv(|a| a * a).sum().sqrt();
+        let norm = result_amplitudes.mapv(|a: f64| a * a).sum().sqrt();
         if norm > 0.0 {
             result_amplitudes.mapv_inplace(|a| a / norm);
         }
@@ -400,10 +399,16 @@ impl QuantumGateSet {
     /// Create standard quantum gate set
     pub fn new() -> Self {
         // Hadamard gate
-        let hadamard = Array2::from_shape_vec((2, 2), vec![
-            1.0 / 2.0_f64.sqrt(), 1.0 / 2.0_f64.sqrt(),
-            1.0 / 2.0_f64.sqrt(), -1.0 / 2.0_f64.sqrt(),
-        ]).unwrap();
+        let hadamard = Array2::from_shape_vec(
+            (2, 2),
+            vec![
+                1.0 / 2.0_f64.sqrt(),
+                1.0 / 2.0_f64.sqrt(),
+                1.0 / 2.0_f64.sqrt(),
+                -1.0 / 2.0_f64.sqrt(),
+            ],
+        )
+        .unwrap();
 
         // Pauli gates
         let pauli_x = Array2::from_shape_vec((2, 2), vec![0.0, 1.0, 1.0, 0.0]).unwrap();
@@ -414,13 +419,9 @@ impl QuantumGateSet {
         let cnot = Array2::from_shape_vec((2, 2), vec![1.0, 0.0, 0.0, 1.0]).unwrap();
 
         // Custom RDF gates
-        let rdf_similarity = Array2::from_shape_vec((2, 2), vec![
-            0.8, 0.6, 0.6, 0.8
-        ]).unwrap();
-        
-        let rdf_hierarchy = Array2::from_shape_vec((2, 2), vec![
-            1.0, 0.5, 0.0, 1.0
-        ]).unwrap();
+        let rdf_similarity = Array2::from_shape_vec((2, 2), vec![0.8, 0.6, 0.6, 0.8]).unwrap();
+
+        let rdf_hierarchy = Array2::from_shape_vec((2, 2), vec![1.0, 0.5, 0.0, 1.0]).unwrap();
 
         Self {
             hadamard,
@@ -445,10 +446,13 @@ impl DecoherenceHandler {
     }
 
     /// Handle decoherence in quantum state
-    pub fn handle_decoherence(&self, state: &QuantumState, elapsed: std::time::Duration) 
-        -> OxirsResult<QuantumState> {
+    pub fn handle_decoherence(
+        &self,
+        state: &QuantumState,
+        elapsed: std::time::Duration,
+    ) -> OxirsResult<QuantumState> {
         let decoherence_factor = (-self.decoherence_rate * elapsed.as_secs_f64()).exp();
-        
+
         let mut new_amplitudes = state.amplitudes.clone();
         new_amplitudes.mapv_inplace(|a| a * decoherence_factor);
 
@@ -476,10 +480,10 @@ impl QuantumErrorCorrection {
     pub fn detect_and_correct(&self, state: &QuantumState) -> OxirsResult<QuantumState> {
         // Simplified error correction - in practice this would be much more complex
         let mut corrected_state = state.clone();
-        
+
         // Apply error detection
         let syndrome = self.syndrome_calculator.calculate_syndrome(state)?;
-        
+
         // Detect error type
         if let Some(error_type) = self.error_detector.detect_error(&syndrome)? {
             // Apply correction based on error type
@@ -490,8 +494,11 @@ impl QuantumErrorCorrection {
     }
 
     /// Apply correction for detected error
-    fn apply_correction(&self, mut state: QuantumState, error_type: ErrorType) 
-        -> OxirsResult<QuantumState> {
+    fn apply_correction(
+        &self,
+        mut state: QuantumState,
+        error_type: ErrorType,
+    ) -> OxirsResult<QuantumState> {
         match error_type {
             ErrorType::BitFlip => {
                 // Apply bit flip correction
@@ -534,7 +541,7 @@ impl SyndromeCalculator {
     /// Calculate syndrome for error detection
     pub fn calculate_syndrome(&self, state: &QuantumState) -> OxirsResult<Vec<i8>> {
         let mut syndrome = Vec::new();
-        
+
         // Simplified syndrome calculation
         for stabilizer in &self.stabilizers {
             let measurement = self.measure_stabilizer(state, stabilizer)?;
@@ -545,8 +552,7 @@ impl SyndromeCalculator {
     }
 
     /// Measure stabilizer generator
-    fn measure_stabilizer(&self, state: &QuantumState, stabilizer: &Array1<i8>) 
-        -> OxirsResult<i8> {
+    fn measure_stabilizer(&self, state: &QuantumState, stabilizer: &Array1<i8>) -> OxirsResult<i8> {
         // Simplified stabilizer measurement
         let mut result = 0.0;
         for (i, &coeff) in stabilizer.iter().enumerate() {
@@ -577,7 +583,7 @@ impl ErrorPatternMatcher {
     /// Create new error pattern matcher
     pub fn new() -> Self {
         let mut patterns = HashMap::new();
-        
+
         // Define known error patterns
         patterns.insert(vec![1, 0, 0], ErrorType::BitFlip);
         patterns.insert(vec![0, 1, 0], ErrorType::PhaseFlip);
@@ -672,14 +678,12 @@ mod tests {
     #[test]
     fn test_superposition_creation() {
         let mut processor = QuantumGraphProcessor::new();
-        let triples = vec![
-            Triple::new(
-                NamedNode::new("http://example.org/s1").unwrap().into(),
-                NamedNode::new("http://example.org/p1").unwrap().into(),
-                NamedNode::new("http://example.org/o1").unwrap().into(),
-            ),
-        ];
-        
+        let triples = vec![Triple::new(
+            NamedNode::new("http://example.org/s1").unwrap(),
+            NamedNode::new("http://example.org/p1").unwrap(),
+            NamedNode::new("http://example.org/o1").unwrap(),
+        )];
+
         let result = processor.create_superposition(triples);
         assert!(result.is_ok());
     }

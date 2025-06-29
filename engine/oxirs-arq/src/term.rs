@@ -615,7 +615,6 @@ impl Term {
             Term::Variable(_) => bail!("Cannot convert unbound variable to numeric"),
         }
     }
-
 }
 
 #[cfg(test)]

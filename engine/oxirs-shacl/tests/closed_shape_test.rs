@@ -22,9 +22,9 @@ fn test_closed_shape_validation() {
 
     // Add a closed constraint allowing only specific properties
     let closed_constraint = ClosedConstraint {
-        allowed_properties: vec![
-            Term::NamedNode(NamedNode::new("http://example.org/name").unwrap()),
-        ],
+        allowed_properties: vec![Term::NamedNode(
+            NamedNode::new("http://example.org/name").unwrap(),
+        )],
         ignore_properties: vec![
             Term::NamedNode(NamedNode::new("http://example.org/age").unwrap()),
             Term::NamedNode(NamedNode::new("http://example.org/email").unwrap()),
@@ -78,12 +78,12 @@ fn test_closed_shape_with_property_shapes() {
 
     // Make it closed with some ignored properties
     let closed_constraint = ClosedConstraint {
-        allowed_properties: vec![
-            Term::NamedNode(NamedNode::new("http://example.org/name").unwrap()),
-        ],
-        ignore_properties: vec![
-            Term::NamedNode(NamedNode::new("http://www.w3.org/2000/01/rdf-schema#label").unwrap()),
-        ],
+        allowed_properties: vec![Term::NamedNode(
+            NamedNode::new("http://example.org/name").unwrap(),
+        )],
+        ignore_properties: vec![Term::NamedNode(
+            NamedNode::new("http://www.w3.org/2000/01/rdf-schema#label").unwrap(),
+        )],
     };
 
     person_shape.add_constraint(

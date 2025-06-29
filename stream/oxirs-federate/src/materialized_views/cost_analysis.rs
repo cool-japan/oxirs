@@ -8,8 +8,8 @@ use std::time::Duration;
 use tracing::{debug, info, warn};
 
 use crate::{
-    planner::planning::{FilterExpression, TriplePattern},
     planner::planning::types::QueryInfo,
+    planner::planning::{FilterExpression, TriplePattern},
     FederatedService, ServiceRegistry,
 };
 
@@ -73,7 +73,9 @@ impl ViewCostAnalyzer {
     ) -> Result<ViewBenefit> {
         debug!("Estimating query benefit for view: {}", view.id);
 
-        let direct_query_cost = self.estimate_direct_query_cost(query_info, registry).await?;
+        let direct_query_cost = self
+            .estimate_direct_query_cost(query_info, registry)
+            .await?;
         let view_query_cost = self.estimate_view_query_cost(view, query_info)?;
 
         let cost_saving = direct_query_cost - view_query_cost;
@@ -94,7 +96,8 @@ impl ViewCostAnalyzer {
     /// Estimate the maintenance cost for a materialized view
     pub fn estimate_maintenance_cost(&self, view: &MaterializedView) -> MaintenanceCost {
         let base_cost = view.size_bytes as f64 * 0.001; // $0.001 per MB
-        let refresh_frequency = 24.0 / view.definition.estimate_freshness_requirement().as_secs() as f64 * 3600.0;
+        let refresh_frequency =
+            24.0 / view.definition.estimate_freshness_requirement().as_secs() as f64 * 3600.0;
         let complexity_multiplier = view.definition.complexity_score() / 10.0;
 
         MaintenanceCost {
@@ -112,10 +115,10 @@ impl ViewCostAnalyzer {
         registry: &ServiceRegistry,
     ) -> Result<ViewRecommendation> {
         let creation_cost = self.estimate_creation_cost(definition, registry).await?;
-        
+
         // Estimate benefit based on pattern analysis
         let estimated_benefit = self.estimate_pattern_benefit(definition, query_patterns);
-        
+
         let confidence = self.calculate_recommendation_confidence(definition, query_patterns);
 
         let reason = if estimated_benefit > creation_cost.total_cost * 2.0 {
@@ -195,19 +198,27 @@ impl ViewCostAnalyzer {
         Ok(base_cost + filter_cost + complexity_cost)
     }
 
-    fn estimate_view_query_cost(&self, view: &MaterializedView, query_info: &QueryInfo) -> Result<f64> {
+    fn estimate_view_query_cost(
+        &self,
+        view: &MaterializedView,
+        query_info: &QueryInfo,
+    ) -> Result<f64> {
         // Cost is much lower when using a materialized view
         let base_view_cost = 1.0; // Fixed cost for view access
         let pattern_coverage = self.calculate_pattern_coverage(view, &query_info.patterns);
-        
+
         Ok(base_view_cost * (1.0 - pattern_coverage + 0.1))
     }
 
-    fn estimate_cache_hit_probability(&self, view: &MaterializedView, query_info: &QueryInfo) -> f64 {
+    fn estimate_cache_hit_probability(
+        &self,
+        view: &MaterializedView,
+        query_info: &QueryInfo,
+    ) -> f64 {
         // Simplified cache hit probability based on pattern matching
         let pattern_match_score = self.calculate_pattern_coverage(view, &query_info.patterns);
         let freshness_factor = if view.is_stale { 0.5 } else { 1.0 };
-        
+
         pattern_match_score * freshness_factor
     }
 
@@ -217,7 +228,7 @@ impl ViewCostAnalyzer {
         } else if let Some(last_refresh) = view.last_refresh {
             let age = chrono::Utc::now().signed_duration_since(last_refresh);
             let max_age = view.definition.estimate_freshness_requirement();
-            
+
             let age_ratio = age.num_seconds() as f64 / max_age.as_secs() as f64;
             (1.0 - age_ratio).max(0.0).min(1.0)
         } else {
@@ -225,7 +236,11 @@ impl ViewCostAnalyzer {
         }
     }
 
-    fn calculate_pattern_coverage(&self, view: &MaterializedView, query_patterns: &[TriplePattern]) -> f64 {
+    fn calculate_pattern_coverage(
+        &self,
+        view: &MaterializedView,
+        query_patterns: &[TriplePattern],
+    ) -> f64 {
         if query_patterns.is_empty() {
             return 0.0;
         }
@@ -233,18 +248,20 @@ impl ViewCostAnalyzer {
         let view_patterns = view.definition.query_patterns();
         let covered_patterns = query_patterns
             .iter()
-            .filter(|qp| {
-                view_patterns.iter().any(|vp| patterns_match(qp, vp))
-            })
+            .filter(|qp| view_patterns.iter().any(|vp| patterns_match(qp, vp)))
             .count();
 
         covered_patterns as f64 / query_patterns.len() as f64
     }
 
-    fn estimate_pattern_benefit(&self, definition: &ViewDefinition, query_patterns: &[TriplePattern]) -> f64 {
+    fn estimate_pattern_benefit(
+        &self,
+        definition: &ViewDefinition,
+        query_patterns: &[TriplePattern],
+    ) -> f64 {
         let pattern_count = query_patterns.len();
         let view_patterns = definition.query_patterns();
-        
+
         let coverage = if pattern_count == 0 {
             0.0
         } else {
@@ -258,7 +275,11 @@ impl ViewCostAnalyzer {
         coverage * 100.0 // Base benefit score
     }
 
-    fn calculate_recommendation_confidence(&self, definition: &ViewDefinition, query_patterns: &[TriplePattern]) -> f64 {
+    fn calculate_recommendation_confidence(
+        &self,
+        definition: &ViewDefinition,
+        query_patterns: &[TriplePattern],
+    ) -> f64 {
         let mut confidence = 0.5; // Base confidence
 
         // Increase confidence based on pattern coverage
@@ -282,9 +303,9 @@ impl Default for ViewCostAnalyzer {
 
 /// Pattern matching helper function
 fn patterns_match(query_pattern: &TriplePattern, view_pattern: &TriplePattern) -> bool {
-    (query_pattern.subject.is_none() || query_pattern.subject == view_pattern.subject) &&
-    (query_pattern.predicate.is_none() || query_pattern.predicate == view_pattern.predicate) &&
-    (query_pattern.object.is_none() || query_pattern.object == view_pattern.object)
+    (query_pattern.subject.is_none() || query_pattern.subject == view_pattern.subject)
+        && (query_pattern.predicate.is_none() || query_pattern.predicate == view_pattern.predicate)
+        && (query_pattern.object.is_none() || query_pattern.object == view_pattern.object)
 }
 
 /// Cost model for different types of operations

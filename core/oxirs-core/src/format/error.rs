@@ -217,6 +217,15 @@ impl From<crate::OxirsError> for RdfParseError {
             crate::OxirsError::Serialize(msg) => {
                 Self::internal(format!("Serialization error: {}", msg))
             }
+            crate::OxirsError::QuantumError(msg) => {
+                Self::internal(format!("Quantum error: {}", msg))
+            }
+            crate::OxirsError::MolecularError(msg) => {
+                Self::internal(format!("Molecular error: {}", msg))
+            }
+            crate::OxirsError::NeuralSymbolicError(msg) => {
+                Self::internal(format!("Neural-symbolic error: {}", msg))
+            }
         }
     }
 }

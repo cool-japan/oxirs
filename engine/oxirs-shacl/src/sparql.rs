@@ -15,7 +15,10 @@ use crate::{
         ConstraintContext, ConstraintEvaluationResult, ConstraintEvaluator, ConstraintValidator,
     },
     optimization::{AdvancedConstraintEvaluator, ConstraintCache},
-    security::{SecurityConfig, SparqlSecurityAnalyzer, QueryExecutionSandbox, RecursionMonitor, SecurityAnalysisResult},
+    security::{
+        QueryExecutionSandbox, RecursionMonitor, SecurityAnalysisResult, SecurityConfig,
+        SparqlSecurityAnalyzer,
+    },
     vocabulary::SHACL_PREFIXES,
     Result, Severity, ShaclError, ShapeId,
 };
@@ -1536,7 +1539,7 @@ impl SecureSparqlConstraintExecutor {
     pub fn new(security_config: SecurityConfig) -> Result<Self> {
         let security_analyzer = SparqlSecurityAnalyzer::new(security_config.clone())?;
         let recursion_monitor = RecursionMonitor::new(security_config.max_recursion_depth);
-        
+
         Ok(Self {
             base_executor: SparqlConstraintExecutor::new(),
             security_analyzer,
@@ -1563,29 +1566,29 @@ impl SecureSparqlConstraintExecutor {
     ) -> Result<SecureSparqlConstraintResult> {
         // Track recursion for this shape
         self.recursion_monitor.enter_shape(shape_id)?;
-        
+
         // Prepare the query with bindings
         let prepared_query = constraint.prepare_query(bindings)?;
-        
+
         // Perform security analysis
         let security_analysis = self.security_analyzer.analyze_query(&prepared_query)?;
-        
+
         // Check if query is safe to execute
         if !security_analysis.is_safe {
             self.execution_stats.security_violations += 1;
-            
+
             if self.security_config.enable_security_logging {
                 tracing::warn!(
                     "Security violation in SPARQL constraint for shape {}: {} violations found",
                     shape_id,
                     security_analysis.violations.len()
                 );
-                
+
                 for violation in &security_analysis.violations {
                     tracing::warn!("Security violation: {}", violation.message);
                 }
             }
-            
+
             return Err(ShaclError::SecurityViolation(format!(
                 "Query failed security validation: {} violations",
                 security_analysis.violations.len()
@@ -1594,11 +1597,11 @@ impl SecureSparqlConstraintExecutor {
 
         // Sanitize the query
         let sanitized_query = self.security_analyzer.sanitize_query(&prepared_query)?;
-        
+
         // Create execution sandbox
         let mut sandbox = QueryExecutionSandbox::new(self.security_config.clone());
         sandbox.start_execution()?;
-        
+
         // Execute the constraint with monitoring
         let start_time = std::time::Instant::now();
         let result = self.execute_with_monitoring(
@@ -1609,25 +1612,27 @@ impl SecureSparqlConstraintExecutor {
             graph_name,
             &mut sandbox,
         );
-        
+
         // Stop sandbox and collect stats
         let execution_stats = sandbox.stop_execution()?;
-        
+
         // Update execution statistics
         self.execution_stats.total_executions += 1;
         self.execution_stats.total_execution_time += start_time.elapsed();
         self.execution_stats.total_memory_used += execution_stats.memory_used;
-        self.execution_stats.average_complexity_score = 
-            (self.execution_stats.average_complexity_score * (self.execution_stats.total_executions - 1) as f64 
-            + security_analysis.complexity_score) / self.execution_stats.total_executions as f64;
+        self.execution_stats.average_complexity_score =
+            (self.execution_stats.average_complexity_score
+                * (self.execution_stats.total_executions - 1) as f64
+                + security_analysis.complexity_score)
+                / self.execution_stats.total_executions as f64;
 
         // Exit recursion tracking
         self.recursion_monitor.exit_shape(shape_id);
-        
+
         match result {
             Ok(constraint_result) => {
                 self.execution_stats.successful_executions += 1;
-                
+
                 Ok(SecureSparqlConstraintResult {
                     constraint_result,
                     security_analysis,
@@ -1663,9 +1668,21 @@ impl SecureSparqlConstraintExecutor {
 
         // Monitor execution periodically
         let result = if constraint.is_ask_query() {
-            self.execute_ask_with_monitoring(store, &secure_constraint, bindings, graph_name, sandbox)
+            self.execute_ask_with_monitoring(
+                store,
+                &secure_constraint,
+                bindings,
+                graph_name,
+                sandbox,
+            )
         } else if constraint.is_select_query() {
-            self.execute_select_with_monitoring(store, &secure_constraint, bindings, graph_name, sandbox)
+            self.execute_select_with_monitoring(
+                store,
+                &secure_constraint,
+                bindings,
+                graph_name,
+                sandbox,
+            )
         } else {
             Err(ShaclError::SparqlExecution(
                 "Unsupported query type for secure execution".to_string(),
@@ -1686,13 +1703,15 @@ impl SecureSparqlConstraintExecutor {
     ) -> Result<SparqlConstraintResult> {
         // Check execution limits before starting
         sandbox.check_execution_limits()?;
-        
+
         // Execute the ASK query
-        let result = self.base_executor.execute_constraint(store, constraint, bindings, graph_name)?;
-        
+        let result = self
+            .base_executor
+            .execute_constraint(store, constraint, bindings, graph_name)?;
+
         // Record result and check limits
         sandbox.record_result()?;
-        
+
         Ok(result)
     }
 
@@ -1707,10 +1726,12 @@ impl SecureSparqlConstraintExecutor {
     ) -> Result<SparqlConstraintResult> {
         // Check execution limits before starting
         sandbox.check_execution_limits()?;
-        
+
         // Execute the SELECT query
-        let result = self.base_executor.execute_constraint(store, constraint, bindings, graph_name)?;
-        
+        let result = self
+            .base_executor
+            .execute_constraint(store, constraint, bindings, graph_name)?;
+
         // Check result count and record
         match &result {
             SparqlConstraintResult::Select { solutions, .. } => {
@@ -1723,7 +1744,7 @@ impl SecureSparqlConstraintExecutor {
                 sandbox.record_result()?;
             }
         }
-        
+
         Ok(result)
     }
 
@@ -1756,7 +1777,11 @@ impl SecureSparqlConstraintExecutor {
     }
 
     /// Pre-validate a constraint before execution
-    pub fn pre_validate_constraint(&self, constraint: &SparqlConstraint, bindings: &SparqlBindings) -> Result<SecurityAnalysisResult> {
+    pub fn pre_validate_constraint(
+        &self,
+        constraint: &SparqlConstraint,
+        bindings: &SparqlBindings,
+    ) -> Result<SecurityAnalysisResult> {
         let prepared_query = constraint.prepare_query(bindings)?;
         self.security_analyzer.analyze_query(&prepared_query)
     }
@@ -1868,12 +1893,12 @@ mod secure_tests {
     #[test]
     fn test_query_security_validation() {
         let executor = SecureSparqlConstraintExecutor::with_default_security().unwrap();
-        
+
         // Test safe query
         let safe_query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
         let analysis = executor.validate_query_security(safe_query).unwrap();
         assert!(analysis.is_safe);
-        
+
         // Test potentially dangerous query
         let dangerous_query = "DROP GRAPH <http://example.org/graph>";
         let analysis = executor.validate_query_security(dangerous_query).unwrap();
@@ -1883,12 +1908,15 @@ mod secure_tests {
     #[test]
     fn test_constraint_pre_validation() {
         let executor = SecureSparqlConstraintExecutor::with_default_security().unwrap();
-        
+
         let constraint = SparqlConstraint::ask("ASK { $this a ?type }".to_string());
-        let bindings = SparqlBindings::new()
-            .with_this(Term::NamedNode(NamedNode::new("http://example.org/test").unwrap()));
-        
-        let analysis = executor.pre_validate_constraint(&constraint, &bindings).unwrap();
+        let bindings = SparqlBindings::new().with_this(Term::NamedNode(
+            NamedNode::new("http://example.org/test").unwrap(),
+        ));
+
+        let analysis = executor
+            .pre_validate_constraint(&constraint, &bindings)
+            .unwrap();
         assert!(analysis.is_safe);
     }
 
@@ -1903,7 +1931,10 @@ mod secure_tests {
         stats.total_memory_used = 1024 * 1024;
 
         assert_eq!(stats.success_rate(), 0.8);
-        assert_eq!(stats.average_execution_time(), std::time::Duration::from_millis(100));
+        assert_eq!(
+            stats.average_execution_time(),
+            std::time::Duration::from_millis(100)
+        );
         assert_eq!(stats.average_memory_usage(), 1024 * 1024 / 10);
         assert_eq!(stats.security_violation_rate(), 0.1);
     }
@@ -1915,19 +1946,19 @@ mod secure_tests {
             ..SecurityConfig::default()
         };
         let mut executor = SecureSparqlConstraintExecutor::new(config).unwrap();
-        
+
         assert_eq!(executor.get_recursion_depth("shape1"), 0);
-        
+
         // This would be called internally during execution
         assert!(executor.recursion_monitor.enter_shape("shape1").is_ok());
         assert_eq!(executor.get_recursion_depth("shape1"), 1);
-        
+
         assert!(executor.recursion_monitor.enter_shape("shape1").is_ok());
         assert_eq!(executor.get_recursion_depth("shape1"), 2);
-        
+
         assert!(executor.recursion_monitor.enter_shape("shape1").is_ok());
         assert_eq!(executor.get_recursion_depth("shape1"), 3);
-        
+
         // Should fail on exceeding depth
         assert!(executor.recursion_monitor.enter_shape("shape1").is_err());
     }

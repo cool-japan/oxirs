@@ -36,9 +36,12 @@ use anyhow::Result;
 
 pub mod advanced_caching;
 pub mod advanced_metrics;
+pub mod benchmarking;
 pub mod cache_friendly_index;
 pub mod clustering;
 pub mod compression;
+#[cfg(feature = "content-processing")]
+pub mod content_processing;
 pub mod cross_modal_embeddings;
 pub mod embedding_pipeline;
 pub mod embeddings;
@@ -56,6 +59,7 @@ pub mod mmap_index;
 pub mod opq;
 pub mod pq;
 pub mod real_time_analytics;
+pub mod result_fusion;
 pub mod similarity;
 pub mod sparql_integration;
 pub mod sparse;
@@ -70,8 +74,19 @@ pub use advanced_caching::{
     CacheInvalidator, CacheKey, CacheStats, CacheWarmer, EvictionPolicy, InvalidationStats,
     MultiLevelCache, MultiLevelCacheStats,
 };
+pub use benchmarking::{
+    BenchmarkConfig, BenchmarkDataset, BenchmarkOutputFormat, BenchmarkResult, BenchmarkRunner,
+    BenchmarkSuite, BenchmarkTestCase, MemoryMetrics, PerformanceMetrics, PerformanceProfiler,
+    QualityMetrics, ScalabilityMetrics, SystemInfo,
+};
 pub use cache_friendly_index::{CacheFriendlyVectorIndex, IndexConfig as CacheFriendlyIndexConfig};
 pub use compression::{create_compressor, CompressionMethod, VectorCompressor};
+#[cfg(feature = "content-processing")]
+pub use content_processing::{
+    ChunkType, ChunkingStrategy, ContentChunk, ContentExtractionConfig, ContentLocation,
+    ContentProcessor, DocumentFormat, DocumentStructure, ExtractedContent, ExtractedImage,
+    ExtractedLink, ExtractedTable, FormatHandler, Heading, ProcessingStats, TocEntry,
+};
 pub use cross_modal_embeddings::{
     AttentionMechanism, AudioData, AudioEncoder, CrossModalConfig, CrossModalEncoder, FusionLayer,
     FusionStrategy, GraphData, GraphEncoder, ImageData, ImageEncoder, Modality, ModalityData,
@@ -103,12 +118,17 @@ pub use mmap_index::{MemoryMappedIndexStats, MemoryMappedVectorIndex};
 pub use pq::{PQConfig, PQIndex, PQStats};
 pub use real_time_analytics::{
     AlertSeverity, AlertType, AnalyticsConfig, AnalyticsEvent, AnalyticsReport, DashboardData,
-    ExportFormat, MetricsCollector, PerformanceMonitor, QualityMetrics, QueryMetrics,
-    SystemMetrics, VectorAnalyticsEngine,
+    ExportFormat, MetricsCollector, PerformanceMonitor, QueryMetrics, SystemMetrics,
+    VectorAnalyticsEngine,
+};
+pub use result_fusion::{
+    FusedResults, FusionAlgorithm, FusionConfig, FusionQualityMetrics, FusionStats,
+    ResultFusionEngine, ScoreNormalizationStrategy, SourceResults, VectorSearchResult,
 };
 pub use similarity::{AdaptiveSimilarity, SemanticSimilarity, SimilarityConfig, SimilarityMetric};
 pub use sparql_integration::{
-    HybridQuery, SparqlVectorService, VectorOperation, VectorQueryBuilder, VectorServiceConfig,
+    FederatedQueryResult, FederatedVectorService, HybridQuery, RetryConfig, ServiceHealthStatus,
+    SparqlVectorService, VectorOperation, VectorQueryBuilder, VectorServiceConfig,
     VectorServiceRegistry,
 };
 pub use sparse::{COOMatrix, CSRMatrix, SparseVector};
@@ -869,7 +889,7 @@ pub struct SearchOptions {
 
 /// Vector operation results with enhanced metadata
 #[derive(Debug, Clone)]
-pub struct VectorSearchResult {
+pub struct VectorOperationResult {
     pub uri: String,
     pub similarity: f32,
     pub vector: Option<Vector>,

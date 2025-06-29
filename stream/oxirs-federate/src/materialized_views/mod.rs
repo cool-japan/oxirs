@@ -3,14 +3,16 @@
 //! This module provides comprehensive materialized view management for federated queries,
 //! including creation, maintenance, cost analysis, and optimization.
 
-pub mod types;
 pub mod cost_analysis;
 pub mod maintenance;
+pub mod query_rewriting;
+pub mod types;
 
 // Re-export commonly used types and functions
+pub use cost_analysis::{MaintenanceCost, ViewBenefit, ViewCostAnalyzer, ViewCreationCost};
+pub use maintenance::{CleanupResult, MaintenanceConfig, MaintenanceScheduler, ViewStorageCleaner};
+pub use query_rewriting::{QueryRewriter, RewritingConfig, RewritingResult, RewritingStrategy, ViewUsage};
 pub use types::*;
-pub use cost_analysis::{ViewCostAnalyzer, ViewCreationCost, ViewBenefit, MaintenanceCost};
-pub use maintenance::{MaintenanceScheduler, ViewStorageCleaner, MaintenanceConfig, CleanupResult};
 
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
@@ -19,10 +21,7 @@ use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
-use crate::{
-    planner::planning::types::QueryInfo,
-    ServiceRegistry,
-};
+use crate::{planner::planning::types::QueryInfo, ServiceRegistry};
 
 /// Main materialized view manager that coordinates all view operations
 #[derive(Debug)]
@@ -70,16 +69,21 @@ impl MaterializedViewManager {
 
         // Check if we've reached the maximum number of views
         if self.views.len() >= self.config.max_views {
-            return Err(anyhow!("Maximum number of views ({}) reached", self.config.max_views));
+            return Err(anyhow!(
+                "Maximum number of views ({}) reached",
+                self.config.max_views
+            ));
         }
 
         // Estimate creation cost
-        let creation_cost = self.cost_analyzer.estimate_creation_cost(&definition, registry).await?;
-        
+        let creation_cost = self
+            .cost_analyzer
+            .estimate_creation_cost(&definition, registry)
+            .await?;
+
         info!(
             "Estimated creation cost for view '{}': ${:.2}",
-            definition.name,
-            creation_cost.total_cost
+            definition.name, creation_cost.total_cost
         );
 
         // Create the view instance
@@ -151,7 +155,10 @@ impl MaterializedViewManager {
         query_info: &QueryInfo,
         registry: &ServiceRegistry,
     ) -> Result<Vec<ViewRecommendation>> {
-        debug!("Finding suitable views for query with {} patterns", query_info.patterns.len());
+        debug!(
+            "Finding suitable views for query with {} patterns",
+            query_info.patterns.len()
+        );
 
         let mut recommendations = Vec::new();
 
@@ -159,8 +166,11 @@ impl MaterializedViewManager {
             // Check if the view can support the query patterns
             if view.definition.supports_patterns(&query_info.patterns) {
                 // Estimate the benefit of using this view
-                let benefit = self.cost_analyzer.estimate_query_benefit(view, query_info, registry).await?;
-                
+                let benefit = self
+                    .cost_analyzer
+                    .estimate_query_benefit(view, query_info, registry)
+                    .await?;
+
                 if benefit.cost_saving > 0.0 {
                     let recommendation = ViewRecommendation {
                         view_id: view.id.clone(),
@@ -169,14 +179,18 @@ impl MaterializedViewManager {
                         implementation_cost: 0.0, // Already implemented
                         confidence: benefit.cache_hit_probability,
                     };
-                    
+
                     recommendations.push(recommendation);
                 }
             }
         }
 
         // Sort by estimated benefit
-        recommendations.sort_by(|a, b| b.estimated_benefit.partial_cmp(&a.estimated_benefit).unwrap_or(std::cmp::Ordering::Equal));
+        recommendations.sort_by(|a, b| {
+            b.estimated_benefit
+                .partial_cmp(&a.estimated_benefit)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         debug!("Found {} suitable views", recommendations.len());
         Ok(recommendations)
@@ -186,8 +200,9 @@ impl MaterializedViewManager {
     pub async fn remove_view(&mut self, view_id: &str) -> Result<()> {
         if let Some(view) = self.views.remove(view_id) {
             self.view_statistics.remove(view_id);
-            self.maintenance_scheduler.cancel_operations_for_view(view_id);
-            
+            self.maintenance_scheduler
+                .cancel_operations_for_view(view_id);
+
             info!("Removed materialized view: {}", view_id);
             Ok(())
         } else {
@@ -203,24 +218,16 @@ impl MaterializedViewManager {
 
         // Process scheduled maintenance operations
         while let Some(operation) = self.maintenance_scheduler.get_next_operation() {
-            let operation_id = self.maintenance_scheduler.start_operation(operation.clone());
-            
+            let operation_id = self
+                .maintenance_scheduler
+                .start_operation(operation.clone());
+
             let result = match operation.operation {
-                MaintenanceOperation::Refresh => {
-                    self.refresh_view(&operation.view_id).await
-                }
-                MaintenanceOperation::Cleanup => {
-                    self.cleanup_view(&operation.view_id).await
-                }
-                MaintenanceOperation::Optimize => {
-                    self.optimize_view(&operation.view_id).await
-                }
-                MaintenanceOperation::Validate => {
-                    self.validate_view(&operation.view_id).await
-                }
-                MaintenanceOperation::Archive => {
-                    self.archive_view(&operation.view_id).await
-                }
+                MaintenanceOperation::Refresh => self.refresh_view(&operation.view_id).await,
+                MaintenanceOperation::Cleanup => self.cleanup_view(&operation.view_id).await,
+                MaintenanceOperation::Optimize => self.optimize_view(&operation.view_id).await,
+                MaintenanceOperation::Validate => self.validate_view(&operation.view_id).await,
+                MaintenanceOperation::Archive => self.archive_view(&operation.view_id).await,
             };
 
             match result {
@@ -230,13 +237,18 @@ impl MaterializedViewManager {
                         &operation_id,
                         maintenance::OperationResult::Success {
                             duration,
-                            details: format!("Successfully completed {:?} operation", operation.operation),
+                            details: format!(
+                                "Successfully completed {:?} operation",
+                                operation.operation
+                            ),
                         },
                     );
                 }
                 Err(e) => {
-                    errors.push(format!("Operation {:?} failed for view {}: {}", 
-                        operation.operation, operation.view_id, e));
+                    errors.push(format!(
+                        "Operation {:?} failed for view {}: {}",
+                        operation.operation, operation.view_id, e
+                    ));
                     self.maintenance_scheduler.complete_operation(
                         &operation_id,
                         maintenance::OperationResult::Failed {
@@ -272,8 +284,15 @@ impl MaterializedViewManager {
         }
 
         // Check for duplicate view names
-        if self.views.values().any(|v| v.definition.name == definition.name) {
-            return Err(anyhow!("View with name '{}' already exists", definition.name));
+        if self
+            .views
+            .values()
+            .any(|v| v.definition.name == definition.name)
+        {
+            return Err(anyhow!(
+                "View with name '{}' already exists",
+                definition.name
+            ));
         }
 
         Ok(())
@@ -281,18 +300,18 @@ impl MaterializedViewManager {
 
     async fn refresh_view(&mut self, view_id: &str) -> Result<Duration> {
         let start_time = Instant::now();
-        
+
         if let Some(view) = self.views.get_mut(view_id) {
             view.refresh_in_progress = true;
             view.last_refresh = Some(chrono::Utc::now());
             view.is_stale = false;
             view.refresh_in_progress = false;
-            
+
             // Record refresh in statistics
             if let Some(stats) = self.view_statistics.get_mut(view_id) {
                 stats.record_refresh(start_time.elapsed());
             }
-            
+
             Ok(start_time.elapsed())
         } else {
             Err(anyhow!("View not found: {}", view_id))
@@ -301,37 +320,37 @@ impl MaterializedViewManager {
 
     async fn cleanup_view(&mut self, view_id: &str) -> Result<Duration> {
         let start_time = Instant::now();
-        
+
         // Perform cleanup operations
         debug!("Cleaning up view: {}", view_id);
-        
+
         Ok(start_time.elapsed())
     }
 
     async fn optimize_view(&mut self, view_id: &str) -> Result<Duration> {
         let start_time = Instant::now();
-        
+
         // Perform optimization operations
         debug!("Optimizing view: {}", view_id);
-        
+
         Ok(start_time.elapsed())
     }
 
     async fn validate_view(&mut self, view_id: &str) -> Result<Duration> {
         let start_time = Instant::now();
-        
+
         // Perform validation operations
         debug!("Validating view: {}", view_id);
-        
+
         Ok(start_time.elapsed())
     }
 
     async fn archive_view(&mut self, view_id: &str) -> Result<Duration> {
         let start_time = Instant::now();
-        
+
         // Perform archival operations
         debug!("Archiving view: {}", view_id);
-        
+
         Ok(start_time.elapsed())
     }
 }

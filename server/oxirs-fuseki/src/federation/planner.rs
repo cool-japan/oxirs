@@ -101,7 +101,7 @@ pub struct QueryPlanner {
 
 /// Service discovery interface for finding available SPARQL endpoints
 #[async_trait::async_trait]
-pub trait ServiceDiscovery: Send + Sync {
+pub trait ServiceDiscovery: Send + Sync + std::fmt::Debug {
     /// Discover available SPARQL endpoints
     async fn discover_endpoints(&self) -> Result<Vec<ServiceEndpoint>>;
 

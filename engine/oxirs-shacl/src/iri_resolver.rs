@@ -242,51 +242,53 @@ impl IriResolver {
         if local_name.is_empty() {
             return false;
         }
-        
+
         // Check for forbidden characters in local names
-        let forbidden_chars = [' ', '\t', '\n', '\r', '<', '>', '"', '{', '}', '|', '^', '`', '\\'];
+        let forbidden_chars = [
+            ' ', '\t', '\n', '\r', '<', '>', '"', '{', '}', '|', '^', '`', '\\',
+        ];
         for &ch in &forbidden_chars {
             if local_name.contains(ch) {
                 return false;
             }
         }
-        
+
         // Check for percent-encoded sequences
         if local_name.contains('%') {
             if !self.is_valid_percent_encoding(local_name) {
                 return false;
             }
         }
-        
+
         true
     }
-    
+
     /// Validate percent-encoded sequences in local names
     fn is_valid_percent_encoding(&self, s: &str) -> bool {
         let chars: Vec<char> = s.chars().collect();
         let mut i = 0;
-        
+
         while i < chars.len() {
             if chars[i] == '%' {
                 // Need at least 2 more characters for valid percent encoding
                 if i + 2 >= chars.len() {
                     return false;
                 }
-                
+
                 // Check if next two characters are valid hex digits
                 let hex1 = chars[i + 1];
                 let hex2 = chars[i + 2];
-                
+
                 if !hex1.is_ascii_hexdigit() || !hex2.is_ascii_hexdigit() {
                     return false;
                 }
-                
+
                 i += 3;
             } else {
                 i += 1;
             }
         }
-        
+
         true
     }
 
@@ -324,15 +326,15 @@ impl IriResolver {
         self.prefixes.clear();
         self.base_iri = None;
     }
-    
+
     /// Normalize an IRI by removing unnecessary components
     pub fn normalize_iri(&self, iri: &str) -> Result<String, IriResolutionError> {
         let resolved_iri = self.resolve_iri(iri)?;
         let url = Url::parse(&resolved_iri)?;
-        
+
         // Normalize the URL
         let mut normalized = url.clone();
-        
+
         // Remove default port numbers
         match (url.scheme(), url.port()) {
             ("http", Some(80)) | ("https", Some(443)) => {
@@ -342,27 +344,27 @@ impl IriResolver {
             }
             _ => {}
         }
-        
+
         // Remove fragment if empty
         if url.fragment() == Some("") {
             normalized.set_fragment(None);
         }
-        
+
         // Normalize path (remove redundant . and .. segments)
         let path = normalized.path();
         if path.contains("./") || path.contains("../") {
             let normalized_path = self.normalize_path(path);
             normalized.set_path(&normalized_path);
         }
-        
+
         Ok(normalized.to_string())
     }
-    
+
     /// Normalize a URL path by resolving . and .. segments
     fn normalize_path(&self, path: &str) -> String {
         let segments: Vec<&str> = path.split('/').collect();
         let mut normalized = Vec::new();
-        
+
         for segment in segments {
             match segment {
                 "." => continue, // Skip current directory references
@@ -378,7 +380,7 @@ impl IriResolver {
                 _ => normalized.push(segment),
             }
         }
-        
+
         // Reconstruct path
         let result = normalized.join("/");
         if path.starts_with('/') && !result.starts_with('/') {
@@ -389,7 +391,7 @@ impl IriResolver {
             result
         }
     }
-    
+
     /// Validate namespace prefix according to XML namespace rules
     pub fn validate_prefix(&self, prefix: &str) -> Result<(), IriResolutionError> {
         if prefix.is_empty() {
@@ -397,7 +399,7 @@ impl IriResolver {
                 "Prefix cannot be empty".to_string(),
             ));
         }
-        
+
         // Check for valid XML NCName
         if !self.is_valid_ncname(prefix) {
             return Err(IriResolutionError::InvalidIri(format!(
@@ -405,33 +407,33 @@ impl IriResolver {
                 prefix
             )));
         }
-        
+
         Ok(())
     }
-    
+
     /// Check if a string is a valid XML NCName (no colon)
     fn is_valid_ncname(&self, name: &str) -> bool {
         if name.is_empty() {
             return false;
         }
-        
+
         // Must start with letter or underscore
         let first_char = name.chars().next().unwrap();
         if !first_char.is_alphabetic() && first_char != '_' {
             return false;
         }
-        
+
         // Rest must be letters, digits, underscores, hyphens, or dots
         for ch in name.chars().skip(1) {
             if !ch.is_alphanumeric() && ch != '_' && ch != '-' && ch != '.' {
                 return false;
             }
         }
-        
+
         // Must not contain colon (that's what makes it NCName vs QName)
         !name.contains(':')
     }
-    
+
     /// Get suggestions for common namespace prefixes
     pub fn suggest_prefix_for_namespace(&self, namespace: &str) -> Option<String> {
         // Common namespace to prefix mappings
@@ -451,13 +453,13 @@ impl IriResolver {
             ("http://dbpedia.org/resource/", "dbr"),
             ("http://www.wikidata.org/entity/", "wd"),
         ];
-        
+
         for (ns, prefix) in &suggestions {
             if namespace == *ns {
                 return Some(prefix.to_string());
             }
         }
-        
+
         // Try to generate a reasonable prefix from the namespace
         if let Ok(url) = Url::parse(namespace) {
             if let Some(host) = url.host_str() {
@@ -471,44 +473,50 @@ impl IriResolver {
                 }
             }
         }
-        
+
         None
     }
-    
+
     /// Export current prefix mappings for serialization
     pub fn export_prefix_mappings(&self) -> HashMap<String, String> {
         let mut mappings = HashMap::new();
-        
+
         // Include default namespaces
         for (prefix, namespace) in &self.default_namespaces {
             mappings.insert(prefix.clone(), namespace.clone());
         }
-        
+
         // Include custom prefixes (override defaults if necessary)
         for (prefix, namespace) in &self.prefixes {
             mappings.insert(prefix.clone(), namespace.clone());
         }
-        
+
         mappings
     }
-    
+
     /// Import prefix mappings from external source
-    pub fn import_prefix_mappings(&mut self, mappings: &HashMap<String, String>) -> Result<Vec<String>, IriResolutionError> {
+    pub fn import_prefix_mappings(
+        &mut self,
+        mappings: &HashMap<String, String>,
+    ) -> Result<Vec<String>, IriResolutionError> {
         let mut warnings = Vec::new();
-        
+
         for (prefix, namespace) in mappings {
             // Validate prefix
             if let Err(e) = self.validate_prefix(prefix) {
                 warnings.push(format!("Skipping invalid prefix '{}': {}", prefix, e));
                 continue;
             }
-            
+
             // Validate namespace
             if let Err(e) = Url::parse(namespace) {
-                warnings.push(format!("Skipping invalid namespace '{}' for prefix '{}': {}", namespace, prefix, e));
+                warnings.push(format!(
+                    "Skipping invalid namespace '{}' for prefix '{}': {}",
+                    namespace, prefix, e
+                ));
                 continue;
             }
-            
+
             // Check for conflicts with default namespaces
             if let Some(existing_ns) = self.default_namespaces.get(prefix) {
                 if existing_ns != namespace {
@@ -518,10 +526,10 @@ impl IriResolver {
                     ));
                 }
             }
-            
+
             self.prefixes.insert(prefix.clone(), namespace.clone());
         }
-        
+
         Ok(warnings)
     }
 }
@@ -726,20 +734,26 @@ mod tests {
     #[test]
     fn test_iri_normalization() {
         let resolver = IriResolver::new();
-        
+
         // Test port normalization
         assert_eq!(
-            resolver.normalize_iri("http://example.org:80/path").unwrap(),
+            resolver
+                .normalize_iri("http://example.org:80/path")
+                .unwrap(),
             "http://example.org/path"
         );
         assert_eq!(
-            resolver.normalize_iri("https://example.org:443/path").unwrap(),
+            resolver
+                .normalize_iri("https://example.org:443/path")
+                .unwrap(),
             "https://example.org/path"
         );
-        
+
         // Test path normalization
         assert_eq!(
-            resolver.normalize_iri("http://example.org/a/./b/../c").unwrap(),
+            resolver
+                .normalize_iri("http://example.org/a/./b/../c")
+                .unwrap(),
             "http://example.org/a/c"
         );
     }
@@ -747,7 +761,7 @@ mod tests {
     #[test]
     fn test_path_normalization() {
         let resolver = IriResolver::new();
-        
+
         assert_eq!(resolver.normalize_path("/a/./b/../c"), "/a/c");
         assert_eq!(resolver.normalize_path("a/./b/../c"), "a/c");
         assert_eq!(resolver.normalize_path("/a/b/c/.."), "/a/b");
@@ -757,13 +771,13 @@ mod tests {
     #[test]
     fn test_prefix_validation() {
         let resolver = IriResolver::new();
-        
+
         // Valid prefixes
         assert!(resolver.validate_prefix("ex").is_ok());
         assert!(resolver.validate_prefix("example").is_ok());
         assert!(resolver.validate_prefix("_private").is_ok());
         assert!(resolver.validate_prefix("my-namespace").is_ok());
-        
+
         // Invalid prefixes
         assert!(resolver.validate_prefix("").is_err());
         assert!(resolver.validate_prefix("123invalid").is_err());
@@ -774,13 +788,13 @@ mod tests {
     #[test]
     fn test_ncname_validation() {
         let resolver = IriResolver::new();
-        
+
         assert!(resolver.is_valid_ncname("validName"));
         assert!(resolver.is_valid_ncname("_underscore"));
         assert!(resolver.is_valid_ncname("with-hyphen"));
         assert!(resolver.is_valid_ncname("with.dot"));
         assert!(resolver.is_valid_ncname("name123"));
-        
+
         assert!(!resolver.is_valid_ncname(""));
         assert!(!resolver.is_valid_ncname("123startsWithNumber"));
         assert!(!resolver.is_valid_ncname("has:colon"));
@@ -790,11 +804,11 @@ mod tests {
     #[test]
     fn test_percent_encoding_validation() {
         let resolver = IriResolver::new();
-        
+
         assert!(resolver.is_valid_percent_encoding("simple"));
         assert!(resolver.is_valid_percent_encoding("with%20space"));
         assert!(resolver.is_valid_percent_encoding("multiple%20%2B%3D"));
-        
+
         assert!(!resolver.is_valid_percent_encoding("incomplete%2"));
         assert!(!resolver.is_valid_percent_encoding("invalid%GG"));
         assert!(!resolver.is_valid_percent_encoding("percent%"));
@@ -803,17 +817,17 @@ mod tests {
     #[test]
     fn test_prefix_suggestions() {
         let resolver = IriResolver::new();
-        
+
         assert_eq!(
             resolver.suggest_prefix_for_namespace("http://www.w3.org/ns/shacl#"),
             Some("sh".to_string())
         );
-        
+
         assert_eq!(
             resolver.suggest_prefix_for_namespace("http://xmlns.com/foaf/0.1/"),
             Some("foaf".to_string())
         );
-        
+
         // Test domain-based suggestion
         assert_eq!(
             resolver.suggest_prefix_for_namespace("http://example.org/ontology/"),
@@ -824,20 +838,20 @@ mod tests {
     #[test]
     fn test_prefix_import_export() {
         let mut resolver = IriResolver::new();
-        
+
         // Export current mappings
         let exported = resolver.export_prefix_mappings();
         assert!(exported.contains_key("sh"));
         assert!(exported.contains_key("rdf"));
-        
+
         // Import new mappings
         let mut new_mappings = HashMap::new();
         new_mappings.insert("test".to_string(), "http://test.example.org/".to_string());
         new_mappings.insert("invalid".to_string(), "not-a-valid-url".to_string());
-        
+
         let warnings = resolver.import_prefix_mappings(&new_mappings).unwrap();
         assert_eq!(warnings.len(), 1); // Should warn about invalid URL
-        
+
         // Check that valid mapping was added
         assert_eq!(
             resolver.get_namespace("test"),

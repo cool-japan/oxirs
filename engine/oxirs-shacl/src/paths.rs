@@ -788,7 +788,7 @@ impl PropertyPathEvaluator {
         tracing::debug!("Executing path query: {}", query);
 
         let result = query_engine
-            .query(query, store)
+            .execute_query(store, query)
             .map_err(|e| ShaclError::PropertyPath(format!("Path query execution failed: {}", e)))?;
 
         Ok(result)
@@ -987,7 +987,7 @@ impl PropertyPathEvaluator {
         let can_use_sparql = path.can_use_sparql_path();
         let estimated_cost = self.estimate_path_cost(path);
 
-        let optimization_strategy = if can_use_sparql && complexity <= 20 {
+        let optimization_strategy = if can_use_sparql && complexity <= 5 {
             PathOptimizationStrategy::SparqlPath
         } else if complexity > 50 {
             PathOptimizationStrategy::Programmatic
@@ -1003,7 +1003,7 @@ impl PropertyPathEvaluator {
             can_use_sparql_path: can_use_sparql,
         }
     }
-    
+
     /// Generate an optimized SPARQL query for property path evaluation
     pub fn generate_optimized_sparql_query(
         &self,
@@ -1013,11 +1013,14 @@ impl PropertyPathEvaluator {
         optimization_hints: &PathOptimizationHints,
     ) -> Result<String> {
         let optimized_path = self.optimize_path(path);
-        
+
         match optimized_path.optimization_strategy {
-            PathOptimizationStrategy::SparqlPath => {
-                self.generate_native_sparql_path_query(start_node, path, graph_name, optimization_hints)
-            }
+            PathOptimizationStrategy::SparqlPath => self.generate_native_sparql_path_query(
+                start_node,
+                path,
+                graph_name,
+                optimization_hints,
+            ),
             PathOptimizationStrategy::Programmatic => {
                 // For programmatic evaluation, generate query for simple fallback
                 self.generate_fallback_sparql_query(start_node, path, graph_name)
@@ -1027,7 +1030,7 @@ impl PropertyPathEvaluator {
             }
         }
     }
-    
+
     /// Generate native SPARQL property path query
     fn generate_native_sparql_path_query(
         &self,
@@ -1037,13 +1040,13 @@ impl PropertyPathEvaluator {
         optimization_hints: &PathOptimizationHints,
     ) -> Result<String> {
         let start_term = format_term_for_sparql(start_node)?;
-        
+
         // Build query with optimizations
         let mut query_parts = Vec::new();
-        
+
         // Add prefixes if needed
         query_parts.push(self.generate_common_prefixes());
-        
+
         // Add main SELECT clause with optimizations
         let select_clause = if optimization_hints.parallel_threshold > 0 {
             "SELECT DISTINCT ?value # HINT: PARALLEL"
@@ -1051,7 +1054,7 @@ impl PropertyPathEvaluator {
             "SELECT DISTINCT ?value"
         };
         query_parts.push(select_clause.to_string());
-        
+
         // Special handling for alternative paths - use UNION for better optimization
         let where_clause = if matches!(path, PropertyPath::Alternative(_)) {
             self.generate_union_based_alternative_query(start_node, path, graph_name)?
@@ -1063,27 +1066,27 @@ impl PropertyPathEvaluator {
                     graph, start_term, sparql_path
                 )
             } else {
-                format!(
-                    "WHERE {{\n  {} {} ?value .\n}}",
-                    start_term, sparql_path
-                )
+                format!("WHERE {{\n  {} {} ?value .\n}}", start_term, sparql_path)
             }
         };
         query_parts.push(where_clause);
-        
+
         // Add optimization hints
         if path.complexity() > 10 {
             query_parts.push("# HINT: USE_INDEX(property_path_index)".to_string());
         }
-        
+
         // Add ordering for deterministic results
         query_parts.push("ORDER BY ?value".to_string());
-        
+
         // Add limits if configured
         if optimization_hints.max_intermediate_results < usize::MAX {
-            query_parts.push(format!("LIMIT {}", optimization_hints.max_intermediate_results));
+            query_parts.push(format!(
+                "LIMIT {}",
+                optimization_hints.max_intermediate_results
+            ));
         }
-        
+
         Ok(query_parts.join("\n"))
     }
 
@@ -1097,25 +1100,28 @@ impl PropertyPathEvaluator {
         if let PropertyPath::Alternative(paths) = path {
             let start_term = format_term_for_sparql(start_node)?;
             let mut union_parts = Vec::new();
-            
+
             for alternative_path in paths {
                 let path_sparql = alternative_path.to_sparql_path()?;
                 let triple_pattern = if let Some(graph) = graph_name {
-                    format!("    GRAPH <{}> {{ {} {} ?value . }}", graph, start_term, path_sparql)
+                    format!(
+                        "    GRAPH <{}> {{ {} {} ?value . }}",
+                        graph, start_term, path_sparql
+                    )
                 } else {
                     format!("    {} {} ?value .", start_term, path_sparql)
                 };
                 union_parts.push(format!("  {{\n{}\n  }}", triple_pattern));
             }
-            
+
             Ok(format!("WHERE {{\n{}\n}}", union_parts.join("\n  UNION\n")))
         } else {
             Err(ShaclError::PropertyPath(
-                "Expected alternative path for UNION query generation".to_string()
+                "Expected alternative path for UNION query generation".to_string(),
             ))
         }
     }
-    
+
     /// Generate hybrid SPARQL query that combines multiple strategies
     fn generate_hybrid_sparql_query(
         &self,
@@ -1127,7 +1133,12 @@ impl PropertyPathEvaluator {
         match path {
             PropertyPath::Sequence(paths) => {
                 // For sequences, generate optimized multi-step query
-                self.generate_sequence_sparql_query(start_node, paths, graph_name, optimization_hints)
+                self.generate_sequence_sparql_query(
+                    start_node,
+                    paths,
+                    graph_name,
+                    optimization_hints,
+                )
             }
             PropertyPath::Alternative(paths) => {
                 // For alternatives, generate UNION query
@@ -1135,15 +1146,25 @@ impl PropertyPathEvaluator {
             }
             PropertyPath::ZeroOrMore(_) | PropertyPath::OneOrMore(_) => {
                 // For recursive paths, generate specialized recursive query
-                self.generate_recursive_sparql_query(start_node, path, graph_name, optimization_hints)
+                self.generate_recursive_sparql_query(
+                    start_node,
+                    path,
+                    graph_name,
+                    optimization_hints,
+                )
             }
             _ => {
                 // For other paths, use native SPARQL path
-                self.generate_native_sparql_path_query(start_node, path, graph_name, optimization_hints)
+                self.generate_native_sparql_path_query(
+                    start_node,
+                    path,
+                    graph_name,
+                    optimization_hints,
+                )
             }
         }
     }
-    
+
     /// Generate optimized SPARQL query for sequence paths
     fn generate_sequence_sparql_query(
         &self,
@@ -1154,54 +1175,60 @@ impl PropertyPathEvaluator {
     ) -> Result<String> {
         let start_term = format_term_for_sparql(start_node)?;
         let mut query_parts = Vec::new();
-        
+
         // Add prefixes
         query_parts.push(self.generate_common_prefixes());
-        
+
         // Add SELECT clause
         query_parts.push("SELECT DISTINCT ?value".to_string());
-        
+
         // Generate intermediate variables
         let mut variables = vec!["?start".to_string()];
         for i in 1..paths.len() {
             variables.push(format!("?inter{}", i));
         }
         variables.push("?value".to_string());
-        
+
         // Build WHERE clause with sequence
         let mut where_parts = Vec::new();
         where_parts.push(format!("BIND({} AS ?start)", start_term));
-        
+
         for (i, path) in paths.iter().enumerate() {
             let from_var = &variables[i];
             let to_var = &variables[i + 1];
             let sparql_path = path.to_sparql_path()?;
-            
+
             let triple_pattern = if let Some(graph) = graph_name {
-                format!("GRAPH <{}> {{ {} {} {} . }}", graph, from_var, sparql_path, to_var)
+                format!(
+                    "GRAPH <{}> {{ {} {} {} . }}",
+                    graph, from_var, sparql_path, to_var
+                )
             } else {
                 format!("{} {} {} .", from_var, sparql_path, to_var)
             };
-            
+
             where_parts.push(triple_pattern);
         }
-        
+
         query_parts.push(format!("WHERE {{\n  {}\n}}", where_parts.join("\n  ")));
-        
+
         // Add optimizations
         if paths.len() > 3 {
             query_parts.push("# HINT: OPTIMIZE_JOIN_ORDER".to_string());
         }
-        
+
         query_parts.push("ORDER BY ?value".to_string());
-        
+
         if optimization_hints.max_intermediate_results < usize::MAX {
-            query_parts.push(format!("LIMIT {}", optimization_hints.max_intermediate_results));
+            query_parts.push(format!(
+                "LIMIT {}",
+                optimization_hints.max_intermediate_results
+            ));
         }
-        
+
         Ok(query_parts.join("\n"))
     }
-    
+
     /// Generate optimized SPARQL query for alternative paths using UNION
     fn generate_union_sparql_query(
         &self,
@@ -1212,16 +1239,16 @@ impl PropertyPathEvaluator {
     ) -> Result<String> {
         let start_term = format_term_for_sparql(start_node)?;
         let mut query_parts = Vec::new();
-        
+
         // Add prefixes
         query_parts.push(self.generate_common_prefixes());
-        
+
         // Add SELECT clause
         query_parts.push("SELECT DISTINCT ?value".to_string());
-        
+
         // Build UNION query for alternatives
         let mut union_parts = Vec::new();
-        
+
         for path in paths {
             let sparql_path = path.to_sparql_path()?;
             let union_part = if let Some(graph) = graph_name {
@@ -1234,23 +1261,29 @@ impl PropertyPathEvaluator {
             };
             union_parts.push(union_part);
         }
-        
-        query_parts.push(format!("WHERE {{\n  {}\n}}", union_parts.join("\n  UNION\n  ")));
-        
+
+        query_parts.push(format!(
+            "WHERE {{\n  {}\n}}",
+            union_parts.join("\n  UNION\n  ")
+        ));
+
         // Add optimizations for UNION queries
         if paths.len() > 5 {
             query_parts.push("# HINT: OPTIMIZE_UNION".to_string());
         }
-        
+
         query_parts.push("ORDER BY ?value".to_string());
-        
+
         if optimization_hints.max_intermediate_results < usize::MAX {
-            query_parts.push(format!("LIMIT {}", optimization_hints.max_intermediate_results));
+            query_parts.push(format!(
+                "LIMIT {}",
+                optimization_hints.max_intermediate_results
+            ));
         }
-        
+
         Ok(query_parts.join("\n"))
     }
-    
+
     /// Generate specialized SPARQL query for recursive paths
     fn generate_recursive_sparql_query(
         &self,
@@ -1261,18 +1294,18 @@ impl PropertyPathEvaluator {
     ) -> Result<String> {
         let start_term = format_term_for_sparql(start_node)?;
         let mut query_parts = Vec::new();
-        
+
         // Add prefixes
         query_parts.push(self.generate_common_prefixes());
-        
+
         // Add SELECT clause
         query_parts.push("SELECT DISTINCT ?value".to_string());
-        
+
         // Generate recursive query based on path type
         let where_clause = match path {
             PropertyPath::ZeroOrMore(inner_path) => {
                 let inner_sparql = inner_path.to_sparql_path()?;
-                
+
                 if let Some(graph) = graph_name {
                     format!(
                         "WHERE {{\n  {{\n    BIND({} AS ?value)\n  }}\n  UNION\n  {{\n    GRAPH <{}> {{\n      {} {}+ ?value .\n    }}\n  }}\n}}",
@@ -1287,17 +1320,14 @@ impl PropertyPathEvaluator {
             }
             PropertyPath::OneOrMore(inner_path) => {
                 let inner_sparql = inner_path.to_sparql_path()?;
-                
+
                 if let Some(graph) = graph_name {
                     format!(
                         "WHERE {{\n  GRAPH <{}> {{\n    {} {}+ ?value .\n  }}\n}}",
                         graph, start_term, inner_sparql
                     )
                 } else {
-                    format!(
-                        "WHERE {{\n  {} {}+ ?value .\n}}",
-                        start_term, inner_sparql
-                    )
+                    format!("WHERE {{\n  {} {}+ ?value .\n}}", start_term, inner_sparql)
                 }
             }
             _ => {
@@ -1306,21 +1336,24 @@ impl PropertyPathEvaluator {
                 ));
             }
         };
-        
+
         query_parts.push(where_clause);
-        
+
         // Add recursion safety limits
-        query_parts.push(format!("# HINT: MAX_RECURSION_DEPTH {}", optimization_hints.max_recursion_depth));
-        
+        query_parts.push(format!(
+            "# HINT: MAX_RECURSION_DEPTH {}",
+            optimization_hints.max_recursion_depth
+        ));
+
         query_parts.push("ORDER BY ?value".to_string());
-        
+
         // Limit results for recursive queries to prevent explosion
         let recursive_limit = optimization_hints.max_intermediate_results.min(1000);
         query_parts.push(format!("LIMIT {}", recursive_limit));
-        
+
         Ok(query_parts.join("\n"))
     }
-    
+
     /// Generate fallback SPARQL query for programmatic evaluation
     fn generate_fallback_sparql_query(
         &self,
@@ -1331,7 +1364,7 @@ impl PropertyPathEvaluator {
         // For complex paths that can't be efficiently expressed in SPARQL,
         // generate a simple query to get initial candidates
         let start_term = format_term_for_sparql(start_node)?;
-        
+
         let query = if let Some(graph) = graph_name {
             format!(
                 "# Fallback query for complex path evaluation\nSELECT DISTINCT ?candidate WHERE {{\n  GRAPH <{}> {{\n    {} ?p ?candidate .\n  }}\n}}\nLIMIT 100",
@@ -1343,19 +1376,20 @@ impl PropertyPathEvaluator {
                 start_term
             )
         };
-        
+
         Ok(query)
     }
-    
+
     /// Generate common SPARQL prefixes
     fn generate_common_prefixes(&self) -> String {
         r#"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX owl: <http://www.w3.org/2002/07/owl#>
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-PREFIX sh: <http://www.w3.org/ns/shacl#>"#.to_string()
+PREFIX sh: <http://www.w3.org/ns/shacl#>"#
+            .to_string()
     }
-    
+
     /// Generate query plan for complex property path evaluation
     pub fn generate_query_plan(
         &self,
@@ -1365,14 +1399,15 @@ PREFIX sh: <http://www.w3.org/ns/shacl#>"#.to_string()
         optimization_hints: &PathOptimizationHints,
     ) -> Result<PropertyPathQueryPlan> {
         let optimized_path = self.optimize_path(path);
-        let query = self.generate_optimized_sparql_query(start_node, path, graph_name, optimization_hints)?;
-        
+        let query =
+            self.generate_optimized_sparql_query(start_node, path, graph_name, optimization_hints)?;
+
         let execution_strategy = match optimized_path.optimization_strategy {
             PathOptimizationStrategy::SparqlPath => PathExecutionStrategy::DirectSparql,
             PathOptimizationStrategy::Programmatic => PathExecutionStrategy::Programmatic,
             PathOptimizationStrategy::Hybrid => PathExecutionStrategy::HybridExecution,
         };
-        
+
         Ok(PropertyPathQueryPlan {
             query,
             execution_strategy,
@@ -1382,18 +1417,21 @@ PREFIX sh: <http://www.w3.org/ns/shacl#>"#.to_string()
             cache_key: self.create_cache_key(start_node, path, graph_name),
         })
     }
-    
+
     /// Validate a property path for correctness and performance
     pub fn validate_property_path(&self, path: &PropertyPath) -> PathValidationResult {
         let mut warnings = Vec::new();
         let mut errors = Vec::new();
-        
+
         // Check complexity
         let complexity = path.complexity();
         if complexity > 100 {
-            warnings.push(format!("High complexity path ({}), consider simplification", complexity));
+            warnings.push(format!(
+                "High complexity path ({}), consider simplification",
+                complexity
+            ));
         }
-        
+
         // Check for potential performance issues
         match path {
             PropertyPath::ZeroOrMore(_) => {
@@ -1404,7 +1442,10 @@ PREFIX sh: <http://www.w3.org/ns/shacl#>"#.to_string()
             }
             PropertyPath::Sequence(paths) => {
                 if paths.len() > 10 {
-                    warnings.push(format!("Long sequence path ({} steps), consider breaking into smaller parts", paths.len()));
+                    warnings.push(format!(
+                        "Long sequence path ({} steps), consider breaking into smaller parts",
+                        paths.len()
+                    ));
                 }
                 if paths.is_empty() {
                     errors.push("Empty sequence path is invalid".to_string());
@@ -1412,7 +1453,10 @@ PREFIX sh: <http://www.w3.org/ns/shacl#>"#.to_string()
             }
             PropertyPath::Alternative(paths) => {
                 if paths.len() > 20 {
-                    warnings.push(format!("Many alternatives ({}), consider grouping", paths.len()));
+                    warnings.push(format!(
+                        "Many alternatives ({}), consider grouping",
+                        paths.len()
+                    ));
                 }
                 if paths.len() < 2 {
                     errors.push("Alternative path must have at least 2 alternatives".to_string());
@@ -1420,17 +1464,22 @@ PREFIX sh: <http://www.w3.org/ns/shacl#>"#.to_string()
             }
             _ => {}
         }
-        
+
         // Check SPARQL compatibility
         if !path.can_use_sparql_path() {
-            warnings.push("Path cannot use native SPARQL property paths, will use programmatic evaluation".to_string());
+            warnings.push(
+                "Path cannot use native SPARQL property paths, will use programmatic evaluation"
+                    .to_string(),
+            );
         }
-        
+
         // Check for recursive structures that might cause infinite loops
         if self.has_potential_cycles(path) {
-            warnings.push("Path has potential for infinite recursion, ensure proper depth limits".to_string());
+            warnings.push(
+                "Path has potential for infinite recursion, ensure proper depth limits".to_string(),
+            );
         }
-        
+
         PathValidationResult {
             is_valid: errors.is_empty(),
             errors,
@@ -1440,7 +1489,7 @@ PREFIX sh: <http://www.w3.org/ns/shacl#>"#.to_string()
             estimated_cost: self.estimate_path_cost(path),
         }
     }
-    
+
     /// Check if a path has potential for infinite cycles
     fn has_potential_cycles(&self, path: &PropertyPath) -> bool {
         match path {
@@ -1807,15 +1856,15 @@ mod tests {
     fn test_sequence_path_query_generation() {
         let evaluator = PropertyPathEvaluator::new();
         let start_node = Term::NamedNode(NamedNode::new("http://example.org/person1").unwrap());
-        
+
         let pred1 = NamedNode::new("http://example.org/knows").unwrap();
         let pred2 = NamedNode::new("http://example.org/friend").unwrap();
-        
+
         let path = PropertyPath::sequence(vec![
             PropertyPath::predicate(pred1),
             PropertyPath::predicate(pred2),
         ]);
-        
+
         let hints = PathOptimizationHints::default();
 
         let query = evaluator
@@ -1832,15 +1881,15 @@ mod tests {
     fn test_alternative_path_query_generation() {
         let evaluator = PropertyPathEvaluator::new();
         let start_node = Term::NamedNode(NamedNode::new("http://example.org/person1").unwrap());
-        
+
         let pred1 = NamedNode::new("http://example.org/knows").unwrap();
         let pred2 = NamedNode::new("http://example.org/friend").unwrap();
-        
+
         let path = PropertyPath::alternative(vec![
             PropertyPath::predicate(pred1),
             PropertyPath::predicate(pred2),
         ]);
-        
+
         let hints = PathOptimizationHints::default();
 
         let query = evaluator
@@ -1857,10 +1906,10 @@ mod tests {
     fn test_recursive_path_query_generation() {
         let evaluator = PropertyPathEvaluator::new();
         let start_node = Term::NamedNode(NamedNode::new("http://example.org/person1").unwrap());
-        
+
         let predicate = NamedNode::new("http://example.org/knows").unwrap();
         let path = PropertyPath::one_or_more(PropertyPath::predicate(predicate));
-        
+
         let hints = PathOptimizationHints::default();
 
         let query = evaluator
@@ -1875,39 +1924,51 @@ mod tests {
     #[test]
     fn test_path_optimization() {
         let evaluator = PropertyPathEvaluator::new();
-        
+
         // Simple path should use SPARQL
-        let simple_path = PropertyPath::predicate(NamedNode::new("http://example.org/knows").unwrap());
+        let simple_path =
+            PropertyPath::predicate(NamedNode::new("http://example.org/knows").unwrap());
         let optimized = evaluator.optimize_path(&simple_path);
-        assert_eq!(optimized.optimization_strategy, PathOptimizationStrategy::SparqlPath);
-        
+        assert_eq!(
+            optimized.optimization_strategy,
+            PathOptimizationStrategy::SparqlPath
+        );
+
         // Complex sequence should use hybrid
         let complex_path = PropertyPath::sequence(vec![
             PropertyPath::predicate(NamedNode::new("http://example.org/knows").unwrap()),
-            PropertyPath::zero_or_more(PropertyPath::predicate(NamedNode::new("http://example.org/friend").unwrap())),
+            PropertyPath::zero_or_more(PropertyPath::predicate(
+                NamedNode::new("http://example.org/friend").unwrap(),
+            )),
         ]);
         let optimized = evaluator.optimize_path(&complex_path);
-        assert_eq!(optimized.optimization_strategy, PathOptimizationStrategy::Hybrid);
+        assert_eq!(
+            optimized.optimization_strategy,
+            PathOptimizationStrategy::Hybrid
+        );
     }
 
     #[test]
     fn test_path_validation() {
         let evaluator = PropertyPathEvaluator::new();
-        
+
         // Valid simple path
-        let valid_path = PropertyPath::predicate(NamedNode::new("http://example.org/knows").unwrap());
+        let valid_path =
+            PropertyPath::predicate(NamedNode::new("http://example.org/knows").unwrap());
         let result = evaluator.validate_property_path(&valid_path);
         assert!(result.is_valid);
         assert!(result.errors.is_empty());
-        
+
         // Invalid empty sequence
         let invalid_path = PropertyPath::sequence(vec![]);
         let result = evaluator.validate_property_path(&invalid_path);
         assert!(!result.is_valid);
         assert!(!result.errors.is_empty());
-        
+
         // Path with warnings
-        let warning_path = PropertyPath::zero_or_more(PropertyPath::predicate(NamedNode::new("http://example.org/knows").unwrap()));
+        let warning_path = PropertyPath::zero_or_more(PropertyPath::predicate(
+            NamedNode::new("http://example.org/knows").unwrap(),
+        ));
         let result = evaluator.validate_property_path(&warning_path);
         assert!(result.is_valid);
         assert!(!result.warnings.is_empty());
@@ -1928,5 +1989,36 @@ mod tests {
         assert_eq!(plan.execution_strategy, PathExecutionStrategy::DirectSparql);
         assert!(plan.estimated_cost > 0.0);
         assert!(!plan.cache_key.is_empty());
+    }
+}
+
+/// Format a term for use in SPARQL queries
+fn format_term_for_sparql(term: &Term) -> Result<String> {
+    match term {
+        Term::NamedNode(node) => Ok(format!("<{}>", node.as_str())),
+        Term::BlankNode(node) => Ok(format!("_:{}", node.as_str())),
+        Term::Literal(literal) => {
+            // Format literal with proper escaping and datatype/language tags
+            let value = literal.value().replace('\\', "\\\\").replace('"', "\\\"");
+            
+            if let Some(datatype) = literal.datatype() {
+                if datatype.as_str() == "http://www.w3.org/2001/XMLSchema#string" {
+                    // Simple string literals don't need datatype annotation
+                    Ok(format!("\"{}\"", value))
+                } else {
+                    Ok(format!("\"{}\"^^<{}>", value, datatype.as_str()))
+                }
+            } else if let Some(language) = literal.language() {
+                Ok(format!("\"{}\"@{}", value, language))
+            } else {
+                Ok(format!("\"{}\"", value))
+            }
+        }
+        Term::Variable(var) => Ok(format!("?{}", var.name())),
+        Term::QuotedTriple(_) => {
+            Err(ShaclError::PropertyPath(
+                "Quoted triples not supported in property path queries".to_string(),
+            ))
+        }
     }
 }

@@ -17,7 +17,7 @@ use dashmap::DashMap;
 use oxirs_core::model::NamedNode;
 use parking_lot::{Mutex, RwLock};
 use rayon::prelude::*;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
@@ -893,10 +893,179 @@ impl ParallelQueryExecutor {
         context: &ExecutionContext,
         stats: &mut ExecutionStats,
     ) -> Result<Solution> {
-        // For now, return empty solution as property path evaluation is complex
-        // In a full implementation, this would use parallel path traversal
         stats.property_path_evaluations += 1;
-        Ok(vec![])
+        
+        // Parallel property path evaluation based on path type
+        match path {
+            PropertyPath::Direct(predicate) => {
+                // Direct path - simple triple pattern
+                let pattern = TriplePattern {
+                    subject: subject.clone(),
+                    predicate: predicate.clone(),
+                    object: object.clone(),
+                };
+                self.execute_parallel_bgp(&[pattern], dataset, stats)
+            }
+            PropertyPath::Inverse(inner_path) => {
+                // Inverse path - swap subject and object
+                self.execute_parallel_property_path(object, inner_path, subject, dataset, context, stats)
+            }
+            PropertyPath::Sequence(left_path, right_path) => {
+                // Sequence path (p1/p2) - find intermediate nodes
+                self.execute_parallel_sequence_path(subject, left_path, right_path, object, dataset, context, stats)
+            }
+            PropertyPath::Alternative(left_path, right_path) => {
+                // Alternative path (p1|p2) - union of both paths
+                self.execute_parallel_alternative_path(subject, left_path, right_path, object, dataset, context, stats)
+            }
+            PropertyPath::ZeroOrMore(inner_path) => {
+                // Kleene star - transitive closure
+                self.execute_parallel_transitive_closure(subject, inner_path, object, dataset, context, stats, true)
+            }
+            PropertyPath::OneOrMore(inner_path) => {
+                // Plus operator - transitive closure without zero
+                self.execute_parallel_transitive_closure(subject, inner_path, object, dataset, context, stats, false)
+            }
+            PropertyPath::ZeroOrOne(inner_path) => {
+                // Optional path - direct or empty
+                let direct_result = self.execute_parallel_property_path(subject, inner_path, object, dataset, context, stats)?;
+                
+                // Add empty binding if subject equals object (zero path)
+                if subject == object {
+                    let mut result = direct_result;
+                    result.push(HashMap::new());
+                    Ok(result)
+                } else {
+                    Ok(direct_result)
+                }
+            }
+        }
+    }
+
+    /// Execute sequence path in parallel (p1/p2)
+    fn execute_parallel_sequence_path(
+        &self,
+        subject: &AlgebraTerm,
+        left_path: &PropertyPath,
+        right_path: &PropertyPath,
+        object: &AlgebraTerm,
+        dataset: &dyn Dataset,
+        context: &ExecutionContext,
+        stats: &mut ExecutionStats,
+    ) -> Result<Solution> {
+        // Find all possible intermediate nodes by exploring left path from subject
+        let intermediate_var = Variable::new("?__intermediate")?;
+        let intermediate_term = AlgebraTerm::Variable(intermediate_var.clone());
+        
+        let left_results = self.execute_parallel_property_path(
+            subject, left_path, &intermediate_term, dataset, context, stats
+        )?;
+
+        // For each intermediate result, explore right path to object
+        let results: Vec<Solution> = left_results
+            .par_iter()
+            .filter_map(|binding| {
+                if let Some(intermediate_value) = binding.get(&intermediate_var) {
+                    self.execute_parallel_property_path(
+                        intermediate_value, right_path, object, dataset, context, stats
+                    ).ok()
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // Flatten and merge results
+        let mut final_result = Vec::new();
+        for result_set in results {
+            final_result.extend(result_set);
+        }
+
+        Ok(final_result)
+    }
+
+    /// Execute alternative path in parallel (p1|p2)
+    fn execute_parallel_alternative_path(
+        &self,
+        subject: &AlgebraTerm,
+        left_path: &PropertyPath,
+        right_path: &PropertyPath,
+        object: &AlgebraTerm,
+        dataset: &dyn Dataset,
+        context: &ExecutionContext,
+        stats: &mut ExecutionStats,
+    ) -> Result<Solution> {
+        // Execute both paths in parallel
+        let (left_results, right_results) = rayon::join(
+            || self.execute_parallel_property_path(subject, left_path, object, dataset, context, stats),
+            || self.execute_parallel_property_path(subject, right_path, object, dataset, context, stats),
+        );
+
+        let mut combined_results = left_results?;
+        combined_results.extend(right_results?);
+
+        // Remove duplicates
+        Ok(self.parallel_distinct(combined_results))
+    }
+
+    /// Execute transitive closure in parallel (p+ or p*)
+    fn execute_parallel_transitive_closure(
+        &self,
+        subject: &AlgebraTerm,
+        path: &PropertyPath,
+        object: &AlgebraTerm,
+        dataset: &dyn Dataset,
+        context: &ExecutionContext,
+        stats: &mut ExecutionStats,
+        include_zero: bool,
+    ) -> Result<Solution> {
+        let mut result = Vec::new();
+        let mut visited = HashSet::new();
+        let mut current_level = vec![subject.clone()];
+        let max_depth = 50; // Prevent infinite loops
+        
+        // Add zero-length path if needed
+        if include_zero && subject == object {
+            result.push(HashMap::new());
+        }
+
+        for depth in 1..=max_depth {
+            if current_level.is_empty() {
+                break;
+            }
+
+            let next_level: Vec<AlgebraTerm> = current_level
+                .par_iter()
+                .flat_map(|current_node| {
+                    // Find all nodes reachable in one step
+                    let next_var = Variable::new(&format!("?__next_{}", depth)).unwrap();
+                    let next_term = AlgebraTerm::Variable(next_var.clone());
+                    
+                    if let Ok(step_results) = self.execute_parallel_property_path(
+                        current_node, path, &next_term, dataset, context, stats
+                    ) {
+                        step_results.into_iter().filter_map(|binding| {
+                            binding.get(&next_var).cloned()
+                        }).collect::<Vec<_>>()
+                    } else {
+                        Vec::new()
+                    }
+                })
+                .filter(|node| !visited.contains(node))
+                .collect();
+
+            // Check if we reached the target object
+            for node in &next_level {
+                if node == object {
+                    result.push(HashMap::new());
+                }
+                visited.insert(node.clone());
+            }
+
+            current_level = next_level;
+        }
+
+        Ok(result)
     }
 
     /// Execute left join in parallel
@@ -1254,49 +1423,123 @@ impl<'a> ParallelScanIterator<'a> {
 
 /// Work-stealing queue for dynamic load balancing
 pub struct WorkStealingQueue<T: Send + Sync> {
-    queues: Vec<Arc<Mutex<Vec<T>>>>,
+    queues: Vec<Arc<Mutex<VecDeque<T>>>>,
     thread_count: usize,
+    work_counters: Vec<AtomicUsize>,
+    global_work_count: AtomicUsize,
 }
 
 impl<T: Send + Sync> WorkStealingQueue<T> {
     pub fn new(thread_count: usize) -> Self {
         let mut queues = Vec::with_capacity(thread_count);
+        let mut work_counters = Vec::with_capacity(thread_count);
+        
         for _ in 0..thread_count {
-            queues.push(Arc::new(Mutex::new(Vec::new())));
+            queues.push(Arc::new(Mutex::new(VecDeque::new())));
+            work_counters.push(AtomicUsize::new(0));
         }
 
         Self {
             queues,
             thread_count,
+            work_counters,
+            global_work_count: AtomicUsize::new(0),
         }
     }
 
     /// Push work to a specific thread's queue
     pub fn push(&self, thread_id: usize, work: T) {
-        if let Some(queue) = self.queues.get(thread_id % self.thread_count) {
-            queue.lock().push(work);
+        let queue_id = thread_id % self.thread_count;
+        if let Some(queue) = self.queues.get(queue_id) {
+            queue.lock().unwrap().push_back(work);
+            self.work_counters[queue_id].fetch_add(1, Ordering::Relaxed);
+            self.global_work_count.fetch_add(1, Ordering::Relaxed);
         }
     }
 
-    /// Try to steal work from other threads
-    pub fn steal(&self, thread_id: usize) -> Option<T> {
-        // Try own queue first
-        if let Some(queue) = self.queues.get(thread_id) {
-            if let Some(work) = queue.lock().pop() {
-                return Some(work);
+    /// Push work to the least loaded queue
+    pub fn push_balanced(&self, work: T) {
+        let mut min_load = usize::MAX;
+        let mut best_queue = 0;
+        
+        // Find the queue with minimum load
+        for (i, counter) in self.work_counters.iter().enumerate() {
+            let load = counter.load(Ordering::Relaxed);
+            if load < min_load {
+                min_load = load;
+                best_queue = i;
             }
         }
+        
+        self.push(best_queue, work);
+    }
 
-        // Try to steal from others
-        for (i, queue) in self.queues.iter().enumerate() {
-            if i != thread_id {
-                if let Some(work) = queue.lock().pop() {
+    /// Try to get work, stealing if necessary
+    pub fn steal(&self, thread_id: usize) -> Option<T> {
+        // Try own queue first (LIFO for cache locality)
+        if let Some(queue) = self.queues.get(thread_id) {
+            if let Ok(mut q) = queue.try_lock() {
+                if let Some(work) = q.pop_back() {
+                    self.work_counters[thread_id].fetch_sub(1, Ordering::Relaxed);
+                    self.global_work_count.fetch_sub(1, Ordering::Relaxed);
                     return Some(work);
                 }
             }
         }
 
+        // Try to steal from others (FIFO to avoid conflicts)
+        let start = (thread_id + 1) % self.thread_count;
+        for i in 0..self.thread_count {
+            let target = (start + i) % self.thread_count;
+            if target != thread_id {
+                if let Some(queue) = self.queues.get(target) {
+                    if let Ok(mut q) = queue.try_lock() {
+                        if let Some(work) = q.pop_front() {
+                            self.work_counters[target].fetch_sub(1, Ordering::Relaxed);
+                            self.global_work_count.fetch_sub(1, Ordering::Relaxed);
+                            return Some(work);
+                        }
+                    }
+                }
+            }
+        }
+
         None
+    }
+
+    /// Get total pending work count
+    pub fn pending_work(&self) -> usize {
+        self.global_work_count.load(Ordering::Relaxed)
+    }
+
+    /// Check if all queues are empty
+    pub fn is_empty(&self) -> bool {
+        self.pending_work() == 0
+    }
+
+    /// Get load distribution across threads
+    pub fn get_load_distribution(&self) -> Vec<usize> {
+        self.work_counters
+            .iter()
+            .map(|counter| counter.load(Ordering::Relaxed))
+            .collect()
+    }
+
+    /// Drain all work from all queues
+    pub fn drain_all(&self) -> Vec<T> {
+        let mut all_work = Vec::new();
+        
+        for (i, queue) in self.queues.iter().enumerate() {
+            if let Ok(mut q) = queue.lock() {
+                while let Some(work) = q.pop_front() {
+                    all_work.push(work);
+                }
+                self.work_counters[i].store(0, Ordering::Relaxed);
+            }
+        }
+        
+        self.global_work_count.store(0, Ordering::Relaxed);
+        all_work
     }
 }
 

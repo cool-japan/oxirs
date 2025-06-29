@@ -6,8 +6,10 @@ use std::collections::HashSet;
 
 use oxirs_core::{model::Term, Store};
 
+use super::{
+    ConstraintContext, ConstraintEvaluationResult, ConstraintEvaluator, ConstraintValidator,
+};
 use crate::{Result, ShaclError};
-use super::{ConstraintValidator, ConstraintEvaluator, ConstraintContext, ConstraintEvaluationResult};
 
 /// sh:minLength constraint - validates minimum string length
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

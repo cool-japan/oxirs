@@ -7,8 +7,10 @@ use oxirs_core::{
     Store,
 };
 
+use super::{
+    ConstraintContext, ConstraintEvaluationResult, ConstraintEvaluator, ConstraintValidator,
+};
 use crate::{Result, ShaclError};
-use super::{ConstraintValidator, ConstraintEvaluator, ConstraintContext, ConstraintEvaluationResult};
 
 /// sh:class constraint - validates that values are instances of a class
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

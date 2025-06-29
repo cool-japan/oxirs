@@ -11,10 +11,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
-use crate::{
-    planner::planning::types::QueryInfo,
-    ServiceRegistry,
-};
+use crate::{planner::planning::types::QueryInfo, ServiceRegistry};
 
 use super::types::*;
 
@@ -61,10 +58,10 @@ impl MaintenanceScheduler {
         let mut inserted = false;
         for i in 0..self.scheduled_operations.len() {
             if self.scheduled_operations[i].priority < schedule.priority
-                || (self.scheduled_operations[i].priority == schedule.priority 
+                || (self.scheduled_operations[i].priority == schedule.priority
                     && self.scheduled_operations[i].scheduled_time > schedule.scheduled_time)
             {
-                self.scheduled_operations.insert(i, schedule);
+                self.scheduled_operations.insert(i, schedule.clone());
                 inserted = true;
                 break;
             }
@@ -124,7 +121,7 @@ impl MaintenanceScheduler {
     /// Get the next operation to execute
     pub fn get_next_operation(&mut self) -> Option<MaintenanceSchedule> {
         let now = Utc::now();
-        
+
         // Find the highest priority operation that is ready to run
         let mut index = None;
         for (i, schedule) in self.scheduled_operations.iter().enumerate() {
@@ -149,17 +146,19 @@ impl MaintenanceScheduler {
     /// Start execution of an operation
     pub fn start_operation(&mut self, schedule: MaintenanceSchedule) -> String {
         let operation_id = format!("{}_{}", schedule.view_id, Utc::now().timestamp());
-        
+
         let running_op = RunningOperation {
             id: operation_id.clone(),
             view_id: schedule.view_id.clone(),
             operation: schedule.operation.clone(),
             start_time: Utc::now(),
-            estimated_completion: Utc::now() + chrono::Duration::from_std(schedule.estimated_duration).unwrap(),
+            estimated_completion: Utc::now()
+                + chrono::Duration::from_std(schedule.estimated_duration).unwrap(),
         };
 
-        self.running_operations.insert(schedule.view_id.clone(), running_op);
-        
+        self.running_operations
+            .insert(schedule.view_id.clone(), running_op);
+
         info!(
             "Started {} operation for view {} (ID: {})",
             format!("{:?}", schedule.operation),
@@ -173,7 +172,8 @@ impl MaintenanceScheduler {
     /// Complete an operation
     pub fn complete_operation(&mut self, operation_id: &str, result: OperationResult) {
         // Find and remove the running operation
-        let running_op = self.running_operations
+        let running_op = self
+            .running_operations
             .iter()
             .find(|(_, op)| op.id == operation_id)
             .map(|(view_id, op)| (view_id.clone(), op.clone()));
@@ -226,10 +226,10 @@ impl MaintenanceScheduler {
     /// Cancel scheduled operations for a view
     pub fn cancel_operations_for_view(&mut self, view_id: &str) {
         self.scheduled_operations.retain(|op| op.view_id != view_id);
-        
+
         if let Some(running_op) = self.running_operations.remove(view_id) {
             warn!("Cancelled running operation for view: {}", view_id);
-            
+
             let completed_op = CompletedOperation {
                 id: running_op.id,
                 view_id: running_op.view_id,
@@ -238,7 +238,7 @@ impl MaintenanceScheduler {
                 completion_time: Utc::now(),
                 result: OperationResult::Cancelled,
             };
-            
+
             self.operation_history.push(completed_op);
         }
     }
@@ -251,15 +251,21 @@ impl MaintenanceScheduler {
     /// Get maintenance statistics
     pub fn get_statistics(&self) -> MaintenanceStatistics {
         let total_operations = self.operation_history.len();
-        let successful_operations = self.operation_history
+        let successful_operations = self
+            .operation_history
             .iter()
             .filter(|op| matches!(op.result, OperationResult::Success { .. }))
             .count();
 
         let average_duration = if total_operations > 0 {
-            let total_duration: i64 = self.operation_history
+            let total_duration: i64 = self
+                .operation_history
                 .iter()
-                .map(|op| op.completion_time.signed_duration_since(op.start_time).num_seconds())
+                .map(|op| {
+                    op.completion_time
+                        .signed_duration_since(op.start_time)
+                        .num_seconds()
+                })
                 .sum();
             Duration::from_secs((total_duration / total_operations as i64) as u64)
         } else {
@@ -273,9 +279,7 @@ impl MaintenanceScheduler {
             scheduled_operations: self.scheduled_operations.len(),
             running_operations: self.running_operations.len(),
             average_operation_duration: average_duration,
-            last_operation_time: self.operation_history
-                .last()
-                .map(|op| op.completion_time),
+            last_operation_time: self.operation_history.last().map(|op| op.completion_time),
         }
     }
 }
@@ -332,14 +336,8 @@ pub struct CompletedOperation {
 /// Result of a maintenance operation
 #[derive(Debug, Clone)]
 pub enum OperationResult {
-    Success {
-        duration: Duration,
-        details: String,
-    },
-    Failed {
-        error: String,
-        retry_count: u32,
-    },
+    Success { duration: Duration, details: String },
+    Failed { error: String, retry_count: u32 },
     Cancelled,
     TimedOut,
 }

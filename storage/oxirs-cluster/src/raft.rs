@@ -212,25 +212,33 @@ impl RdfApp {
     }
 
     /// Insert a triple into a specific shard
-    pub fn insert_triple_to_shard(&mut self, shard_id: crate::shard::ShardId, triple: oxirs_core::model::Triple) {
+    pub fn insert_triple_to_shard(
+        &mut self,
+        shard_id: crate::shard::ShardId,
+        triple: oxirs_core::model::Triple,
+    ) {
         let triple_tuple = (
             triple.subject().to_string(),
             triple.predicate().to_string(),
             triple.object().to_string(),
         );
-        
+
         let shard = self.shards.entry(shard_id).or_insert_with(BTreeSet::new);
         shard.insert(triple_tuple);
     }
 
     /// Delete a triple from a specific shard
-    pub fn delete_triple_from_shard(&mut self, shard_id: crate::shard::ShardId, triple: &oxirs_core::model::Triple) {
+    pub fn delete_triple_from_shard(
+        &mut self,
+        shard_id: crate::shard::ShardId,
+        triple: &oxirs_core::model::Triple,
+    ) {
         let triple_tuple = (
             triple.subject().to_string(),
             triple.predicate().to_string(),
             triple.object().to_string(),
         );
-        
+
         if let Some(shard) = self.shards.get_mut(&shard_id) {
             shard.remove(&triple_tuple);
         }
@@ -255,7 +263,7 @@ impl RdfApp {
                 .filter_map(|(s, p, o)| {
                     // Convert string tuple back to Triple
                     // This is a simplified conversion; in practice you'd want proper parsing
-                    use oxirs_core::model::{NamedNode, Literal, Triple};
+                    use oxirs_core::model::{Literal, NamedNode, Triple};
                     if let (Ok(subj), Ok(pred)) = (NamedNode::new(s), NamedNode::new(p)) {
                         // Try to parse object as NamedNode first, then as Literal
                         if let Ok(obj_node) = NamedNode::new(o) {
@@ -295,7 +303,11 @@ impl RdfApp {
     }
 
     /// Import triples into a shard
-    pub fn import_shard(&mut self, shard_id: crate::shard::ShardId, triples: Vec<oxirs_core::model::Triple>) {
+    pub fn import_shard(
+        &mut self,
+        shard_id: crate::shard::ShardId,
+        triples: Vec<oxirs_core::model::Triple>,
+    ) {
         let shard = self.shards.entry(shard_id).or_insert_with(BTreeSet::new);
         for triple in triples {
             let triple_tuple = (
@@ -308,12 +320,19 @@ impl RdfApp {
     }
 
     /// Get all triples from a shard
-    pub fn get_shard_triples(&self, shard_id: crate::shard::ShardId) -> Vec<oxirs_core::model::Triple> {
+    pub fn get_shard_triples(
+        &self,
+        shard_id: crate::shard::ShardId,
+    ) -> Vec<oxirs_core::model::Triple> {
         self.export_shard(shard_id)
     }
 
     /// Insert multiple triples into a shard
-    pub fn insert_triples_to_shard(&mut self, shard_id: crate::shard::ShardId, triples: Vec<oxirs_core::model::Triple>) {
+    pub fn insert_triples_to_shard(
+        &mut self,
+        shard_id: crate::shard::ShardId,
+        triples: Vec<oxirs_core::model::Triple>,
+    ) {
         let shard = self.shards.entry(shard_id).or_insert_with(BTreeSet::new);
         for triple in triples {
             let triple_tuple = (

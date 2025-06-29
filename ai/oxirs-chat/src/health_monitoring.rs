@@ -312,8 +312,9 @@ pub struct HealthMonitor {
 impl HealthMonitor {
     /// Create a new health monitor
     pub fn new(config: HealthMonitoringConfig) -> Self {
-        let mut component_monitors: HashMap<String, Box<dyn ComponentMonitor + Send + Sync>> = HashMap::new();
-        
+        let mut component_monitors: HashMap<String, Box<dyn ComponentMonitor + Send + Sync>> =
+            HashMap::new();
+
         // Add default component monitors
         component_monitors.insert("system".to_string(), Box::new(SystemResourceMonitor::new()));
         component_monitors.insert("database".to_string(), Box::new(DatabaseMonitor::new()));
@@ -336,7 +337,7 @@ impl HealthMonitor {
 
         loop {
             interval.tick().await;
-            
+
             if let Err(e) = self.perform_health_checks().await {
                 eprintln!("Health check failed: {}", e);
             }
@@ -346,10 +347,10 @@ impl HealthMonitor {
     /// Perform all configured health checks
     async fn perform_health_checks(&mut self) -> Result<()> {
         let health_report = self.generate_health_report().await?;
-        
+
         // Check for alerts
         let alerts = self.alert_manager.check_for_alerts(&health_report).await?;
-        
+
         // Send notifications if needed
         if !alerts.is_empty() {
             self.notification_manager.send_alerts(&alerts).await?;
@@ -364,7 +365,9 @@ impl HealthMonitor {
     /// Generate comprehensive health report
     pub async fn generate_health_report(&self) -> Result<SystemHealthReport> {
         let timestamp = SystemTime::now();
-        let uptime = timestamp.duration_since(self.start_time).unwrap_or(Duration::ZERO);
+        let uptime = timestamp
+            .duration_since(self.start_time)
+            .unwrap_or(Duration::ZERO);
 
         // Collect component health statuses
         let mut component_statuses = HashMap::new();
@@ -412,7 +415,7 @@ impl HealthMonitor {
     pub async fn get_metrics_history(&self, duration: Duration) -> Result<Vec<SystemHealthReport>> {
         let history = self.metrics_history.read().await;
         let cutoff = SystemTime::now() - duration;
-        
+
         Ok(history
             .iter()
             .filter(|report| report.timestamp >= cutoff)
@@ -494,7 +497,9 @@ impl HealthMonitor {
         for check_type in &self.config.enabled_checks {
             let start_time = SystemTime::now();
             let result = self.perform_health_check(check_type.clone()).await?;
-            let duration = SystemTime::now().duration_since(start_time).unwrap_or(Duration::ZERO);
+            let duration = SystemTime::now()
+                .duration_since(start_time)
+                .unwrap_or(Duration::ZERO);
 
             results.push(HealthCheckResult {
                 check_type: check_type.clone(),
@@ -510,28 +515,51 @@ impl HealthMonitor {
     }
 
     /// Perform individual health check
-    async fn perform_health_check(&self, check_type: HealthCheckType) -> Result<(HealthStatus, String, Option<String>)> {
+    async fn perform_health_check(
+        &self,
+        check_type: HealthCheckType,
+    ) -> Result<(HealthStatus, String, Option<String>)> {
         match check_type {
             HealthCheckType::SystemResources => {
                 let metrics = self.collect_system_metrics().await?;
                 if metrics.cpu_usage > 90.0 || metrics.memory_usage > 95.0 {
-                    Ok((HealthStatus::Critical, "High resource usage".to_string(), None))
+                    Ok((
+                        HealthStatus::Critical,
+                        "High resource usage".to_string(),
+                        None,
+                    ))
                 } else if metrics.cpu_usage > 70.0 || metrics.memory_usage > 80.0 {
-                    Ok((HealthStatus::Degraded, "Elevated resource usage".to_string(), None))
+                    Ok((
+                        HealthStatus::Degraded,
+                        "Elevated resource usage".to_string(),
+                        None,
+                    ))
                 } else {
-                    Ok((HealthStatus::Healthy, "Resource usage normal".to_string(), None))
+                    Ok((
+                        HealthStatus::Healthy,
+                        "Resource usage normal".to_string(),
+                        None,
+                    ))
                 }
             }
             HealthCheckType::ServiceAvailability => {
                 // Mock check - would test actual service endpoints
-                Ok((HealthStatus::Healthy, "All services available".to_string(), None))
+                Ok((
+                    HealthStatus::Healthy,
+                    "All services available".to_string(),
+                    None,
+                ))
             }
             HealthCheckType::ErrorRates => {
                 let metrics = self.collect_error_metrics().await?;
                 if metrics.error_rate > 10.0 {
                     Ok((HealthStatus::Critical, "High error rate".to_string(), None))
                 } else if metrics.error_rate > 5.0 {
-                    Ok((HealthStatus::Degraded, "Elevated error rate".to_string(), None))
+                    Ok((
+                        HealthStatus::Degraded,
+                        "Elevated error rate".to_string(),
+                        None,
+                    ))
                 } else {
                     Ok((HealthStatus::Healthy, "Error rate normal".to_string(), None))
                 }
@@ -539,9 +567,17 @@ impl HealthMonitor {
             HealthCheckType::ResponseTimes => {
                 let metrics = self.collect_performance_metrics().await?;
                 if metrics.p95_response_time > Duration::from_millis(2000) {
-                    Ok((HealthStatus::Degraded, "Slow response times".to_string(), None))
+                    Ok((
+                        HealthStatus::Degraded,
+                        "Slow response times".to_string(),
+                        None,
+                    ))
                 } else {
-                    Ok((HealthStatus::Healthy, "Response times normal".to_string(), None))
+                    Ok((
+                        HealthStatus::Healthy,
+                        "Response times normal".to_string(),
+                        None,
+                    ))
                 }
             }
             _ => Ok((HealthStatus::Healthy, "Check passed".to_string(), None)),
@@ -611,7 +647,7 @@ impl SystemResourceMonitor {
 impl ComponentMonitor for SystemResourceMonitor {
     async fn check_health(&self) -> Result<ComponentHealth> {
         let metrics = self.get_metrics().await?;
-        
+
         let status = if metrics.custom_metrics.get("cpu_usage").unwrap_or(&0.0) > &90.0 {
             HealthStatus::Critical
         } else if metrics.custom_metrics.get("cpu_usage").unwrap_or(&0.0) > &70.0 {
@@ -662,7 +698,7 @@ impl DatabaseMonitor {
 impl ComponentMonitor for DatabaseMonitor {
     async fn check_health(&self) -> Result<ComponentHealth> {
         let metrics = self.get_metrics().await?;
-        
+
         Ok(ComponentHealth {
             name: "Database".to_string(),
             status: HealthStatus::Healthy,
@@ -700,7 +736,7 @@ impl CacheMonitor {
 impl ComponentMonitor for CacheMonitor {
     async fn check_health(&self) -> Result<ComponentHealth> {
         let metrics = self.get_metrics().await?;
-        
+
         Ok(ComponentHealth {
             name: "Cache".to_string(),
             status: HealthStatus::Healthy,
@@ -742,7 +778,7 @@ impl LLMMonitor {
 impl ComponentMonitor for LLMMonitor {
     async fn check_health(&self) -> Result<ComponentHealth> {
         let metrics = self.get_metrics().await?;
-        
+
         Ok(ComponentHealth {
             name: "LLM Service".to_string(),
             status: HealthStatus::Healthy,
@@ -877,7 +913,11 @@ impl NotificationManager {
 
         // Check cooldown
         if let Some(last) = self.last_notification {
-            if SystemTime::now().duration_since(last).unwrap_or(Duration::ZERO) < self.config.notification_cooldown {
+            if SystemTime::now()
+                .duration_since(last)
+                .unwrap_or(Duration::ZERO)
+                < self.config.notification_cooldown
+            {
                 return Ok(());
             }
         }
@@ -895,7 +935,7 @@ impl NotificationManager {
     async fn send_notification(&self, alert: &Alert) -> Result<()> {
         // Mock implementation - would send actual notifications
         println!("ALERT: {} - {}", alert.title, alert.description);
-        
+
         if self.config.webhook_notifications {
             // Would send webhook notification
         }
@@ -916,7 +956,7 @@ mod tests {
     async fn test_health_monitor_creation() {
         let config = HealthMonitoringConfig::default();
         let monitor = HealthMonitor::new(config);
-        
+
         let status = monitor.get_health_status().await.unwrap();
         // Should start healthy
         assert_eq!(status, HealthStatus::Healthy);
@@ -926,7 +966,7 @@ mod tests {
     async fn test_system_resource_monitor() {
         let monitor = SystemResourceMonitor::new();
         let health = monitor.check_health().await.unwrap();
-        
+
         assert_eq!(health.name, "System Resources");
         assert!(health.metrics.availability_percentage > 0.0);
     }
@@ -935,7 +975,7 @@ mod tests {
     async fn test_alert_manager() {
         let thresholds = AlertThresholds::default();
         let mut alert_manager = AlertManager::new(thresholds);
-        
+
         let report = SystemHealthReport {
             overall_status: HealthStatus::Critical,
             timestamp: SystemTime::now(),

@@ -35,9 +35,15 @@ reqwest = { version = "0.12.11", features = ["json"] }
 regex = "1.11.1"
 fastrand = "2.2"
 
+# Distributed caching
+redis = { version = "0.27", features = ["async-std-comp"] }
+lru = "0.12"
+flate2 = "1.0"
+
 # WebSocket support for subscriptions
 tokio-tungstenite.workspace = true
 futures-util.workspace = true
+futures.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
@@ -49,4 +55,8 @@ graphiql = []
 [[bin]]
 name = "oxirs-gql"
 path = "src/main.rs"
+
+[[bin]]
+name = "generate-docs"
+path = "src/bin/generate_docs.rs"
 

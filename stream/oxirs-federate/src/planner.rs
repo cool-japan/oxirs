@@ -10,9 +10,9 @@ use std::sync::Arc;
 use tracing::{debug, info};
 
 use crate::{
-    ServiceRegistry, StepResult,
     query_decomposition::{DecomposerConfig, DecompositionResult, QueryDecomposer},
     service_optimizer::{ServiceOptimizer, ServiceOptimizerConfig},
+    ServiceRegistry, StepResult,
 };
 
 // Import from the planning module
@@ -56,7 +56,10 @@ impl QueryPlanner {
         debug!("Planning federated query execution");
 
         // Use the inner planner to create the execution plan
-        let mut plan = self.inner.plan_federated_query(query, variables, context, service_registry).await?;
+        let mut plan = self
+            .inner
+            .plan_federated_query(query, variables, context, service_registry)
+            .await?;
 
         // Optimize the plan using the service optimizer
         plan = self.optimize_execution_plan(plan, service_registry).await?;
@@ -96,11 +99,11 @@ impl QueryPlanner {
     /// Analyze a SPARQL query and return query information
     pub async fn analyze_sparql(&self, query: &str) -> Result<QueryInfo> {
         use std::collections::HashSet;
-        
+
         // Parse the SPARQL query to extract basic information
         // This is a simplified implementation - you might want to use a proper SPARQL parser
         let pattern_count = query.matches("{").count();
-        
+
         // Determine query type
         let query_type = if query.to_uppercase().starts_with("SELECT") {
             QueryType::Select
@@ -113,7 +116,7 @@ impl QueryPlanner {
         } else {
             QueryType::Update
         };
-        
+
         // Extract basic patterns (simplified)
         let patterns = vec![TriplePattern {
             subject: Some("?s".to_string()),
@@ -121,7 +124,7 @@ impl QueryPlanner {
             object: Some("?o".to_string()),
             pattern_string: "?s ?p ?o".to_string(),
         }];
-        
+
         // Extract variables (simplified)
         let mut variables = HashSet::new();
         for word in query.split_whitespace() {
@@ -129,7 +132,7 @@ impl QueryPlanner {
                 variables.insert(word.to_string());
             }
         }
-        
+
         // Extract basic filters (simplified)
         let filters = if query.contains("FILTER") {
             vec![FilterExpression {
@@ -153,9 +156,9 @@ impl QueryPlanner {
 
     /// Plan a SPARQL query execution
     pub async fn plan_sparql(
-        &self, 
+        &self,
         query_info: &QueryInfo,
-        service_registry: &ServiceRegistry
+        service_registry: &ServiceRegistry,
     ) -> Result<ExecutionPlan> {
         // Create a basic execution context
         let context = ExecutionContext {
@@ -166,26 +169,25 @@ impl QueryPlanner {
             variables: std::collections::HashMap::new(),
             metadata: std::collections::HashMap::new(),
         };
-        
+
         // Use the existing plan_query method with a reconstructed query
         // This is a simplified approach - in practice you'd want to preserve the original query
-        let placeholder_query = format!(
-            "SELECT * WHERE {{ ?s ?p ?o . FILTER(1=1) }}"
-        );
-        
-        self.plan_query(&placeholder_query, None, &context, service_registry).await
+        let placeholder_query = format!("SELECT * WHERE {{ ?s ?p ?o . FILTER(1=1) }}");
+
+        self.plan_query(&placeholder_query, None, &context, service_registry)
+            .await
     }
 
     /// Analyze a GraphQL query and return query information  
     pub async fn analyze_graphql(
         &self,
-        query: &str, 
-        variables: Option<&serde_json::Value>
+        query: &str,
+        variables: Option<&serde_json::Value>,
     ) -> Result<crate::planner::planning::query_analysis::QueryInfo> {
         // Basic GraphQL analysis - this is simplified
         let field_count = query.matches("{").count();
         let has_variables = variables.is_some() && !variables.unwrap().is_null();
-        
+
         Ok(crate::planner::planning::query_analysis::QueryInfo {
             operation_type: crate::planner::planning::types::GraphQLOperationType::Query,
             field_count,
@@ -199,7 +201,7 @@ impl QueryPlanner {
     pub async fn plan_graphql(
         &self,
         query_info: &crate::planner::planning::query_analysis::QueryInfo,
-        service_registry: &ServiceRegistry
+        service_registry: &ServiceRegistry,
     ) -> Result<ExecutionPlan> {
         // Create a basic execution context
         let context = ExecutionContext {
@@ -210,14 +212,13 @@ impl QueryPlanner {
             variables: std::collections::HashMap::new(),
             metadata: std::collections::HashMap::new(),
         };
-        
+
         // Use the existing plan_query method with a reconstructed query
         // This is a simplified approach - in practice you'd want to preserve the original query
-        let placeholder_query = format!(
-            "query {{ field{} }}", query_info.field_count
-        );
-        
-        self.plan_query(&placeholder_query, None, &context, service_registry).await
+        let placeholder_query = format!("query {{ field{} }}", query_info.field_count);
+
+        self.plan_query(&placeholder_query, None, &context, service_registry)
+            .await
     }
 
     /// Analyze performance and suggest reoptimization
@@ -236,7 +237,9 @@ impl QueryPlanner {
         service_registry: &ServiceRegistry,
     ) -> Result<DecompositionResult> {
         let query_info = self.analyze_sparql(query).await?;
-        self.decomposer.decompose(&query_info, service_registry).await
+        self.decomposer
+            .decompose(&query_info, service_registry)
+            .await
     }
 
     /// Get historical performance data
@@ -247,7 +250,7 @@ impl QueryPlanner {
     /// Create a simple execution plan for testing
     pub fn create_test_plan(query_id: String, steps: Vec<ExecutionStep>) -> ExecutionPlan {
         let total_cost = steps.iter().map(|s| s.estimated_cost).sum();
-        
+
         ExecutionPlan {
             query_id,
             steps,
@@ -266,7 +269,7 @@ impl QueryPlanner {
         service_registry: &ServiceRegistry,
     ) -> Result<Vec<String>> {
         let parsed_query = QueryAnalyzer::parse_graphql_query(query)?;
-        
+
         // Create a mock unified schema for validation
         let unified_schema = UnifiedSchema {
             types: std::collections::HashMap::new(),
@@ -289,7 +292,7 @@ impl QueryPlanner {
     /// Check if a query requires federation
     pub fn requires_federation(query: &str) -> Result<bool> {
         let parsed_query = QueryAnalyzer::parse_graphql_query(query)?;
-        
+
         // Simple heuristic: if query has multiple top-level fields, it might require federation
         Ok(parsed_query.selection_set.len() > 1)
     }
@@ -303,9 +306,8 @@ impl Default for QueryPlanner {
 
 // Re-export key types from the planning module
 pub use self::planning::{
-    ExecutionContext, HistoricalPerformance, ReoptimizationAnalysis,
-    PlannerConfig, RetryConfig,
-    FilterExpression, ExecutionPlan, ExecutionStep, StepType,
+    ExecutionContext, ExecutionPlan, ExecutionStep, FilterExpression, HistoricalPerformance,
+    PlannerConfig, ReoptimizationAnalysis, RetryConfig, StepType,
 };
 
 // Import types for SPARQL query info
@@ -359,7 +361,7 @@ mod tests {
 
         let complexity = QueryPlanner::analyze_query_complexity(query);
         assert!(complexity.is_ok());
-        
+
         let complexity = complexity.unwrap();
         assert_eq!(complexity.field_count, 2); // user and posts
     }
@@ -390,28 +392,26 @@ mod tests {
 
         assert!(simple_result.is_ok());
         assert!(complex_result.is_ok());
-        
+
         assert!(!simple_result.unwrap()); // Single field
         assert!(complex_result.unwrap()); // Multiple fields
     }
 
     #[test]
     fn test_execution_plan_creation() {
-        let steps = vec![
-            ExecutionStep {
-                step_id: "step1".to_string(),
-                step_type: StepType::ServiceQuery,
-                service_id: Some("service1".to_string()),
-                query_fragment: "{ user { name } }".to_string(),
-                dependencies: vec![],
-                estimated_cost: 10.0,
-                timeout: std::time::Duration::from_secs(30),
-                retry_config: None,
-            }
-        ];
+        let steps = vec![ExecutionStep {
+            step_id: "step1".to_string(),
+            step_type: StepType::ServiceQuery,
+            service_id: Some("service1".to_string()),
+            query_fragment: "{ user { name } }".to_string(),
+            dependencies: vec![],
+            estimated_cost: 10.0,
+            timeout: std::time::Duration::from_secs(30),
+            retry_config: None,
+        }];
 
         let plan = QueryPlanner::create_test_plan("test_query".to_string(), steps);
-        
+
         assert_eq!(plan.query_id, "test_query");
         assert_eq!(plan.steps.len(), 1);
         assert_eq!(plan.estimated_total_cost, 10.0);

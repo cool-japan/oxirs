@@ -2,10 +2,15 @@
 
 use serde::{Deserialize, Serialize};
 
-use oxirs_core::{model::{Literal, Term}, Store};
+use oxirs_core::{
+    model::{Literal, Term},
+    Store,
+};
 
+use super::{
+    ConstraintContext, ConstraintEvaluationResult, ConstraintEvaluator, ConstraintValidator,
+};
 use crate::Result;
-use super::{ConstraintValidator, ConstraintEvaluator, ConstraintContext, ConstraintEvaluationResult};
 
 /// sh:minExclusive constraint - validates minimum exclusive value
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

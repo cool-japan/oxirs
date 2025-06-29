@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{RwLock, Mutex};
+use tokio::sync::{Mutex, RwLock};
 use tokio::time::{interval, sleep};
 use tracing::{debug, error, info, warn};
 
@@ -214,7 +214,10 @@ impl ServiceDiscovery {
     }
 
     /// Get services by capability
-    pub async fn get_services_with_capability(&self, check: impl Fn(&ServiceCapabilities) -> bool) -> Vec<ServiceInfo> {
+    pub async fn get_services_with_capability(
+        &self,
+        check: impl Fn(&ServiceCapabilities) -> bool,
+    ) -> Vec<ServiceInfo> {
         let services = self.services.read().await;
         services
             .values()
@@ -236,12 +239,16 @@ impl ServiceDiscovery {
         // Register with backends
         for backend in &self.backends {
             if let Err(e) = backend.register_service(&service).await {
-                warn!("Failed to register service {} with backend: {}", service.id, e);
+                warn!(
+                    "Failed to register service {} with backend: {}",
+                    service.id, e
+                );
             }
         }
 
         // Emit event
-        self.emit_event(DiscoveryEvent::ServiceRegistered(service)).await;
+        self.emit_event(DiscoveryEvent::ServiceRegistered(service))
+            .await;
 
         Ok(())
     }
@@ -259,29 +266,42 @@ impl ServiceDiscovery {
         // Deregister from backends
         for backend in &self.backends {
             if let Err(e) = backend.deregister_service(service_id).await {
-                warn!("Failed to deregister service {} from backend: {}", service_id, e);
+                warn!(
+                    "Failed to deregister service {} from backend: {}",
+                    service_id, e
+                );
             }
         }
 
         // Emit event
-        self.emit_event(DiscoveryEvent::ServiceDeregistered(service_id.to_string())).await;
+        self.emit_event(DiscoveryEvent::ServiceDeregistered(service_id.to_string()))
+            .await;
 
         Ok(())
     }
 
     /// Get service with best performance (lowest latency and load)
-    pub async fn get_best_service(&self, predicate: impl Fn(&ServiceInfo) -> bool) -> Option<ServiceInfo> {
+    pub async fn get_best_service(
+        &self,
+        predicate: impl Fn(&ServiceInfo) -> bool,
+    ) -> Option<ServiceInfo> {
         let services = self.services.read().await;
-        
+
         services
             .values()
-            .filter(|service| {
-                service.health_status == HealthStatus::Healthy && predicate(service)
-            })
+            .filter(|service| service.health_status == HealthStatus::Healthy && predicate(service))
             .min_by(|a, b| {
-                let a_score = a.load_factor + a.response_time.unwrap_or(Duration::from_secs(1)).as_secs_f64();
-                let b_score = b.load_factor + b.response_time.unwrap_or(Duration::from_secs(1)).as_secs_f64();
-                a_score.partial_cmp(&b_score).unwrap_or(std::cmp::Ordering::Equal)
+                let a_score = a.load_factor
+                    + a.response_time
+                        .unwrap_or(Duration::from_secs(1))
+                        .as_secs_f64();
+                let b_score = b.load_factor
+                    + b.response_time
+                        .unwrap_or(Duration::from_secs(1))
+                        .as_secs_f64();
+                a_score
+                    .partial_cmp(&b_score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
             })
             .cloned()
     }
@@ -291,7 +311,7 @@ impl ServiceDiscovery {
         debug!("Introspecting service at: {}", url);
 
         let introspection_query = IntrospectionQuery::full_query();
-        
+
         let response = self
             .http_client
             .post(url)
@@ -328,7 +348,7 @@ impl ServiceDiscovery {
                 for directive in directives {
                     if let Some(name) = directive.get("name").and_then(|n| n.as_str()) {
                         capabilities.supported_directives.insert(name.to_string());
-                        
+
                         // Check for federation-specific directives
                         if ["key", "external", "requires", "provides", "extends"].contains(&name) {
                             capabilities.federation_enabled = true;
@@ -393,7 +413,7 @@ impl ServiceDiscovery {
     /// Check service health
     pub async fn check_service_health(&self, service: &ServiceInfo) -> HealthStatus {
         let start = Instant::now();
-        
+
         // Try a simple introspection query
         let simple_query = r#"
             query HealthCheck {
@@ -419,11 +439,12 @@ impl ServiceDiscovery {
         match result {
             Ok(response) => {
                 let duration = start.elapsed();
-                
+
                 if response.status().is_success() {
                     // Update response time
-                    self.update_service_response_time(&service.id, duration).await;
-                    
+                    self.update_service_response_time(&service.id, duration)
+                        .await;
+
                     if duration < Duration::from_millis(500) {
                         HealthStatus::Healthy
                     } else {
@@ -453,18 +474,20 @@ impl ServiceDiscovery {
 
         tokio::spawn(async move {
             let mut interval = interval(discovery_interval);
-            
+
             loop {
                 interval.tick().await;
-                
+
                 debug!("Running service discovery sweep");
-                
+
                 // In a real implementation, you would iterate over backends
                 // For now, this is a placeholder that logs the discovery attempt
                 if backends > 0 {
-                    debug!("Discovered {} services from {} backends", 
-                           services.read().await.len(), 
-                           backends);
+                    debug!(
+                        "Discovered {} services from {} backends",
+                        services.read().await.len(),
+                        backends
+                    );
                 }
             }
         });
@@ -480,10 +503,10 @@ impl ServiceDiscovery {
 
         tokio::spawn(async move {
             let mut interval = interval(health_check_interval);
-            
+
             loop {
                 interval.tick().await;
-                
+
                 let service_list = {
                     let services_guard = services.read().await;
                     services_guard.values().cloned().collect::<Vec<_>>()
@@ -493,9 +516,11 @@ impl ServiceDiscovery {
                     // Check if we need to health check this service
                     let should_check = {
                         let mut checks = health_checks.lock().await;
-                        let last_check = checks.get(&service.id).copied()
+                        let last_check = checks
+                            .get(&service.id)
+                            .copied()
                             .unwrap_or_else(|| Instant::now() - health_check_interval);
-                        
+
                         if last_check.elapsed() >= health_check_interval {
                             checks.insert(service.id.clone(), Instant::now());
                             true
@@ -509,13 +534,16 @@ impl ServiceDiscovery {
                         let services_clone = Arc::clone(&services);
                         let event_handlers_clone = Arc::clone(&event_handlers);
                         let http_client_clone = http_client.clone();
-                        
+
                         tokio::spawn(async move {
-                            let new_status = Self::perform_health_check(&http_client_clone, &service_clone).await;
-                            
+                            let new_status =
+                                Self::perform_health_check(&http_client_clone, &service_clone)
+                                    .await;
+
                             let old_status = {
                                 let mut services_guard = services_clone.write().await;
-                                if let Some(service_mut) = services_guard.get_mut(&service_clone.id) {
+                                if let Some(service_mut) = services_guard.get_mut(&service_clone.id)
+                                {
                                     let old = service_mut.health_status.clone();
                                     service_mut.health_status = new_status.clone();
                                     service_mut.last_seen = Utc::now();
@@ -576,7 +604,7 @@ impl ServiceDiscovery {
         match result {
             Ok(response) => {
                 let duration = start.elapsed();
-                
+
                 if response.status().is_success() {
                     if duration < Duration::from_millis(500) {
                         HealthStatus::Healthy
@@ -643,7 +671,7 @@ mod tests {
     async fn test_service_discovery_creation() {
         let config = ServiceDiscoveryConfig::default();
         let discovery = ServiceDiscovery::new(config);
-        
+
         let services = discovery.get_services().await;
         assert!(services.is_empty());
     }
@@ -668,7 +696,7 @@ mod tests {
         };
 
         discovery.register_service(service.clone()).await.unwrap();
-        
+
         let services = discovery.get_services().await;
         assert_eq!(services.len(), 1);
         assert_eq!(services[0].id, "test-service");

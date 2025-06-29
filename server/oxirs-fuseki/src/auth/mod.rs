@@ -1443,7 +1443,9 @@ impl AuthService {
         relay_state: &str,
     ) -> FusekiResult<(String, String)> {
         if let Some(ref saml_provider) = self.saml_provider {
-            saml_provider.generate_auth_request(target_url, force_authn, relay_state).await
+            saml_provider
+                .generate_auth_request(target_url, force_authn, relay_state)
+                .await
         } else {
             Err(FusekiError::configuration("SAML not configured"))
         }
@@ -1461,27 +1463,28 @@ impl AuthService {
     #[cfg(feature = "saml")]
     pub async fn logout_by_session_index(&self, session_index: &str) -> FusekiResult<bool> {
         debug!("Logging out SAML session: {}", session_index);
-        
+
         // Find and invalidate sessions by SAML session index
         let mut sessions = self.sessions.write().await;
         let mut removed_count = 0;
-        
+
         sessions.retain(|_, session| {
             // In a real implementation, you'd store SAML session index with the session
             // For now, we'll remove all sessions (simplified)
             removed_count += 1;
             false
         });
-        
+
         Ok(removed_count > 0)
     }
 
     /// Get SAML service provider configuration
     #[cfg(feature = "saml")]
     pub fn get_saml_sp_config(&self) -> FusekiResult<&crate::auth::saml::SamlConfig> {
-        self.config.saml.as_ref().ok_or_else(|| {
-            FusekiError::configuration("SAML not configured")
-        })
+        self.config
+            .saml
+            .as_ref()
+            .ok_or_else(|| FusekiError::configuration("SAML not configured"))
     }
 
     /// Non-feature version of SAML methods for compilation compatibility

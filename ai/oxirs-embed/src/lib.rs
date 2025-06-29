@@ -115,17 +115,24 @@
 
 #[cfg(feature = "api-server")]
 pub mod api;
+pub mod batch_processing;
 pub mod biomedical_embeddings;
 pub mod caching;
+pub mod cloud_integration;
 pub mod compression;
+pub mod delta;
+pub mod enterprise_knowledge;
 pub mod evaluation;
 pub mod gpu_acceleration;
+pub mod graphql_api;
 pub mod inference;
 pub mod integration;
 pub mod model_registry;
 pub mod models;
+pub mod monitoring;
 pub mod multimodal;
 pub mod persistence;
+pub mod research_networks;
 pub mod training;
 pub mod utils;
 
@@ -384,7 +391,7 @@ pub trait EmbeddingModel: Send + Sync {
     fn load(&mut self, path: &str) -> Result<()>;
     fn clear(&mut self);
     fn is_trained(&self) -> bool;
-    
+
     /// Encode text strings into embeddings
     async fn encode(&self, texts: &[String]) -> Result<Vec<Vec<f32>>>;
 }
@@ -392,28 +399,107 @@ pub trait EmbeddingModel: Send + Sync {
 // Re-export main types
 #[cfg(feature = "api-server")]
 pub use api::{start_server, ApiConfig, ApiState};
+pub use batch_processing::{
+    BatchJob, BatchProcessingConfig, BatchProcessingManager, BatchProcessingResult,
+    BatchProcessingStats, IncrementalConfig, JobProgress, JobStatus, OutputFormat,
+    PartitioningStrategy, RetryConfig,
+};
 pub use biomedical_embeddings::{
     BiomedicalEmbedding, BiomedicalEmbeddingConfig, BiomedicalEntityType, BiomedicalRelationType,
-    SpecializedTextEmbedding, SpecializedTextConfig, SpecializedTextModel, PreprocessingRule,
-    FineTuningConfig,
+    FineTuningConfig, PreprocessingRule, SpecializedTextConfig, SpecializedTextEmbedding,
+    SpecializedTextModel,
 };
 pub use caching::{CacheConfig, CacheManager, CachedEmbeddingModel};
+pub use cloud_integration::{
+    AWSSageMakerService, AutoScalingConfig, AzureMLService, BackupConfig, CloudIntegrationConfig,
+    CloudIntegrationManager, CloudProvider, CloudService, ClusterStatus, CostEstimate,
+    CostOptimizationResult, CostOptimizationStrategy, DeploymentConfig, DeploymentResult,
+    DeploymentStatus, EndpointInfo, FunctionInvocationResult, GPUClusterConfig, GPUClusterResult,
+    LifecyclePolicy, OptimizationAction, PerformanceTier, ReplicationType,
+    ServerlessDeploymentResult, ServerlessFunctionConfig, ServerlessStatus, StorageConfig,
+    StorageResult, StorageStatus, StorageType,
+};
 pub use compression::{
-    CompressionTarget, CompressionStats, CompressedModel, ModelCompressionManager,
-    QuantizationConfig, QuantizationMethod, PruningConfig, PruningMethod,
-    DistillationConfig, NASConfig, OptimizationTarget,
+    CompressedModel, CompressionStats, CompressionTarget, DistillationConfig,
+    ModelCompressionManager, NASConfig, OptimizationTarget, PruningConfig, PruningMethod,
+    QuantizationConfig, QuantizationMethod,
+};
+pub use delta::{
+    ChangeRecord, ChangeStatistics, ChangeType, DeltaConfig, DeltaManager, DeltaResult, DeltaStats,
+    IncrementalStrategy,
+};
+pub use enterprise_knowledge::{
+    BehaviorMetrics, CareerPredictions, Category, CategoryHierarchy, CategoryPerformance,
+    ColdStartStrategy, CommunicationFrequency, CommunicationPreferences, CustomerEmbedding,
+    CustomerPreferences, CustomerRatings, CustomerSegment, Department, DepartmentPerformance,
+    EmployeeEmbedding, EnterpriseConfig, EnterpriseKnowledgeAnalyzer, EnterpriseMetrics,
+    ExperienceLevel, FeatureType, MarketAnalysis, OrganizationalStructure,
+    PerformanceMetrics as EnterprisePerformanceMetrics, ProductAvailability, ProductEmbedding,
+    ProductFeature, ProductRecommendation, Project, ProjectOutcome, ProjectParticipation,
+    ProjectPerformance, ProjectStatus, Purchase, PurchaseChannel, RecommendationConfig,
+    RecommendationEngine, RecommendationEngineType, RecommendationPerformance,
+    RecommendationReason, SalesMetrics, Skill, SkillCategory, Team, TeamPerformance,
+};
+pub use evaluation::{
+    BenchmarkReport,
+    BenchmarkSuite,
+    ConsoleAlertHandler,
+    DriftAlert,
+    DriftDetector,
+    DriftDetectorConfig,
+    DriftThresholds,
+    // Outlier detection exports
+    EmbeddingSnapshot,
+    EvaluationConfig,
+    EvaluationMetric,
+    EvaluationResults,
+    EvaluationSuite,
+    ModelComparison,
+    OutlierDetailedAnalysis,
+    OutlierDetectionConfig,
+    OutlierDetectionMethod,
+    OutlierDetectionResults,
+    OutlierDetectionStats,
+    OutlierDetector,
+    OutlierInstance,
+    OutlierScoreDistribution,
+    OutlierSummary,
+    OutlierThresholds,
+    OutlierType,
+    QualityMonitor,
+    QualityMonitorConfig,
+    QualitySnapshot,
+    RootCause,
+    TemporalPattern,
+    TripleEvaluationResult,
 };
 pub use gpu_acceleration::{
     GpuAccelerationConfig, GpuAccelerationManager, GpuMemoryPool, GpuPerformanceStats,
     MixedPrecisionProcessor, MultiStreamProcessor, TensorCache,
 };
+pub use graphql_api::{
+    create_schema, BatchEmbeddingInput, BatchEmbeddingResult, BatchStatus, DistanceMetric,
+    EmbeddingFormat, EmbeddingQueryInput, EmbeddingResult, EmbeddingSchema, GraphQLContext,
+    ModelInfo, ModelType, SimilarityResult, SimilaritySearchInput,
+};
 pub use models::{
     AggregationType, ComplEx, DistMult, GNNConfig, GNNEmbedding, GNNType, PoolingStrategy, RotatE,
     TransE, TransformerConfig, TransformerEmbedding, TransformerType,
 };
+pub use monitoring::{
+    Alert, AlertSeverity, AlertThresholds, AlertType, CacheMetrics, ConsoleAlertHandler,
+    DriftMetrics, ErrorEvent, ErrorMetrics, ErrorSeverity, LatencyMetrics, MonitoringConfig,
+    PerformanceMetrics as MonitoringPerformanceMetrics, PerformanceMonitor, QualityAssessment,
+    QualityMetrics, ResourceMetrics, SlackAlertHandler, ThroughputMetrics,
+};
 pub use multimodal::{
     AlignmentNetwork, AlignmentObjective, ContrastiveConfig, CrossDomainConfig, CrossModalConfig,
     KGEncoder, MultiModalEmbedding, MultiModalStats, TextEncoder,
+};
+pub use research_networks::{
+    AuthorEmbedding, Citation, CitationNetwork, CitationType, Collaboration, CollaborationNetwork,
+    NetworkMetrics, PaperSection, PublicationEmbedding, PublicationType, ResearchCommunity,
+    ResearchNetworkAnalyzer, ResearchNetworkConfig, TopicModel, TopicModelingConfig,
 };
 
 #[cfg(feature = "tucker")]
@@ -423,4 +509,6 @@ pub use models::TuckER;
 pub use models::QuatD;
 
 // Re-export model registry types
-pub use crate::model_registry::{ModelRegistry, ModelVersion, ResourceAllocation};
+pub use crate::model_registry::{
+    ModelRegistry, ModelVersion, ResourceAllocation as ModelResourceAllocation,
+};

@@ -229,10 +229,7 @@ impl EntityResolver {
     }
 
     /// Execute query against a specific GraphQL service
-    async fn execute_service_query(
-        service_id: &str,
-        query: &str,
-    ) -> Result<GraphQLResponse> {
+    async fn execute_service_query(service_id: &str, query: &str) -> Result<GraphQLResponse> {
         debug!("Executing GraphQL query against service: {}", service_id);
 
         // Mock implementation - would make actual HTTP request to service
@@ -394,13 +391,9 @@ impl EntityResolver {
 
         // Resolve each service group
         for (service_id, service_entities) in service_groups {
-            let service_results = Self::resolve_service_entity_batch(
-                &service_id,
-                &service_entities,
-                context,
-                cache,
-            )
-            .await?;
+            let service_results =
+                Self::resolve_service_entity_batch(&service_id, &service_entities, context, cache)
+                    .await?;
             results.extend(service_results);
         }
 
@@ -496,7 +489,8 @@ impl EntityResolver {
 
         // Resolve entities in dependency order
         for batch in resolution_order {
-            let batch_results = Self::resolve_entity_batch(&batch, context, &resolution_cache).await?;
+            let batch_results =
+                Self::resolve_entity_batch(&batch, context, &resolution_cache).await?;
 
             // Update cache and results
             for (entity_ref, entity_data) in batch_results {

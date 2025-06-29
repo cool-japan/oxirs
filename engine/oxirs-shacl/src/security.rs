@@ -116,23 +116,17 @@ impl SparqlSecurityAnalyzer {
             // Potential injection patterns
             Regex::new(r"(?i)\b(drop|delete|insert|clear|create|load)\s+(?:data|graph|silent)")?
                 .into(),
-            Regex::new(r"(?i)\bservice\s+<[^>]*>")?
-                .into(),
-            Regex::new(r"(?i)\bfrom\s+named\s+<[^>]*>")?
-                .into(),
-            Regex::new(r"(?i)\binto\s+(?:graph\s+)?<[^>]*>")?
-                .into(),
+            Regex::new(r"(?i)\bservice\s+<[^>]*>")?.into(),
+            Regex::new(r"(?i)\bfrom\s+named\s+<[^>]*>")?.into(),
+            Regex::new(r"(?i)\binto\s+(?:graph\s+)?<[^>]*>")?.into(),
             // Recursive or complex constructs
-            Regex::new(r"(?i)\b(?:union|optional|exists|not\s+exists)\s*\{")?
-                .into(),
+            Regex::new(r"(?i)\b(?:union|optional|exists|not\s+exists)\s*\{")?.into(),
             Regex::new(r"\{[^}]*\{[^}]*\{[^}]*\{")? // Deep nesting
                 .into(),
             // Potential DoS patterns
-            Regex::new(r"(?i)\b(?:count|sum|avg|min|max)\s*\(\s*\*\s*\)")?
-                .into(),
+            Regex::new(r"(?i)\b(?:count|sum|avg|min|max)\s*\(\s*\*\s*\)")?.into(),
             // File system access
-            Regex::new(r"(?i)file://")?
-                .into(),
+            Regex::new(r"(?i)file://")?.into(),
         ];
 
         let function_extractor = Regex::new(r"(?i)\b([A-Z_][A-Z0-9_]*)\s*\(")?;
@@ -149,7 +143,7 @@ impl SparqlSecurityAnalyzer {
     /// Analyze a SPARQL query for security issues
     pub fn analyze_query(&self, query: &str) -> Result<SecurityAnalysisResult> {
         let start_time = Instant::now();
-        
+
         let mut analysis = SecurityAnalysisResult {
             is_safe: true,
             violations: Vec::new(),
@@ -177,7 +171,7 @@ impl SparqlSecurityAnalyzer {
         self.check_resource_limits(&analysis)?;
 
         analysis.analysis_time = start_time.elapsed();
-        
+
         if self.config.enable_security_logging && !analysis.is_safe {
             tracing::warn!(
                 "Security violation detected in SPARQL query: {} violations",
@@ -214,11 +208,7 @@ impl SparqlSecurityAnalyzer {
     }
 
     /// Analyze query complexity
-    fn analyze_complexity(
-        &self,
-        query: &str,
-        analysis: &mut SecurityAnalysisResult,
-    ) -> Result<()> {
+    fn analyze_complexity(&self, query: &str, analysis: &mut SecurityAnalysisResult) -> Result<()> {
         let mut complexity = 0.0;
 
         // Count triple patterns
@@ -374,7 +364,9 @@ impl SparqlSecurityAnalyzer {
     /// Normalize whitespace
     fn normalize_whitespace(&self, query: &str) -> String {
         let whitespace_pattern = Regex::new(r"\s+").unwrap();
-        whitespace_pattern.replace_all(query.trim(), " ").to_string()
+        whitespace_pattern
+            .replace_all(query.trim(), " ")
+            .to_string()
     }
 
     /// Escape literals in query
@@ -619,10 +611,10 @@ mod tests {
     fn test_safe_query_analysis() {
         let config = SecurityConfig::default();
         let analyzer = SparqlSecurityAnalyzer::new(config).unwrap();
-        
+
         let safe_query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
         let result = analyzer.analyze_query(safe_query).unwrap();
-        
+
         assert!(result.is_safe);
         assert!(result.violations.is_empty());
     }
@@ -631,13 +623,16 @@ mod tests {
     fn test_dangerous_pattern_detection() {
         let config = SecurityConfig::default();
         let analyzer = SparqlSecurityAnalyzer::new(config).unwrap();
-        
+
         let dangerous_query = "DROP GRAPH <http://example.org/graph>";
         let result = analyzer.analyze_query(dangerous_query).unwrap();
-        
+
         assert!(!result.is_safe);
         assert!(!result.violations.is_empty());
-        assert_eq!(result.violations[0].violation_type, SecurityViolationType::DangerousPattern);
+        assert_eq!(
+            result.violations[0].violation_type,
+            SecurityViolationType::DangerousPattern
+        );
     }
 
     #[test]
@@ -647,7 +642,7 @@ mod tests {
             ..SecurityConfig::default()
         };
         let analyzer = SparqlSecurityAnalyzer::new(config).unwrap();
-        
+
         let complex_query = r"
             SELECT ?s ?p ?o ?x ?y ?z WHERE {
                 ?s ?p ?o .
@@ -658,9 +653,12 @@ mod tests {
             }
         ";
         let result = analyzer.analyze_query(complex_query).unwrap();
-        
+
         assert!(!result.is_safe);
-        assert!(result.violations.iter().any(|v| v.violation_type == SecurityViolationType::ComplexityExceeded));
+        assert!(result
+            .violations
+            .iter()
+            .any(|v| v.violation_type == SecurityViolationType::ComplexityExceeded));
     }
 
     #[test]
@@ -668,28 +666,33 @@ mod tests {
         let mut config = SecurityConfig::default();
         config.allowed_functions.clear();
         config.allowed_functions.insert("STR".to_string());
-        
+
         let analyzer = SparqlSecurityAnalyzer::new(config).unwrap();
-        
+
         let query_with_disallowed_function = "SELECT ?s WHERE { ?s ?p ?o . FILTER(RAND() > 0.5) }";
-        let result = analyzer.analyze_query(query_with_disallowed_function).unwrap();
-        
+        let result = analyzer
+            .analyze_query(query_with_disallowed_function)
+            .unwrap();
+
         assert!(!result.is_safe);
-        assert!(result.violations.iter().any(|v| v.violation_type == SecurityViolationType::DisallowedFunction));
+        assert!(result
+            .violations
+            .iter()
+            .any(|v| v.violation_type == SecurityViolationType::DisallowedFunction));
     }
 
     #[test]
     fn test_query_sanitization() {
         let config = SecurityConfig::default();
         let analyzer = SparqlSecurityAnalyzer::new(config).unwrap();
-        
+
         let query_with_comments = r"
             SELECT ?s ?p ?o WHERE {
                 ?s ?p ?o .  # This is a comment
                 # Another comment
             }
         ";
-        
+
         let sanitized = analyzer.sanitize_query(query_with_comments).unwrap();
         assert!(!sanitized.contains('#'));
     }
@@ -698,16 +701,16 @@ mod tests {
     fn test_execution_sandbox() {
         let config = SecurityConfig::default();
         let mut sandbox = QueryExecutionSandbox::new(config);
-        
+
         sandbox.start_execution().unwrap();
-        
+
         // Should be able to record results within limit
         for _ in 0..10 {
             sandbox.record_result().unwrap();
         }
-        
+
         sandbox.check_execution_limits().unwrap();
-        
+
         let stats = sandbox.stop_execution().unwrap();
         assert_eq!(stats.results_produced, 10);
     }
@@ -715,15 +718,15 @@ mod tests {
     #[test]
     fn test_recursion_monitor() {
         let mut monitor = RecursionMonitor::new(3);
-        
+
         // Should allow normal recursion
         monitor.enter_shape("shape1").unwrap();
         monitor.enter_shape("shape1").unwrap();
         monitor.enter_shape("shape1").unwrap();
-        
+
         // Should fail on exceeding depth
         assert!(monitor.enter_shape("shape1").is_err());
-        
+
         // Should recover after exiting
         monitor.exit_shape("shape1");
         monitor.enter_shape("shape1").unwrap();

@@ -8,10 +8,10 @@
 //! - Success metrics
 //! - User satisfaction measurement
 
+use crate::types::Message;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::types::Message;
 
 /// Message analytics result
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,24 +36,24 @@ pub struct IntentClassification {
 /// Intent types for user messages
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Intent {
-    Query,              // User asking a question
-    Exploration,        // User exploring data
-    Learning,           // User learning about concepts
-    Verification,       // User verifying information
-    Comparison,         // User comparing entities
-    Aggregation,        // User requesting summaries/aggregation
-    Navigation,         // User navigating through data
-    Configuration,      // User configuring system
-    Feedback,           // User providing feedback
-    Clarification,      // User asking for clarification
-    Unknown,            // Intent cannot be determined
+    Query,         // User asking a question
+    Exploration,   // User exploring data
+    Learning,      // User learning about concepts
+    Verification,  // User verifying information
+    Comparison,    // User comparing entities
+    Aggregation,   // User requesting summaries/aggregation
+    Navigation,    // User navigating through data
+    Configuration, // User configuring system
+    Feedback,      // User providing feedback
+    Clarification, // User asking for clarification
+    Unknown,       // Intent cannot be determined
 }
 
 /// Sentiment analysis results
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SentimentAnalysis {
     pub overall_sentiment: Sentiment,
-    pub sentiment_score: f32,  // -1.0 (negative) to 1.0 (positive)
+    pub sentiment_score: f32, // -1.0 (negative) to 1.0 (positive)
     pub emotion_indicators: Vec<EmotionIndicator>,
     pub confidence: f32,
 }
@@ -71,7 +71,7 @@ pub enum Sentiment {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmotionIndicator {
     pub emotion: Emotion,
-    pub intensity: f32,  // 0.0 to 1.0
+    pub intensity: f32, // 0.0 to 1.0
     pub indicators: Vec<String>,
 }
 
@@ -91,7 +91,7 @@ pub enum Emotion {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComplexityScore {
     pub overall_complexity: ComplexityLevel,
-    pub complexity_score: f32,  // 0.0 (simple) to 1.0 (complex)
+    pub complexity_score: f32, // 0.0 (simple) to 1.0 (complex)
     pub complexity_factors: Vec<ComplexityFactor>,
     pub readability_score: f32,
 }
@@ -287,7 +287,10 @@ impl MessageAnalyticsEngine {
         let sentiment_analysis = self.sentiment_analyzer.analyze(message).await?;
         let complexity_score = self.complexity_scorer.score(message).await?;
         let confidence_tracking = self.confidence_tracker.track(message, response).await?;
-        let success_metrics = self.success_evaluator.evaluate(message, response, context).await?;
+        let success_metrics = self
+            .success_evaluator
+            .evaluate(message, response, context)
+            .await?;
         let quality_assessment = self.quality_assessor.assess(message, response).await?;
 
         Ok(MessageAnalytics {
@@ -312,17 +315,17 @@ impl MessageAnalyticsEngine {
 
         for message in messages {
             let analytics = self.analyze_message(message, &[], None).await?;
-            
+
             // Track intent distribution
             let intent_str = format!("{:?}", analytics.intent_classification.primary_intent);
             *intent_distribution.entry(intent_str).or_insert(0) += 1;
-            
+
             // Track sentiment progression
             sentiment_progression.push(analytics.sentiment_analysis.sentiment_score);
-            
+
             // Track complexity progression
             complexity_progression.push(analytics.complexity_score.complexity_score);
-            
+
             // Track satisfaction progression
             satisfaction_trend.push(analytics.success_metrics.user_satisfaction_predicted);
         }
@@ -337,11 +340,16 @@ impl MessageAnalyticsEngine {
     }
 
     /// Calculate engagement metrics
-    async fn calculate_engagement_metrics(&self, messages: &[Message]) -> Result<EngagementMetrics> {
+    async fn calculate_engagement_metrics(
+        &self,
+        messages: &[Message],
+    ) -> Result<EngagementMetrics> {
         let total_messages = messages.len();
-        let avg_message_length = messages.iter()
+        let avg_message_length = messages
+            .iter()
             .map(|m| m.content.to_text().len())
-            .sum::<usize>() as f32 / total_messages as f32;
+            .sum::<usize>() as f32
+            / total_messages as f32;
 
         let conversation_duration = if messages.len() > 1 {
             let start = messages.first().unwrap().timestamp;
@@ -351,9 +359,11 @@ impl MessageAnalyticsEngine {
             0.0
         };
 
-        let response_rate = messages.iter()
+        let response_rate = messages
+            .iter()
             .filter(|m| matches!(m.role, crate::types::MessageRole::Assistant))
-            .count() as f32 / total_messages as f32;
+            .count() as f32
+            / total_messages as f32;
 
         Ok(EngagementMetrics {
             total_messages: total_messages as u32,
@@ -368,10 +378,11 @@ impl MessageAnalyticsEngine {
     fn calculate_interaction_depth(&self, messages: &[Message]) -> f32 {
         // Simple heuristic: measure how deep the conversation goes
         // by looking at follow-up patterns and question complexity
-        let follow_up_count = messages.windows(2)
+        let follow_up_count = messages
+            .windows(2)
             .filter(|pair| {
-                matches!(pair[0].role, crate::types::MessageRole::Assistant) &&
-                matches!(pair[1].role, crate::types::MessageRole::User)
+                matches!(pair[0].role, crate::types::MessageRole::Assistant)
+                    && matches!(pair[1].role, crate::types::MessageRole::User)
             })
             .count();
 
@@ -387,10 +398,12 @@ impl MessageAnalyticsEngine {
 
         let mut coherence_scores = Vec::new();
         for window in messages.windows(2) {
-            let similarity = self.calculate_semantic_similarity(
-                &window[0].content.to_text(),
-                &window[1].content.to_text(),
-            ).await?;
+            let similarity = self
+                .calculate_semantic_similarity(
+                    &window[0].content.to_text(),
+                    &window[1].content.to_text(),
+                )
+                .await?;
             coherence_scores.push(similarity);
         }
 
@@ -401,7 +414,7 @@ impl MessageAnalyticsEngine {
         // Mock implementation - would use actual embeddings/similarity
         let common_words = self.get_common_words(text1, text2);
         let total_words = self.get_unique_words(text1).len() + self.get_unique_words(text2).len();
-        
+
         if total_words == 0 {
             Ok(0.0)
         } else {
@@ -451,29 +464,52 @@ pub struct IntentClassifier {
 impl IntentClassifier {
     pub fn new() -> Self {
         let mut intent_patterns = HashMap::new();
-        
-        intent_patterns.insert(Intent::Query, vec![
-            "what".to_string(), "how".to_string(), "why".to_string(), 
-            "when".to_string(), "where".to_string(), "which".to_string()
-        ]);
-        
-        intent_patterns.insert(Intent::Exploration, vec![
-            "show me".to_string(), "explore".to_string(), "browse".to_string(),
-            "navigate".to_string(), "discover".to_string()
-        ]);
-        
-        intent_patterns.insert(Intent::Learning, vec![
-            "learn".to_string(), "understand".to_string(), "explain".to_string(),
-            "teach me".to_string(), "how does".to_string()
-        ]);
+
+        intent_patterns.insert(
+            Intent::Query,
+            vec![
+                "what".to_string(),
+                "how".to_string(),
+                "why".to_string(),
+                "when".to_string(),
+                "where".to_string(),
+                "which".to_string(),
+            ],
+        );
+
+        intent_patterns.insert(
+            Intent::Exploration,
+            vec![
+                "show me".to_string(),
+                "explore".to_string(),
+                "browse".to_string(),
+                "navigate".to_string(),
+                "discover".to_string(),
+            ],
+        );
+
+        intent_patterns.insert(
+            Intent::Learning,
+            vec![
+                "learn".to_string(),
+                "understand".to_string(),
+                "explain".to_string(),
+                "teach me".to_string(),
+                "how does".to_string(),
+            ],
+        );
 
         Self { intent_patterns }
     }
 
-    pub async fn classify(&self, message: &Message, _context: &[Message]) -> Result<IntentClassification> {
+    pub async fn classify(
+        &self,
+        message: &Message,
+        _context: &[Message],
+    ) -> Result<IntentClassification> {
         let text = message.content.to_text().to_lowercase();
         let mut intent_scores = HashMap::new();
-        
+
         // Simple pattern matching for intent classification
         for (intent, patterns) in &self.intent_patterns {
             let mut score = 0.0;
@@ -485,9 +521,10 @@ impl IntentClassifier {
             score = score / patterns.len() as f32;
             intent_scores.insert(format!("{:?}", intent), score);
         }
-        
+
         // Find primary intent
-        let primary_intent = intent_scores.iter()
+        let primary_intent = intent_scores
+            .iter()
             .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
             .map(|(intent, _)| match intent.as_str() {
                 "Query" => Intent::Query,
@@ -496,8 +533,11 @@ impl IntentClassifier {
                 _ => Intent::Unknown,
             })
             .unwrap_or(Intent::Unknown);
-            
-        let confidence = intent_scores.values().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap_or(&0.0);
+
+        let confidence = intent_scores
+            .values()
+            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .unwrap_or(&0.0);
 
         Ok(IntentClassification {
             primary_intent,
@@ -518,12 +558,20 @@ impl SentimentAnalyzer {
     pub fn new() -> Self {
         Self {
             positive_words: vec![
-                "good".to_string(), "great".to_string(), "excellent".to_string(),
-                "helpful".to_string(), "useful".to_string(), "thanks".to_string()
+                "good".to_string(),
+                "great".to_string(),
+                "excellent".to_string(),
+                "helpful".to_string(),
+                "useful".to_string(),
+                "thanks".to_string(),
             ],
             negative_words: vec![
-                "bad".to_string(), "terrible".to_string(), "useless".to_string(),
-                "frustrated".to_string(), "confused".to_string(), "wrong".to_string()
+                "bad".to_string(),
+                "terrible".to_string(),
+                "useless".to_string(),
+                "frustrated".to_string(),
+                "confused".to_string(),
+                "wrong".to_string(),
             ],
         }
     }
@@ -531,10 +579,10 @@ impl SentimentAnalyzer {
     pub async fn analyze(&self, message: &Message) -> Result<SentimentAnalysis> {
         let text = message.content.to_text().to_lowercase();
         let words: Vec<&str> = text.split_whitespace().collect();
-        
+
         let mut positive_count = 0;
         let mut negative_count = 0;
-        
+
         for word in &words {
             if self.positive_words.contains(&word.to_string()) {
                 positive_count += 1;
@@ -543,24 +591,24 @@ impl SentimentAnalyzer {
                 negative_count += 1;
             }
         }
-        
+
         let sentiment_score = if words.is_empty() {
             0.0
         } else {
             (positive_count as f32 - negative_count as f32) / words.len() as f32
         };
-        
+
         let overall_sentiment = match sentiment_score {
             s if s > 0.1 => Sentiment::Positive,
             s if s < -0.1 => Sentiment::Negative,
             _ => Sentiment::Neutral,
         };
-        
+
         Ok(SentimentAnalysis {
             overall_sentiment,
             sentiment_score,
             emotion_indicators: vec![], // Would be populated with emotion analysis
-            confidence: 0.7, // Mock confidence
+            confidence: 0.7,            // Mock confidence
         })
     }
 }
@@ -582,17 +630,17 @@ impl ComplexityScorer {
         } else {
             0.0
         };
-        
+
         // Simple complexity scoring based on length and structure
         let complexity_score = (avg_sentence_length / 20.0).min(1.0);
-        
+
         let overall_complexity = match complexity_score {
             s if s < 0.3 => ComplexityLevel::Simple,
             s if s < 0.6 => ComplexityLevel::Moderate,
             s if s < 0.8 => ComplexityLevel::Complex,
             _ => ComplexityLevel::VeryComplex,
         };
-        
+
         Ok(ComplexityScore {
             overall_complexity,
             complexity_score,
@@ -610,13 +658,17 @@ impl ConfidenceTracker {
         Self
     }
 
-    pub async fn track(&self, _message: &Message, response: Option<&Message>) -> Result<ConfidenceTracking> {
+    pub async fn track(
+        &self,
+        _message: &Message,
+        response: Option<&Message>,
+    ) -> Result<ConfidenceTracking> {
         let overall_confidence = if response.is_some() {
             0.8 // Higher confidence if there's a response
         } else {
             0.5 // Lower confidence for standalone messages
         };
-        
+
         Ok(ConfidenceTracking {
             overall_confidence,
             confidence_components: vec![], // Would be populated with detailed components
@@ -641,7 +693,7 @@ impl SuccessEvaluator {
         _context: &[Message],
     ) -> Result<SuccessMetrics> {
         let task_completion_rate = if response.is_some() { 0.9 } else { 0.0 };
-        
+
         Ok(SuccessMetrics {
             task_completion_rate,
             user_satisfaction_predicted: 0.75,
@@ -661,10 +713,14 @@ impl QualityAssessor {
         Self
     }
 
-    pub async fn assess(&self, message: &Message, response: Option<&Message>) -> Result<QualityAssessment> {
+    pub async fn assess(
+        &self,
+        message: &Message,
+        response: Option<&Message>,
+    ) -> Result<QualityAssessment> {
         let text = message.content.to_text();
         let clarity_score = if text.len() > 10 { 0.8 } else { 0.4 };
-        
+
         Ok(QualityAssessment {
             clarity_score,
             helpfulness_score: 0.7,
@@ -690,7 +746,7 @@ mod tests {
     #[tokio::test]
     async fn test_message_analytics_engine() {
         let engine = MessageAnalyticsEngine::new();
-        
+
         let message = Message {
             id: "test".to_string(),
             role: MessageRole::User,
@@ -704,10 +760,13 @@ mod tests {
             attachments: Vec::new(),
             rich_elements: Vec::new(),
         };
-        
+
         let analytics = engine.analyze_message(&message, &[], None).await.unwrap();
-        
-        assert!(matches!(analytics.intent_classification.primary_intent, Intent::Query));
+
+        assert!(matches!(
+            analytics.intent_classification.primary_intent,
+            Intent::Query
+        ));
         assert!(analytics.sentiment_analysis.sentiment_score >= -1.0);
         assert!(analytics.sentiment_analysis.sentiment_score <= 1.0);
         assert!(analytics.complexity_score.complexity_score >= 0.0);
@@ -717,7 +776,7 @@ mod tests {
     #[tokio::test]
     async fn test_intent_classification() {
         let classifier = IntentClassifier::new();
-        
+
         let message = Message {
             id: "test".to_string(),
             role: MessageRole::User,
@@ -731,17 +790,20 @@ mod tests {
             attachments: Vec::new(),
             rich_elements: Vec::new(),
         };
-        
+
         let classification = classifier.classify(&message, &[]).await.unwrap();
-        
-        assert!(matches!(classification.primary_intent, Intent::Query | Intent::Learning));
+
+        assert!(matches!(
+            classification.primary_intent,
+            Intent::Query | Intent::Learning
+        ));
         assert!(classification.confidence > 0.0);
     }
 
     #[tokio::test]
     async fn test_sentiment_analysis() {
         let analyzer = SentimentAnalyzer::new();
-        
+
         let positive_message = Message {
             id: "test".to_string(),
             role: MessageRole::User,
@@ -755,9 +817,9 @@ mod tests {
             attachments: Vec::new(),
             rich_elements: Vec::new(),
         };
-        
+
         let sentiment = analyzer.analyze(&positive_message).await.unwrap();
-        
+
         assert!(matches!(sentiment.overall_sentiment, Sentiment::Positive));
         assert!(sentiment.sentiment_score > 0.0);
     }

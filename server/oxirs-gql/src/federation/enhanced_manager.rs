@@ -9,17 +9,18 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{RwLock, Mutex};
+use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, error, info, warn};
 
 use super::config::{FederationConfig, RemoteEndpoint, RetryStrategy};
 use super::query_planner::{QueryPlan, QueryPlanner};
+use super::real_time_sync::{RealTimeSchemaSynchronizer, SyncConfig};
 use super::schema_stitcher::SchemaStitcher;
 use super::service_discovery::{
-    ServiceDiscovery, ServiceDiscoveryConfig, DiscoveryEvent,
-    ServiceDiscoveryEventHandler, ServiceInfo, HealthStatus
+    DiscoveryEvent, HealthStatus, ServiceDiscovery, ServiceDiscoveryConfig,
+    ServiceDiscoveryEventHandler, ServiceInfo,
 };
-use crate::ast::{Document, Value, OperationType};
+use crate::ast::{Document, OperationType, Value};
 use crate::types::Schema;
 
 /// Enhanced federation manager configuration
@@ -31,6 +32,7 @@ pub struct EnhancedFederationConfig {
     pub retry_policy: RetryPolicyConfig,
     pub query_routing: QueryRoutingConfig,
     pub caching: FederationCacheConfig,
+    pub real_time_sync: SyncConfig,
 }
 
 impl Default for EnhancedFederationConfig {
@@ -42,6 +44,7 @@ impl Default for EnhancedFederationConfig {
             retry_policy: RetryPolicyConfig::default(),
             query_routing: QueryRoutingConfig::default(),
             caching: FederationCacheConfig::default(),
+            real_time_sync: SyncConfig::default(),
         }
     }
 }
@@ -294,6 +297,7 @@ pub struct EnhancedFederationManager {
     circuit_breakers: Arc<RwLock<HashMap<String, ServiceCircuitBreaker>>>,
     load_balancer: Arc<Mutex<LoadBalancer>>,
     merged_schema: Arc<RwLock<Option<Schema>>>,
+    schema_synchronizer: Arc<RealTimeSchemaSynchronizer>,
     http_client: reqwest::Client,
 }
 
@@ -317,7 +321,11 @@ impl LoadBalancer {
     }
 
     /// Select the best service for a request
-    pub fn select_service(&mut self, services: &[ServiceInfo], _query_hash: Option<u64>) -> Option<String> {
+    pub fn select_service(
+        &mut self,
+        services: &[ServiceInfo],
+        _query_hash: Option<u64>,
+    ) -> Option<String> {
         if services.is_empty() {
             return None;
         }
@@ -346,9 +354,7 @@ impl LoadBalancer {
             LoadBalancingAlgorithm::LeastResponseTime => {
                 self.select_least_response_time(&healthy_services)
             }
-            LoadBalancingAlgorithm::Adaptive => {
-                self.select_adaptive(&healthy_services)
-            }
+            LoadBalancingAlgorithm::Adaptive => self.select_adaptive(&healthy_services),
             LoadBalancingAlgorithm::ConsistentHashing => {
                 // For consistent hashing, we'd use the query_hash
                 self.select_consistent_hash(&healthy_services, _query_hash.unwrap_or(0))
@@ -368,18 +374,18 @@ impl LoadBalancer {
                 _ => 0.0,
             };
 
-            let response_time_score = service.response_time
+            let response_time_score = service
+                .response_time
                 .map(|rt| rt.as_millis() as f64)
                 .unwrap_or(1000.0);
 
             let load_score = service.load_factor;
             let request_count = self.request_counts.get(&service.id).copied().unwrap_or(0) as f64;
 
-            let total_score = 
-                (health_score * self.config.health_check_weight) +
-                (response_time_score * self.config.response_time_weight) +
-                (load_score * self.config.load_weight) +
-                (request_count * 0.1);
+            let total_score = (health_score * self.config.health_check_weight)
+                + (response_time_score * self.config.response_time_weight)
+                + (load_score * self.config.load_weight)
+                + (request_count * 0.1);
 
             if total_score < best_score {
                 best_score = total_score;
@@ -397,18 +403,14 @@ impl LoadBalancer {
     fn select_least_connections(&self, services: &[&ServiceInfo]) -> Option<String> {
         services
             .iter()
-            .min_by_key(|service| {
-                self.request_counts.get(&service.id).copied().unwrap_or(0)
-            })
+            .min_by_key(|service| self.request_counts.get(&service.id).copied().unwrap_or(0))
             .map(|service| service.id.clone())
     }
 
     fn select_least_response_time(&self, services: &[&ServiceInfo]) -> Option<String> {
         services
             .iter()
-            .min_by_key(|service| {
-                service.response_time.unwrap_or(Duration::from_secs(10))
-            })
+            .min_by_key(|service| service.response_time.unwrap_or(Duration::from_secs(10)))
             .map(|service| service.id.clone())
     }
 
@@ -437,20 +439,26 @@ impl LoadBalancer {
 
 impl EnhancedFederationManager {
     /// Create a new enhanced federation manager
-    pub async fn new(
-        config: EnhancedFederationConfig,
-        local_schema: Arc<Schema>,
-    ) -> Result<Self> {
+    pub async fn new(config: EnhancedFederationConfig, local_schema: Arc<Schema>) -> Result<Self> {
         let service_discovery = Arc::new(ServiceDiscovery::new(config.service_discovery.clone()));
         let schema_stitcher = Arc::new(SchemaStitcher::new(local_schema));
         let federation_config = FederationConfig::default();
-        let query_planner = Arc::new(QueryPlanner::new(schema_stitcher.clone(), federation_config));
+        let query_planner = Arc::new(QueryPlanner::new(
+            schema_stitcher.clone(),
+            federation_config,
+        ));
         let load_balancer = Arc::new(Mutex::new(LoadBalancer::new(config.load_balancing.clone())));
 
         let http_client = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
             .build()
             .context("Failed to create HTTP client")?;
+
+        let schema_synchronizer = Arc::new(RealTimeSchemaSynchronizer::new(
+            config.real_time_sync.clone(),
+            service_discovery.clone(),
+            schema_stitcher.clone(),
+        ));
 
         let manager = Self {
             config,
@@ -460,6 +468,7 @@ impl EnhancedFederationManager {
             circuit_breakers: Arc::new(RwLock::new(HashMap::new())),
             load_balancer,
             merged_schema: Arc::new(RwLock::new(None)),
+            schema_synchronizer,
             http_client,
         };
 
@@ -476,6 +485,9 @@ impl EnhancedFederationManager {
         // Start service discovery
         self.service_discovery.start().await?;
 
+        // Start real-time schema synchronization
+        self.schema_synchronizer.start().await?;
+
         // Build initial merged schema
         self.rebuild_schema().await?;
 
@@ -490,17 +502,20 @@ impl EnhancedFederationManager {
         context: FederationContext,
     ) -> Result<FederationResult> {
         let start_time = Instant::now();
-        
+
         debug!("Executing federated query: {}", context.request_id);
 
         // Get current schema
         let schema = {
             let schema_guard = self.merged_schema.read().await;
-            schema_guard.clone().ok_or_else(|| anyhow!("No schema available"))?
+            schema_guard
+                .clone()
+                .ok_or_else(|| anyhow!("No schema available"))?
         };
 
         // Plan the query
-        let query_plan = self.query_planner
+        let query_plan = self
+            .query_planner
             .plan_query(document, &schema)
             .await
             .context("Failed to plan federated query")?;
@@ -509,7 +524,10 @@ impl EnhancedFederationManager {
         let result = self.execute_query_plan(&query_plan, &context).await?;
 
         let execution_time = start_time.elapsed();
-        debug!("Query executed in {:?}: {}", execution_time, context.request_id);
+        debug!(
+            "Query executed in {:?}: {}",
+            execution_time, context.request_id
+        );
 
         Ok(result)
     }
@@ -528,6 +546,28 @@ impl EnhancedFederationManager {
     /// Get healthy services only
     pub async fn get_healthy_services(&self) -> Vec<ServiceInfo> {
         self.service_discovery.get_healthy_services().await
+    }
+
+    /// Get schema synchronization status
+    pub async fn get_sync_status(&self) -> super::real_time_sync::SyncStatus {
+        self.schema_synchronizer.get_sync_status().await
+    }
+
+    /// Get active schema conflicts
+    pub async fn get_schema_conflicts(&self) -> Vec<super::real_time_sync::SchemaConflict> {
+        self.schema_synchronizer.get_active_conflicts().await
+    }
+
+    /// Force a manual schema synchronization
+    pub async fn force_schema_sync(&self) -> Result<()> {
+        self.schema_synchronizer.perform_full_sync().await
+    }
+
+    /// Subscribe to schema changes
+    pub async fn subscribe_to_schema_changes(
+        &self,
+    ) -> tokio::sync::mpsc::UnboundedReceiver<super::real_time_sync::SchemaChangeEvent> {
+        self.schema_synchronizer.subscribe_to_changes().await
     }
 
     /// Execute a query plan
@@ -550,7 +590,10 @@ impl EnhancedFederationManager {
                 }
                 Err(e) => {
                     errors.push(FederationError {
-                        message: format!("Failed to execute step for service {}: {}", step.endpoint_id, e),
+                        message: format!(
+                            "Failed to execute step for service {}: {}",
+                            step.endpoint_id, e
+                        ),
                         path: None,
                         locations: None,
                         extensions: HashMap::new(),
@@ -577,7 +620,8 @@ impl EnhancedFederationManager {
         _previous_results: &HashMap<String, serde_json::Value>,
     ) -> Result<FederationResult> {
         // Get service info
-        let service = self.service_discovery
+        let service = self
+            .service_discovery
             .get_service(&step.endpoint_id)
             .await
             .ok_or_else(|| anyhow!("Service not found: {}", step.endpoint_id))?;
@@ -595,7 +639,9 @@ impl EnhancedFederationManager {
         }
 
         // Execute query with retry
-        let result = self.execute_with_retry(&service, &step.query_fragment, &context.variables).await;
+        let result = self
+            .execute_with_retry(&service, &step.query_fragment, &context.variables)
+            .await;
 
         // Update circuit breaker
         {
@@ -609,7 +655,10 @@ impl EnhancedFederationManager {
         }
 
         // Record completion in load balancer
-        self.load_balancer.lock().await.record_completion(&service.id);
+        self.load_balancer
+            .lock()
+            .await
+            .record_completion(&service.id);
 
         result
     }
@@ -676,7 +725,8 @@ impl EnhancedFederationManager {
             "variables": variables
         });
 
-        let response = self.http_client
+        let response = self
+            .http_client
             .post(&service.url)
             .json(&request_body)
             .send()
@@ -814,9 +864,9 @@ unsafe impl Sync for SchemaRebuildHandler {}
 impl ServiceDiscoveryEventHandler for SchemaRebuildHandler {
     async fn handle_event(&self, event: DiscoveryEvent) -> Result<()> {
         match event {
-            DiscoveryEvent::ServiceRegistered(_) |
-            DiscoveryEvent::ServiceDeregistered(_) |
-            DiscoveryEvent::HealthChanged { .. } => {
+            DiscoveryEvent::ServiceRegistered(_)
+            | DiscoveryEvent::ServiceDeregistered(_)
+            | DiscoveryEvent::HealthChanged { .. } => {
                 // In a real implementation, we'd safely access the manager
                 info!("Service discovery event received, would trigger schema rebuild");
                 Ok(())

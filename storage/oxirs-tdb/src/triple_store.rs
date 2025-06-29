@@ -16,6 +16,7 @@ use crate::mvcc::{MvccStorage, TransactionId, Version};
 use crate::nodes::{NodeId, NodeTable, NodeTableConfig, Term};
 use crate::page::{BufferPool, BufferPoolConfig, PageType};
 use crate::transactions::{IsolationLevel, TransactionManager, TransactionState};
+use crate::wal::StorageInterface;
 
 /// Triple representation using node IDs
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -793,6 +794,54 @@ impl TripleStore {
             }
         }
         true
+    }
+}
+
+/// Implementation of StorageInterface for WAL recovery
+impl StorageInterface for TripleStore {
+    fn apply_insert(
+        &self,
+        transaction_id: TransactionId,
+        key: TripleKey,
+        value: bool,
+    ) -> Result<()> {
+        if !value {
+            return Ok(()); // Skip if value is false (deleted)
+        }
+
+        // Convert TripleKey back to Triple
+        // This is a simplified approach - in practice you'd need to know the index type
+        let triple = Triple::new(key.first, key.second, key.third);
+
+        // Apply the insert using existing transaction-based insert
+        self.insert_triple_tx(transaction_id, &triple)?;
+
+        Ok(())
+    }
+
+    fn apply_update(
+        &self,
+        transaction_id: TransactionId,
+        key: TripleKey,
+        value: bool,
+    ) -> Result<()> {
+        let triple = Triple::new(key.first, key.second, key.third);
+
+        if value {
+            // Update means insert (or ensure exists)
+            self.insert_triple_tx(transaction_id, &triple)?;
+        } else {
+            // Update to false means delete
+            self.delete_triple_tx(transaction_id, &triple)?;
+        }
+
+        Ok(())
+    }
+
+    fn apply_delete(&self, transaction_id: TransactionId, key: TripleKey) -> Result<()> {
+        let triple = Triple::new(key.first, key.second, key.third);
+        self.delete_triple_tx(transaction_id, &triple)?;
+        Ok(())
     }
 }
 

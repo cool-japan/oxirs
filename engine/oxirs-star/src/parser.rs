@@ -1573,8 +1573,9 @@ impl StarParser {
         // Read the entire JSON content
         let mut content = String::new();
         let mut buf_reader = BufReader::new(reader);
-        buf_reader.read_to_string(&mut content)
-            .map_err(|e| StarError::parse_error(format!("Failed to read JSON-LD-star content: {}", e)))?;
+        buf_reader.read_to_string(&mut content).map_err(|e| {
+            StarError::parse_error(format!("Failed to read JSON-LD-star content: {}", e))
+        })?;
 
         // Parse JSON
         let json_value: serde_json::Value = serde_json::from_str(&content)
@@ -1641,7 +1642,9 @@ impl StarParser {
                 _ => return Err(StarError::parse_error("@id must be a string".to_string())),
             }
         } else {
-            StarTerm::BlankNode(BlankNode { id: context.next_blank_node() })
+            StarTerm::BlankNode(BlankNode {
+                id: context.next_blank_node(),
+            })
         };
 
         // Process properties
@@ -1720,11 +1723,13 @@ impl StarParser {
                         _ => return Err(StarError::parse_error("Invalid @value".to_string())),
                     };
 
-                    let datatype = obj.get("@type")
+                    let datatype = obj
+                        .get("@type")
                         .and_then(|v| v.as_str())
                         .map(|s| NamedNode { iri: s.to_string() });
 
-                    let language = obj.get("@language")
+                    let language = obj
+                        .get("@language")
                         .and_then(|v| v.as_str())
                         .map(|s| s.to_string());
 
@@ -1735,23 +1740,31 @@ impl StarParser {
                     })
                 } else {
                     // Nested object - process recursively and return blank node
-                    let blank_node = StarTerm::BlankNode(BlankNode { id: context.next_blank_node() });
+                    let blank_node = StarTerm::BlankNode(BlankNode {
+                        id: context.next_blank_node(),
+                    });
                     self.process_jsonld_star_object(obj, graph, context)?;
                     blank_node
                 }
             }
             serde_json::Value::Number(n) => StarTerm::Literal(Literal {
                 value: n.to_string(),
-                datatype: Some(NamedNode { iri: "http://www.w3.org/2001/XMLSchema#decimal".to_string() }),
+                datatype: Some(NamedNode {
+                    iri: "http://www.w3.org/2001/XMLSchema#decimal".to_string(),
+                }),
                 language: None,
             }),
             serde_json::Value::Bool(b) => StarTerm::Literal(Literal {
                 value: b.to_string(),
-                datatype: Some(NamedNode { iri: "http://www.w3.org/2001/XMLSchema#boolean".to_string() }),
+                datatype: Some(NamedNode {
+                    iri: "http://www.w3.org/2001/XMLSchema#boolean".to_string(),
+                }),
                 language: None,
             }),
             _ => {
-                return Err(StarError::parse_error("Unsupported JSON value type".to_string()));
+                return Err(StarError::parse_error(
+                    "Unsupported JSON value type".to_string(),
+                ));
             }
         };
 
@@ -1770,25 +1783,30 @@ impl StarParser {
         graph: &mut StarGraph,
         context: &mut ParseContext,
     ) -> StarResult<()> {
-        let annotation = obj.get("@annotation")
+        let annotation = obj
+            .get("@annotation")
             .ok_or_else(|| StarError::parse_error("Missing @annotation".to_string()))?;
 
         match annotation {
             serde_json::Value::Object(ann_obj) => {
                 // Extract the quoted triple
-                let subject_val = ann_obj.get("subject")
-                    .ok_or_else(|| StarError::parse_error("Missing subject in annotation".to_string()))?;
-                let predicate_val = ann_obj.get("predicate")
-                    .ok_or_else(|| StarError::parse_error("Missing predicate in annotation".to_string()))?;
-                let object_val = ann_obj.get("object")
-                    .ok_or_else(|| StarError::parse_error("Missing object in annotation".to_string()))?;
+                let subject_val = ann_obj.get("subject").ok_or_else(|| {
+                    StarError::parse_error("Missing subject in annotation".to_string())
+                })?;
+                let predicate_val = ann_obj.get("predicate").ok_or_else(|| {
+                    StarError::parse_error("Missing predicate in annotation".to_string())
+                })?;
+                let object_val = ann_obj.get("object").ok_or_else(|| {
+                    StarError::parse_error("Missing object in annotation".to_string())
+                })?;
 
                 let subject = self.json_value_to_star_term(subject_val)?;
                 let predicate = self.json_value_to_star_term(predicate_val)?;
                 let object = self.json_value_to_star_term(object_val)?;
 
                 // Create quoted triple
-                let quoted_triple = StarTerm::QuotedTriple(Box::new(StarTriple::new(subject, predicate, object)));
+                let quoted_triple =
+                    StarTerm::QuotedTriple(Box::new(StarTriple::new(subject, predicate, object)));
 
                 // Process annotation properties
                 for (prop_key, prop_value) in obj {
@@ -1807,7 +1825,9 @@ impl StarParser {
                 }
             }
             _ => {
-                return Err(StarError::parse_error("@annotation must be an object".to_string()));
+                return Err(StarError::parse_error(
+                    "@annotation must be an object".to_string(),
+                ));
             }
         }
 
@@ -1828,9 +1848,15 @@ impl StarParser {
                 if let Some(id) = obj.get("@id").and_then(|v| v.as_str()) {
                     StarTerm::iri(id)
                 } else if let Some(value) = obj.get("@value").and_then(|v| v.as_str()) {
-                    let datatype = obj.get("@type").and_then(|v| v.as_str()).map(|s| NamedNode { iri: s.to_string() });
-                    let language = obj.get("@language").and_then(|v| v.as_str()).map(|s| s.to_string());
-                    
+                    let datatype = obj
+                        .get("@type")
+                        .and_then(|v| v.as_str())
+                        .map(|s| NamedNode { iri: s.to_string() });
+                    let language = obj
+                        .get("@language")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+
                     Ok(StarTerm::Literal(Literal {
                         value: value.to_string(),
                         datatype,

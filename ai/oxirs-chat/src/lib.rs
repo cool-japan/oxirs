@@ -23,6 +23,7 @@ pub mod cache;
 pub mod chat;
 pub mod context;
 pub mod explanation;
+pub mod external_services;
 pub mod graph_exploration;
 pub mod health_monitoring;
 pub mod llm;
@@ -36,6 +37,7 @@ pub mod server;
 pub mod session;
 pub mod sparql_optimizer;
 pub mod types;
+pub mod workflow;
 
 // Re-export commonly used types
 pub use session::*;
